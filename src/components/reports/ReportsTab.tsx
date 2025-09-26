@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart3, Download, Filter, Calendar, User, FileText, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/database';
-import { formatDateBR, formatDateTimeBR } from '../../utils/dateUtils';
+import { formatDateBR, formatTimestampForExcel } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 
@@ -85,7 +85,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
         'Status': att.status === 'present' ? 'Presente' : 'Falta',
         'Horário Saída': att.exit_time || '-',
         'Marcado por': att.marked_by,
-        'Marcado em': formatDateTimeBR(att.created_at)
+        'Marcado em': formatTimestampForExcel(att.created_at, att.date)
       }));
 
       const wb = XLSX.utils.book_new();

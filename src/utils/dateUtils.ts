@@ -33,6 +33,20 @@ export const getCurrentBrazilTime = (): string => {
   return new Date().toLocaleTimeString('pt-BR', {
     timeZone: 'America/Sao_Paulo',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    hour12: false
   });
+};
+
+export const formatTimestampForExcel = (timestamp: string, date: string): string => {
+  // Para o Excel, vamos mostrar apenas a data da marcação + horário atual
+  // já que o timestamp do banco pode estar em UTC
+  const currentTime = new Date().toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  
+  return `${formatDateBR(date)} ${currentTime}`;
 };
