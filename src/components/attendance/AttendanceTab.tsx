@@ -3,6 +3,7 @@ import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw } from 'l
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getAllEmployees, getTodayAttendance, markAttendance, Employee, Attendance } from '../../services/database';
+import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 
 interface AttendanceTabProps {
@@ -13,7 +14,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getBrazilDate());
   const [exitTimes, setExitTimes] = useState<Record<string, string>>({});
 
   const loadData = async () => {
@@ -103,7 +104,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
   }
 
   const { present, absent, notMarked } = getStatusCounts();
-  const today = format(new Date(), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+  
+  const today = format(getBrazilDateTime(), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
 
   return (
     <div className="space-y-6">

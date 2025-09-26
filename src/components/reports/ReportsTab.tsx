@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart3, Download, Filter, Calendar, User, FileText, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/database';
+import { formatDateBR, formatDateTimeBR } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 
@@ -78,13 +79,13 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
   const exportToExcel = () => {
     try {
       const data = filteredAttendances.map(att => ({
-        'Data': new Date(att.date).toLocaleDateString('pt-BR'),
+        'Data': formatDateBR(att.date),
         'Funcionário': att.employees?.name || 'N/A',
         'CPF': att.employees?.cpf || 'N/A',
         'Status': att.status === 'present' ? 'Presente' : 'Falta',
         'Horário Saída': att.exit_time || '-',
         'Marcado por': att.marked_by,
-        'Marcado em': new Date(att.created_at).toLocaleString('pt-BR')
+        'Marcado em': formatDateTimeBR(att.created_at)
       }));
 
       const wb = XLSX.utils.book_new();
@@ -304,7 +305,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
                 <tr key={attendance.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
-                      {new Date(attendance.date).toLocaleDateString('pt-BR')}
+                      {formatDateBR(attendance.date)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">

@@ -239,7 +239,11 @@ export const deleteEmployee = async (id: string): Promise<void> => {
 
 // Attendance functions
 export const getTodayAttendance = async (): Promise<Attendance[]> => {
-  const today = new Date().toISOString().split('T')[0];
+  // Usar data local do Brasil (UTC-3)
+  const today = new Date();
+  const brazilOffset = -3 * 60; // UTC-3 em minutos
+  const localTime = new Date(today.getTime() + (brazilOffset * 60 * 1000));
+  const todayString = localTime.toISOString().split('T')[0];
   
   const { data, error } = await supabase
     .from('attendance')
@@ -251,7 +255,7 @@ export const getTodayAttendance = async (): Promise<Attendance[]> => {
         cpf
       )
     `)
-    .eq('date', today)
+    .eq('date', todayString)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
