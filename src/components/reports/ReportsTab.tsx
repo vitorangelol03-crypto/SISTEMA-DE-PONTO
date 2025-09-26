@@ -84,8 +84,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
         'CPF': att.employees?.cpf || 'N/A',
         'Status': att.status === 'present' ? 'Presente' : 'Falta',
         'Horário Saída': att.exit_time || '-',
-        'Marcado por': att.marked_by,
-        'Marcado em': formatTimestampForExcel(att.created_at, att.date)
+        'Marcado por': att.marked_by
       }));
 
       const wb = XLSX.utils.book_new();
@@ -98,8 +97,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
         { wch: 15 }, // CPF
         { wch: 10 }, // Status
         { wch: 12 }, // Horário Saída
-        { wch: 12 }, // Marcado por
-        { wch: 20 }  // Marcado em
+        { wch: 12 }  // Marcado por
       ];
       ws['!cols'] = colWidths;
 
