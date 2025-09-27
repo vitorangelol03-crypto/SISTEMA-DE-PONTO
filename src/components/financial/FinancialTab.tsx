@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Plus, Trash2, RefreshCw, Filter } from 'lucide-react';
-import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance } from '../../services/database';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Plus, Trash2, RefreshCw, Filter, AlertTriangle } from 'lucide-react';
+import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
@@ -41,6 +41,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [editingPayment, setEditingPayment] = useState<{employeeId: string, date: string} | null>(null);
   const [editValues, setEditValues] = useState({ dailyRate: '', bonus: '' });
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearType, setClearType] = useState<'all' | 'selected'>('selected');
 
   const loadData = async () => {
     try {
@@ -207,6 +209,42 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     }
   };
 
+  const handleClearPayments = async () => {
+    if (clearType === 'all') {
+      if (!confirm('⚠️ ATENÇÃO: Tem certeza que deseja limpar TODOS os pagamentos do período selecionado?\n\nEsta ação não pode ser desfeita!')) {
+        return;
+      }
+    } else {
+      if (selectedEmployees.size === 0) {
+        toast.error('Selecione pelo menos um funcionário');
+        return;
+      }
+      
+      if (!confirm(`⚠️ ATENÇÃO: Tem certeza que deseja limpar os pagamentos de ${selectedEmployees.size} funcionário(s) selecionado(s)?\n\nEsta ação não pode ser desfeita!`)) {
+        return;
+      }
+    }
+
+    try {
+      if (clearType === 'all') {
+        await clearAllPayments(filters.startDate, filters.endDate);
+        toast.success('Todos os pagamentos foram limpos com sucesso!');
+      } else {
+        for (const employeeId of selectedEmployees) {
+          await clearEmployeePayments(employeeId, filters.startDate, filters.endDate);
+        }
+        toast.success(`Pagamentos de ${selectedEmployees.size} funcionário(s) foram limpos com sucesso!`);
+        setSelectedEmployees(new Set());
+      }
+      
+      setShowClearModal(false);
+      loadData();
+    } catch (error) {
+      console.error('Erro ao limpar pagamentos:', error);
+      toast.error('Erro ao limpar pagamentos');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -365,6 +403,16 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
               className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Aplicar ({selectedEmployees.size} selecionados)
+            </button>
+          </div>
+          
+          <div className="flex items-end">
+            <button
+              onClick={() => setShowClearModal(true)}
+              className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center justify-center space-x-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Limpar Pagamentos</span>
             </button>
           </div>
         </div>
@@ -559,6 +607,87 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
           </div>
         )}
       </div>
+
+      {/* Modal de Limpeza de Pagamentos */}
+      {showClearModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium flex items-center text-red-600">
+                <AlertTriangle className="w-5 h-5 mr-2" />
+                Limpar Pagamentos
+              </h3>
+              <button
+                onClick={() => setShowClearModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                <p className="text-sm text-red-800">
+                  <strong>⚠️ ATENÇÃO:</strong> Esta ação irá remover permanentemente os pagamentos selecionados e não pode ser desfeita!
+                </p>
+              </div>
+              
+              <div>
+                <p className="text-sm text-gray-600 mb-3">
+                  <strong>Período:</strong> {formatDateBR(filters.startDate)} até {formatDateBR(filters.endDate)}
+                </p>
+                
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="clearType"
+                      value="selected"
+                      checked={clearType === 'selected'}
+                      onChange={(e) => setClearType(e.target.value as 'all' | 'selected')}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">
+                      Limpar funcionários selecionados ({selectedEmployees.size} selecionados)
+                    </span>
+                  </label>
+                  
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="clearType"
+                      value="all"
+                      checked={clearType === 'all'}
+                      onChange={(e) => setClearType(e.target.value as 'all' | 'selected')}
+                      className="mr-2"
+                    />
+                    <span className="text-sm text-red-600 font-medium">
+                      Limpar TODOS os funcionários do período
+                    </span>
+                  </label>
+                </div>
+              </div>
+              
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={handleClearPayments}
+                  disabled={clearType === 'selected' && selectedEmployees.size === 0}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Confirmar Limpeza</span>
+                </button>
+                <button
+                  onClick={() => setShowClearModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

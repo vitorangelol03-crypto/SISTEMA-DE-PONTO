@@ -354,6 +354,51 @@ export const deletePayment = async (id: string): Promise<void> => {
   if (error) throw error;
 };
 
+export const clearEmployeePayments = async (
+  employeeId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<void> => {
+  let query = supabase
+    .from('payments')
+    .delete()
+    .eq('employee_id', employeeId);
+
+  if (startDate) {
+    query = query.gte('date', startDate);
+  }
+  
+  if (endDate) {
+    query = query.lte('date', endDate);
+  }
+
+  const { error } = await query;
+  if (error) throw error;
+};
+
+export const clearAllPayments = async (
+  startDate?: string,
+  endDate?: string
+): Promise<void> => {
+  let query = supabase.from('payments').delete();
+
+  if (startDate) {
+    query = query.gte('date', startDate);
+  }
+  
+  if (endDate) {
+    query = query.lte('date', endDate);
+  }
+
+  // Se não há filtros de data, limpa tudo
+  if (!startDate && !endDate) {
+    query = query.neq('id', '00000000-0000-0000-0000-000000000000'); // Condição sempre verdadeira
+  }
+
+  const { error } = await query;
+  if (error) throw error;
+};
+
 // Bonus functions
 export const getBonuses = async (): Promise<Bonus[]> => {
   const { data, error } = await supabase
