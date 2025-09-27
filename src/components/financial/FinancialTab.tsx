@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Calendar, Users, Calculator, Edit2, Save, X, Plus, Trash2, RefreshCw, Filter } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Plus, Trash2, RefreshCw, Filter } from 'lucide-react';
 import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
