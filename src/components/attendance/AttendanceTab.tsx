@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { getAllEmployees, getTodayAttendance, markAttendance, Employee, Attendance } from '../../services/database';
+import { getAllEmployees, getTodayAttendance, markAttendance, Employee, Attendance, createBonus, applyBonusToAllPresent } from '../../services/database';
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 
@@ -18,6 +18,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
   const [selectedDate, setSelectedDate] = useState(getBrazilDate());
   const [exitTimes, setExitTimes] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [showBonusModal, setShowBonusModal] = useState(false);
+  const [bonusAmount, setBonusAmount] = useState<string>('');
 
   const loadData = async () => {
     try {
@@ -118,6 +120,30 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
     return { present, absent, notMarked };
   };
 
+  const handleBonus = async () => {
+    const amount = parseFloat(bonusAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Valor de bonificação inválido');
+      return;
+    }
+
+    try {
+      // Criar registro de bonificação
+      await createBonus(selectedDate, amount, userId);
+      
+      // Aplicar bonificação para todos os presentes
+      await applyBonusToAllPresent(selectedDate, amount, userId);
+      
+      toast.success(`Bonificação de R$ ${amount.toFixed(2)} aplicada para todos os funcionários presentes!`);
+      setShowBonusModal(false);
+      setBonusAmount('');
+      loadData();
+    } catch (error: any) {
+      console.error('Erro ao aplicar bonificação:', error);
+      toast.error(error.message || 'Erro ao aplicar bonificação');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -145,6 +171,14 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
           >
             <RefreshCw className="w-4 h-4" />
             <span>Atualizar</span>
+          </button>
+          
+          <button
+            onClick={() => setShowBonusModal(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+          >
+            <Gift className="w-4 h-4" />
+            <span>Bonificação</span>
           </button>
         </div>
         
@@ -310,6 +344,75 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
           </div>
         )}
       </div>
+
+      {/* Modal de Bonificação */}
+      {showBonusModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium flex items-center">
+                <Gift className="w-5 h-5 mr-2 text-green-600" />
+                Aplicar Bonificação
+              </h3>
+              <button
+                onClick={() => setShowBonusModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Data: <strong>{formatDateBR(selectedDate)}</strong>
+                </p>
+                <p className="text-sm text-gray-600 mb-4">
+                  Funcionários presentes: <strong>{present}</strong>
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Valor da Bonificação (R$)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={bonusAmount}
+                  onChange={(e) => setBonusAmount(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                  placeholder="0.00"
+                  autoFocus
+                />
+              </div>
+              
+              <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+                <p className="text-sm text-yellow-800">
+                  <strong>Atenção:</strong> A bonificação será aplicada para todos os {present} funcionários que estão presentes hoje.
+                </p>
+              </div>
+              
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={handleBonus}
+                  disabled={!bonusAmount || present === 0}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Confirmar Bonificação
+                </button>
+                <button
+                  onClick={() => setShowBonusModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
