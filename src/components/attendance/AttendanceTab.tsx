@@ -52,10 +52,20 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
   }, []);
 
   useEffect(() => {
-    const filtered = employees.filter(employee =>
-      employee.name.toLowerCase().includes(searchTerm.toLowerCase().trim()) ||
-      employee.cpf.includes(searchTerm.replace(/\D/g, ''))
-    );
+    if (!searchTerm.trim()) {
+      setFilteredEmployees(employees);
+      return;
+    }
+
+    const searchLower = searchTerm.toLowerCase().trim();
+    const searchNumbers = searchTerm.replace(/\D/g, '');
+    
+    const filtered = employees.filter(employee => {
+      const nameMatch = employee.name.toLowerCase().includes(searchLower);
+      const cpfMatch = searchNumbers && employee.cpf.includes(searchNumbers);
+      return nameMatch || cpfMatch;
+    });
+    
     setFilteredEmployees(filtered);
   }, [searchTerm, employees]);
 
