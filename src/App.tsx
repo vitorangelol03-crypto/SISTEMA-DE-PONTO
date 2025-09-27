@@ -8,6 +8,7 @@ import { EmployeesTab } from './components/employees/EmployeesTab';
 import { ReportsTab } from './components/reports/ReportsTab';
 import { SettingsTab } from './components/settings/SettingsTab';
 import { UsersTab } from './components/users/UsersTab';
+import { FinancialTab } from './components/financial/FinancialTab';
 import { useAuth } from './hooks/useAuth';
 import { initializeSystem } from './services/database';
 
@@ -48,6 +49,8 @@ function App() {
         return <EmployeesTab userId={user.id} />;
       case 'reports':
         return <ReportsTab userId={user.id} />;
+      case 'financial':
+        return <FinancialTab userId={user.id} />;
       case 'settings':
         return <SettingsTab />;
       case 'users':

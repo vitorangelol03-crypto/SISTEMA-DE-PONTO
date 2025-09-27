@@ -1,0 +1,540 @@
+import React, { useState, useEffect } from 'react';
+import { DollarSign, Calendar, Users, Calculator, Edit2, Save, X, Plus, Trash2, RefreshCw, Filter } from 'lucide-react';
+import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance } from '../../services/database';
+import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
+import { formatCPF } from '../../utils/validation';
+import toast from 'react-hot-toast';
+
+interface FinancialTabProps {
+  userId: string;
+}
+
+interface EmployeeFinancialData {
+  employee: Employee;
+  workDays: number;
+  absences: number;
+  customExitDays: number;
+  payments: Payment[];
+  totalEarned: number;
+}
+
+export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [bonuses, setBonuses] = useState<any[]>([]);
+  const [attendances, setAttendances] = useState<Attendance[]>([]);
+  const [financialData, setFinancialData] = useState<EmployeeFinancialData[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  const [filters, setFilters] = useState({
+    startDate: getBrazilDate(),
+    endDate: getBrazilDate(),
+    employeeId: ''
+  });
+  
+  const [bulkDailyRate, setBulkDailyRate] = useState<string>('');
+  const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
+  const [editingPayment, setEditingPayment] = useState<{employeeId: string, date: string} | null>(null);
+  const [editValues, setEditValues] = useState({ dailyRate: '', bonus: '' });
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [employeesData, paymentsData, bonusesData, attendancesData] = await Promise.all([
+        getAllEmployees(),
+        getPayments(filters.startDate, filters.endDate, filters.employeeId),
+        getBonuses(),
+        getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId)
+      ]);
+      
+      setEmployees(employeesData);
+      setPayments(paymentsData);
+      setBonuses(bonusesData);
+      setAttendances(attendancesData);
+      
+      // Processar dados financeiros
+      processFinancialData(employeesData, paymentsData, attendancesData);
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+      toast.error('Erro ao carregar dados financeiros');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const processFinancialData = (employeesData: Employee[], paymentsData: Payment[], attendancesData: Attendance[]) => {
+    const data: EmployeeFinancialData[] = employeesData.map(employee => {
+      const employeeAttendances = attendancesData.filter(att => att.employee_id === employee.id);
+      const employeePayments = paymentsData.filter(pay => pay.employee_id === employee.id);
+      
+      const workDays = employeeAttendances.filter(att => att.status === 'present').length;
+      const absences = employeeAttendances.filter(att => att.status === 'absent').length;
+      const customExitDays = employeeAttendances.filter(att => att.status === 'present' && att.exit_time).length;
+      const totalEarned = employeePayments.reduce((sum, pay) => sum + (pay.total || 0), 0);
+      
+      return {
+        employee,
+        workDays,
+        absences,
+        customExitDays,
+        payments: employeePayments,
+        totalEarned
+      };
+    });
+    
+    setFinancialData(data);
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [filters]);
+
+  const handleBulkApply = async () => {
+    if (!bulkDailyRate || selectedEmployees.size === 0) {
+      toast.error('Selecione funcionários e defina um valor diário');
+      return;
+    }
+
+    const dailyRate = parseFloat(bulkDailyRate);
+    if (isNaN(dailyRate) || dailyRate < 0) {
+      toast.error('Valor diário inválido');
+      return;
+    }
+
+    try {
+      const startDate = new Date(filters.startDate);
+      const endDate = new Date(filters.endDate);
+      
+      for (const employeeId of selectedEmployees) {
+        const employeeAttendances = attendances.filter(att => 
+          att.employee_id === employeeId && att.status === 'present'
+        );
+        
+        for (const attendance of employeeAttendances) {
+          const existingPayment = payments.find(pay => 
+            pay.employee_id === employeeId && pay.date === attendance.date
+          );
+          
+          const currentBonus = existingPayment?.bonus || 0;
+          await upsertPayment(employeeId, attendance.date, dailyRate, currentBonus, userId);
+        }
+      }
+      
+      toast.success('Valores aplicados com sucesso!');
+      setBulkDailyRate('');
+      setSelectedEmployees(new Set());
+      loadData();
+    } catch (error) {
+      console.error('Erro ao aplicar valores:', error);
+      toast.error('Erro ao aplicar valores');
+    }
+  };
+
+  const handleEditPayment = (employeeId: string, date: string) => {
+    const payment = payments.find(pay => pay.employee_id === employeeId && pay.date === date);
+    setEditingPayment({ employeeId, date });
+    setEditValues({
+      dailyRate: payment?.daily_rate?.toString() || '0',
+      bonus: payment?.bonus?.toString() || '0'
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingPayment) return;
+
+    const dailyRate = parseFloat(editValues.dailyRate) || 0;
+    const bonus = parseFloat(editValues.bonus) || 0;
+
+    try {
+      await upsertPayment(editingPayment.employeeId, editingPayment.date, dailyRate, bonus, userId);
+      toast.success('Pagamento atualizado com sucesso!');
+      setEditingPayment(null);
+      loadData();
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+      toast.error('Erro ao salvar pagamento');
+    }
+  };
+
+  const handleDeletePayment = async (paymentId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este pagamento?')) return;
+
+    try {
+      await deletePayment(paymentId);
+      toast.success('Pagamento excluído com sucesso!');
+      loadData();
+    } catch (error) {
+      console.error('Erro ao excluir:', error);
+      toast.error('Erro ao excluir pagamento');
+    }
+  };
+
+  const toggleEmployeeSelection = (employeeId: string) => {
+    const newSelected = new Set(selectedEmployees);
+    if (newSelected.has(employeeId)) {
+      newSelected.delete(employeeId);
+    } else {
+      newSelected.add(employeeId);
+    }
+    setSelectedEmployees(newSelected);
+  };
+
+  const selectAllEmployees = () => {
+    if (selectedEmployees.size === financialData.length) {
+      setSelectedEmployees(new Set());
+    } else {
+      setSelectedEmployees(new Set(financialData.map(data => data.employee.id)));
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+        <span className="ml-2">Carregando...</span>
+      </div>
+    );
+  }
+
+  const totalEarnings = financialData.reduce((sum, data) => sum + data.totalEarned, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold flex items-center">
+            <DollarSign className="w-5 h-5 mr-2 text-green-600" />
+            Gestão Financeira
+          </h2>
+          
+          <button
+            onClick={loadData}
+            className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Atualizar</span>
+          </button>
+        </div>
+
+        {/* Filtros */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Data Inicial
+            </label>
+            <input
+              type="date"
+              value={filters.startDate}
+              onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Data Final
+            </label>
+            <input
+              type="date"
+              value={filters.endDate}
+              onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Funcionário
+            </label>
+            <select
+              value={filters.employeeId}
+              onChange={(e) => setFilters(prev => ({ ...prev, employeeId: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Todos</option>
+              {employees.map(employee => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Estatísticas */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+            <div className="flex items-center justify-between">
+              <span className="text-green-800 font-medium">Total Ganho</span>
+              <DollarSign className="w-5 h-5 text-green-600" />
+            </div>
+            <div className="text-2xl font-bold text-green-600">
+              R$ {totalEarnings.toFixed(2)}
+            </div>
+          </div>
+          
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <div className="flex items-center justify-between">
+              <span className="text-blue-800 font-medium">Funcionários</span>
+              <Users className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="text-2xl font-bold text-blue-600">{financialData.length}</div>
+          </div>
+          
+          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+            <div className="flex items-center justify-between">
+              <span className="text-purple-800 font-medium">Dias Trabalhados</span>
+              <Calendar className="w-5 h-5 text-purple-600" />
+            </div>
+            <div className="text-2xl font-bold text-purple-600">
+              {financialData.reduce((sum, data) => sum + data.workDays, 0)}
+            </div>
+          </div>
+          
+          <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+            <div className="flex items-center justify-between">
+              <span className="text-orange-800 font-medium">Pagamentos</span>
+              <Calculator className="w-5 h-5 text-orange-600" />
+            </div>
+            <div className="text-2xl font-bold text-orange-600">{payments.length}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Aplicação em Lote */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        <h3 className="text-lg font-medium mb-4 flex items-center">
+          <Calculator className="w-5 h-5 mr-2 text-blue-600" />
+          Aplicar Valor em Lote
+        </h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Valor por Dia (R$)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={bulkDailyRate}
+              onChange={(e) => setBulkDailyRate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              placeholder="0.00"
+            />
+          </div>
+          
+          <div className="flex items-end">
+            <button
+              onClick={selectAllEmployees}
+              className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+            >
+              {selectedEmployees.size === financialData.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+            </button>
+          </div>
+          
+          <div className="flex items-end">
+            <button
+              onClick={handleBulkApply}
+              disabled={!bulkDailyRate || selectedEmployees.size === 0}
+              className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Aplicar ({selectedEmployees.size} selecionados)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Lista de Funcionários */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">
+            Funcionários e Pagamentos
+          </h3>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <input
+                    type="checkbox"
+                    checked={selectedEmployees.size === financialData.length && financialData.length > 0}
+                    onChange={selectAllEmployees}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Funcionário
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Dias Trabalhados
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Faltas
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Saídas Personalizadas
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Total Ganho
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Ações
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {financialData.map((data) => (
+                <React.Fragment key={data.employee.id}>
+                  <tr className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployees.has(data.employee.id)}
+                        onChange={() => toggleEmployeeSelection(data.employee.id)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{data.employee.name}</div>
+                        <div className="text-sm text-gray-500">{formatCPF(data.employee.cpf)}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        {data.workDays} dias
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                        {data.absences} faltas
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        {data.customExitDays} dias
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-green-600">
+                        R$ {data.totalEarned.toFixed(2)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => {
+                          const row = document.getElementById(`payments-${data.employee.id}`);
+                          if (row) {
+                            row.style.display = row.style.display === 'none' ? '' : 'none';
+                          }
+                        }}
+                        className="text-blue-600 hover:text-blue-900 mr-2"
+                      >
+                        Ver Detalhes
+                      </button>
+                    </td>
+                  </tr>
+                  
+                  {/* Detalhes dos Pagamentos */}
+                  <tr id={`payments-${data.employee.id}`} style={{ display: 'none' }}>
+                    <td colSpan={7} className="px-6 py-4 bg-gray-50">
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-gray-900">Pagamentos Detalhados:</h4>
+                        {data.payments.length > 0 ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {data.payments.map((payment) => (
+                              <div key={payment.id} className="bg-white p-3 rounded border">
+                                {editingPayment?.employeeId === data.employee.id && editingPayment?.date === payment.date ? (
+                                  <div className="space-y-2">
+                                    <div className="text-sm font-medium">{formatDateBR(payment.date)}</div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={editValues.dailyRate}
+                                        onChange={(e) => setEditValues(prev => ({ ...prev, dailyRate: e.target.value }))}
+                                        className="px-2 py-1 text-xs border rounded"
+                                        placeholder="Diária"
+                                      />
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={editValues.bonus}
+                                        onChange={(e) => setEditValues(prev => ({ ...prev, bonus: e.target.value }))}
+                                        className="px-2 py-1 text-xs border rounded"
+                                        placeholder="Bônus"
+                                      />
+                                    </div>
+                                    <div className="flex space-x-1">
+                                      <button
+                                        onClick={handleSaveEdit}
+                                        className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                      >
+                                        <Save className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingPayment(null)}
+                                        className="p-1 text-gray-600 hover:bg-gray-50 rounded"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="text-sm font-medium">{formatDateBR(payment.date)}</div>
+                                    <div className="text-xs text-gray-600">
+                                      Diária: R$ {payment.daily_rate?.toFixed(2) || '0.00'}
+                                    </div>
+                                    <div className="text-xs text-gray-600">
+                                      Bônus: R$ {payment.bonus?.toFixed(2) || '0.00'}
+                                    </div>
+                                    <div className="text-sm font-medium text-green-600">
+                                      Total: R$ {payment.total?.toFixed(2) || '0.00'}
+                                    </div>
+                                    <div className="flex space-x-1 mt-2">
+                                      <button
+                                        onClick={() => handleEditPayment(data.employee.id, payment.date)}
+                                        className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                      >
+                                        <Edit2 className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeletePayment(payment.id)}
+                                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">Nenhum pagamento registrado para este período.</p>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {financialData.length === 0 && (
+          <div className="text-center py-8">
+            <DollarSign className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum dado financeiro encontrado</h3>
+            <p className="text-gray-500">Ajuste os filtros ou aguarde mais registros serem criados.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

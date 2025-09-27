@@ -28,6 +28,27 @@ export interface Attendance {
   employees?: Employee;
 }
 
+export interface Payment {
+  id: string;
+  employee_id: string;
+  date: string;
+  daily_rate: number;
+  bonus: number;
+  total: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  employees?: Employee;
+}
+
+export interface Bonus {
+  id: string;
+  date: string;
+  amount: number;
+  created_by: string;
+  created_at: string;
+}
+
 export const createTables = async () => {
   try {
     // Criar tabela users
@@ -69,6 +90,37 @@ export const createTables = async () => {
           marked_by TEXT NOT NULL,
           created_at TIMESTAMP DEFAULT NOW(),
           UNIQUE(employee_id, date)
+        );
+      `
+    });
+
+    // Criar tabela payments
+    await supabase.rpc('exec_sql', {
+      sql: `
+        CREATE TABLE IF NOT EXISTS payments (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
+          date DATE NOT NULL,
+          daily_rate DECIMAL(10,2) DEFAULT 0,
+          bonus DECIMAL(10,2) DEFAULT 0,
+          total DECIMAL(10,2) DEFAULT 0,
+          created_by TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(employee_id, date)
+        );
+      `
+    });
+
+    // Criar tabela bonuses
+    await supabase.rpc('exec_sql', {
+      sql: `
+        CREATE TABLE IF NOT EXISTS bonuses (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          date DATE NOT NULL UNIQUE,
+          amount DECIMAL(10,2) NOT NULL,
+          created_by TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW()
         );
       `
     });
@@ -316,4 +368,150 @@ export const getAttendanceHistory = async (
 
   if (error) throw error;
   return data || [];
+};
+
+// Payment functions
+export const getPayments = async (
+  startDate?: string,
+  endDate?: string,
+  employeeId?: string
+): Promise<Payment[]> => {
+  let query = supabase
+    .from('payments')
+    .select(`
+      *,
+      employees (
+        id,
+        name,
+        cpf
+      )
+    `);
+
+  if (startDate) {
+    query = query.gte('date', startDate);
+  }
+  
+  if (endDate) {
+    query = query.lte('date', endDate);
+  }
+  
+  if (employeeId) {
+    query = query.eq('employee_id', employeeId);
+  }
+
+  const { data, error } = await query.order('date', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const upsertPayment = async (
+  employeeId: string,
+  date: string,
+  dailyRate: number,
+  bonus: number,
+  createdBy: string
+): Promise<void> => {
+  const total = dailyRate + bonus;
+  
+  const { error } = await supabase
+    .from('payments')
+    .upsert([{
+      employee_id: employeeId,
+      date,
+      daily_rate: dailyRate,
+      bonus,
+      total,
+      created_by: createdBy,
+      updated_at: new Date().toISOString()
+    }], { 
+      onConflict: 'employee_id,date'
+    });
+
+  if (error) throw error;
+};
+
+export const deletePayment = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('payments')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+};
+
+// Bonus functions
+export const getBonuses = async (): Promise<Bonus[]> => {
+  const { data, error } = await supabase
+    .from('bonuses')
+    .select('*')
+    .order('date', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const createBonus = async (
+  date: string,
+  amount: number,
+  createdBy: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('bonuses')
+    .upsert([{
+      date,
+      amount,
+      created_by: createdBy
+    }], { 
+      onConflict: 'date'
+    });
+
+  if (error) throw error;
+};
+
+export const applyBonusToAllPresent = async (
+  date: string,
+  bonusAmount: number,
+  createdBy: string
+): Promise<void> => {
+  // Buscar todos os funcionários presentes no dia
+  const { data: attendances, error: attendanceError } = await supabase
+    .from('attendance')
+    .select('employee_id')
+    .eq('date', date)
+    .eq('status', 'present');
+
+  if (attendanceError) throw attendanceError;
+  
+  if (!attendances || attendances.length === 0) {
+    throw new Error('Nenhum funcionário presente encontrado para este dia');
+  }
+
+  // Aplicar bonificação para cada funcionário presente
+  for (const attendance of attendances) {
+    // Buscar pagamento existente ou criar novo
+    const { data: existingPayment } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('employee_id', attendance.employee_id)
+      .eq('date', date)
+      .single();
+
+    const currentDailyRate = existingPayment?.daily_rate || 0;
+    const newTotal = currentDailyRate + bonusAmount;
+
+    await supabase
+      .from('payments')
+      .upsert([{
+        employee_id: attendance.employee_id,
+        date,
+        daily_rate: currentDailyRate,
+        bonus: bonusAmount,
+        total: newTotal,
+        created_by: createdBy,
+        updated_at: new Date().toISOString()
+      }], { 
+        onConflict: 'employee_id,date'
+      });
+  }
 };
