@@ -70,9 +70,14 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
   }, [filters, attendances]);
 
   useEffect(() => {
-    const searched = filteredAttendances.filter(attendance =>
-      attendance.employees?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      attendance.employees?.cpf.includes(searchTerm.replace(/\D/g, ''))
+    const searched = filteredAttendances.filter(attendance => {
+      const employeeName = attendance.employees?.name || '';
+      const employeeCpf = attendance.employees?.cpf || '';
+      const searchLower = searchTerm.toLowerCase().trim();
+      
+      return employeeName.toLowerCase().includes(searchLower) ||
+             employeeCpf.includes(searchTerm.replace(/\D/g, ''));
+    }
     );
     setDisplayedAttendances(searched);
   }, [searchTerm, filteredAttendances]);

@@ -53,7 +53,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
 
   useEffect(() => {
     const filtered = employees.filter(employee =>
-      employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.name.toLowerCase().includes(searchTerm.toLowerCase().trim()) ||
       employee.cpf.includes(searchTerm.replace(/\D/g, ''))
     );
     setFilteredEmployees(filtered);
