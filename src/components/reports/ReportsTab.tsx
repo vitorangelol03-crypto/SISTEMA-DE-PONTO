@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Download, Filter, Calendar, User, FileText, RefreshCw } from 'lucide-react';
+import { BarChart3, Download, Filter, Calendar, User, FileText, RefreshCw, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/database';
 import { formatDateBR, formatTimestampForExcel } from '../../utils/dateUtils';
@@ -14,7 +14,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [filteredAttendances, setFilteredAttendances] = useState<Attendance[]>([]);
+  const [displayedAttendances, setDisplayedAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     startDate: '',
     endDate: '',
@@ -67,10 +69,18 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
     setFilteredAttendances(filtered);
   }, [filters, attendances]);
 
+  useEffect(() => {
+    const searched = filteredAttendances.filter(attendance =>
+      attendance.employees?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      attendance.employees?.cpf.includes(searchTerm.replace(/\D/g, ''))
+    );
+    setDisplayedAttendances(searched);
+  }, [searchTerm, filteredAttendances]);
+
   const getStatistics = () => {
-    const total = filteredAttendances.length;
-    const present = filteredAttendances.filter(att => att.status === 'present').length;
-    const absent = filteredAttendances.filter(att => att.status === 'absent').length;
+    const total = displayedAttendances.length;
+    const present = displayedAttendances.filter(att => att.status === 'present').length;
+    const absent = displayedAttendances.filter(att => att.status === 'absent').length;
     const presenceRate = total > 0 ? ((present / total) * 100).toFixed(1) : '0';
 
     return { total, present, absent, presenceRate };
@@ -78,7 +88,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
 
   const exportToExcel = () => {
     try {
-      const data = filteredAttendances.map(att => ({
+      const data = displayedAttendances.map(att => ({
         'Data': formatDateBR(att.date),
         'Funcionário': att.employees?.name || 'N/A',
         'CPF': att.employees?.cpf || 'N/A',
@@ -261,7 +271,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
           
           <button
             onClick={exportToExcel}
-            disabled={filteredAttendances.length === 0}
+            disabled={displayedAttendances.length === 0}
             className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Download className="w-4 h-4" />
@@ -272,9 +282,22 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">
-            Registros de Ponto ({filteredAttendances.length})
-          </h3>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <h3 className="text-lg font-medium text-gray-900">
+              Registros de Ponto ({displayedAttendances.length})
+            </h3>
+            
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Buscar por nome ou CPF..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 sm:w-64"
+              />
+            </div>
+          </div>
         </div>
         
         <div className="overflow-x-auto">
@@ -299,7 +322,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredAttendances.map((attendance) => (
+              {displayedAttendances.map((attendance) => (
                 <tr key={attendance.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
@@ -338,6 +361,14 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
             </tbody>
           </table>
         </div>
+
+        {displayedAttendances.length === 0 && filteredAttendances.length > 0 && (
+          <div className="text-center py-8">
+            <Search className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum registro encontrado</h3>
+            <p className="text-gray-500">Tente ajustar os termos de busca.</p>
+          </div>
+        )}
 
         {filteredAttendances.length === 0 && (
           <div className="text-center py-8">
