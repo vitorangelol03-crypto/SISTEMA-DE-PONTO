@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart3, Download, Filter, Calendar, User, FileText, RefreshCw, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/database';
-import { formatDateBR, formatTimestampForExcel } from '../../utils/dateUtils';
+import { formatDateBR } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 

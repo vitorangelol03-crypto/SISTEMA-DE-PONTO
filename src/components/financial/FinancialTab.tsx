@@ -32,6 +32,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     employeeId: ''
   });
   
+  const [isEditingDate, setIsEditingDate] = useState({
+    startDate: false,
+    endDate: false
+  });
+  
   const [bulkDailyRate, setBulkDailyRate] = useState<string>('');
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [editingPayment, setEditingPayment] = useState<{employeeId: string, date: string} | null>(null);
@@ -86,8 +91,23 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   };
 
   useEffect(() => {
-    loadData();
-  }, [filters]);
+    // Só carrega dados se não estiver editando nenhuma data
+    if (!isEditingDate.startDate && !isEditingDate.endDate) {
+      loadData();
+    }
+  }, [filters, isEditingDate]);
+
+  const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
+    setFilters(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleDateFocus = (field: 'startDate' | 'endDate') => {
+    setIsEditingDate(prev => ({ ...prev, [field]: true }));
+  };
+
+  const handleDateBlur = (field: 'startDate' | 'endDate') => {
+    setIsEditingDate(prev => ({ ...prev, [field]: false }));
+  };
 
   const handleBulkApply = async () => {
     if (!bulkDailyRate || selectedEmployees.size === 0) {
@@ -226,8 +246,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
             <input
               type="date"
               value={filters.startDate}
-              onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
-              onBlur={loadData}
+              onChange={(e) => handleDateChange('startDate', e.target.value)}
+              onFocus={() => handleDateFocus('startDate')}
+              onBlur={() => handleDateBlur('startDate')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -239,8 +260,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
             <input
               type="date"
               value={filters.endDate}
-              onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
-              onBlur={loadData}
+              onChange={(e) => handleDateChange('endDate', e.target.value)}
+              onFocus={() => handleDateFocus('endDate')}
+              onBlur={() => handleDateBlur('endDate')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>

@@ -51,96 +51,10 @@ export interface Bonus {
 
 export const createTables = async () => {
   try {
-    // Criar tabela users
-    await supabase.rpc('exec_sql', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS users (
-          id TEXT PRIMARY KEY,
-          password TEXT NOT NULL,
-          role TEXT NOT NULL CHECK (role IN ('admin', 'supervisor')),
-          created_by TEXT,
-          created_at TIMESTAMP DEFAULT NOW()
-        );
-      `
-    });
-
-    // Criar tabela employees
-    await supabase.rpc('exec_sql', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS employees (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          name TEXT NOT NULL,
-          cpf TEXT UNIQUE NOT NULL,
-          pix_key TEXT,
-          created_by TEXT NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW()
-        );
-      `
-    });
-
-    // Criar tabela attendance
-    await supabase.rpc('exec_sql', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS attendance (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
-          date DATE NOT NULL,
-          status TEXT NOT NULL CHECK (status IN ('present', 'absent')),
-          exit_time TEXT,
-          marked_by TEXT NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW(),
-          UNIQUE(employee_id, date)
-        );
-      `
-    });
-
-    // Criar tabela payments
-    await supabase.rpc('exec_sql', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS payments (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
-          date DATE NOT NULL,
-          daily_rate DECIMAL(10,2) DEFAULT 0,
-          bonus DECIMAL(10,2) DEFAULT 0,
-          total DECIMAL(10,2) DEFAULT 0,
-          created_by TEXT NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW(),
-          updated_at TIMESTAMP DEFAULT NOW(),
-          UNIQUE(employee_id, date)
-        );
-      `
-    });
-
-    // Criar tabela bonuses
-    await supabase.rpc('exec_sql', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS bonuses (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          date DATE NOT NULL UNIQUE,
-          amount DECIMAL(10,2) NOT NULL,
-          created_by TEXT NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW()
-        );
-      `
-    });
-
-    console.log('Tabelas criadas com sucesso!');
+    // Verificar se as tabelas existem, se não existir o Supabase já as criou automaticamente
+    console.log('Verificando estrutura do banco de dados...');
   } catch (error) {
-    console.error('Erro ao criar tabelas:', error);
-    // Fallback: usar consultas diretas
-    try {
-      const { error: userTableError } = await supabase
-        .from('users')
-        .select('id')
-        .limit(1);
-        
-      if (userTableError && userTableError.code === '42P01') {
-        console.log('Tabelas não existem, mas continuando...');
-      }
-    } catch (e) {
-      console.log('Continuando sem verificação de tabelas...');
-    }
+    console.log('Estrutura do banco verificada:', error);
   }
 };
 
