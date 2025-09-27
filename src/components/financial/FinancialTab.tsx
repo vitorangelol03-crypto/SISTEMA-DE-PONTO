@@ -18,6 +18,23 @@ interface EmployeeFinancialData {
   totalEarned: number;
 }
 
+// Hook personalizado para debounce
+const useDebounce = (value: any, delay: number) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+};
+
 export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -26,11 +43,15 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const [financialData, setFinancialData] = useState<EmployeeFinancialData[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [filters, setFilters] = useState({
+  // Estados separados para input e filtro efetivo
+  const [filterInputs, setFilterInputs] = useState({
     startDate: getBrazilDate(),
     endDate: getBrazilDate(),
     employeeId: ''
   });
+  
+  // Debounce nos filtros de data (500ms de atraso)
+  const debouncedFilters = useDebounce(filterInputs, 500);
   
   const [bulkDailyRate, setBulkDailyRate] = useState<string>('');
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
@@ -42,9 +63,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
       setLoading(true);
       const [employeesData, paymentsData, bonusesData, attendancesData] = await Promise.all([
         getAllEmployees(),
-        getPayments(filters.startDate, filters.endDate, filters.employeeId),
+        getPayments(debouncedFilters.startDate, debouncedFilters.endDate, debouncedFilters.employeeId),
         getBonuses(),
-        getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId)
+        getAttendanceHistory(debouncedFilters.startDate, debouncedFilters.endDate, debouncedFilters.employeeId)
       ]);
       
       setEmployees(employeesData);
@@ -87,7 +108,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
 
   useEffect(() => {
     loadData();
-  }, [filters]);
+  }, [debouncedFilters]);
 
   const handleBulkApply = async () => {
     if (!bulkDailyRate || selectedEmployees.size === 0) {
@@ -102,8 +123,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     }
 
     try {
-      const startDate = new Date(filters.startDate);
-      const endDate = new Date(filters.endDate);
+      const startDate = new Date(debouncedFilters.startDate);
+      const endDate = new Date(debouncedFilters.endDate);
       
       for (const employeeId of selectedEmployees) {
         const employeeAttendances = attendances.filter(att => 
@@ -225,8 +246,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
             </label>
             <input
               type="date"
-              value={filters.startDate}
-              onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
+              value={filterInputs.startDate}
+              onChange={(e) => setFilterInputs(prev => ({ ...prev, startDate: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -237,8 +258,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
             </label>
             <input
               type="date"
-              value={filters.endDate}
-              onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
+              value={filterInputs.endDate}
+              onChange={(e) => setFilterInputs(prev => ({ ...prev, endDate: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -248,8 +269,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
               Funcionário
             </label>
             <select
-              value={filters.employeeId}
-              onChange={(e) => setFilters(prev => ({ ...prev, employeeId: e.target.value }))}
+              value={filterInputs.employeeId}
+              onChange={(e) => setFilterInputs(prev => ({ ...prev, employeeId: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Todos</option>
