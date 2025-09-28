@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Plus, Search, Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target } from 'lucide-react';
+import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorRecord, deleteErrorRecord, getErrorStatistics, Employee, Attendance, ErrorRecord } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
