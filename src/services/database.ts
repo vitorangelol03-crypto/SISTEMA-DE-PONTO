@@ -49,6 +49,18 @@ export interface Bonus {
   created_at: string;
 }
 
+export interface ErrorRecord {
+  id: string;
+  employee_id: string;
+  date: string;
+  error_count: number;
+  observations: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  employees?: Employee;
+}
+
 export const createTables = async () => {
   try {
     // Verificar se as tabelas existem, se não existir o Supabase já as criou automaticamente
