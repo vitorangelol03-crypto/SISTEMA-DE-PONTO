@@ -486,3 +486,272 @@ export const applyBonusToAllPresent = async (
       });
   }
 };
+
+// Error functions
+export const getErrorRecords = async (
+  startDate?: string,
+  endDate?: string,
+  employeeId?: string
+): Promise<ErrorRecord[]> => {
+  let query = supabase
+    .from('error_records')
+    .select(`
+      *,
+      employees (
+        id,
+        name,
+        cpf
+      )
+    `);
+
+  if (startDate) {
+    query = query.gte('date', startDate);
+  }
+  
+  if (endDate) {
+    query = query.lte('date', endDate);
+  }
+  
+  if (employeeId) {
+    query = query.eq('employee_id', employeeId);
+  }
+
+  const { data, error } = await query.order('date', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const upsertErrorRecord = async (
+  employeeId: string,
+  date: string,
+  errorCount: number,
+  observations: string | null,
+  createdBy: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('error_records')
+    .upsert([{
+      employee_id: employeeId,
+      date,
+      error_count: errorCount,
+      observations,
+      created_by: createdBy,
+      updated_at: new Date().toISOString()
+    }], { 
+      onConflict: 'employee_id,date'
+    });
+
+  if (error) throw error;
+};
+
+export const deleteErrorRecord = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('error_records')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+};
+
+export const getErrorStatistics = async (
+  startDate?: string,
+  endDate?: string
+): Promise<{
+  totalErrors: number;
+  employeeStats: Array<{
+    employee: Employee;
+    totalErrors: number;
+    workDays: number;
+    errorRate: number;
+  }>;
+}> => {
+  // Buscar registros de erro
+  const errorRecords = await getErrorRecords(startDate, endDate);
+  
+  // Buscar presenças para calcular taxa de erro
+  const attendances = await getAttendanceHistory(startDate, endDate);
+  const presentAttendances = attendances.filter(att => att.status === 'present');
+  
+  // Calcular estatísticas por funcionário
+  const employeeMap = new Map<string, {
+    employee: Employee;
+    totalErrors: number;
+    workDays: number;
+  }>();
+
+  // Inicializar com funcionários que trabalharam
+  presentAttendances.forEach(att => {
+    if (att.employees) {
+      const key = att.employee_id;
+      if (!employeeMap.has(key)) {
+        employeeMap.set(key, {
+          employee: att.employees,
+          totalErrors: 0,
+          workDays: 0
+        });
+      }
+      employeeMap.get(key)!.workDays++;
+    }
+  });
+
+  // Adicionar erros
+  errorRecords.forEach(error => {
+    if (error.employees) {
+      const key = error.employee_id;
+      if (!employeeMap.has(key)) {
+        employeeMap.set(key, {
+          employee: error.employees,
+          totalErrors: 0,
+          workDays: 0
+        });
+      }
+      employeeMap.get(key)!.totalErrors += error.error_count;
+    }
+  });
+
+  const employeeStats = Array.from(employeeMap.values()).map(stat => ({
+    ...stat,
+    errorRate: stat.workDays > 0 ? (stat.totalErrors / stat.workDays) : 0
+  }));
+
+  const totalErrors = errorRecords.reduce((sum, record) => sum + record.error_count, 0);
+
+  return {
+    totalErrors,
+    employeeStats
+  };
+};
+
+// Error management functions
+export const getErrorRecords = async (
+  startDate?: string,
+  endDate?: string,
+  employeeId?: string
+): Promise<ErrorRecord[]> => {
+  let query = supabase
+    .from('error_records')
+    .select(`
+      *,
+      employees (
+        id,
+        name,
+        cpf
+      )
+    `);
+
+  if (startDate) {
+    query = query.gte('date', startDate);
+  }
+  
+  if (endDate) {
+    query = query.lte('date', endDate);
+  }
+  
+  if (employeeId) {
+    query = query.eq('employee_id', employeeId);
+  }
+
+  const { data, error } = await query.order('date', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const upsertErrorRecord = async (
+  employeeId: string,
+  date: string,
+  errorCount: number,
+  observations: string | null,
+  createdBy: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('error_records')
+    .upsert([{
+      employee_id: employeeId,
+      date,
+      error_count: errorCount,
+      observations,
+      created_by: createdBy,
+      updated_at: new Date().toISOString()
+    }], { 
+      onConflict: 'employee_id,date'
+    });
+
+  if (error) throw error;
+};
+
+export const deleteErrorRecord = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('error_records')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+};
+
+export const getErrorStatistics = async (
+  startDate?: string,
+  endDate?: string
+): Promise<{
+  totalErrors: number;
+  totalWorkDays: number;
+  errorRate: number;
+  bestEmployees: Array<{employee: Employee, errorRate: number}>;
+  worstEmployees: Array<{employee: Employee, errorRate: number}>;
+}> => {
+  // Buscar registros de erro
+  const errorRecords = await getErrorRecords(startDate, endDate);
+  
+  // Buscar dias trabalhados no período
+  const attendances = await getAttendanceHistory(startDate, endDate);
+  const workDays = attendances.filter(att => att.status === 'present');
+  
+  const totalErrors = errorRecords.reduce((sum, record) => sum + record.error_count, 0);
+  const totalWorkDays = workDays.length;
+  const errorRate = totalWorkDays > 0 ? (totalErrors / totalWorkDays) * 100 : 0;
+  
+  // Calcular estatísticas por funcionário
+  const employeeStats = new Map();
+  
+  // Inicializar com funcionários que trabalharam
+  workDays.forEach(attendance => {
+    if (!employeeStats.has(attendance.employee_id)) {
+      employeeStats.set(attendance.employee_id, {
+        employee: attendance.employees,
+        workDays: 0,
+        errors: 0
+      });
+    }
+    employeeStats.get(attendance.employee_id).workDays++;
+  });
+  
+  // Adicionar erros
+  errorRecords.forEach(record => {
+    if (employeeStats.has(record.employee_id)) {
+      employeeStats.get(record.employee_id).errors += record.error_count;
+    }
+  });
+  
+  // Calcular taxa de erro por funcionário
+  const employeeRates = Array.from(employeeStats.values())
+    .map(stat => ({
+      employee: stat.employee,
+      errorRate: stat.workDays > 0 ? (stat.errors / stat.workDays) * 100 : 0
+    }))
+    .filter(stat => stat.employee); // Filtrar apenas funcionários válidos
+  
+  // Ordenar por taxa de erro
+  employeeRates.sort((a, b) => a.errorRate - b.errorRate);
+  
+  const bestEmployees = employeeRates.slice(0, 5);
+  const worstEmployees = employeeRates.slice(-5).reverse();
+  
+  return {
+    totalErrors,
+    totalWorkDays,
+    errorRate,
+    bestEmployees,
+    worstEmployees
+  };
+};
