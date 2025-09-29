@@ -137,10 +137,11 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       toast.success(`Bonificação de R$ ${amount.toFixed(2)} aplicada para todos os funcionários presentes!`);
       setShowBonusModal(false);
       setBonusAmount('');
-      loadData();
     } catch (error: any) {
       console.error('Erro ao aplicar bonificação:', error);
       toast.error(error.message || 'Erro ao aplicar bonificação');
+    } finally {
+      loadData();
     }
   };
 

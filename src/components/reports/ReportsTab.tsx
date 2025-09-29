@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart3, Download, Filter, Calendar, User, FileText, RefreshCw, Search } from 'lucide-react';
-import { format } from 'date-fns';
 import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/database';
 import { formatDateBR } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx';
@@ -125,7 +124,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
 
       XLSX.utils.book_append_sheet(wb, ws, 'Relatório de Ponto');
       
-      const fileName = `relatorio-ponto-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+      const fileName = `relatorio-ponto-${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(wb, fileName);
       
       toast.success('Relatório exportado com sucesso!');

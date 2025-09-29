@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target } from 'lucide-react';
+import { AlertTriangle, Plus, Search, Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorRecord, deleteErrorRecord, getErrorStatistics, Employee, Attendance, ErrorRecord } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
@@ -392,28 +392,40 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white p-6 rounded-lg shadow">
             <h3 className="text-lg font-medium mb-4">Erros por Funcionário</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="erros" fill="#ef4444" />
-              </BarChart>
-            </ResponsiveContainer>
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="erros" fill="#ef4444" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-gray-500">
+                <p>Nenhum dado para exibir</p>
+              </div>
+            )}
           </div>
 
           <div className="bg-white p-6 rounded-lg shadow">
             <h3 className="text-lg font-medium mb-4">Taxa de Erros</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="taxa" fill="#f97316" />
-              </BarChart>
-            </ResponsiveContainer>
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="taxa" fill="#f97316" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-gray-500">
+                <p>Nenhum dado para exibir</p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -425,25 +437,31 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
             <TrendingUp className="w-5 h-5 mr-2" />
             Melhores Funcionários (Menos Erros)
           </h3>
-          <div className="space-y-3">
-            {best.map((employee, index) => (
-              <div key={employee.employee.id} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                    {index + 1}
+          {best.length > 0 ? (
+            <div className="space-y-3">
+              {best.map((employee, index) => (
+                <div key={employee.employee.id} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900">{employee.employee.name}</div>
+                      <div className="text-sm text-gray-500">{employee.workDays} dias trabalhados</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-medium text-gray-900">{employee.employee.name}</div>
-                    <div className="text-sm text-gray-500">{employee.workDays} dias trabalhados</div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-green-600">{employee.totalErrors}</div>
+                    <div className="text-sm text-gray-500">Taxa: {employee.errorRate.toFixed(2)}</div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold text-green-600">{employee.totalErrors}</div>
-                  <div className="text-sm text-gray-500">Taxa: {employee.errorRate.toFixed(2)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p>Nenhum funcionário encontrado</p>
+            </div>
+          )}
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">
@@ -451,25 +469,31 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
             <TrendingDown className="w-5 h-5 mr-2" />
             Funcionários com Mais Erros
           </h3>
-          <div className="space-y-3">
-            {worst.map((employee, index) => (
-              <div key={employee.employee.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                    {index + 1}
+          {worst.length > 0 ? (
+            <div className="space-y-3">
+              {worst.map((employee, index) => (
+                <div key={employee.employee.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900">{employee.employee.name}</div>
+                      <div className="text-sm text-gray-500">{employee.workDays} dias trabalhados</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-medium text-gray-900">{employee.employee.name}</div>
-                    <div className="text-sm text-gray-500">{employee.workDays} dias trabalhados</div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-red-600">{employee.totalErrors}</div>
+                    <div className="text-sm text-gray-500">Taxa: {employee.errorRate.toFixed(2)}</div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold text-red-600">{employee.totalErrors}</div>
-                  <div className="text-sm text-gray-500">Taxa: {employee.errorRate.toFixed(2)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p>Nenhum funcionário encontrado</p>
+            </div>
+          )}
         </div>
       </div>
 
