@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Calendar, Users, Calculator, Edit2, Save, X, Plus, Trash2, RefreshCw, Filter, AlertTriangle, Minus } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Plus, Trash2, RefreshCw, Filter, AlertTriangle, Minus } from 'lucide-react';
 import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
@@ -284,6 +284,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
           
           if (existingPayment) {
             // Aplicar desconto no pagamento existente
+            const newTotal = Math.max(0, (existingPayment.total || 0) - discountAmount);
             const newDailyRate = Math.max(0, (existingPayment.daily_rate || 0) - discountAmount);
             
             await upsertPayment(
