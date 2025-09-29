@@ -10,7 +10,6 @@ import { SettingsTab } from './components/settings/SettingsTab';
 import { UsersTab } from './components/users/UsersTab';
 import { FinancialTab } from './components/financial/FinancialTab';
 import { ErrorsTab } from './components/errors/ErrorsTab';
-import { ErrorsTab } from './components/errors/ErrorsTab';
 import { useAuth } from './hooks/useAuth';
 import { initializeSystem } from './services/database';
 
@@ -57,8 +56,6 @@ function App() {
         return <ErrorsTab userId={user.id} />;
       case 'settings':
         return <SettingsTab />;
-      case 'errors':
-        return <ErrorsTab userId={user.id} />;
       case 'users':
         return user.role === 'admin' ? <UsersTab userId={user.id} /> : null;
       default:
