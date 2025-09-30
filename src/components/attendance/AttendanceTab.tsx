@@ -20,6 +20,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showBonusModal, setShowBonusModal] = useState(false);
   const [bonusAmount, setBonusAmount] = useState<string>('');
+  const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
+  const [bulkMarkingLoading, setBulkMarkingLoading] = useState(false);
 
   const loadData = async () => {
     try {
@@ -145,6 +147,64 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
     }
   };
 
+  const toggleEmployeeSelection = (employeeId: string) => {
+    const newSelected = new Set(selectedEmployees);
+    if (newSelected.has(employeeId)) {
+      newSelected.delete(employeeId);
+    } else {
+      newSelected.add(employeeId);
+    }
+    setSelectedEmployees(newSelected);
+  };
+
+  const selectAllEmployees = () => {
+    if (selectedEmployees.size === filteredEmployees.length) {
+      setSelectedEmployees(new Set());
+    } else {
+      setSelectedEmployees(new Set(filteredEmployees.map(emp => emp.id)));
+    }
+  };
+
+  const handleBulkMarkAttendance = async (status: 'present' | 'absent') => {
+    if (selectedEmployees.size === 0) {
+      toast.error('Selecione pelo menos um funcionário');
+      return;
+    }
+
+    setBulkMarkingLoading(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      for (const employeeId of selectedEmployees) {
+        try {
+          const exitTime = exitTimes[employeeId] || null;
+          await markAttendance(employeeId, selectedDate, status, exitTime, userId);
+          successCount++;
+        } catch (error) {
+          console.error(`Erro ao marcar presença para funcionário ${employeeId}:`, error);
+          errorCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`${successCount} funcionário(s) marcado(s) como ${status === 'present' ? 'presente' : 'falta'}`);
+      }
+      
+      if (errorCount > 0) {
+        toast.error(`Erro ao marcar ${errorCount} funcionário(s)`);
+      }
+
+      setSelectedEmployees(new Set());
+      await loadData();
+    } catch (error) {
+      console.error('Erro na marcação em massa:', error);
+      toast.error('Erro na marcação em massa');
+    } finally {
+      setBulkMarkingLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -215,6 +275,46 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
         </div>
       </div>
 
+      {/* Ações em Massa */}
+      {selectedEmployees.size > 0 && (
+        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg shadow">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center space-x-2">
+              <span className="text-blue-800 font-medium">
+                {selectedEmployees.size} funcionário(s) selecionado(s)
+              </span>
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={() => handleBulkMarkAttendance('present')}
+                disabled={bulkMarkingLoading}
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>{bulkMarkingLoading ? 'Marcando...' : 'Marcar como Presente'}</span>
+              </button>
+              
+              <button
+                onClick={() => handleBulkMarkAttendance('absent')}
+                disabled={bulkMarkingLoading}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <XCircle className="w-4 h-4" />
+                <span>{bulkMarkingLoading ? 'Marcando...' : 'Marcar como Falta'}</span>
+              </button>
+              
+              <button
+                onClick={() => setSelectedEmployees(new Set())}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+              >
+                Cancelar Seleção
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -233,12 +333,37 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
               />
             </div>
           </div>
+          
+          {filteredEmployees.length > 0 && (
+            <div className="mt-4 flex items-center space-x-4">
+              <button
+                onClick={selectAllEmployees}
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                {selectedEmployees.size === filteredEmployees.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+              </button>
+              
+              {selectedEmployees.size > 0 && (
+                <span className="text-sm text-gray-600">
+                  {selectedEmployees.size} de {filteredEmployees.length} selecionados
+                </span>
+              )}
+            </div>
+          )}
         </div>
         
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <input
+                    type="checkbox"
+                    checked={selectedEmployees.size === filteredEmployees.length && filteredEmployees.length > 0}
+                    onChange={selectAllEmployees}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Funcionário
                 </th>
@@ -259,6 +384,14 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
                 
                 return (
                   <tr key={employee.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployees.has(employee.id)}
+                        onChange={() => toggleEmployeeSelection(employee.id)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900">{employee.name}</div>
