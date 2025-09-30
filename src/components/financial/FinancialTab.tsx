@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Plus, Trash2, RefreshCw, Filter, AlertTriangle, Minus } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
@@ -283,17 +284,44 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
           );
           
           if (existingPayment) {
-            // Aplicar desconto no pagamento existente
-            const newTotal = Math.max(0, (existingPayment.total || 0) - discountAmount);
-            const newDailyRate = Math.max(0, (existingPayment.daily_rate || 0) - discountAmount);
+            // Aplicar desconto mantendo a diária original, mas reduzindo o total
+            const originalDailyRate = existingPayment.daily_rate || 0;
+            const originalBonus = existingPayment.bonus || 0;
+            const newTotal = Math.max(0, originalDailyRate + originalBonus - discountAmount);
             
             await upsertPayment(
               employeeId, 
               errorRecord.date, 
-              newDailyRate, 
-              existingPayment.bonus || 0, 
+              originalDailyRate, 
+              originalBonus, 
               userId
             );
+            
+            // Atualizar o total manualmente no banco
+            const { error: updateError } = await supabase
+              .from('payments')
+              .update({ total: newTotal })
+              .eq('employee_id', employeeId)
+              .eq('date', errorRecord.date);
+              
+            if (updateError) {
+              console.error('Erro ao atualizar total:', updateError);
+            }
+          } else {
+            // Se não existe pagamento, criar um com desconto
+            const discountedTotal = Math.max(0, -discountAmount);
+            await upsertPayment(employeeId, errorRecord.date, 0, 0, userId);
+            
+            // Atualizar o total para refletir o desconto
+            const { error: updateError } = await supabase
+              .from('payments')
+              .update({ total: discountedTotal })
+              .eq('employee_id', employeeId)
+              .eq('date', errorRecord.date);
+              
+            if (updateError) {
+              console.error('Erro ao criar pagamento com desconto:', updateError);
+            }
           }
         }
       }
