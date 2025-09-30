@@ -654,6 +654,15 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
                                     <div className="text-xs text-gray-600">
                                       Bônus: R$ {payment.bonus?.toFixed(2) || '0.00'}
                                     </div>
+                                    {(() => {
+                                      const errorRecord = data.errorRecords.find(err => err.date === payment.date);
+                                      const errorValue = errorRecord ? errorRecord.error_count * 5 : 0; // Assumindo R$ 5 por erro
+                                      return errorValue > 0 ? (
+                                        <div className="text-xs text-red-600">
+                                          Erros: -{errorRecord?.error_count} × R$ 5,00 = -R$ {errorValue.toFixed(2)}
+                                        </div>
+                                      ) : null;
+                                    })()}
                                     <div className="text-sm font-medium text-green-600">
                                       Total: R$ {payment.total?.toFixed(2) || '0.00'}
                                     </div>
