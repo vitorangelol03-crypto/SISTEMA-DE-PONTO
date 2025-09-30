@@ -656,10 +656,19 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
                                     </div>
                                     {(() => {
                                       const errorRecord = data.errorRecords.find(err => err.date === payment.date);
-                                      const errorValue = errorRecord ? errorRecord.error_count * 5 : 0; // Assumindo R$ 5 por erro
+                                      if (!errorRecord || errorRecord.error_count === 0) return null;
+                                      
+                                      // Calcular valor real do desconto por erro
+                                      // Valor esperado (diária + bônus) - valor real pago = desconto total
+                                      // Desconto total / quantidade de erros = valor por erro
+                                      const expectedValue = (payment.daily_rate || 0) + (payment.bonus || 0);
+                                      const actualValue = payment.total || 0;
+                                      const totalDiscount = expectedValue - actualValue;
+                                      const valuePerError = totalDiscount > 0 ? totalDiscount / errorRecord.error_count : 0;
+                                      
                                       return errorValue > 0 ? (
                                         <div className="text-xs text-red-600">
-                                          Erros: -{errorRecord?.error_count} × R$ 5,00 = -R$ {errorValue.toFixed(2)}
+                                          Erros: -{errorRecord.error_count} × R$ {valuePerError.toFixed(2)} = -R$ {totalDiscount.toFixed(2)}
                                         </div>
                                       ) : null;
                                     })()}
