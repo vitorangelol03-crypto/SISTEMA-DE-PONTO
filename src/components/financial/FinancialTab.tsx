@@ -666,7 +666,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
                                       const totalDiscount = expectedValue - actualValue;
                                       const valuePerError = totalDiscount > 0 ? totalDiscount / errorRecord.error_count : 0;
                                       
-                                      return errorValue > 0 ? (
+                                     return valuePerError > 0 ? (
                                         <div className="text-xs text-red-600">
                                           Erros: -{errorRecord.error_count} × R$ {valuePerError.toFixed(2)} = -R$ {totalDiscount.toFixed(2)}
                                         </div>
