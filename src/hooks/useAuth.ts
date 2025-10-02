@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { getCurrentSession, signOut as authSignOut } from '../services/authService';
 import { User } from '../services/database';
 
 export const useAuth = () => {
@@ -6,26 +8,47 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('timecard_user');
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch (error) {
-        console.error('Erro ao recuperar usuário:', error);
-        localStorage.removeItem('timecard_user');
+    getCurrentSession()
+      .then((session) => {
+        setUser(session);
+        setLoading(false);
+      })
+      .catch(() => {
+        setUser(null);
+        setLoading(false);
+      });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          const currentUser = await getCurrentSession();
+          setUser(currentUser);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+        } else if (event === 'TOKEN_REFRESHED' && session) {
+          const currentUser = await getCurrentSession();
+          setUser(currentUser);
+        }
       }
-    }
-    setLoading(false);
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = (userData: User) => {
     setUser(userData);
-    localStorage.setItem('timecard_user', JSON.stringify(userData));
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('timecard_user');
+  const logout = async () => {
+    try {
+      await authSignOut();
+      setUser(null);
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+      setUser(null);
+    }
   };
 
   return { user, loading, login, logout };

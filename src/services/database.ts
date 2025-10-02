@@ -129,20 +129,10 @@ export const initializeSystem = async () => {
   }
 };
 
-// Auth functions
+// Auth functions (deprecated - use authService instead)
 export const loginUser = async (id: string, password: string): Promise<User | null> => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', id)
-    .eq('password', password)
-    .single();
-
-  if (error || !data) {
-    throw new Error('Credenciais inválidas');
-  }
-
-  return data;
+  const { signIn } = await import('./authService');
+  return await signIn(id, password);
 };
 
 // User functions
@@ -157,17 +147,12 @@ export const getAllUsers = async (): Promise<User[]> => {
 };
 
 export const createUser = async (id: string, password: string, role: 'supervisor', createdBy: string): Promise<void> => {
-  const { error } = await supabase
-    .from('users')
-    .insert([{
-      id,
-      password,
-      role,
-      created_by: createdBy
-    }]);
+  const { signUp } = await import('./authService');
 
-  if (error) {
-    if (error.code === '23505') {
+  try {
+    await signUp(id, password, role, createdBy);
+  } catch (error: any) {
+    if (error.message?.includes('já existe') || error.message?.includes('já cadastrada')) {
       throw new Error('ID já existe');
     }
     throw error;
@@ -175,12 +160,28 @@ export const createUser = async (id: string, password: string, role: 'supervisor
 };
 
 export const deleteUser = async (id: string): Promise<void> => {
-  const { error } = await supabase
+  const { data: user, error: getUserError } = await supabase
+    .from('users')
+    .select('auth_user_id')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (getUserError) throw getUserError;
+
+  const { error: deleteError } = await supabase
     .from('users')
     .delete()
     .eq('id', id);
 
-  if (error) throw error;
+  if (deleteError) throw deleteError;
+
+  if (user?.auth_user_id) {
+    try {
+      await supabase.auth.admin.deleteUser(user.auth_user_id);
+    } catch (error) {
+      console.warn('Erro ao deletar usuário do Auth (pode já estar deletado):', error);
+    }
+  }
 };
 
 // Employee functions

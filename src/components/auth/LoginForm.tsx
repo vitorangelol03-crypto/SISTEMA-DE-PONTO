@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react';
-import { loginUser } from '../../services/database';
+import { signIn } from '../../services/authService';
 import { isNumericString } from '../../utils/validation';
 import toast from 'react-hot-toast';
 
@@ -32,7 +32,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     setLoading(true);
 
     try {
-      const user = await loginUser(id, password);
+      const user = await signIn(id, password);
       toast.success('Login realizado com sucesso!');
       onLogin(user);
     } catch (error) {

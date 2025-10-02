@@ -18,8 +18,14 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabType>('attendance');
 
   useEffect(() => {
-    // Inicializar sistema na primeira carga
-    initializeSystem();
+    const initialize = async () => {
+      await initializeSystem();
+
+      const { migrateAdminToAuth } = await import('./utils/migrateAdmin');
+      await migrateAdminToAuth();
+    };
+
+    initialize();
   }, []);
 
   if (loading) {
