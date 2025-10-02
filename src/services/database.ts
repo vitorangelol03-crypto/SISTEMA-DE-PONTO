@@ -61,6 +61,26 @@ export interface ErrorRecord {
   employees?: Employee;
 }
 
+export interface CollectiveError {
+  id: string;
+  date: string;
+  total_errors: number;
+  value_per_error: number;
+  total_amount: number;
+  observations: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollectiveErrorApplication {
+  id: string;
+  collective_error_id: string;
+  employee_id: string;
+  discount_amount: number;
+  applied_at: string;
+}
+
 export const createTables = async () => {
   try {
     // Verificar se as tabelas existem, se não existir o Supabase já as criou automaticamente
@@ -568,11 +588,11 @@ export const getErrorStatistics = async (
 }> => {
   // Buscar registros de erro
   const errorRecords = await getErrorRecords(startDate, endDate);
-  
+
   // Buscar presenças para calcular taxa de erro
   const attendances = await getAttendanceHistory(startDate, endDate);
   const presentAttendances = attendances.filter(att => att.status === 'present');
-  
+
   // Calcular estatísticas por funcionário
   const employeeMap = new Map<string, {
     employee: Employee;
@@ -621,4 +641,140 @@ export const getErrorStatistics = async (
     totalErrors,
     employeeStats
   };
+};
+
+// Collective Error functions
+export const getCollectiveErrors = async (
+  startDate?: string,
+  endDate?: string
+): Promise<CollectiveError[]> => {
+  let query = supabase
+    .from('collective_errors')
+    .select('*');
+
+  if (startDate) {
+    query = query.gte('date', startDate);
+  }
+
+  if (endDate) {
+    query = query.lte('date', endDate);
+  }
+
+  const { data, error } = await query.order('date', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const getCollectiveErrorApplications = async (
+  collectiveErrorId?: string,
+  employeeId?: string
+): Promise<CollectiveErrorApplication[]> => {
+  let query = supabase
+    .from('collective_error_applications')
+    .select('*');
+
+  if (collectiveErrorId) {
+    query = query.eq('collective_error_id', collectiveErrorId);
+  }
+
+  if (employeeId) {
+    query = query.eq('employee_id', employeeId);
+  }
+
+  const { data, error } = await query.order('applied_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const createCollectiveError = async (
+  date: string,
+  totalErrors: number,
+  valuePerError: number,
+  employeeIds: string[],
+  observations: string | null,
+  createdBy: string
+): Promise<void> => {
+  const totalAmount = totalErrors * valuePerError;
+
+  // Criar o erro coletivo
+  const { data: collectiveError, error: collectiveErrorError } = await supabase
+    .from('collective_errors')
+    .insert([{
+      date,
+      total_errors: totalErrors,
+      value_per_error: valuePerError,
+      total_amount: totalAmount,
+      observations,
+      created_by: createdBy,
+      updated_at: new Date().toISOString()
+    }])
+    .select()
+    .single();
+
+  if (collectiveErrorError) throw collectiveErrorError;
+  if (!collectiveError) throw new Error('Erro ao criar erro coletivo');
+
+  // Calcular desconto por funcionário
+  const discountPerEmployee = totalAmount / employeeIds.length;
+
+  // Criar aplicações para cada funcionário
+  for (const employeeId of employeeIds) {
+    // Registrar a aplicação
+    const { error: applicationError } = await supabase
+      .from('collective_error_applications')
+      .insert([{
+        collective_error_id: collectiveError.id,
+        employee_id: employeeId,
+        discount_amount: discountPerEmployee
+      }]);
+
+    if (applicationError) {
+      console.error('Erro ao criar aplicação:', applicationError);
+      continue;
+    }
+
+    // Buscar pagamento existente ou criar novo com valor negativo
+    const { data: existingPayment } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .eq('date', date)
+      .maybeSingle();
+
+    if (existingPayment) {
+      // Atualizar pagamento existente aplicando desconto
+      const newTotal = (existingPayment.total || 0) - discountPerEmployee;
+
+      const { error: updateError } = await supabase
+        .from('payments')
+        .update({
+          total: newTotal,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingPayment.id);
+
+      if (updateError) {
+        console.error('Erro ao atualizar pagamento:', updateError);
+      }
+    } else {
+      // Criar novo pagamento com valor negativo (desconto)
+      const { error: insertError } = await supabase
+        .from('payments')
+        .insert([{
+          employee_id: employeeId,
+          date,
+          daily_rate: 0,
+          bonus: 0,
+          total: -discountPerEmployee,
+          created_by: createdBy,
+          updated_at: new Date().toISOString()
+        }]);
+
+      if (insertError) {
+        console.error('Erro ao criar pagamento negativo:', insertError);
+      }
+    }
+  }
 };

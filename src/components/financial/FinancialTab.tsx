@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Plus, Trash2, RefreshCw, Filter, AlertTriangle, Minus } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Plus, Trash2, RefreshCw, Filter, AlertTriangle, Minus, UsersRound } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord } from '../../services/database';
+import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getCollectiveErrors, getCollectiveErrorApplications, CollectiveError, CollectiveErrorApplication } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
@@ -17,6 +17,7 @@ interface EmployeeFinancialData {
   customExitDays: number;
   payments: Payment[];
   errorRecords: ErrorRecord[];
+  collectiveErrorApplications: CollectiveErrorApplication[];
   totalErrors: number;
   totalEarned: number;
 }
@@ -27,6 +28,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const [bonuses, setBonuses] = useState<any[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [errorRecords, setErrorRecords] = useState<ErrorRecord[]>([]);
+  const [collectiveErrors, setCollectiveErrors] = useState<CollectiveError[]>([]);
+  const [collectiveErrorApplications, setCollectiveErrorApplications] = useState<CollectiveErrorApplication[]>([]);
   const [financialData, setFinancialData] = useState<EmployeeFinancialData[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -53,22 +56,26 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [employeesData, paymentsData, bonusesData, attendancesData, errorRecordsData] = await Promise.all([
+      const [employeesData, paymentsData, bonusesData, attendancesData, errorRecordsData, collectiveErrorsData, collectiveApplicationsData] = await Promise.all([
         getAllEmployees(),
         getPayments(filters.startDate, filters.endDate, filters.employeeId),
         getBonuses(),
         getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId),
-        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId)
+        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId),
+        getCollectiveErrors(filters.startDate, filters.endDate),
+        getCollectiveErrorApplications()
       ]);
-      
+
       setEmployees(employeesData);
       setPayments(paymentsData);
       setBonuses(bonusesData);
       setAttendances(attendancesData);
       setErrorRecords(errorRecordsData);
-      
+      setCollectiveErrors(collectiveErrorsData);
+      setCollectiveErrorApplications(collectiveApplicationsData);
+
       // Processar dados financeiros
-      processFinancialData(employeesData, paymentsData, attendancesData, errorRecordsData);
+      processFinancialData(employeesData, paymentsData, attendancesData, errorRecordsData, collectiveApplicationsData);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados financeiros');
@@ -77,18 +84,25 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     }
   };
 
-  const processFinancialData = (employeesData: Employee[], paymentsData: Payment[], attendancesData: Attendance[], errorRecordsData: ErrorRecord[]) => {
+  const processFinancialData = (
+    employeesData: Employee[],
+    paymentsData: Payment[],
+    attendancesData: Attendance[],
+    errorRecordsData: ErrorRecord[],
+    collectiveApplicationsData: CollectiveErrorApplication[]
+  ) => {
     const data: EmployeeFinancialData[] = employeesData.map(employee => {
       const employeeAttendances = attendancesData.filter(att => att.employee_id === employee.id);
       const employeePayments = paymentsData.filter(pay => pay.employee_id === employee.id);
       const employeeErrors = errorRecordsData.filter(err => err.employee_id === employee.id);
-      
+      const employeeCollectiveApplications = collectiveApplicationsData.filter(app => app.employee_id === employee.id);
+
       const workDays = employeeAttendances.filter(att => att.status === 'present').length;
       const absences = employeeAttendances.filter(att => att.status === 'absent').length;
       const customExitDays = employeeAttendances.filter(att => att.status === 'present' && att.exit_time).length;
       const totalErrors = employeeErrors.reduce((sum, err) => sum + err.error_count, 0);
       const totalEarned = employeePayments.reduce((sum, pay) => sum + (pay.total || 0), 0);
-      
+
       return {
         employee,
         workDays,
@@ -96,11 +110,12 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
         customExitDays,
         payments: employeePayments,
         errorRecords: employeeErrors,
+        collectiveErrorApplications: employeeCollectiveApplications,
         totalErrors,
         totalEarned
       };
     });
-    
+
     setFinancialData(data);
   };
 
@@ -728,7 +743,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
                         
                         {data.errorRecords.length > 0 && (
                           <div className="mt-4">
-                            <h4 className="font-medium text-gray-900 mb-2">Erros Registrados:</h4>
+                            <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+                              <AlertTriangle className="w-4 h-4 mr-1 text-red-600" />
+                              Erros Individuais:
+                            </h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                               {data.errorRecords.map((errorRecord) => (
                                 <div key={errorRecord.id} className="bg-red-50 p-3 rounded border border-red-200">
@@ -743,6 +761,35 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
                                   )}
                                 </div>
                               ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {data.collectiveErrorApplications.length > 0 && (
+                          <div className="mt-4">
+                            <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+                              <UsersRound className="w-4 h-4 mr-1 text-orange-600" />
+                              Erros Coletivos Aplicados:
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {data.collectiveErrorApplications.map((application) => {
+                                const collectiveError = collectiveErrors.find(ce => ce.id === application.collective_error_id);
+                                return (
+                                  <div key={application.id} className="bg-orange-50 p-3 rounded border border-orange-200">
+                                    <div className="text-sm font-medium">
+                                      {collectiveError ? formatDateBR(collectiveError.date) : 'Data não encontrada'}
+                                    </div>
+                                    <div className="text-sm text-orange-600 font-medium">
+                                      Desconto: R$ {parseFloat(application.discount_amount.toString()).toFixed(2)}
+                                    </div>
+                                    {collectiveError && (
+                                      <div className="text-xs text-gray-600 mt-1">
+                                        {collectiveError.total_errors} erros coletivos
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
