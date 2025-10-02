@@ -20,9 +20,6 @@ function App() {
   useEffect(() => {
     const initialize = async () => {
       await initializeSystem();
-
-      const { migrateAdminToAuth } = await import('./utils/migrateAdmin');
-      await migrateAdminToAuth();
     };
 
     initialize();

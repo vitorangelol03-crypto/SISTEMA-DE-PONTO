@@ -94,26 +94,21 @@ export const createDefaultAdmin = async () => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id')
+      .select('id, auth_user_id')
       .eq('id', '9999')
-      .single();
+      .maybeSingle();
 
-    if (!data) {
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert([{
-          id: '9999',
-          password: '684171',
-          role: 'admin',
-          created_by: null
-        }]);
-
-      if (insertError) {
-        console.error('Erro ao criar admin padrão:', insertError);
-      } else {
-        console.log('Admin padrão criado com sucesso!');
-      }
+    if (error) {
+      console.error('Erro ao verificar admin padrão:', error);
+      return;
     }
+
+    if (data) {
+      console.log('Admin padrão já existe');
+      return;
+    }
+
+    console.log('Admin não encontrado, mas isso está OK - será criado pela migração');
   } catch (error) {
     console.error('Erro ao verificar admin padrão:', error);
   }
