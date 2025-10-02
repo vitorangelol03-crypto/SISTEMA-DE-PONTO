@@ -372,13 +372,13 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
             </div>
           </div>
           
-          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+          <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
             <div className="flex items-center justify-between">
-              <span className="text-purple-800 font-medium">Taxa Média</span>
-              <Target className="w-5 h-5 text-purple-600" />
+              <span className="text-amber-800 font-medium">Taxa Média</span>
+              <Target className="w-5 h-5 text-amber-600" />
             </div>
-            <div className="text-2xl font-bold text-purple-600">
-              {filteredEmployees.length > 0 
+            <div className="text-2xl font-bold text-amber-600">
+              {filteredEmployees.length > 0
                 ? (filteredEmployees.reduce((sum, emp) => sum + emp.errorRate, 0) / filteredEmployees.length).toFixed(2)
                 : '0.00'
               }

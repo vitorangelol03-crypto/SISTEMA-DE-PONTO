@@ -36,12 +36,12 @@ export const SettingsTab: React.FC = () => {
             </div>
           </div>
 
-          <div className="border-l-4 border-purple-500 bg-purple-50 p-4">
+          <div className="border-l-4 border-slate-500 bg-slate-50 p-4">
             <div className="flex items-center">
-              <Shield className="w-5 h-5 text-purple-600 mr-2" />
-              <h3 className="text-lg font-medium text-purple-800">Segurança</h3>
+              <Shield className="w-5 h-5 text-slate-600 mr-2" />
+              <h3 className="text-lg font-medium text-slate-800">Segurança</h3>
             </div>
-            <div className="mt-3 space-y-2 text-sm text-purple-700">
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
               <p>🔐 Autenticação por ID e senha</p>
               <p>👤 Controle de permissões por função</p>
               <p>🔄 Sessões persistentes</p>

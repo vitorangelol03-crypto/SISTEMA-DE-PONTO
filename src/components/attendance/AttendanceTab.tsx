@@ -226,21 +226,24 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
             <Clock className="w-5 h-5 mr-2 text-blue-600" />
             Controle de Ponto
           </h2>
-          <button
-            onClick={loadData}
-            className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>Atualizar</span>
-          </button>
-          
-          <button
-            onClick={() => setShowBonusModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-          >
-            <Gift className="w-4 h-4" />
-            <span>Bonificação</span>
-          </button>
+
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={loadData}
+              className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Atualizar</span>
+            </button>
+
+            <button
+              onClick={() => setShowBonusModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            >
+              <Gift className="w-4 h-4" />
+              <span>Bonificação</span>
+            </button>
+          </div>
         </div>
         
         <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600">

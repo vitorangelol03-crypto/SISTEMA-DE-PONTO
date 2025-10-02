@@ -197,12 +197,12 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
             <div className="text-2xl font-bold text-red-600">{stats.absent}</div>
           </div>
           
-          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+          <div className="bg-teal-50 p-4 rounded-lg border border-teal-200">
             <div className="flex items-center justify-between">
-              <span className="text-purple-800 font-medium">Taxa Presença</span>
-              <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+              <span className="text-teal-800 font-medium">Taxa Presença</span>
+              <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
             </div>
-            <div className="text-2xl font-bold text-purple-600">{stats.presenceRate}%</div>
+            <div className="text-2xl font-bold text-teal-600">{stats.presenceRate}%</div>
           </div>
         </div>
       </div>

@@ -436,12 +436,12 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
             <div className="text-2xl font-bold text-blue-600">{financialData.length}</div>
           </div>
           
-          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+          <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
             <div className="flex items-center justify-between">
-              <span className="text-purple-800 font-medium">Dias Trabalhados</span>
-              <Calendar className="w-5 h-5 text-purple-600" />
+              <span className="text-cyan-800 font-medium">Dias Trabalhados</span>
+              <Calendar className="w-5 h-5 text-cyan-600" />
             </div>
-            <div className="text-2xl font-bold text-purple-600">
+            <div className="text-2xl font-bold text-cyan-600">
               {financialData.reduce((sum, data) => sum + data.workDays, 0)}
             </div>
           </div>
