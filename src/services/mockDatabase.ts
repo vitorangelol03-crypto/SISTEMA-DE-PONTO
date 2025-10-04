@@ -18,6 +18,44 @@ const saveToStorage = <T>(key: string, data: T[]): void => {
   localStorage.setItem(key, JSON.stringify(data));
 };
 
+const initializeSampleData = () => {
+  if (localStorage.getItem('mock-data-initialized')) {
+    return;
+  }
+
+  const sampleEmployees: Employee[] = [
+    {
+      id: '1',
+      name: 'João Silva',
+      cpf: '123.456.789-00',
+      pix_key: '123.456.789-00',
+      created_by: '9999',
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: '2',
+      name: 'Maria Santos',
+      cpf: '987.654.321-00',
+      pix_key: '987.654.321-00',
+      created_by: '9999',
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: '3',
+      name: 'Pedro Oliveira',
+      cpf: '456.789.123-00',
+      pix_key: '456.789.123-00',
+      created_by: '9999',
+      created_at: new Date().toISOString(),
+    },
+  ];
+
+  saveToStorage(STORAGE_KEYS.EMPLOYEES, sampleEmployees);
+  localStorage.setItem('mock-data-initialized', 'true');
+};
+
+initializeSampleData();
+
 export const mockDatabase = {
   employees: {
     getAll: async (): Promise<Employee[]> => {
