@@ -1,3 +1,4 @@
+import { supabase } from '../lib/supabase';
 import { User } from './database';
 import { saveSession, clearSession, getSession } from '../utils/sessionManager';
 
@@ -5,8 +6,6 @@ export interface AuthUser extends User {
   auth_user_id: string;
   email: string;
 }
-
-const API_BASE = '/api';
 
 const generateEmail = (matricula: string): string => {
   return `${matricula}@sistema.local`;
@@ -20,57 +19,81 @@ export const signUp = async (
 ): Promise<AuthUser> => {
   const email = generateEmail(matricula);
 
-  const response = await fetch(`${API_BASE}/auth/signup`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      matricula,
-      email,
-      password,
-      role,
-      createdBy
-    })
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        matricula,
+        role,
+        created_by: createdBy
+      }
+    }
   });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Erro ao criar usuário');
+  if (authError) {
+    throw new Error(authError.message);
   }
 
-  const data = await response.json();
+  if (!authData.user) {
+    throw new Error('Erro ao criar usuário');
+  }
 
-  saveSession(data.user, data.session?.access_token);
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .insert({
+      id: matricula,
+      auth_user_id: authData.user.id,
+      email: email,
+      role: role,
+      created_by: createdBy
+    })
+    .select()
+    .single();
 
-  return data.user;
+  if (userError) {
+    await supabase.auth.admin.deleteUser(authData.user.id);
+    throw new Error(userError.message);
+  }
+
+  saveSession(userData, authData.session?.access_token || '');
+
+  return userData as AuthUser;
 };
 
 export const signIn = async (matricula: string, password: string): Promise<AuthUser> => {
-  const response = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      userId: matricula,
-      password
-    })
+  const email = generateEmail(matricula);
+
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email,
+    password
   });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Credenciais inválidas');
+  if (authError) {
+    throw new Error('Credenciais inválidas');
   }
 
-  const data = await response.json();
+  if (!authData.user) {
+    throw new Error('Erro ao fazer login');
+  }
 
-  saveSession(data.user, data.session?.access_token);
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .select('*')
+    .eq('auth_user_id', authData.user.id)
+    .maybeSingle();
 
-  return data.user;
+  if (userError || !userData) {
+    throw new Error('Usuário não encontrado');
+  }
+
+  saveSession(userData, authData.session?.access_token || '');
+
+  return userData as AuthUser;
 };
 
 export const signOut = async (): Promise<void> => {
+  await supabase.auth.signOut();
   clearSession();
 };
 
