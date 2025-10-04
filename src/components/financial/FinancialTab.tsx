@@ -4,6 +4,7 @@ import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses,
 import { applyBulkDailyRate, clearPaymentsBatch, applyErrorDiscounts } from '../../services/paymentHelpers';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
+import { logger } from '../../utils/logger';
 import toast from 'react-hot-toast';
 
 interface FinancialTabProps {
@@ -74,7 +75,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
       // Processar dados financeiros
       processFinancialData(employeesData, paymentsData, attendancesData, errorRecordsData, collectiveApplicationsData);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      logger.error('Erro ao carregar dados financeiros', error, 'FinancialTab');
       toast.error('Erro ao carregar dados financeiros');
     } finally {
       setLoading(false);

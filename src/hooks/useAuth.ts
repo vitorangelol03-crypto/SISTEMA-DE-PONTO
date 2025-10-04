@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { getCurrentSession, signOut as authSignOut } from '../services/authService';
 import { User } from '../services/database';
+import { authLogger } from '../utils/logger';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -45,8 +46,9 @@ export const useAuth = () => {
     try {
       await authSignOut();
       setUser(null);
+      if (user) authLogger.logout(user.id);
     } catch (error) {
-      console.error('Erro ao fazer logout:', error);
+      authLogger.loginFailure(user?.id || 'unknown', 'Erro ao fazer logout');
       setUser(null);
     }
   };

@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getAllEmployees, getTodayAttendance, markAttendance, Employee, Attendance, createBonus, applyBonusToAllPresent } from '../../services/database';
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
+import { logger } from '../../utils/logger';
 import toast from 'react-hot-toast';
 
 interface AttendanceTabProps {
@@ -41,7 +42,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       });
       setExitTimes(exitTimesMap);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      logger.error('Erro ao carregar dados de presença', error, 'AttendanceTab');
       toast.error('Erro ao carregar dados');
     } finally {
       setLoading(false);
@@ -86,7 +87,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       await loadData();
       toast.success(`Presença marcada como ${status === 'present' ? 'presente' : 'falta'}`);
     } catch (error) {
-      console.error('Erro ao marcar presença:', error);
+      logger.error('Erro ao marcar presença', error, 'AttendanceTab');
       toast.error('Erro ao marcar presença');
     }
   }, [exitTimes, selectedDate, userId, loadData]);
@@ -107,7 +108,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
         toast.success('Horário de saída atualizado');
       }
     } catch (error) {
-      console.error('Erro ao atualizar horário:', error);
+      logger.error('Erro ao atualizar horário', error, 'AttendanceTab');
       toast.error('Erro ao atualizar horário');
     }
   }, [getAttendanceStatus, exitTimes, selectedDate, userId]);
@@ -141,7 +142,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       setShowBonusModal(false);
       setBonusAmount('');
     } catch (error: any) {
-      console.error('Erro ao aplicar bonificação:', error);
+      logger.error('Erro ao aplicar bonificação', error, 'AttendanceTab');
       toast.error(error.message || 'Erro ao aplicar bonificação');
     } finally {
       loadData();
@@ -185,7 +186,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
           await markAttendance(employeeId, selectedDate, status, exitTime, userId);
           return { success: true };
         } catch (error) {
-          console.error(`Erro ao marcar presença para funcionário ${employeeId}:`, error);
+          logger.error('Erro ao marcar presença em lote', error, 'AttendanceTab');
           return { success: false };
         }
       });
@@ -205,7 +206,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       setSelectedEmployees(new Set());
       await loadData();
     } catch (error) {
-      console.error('Erro na marcação em massa:', error);
+      logger.error('Erro na marcação em massa', error, 'AttendanceTab');
       toast.error('Erro na marcação em massa');
     } finally {
       setBulkMarkingLoading(false);

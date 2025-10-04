@@ -1,4 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { logger } from './utils/logger';
 import { Toaster } from 'react-hot-toast';
 import { LoginForm } from './components/auth/LoginForm';
 import { Layout } from './components/common/Layout';
@@ -18,7 +19,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabType>('attendance');
 
   useEffect(() => {
-    console.log('Sistema inicializado com sucesso!');
+    logger.info('Sistema inicializado com sucesso!');
   }, []);
 
   if (loading) {

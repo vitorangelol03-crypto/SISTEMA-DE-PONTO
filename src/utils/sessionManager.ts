@@ -1,4 +1,5 @@
 import { User } from '../services/database';
+import { logger } from './logger';
 
 const SESSION_KEY = 'auth-session';
 const SESSION_TIMEOUT = 8 * 60 * 60 * 1000;
@@ -19,7 +20,7 @@ export const saveSession = (user: User, accessToken?: string): void => {
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
   } catch (error) {
-    console.error('Error saving session:', error);
+    logger.error('Error saving session', error, 'SessionManager');
   }
 };
 
@@ -48,7 +49,7 @@ export const getSession = (): User | null => {
 
     return sessionData.user;
   } catch (error) {
-    console.error('Error reading session:', error);
+    logger.error('Error reading session', error, 'SessionManager');
     clearSession();
     return null;
   }
@@ -59,7 +60,7 @@ export const clearSession = (): void => {
     sessionStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(SESSION_KEY);
   } catch (error) {
-    console.error('Error clearing session:', error);
+    logger.error('Error clearing session', error, 'SessionManager');
   }
 };
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw } from 'lucide-react';
 import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee } from '../../services/database';
 import { validateCPF, formatCPF } from '../../utils/validation';
+import { logger } from '../../utils/logger';
 import toast from 'react-hot-toast';
 
 interface EmployeesTabProps {
@@ -26,7 +27,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
       const data = await getAllEmployees();
       setEmployees(data);
     } catch (error) {
-      console.error('Erro ao carregar funcionários:', error);
+      logger.error('Erro ao carregar funcionários', error, 'EmployeesTab');
       toast.error('Erro ao carregar funcionários');
     } finally {
       setLoading(false);
@@ -104,7 +105,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
       toast.success('Funcionário excluído com sucesso!');
       loadEmployees();
     } catch (error) {
-      console.error('Erro ao excluir funcionário:', error);
+      logger.error('Erro ao excluir funcionário', error, 'EmployeesTab');
       toast.error('Erro ao excluir funcionário');
     }
   }, [loadEmployees]);

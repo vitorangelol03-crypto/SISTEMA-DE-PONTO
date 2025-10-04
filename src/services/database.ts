@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { db } from './databaseWrapper';
 import { getBrazilDate, getCurrentTimestamp } from '../utils/dateUtils';
+import { logger, dbLogger } from '../utils/logger';
 
 export interface User {
   id: string;
@@ -85,10 +86,9 @@ export interface CollectiveErrorApplication {
 
 export const createTables = async () => {
   try {
-    // Verificar se as tabelas existem, se não existir o Supabase já as criou automaticamente
-    console.log('Verificando estrutura do banco de dados...');
+    logger.debug('Verificando estrutura do banco de dados...');
   } catch (error) {
-    console.log('Estrutura do banco verificada:', error);
+    logger.debug('Estrutura do banco verificada');
   }
 };
 
@@ -101,18 +101,18 @@ export const createDefaultAdmin = async () => {
       .maybeSingle();
 
     if (error) {
-      console.error('Erro ao verificar admin padrão:', error);
+      logger.error('Erro ao verificar admin padrão', error);
       return;
     }
 
     if (data) {
-      console.log('Admin padrão já existe');
+      logger.debug('Admin padrão já existe');
       return;
     }
 
-    console.log('Admin não encontrado, mas isso está OK - será criado pela migração');
+    logger.debug('Admin não encontrado, mas isso está OK - será criado pela migração');
   } catch (error) {
-    console.error('Erro ao verificar admin padrão:', error);
+    logger.error('Erro ao verificar admin padrão', error);
   }
 };
 
@@ -120,9 +120,9 @@ export const initializeSystem = async () => {
   try {
     await createTables();
     await createDefaultAdmin();
-    console.log('Sistema inicializado com sucesso!');
+    logger.info('Sistema inicializado com sucesso!');
   } catch (error) {
-    console.error('Erro na inicialização:', error);
+    logger.error('Erro na inicialização', error);
   }
 };
 
@@ -176,7 +176,7 @@ export const deleteUser = async (id: string): Promise<void> => {
     try {
       await supabase.auth.admin.deleteUser(user.auth_user_id);
     } catch (error) {
-      console.warn('Erro ao deletar usuário do Auth (pode já estar deletado):', error);
+      logger.warn('Erro ao deletar usuário do Auth (pode já estar deletado)');
     }
   }
 };
@@ -702,7 +702,7 @@ export const createCollectiveError = async (
       }]);
 
     if (applicationError) {
-      console.error('Erro ao criar aplicação:', applicationError);
+      dbLogger.queryError('insert', 'collective_error_applications', applicationError);
       continue;
     }
 
@@ -727,7 +727,7 @@ export const createCollectiveError = async (
         .eq('id', existingPayment.id);
 
       if (updateError) {
-        console.error('Erro ao atualizar pagamento:', updateError);
+        dbLogger.queryError('update', 'payments', updateError);
       }
     } else {
       // Criar novo pagamento com valor negativo (desconto)
@@ -744,7 +744,7 @@ export const createCollectiveError = async (
         }]);
 
       if (insertError) {
-        console.error('Erro ao criar pagamento negativo:', insertError);
+        dbLogger.queryError('insert', 'payments', insertError);
       }
     }
   }
