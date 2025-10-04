@@ -4,6 +4,10 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
+  console.error('Variáveis de ambiente:', {
+    VITE_SUPABASE_URL: supabaseUrl ? 'Definida' : 'Não definida',
+    VITE_SUPABASE_ANON_KEY: supabaseKey ? 'Definida' : 'Não definida'
+  });
   throw new Error('Credenciais do Supabase não encontradas no arquivo .env');
 }
 
