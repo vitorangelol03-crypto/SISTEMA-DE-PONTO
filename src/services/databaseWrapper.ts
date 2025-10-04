@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { getCurrentTimestamp } from '../utils/dateUtils';
 import type { Employee, Attendance, Payment, ErrorRecord, CollectiveError, Bonus } from './database';
 
 export const db = {
@@ -178,7 +179,7 @@ export const db = {
     },
 
     create: async (payment: Omit<Payment, 'id' | 'created_at' | 'updated_at'>): Promise<Payment> => {
-      const now = new Date().toISOString();
+      const now = getCurrentTimestamp();
       const { data, error } = await supabase
         .from('payments')
         .insert([{ ...payment, updated_at: now }])
@@ -243,7 +244,7 @@ export const db = {
     },
 
     create: async (record: Omit<ErrorRecord, 'id' | 'created_at' | 'updated_at'>): Promise<ErrorRecord> => {
-      const now = new Date().toISOString();
+      const now = getCurrentTimestamp();
       const { data, error } = await supabase
         .from('error_records')
         .upsert([{ ...record, updated_at: now }], { onConflict: 'employee_id,date' })
@@ -255,7 +256,7 @@ export const db = {
     },
 
     update: async (id: string, updates: Partial<ErrorRecord>): Promise<ErrorRecord> => {
-      const now = new Date().toISOString();
+      const now = getCurrentTimestamp();
       const { data, error } = await supabase
         .from('error_records')
         .update({ ...updates, updated_at: now })
@@ -310,7 +311,7 @@ export const db = {
     },
 
     create: async (error: Omit<CollectiveError, 'id' | 'created_at' | 'updated_at'>): Promise<CollectiveError> => {
-      const now = new Date().toISOString();
+      const now = getCurrentTimestamp();
       const { data, error: dbError } = await supabase
         .from('collective_errors')
         .insert([{ ...error, updated_at: now }])

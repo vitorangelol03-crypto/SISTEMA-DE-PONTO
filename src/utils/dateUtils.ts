@@ -1,24 +1,23 @@
-// Utilitários para manipulação de datas com timezone do Brasil
-
 export const getBrazilDate = (): string => {
-  const now = new Date();
-  const brazilOffset = -3 * 60; // UTC-3 em minutos
-  const localTime = new Date(now.getTime() + (brazilOffset * 60 * 1000));
-  return localTime.toISOString().split('T')[0];
+  return new Date().toLocaleDateString('en-CA', {
+    timeZone: 'America/Sao_Paulo'
+  });
 };
 
 export const getBrazilDateTime = (): Date => {
-  const now = new Date();
-  const brazilOffset = -3 * 60; // UTC-3 em minutos
-  return new Date(now.getTime() + (brazilOffset * 60 * 1000));
+  const nowInBrazil = new Date().toLocaleString('en-US', {
+    timeZone: 'America/Sao_Paulo'
+  });
+  return new Date(nowInBrazil);
 };
 
 export const formatDateBR = (dateString: string): string => {
-  // Converter YYYY-MM-DD para DD/MM/YYYY
+  if (!dateString) return '';
   return dateString.split('-').reverse().join('/');
 };
 
 export const formatDateTimeBR = (dateTime: string): string => {
+  if (!dateTime) return '';
   return new Date(dateTime).toLocaleString('pt-BR', {
     timeZone: 'America/Sao_Paulo',
     day: '2-digit',
@@ -39,6 +38,7 @@ export const getCurrentBrazilTime = (): string => {
 };
 
 export const formatTimestampForExcel = (timestamp: string): string => {
+  if (!timestamp) return '';
   return new Date(timestamp).toLocaleString('pt-BR', {
     timeZone: 'America/Sao_Paulo',
     day: '2-digit',
@@ -48,4 +48,21 @@ export const formatTimestampForExcel = (timestamp: string): string => {
     minute: '2-digit',
     second: '2-digit'
   });
+};
+
+export const getCurrentTimestamp = (): string => {
+  return new Date().toISOString();
+};
+
+export const compareDates = (date1: string, date2: string): number => {
+  const d1 = new Date(date1 + 'T00:00:00');
+  const d2 = new Date(date2 + 'T00:00:00');
+  return d1.getTime() - d2.getTime();
+};
+
+export const isDateInRange = (date: string, startDate: string, endDate: string): boolean => {
+  const dateTime = new Date(date + 'T00:00:00').getTime();
+  const startTime = new Date(startDate + 'T00:00:00').getTime();
+  const endTime = new Date(endDate + 'T23:59:59').getTime();
+  return dateTime >= startTime && dateTime <= endTime;
 };

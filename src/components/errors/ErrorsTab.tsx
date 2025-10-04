@@ -3,6 +3,7 @@ import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Tr
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorRecord, deleteErrorRecord, getErrorStatistics, getCollectiveErrors, Employee, Attendance, ErrorRecord, CollectiveError } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
+import { sanitizeObservations } from '../../utils/sanitization';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
 
@@ -200,7 +201,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
         errorFormData.employeeId,
         errorFormData.date,
         errorCount,
-        errorFormData.observations.trim() || null,
+        errorFormData.observations ? sanitizeObservations(errorFormData.observations) : null,
         userId
       );
 

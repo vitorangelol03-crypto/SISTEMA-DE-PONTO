@@ -56,32 +56,22 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name.trim() || formData.name.trim().length < 3) {
-      toast.error('Nome deve ter pelo menos 3 caracteres');
-      return;
-    }
-
-    if (!validateCPF(formData.cpf)) {
-      toast.error('CPF inválido');
-      return;
-    }
-
     try {
       const cpfNumbers = formData.cpf.replace(/\D/g, '');
-      
+
       if (editingEmployee) {
         await updateEmployee(
           editingEmployee.id,
-          formData.name.trim(),
+          formData.name,
           cpfNumbers,
-          formData.pixKey.trim() || null
+          formData.pixKey || null
         );
         toast.success('Funcionário atualizado com sucesso!');
       } else {
         await createEmployee(
-          formData.name.trim(),
+          formData.name,
           cpfNumbers,
-          formData.pixKey.trim() || null,
+          formData.pixKey || null,
           userId
         );
         toast.success('Funcionário cadastrado com sucesso!');

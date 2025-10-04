@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { db } from './databaseWrapper';
+import { getBrazilDate, getCurrentTimestamp } from '../utils/dateUtils';
 
 export interface User {
   id: string;
@@ -206,11 +207,7 @@ export const deleteEmployee = async (id: string): Promise<void> => {
 
 // Attendance functions
 export const getTodayAttendance = async (): Promise<Attendance[]> => {
-  // Usar data local do Brasil (UTC-3)
-  const today = new Date();
-  const brazilOffset = -3 * 60; // UTC-3 em minutos
-  const localTime = new Date(today.getTime() + (brazilOffset * 60 * 1000));
-  const todayString = localTime.toISOString().split('T')[0];
+  const todayString = getBrazilDate();
   
   const { data, error } = await supabase
     .from('attendance')
@@ -338,7 +335,7 @@ export const upsertPayment = async (
       bonus,
       total,
       created_by: createdBy,
-      updated_at: new Date().toISOString()
+      updated_at: getCurrentTimestamp()
     }], { 
       onConflict: 'employee_id,date'
     });
@@ -469,7 +466,7 @@ export const applyBonusToAllPresent = async (
         bonus: bonusAmount,
         total: newTotal,
         created_by: createdBy,
-        updated_at: new Date().toISOString()
+        updated_at: getCurrentTimestamp()
       }], { 
         onConflict: 'employee_id,date'
       });
@@ -526,7 +523,7 @@ export const upsertErrorRecord = async (
       error_count: errorCount,
       observations,
       created_by: createdBy,
-      updated_at: new Date().toISOString()
+      updated_at: getCurrentTimestamp()
     }], { 
       onConflict: 'employee_id,date'
     });
@@ -677,7 +674,7 @@ export const createCollectiveError = async (
       total_amount: totalAmount,
       observations,
       created_by: createdBy,
-      updated_at: new Date().toISOString()
+      updated_at: getCurrentTimestamp()
     }])
     .select()
     .single();
@@ -720,7 +717,7 @@ export const createCollectiveError = async (
         .from('payments')
         .update({
           total: newTotal,
-          updated_at: new Date().toISOString()
+          updated_at: getCurrentTimestamp()
         })
         .eq('id', existingPayment.id);
 
@@ -738,7 +735,7 @@ export const createCollectiveError = async (
           bonus: 0,
           total: -discountPerEmployee,
           created_by: createdBy,
-          updated_at: new Date().toISOString()
+          updated_at: getCurrentTimestamp()
         }]);
 
       if (insertError) {
