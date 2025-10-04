@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -55,23 +55,24 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
     loadData();
   }, []);
 
-  useEffect(() => {
+  const filteredEmployeesMemo = useMemo(() => {
     if (!searchTerm.trim()) {
-      setFilteredEmployees(employees);
-      return;
+      return employees;
     }
 
     const searchLower = searchTerm.toLowerCase().trim();
     const searchNumbers = searchTerm.replace(/\D/g, '');
-    
-    const filtered = employees.filter(employee => {
+
+    return employees.filter(employee => {
       const nameMatch = employee.name.toLowerCase().includes(searchLower);
       const cpfMatch = searchNumbers && employee.cpf.includes(searchNumbers);
       return nameMatch || cpfMatch;
     });
-    
-    setFilteredEmployees(filtered);
   }, [searchTerm, employees]);
+
+  useEffect(() => {
+    setFilteredEmployees(filteredEmployeesMemo);
+  }, [filteredEmployeesMemo]);
 
   const getAttendanceStatus = (employeeId: string) => {
     const attendance = attendances.find(att => att.employee_id === employeeId);

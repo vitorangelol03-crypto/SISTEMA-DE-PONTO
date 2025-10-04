@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart3, Download, Filter, Calendar, User, FileText, RefreshCw, Search } from 'lucide-react';
 import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/database';
 import { formatDateBR } from '../../utils/dateUtils';
@@ -68,25 +68,26 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
     setFilteredAttendances(filtered);
   }, [filters, attendances]);
 
-  useEffect(() => {
+  const displayedAttendancesMemo = useMemo(() => {
     if (!searchTerm.trim()) {
-      setDisplayedAttendances(filteredAttendances);
-      return;
+      return filteredAttendances;
     }
 
     const searchLower = searchTerm.toLowerCase().trim();
     const searchNumbers = searchTerm.replace(/\D/g, '');
-    
-    const searched = filteredAttendances.filter(attendance => {
+
+    return filteredAttendances.filter(attendance => {
       if (!attendance.employees) return false;
-      
+
       const nameMatch = attendance.employees.name.toLowerCase().includes(searchLower);
       const cpfMatch = searchNumbers && attendance.employees.cpf.includes(searchNumbers);
       return nameMatch || cpfMatch;
     });
-    
-    setDisplayedAttendances(searched);
   }, [searchTerm, filteredAttendances]);
+
+  useEffect(() => {
+    setDisplayedAttendances(displayedAttendancesMemo);
+  }, [displayedAttendancesMemo]);
 
   const getStatistics = () => {
     const total = displayedAttendances.length;

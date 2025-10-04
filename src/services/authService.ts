@@ -1,4 +1,5 @@
 import { User } from './database';
+import { saveSession, clearSession, getSession } from '../utils/sessionManager';
 
 export interface AuthUser extends User {
   auth_user_id: string;
@@ -40,10 +41,7 @@ export const signUp = async (
 
   const data = await response.json();
 
-  localStorage.setItem('auth-session', JSON.stringify({
-    user: data.user,
-    access_token: data.session?.access_token,
-  }));
+  saveSession(data.user, data.session?.access_token);
 
   return data.user;
 };
@@ -67,31 +65,17 @@ export const signIn = async (matricula: string, password: string): Promise<AuthU
 
   const data = await response.json();
 
-  localStorage.setItem('auth-session', JSON.stringify({
-    user: data.user,
-    access_token: data.session?.access_token,
-  }));
+  saveSession(data.user, data.session?.access_token);
 
   return data.user;
 };
 
 export const signOut = async (): Promise<void> => {
-  localStorage.removeItem('auth-session');
+  clearSession();
 };
 
 export const getCurrentSession = async (): Promise<AuthUser | null> => {
-  const sessionStr = localStorage.getItem('auth-session');
-
-  if (!sessionStr) {
-    return null;
-  }
-
-  try {
-    const session = JSON.parse(sessionStr);
-    return session.user;
-  } catch {
-    return null;
-  }
+  return getSession();
 };
 
 export const resetPassword = async (matricula: string): Promise<void> => {

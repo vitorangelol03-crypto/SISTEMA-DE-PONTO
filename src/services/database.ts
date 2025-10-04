@@ -186,35 +186,13 @@ export const getAllEmployees = async (): Promise<Employee[]> => {
 };
 
 export const createEmployee = async (name: string, cpf: string, pixKey: string | null, createdBy: string): Promise<void> => {
-  const { error } = await supabase
-    .from('employees')
-    .insert([{
-      name,
-      cpf,
-      pix_key: pixKey,
-      created_by: createdBy
-    }]);
-
-  if (error) {
-    if (error.code === '23505') {
-      throw new Error('CPF já cadastrado');
-    }
-    throw error;
-  }
+  const { createEmployeeWithValidation } = await import('./employeeHelpers');
+  await createEmployeeWithValidation(name, cpf, pixKey, createdBy);
 };
 
 export const updateEmployee = async (id: string, name: string, cpf: string, pixKey: string | null): Promise<void> => {
-  const { error } = await supabase
-    .from('employees')
-    .update({ name, cpf, pix_key: pixKey })
-    .eq('id', id);
-
-  if (error) {
-    if (error.code === '23505') {
-      throw new Error('CPF já cadastrado');
-    }
-    throw error;
-  }
+  const { updateEmployeeWithValidation } = await import('./employeeHelpers');
+  await updateEmployeeWithValidation(id, name, cpf, pixKey);
 };
 
 export const deleteEmployee = async (id: string): Promise<void> => {

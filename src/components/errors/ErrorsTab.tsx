@@ -34,10 +34,6 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
     employeeId: ''
   });
   
-  const [isEditingDate, setIsEditingDate] = useState({
-    startDate: false,
-    endDate: false
-  });
   
   const [showErrorForm, setShowErrorForm] = useState(false);
   const [editingError, setEditingError] = useState<{employeeId: string, date: string} | null>(null);
@@ -57,6 +53,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
       errorRate: number;
     }>
   });
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const loadData = async () => {
     try {
@@ -121,10 +118,8 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
   };
 
   useEffect(() => {
-    if (!isEditingDate.startDate && !isEditingDate.endDate) {
-      loadData();
-    }
-  }, [filters, isEditingDate]);
+    loadData();
+  }, [filters.startDate, filters.endDate, filters.employeeId]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -146,14 +141,6 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
 
   const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleDateFocus = (field: 'startDate' | 'endDate') => {
-    setIsEditingDate(prev => ({ ...prev, [field]: true }));
-  };
-
-  const handleDateBlur = (field: 'startDate' | 'endDate') => {
-    setIsEditingDate(prev => ({ ...prev, [field]: false }));
   };
 
   const resetErrorForm = () => {
@@ -308,8 +295,6 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
               type="date"
               value={filters.startDate}
               onChange={(e) => handleDateChange('startDate', e.target.value)}
-              onFocus={() => handleDateFocus('startDate')}
-              onBlur={() => handleDateBlur('startDate')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
@@ -322,8 +307,6 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
               type="date"
               value={filters.endDate}
               onChange={(e) => handleDateChange('endDate', e.target.value)}
-              onFocus={() => handleDateFocus('endDate')}
-              onBlur={() => handleDateBlur('endDate')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
@@ -628,21 +611,27 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
                         </button>
                         <button
                           onClick={() => {
-                            const row = document.getElementById(`errors-${employeeData.employee.id}`);
-                            if (row) {
-                              row.style.display = row.style.display === 'none' ? '' : 'none';
-                            }
+                            setExpandedRows(prev => {
+                              const newSet = new Set(prev);
+                              if (newSet.has(employeeData.employee.id)) {
+                                newSet.delete(employeeData.employee.id);
+                              } else {
+                                newSet.add(employeeData.employee.id);
+                              }
+                              return newSet;
+                            });
                           }}
                           className="text-blue-600 hover:text-blue-900"
                         >
-                          Ver Detalhes
+                          {expandedRows.has(employeeData.employee.id) ? 'Ocultar Detalhes' : 'Ver Detalhes'}
                         </button>
                       </div>
                     </td>
                   </tr>
                   
                   {/* Detalhes dos Erros */}
-                  <tr id={`errors-${employeeData.employee.id}`} style={{ display: 'none' }}>
+                  {expandedRows.has(employeeData.employee.id) && (
+                  <tr>
                     <td colSpan={5} className="px-6 py-4 bg-gray-50">
                       <div className="space-y-2">
                         <h4 className="font-medium text-gray-900">Registros de Erros:</h4>
@@ -682,6 +671,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
                       </div>
                     </td>
                   </tr>
+                  )}
                 </React.Fragment>
               ))}
             </tbody>

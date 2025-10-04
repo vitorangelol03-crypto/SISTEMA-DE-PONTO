@@ -39,10 +39,6 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     employeeId: ''
   });
   
-  const [isEditingDate, setIsEditingDate] = useState({
-    startDate: false,
-    endDate: false
-  });
   
   const [bulkDailyRate, setBulkDailyRate] = useState<string>('');
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
@@ -52,6 +48,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const [clearType, setClearType] = useState<'all' | 'selected'>('selected');
   const [showErrorDiscountModal, setShowErrorDiscountModal] = useState(false);
   const [errorDiscountValue, setErrorDiscountValue] = useState<string>('');
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const loadData = async () => {
     try {
@@ -120,22 +117,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   };
 
   useEffect(() => {
-    // Só carrega dados se não estiver editando nenhuma data
-    if (!isEditingDate.startDate && !isEditingDate.endDate) {
-      loadData();
-    }
-  }, [filters, isEditingDate]);
+    loadData();
+  }, [filters.startDate, filters.endDate, filters.employeeId]);
 
   const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleDateFocus = (field: 'startDate' | 'endDate') => {
-    setIsEditingDate(prev => ({ ...prev, [field]: true }));
-  };
-
-  const handleDateBlur = (field: 'startDate' | 'endDate') => {
-    setIsEditingDate(prev => ({ ...prev, [field]: false }));
   };
 
   const handleBulkApply = async () => {
@@ -392,8 +378,6 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
               type="date"
               value={filters.startDate}
               onChange={(e) => handleDateChange('startDate', e.target.value)}
-              onFocus={() => handleDateFocus('startDate')}
-              onBlur={() => handleDateBlur('startDate')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -406,8 +390,6 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
               type="date"
               value={filters.endDate}
               onChange={(e) => handleDateChange('endDate', e.target.value)}
-              onFocus={() => handleDateFocus('endDate')}
-              onBlur={() => handleDateBlur('endDate')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -631,20 +613,26 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
                         onClick={() => {
-                          const row = document.getElementById(`payments-${data.employee.id}`);
-                          if (row) {
-                            row.style.display = row.style.display === 'none' ? '' : 'none';
-                          }
+                          setExpandedRows(prev => {
+                            const newSet = new Set(prev);
+                            if (newSet.has(data.employee.id)) {
+                              newSet.delete(data.employee.id);
+                            } else {
+                              newSet.add(data.employee.id);
+                            }
+                            return newSet;
+                          });
                         }}
                         className="text-blue-600 hover:text-blue-900 mr-2"
                       >
-                        Ver Detalhes
+                        {expandedRows.has(data.employee.id) ? 'Ocultar Detalhes' : 'Ver Detalhes'}
                       </button>
                     </td>
                   </tr>
                   
                   {/* Detalhes dos Pagamentos */}
-                  <tr id={`payments-${data.employee.id}`} style={{ display: 'none' }}>
+                  {expandedRows.has(data.employee.id) && (
+                  <tr>
                     <td colSpan={8} className="px-6 py-4 bg-gray-50">
                       <div className="space-y-2">
                         <h4 className="font-medium text-gray-900">Pagamentos Detalhados:</h4>
@@ -796,6 +784,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
                       </div>
                     </td>
                   </tr>
+                  )}
                 </React.Fragment>
               ))}
             </tbody>
