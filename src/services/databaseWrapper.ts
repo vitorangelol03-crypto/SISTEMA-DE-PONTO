@@ -1,153 +1,379 @@
-import { mockDatabase } from './mockDatabase';
+import { supabase } from '../lib/supabase';
 import type { Employee, Attendance, Payment, ErrorRecord, CollectiveError, Bonus } from './database';
-
-const USE_MOCK = true;
 
 export const db = {
   employees: {
     getAll: async (): Promise<Employee[]> => {
-      if (USE_MOCK) return mockDatabase.employees.getAll();
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
 
     getById: async (id: string): Promise<Employee | null> => {
-      if (USE_MOCK) return mockDatabase.employees.getById(id);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
     },
 
     create: async (employee: Omit<Employee, 'id' | 'created_at'>): Promise<Employee> => {
-      if (USE_MOCK) return mockDatabase.employees.create(employee);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('employees')
+        .insert([employee])
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error('CPF já cadastrado');
+        }
+        throw error;
+      }
+      return data;
     },
 
     update: async (id: string, updates: Partial<Employee>): Promise<Employee> => {
-      if (USE_MOCK) return mockDatabase.employees.update(id, updates);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('employees')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error('CPF já cadastrado');
+        }
+        throw error;
+      }
+      return data;
     },
 
     delete: async (id: string): Promise<void> => {
-      if (USE_MOCK) return mockDatabase.employees.delete(id);
-      throw new Error('Supabase não disponível');
+      const { error } = await supabase
+        .from('employees')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
     },
   },
 
   attendance: {
     getAll: async (): Promise<Attendance[]> => {
-      if (USE_MOCK) return mockDatabase.attendance.getAll();
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('attendance')
+        .select(`
+          *,
+          employees (
+            id,
+            name,
+            cpf,
+            pix_key,
+            created_by,
+            created_at
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
 
     getByDateRange: async (startDate: string, endDate: string): Promise<Attendance[]> => {
-      if (USE_MOCK) return mockDatabase.attendance.getByDateRange(startDate, endDate);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('attendance')
+        .select(`
+          *,
+          employees (
+            id,
+            name,
+            cpf,
+            pix_key,
+            created_by,
+            created_at
+          )
+        `)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
 
     create: async (attendance: Omit<Attendance, 'id' | 'created_at'>): Promise<Attendance> => {
-      if (USE_MOCK) return mockDatabase.attendance.create(attendance);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('attendance')
+        .upsert([attendance], { onConflict: 'employee_id,date' })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
     },
 
     update: async (id: string, updates: Partial<Attendance>): Promise<Attendance> => {
-      if (USE_MOCK) return mockDatabase.attendance.update(id, updates);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('attendance')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
     },
   },
 
   payments: {
     getAll: async (): Promise<Payment[]> => {
-      if (USE_MOCK) return mockDatabase.payments.getAll();
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('payments')
+        .select(`
+          *,
+          employees (
+            id,
+            name,
+            cpf,
+            pix_key,
+            created_by,
+            created_at
+          )
+        `)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
 
     getByDateRange: async (startDate: string, endDate: string): Promise<Payment[]> => {
-      if (USE_MOCK) return mockDatabase.payments.getByDateRange(startDate, endDate);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('payments')
+        .select(`
+          *,
+          employees (
+            id,
+            name,
+            cpf,
+            pix_key,
+            created_by,
+            created_at
+          )
+        `)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
 
     create: async (payment: Omit<Payment, 'id' | 'created_at' | 'updated_at'>): Promise<Payment> => {
-      if (USE_MOCK) return mockDatabase.payments.create(payment);
-      throw new Error('Supabase não disponível');
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('payments')
+        .insert([{ ...payment, updated_at: now }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
     },
 
     deleteAll: async (): Promise<void> => {
-      if (USE_MOCK) return mockDatabase.payments.deleteAll();
-      throw new Error('Supabase não disponível');
+      const { error } = await supabase
+        .from('payments')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (error) throw error;
     },
   },
 
   errorRecords: {
     getAll: async (): Promise<ErrorRecord[]> => {
-      if (USE_MOCK) return mockDatabase.errorRecords.getAll();
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('error_records')
+        .select(`
+          *,
+          employees (
+            id,
+            name,
+            cpf,
+            pix_key,
+            created_by,
+            created_at
+          )
+        `)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
 
     getByDateRange: async (startDate: string, endDate: string): Promise<ErrorRecord[]> => {
-      if (USE_MOCK) return mockDatabase.errorRecords.getByDateRange(startDate, endDate);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('error_records')
+        .select(`
+          *,
+          employees (
+            id,
+            name,
+            cpf,
+            pix_key,
+            created_by,
+            created_at
+          )
+        `)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
 
     create: async (record: Omit<ErrorRecord, 'id' | 'created_at' | 'updated_at'>): Promise<ErrorRecord> => {
-      if (USE_MOCK) return mockDatabase.errorRecords.create(record);
-      throw new Error('Supabase não disponível');
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('error_records')
+        .upsert([{ ...record, updated_at: now }], { onConflict: 'employee_id,date' })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
     },
 
     update: async (id: string, updates: Partial<ErrorRecord>): Promise<ErrorRecord> => {
-      if (USE_MOCK) return mockDatabase.errorRecords.update(id, updates);
-      throw new Error('Supabase não disponível');
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('error_records')
+        .update({ ...updates, updated_at: now })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
     },
 
     delete: async (id: string): Promise<void> => {
-      if (USE_MOCK) return mockDatabase.errorRecords.delete(id);
-      throw new Error('Supabase não disponível');
+      const { error } = await supabase
+        .from('error_records')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
     },
 
     clearByDate: async (date: string): Promise<void> => {
-      if (USE_MOCK) return mockDatabase.errorRecords.clearByDate(date);
-      throw new Error('Supabase não disponível');
+      const { error } = await supabase
+        .from('error_records')
+        .delete()
+        .eq('date', date);
+
+      if (error) throw error;
     },
   },
 
   collectiveErrors: {
     getAll: async (): Promise<CollectiveError[]> => {
-      if (USE_MOCK) return mockDatabase.collectiveErrors.getAll();
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('collective_errors')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
 
     getByDateRange: async (startDate: string, endDate: string): Promise<CollectiveError[]> => {
-      if (USE_MOCK) return mockDatabase.collectiveErrors.getByDateRange(startDate, endDate);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('collective_errors')
+        .select('*')
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
 
     create: async (error: Omit<CollectiveError, 'id' | 'created_at' | 'updated_at'>): Promise<CollectiveError> => {
-      if (USE_MOCK) return mockDatabase.collectiveErrors.create(error);
-      throw new Error('Supabase não disponível');
+      const now = new Date().toISOString();
+      const { data, error: dbError } = await supabase
+        .from('collective_errors')
+        .insert([{ ...error, updated_at: now }])
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+      return data;
     },
 
     clearByDate: async (date: string): Promise<void> => {
-      if (USE_MOCK) return mockDatabase.collectiveErrors.clearByDate(date);
-      throw new Error('Supabase não disponível');
+      const { error } = await supabase
+        .from('collective_errors')
+        .delete()
+        .eq('date', date);
+
+      if (error) throw error;
     },
   },
 
   bonuses: {
     getAll: async (): Promise<Bonus[]> => {
-      if (USE_MOCK) return mockDatabase.bonuses.getAll();
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('bonuses')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
 
     getByDate: async (date: string): Promise<Bonus | null> => {
-      if (USE_MOCK) return mockDatabase.bonuses.getByDate(date);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('bonuses')
+        .select('*')
+        .eq('date', date)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
     },
 
     create: async (bonus: Omit<Bonus, 'id' | 'created_at'>): Promise<Bonus> => {
-      if (USE_MOCK) return mockDatabase.bonuses.create(bonus);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('bonuses')
+        .upsert([bonus], { onConflict: 'date' })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
     },
 
     update: async (id: string, updates: Partial<Bonus>): Promise<Bonus> => {
-      if (USE_MOCK) return mockDatabase.bonuses.update(id, updates);
-      throw new Error('Supabase não disponível');
+      const { data, error } = await supabase
+        .from('bonuses')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
     },
   },
 };
