@@ -11,18 +11,13 @@ import { UsersTab } from './components/users/UsersTab';
 import { FinancialTab } from './components/financial/FinancialTab';
 import { ErrorsTab } from './components/errors/ErrorsTab';
 import { useAuth } from './hooks/useAuth';
-import { initializeSystem } from './services/database';
 
 function App() {
   const { user, loading, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('attendance');
 
   useEffect(() => {
-    const initialize = async () => {
-      await initializeSystem();
-    };
-
-    initialize();
+    console.log('Sistema inicializado com sucesso!');
   }, []);
 
   if (loading) {

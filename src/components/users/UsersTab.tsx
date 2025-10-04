@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserCog, Plus, Trash2, Eye, EyeOff, RefreshCw } from 'lucide-react';
-import { getAllUsers, createUser, deleteUser, User } from '../../services/database';
+import { getAllUsers, createUser, deleteUser, User } from '../../services/databaseMock';
 import { isValidPassword, isNumericString } from '../../utils/validation';
 import toast from 'react-hot-toast';
 

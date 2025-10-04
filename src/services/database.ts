@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { db } from './databaseWrapper';
 
 export interface User {
   id: string;
@@ -181,13 +182,7 @@ export const deleteUser = async (id: string): Promise<void> => {
 
 // Employee functions
 export const getAllEmployees = async (): Promise<Employee[]> => {
-  const { data, error } = await supabase
-    .from('employees')
-    .select('*')
-    .order('name');
-
-  if (error) throw error;
-  return data || [];
+  return db.employees.getAll();
 };
 
 export const createEmployee = async (name: string, cpf: string, pixKey: string | null, createdBy: string): Promise<void> => {
