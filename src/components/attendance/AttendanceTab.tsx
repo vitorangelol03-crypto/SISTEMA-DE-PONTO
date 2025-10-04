@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { getAllEmployees, getTodayAttendance, markAttendance, Employee, Attendance, createBonus, applyBonusToAllPresent } from '../../services/databaseMock';
+import { getAllEmployees, getTodayAttendance, markAttendance, Employee, Attendance, createBonus, applyBonusToAllPresent } from '../../services/database';
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 

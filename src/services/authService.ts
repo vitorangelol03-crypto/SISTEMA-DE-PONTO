@@ -1,12 +1,10 @@
 import { User } from './database';
-import { mockSignIn, mockGetCurrentSession } from './mockAuth';
 
 export interface AuthUser extends User {
   auth_user_id: string;
   email: string;
 }
 
-const USE_MOCK = true;
 const API_BASE = '/api';
 
 const generateEmail = (matricula: string): string => {
@@ -51,12 +49,6 @@ export const signUp = async (
 };
 
 export const signIn = async (matricula: string, password: string): Promise<AuthUser> => {
-  if (USE_MOCK) {
-    const user = await mockSignIn(matricula, password);
-    localStorage.setItem('auth-session', JSON.stringify({ user }));
-    return user;
-  }
-
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: {
@@ -88,10 +80,6 @@ export const signOut = async (): Promise<void> => {
 };
 
 export const getCurrentSession = async (): Promise<AuthUser | null> => {
-  if (USE_MOCK) {
-    return mockGetCurrentSession();
-  }
-
   const sessionStr = localStorage.getItem('auth-session');
 
   if (!sessionStr) {

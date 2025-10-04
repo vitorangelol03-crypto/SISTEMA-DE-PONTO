@@ -1,6 +1,6 @@
 import React from 'react';
 import { User, LogOut } from 'lucide-react';
-import { User as UserType } from '../../services/databaseMock';
+import { User as UserType } from '../../services/database';
 
 interface LayoutProps {
   user: UserType;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart3, Download, Filter, Calendar, User, FileText, RefreshCw, Search } from 'lucide-react';
-import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/databaseMock';
+import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/database';
 import { formatDateBR } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';

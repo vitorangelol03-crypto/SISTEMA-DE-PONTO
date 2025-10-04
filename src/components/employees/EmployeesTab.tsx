@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw } from 'lucide-react';
-import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee } from '../../services/databaseMock';
+import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee } from '../../services/database';
 import { validateCPF, formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
 
