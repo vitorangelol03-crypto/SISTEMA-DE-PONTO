@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw } from 'lucide-react';
 import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee } from '../../services/database';
 import { validateCPF, formatCPF } from '../../utils/validation';
@@ -10,7 +10,6 @@ interface EmployeesTabProps {
 
 export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -21,39 +20,40 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
     pixKey: ''
   });
 
-  const loadEmployees = async () => {
+  const loadEmployees = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getAllEmployees();
       setEmployees(data);
-      setFilteredEmployees(data);
     } catch (error) {
       console.error('Erro ao carregar funcionários:', error);
       toast.error('Erro ao carregar funcionários');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadEmployees();
   }, []);
 
-  useEffect(() => {
-    const filtered = employees.filter(employee =>
+  const filteredEmployees = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return employees;
+    }
+    return employees.filter(employee =>
       employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       employee.cpf.includes(searchTerm.replace(/\D/g, ''))
     );
-    setFilteredEmployees(filtered);
   }, [searchTerm, employees]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData({ name: '', cpf: '', pixKey: '' });
     setEditingEmployee(null);
     setShowForm(false);
-  };
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
@@ -82,9 +82,9 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
     } catch (error: any) {
       toast.error(error.message || 'Erro ao salvar funcionário');
     }
-  };
+  }, [formData, editingEmployee, userId, resetForm, loadEmployees]);
 
-  const handleEdit = (employee: Employee) => {
+  const handleEdit = useCallback((employee: Employee) => {
     setEditingEmployee(employee);
     setFormData({
       name: employee.name,
@@ -92,9 +92,9 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
       pixKey: employee.pix_key || ''
     });
     setShowForm(true);
-  };
+  }, []);
 
-  const handleDelete = async (employee: Employee) => {
+  const handleDelete = useCallback(async (employee: Employee) => {
     if (!confirm(`Tem certeza que deseja excluir ${employee.name}?\n\nEsta ação também removerá todo o histórico de ponto deste funcionário.`)) {
       return;
     }
@@ -107,12 +107,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
       console.error('Erro ao excluir funcionário:', error);
       toast.error('Erro ao excluir funcionário');
     }
-  };
+  }, [loadEmployees]);
 
-  const handleCPFChange = (value: string) => {
+  const handleCPFChange = useCallback((value: string) => {
     const formatted = formatCPF(value);
     setFormData(prev => ({ ...prev, cpf: formatted }));
-  };
+  }, []);
 
   if (loading) {
     return (

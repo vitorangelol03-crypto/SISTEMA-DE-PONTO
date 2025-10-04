@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -12,7 +12,6 @@ interface AttendanceTabProps {
 
 export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(getBrazilDate());
@@ -23,19 +22,17 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [bulkMarkingLoading, setBulkMarkingLoading] = useState(false);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [employeesData, attendancesData] = await Promise.all([
         getAllEmployees(),
         getTodayAttendance()
       ]);
-      
+
       setEmployees(employeesData);
-      setFilteredEmployees(employeesData);
       setAttendances(attendancesData);
-      
-      // Inicializar horários de saída
+
       const exitTimesMap: Record<string, string> = {};
       attendancesData.forEach(att => {
         if (att.exit_time) {
@@ -49,13 +46,13 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const filteredEmployeesMemo = useMemo(() => {
+  const filteredEmployees = useMemo(() => {
     if (!searchTerm.trim()) {
       return employees;
     }
@@ -70,16 +67,19 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
     });
   }, [searchTerm, employees]);
 
-  useEffect(() => {
-    setFilteredEmployees(filteredEmployeesMemo);
-  }, [filteredEmployeesMemo]);
+  const attendanceStatusMap = useMemo(() => {
+    const map = new Map<string, 'present' | 'absent' | null>();
+    attendances.forEach(att => {
+      map.set(att.employee_id, att.status);
+    });
+    return map;
+  }, [attendances]);
 
-  const getAttendanceStatus = (employeeId: string) => {
-    const attendance = attendances.find(att => att.employee_id === employeeId);
-    return attendance?.status || null;
-  };
+  const getAttendanceStatus = useCallback((employeeId: string) => {
+    return attendanceStatusMap.get(employeeId) || null;
+  }, [attendanceStatusMap]);
 
-  const handleMarkAttendance = async (employeeId: string, status: 'present' | 'absent') => {
+  const handleMarkAttendance = useCallback(async (employeeId: string, status: 'present' | 'absent') => {
     try {
       const exitTime = exitTimes[employeeId] || null;
       await markAttendance(employeeId, selectedDate, status, exitTime, userId);
@@ -89,16 +89,16 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       console.error('Erro ao marcar presença:', error);
       toast.error('Erro ao marcar presença');
     }
-  };
+  }, [exitTimes, selectedDate, userId, loadData]);
 
-  const handleExitTimeChange = (employeeId: string, time: string) => {
+  const handleExitTimeChange = useCallback((employeeId: string, time: string) => {
     setExitTimes(prev => ({
       ...prev,
       [employeeId]: time
     }));
-  };
+  }, []);
 
-  const updateExitTime = async (employeeId: string) => {
+  const updateExitTime = useCallback(async (employeeId: string) => {
     try {
       const currentStatus = getAttendanceStatus(employeeId);
       if (currentStatus) {
@@ -110,20 +110,20 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       console.error('Erro ao atualizar horário:', error);
       toast.error('Erro ao atualizar horário');
     }
-  };
+  }, [getAttendanceStatus, exitTimes, selectedDate, userId]);
 
-  const getStatusCounts = () => {
-    const filteredAttendances = attendances.filter(att => 
+  const statusCounts = useMemo(() => {
+    const filteredAttendances = attendances.filter(att =>
       filteredEmployees.some(emp => emp.id === att.employee_id)
     );
     const present = filteredAttendances.filter(att => att.status === 'present').length;
     const absent = filteredAttendances.filter(att => att.status === 'absent').length;
     const notMarked = filteredEmployees.length - filteredAttendances.length;
-    
-    return { present, absent, notMarked };
-  };
 
-  const handleBonus = async () => {
+    return { present, absent, notMarked };
+  }, [attendances, filteredEmployees]);
+
+  const handleBonus = useCallback(async () => {
     const amount = parseFloat(bonusAmount);
     if (isNaN(amount) || amount <= 0) {
       toast.error('Valor de bonificação inválido');
@@ -146,27 +146,29 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
     } finally {
       loadData();
     }
-  };
+  }, [bonusAmount, selectedDate, userId, loadData]);
 
-  const toggleEmployeeSelection = (employeeId: string) => {
-    const newSelected = new Set(selectedEmployees);
-    if (newSelected.has(employeeId)) {
-      newSelected.delete(employeeId);
-    } else {
-      newSelected.add(employeeId);
-    }
-    setSelectedEmployees(newSelected);
-  };
+  const toggleEmployeeSelection = useCallback((employeeId: string) => {
+    setSelectedEmployees(prev => {
+      const newSelected = new Set(prev);
+      if (newSelected.has(employeeId)) {
+        newSelected.delete(employeeId);
+      } else {
+        newSelected.add(employeeId);
+      }
+      return newSelected;
+    });
+  }, []);
 
-  const selectAllEmployees = () => {
+  const selectAllEmployees = useCallback(() => {
     if (selectedEmployees.size === filteredEmployees.length) {
       setSelectedEmployees(new Set());
     } else {
       setSelectedEmployees(new Set(filteredEmployees.map(emp => emp.id)));
     }
-  };
+  }, [selectedEmployees.size, filteredEmployees]);
 
-  const handleBulkMarkAttendance = async (status: 'present' | 'absent') => {
+  const handleBulkMarkAttendance = useCallback(async (status: 'present' | 'absent') => {
     if (selectedEmployees.size === 0) {
       toast.error('Selecione pelo menos um funcionário');
       return;
@@ -177,21 +179,25 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
     let errorCount = 0;
 
     try {
-      for (const employeeId of selectedEmployees) {
+      const promises = Array.from(selectedEmployees).map(async (employeeId) => {
         try {
           const exitTime = exitTimes[employeeId] || null;
           await markAttendance(employeeId, selectedDate, status, exitTime, userId);
-          successCount++;
+          return { success: true };
         } catch (error) {
           console.error(`Erro ao marcar presença para funcionário ${employeeId}:`, error);
-          errorCount++;
+          return { success: false };
         }
-      }
+      });
+
+      const results = await Promise.all(promises);
+      successCount = results.filter(r => r.success).length;
+      errorCount = results.filter(r => !r.success).length;
 
       if (successCount > 0) {
         toast.success(`${successCount} funcionário(s) marcado(s) como ${status === 'present' ? 'presente' : 'falta'}`);
       }
-      
+
       if (errorCount > 0) {
         toast.error(`Erro ao marcar ${errorCount} funcionário(s)`);
       }
@@ -204,7 +210,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
     } finally {
       setBulkMarkingLoading(false);
     }
-  };
+  }, [selectedEmployees, exitTimes, selectedDate, userId, loadData]);
 
   if (loading) {
     return (
@@ -215,7 +221,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
     );
   }
 
-  const { present, absent, notMarked } = getStatusCounts();
+  const { present, absent, notMarked } = statusCounts;
   
   const today = format(getBrazilDateTime(), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
 

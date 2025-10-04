@@ -431,7 +431,6 @@ export const applyBonusToAllPresent = async (
   bonusAmount: number,
   createdBy: string
 ): Promise<void> => {
-  // Buscar todos os funcionários presentes no dia
   const { data: attendances, error: attendanceError } = await supabase
     .from('attendance')
     .select('employee_id')
@@ -439,25 +438,29 @@ export const applyBonusToAllPresent = async (
     .eq('status', 'present');
 
   if (attendanceError) throw attendanceError;
-  
+
   if (!attendances || attendances.length === 0) {
     throw new Error('Nenhum funcionário presente encontrado para este dia');
   }
 
-  // Aplicar bonificação para cada funcionário presente
-  for (const attendance of attendances) {
-    // Buscar pagamento existente ou criar novo
-    const { data: existingPayment } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('employee_id', attendance.employee_id)
-      .eq('date', date)
-      .single();
+  const employeeIds = attendances.map(att => att.employee_id);
 
+  const { data: existingPayments } = await supabase
+    .from('payments')
+    .select('*')
+    .in('employee_id', employeeIds)
+    .eq('date', date);
+
+  const existingPaymentsMap = new Map(
+    (existingPayments || []).map(p => [p.employee_id, p])
+  );
+
+  const upsertPromises = attendances.map(attendance => {
+    const existingPayment = existingPaymentsMap.get(attendance.employee_id);
     const currentDailyRate = existingPayment?.daily_rate || 0;
     const newTotal = currentDailyRate + bonusAmount;
 
-    await supabase
+    return supabase
       .from('payments')
       .upsert([{
         employee_id: attendance.employee_id,
@@ -467,10 +470,12 @@ export const applyBonusToAllPresent = async (
         total: newTotal,
         created_by: createdBy,
         updated_at: getCurrentTimestamp()
-      }], { 
+      }], {
         onConflict: 'employee_id,date'
       });
-  }
+  });
+
+  await Promise.all(upsertPromises);
 };
 
 // Error functions

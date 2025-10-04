@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Plus, Trash2, RefreshCw, Filter, AlertTriangle, Minus, UsersRound } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
 import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getCollectiveErrors, getCollectiveErrorApplications, CollectiveError, CollectiveErrorApplication } from '../../services/database';
+import { applyBulkDailyRate, clearPaymentsBatch, applyErrorDiscounts } from '../../services/paymentHelpers';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
@@ -50,7 +50,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const [errorDiscountValue, setErrorDiscountValue] = useState<string>('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [employeesData, paymentsData, bonusesData, attendancesData, errorRecordsData, collectiveErrorsData, collectiveApplicationsData] = await Promise.all([
@@ -79,9 +79,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.startDate, filters.endDate, filters.employeeId]);
 
-  const processFinancialData = (
+  const processFinancialData = useCallback((
     employeesData: Employee[],
     paymentsData: Payment[],
     attendancesData: Attendance[],
@@ -114,17 +114,17 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     });
 
     setFinancialData(data);
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, [filters.startDate, filters.endDate, filters.employeeId]);
+  }, [loadData]);
 
-  const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
+  const handleDateChange = useCallback((field: 'startDate' | 'endDate', value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
-  };
+  }, []);
 
-  const handleBulkApply = async () => {
+  const handleBulkApply = useCallback(async () => {
     if (!bulkDailyRate || selectedEmployees.size === 0) {
       toast.error('Selecione funcionários e defina um valor diário');
       return;
@@ -137,24 +137,14 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     }
 
     try {
-      const startDate = new Date(filters.startDate);
-      const endDate = new Date(filters.endDate);
-      
-      for (const employeeId of selectedEmployees) {
-        const employeeAttendances = attendances.filter(att => 
-          att.employee_id === employeeId && att.status === 'present'
-        );
-        
-        for (const attendance of employeeAttendances) {
-          const existingPayment = payments.find(pay => 
-            pay.employee_id === employeeId && pay.date === attendance.date
-          );
-          
-          const currentBonus = existingPayment?.bonus || 0;
-          await upsertPayment(employeeId, attendance.date, dailyRate, currentBonus, userId);
-        }
-      }
-      
+      await applyBulkDailyRate(
+        Array.from(selectedEmployees),
+        attendances,
+        payments,
+        dailyRate,
+        userId
+      );
+
       toast.success('Valores aplicados com sucesso!');
       setBulkDailyRate('');
       setSelectedEmployees(new Set());
@@ -163,18 +153,18 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
       console.error('Erro ao aplicar valores:', error);
       toast.error('Erro ao aplicar valores');
     }
-  };
+  }, [bulkDailyRate, selectedEmployees, attendances, payments, userId, loadData]);
 
-  const handleEditPayment = (employeeId: string, date: string) => {
+  const handleEditPayment = useCallback((employeeId: string, date: string) => {
     const payment = payments.find(pay => pay.employee_id === employeeId && pay.date === date);
     setEditingPayment({ employeeId, date });
     setEditValues({
       dailyRate: payment?.daily_rate?.toString() || '0',
       bonus: payment?.bonus?.toString() || '0'
     });
-  };
+  }, [payments]);
 
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = useCallback(async () => {
     if (!editingPayment) return;
 
     const dailyRate = parseFloat(editValues.dailyRate) || 0;
@@ -189,9 +179,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
       console.error('Erro ao salvar:', error);
       toast.error('Erro ao salvar pagamento');
     }
-  };
+  }, [editingPayment, editValues, userId, loadData]);
 
-  const handleDeletePayment = async (paymentId: string) => {
+  const handleDeletePayment = useCallback(async (paymentId: string) => {
     if (!confirm('Tem certeza que deseja excluir este pagamento?')) return;
 
     try {
@@ -202,27 +192,29 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
       console.error('Erro ao excluir:', error);
       toast.error('Erro ao excluir pagamento');
     }
-  };
+  }, [loadData]);
 
-  const toggleEmployeeSelection = (employeeId: string) => {
-    const newSelected = new Set(selectedEmployees);
-    if (newSelected.has(employeeId)) {
-      newSelected.delete(employeeId);
-    } else {
-      newSelected.add(employeeId);
-    }
-    setSelectedEmployees(newSelected);
-  };
+  const toggleEmployeeSelection = useCallback((employeeId: string) => {
+    setSelectedEmployees(prev => {
+      const newSelected = new Set(prev);
+      if (newSelected.has(employeeId)) {
+        newSelected.delete(employeeId);
+      } else {
+        newSelected.add(employeeId);
+      }
+      return newSelected;
+    });
+  }, []);
 
-  const selectAllEmployees = () => {
+  const selectAllEmployees = useCallback(() => {
     if (selectedEmployees.size === financialData.length) {
       setSelectedEmployees(new Set());
     } else {
       setSelectedEmployees(new Set(financialData.map(data => data.employee.id)));
     }
-  };
+  }, [selectedEmployees.size, financialData]);
 
-  const handleClearPayments = async () => {
+  const handleClearPayments = useCallback(async () => {
     if (clearType === 'all') {
       if (!confirm('⚠️ ATENÇÃO: Tem certeza que deseja limpar TODOS os pagamentos do período selecionado?\n\nEsta ação não pode ser desfeita!')) {
         return;
@@ -243,22 +235,24 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
         await clearAllPayments(filters.startDate, filters.endDate);
         toast.success('Todos os pagamentos foram limpos com sucesso!');
       } else {
-        for (const employeeId of selectedEmployees) {
-          await clearEmployeePayments(employeeId, filters.startDate, filters.endDate);
-        }
+        await clearPaymentsBatch(
+          Array.from(selectedEmployees),
+          filters.startDate,
+          filters.endDate
+        );
         toast.success(`Pagamentos de ${selectedEmployees.size} funcionário(s) foram limpos com sucesso!`);
         setSelectedEmployees(new Set());
       }
-      
+
       setShowClearModal(false);
       loadData();
     } catch (error) {
       console.error('Erro ao limpar pagamentos:', error);
       toast.error('Erro ao limpar pagamentos');
     }
-  };
+  }, [clearType, selectedEmployees, filters.startDate, filters.endDate, loadData]);
 
-  const handleErrorDiscount = async () => {
+  const handleErrorDiscount = useCallback(async () => {
     const discountValue = parseFloat(errorDiscountValue);
     if (isNaN(discountValue) || discountValue < 0) {
       toast.error('Valor de desconto inválido');
@@ -271,62 +265,18 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     }
 
     try {
-      for (const employeeId of selectedEmployees) {
-        const employeeData = financialData.find(data => data.employee.id === employeeId);
-        if (!employeeData) continue;
+      const employeeErrorData = Array.from(selectedEmployees)
+        .map(employeeId => {
+          const employeeData = financialData.find(data => data.employee.id === employeeId);
+          return employeeData ? {
+            employeeId,
+            errorRecords: employeeData.errorRecords
+          } : null;
+        })
+        .filter(Boolean) as Array<{ employeeId: string; errorRecords: any[] }>;
 
-        // Para cada erro registrado, aplicar desconto
-        for (const errorRecord of employeeData.errorRecords) {
-          const discountAmount = errorRecord.error_count * discountValue;
-          
-          // Buscar pagamento existente
-          const existingPayment = payments.find(pay => 
-            pay.employee_id === employeeId && pay.date === errorRecord.date
-          );
-          
-          if (existingPayment) {
-            // Aplicar desconto mantendo a diária original, mas reduzindo o total
-            const originalDailyRate = existingPayment.daily_rate || 0;
-            const originalBonus = existingPayment.bonus || 0;
-            const newTotal = Math.max(0, originalDailyRate + originalBonus - discountAmount);
-            
-            await upsertPayment(
-              employeeId, 
-              errorRecord.date, 
-              originalDailyRate, 
-              originalBonus, 
-              userId
-            );
-            
-            // Atualizar o total manualmente no banco
-            const { error: updateError } = await supabase
-              .from('payments')
-              .update({ total: newTotal })
-              .eq('employee_id', employeeId)
-              .eq('date', errorRecord.date);
-              
-            if (updateError) {
-              console.error('Erro ao atualizar total:', updateError);
-            }
-          } else {
-            // Se não existe pagamento, criar um com desconto
-            const discountedTotal = Math.max(0, -discountAmount);
-            await upsertPayment(employeeId, errorRecord.date, 0, 0, userId);
-            
-            // Atualizar o total para refletir o desconto
-            const { error: updateError } = await supabase
-              .from('payments')
-              .update({ total: discountedTotal })
-              .eq('employee_id', employeeId)
-              .eq('date', errorRecord.date);
-              
-            if (updateError) {
-              console.error('Erro ao criar pagamento com desconto:', updateError);
-            }
-          }
-        }
-      }
-      
+      await applyErrorDiscounts(employeeErrorData, discountValue, payments, userId);
+
       toast.success(`Desconto de R$ ${discountValue.toFixed(2)} por erro aplicado com sucesso!`);
       setShowErrorDiscountModal(false);
       setErrorDiscountValue('');
@@ -336,7 +286,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
       console.error('Erro ao aplicar desconto:', error);
       toast.error('Erro ao aplicar desconto por erros');
     }
-  };
+  }, [errorDiscountValue, selectedEmployees, financialData, payments, userId, loadData]);
 
   if (loading) {
     return (
@@ -347,7 +297,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     );
   }
 
-  const totalEarnings = financialData.reduce((sum, data) => sum + data.totalEarned, 0);
+  const totalEarnings = useMemo(() => {
+    return financialData.reduce((sum, data) => sum + data.totalEarned, 0);
+  }, [financialData]);
 
   return (
     <div className="space-y-6">

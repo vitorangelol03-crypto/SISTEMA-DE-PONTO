@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { BarChart3, Download, Filter, Calendar, User, FileText, RefreshCw, Search } from 'lucide-react';
 import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
@@ -12,8 +12,6 @@ interface ReportsTabProps {
 export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
-  const [filteredAttendances, setFilteredAttendances] = useState<Attendance[]>([]);
-  const [displayedAttendances, setDisplayedAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
@@ -23,30 +21,29 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
     status: '' as '' | 'present' | 'absent'
   });
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [employeesData, attendancesData] = await Promise.all([
         getAllEmployees(),
         getAttendanceHistory()
       ]);
-      
+
       setEmployees(employeesData);
       setAttendances(attendancesData);
-      setFilteredAttendances(attendancesData);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  useEffect(() => {
+  const filteredAttendances = useMemo(() => {
     let filtered = [...attendances];
 
     if (filters.startDate) {
@@ -65,10 +62,10 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
       filtered = filtered.filter(att => att.status === filters.status);
     }
 
-    setFilteredAttendances(filtered);
+    return filtered;
   }, [filters, attendances]);
 
-  const displayedAttendancesMemo = useMemo(() => {
+  const displayedAttendances = useMemo(() => {
     if (!searchTerm.trim()) {
       return filteredAttendances;
     }
@@ -85,20 +82,16 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
     });
   }, [searchTerm, filteredAttendances]);
 
-  useEffect(() => {
-    setDisplayedAttendances(displayedAttendancesMemo);
-  }, [displayedAttendancesMemo]);
-
-  const getStatistics = () => {
+  const statistics = useMemo(() => {
     const total = displayedAttendances.length;
     const present = displayedAttendances.filter(att => att.status === 'present').length;
     const absent = displayedAttendances.filter(att => att.status === 'absent').length;
     const presenceRate = total > 0 ? ((present / total) * 100).toFixed(1) : '0';
 
     return { total, present, absent, presenceRate };
-  };
+  }, [displayedAttendances]);
 
-  const exportToExcel = () => {
+  const exportToExcel = useCallback(() => {
     try {
       const data = displayedAttendances.map(att => ({
         'Data': formatDateBR(att.date),
@@ -133,16 +126,16 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
       console.error('Erro ao exportar:', error);
       toast.error('Erro ao exportar relatório');
     }
-  };
+  }, [displayedAttendances]);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setFilters({
       startDate: '',
       endDate: '',
       employeeId: '',
       status: ''
     });
-  };
+  }, []);
 
   if (loading) {
     return (
@@ -153,7 +146,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
     );
   }
 
-  const stats = getStatistics();
+  const stats = statistics;
 
   return (
     <div className="space-y-6">
