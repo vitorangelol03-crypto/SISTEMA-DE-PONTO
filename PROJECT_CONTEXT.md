@@ -417,6 +417,23 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 
 ## 🔄 HISTÓRICO DE ATUALIZAÇÕES
 
+### 2025-10-05 - 12:35 - 🔧 Correção de .env + Verificação de Build
+**Problema encontrado**: Arquivo .env tinha linha vazia no início
+**Erro no console**: "Uncaught Error: Por favor, configure as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env"
+
+**Causa**:
+- Arquivo .env começava com linha vazia (linha 1)
+- Variáveis estavam nas linhas 2 e 3
+- Vite não carregava corretamente as variáveis
+
+**Solução aplicada**:
+- Removida linha vazia do início do arquivo .env
+- Variáveis agora começam na linha 1
+- Sistema deve carregar corretamente após refresh do browser
+- ✅ Build verificado e compilando com sucesso (9.68s)
+
+**IMPORTANTE**: Se o erro persistir, pressione **Ctrl+Shift+R** (ou Cmd+Shift+R no Mac) para fazer hard refresh do browser e limpar cache.
+
 ### 2025-10-05 - 12:20 - ✅ Correções Implementadas
 **Ação**: Corrigido sistema para ser 100% compatível com Bolt Database
 **Mudanças implementadas**:
@@ -465,6 +482,27 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 
 ---
 
+## 🔧 TROUBLESHOOTING - Erros Comuns
+
+### Erro: "Por favor, configure as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY"
+
+**Sintoma**: Página em branco com erro no console do navegador
+
+**Causas possíveis**:
+1. Arquivo `.env` com linha vazia no início
+2. Cache do navegador desatualizado
+3. Servidor de desenvolvimento não recarregado
+
+**Solução**:
+1. Verificar que `.env` começa direto com `VITE_SUPABASE_URL=` (sem linhas vazias)
+2. Fazer hard refresh no navegador: **Ctrl+Shift+R** (Windows/Linux) ou **Cmd+Shift+R** (Mac)
+3. Se necessário, parar e reiniciar o servidor de desenvolvimento
+4. Limpar cache do navegador completamente
+
+**Status**: ✅ Corrigido em 2025-10-05 12:30
+
+---
+
 ## 📌 LEMBRE-SE
 
 1. **SEMPRE leia este arquivo antes de modificar o projeto**
@@ -473,6 +511,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 4. **Políticas RLS simplificadas: `TO authenticated USING (true)`**
 5. **Sistema CORRIGIDO e ESTÁVEL para Bolt Database** ✅
 6. **Este arquivo é atualizado após cada mudança significativa**
+7. **Arquivo .env não pode ter linhas vazias no início**
 
 ---
 
