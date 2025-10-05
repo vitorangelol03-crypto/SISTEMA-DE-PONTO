@@ -20,16 +20,19 @@ export const useAuth = () => {
       });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          const currentUser = await getCurrentSession();
-          setUser(currentUser);
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-        } else if (event === 'TOKEN_REFRESHED' && session) {
-          const currentUser = await getCurrentSession();
-          setUser(currentUser);
-        }
+      (event, session) => {
+        // Usar IIFE para evitar deadlock com async callbacks
+        (async () => {
+          if (event === 'SIGNED_IN' && session) {
+            const currentUser = await getCurrentSession();
+            setUser(currentUser);
+          } else if (event === 'SIGNED_OUT') {
+            setUser(null);
+          } else if (event === 'TOKEN_REFRESHED' && session) {
+            const currentUser = await getCurrentSession();
+            setUser(currentUser);
+          }
+        })();
       }
     );
 

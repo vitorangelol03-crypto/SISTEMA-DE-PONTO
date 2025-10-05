@@ -172,12 +172,10 @@ export const deleteUser = async (id: string): Promise<void> => {
 
   if (deleteError) throw deleteError;
 
+  // NOTA: Não podemos usar admin.deleteUser no Bolt Database
+  // O usuário será deletado apenas da tabela users
   if (user?.auth_user_id) {
-    try {
-      await supabase.auth.admin.deleteUser(user.auth_user_id);
-    } catch (error) {
-      logger.warn('Erro ao deletar usuário do Auth (pode já estar deletado)');
-    }
+    logger.debug('Usuário deletado da tabela users. Auth user permanece (limitação do Bolt).');
   }
 };
 

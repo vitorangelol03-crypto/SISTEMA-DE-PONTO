@@ -52,7 +52,9 @@ export const signUp = async (
     .single();
 
   if (userError) {
-    await supabase.auth.admin.deleteUser(authData.user.id);
+    // NOTA: Não podemos usar admin.deleteUser no Bolt Database
+    // O usuário ficará no auth mas sem registro na tabela users
+    await supabase.auth.signOut();
     throw new Error(userError.message);
   }
 
