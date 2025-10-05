@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
 import { getCurrentSession, signOut as authSignOut } from '../services/authService';
 import { User } from '../services/database';
 import { authLogger } from '../utils/logger';
@@ -18,27 +17,6 @@ export const useAuth = () => {
         setUser(null);
         setLoading(false);
       });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        // Usar IIFE para evitar deadlock com async callbacks
-        (async () => {
-          if (event === 'SIGNED_IN' && session) {
-            const currentUser = await getCurrentSession();
-            setUser(currentUser);
-          } else if (event === 'SIGNED_OUT') {
-            setUser(null);
-          } else if (event === 'TOKEN_REFRESHED' && session) {
-            const currentUser = await getCurrentSession();
-            setUser(currentUser);
-          }
-        })();
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const login = (userData: User) => {

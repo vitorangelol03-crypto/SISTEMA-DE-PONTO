@@ -96,7 +96,7 @@ export const createDefaultAdmin = async () => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, auth_user_id')
+      .select('id')
       .eq('id', '9999')
       .maybeSingle();
 
@@ -157,14 +157,6 @@ export const createUser = async (id: string, password: string, role: 'supervisor
 };
 
 export const deleteUser = async (id: string): Promise<void> => {
-  const { data: user, error: getUserError } = await supabase
-    .from('users')
-    .select('auth_user_id')
-    .eq('id', id)
-    .maybeSingle();
-
-  if (getUserError) throw getUserError;
-
   const { error: deleteError } = await supabase
     .from('users')
     .delete()
@@ -172,11 +164,7 @@ export const deleteUser = async (id: string): Promise<void> => {
 
   if (deleteError) throw deleteError;
 
-  // NOTA: Não podemos usar admin.deleteUser no Bolt Database
-  // O usuário será deletado apenas da tabela users
-  if (user?.auth_user_id) {
-    logger.debug('Usuário deletado da tabela users. Auth user permanece (limitação do Bolt).');
-  }
+  logger.debug('Usuário deletado com sucesso');
 };
 
 // Employee functions

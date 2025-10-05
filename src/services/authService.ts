@@ -1,14 +1,16 @@
 import { supabase } from '../lib/supabase';
 import { User } from './database';
 import { saveSession, clearSession, getSession } from '../utils/sessionManager';
+import bcrypt from 'bcryptjs';
 
-export interface AuthUser extends User {
-  auth_user_id: string;
-  email: string;
-}
+const SALT_ROUNDS = 10;
 
-const generateEmail = (matricula: string): string => {
-  return `${matricula}@sistema.local`;
+export const hashPassword = async (password: string): Promise<string> => {
+  return bcrypt.hash(password, SALT_ROUNDS);
+};
+
+export const verifyPassword = async (password: string, hash: string): Promise<boolean> => {
+  return bcrypt.compare(password, hash);
 };
 
 export const signUp = async (
@@ -16,35 +18,24 @@ export const signUp = async (
   password: string,
   role: 'admin' | 'supervisor',
   createdBy: string
-): Promise<AuthUser> => {
-  const email = generateEmail(matricula);
+): Promise<User> => {
+  const { data: existingUser } = await supabase
+    .from('users')
+    .select('id')
+    .eq('id', matricula)
+    .maybeSingle();
 
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        matricula,
-        role,
-        created_by: createdBy
-      }
-    }
-  });
-
-  if (authError) {
-    throw new Error(authError.message);
+  if (existingUser) {
+    throw new Error('Matrícula já existe');
   }
 
-  if (!authData.user) {
-    throw new Error('Erro ao criar usuário');
-  }
+  const hashedPassword = await hashPassword(password);
 
   const { data: userData, error: userError } = await supabase
     .from('users')
     .insert({
       id: matricula,
-      auth_user_id: authData.user.id,
-      email: email,
+      password: hashedPassword,
       role: role,
       created_by: createdBy
     })
@@ -52,54 +43,41 @@ export const signUp = async (
     .single();
 
   if (userError) {
-    // NOTA: Não podemos usar admin.deleteUser no Bolt Database
-    // O usuário ficará no auth mas sem registro na tabela users
-    await supabase.auth.signOut();
     throw new Error(userError.message);
   }
 
-  saveSession(userData, authData.session?.access_token || '');
+  saveSession(userData);
 
-  return userData as AuthUser;
+  return userData as User;
 };
 
-export const signIn = async (matricula: string, password: string): Promise<AuthUser> => {
-  const email = generateEmail(matricula);
-
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email,
-    password
-  });
-
-  if (authError) {
-    throw new Error('Credenciais inválidas');
-  }
-
-  if (!authData.user) {
-    throw new Error('Erro ao fazer login');
-  }
-
+export const signIn = async (matricula: string, password: string): Promise<User> => {
   const { data: userData, error: userError } = await supabase
     .from('users')
     .select('*')
-    .eq('auth_user_id', authData.user.id)
+    .eq('id', matricula)
     .maybeSingle();
 
   if (userError || !userData) {
-    throw new Error('Usuário não encontrado');
+    throw new Error('Credenciais inválidas');
   }
 
-  saveSession(userData, authData.session?.access_token || '');
+  const isPasswordValid = await verifyPassword(password, userData.password);
 
-  return userData as AuthUser;
+  if (!isPasswordValid) {
+    throw new Error('Credenciais inválidas');
+  }
+
+  saveSession(userData);
+
+  return userData as User;
 };
 
 export const signOut = async (): Promise<void> => {
-  await supabase.auth.signOut();
   clearSession();
 };
 
-export const getCurrentSession = async (): Promise<AuthUser | null> => {
+export const getCurrentSession = async (): Promise<User | null> => {
   return getSession();
 };
 

@@ -6,14 +6,12 @@ const SESSION_TIMEOUT = 8 * 60 * 60 * 1000;
 
 interface SessionData {
   user: User;
-  access_token?: string;
   timestamp: number;
 }
 
-export const saveSession = (user: User, accessToken?: string): void => {
+export const saveSession = (user: User): void => {
   const sessionData: SessionData = {
     user,
-    access_token: accessToken,
     timestamp: Date.now()
   };
 
