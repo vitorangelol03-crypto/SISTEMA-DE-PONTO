@@ -4,6 +4,30 @@
 
 ---
 
+## 🚨 INFORMAÇÕES CRÍTICAS - LEIA PRIMEIRO
+
+### ✅ CREDENCIAIS CORRETAS (Supabase Real - São Paulo)
+
+**Arquivo `.env` DEVE ter:**
+```bash
+VITE_SUPABASE_URL=https://ezfpijdjvarbrwhiutek.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6ZnBpamRqdmFyYnJ3aGl1dGVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4MDc3NzAsImV4cCI6MjA3NDM4Mzc3MH0.r4Gz3yvPWxlH1Q0QWvtvmYKCxuxYML1kMMDg5S_h5uE
+```
+
+### ✅ LOGIN DO ADMIN
+- **Matrícula**: `9999`
+- **Senha**: `684171`
+- **Hash no banco**: `$2b$10$BIiVNDFWP.BbWhgqlTGEt.e07m/NycEM8BDbtTc9fjeU9lac/wys2`
+
+### ⚠️ PROBLEMA COMUM
+Se aparecer erro "Por favor, configure as variáveis VITE_SUPABASE_URL":
+1. Verificar que `.env` tem as credenciais CORRETAS acima
+2. Arquivo NÃO pode começar com linha vazia
+3. Reiniciar servidor: Ctrl+C → `npm run dev`
+4. Hard refresh: Ctrl+Shift+R
+
+---
+
 ## 📋 VISÃO GERAL DO SISTEMA
 
 Sistema de gestão de funcionários para controle de presença, pagamentos, bonificações e registro de erros.
@@ -18,9 +42,15 @@ Sistema de gestão de funcionários para controle de presença, pagamentos, boni
 
 ## 🔄 HISTÓRICO DE MIGRAÇÃO
 
-### ✅ STATUS ATUAL (2025-10-06 - Migração Concluída)
+### ✅ STATUS ATUAL (2025-10-06 - CORRIGIDO e Funcionando)
 
-**Status**: Sistema MIGRADO para Supabase Real com Autenticação Simplificada
+**Status**: Sistema MIGRADO para Supabase Real com Autenticação Simplificada - FUNCIONANDO ✅
+
+**⚠️ PROBLEMA IDENTIFICADO E CORRIGIDO (2025-10-06 13:50):**
+- O arquivo `.env` voltou para credenciais antigas do Bolt Database
+- Erro: "Por favor, configure as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY"
+- **SOLUÇÃO**: Arquivo .env atualizado com credenciais corretas do Supabase Real
+- Hash BCrypt do admin também foi corrigido no banco (estava incorreto)
 
 **O que foi feito:**
 1. ✅ Migrado do Bolt Database para Supabase Real (São Paulo)
@@ -419,6 +449,28 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 
 ## 🔄 HISTÓRICO DE ATUALIZAÇÕES
 
+### 2025-10-06 - 🔧 CORREÇÃO CRÍTICA: Arquivo .env Revertido
+
+**Problema**: Após a migração, o arquivo `.env` voltou para as credenciais antigas do Bolt Database, causando erro "Por favor, configure as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY"
+
+**Correções Aplicadas:**
+1. ✅ Arquivo `.env` corrigido com credenciais do Supabase Real
+2. ✅ Hash BCrypt do admin corrigido no banco (gerado novo hash válido)
+3. ✅ Políticas RLS duplicadas removidas
+4. ✅ Verificação completa executada - TODOS TESTES PASSARAM
+
+**Credenciais Corretas no .env:**
+```
+VITE_SUPABASE_URL=https://ezfpijdjvarbrwhiutek.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**Hash BCrypt Correto no Banco:**
+- Senha `684171` → Hash: `$2b$10$BIiVNDFWP.BbWhgqlTGEt.e07m/NycEM8BDbtTc9fjeU9lac/wys2`
+- **VERIFICADO**: Hash testado e funciona corretamente
+
+---
+
 ### 2025-10-06 - 🎉 Migração Completa: Supabase Real + Sem Email
 
 **Contexto**: Sistema estava usando Bolt Database com autenticação Supabase Auth gerando emails artificiais. Usuário solicitou remoção completa de dependência de email.
@@ -509,6 +561,26 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 ---
 
 ## 🔧 TROUBLESHOOTING - Erros Comuns
+
+### ⚠️ Erro CRÍTICO: "Por favor, configure as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY"
+
+**Sintoma**: Página em branco com erro no console
+
+**Causa**: Arquivo `.env` está com credenciais erradas (Bolt Database ao invés de Supabase Real)
+
+**Solução GARANTIDA:**
+1. Verificar que `.env` tem EXATAMENTE estas credenciais:
+```
+VITE_SUPABASE_URL=https://ezfpijdjvarbrwhiutek.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6ZnBpamRqdmFyYnJ3aGl1dGVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4MDc3NzAsImV4cCI6MjA3NDM4Mzc3MH0.r4Gz3yvPWxlH1Q0QWvtvmYKCxuxYML1kMMDg5S_h5uE
+```
+2. **IMPORTANTE**: Arquivo NÃO pode começar com linha vazia
+3. Reiniciar servidor de desenvolvimento (Ctrl+C e rodar `npm run dev` novamente)
+4. Hard refresh no navegador: **Ctrl+Shift+R**
+
+**Status**: ✅ CORRIGIDO em 2025-10-06 13:50
+
+---
 
 ### Erro: "Credenciais inválidas"
 
