@@ -52,36 +52,23 @@ export const signUp = async (
 };
 
 export const signIn = async (matricula: string, password: string): Promise<User> => {
-  console.log('[AuthService] Attempting login for:', matricula);
-
   const { data: userData, error: userError } = await supabase
     .from('users')
     .select('*')
     .eq('id', matricula)
     .maybeSingle();
 
-  console.log('[AuthService] User query result:', { userData, userError });
-
-  if (userError) {
-    console.error('[AuthService] Database error:', userError);
-    throw new Error('Erro ao buscar usuário: ' + userError.message);
+  if (userError || !userData) {
+    throw new Error('Credenciais inválidas');
   }
 
-  if (!userData) {
-    console.error('[AuthService] User not found');
-    throw new Error('Usuário não encontrado');
-  }
-
-  console.log('[AuthService] User found, verifying password...');
   const isPasswordValid = await verifyPassword(password, userData.password);
-  console.log('[AuthService] Password valid:', isPasswordValid);
 
   if (!isPasswordValid) {
-    throw new Error('Senha inválida');
+    throw new Error('Credenciais inválidas');
   }
 
   saveSession(userData);
-  console.log('[AuthService] Login successful');
 
   return userData as User;
 };
