@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Plus, Trash2, RefreshCw, Filter, AlertTriangle, Minus, UsersRound } from 'lucide-react';
-import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getCollectiveErrors, getCollectiveErrorApplications, CollectiveError, CollectiveErrorApplication } from '../../services/database';
-import { applyBulkDailyRate, clearPaymentsBatch, applyErrorDiscounts } from '../../services/paymentHelpers';
+import React, { useState, useEffect } from 'react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Plus, Trash2, RefreshCw, Filter, AlertTriangle, Minus } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
-import { logger } from '../../utils/logger';
 import toast from 'react-hot-toast';
 
 interface FinancialTabProps {
@@ -18,7 +17,6 @@ interface EmployeeFinancialData {
   customExitDays: number;
   payments: Payment[];
   errorRecords: ErrorRecord[];
-  collectiveErrorApplications: CollectiveErrorApplication[];
   totalErrors: number;
   totalEarned: number;
 }
@@ -29,8 +27,6 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const [bonuses, setBonuses] = useState<any[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [errorRecords, setErrorRecords] = useState<ErrorRecord[]>([]);
-  const [collectiveErrors, setCollectiveErrors] = useState<CollectiveError[]>([]);
-  const [collectiveErrorApplications, setCollectiveErrorApplications] = useState<CollectiveErrorApplication[]>([]);
   const [financialData, setFinancialData] = useState<EmployeeFinancialData[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -40,6 +36,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     employeeId: ''
   });
   
+  const [isEditingDate, setIsEditingDate] = useState({
+    startDate: false,
+    endDate: false
+  });
   
   const [bulkDailyRate, setBulkDailyRate] = useState<string>('');
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
@@ -49,58 +49,46 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const [clearType, setClearType] = useState<'all' | 'selected'>('selected');
   const [showErrorDiscountModal, setShowErrorDiscountModal] = useState(false);
   const [errorDiscountValue, setErrorDiscountValue] = useState<string>('');
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const loadData = useCallback(async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const [employeesData, paymentsData, bonusesData, attendancesData, errorRecordsData, collectiveErrorsData, collectiveApplicationsData] = await Promise.all([
+      const [employeesData, paymentsData, bonusesData, attendancesData, errorRecordsData] = await Promise.all([
         getAllEmployees(),
         getPayments(filters.startDate, filters.endDate, filters.employeeId),
         getBonuses(),
         getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId),
-        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId),
-        getCollectiveErrors(filters.startDate, filters.endDate),
-        getCollectiveErrorApplications()
+        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId)
       ]);
-
+      
       setEmployees(employeesData);
       setPayments(paymentsData);
       setBonuses(bonusesData);
       setAttendances(attendancesData);
       setErrorRecords(errorRecordsData);
-      setCollectiveErrors(collectiveErrorsData);
-      setCollectiveErrorApplications(collectiveApplicationsData);
-
+      
       // Processar dados financeiros
-      processFinancialData(employeesData, paymentsData, attendancesData, errorRecordsData, collectiveApplicationsData);
+      processFinancialData(employeesData, paymentsData, attendancesData, errorRecordsData);
     } catch (error) {
-      logger.error('Erro ao carregar dados financeiros', error, 'FinancialTab');
+      console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados financeiros');
     } finally {
       setLoading(false);
     }
-  }, [filters.startDate, filters.endDate, filters.employeeId]);
+  };
 
-  const processFinancialData = useCallback((
-    employeesData: Employee[],
-    paymentsData: Payment[],
-    attendancesData: Attendance[],
-    errorRecordsData: ErrorRecord[],
-    collectiveApplicationsData: CollectiveErrorApplication[]
-  ) => {
+  const processFinancialData = (employeesData: Employee[], paymentsData: Payment[], attendancesData: Attendance[], errorRecordsData: ErrorRecord[]) => {
     const data: EmployeeFinancialData[] = employeesData.map(employee => {
       const employeeAttendances = attendancesData.filter(att => att.employee_id === employee.id);
       const employeePayments = paymentsData.filter(pay => pay.employee_id === employee.id);
       const employeeErrors = errorRecordsData.filter(err => err.employee_id === employee.id);
-      const employeeCollectiveApplications = collectiveApplicationsData.filter(app => app.employee_id === employee.id);
-
+      
       const workDays = employeeAttendances.filter(att => att.status === 'present').length;
       const absences = employeeAttendances.filter(att => att.status === 'absent').length;
       const customExitDays = employeeAttendances.filter(att => att.status === 'present' && att.exit_time).length;
       const totalErrors = employeeErrors.reduce((sum, err) => sum + err.error_count, 0);
       const totalEarned = employeePayments.reduce((sum, pay) => sum + (pay.total || 0), 0);
-
+      
       return {
         employee,
         workDays,
@@ -108,24 +96,34 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
         customExitDays,
         payments: employeePayments,
         errorRecords: employeeErrors,
-        collectiveErrorApplications: employeeCollectiveApplications,
         totalErrors,
         totalEarned
       };
     });
-
+    
     setFinancialData(data);
-  }, []);
+  };
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    // Só carrega dados se não estiver editando nenhuma data
+    if (!isEditingDate.startDate && !isEditingDate.endDate) {
+      loadData();
+    }
+  }, [filters, isEditingDate]);
 
-  const handleDateChange = useCallback((field: 'startDate' | 'endDate', value: string) => {
+  const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
-  }, []);
+  };
 
-  const handleBulkApply = useCallback(async () => {
+  const handleDateFocus = (field: 'startDate' | 'endDate') => {
+    setIsEditingDate(prev => ({ ...prev, [field]: true }));
+  };
+
+  const handleDateBlur = (field: 'startDate' | 'endDate') => {
+    setIsEditingDate(prev => ({ ...prev, [field]: false }));
+  };
+
+  const handleBulkApply = async () => {
     if (!bulkDailyRate || selectedEmployees.size === 0) {
       toast.error('Selecione funcionários e defina um valor diário');
       return;
@@ -138,14 +136,24 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     }
 
     try {
-      await applyBulkDailyRate(
-        Array.from(selectedEmployees),
-        attendances,
-        payments,
-        dailyRate,
-        userId
-      );
-
+      const startDate = new Date(filters.startDate);
+      const endDate = new Date(filters.endDate);
+      
+      for (const employeeId of selectedEmployees) {
+        const employeeAttendances = attendances.filter(att => 
+          att.employee_id === employeeId && att.status === 'present'
+        );
+        
+        for (const attendance of employeeAttendances) {
+          const existingPayment = payments.find(pay => 
+            pay.employee_id === employeeId && pay.date === attendance.date
+          );
+          
+          const currentBonus = existingPayment?.bonus || 0;
+          await upsertPayment(employeeId, attendance.date, dailyRate, currentBonus, userId);
+        }
+      }
+      
       toast.success('Valores aplicados com sucesso!');
       setBulkDailyRate('');
       setSelectedEmployees(new Set());
@@ -154,18 +162,18 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
       console.error('Erro ao aplicar valores:', error);
       toast.error('Erro ao aplicar valores');
     }
-  }, [bulkDailyRate, selectedEmployees, attendances, payments, userId, loadData]);
+  };
 
-  const handleEditPayment = useCallback((employeeId: string, date: string) => {
+  const handleEditPayment = (employeeId: string, date: string) => {
     const payment = payments.find(pay => pay.employee_id === employeeId && pay.date === date);
     setEditingPayment({ employeeId, date });
     setEditValues({
       dailyRate: payment?.daily_rate?.toString() || '0',
       bonus: payment?.bonus?.toString() || '0'
     });
-  }, [payments]);
+  };
 
-  const handleSaveEdit = useCallback(async () => {
+  const handleSaveEdit = async () => {
     if (!editingPayment) return;
 
     const dailyRate = parseFloat(editValues.dailyRate) || 0;
@@ -180,9 +188,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
       console.error('Erro ao salvar:', error);
       toast.error('Erro ao salvar pagamento');
     }
-  }, [editingPayment, editValues, userId, loadData]);
+  };
 
-  const handleDeletePayment = useCallback(async (paymentId: string) => {
+  const handleDeletePayment = async (paymentId: string) => {
     if (!confirm('Tem certeza que deseja excluir este pagamento?')) return;
 
     try {
@@ -193,29 +201,27 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
       console.error('Erro ao excluir:', error);
       toast.error('Erro ao excluir pagamento');
     }
-  }, [loadData]);
+  };
 
-  const toggleEmployeeSelection = useCallback((employeeId: string) => {
-    setSelectedEmployees(prev => {
-      const newSelected = new Set(prev);
-      if (newSelected.has(employeeId)) {
-        newSelected.delete(employeeId);
-      } else {
-        newSelected.add(employeeId);
-      }
-      return newSelected;
-    });
-  }, []);
+  const toggleEmployeeSelection = (employeeId: string) => {
+    const newSelected = new Set(selectedEmployees);
+    if (newSelected.has(employeeId)) {
+      newSelected.delete(employeeId);
+    } else {
+      newSelected.add(employeeId);
+    }
+    setSelectedEmployees(newSelected);
+  };
 
-  const selectAllEmployees = useCallback(() => {
+  const selectAllEmployees = () => {
     if (selectedEmployees.size === financialData.length) {
       setSelectedEmployees(new Set());
     } else {
       setSelectedEmployees(new Set(financialData.map(data => data.employee.id)));
     }
-  }, [selectedEmployees.size, financialData]);
+  };
 
-  const handleClearPayments = useCallback(async () => {
+  const handleClearPayments = async () => {
     if (clearType === 'all') {
       if (!confirm('⚠️ ATENÇÃO: Tem certeza que deseja limpar TODOS os pagamentos do período selecionado?\n\nEsta ação não pode ser desfeita!')) {
         return;
@@ -236,24 +242,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
         await clearAllPayments(filters.startDate, filters.endDate);
         toast.success('Todos os pagamentos foram limpos com sucesso!');
       } else {
-        await clearPaymentsBatch(
-          Array.from(selectedEmployees),
-          filters.startDate,
-          filters.endDate
-        );
+        for (const employeeId of selectedEmployees) {
+          await clearEmployeePayments(employeeId, filters.startDate, filters.endDate);
+        }
         toast.success(`Pagamentos de ${selectedEmployees.size} funcionário(s) foram limpos com sucesso!`);
         setSelectedEmployees(new Set());
       }
-
+      
       setShowClearModal(false);
       loadData();
     } catch (error) {
       console.error('Erro ao limpar pagamentos:', error);
       toast.error('Erro ao limpar pagamentos');
     }
-  }, [clearType, selectedEmployees, filters.startDate, filters.endDate, loadData]);
+  };
 
-  const handleErrorDiscount = useCallback(async () => {
+  const handleErrorDiscount = async () => {
     const discountValue = parseFloat(errorDiscountValue);
     if (isNaN(discountValue) || discountValue < 0) {
       toast.error('Valor de desconto inválido');
@@ -266,18 +270,62 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     }
 
     try {
-      const employeeErrorData = Array.from(selectedEmployees)
-        .map(employeeId => {
-          const employeeData = financialData.find(data => data.employee.id === employeeId);
-          return employeeData ? {
-            employeeId,
-            errorRecords: employeeData.errorRecords
-          } : null;
-        })
-        .filter(Boolean) as Array<{ employeeId: string; errorRecords: any[] }>;
+      for (const employeeId of selectedEmployees) {
+        const employeeData = financialData.find(data => data.employee.id === employeeId);
+        if (!employeeData) continue;
 
-      await applyErrorDiscounts(employeeErrorData, discountValue, payments, userId);
-
+        // Para cada erro registrado, aplicar desconto
+        for (const errorRecord of employeeData.errorRecords) {
+          const discountAmount = errorRecord.error_count * discountValue;
+          
+          // Buscar pagamento existente
+          const existingPayment = payments.find(pay => 
+            pay.employee_id === employeeId && pay.date === errorRecord.date
+          );
+          
+          if (existingPayment) {
+            // Aplicar desconto mantendo a diária original, mas reduzindo o total
+            const originalDailyRate = existingPayment.daily_rate || 0;
+            const originalBonus = existingPayment.bonus || 0;
+            const newTotal = Math.max(0, originalDailyRate + originalBonus - discountAmount);
+            
+            await upsertPayment(
+              employeeId, 
+              errorRecord.date, 
+              originalDailyRate, 
+              originalBonus, 
+              userId
+            );
+            
+            // Atualizar o total manualmente no banco
+            const { error: updateError } = await supabase
+              .from('payments')
+              .update({ total: newTotal })
+              .eq('employee_id', employeeId)
+              .eq('date', errorRecord.date);
+              
+            if (updateError) {
+              console.error('Erro ao atualizar total:', updateError);
+            }
+          } else {
+            // Se não existe pagamento, criar um com desconto
+            const discountedTotal = Math.max(0, -discountAmount);
+            await upsertPayment(employeeId, errorRecord.date, 0, 0, userId);
+            
+            // Atualizar o total para refletir o desconto
+            const { error: updateError } = await supabase
+              .from('payments')
+              .update({ total: discountedTotal })
+              .eq('employee_id', employeeId)
+              .eq('date', errorRecord.date);
+              
+            if (updateError) {
+              console.error('Erro ao criar pagamento com desconto:', updateError);
+            }
+          }
+        }
+      }
+      
       toast.success(`Desconto de R$ ${discountValue.toFixed(2)} por erro aplicado com sucesso!`);
       setShowErrorDiscountModal(false);
       setErrorDiscountValue('');
@@ -287,7 +335,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
       console.error('Erro ao aplicar desconto:', error);
       toast.error('Erro ao aplicar desconto por erros');
     }
-  }, [errorDiscountValue, selectedEmployees, financialData, payments, userId, loadData]);
+  };
 
   if (loading) {
     return (
@@ -298,9 +346,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     );
   }
 
-  const totalEarnings = useMemo(() => {
-    return financialData.reduce((sum, data) => sum + data.totalEarned, 0);
-  }, [financialData]);
+  const totalEarnings = financialData.reduce((sum, data) => sum + data.totalEarned, 0);
 
   return (
     <div className="space-y-6">
@@ -331,6 +377,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
               type="date"
               value={filters.startDate}
               onChange={(e) => handleDateChange('startDate', e.target.value)}
+              onFocus={() => handleDateFocus('startDate')}
+              onBlur={() => handleDateBlur('startDate')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -343,6 +391,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
               type="date"
               value={filters.endDate}
               onChange={(e) => handleDateChange('endDate', e.target.value)}
+              onFocus={() => handleDateFocus('endDate')}
+              onBlur={() => handleDateBlur('endDate')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -386,12 +436,12 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
             <div className="text-2xl font-bold text-blue-600">{financialData.length}</div>
           </div>
           
-          <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
+          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
             <div className="flex items-center justify-between">
-              <span className="text-cyan-800 font-medium">Dias Trabalhados</span>
-              <Calendar className="w-5 h-5 text-cyan-600" />
+              <span className="text-purple-800 font-medium">Dias Trabalhados</span>
+              <Calendar className="w-5 h-5 text-purple-600" />
             </div>
-            <div className="text-2xl font-bold text-cyan-600">
+            <div className="text-2xl font-bold text-purple-600">
               {financialData.reduce((sum, data) => sum + data.workDays, 0)}
             </div>
           </div>
@@ -566,26 +616,20 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
                         onClick={() => {
-                          setExpandedRows(prev => {
-                            const newSet = new Set(prev);
-                            if (newSet.has(data.employee.id)) {
-                              newSet.delete(data.employee.id);
-                            } else {
-                              newSet.add(data.employee.id);
-                            }
-                            return newSet;
-                          });
+                          const row = document.getElementById(`payments-${data.employee.id}`);
+                          if (row) {
+                            row.style.display = row.style.display === 'none' ? '' : 'none';
+                          }
                         }}
                         className="text-blue-600 hover:text-blue-900 mr-2"
                       >
-                        {expandedRows.has(data.employee.id) ? 'Ocultar Detalhes' : 'Ver Detalhes'}
+                        Ver Detalhes
                       </button>
                     </td>
                   </tr>
                   
                   {/* Detalhes dos Pagamentos */}
-                  {expandedRows.has(data.employee.id) && (
-                  <tr>
+                  <tr id={`payments-${data.employee.id}`} style={{ display: 'none' }}>
                     <td colSpan={8} className="px-6 py-4 bg-gray-50">
                       <div className="space-y-2">
                         <h4 className="font-medium text-gray-900">Pagamentos Detalhados:</h4>
@@ -684,10 +728,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
                         
                         {data.errorRecords.length > 0 && (
                           <div className="mt-4">
-                            <h4 className="font-medium text-gray-900 mb-2 flex items-center">
-                              <AlertTriangle className="w-4 h-4 mr-1 text-red-600" />
-                              Erros Individuais:
-                            </h4>
+                            <h4 className="font-medium text-gray-900 mb-2">Erros Registrados:</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                               {data.errorRecords.map((errorRecord) => (
                                 <div key={errorRecord.id} className="bg-red-50 p-3 rounded border border-red-200">
@@ -705,39 +746,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
                             </div>
                           </div>
                         )}
-
-                        {data.collectiveErrorApplications.length > 0 && (
-                          <div className="mt-4">
-                            <h4 className="font-medium text-gray-900 mb-2 flex items-center">
-                              <UsersRound className="w-4 h-4 mr-1 text-orange-600" />
-                              Erros Coletivos Aplicados:
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                              {data.collectiveErrorApplications.map((application) => {
-                                const collectiveError = collectiveErrors.find(ce => ce.id === application.collective_error_id);
-                                return (
-                                  <div key={application.id} className="bg-orange-50 p-3 rounded border border-orange-200">
-                                    <div className="text-sm font-medium">
-                                      {collectiveError ? formatDateBR(collectiveError.date) : 'Data não encontrada'}
-                                    </div>
-                                    <div className="text-sm text-orange-600 font-medium">
-                                      Desconto: R$ {parseFloat(application.discount_amount.toString()).toFixed(2)}
-                                    </div>
-                                    {collectiveError && (
-                                      <div className="text-xs text-gray-600 mt-1">
-                                        {collectiveError.total_errors} erros coletivos
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </td>
                   </tr>
-                  )}
                 </React.Fragment>
               ))}
             </tbody>

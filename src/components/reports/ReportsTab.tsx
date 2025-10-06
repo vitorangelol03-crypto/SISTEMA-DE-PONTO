@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart3, Download, Filter, Calendar, User, FileText, RefreshCw, Search } from 'lucide-react';
 import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/database';
-import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
+import { formatDateBR } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 
@@ -12,6 +12,8 @@ interface ReportsTabProps {
 export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
+  const [filteredAttendances, setFilteredAttendances] = useState<Attendance[]>([]);
+  const [displayedAttendances, setDisplayedAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
@@ -21,29 +23,30 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
     status: '' as '' | 'present' | 'absent'
   });
 
-  const loadData = useCallback(async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
       const [employeesData, attendancesData] = await Promise.all([
         getAllEmployees(),
         getAttendanceHistory()
       ]);
-
+      
       setEmployees(employeesData);
       setAttendances(attendancesData);
+      setFilteredAttendances(attendancesData);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados');
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const filteredAttendances = useMemo(() => {
+  useEffect(() => {
     let filtered = [...attendances];
 
     if (filters.startDate) {
@@ -62,36 +65,39 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
       filtered = filtered.filter(att => att.status === filters.status);
     }
 
-    return filtered;
+    setFilteredAttendances(filtered);
   }, [filters, attendances]);
 
-  const displayedAttendances = useMemo(() => {
+  useEffect(() => {
     if (!searchTerm.trim()) {
-      return filteredAttendances;
+      setDisplayedAttendances(filteredAttendances);
+      return;
     }
 
     const searchLower = searchTerm.toLowerCase().trim();
     const searchNumbers = searchTerm.replace(/\D/g, '');
-
-    return filteredAttendances.filter(attendance => {
+    
+    const searched = filteredAttendances.filter(attendance => {
       if (!attendance.employees) return false;
-
+      
       const nameMatch = attendance.employees.name.toLowerCase().includes(searchLower);
       const cpfMatch = searchNumbers && attendance.employees.cpf.includes(searchNumbers);
       return nameMatch || cpfMatch;
     });
+    
+    setDisplayedAttendances(searched);
   }, [searchTerm, filteredAttendances]);
 
-  const statistics = useMemo(() => {
+  const getStatistics = () => {
     const total = displayedAttendances.length;
     const present = displayedAttendances.filter(att => att.status === 'present').length;
     const absent = displayedAttendances.filter(att => att.status === 'absent').length;
     const presenceRate = total > 0 ? ((present / total) * 100).toFixed(1) : '0';
 
     return { total, present, absent, presenceRate };
-  }, [displayedAttendances]);
+  };
 
-  const exportToExcel = useCallback(() => {
+  const exportToExcel = () => {
     try {
       const data = displayedAttendances.map(att => ({
         'Data': formatDateBR(att.date),
@@ -118,7 +124,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
 
       XLSX.utils.book_append_sheet(wb, ws, 'Relatório de Ponto');
       
-      const fileName = `relatorio-ponto-${getBrazilDate()}.xlsx`;
+      const fileName = `relatorio-ponto-${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(wb, fileName);
       
       toast.success('Relatório exportado com sucesso!');
@@ -126,16 +132,16 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
       console.error('Erro ao exportar:', error);
       toast.error('Erro ao exportar relatório');
     }
-  }, [displayedAttendances]);
+  };
 
-  const clearFilters = useCallback(() => {
+  const clearFilters = () => {
     setFilters({
       startDate: '',
       endDate: '',
       employeeId: '',
       status: ''
     });
-  }, []);
+  };
 
   if (loading) {
     return (
@@ -146,7 +152,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
     );
   }
 
-  const stats = statistics;
+  const stats = getStatistics();
 
   return (
     <div className="space-y-6">
@@ -191,12 +197,12 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
             <div className="text-2xl font-bold text-red-600">{stats.absent}</div>
           </div>
           
-          <div className="bg-teal-50 p-4 rounded-lg border border-teal-200">
+          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
             <div className="flex items-center justify-between">
-              <span className="text-teal-800 font-medium">Taxa Presença</span>
-              <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
+              <span className="text-purple-800 font-medium">Taxa Presença</span>
+              <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
             </div>
-            <div className="text-2xl font-bold text-teal-600">{stats.presenceRate}%</div>
+            <div className="text-2xl font-bold text-purple-600">{stats.presenceRate}%</div>
           </div>
         </div>
       </div>

@@ -1,25 +1,25 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
-import { logger } from './utils/logger';
+import React, { useState, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { LoginForm } from './components/auth/LoginForm';
 import { Layout } from './components/common/Layout';
 import { TabNavigation, TabType } from './components/common/TabNavigation';
+import { AttendanceTab } from './components/attendance/AttendanceTab';
+import { EmployeesTab } from './components/employees/EmployeesTab';
+import { ReportsTab } from './components/reports/ReportsTab';
+import { SettingsTab } from './components/settings/SettingsTab';
+import { UsersTab } from './components/users/UsersTab';
+import { FinancialTab } from './components/financial/FinancialTab';
+import { ErrorsTab } from './components/errors/ErrorsTab';
 import { useAuth } from './hooks/useAuth';
-
-const AttendanceTab = lazy(() => import('./components/attendance/AttendanceTab').then(m => ({ default: m.AttendanceTab })));
-const EmployeesTab = lazy(() => import('./components/employees/EmployeesTab').then(m => ({ default: m.EmployeesTab })));
-const ReportsTab = lazy(() => import('./components/reports/ReportsTab').then(m => ({ default: m.ReportsTab })));
-const SettingsTab = lazy(() => import('./components/settings/SettingsTab').then(m => ({ default: m.SettingsTab })));
-const UsersTab = lazy(() => import('./components/users/UsersTab').then(m => ({ default: m.UsersTab })));
-const FinancialTab = lazy(() => import('./components/financial/FinancialTab').then(m => ({ default: m.FinancialTab })));
-const ErrorsTab = lazy(() => import('./components/errors/ErrorsTab').then(m => ({ default: m.ErrorsTab })));
+import { initializeSystem } from './services/database';
 
 function App() {
   const { user, loading, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('attendance');
 
   useEffect(() => {
-    logger.info('Sistema inicializado com sucesso!');
+    // Inicializar sistema na primeira carga
+    initializeSystem();
   }, []);
 
   if (loading) {
@@ -43,23 +43,24 @@ function App() {
   }
 
   const renderTabContent = () => {
-    const LoadingFallback = (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-
-    return (
-      <Suspense fallback={LoadingFallback}>
-        {activeTab === 'attendance' && <AttendanceTab userId={user.id} />}
-        {activeTab === 'employees' && <EmployeesTab userId={user.id} />}
-        {activeTab === 'reports' && <ReportsTab userId={user.id} />}
-        {activeTab === 'financial' && <FinancialTab userId={user.id} />}
-        {activeTab === 'errors' && <ErrorsTab userId={user.id} />}
-        {activeTab === 'settings' && <SettingsTab />}
-        {activeTab === 'users' && user.role === 'admin' && <UsersTab userId={user.id} />}
-      </Suspense>
-    );
+    switch (activeTab) {
+      case 'attendance':
+        return <AttendanceTab userId={user.id} />;
+      case 'employees':
+        return <EmployeesTab userId={user.id} />;
+      case 'reports':
+        return <ReportsTab userId={user.id} />;
+      case 'financial':
+        return <FinancialTab userId={user.id} />;
+      case 'errors':
+        return <ErrorsTab userId={user.id} />;
+      case 'settings':
+        return <SettingsTab />;
+      case 'users':
+        return user.role === 'admin' ? <UsersTab userId={user.id} /> : null;
+      default:
+        return <AttendanceTab userId={user.id} />;
+    }
   };
 
   return (

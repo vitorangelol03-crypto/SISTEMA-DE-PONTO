@@ -1,7 +1,4 @@
 import { supabase } from '../lib/supabase';
-import { db } from './databaseWrapper';
-import { getBrazilDate, getCurrentTimestamp } from '../utils/dateUtils';
-import { logger, dbLogger } from '../utils/logger';
 
 export interface User {
   id: string;
@@ -64,31 +61,12 @@ export interface ErrorRecord {
   employees?: Employee;
 }
 
-export interface CollectiveError {
-  id: string;
-  date: string;
-  total_errors: number;
-  value_per_error: number;
-  total_amount: number;
-  observations: string | null;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CollectiveErrorApplication {
-  id: string;
-  collective_error_id: string;
-  employee_id: string;
-  discount_amount: number;
-  applied_at: string;
-}
-
 export const createTables = async () => {
   try {
-    logger.debug('Verificando estrutura do banco de dados...');
+    // Verificar se as tabelas existem, se não existir o Supabase já as criou automaticamente
+    console.log('Verificando estrutura do banco de dados...');
   } catch (error) {
-    logger.debug('Estrutura do banco verificada');
+    console.log('Estrutura do banco verificada:', error);
   }
 };
 
@@ -98,21 +76,26 @@ export const createDefaultAdmin = async () => {
       .from('users')
       .select('id')
       .eq('id', '9999')
-      .maybeSingle();
+      .single();
 
-    if (error) {
-      logger.error('Erro ao verificar admin padrão', error);
-      return;
+    if (!data) {
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert([{
+          id: '9999',
+          password: '684171',
+          role: 'admin',
+          created_by: null
+        }]);
+
+      if (insertError) {
+        console.error('Erro ao criar admin padrão:', insertError);
+      } else {
+        console.log('Admin padrão criado com sucesso!');
+      }
     }
-
-    if (data) {
-      logger.debug('Admin padrão já existe');
-      return;
-    }
-
-    logger.debug('Admin não encontrado, mas isso está OK - será criado pela migração');
   } catch (error) {
-    logger.error('Erro ao verificar admin padrão', error);
+    console.error('Erro ao verificar admin padrão:', error);
   }
 };
 
@@ -120,16 +103,26 @@ export const initializeSystem = async () => {
   try {
     await createTables();
     await createDefaultAdmin();
-    logger.info('Sistema inicializado com sucesso!');
+    console.log('Sistema inicializado com sucesso!');
   } catch (error) {
-    logger.error('Erro na inicialização', error);
+    console.error('Erro na inicialização:', error);
   }
 };
 
-// Auth functions (deprecated - use authService instead)
+// Auth functions
 export const loginUser = async (id: string, password: string): Promise<User | null> => {
-  const { signIn } = await import('./authService');
-  return await signIn(id, password);
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', id)
+    .eq('password', password)
+    .single();
+
+  if (error || !data) {
+    throw new Error('Credenciais inválidas');
+  }
+
+  return data;
 };
 
 // User functions
@@ -144,12 +137,17 @@ export const getAllUsers = async (): Promise<User[]> => {
 };
 
 export const createUser = async (id: string, password: string, role: 'supervisor', createdBy: string): Promise<void> => {
-  const { signUp } = await import('./authService');
+  const { error } = await supabase
+    .from('users')
+    .insert([{
+      id,
+      password,
+      role,
+      created_by: createdBy
+    }]);
 
-  try {
-    await signUp(id, password, role, createdBy);
-  } catch (error: any) {
-    if (error.message?.includes('já existe') || error.message?.includes('já cadastrada')) {
+  if (error) {
+    if (error.code === '23505') {
       throw new Error('ID já existe');
     }
     throw error;
@@ -157,29 +155,55 @@ export const createUser = async (id: string, password: string, role: 'supervisor
 };
 
 export const deleteUser = async (id: string): Promise<void> => {
-  const { error: deleteError } = await supabase
+  const { error } = await supabase
     .from('users')
     .delete()
     .eq('id', id);
 
-  if (deleteError) throw deleteError;
-
-  logger.debug('Usuário deletado com sucesso');
+  if (error) throw error;
 };
 
 // Employee functions
 export const getAllEmployees = async (): Promise<Employee[]> => {
-  return db.employees.getAll();
+  const { data, error } = await supabase
+    .from('employees')
+    .select('*')
+    .order('name');
+
+  if (error) throw error;
+  return data || [];
 };
 
 export const createEmployee = async (name: string, cpf: string, pixKey: string | null, createdBy: string): Promise<void> => {
-  const { createEmployeeWithValidation } = await import('./employeeHelpers');
-  await createEmployeeWithValidation(name, cpf, pixKey, createdBy);
+  const { error } = await supabase
+    .from('employees')
+    .insert([{
+      name,
+      cpf,
+      pix_key: pixKey,
+      created_by: createdBy
+    }]);
+
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('CPF já cadastrado');
+    }
+    throw error;
+  }
 };
 
 export const updateEmployee = async (id: string, name: string, cpf: string, pixKey: string | null): Promise<void> => {
-  const { updateEmployeeWithValidation } = await import('./employeeHelpers');
-  await updateEmployeeWithValidation(id, name, cpf, pixKey);
+  const { error } = await supabase
+    .from('employees')
+    .update({ name, cpf, pix_key: pixKey })
+    .eq('id', id);
+
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('CPF já cadastrado');
+    }
+    throw error;
+  }
 };
 
 export const deleteEmployee = async (id: string): Promise<void> => {
@@ -193,7 +217,11 @@ export const deleteEmployee = async (id: string): Promise<void> => {
 
 // Attendance functions
 export const getTodayAttendance = async (): Promise<Attendance[]> => {
-  const todayString = getBrazilDate();
+  // Usar data local do Brasil (UTC-3)
+  const today = new Date();
+  const brazilOffset = -3 * 60; // UTC-3 em minutos
+  const localTime = new Date(today.getTime() + (brazilOffset * 60 * 1000));
+  const todayString = localTime.toISOString().split('T')[0];
   
   const { data, error } = await supabase
     .from('attendance')
@@ -321,7 +349,7 @@ export const upsertPayment = async (
       bonus,
       total,
       created_by: createdBy,
-      updated_at: getCurrentTimestamp()
+      updated_at: new Date().toISOString()
     }], { 
       onConflict: 'employee_id,date'
     });
@@ -417,6 +445,7 @@ export const applyBonusToAllPresent = async (
   bonusAmount: number,
   createdBy: string
 ): Promise<void> => {
+  // Buscar todos os funcionários presentes no dia
   const { data: attendances, error: attendanceError } = await supabase
     .from('attendance')
     .select('employee_id')
@@ -424,29 +453,25 @@ export const applyBonusToAllPresent = async (
     .eq('status', 'present');
 
   if (attendanceError) throw attendanceError;
-
+  
   if (!attendances || attendances.length === 0) {
     throw new Error('Nenhum funcionário presente encontrado para este dia');
   }
 
-  const employeeIds = attendances.map(att => att.employee_id);
+  // Aplicar bonificação para cada funcionário presente
+  for (const attendance of attendances) {
+    // Buscar pagamento existente ou criar novo
+    const { data: existingPayment } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('employee_id', attendance.employee_id)
+      .eq('date', date)
+      .single();
 
-  const { data: existingPayments } = await supabase
-    .from('payments')
-    .select('*')
-    .in('employee_id', employeeIds)
-    .eq('date', date);
-
-  const existingPaymentsMap = new Map(
-    (existingPayments || []).map(p => [p.employee_id, p])
-  );
-
-  const upsertPromises = attendances.map(attendance => {
-    const existingPayment = existingPaymentsMap.get(attendance.employee_id);
     const currentDailyRate = existingPayment?.daily_rate || 0;
     const newTotal = currentDailyRate + bonusAmount;
 
-    return supabase
+    await supabase
       .from('payments')
       .upsert([{
         employee_id: attendance.employee_id,
@@ -455,13 +480,11 @@ export const applyBonusToAllPresent = async (
         bonus: bonusAmount,
         total: newTotal,
         created_by: createdBy,
-        updated_at: getCurrentTimestamp()
-      }], {
+        updated_at: new Date().toISOString()
+      }], { 
         onConflict: 'employee_id,date'
       });
-  });
-
-  await Promise.all(upsertPromises);
+  }
 };
 
 // Error functions
@@ -514,7 +537,7 @@ export const upsertErrorRecord = async (
       error_count: errorCount,
       observations,
       created_by: createdBy,
-      updated_at: getCurrentTimestamp()
+      updated_at: new Date().toISOString()
     }], { 
       onConflict: 'employee_id,date'
     });
@@ -545,11 +568,11 @@ export const getErrorStatistics = async (
 }> => {
   // Buscar registros de erro
   const errorRecords = await getErrorRecords(startDate, endDate);
-
+  
   // Buscar presenças para calcular taxa de erro
   const attendances = await getAttendanceHistory(startDate, endDate);
   const presentAttendances = attendances.filter(att => att.status === 'present');
-
+  
   // Calcular estatísticas por funcionário
   const employeeMap = new Map<string, {
     employee: Employee;
@@ -598,140 +621,4 @@ export const getErrorStatistics = async (
     totalErrors,
     employeeStats
   };
-};
-
-// Collective Error functions
-export const getCollectiveErrors = async (
-  startDate?: string,
-  endDate?: string
-): Promise<CollectiveError[]> => {
-  let query = supabase
-    .from('collective_errors')
-    .select('*');
-
-  if (startDate) {
-    query = query.gte('date', startDate);
-  }
-
-  if (endDate) {
-    query = query.lte('date', endDate);
-  }
-
-  const { data, error } = await query.order('date', { ascending: false });
-
-  if (error) throw error;
-  return data || [];
-};
-
-export const getCollectiveErrorApplications = async (
-  collectiveErrorId?: string,
-  employeeId?: string
-): Promise<CollectiveErrorApplication[]> => {
-  let query = supabase
-    .from('collective_error_applications')
-    .select('*');
-
-  if (collectiveErrorId) {
-    query = query.eq('collective_error_id', collectiveErrorId);
-  }
-
-  if (employeeId) {
-    query = query.eq('employee_id', employeeId);
-  }
-
-  const { data, error } = await query.order('applied_at', { ascending: false });
-
-  if (error) throw error;
-  return data || [];
-};
-
-export const createCollectiveError = async (
-  date: string,
-  totalErrors: number,
-  valuePerError: number,
-  employeeIds: string[],
-  observations: string | null,
-  createdBy: string
-): Promise<void> => {
-  const totalAmount = totalErrors * valuePerError;
-
-  // Criar o erro coletivo
-  const { data: collectiveError, error: collectiveErrorError } = await supabase
-    .from('collective_errors')
-    .insert([{
-      date,
-      total_errors: totalErrors,
-      value_per_error: valuePerError,
-      total_amount: totalAmount,
-      observations,
-      created_by: createdBy,
-      updated_at: getCurrentTimestamp()
-    }])
-    .select()
-    .single();
-
-  if (collectiveErrorError) throw collectiveErrorError;
-  if (!collectiveError) throw new Error('Erro ao criar erro coletivo');
-
-  // Calcular desconto por funcionário
-  const discountPerEmployee = totalAmount / employeeIds.length;
-
-  // Criar aplicações para cada funcionário
-  for (const employeeId of employeeIds) {
-    // Registrar a aplicação
-    const { error: applicationError } = await supabase
-      .from('collective_error_applications')
-      .insert([{
-        collective_error_id: collectiveError.id,
-        employee_id: employeeId,
-        discount_amount: discountPerEmployee
-      }]);
-
-    if (applicationError) {
-      dbLogger.queryError('insert', 'collective_error_applications', applicationError);
-      continue;
-    }
-
-    // Buscar pagamento existente ou criar novo com valor negativo
-    const { data: existingPayment } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('employee_id', employeeId)
-      .eq('date', date)
-      .maybeSingle();
-
-    if (existingPayment) {
-      // Atualizar pagamento existente aplicando desconto
-      const newTotal = (existingPayment.total || 0) - discountPerEmployee;
-
-      const { error: updateError } = await supabase
-        .from('payments')
-        .update({
-          total: newTotal,
-          updated_at: getCurrentTimestamp()
-        })
-        .eq('id', existingPayment.id);
-
-      if (updateError) {
-        dbLogger.queryError('update', 'payments', updateError);
-      }
-    } else {
-      // Criar novo pagamento com valor negativo (desconto)
-      const { error: insertError } = await supabase
-        .from('payments')
-        .insert([{
-          employee_id: employeeId,
-          date,
-          daily_rate: 0,
-          bonus: 0,
-          total: -discountPerEmployee,
-          created_by: createdBy,
-          updated_at: getCurrentTimestamp()
-        }]);
-
-      if (insertError) {
-        dbLogger.queryError('insert', 'payments', insertError);
-      }
-    }
-  }
 };

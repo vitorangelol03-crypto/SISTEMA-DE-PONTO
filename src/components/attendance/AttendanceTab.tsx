@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getAllEmployees, getTodayAttendance, markAttendance, Employee, Attendance, createBonus, applyBonusToAllPresent } from '../../services/database';
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
-import { logger } from '../../utils/logger';
 import toast from 'react-hot-toast';
 
 interface AttendanceTabProps {
@@ -13,6 +12,7 @@ interface AttendanceTabProps {
 
 export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(getBrazilDate());
@@ -23,17 +23,19 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [bulkMarkingLoading, setBulkMarkingLoading] = useState(false);
 
-  const loadData = useCallback(async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
       const [employeesData, attendancesData] = await Promise.all([
         getAllEmployees(),
         getTodayAttendance()
       ]);
-
+      
       setEmployees(employeesData);
+      setFilteredEmployees(employeesData);
       setAttendances(attendancesData);
-
+      
+      // Inicializar horários de saída
       const exitTimesMap: Record<string, string> = {};
       attendancesData.forEach(att => {
         if (att.exit_time) {
@@ -42,64 +44,60 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       });
       setExitTimes(exitTimesMap);
     } catch (error) {
-      logger.error('Erro ao carregar dados de presença', error, 'AttendanceTab');
+      console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados');
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const filteredEmployees = useMemo(() => {
+  useEffect(() => {
     if (!searchTerm.trim()) {
-      return employees;
+      setFilteredEmployees(employees);
+      return;
     }
 
     const searchLower = searchTerm.toLowerCase().trim();
     const searchNumbers = searchTerm.replace(/\D/g, '');
-
-    return employees.filter(employee => {
+    
+    const filtered = employees.filter(employee => {
       const nameMatch = employee.name.toLowerCase().includes(searchLower);
       const cpfMatch = searchNumbers && employee.cpf.includes(searchNumbers);
       return nameMatch || cpfMatch;
     });
+    
+    setFilteredEmployees(filtered);
   }, [searchTerm, employees]);
 
-  const attendanceStatusMap = useMemo(() => {
-    const map = new Map<string, 'present' | 'absent' | null>();
-    attendances.forEach(att => {
-      map.set(att.employee_id, att.status);
-    });
-    return map;
-  }, [attendances]);
+  const getAttendanceStatus = (employeeId: string) => {
+    const attendance = attendances.find(att => att.employee_id === employeeId);
+    return attendance?.status || null;
+  };
 
-  const getAttendanceStatus = useCallback((employeeId: string) => {
-    return attendanceStatusMap.get(employeeId) || null;
-  }, [attendanceStatusMap]);
-
-  const handleMarkAttendance = useCallback(async (employeeId: string, status: 'present' | 'absent') => {
+  const handleMarkAttendance = async (employeeId: string, status: 'present' | 'absent') => {
     try {
       const exitTime = exitTimes[employeeId] || null;
       await markAttendance(employeeId, selectedDate, status, exitTime, userId);
       await loadData();
       toast.success(`Presença marcada como ${status === 'present' ? 'presente' : 'falta'}`);
     } catch (error) {
-      logger.error('Erro ao marcar presença', error, 'AttendanceTab');
+      console.error('Erro ao marcar presença:', error);
       toast.error('Erro ao marcar presença');
     }
-  }, [exitTimes, selectedDate, userId, loadData]);
+  };
 
-  const handleExitTimeChange = useCallback((employeeId: string, time: string) => {
+  const handleExitTimeChange = (employeeId: string, time: string) => {
     setExitTimes(prev => ({
       ...prev,
       [employeeId]: time
     }));
-  }, []);
+  };
 
-  const updateExitTime = useCallback(async (employeeId: string) => {
+  const updateExitTime = async (employeeId: string) => {
     try {
       const currentStatus = getAttendanceStatus(employeeId);
       if (currentStatus) {
@@ -108,23 +106,23 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
         toast.success('Horário de saída atualizado');
       }
     } catch (error) {
-      logger.error('Erro ao atualizar horário', error, 'AttendanceTab');
+      console.error('Erro ao atualizar horário:', error);
       toast.error('Erro ao atualizar horário');
     }
-  }, [getAttendanceStatus, exitTimes, selectedDate, userId]);
+  };
 
-  const statusCounts = useMemo(() => {
-    const filteredAttendances = attendances.filter(att =>
+  const getStatusCounts = () => {
+    const filteredAttendances = attendances.filter(att => 
       filteredEmployees.some(emp => emp.id === att.employee_id)
     );
     const present = filteredAttendances.filter(att => att.status === 'present').length;
     const absent = filteredAttendances.filter(att => att.status === 'absent').length;
     const notMarked = filteredEmployees.length - filteredAttendances.length;
-
+    
     return { present, absent, notMarked };
-  }, [attendances, filteredEmployees]);
+  };
 
-  const handleBonus = useCallback(async () => {
+  const handleBonus = async () => {
     const amount = parseFloat(bonusAmount);
     if (isNaN(amount) || amount <= 0) {
       toast.error('Valor de bonificação inválido');
@@ -142,34 +140,32 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       setShowBonusModal(false);
       setBonusAmount('');
     } catch (error: any) {
-      logger.error('Erro ao aplicar bonificação', error, 'AttendanceTab');
+      console.error('Erro ao aplicar bonificação:', error);
       toast.error(error.message || 'Erro ao aplicar bonificação');
     } finally {
       loadData();
     }
-  }, [bonusAmount, selectedDate, userId, loadData]);
+  };
 
-  const toggleEmployeeSelection = useCallback((employeeId: string) => {
-    setSelectedEmployees(prev => {
-      const newSelected = new Set(prev);
-      if (newSelected.has(employeeId)) {
-        newSelected.delete(employeeId);
-      } else {
-        newSelected.add(employeeId);
-      }
-      return newSelected;
-    });
-  }, []);
+  const toggleEmployeeSelection = (employeeId: string) => {
+    const newSelected = new Set(selectedEmployees);
+    if (newSelected.has(employeeId)) {
+      newSelected.delete(employeeId);
+    } else {
+      newSelected.add(employeeId);
+    }
+    setSelectedEmployees(newSelected);
+  };
 
-  const selectAllEmployees = useCallback(() => {
+  const selectAllEmployees = () => {
     if (selectedEmployees.size === filteredEmployees.length) {
       setSelectedEmployees(new Set());
     } else {
       setSelectedEmployees(new Set(filteredEmployees.map(emp => emp.id)));
     }
-  }, [selectedEmployees.size, filteredEmployees]);
+  };
 
-  const handleBulkMarkAttendance = useCallback(async (status: 'present' | 'absent') => {
+  const handleBulkMarkAttendance = async (status: 'present' | 'absent') => {
     if (selectedEmployees.size === 0) {
       toast.error('Selecione pelo menos um funcionário');
       return;
@@ -180,25 +176,21 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
     let errorCount = 0;
 
     try {
-      const promises = Array.from(selectedEmployees).map(async (employeeId) => {
+      for (const employeeId of selectedEmployees) {
         try {
           const exitTime = exitTimes[employeeId] || null;
           await markAttendance(employeeId, selectedDate, status, exitTime, userId);
-          return { success: true };
+          successCount++;
         } catch (error) {
-          logger.error('Erro ao marcar presença em lote', error, 'AttendanceTab');
-          return { success: false };
+          console.error(`Erro ao marcar presença para funcionário ${employeeId}:`, error);
+          errorCount++;
         }
-      });
-
-      const results = await Promise.all(promises);
-      successCount = results.filter(r => r.success).length;
-      errorCount = results.filter(r => !r.success).length;
+      }
 
       if (successCount > 0) {
         toast.success(`${successCount} funcionário(s) marcado(s) como ${status === 'present' ? 'presente' : 'falta'}`);
       }
-
+      
       if (errorCount > 0) {
         toast.error(`Erro ao marcar ${errorCount} funcionário(s)`);
       }
@@ -206,12 +198,12 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       setSelectedEmployees(new Set());
       await loadData();
     } catch (error) {
-      logger.error('Erro na marcação em massa', error, 'AttendanceTab');
+      console.error('Erro na marcação em massa:', error);
       toast.error('Erro na marcação em massa');
     } finally {
       setBulkMarkingLoading(false);
     }
-  }, [selectedEmployees, exitTimes, selectedDate, userId, loadData]);
+  };
 
   if (loading) {
     return (
@@ -222,7 +214,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
     );
   }
 
-  const { present, absent, notMarked } = statusCounts;
+  const { present, absent, notMarked } = getStatusCounts();
   
   const today = format(getBrazilDateTime(), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
 
@@ -234,24 +226,21 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
             <Clock className="w-5 h-5 mr-2 text-blue-600" />
             Controle de Ponto
           </h2>
-
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={loadData}
-              className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>Atualizar</span>
-            </button>
-
-            <button
-              onClick={() => setShowBonusModal(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-            >
-              <Gift className="w-4 h-4" />
-              <span>Bonificação</span>
-            </button>
-          </div>
+          <button
+            onClick={loadData}
+            className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Atualizar</span>
+          </button>
+          
+          <button
+            onClick={() => setShowBonusModal(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+          >
+            <Gift className="w-4 h-4" />
+            <span>Bonificação</span>
+          </button>
         </div>
         
         <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600">

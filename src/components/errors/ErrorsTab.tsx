@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target, UsersRound } from 'lucide-react';
+import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorRecord, deleteErrorRecord, getErrorStatistics, getCollectiveErrors, Employee, Attendance, ErrorRecord, CollectiveError } from '../../services/database';
+import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorRecord, deleteErrorRecord, getErrorStatistics, Employee, Attendance, ErrorRecord } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
-import { sanitizeObservations } from '../../utils/sanitization';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
 
@@ -23,7 +22,6 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [errorRecords, setErrorRecords] = useState<ErrorRecord[]>([]);
-  const [collectiveErrors, setCollectiveErrors] = useState<CollectiveError[]>([]);
   const [employeesWithErrors, setEmployeesWithErrors] = useState<EmployeeWithErrors[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +33,10 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
     employeeId: ''
   });
   
+  const [isEditingDate, setIsEditingDate] = useState({
+    startDate: false,
+    endDate: false
+  });
   
   const [showErrorForm, setShowErrorForm] = useState(false);
   const [editingError, setEditingError] = useState<{employeeId: string, date: string} | null>(null);
@@ -54,25 +56,22 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
       errorRate: number;
     }>
   });
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [employeesData, attendancesData, errorRecordsData, statsData, collectiveErrorsData] = await Promise.all([
+      const [employeesData, attendancesData, errorRecordsData, statsData] = await Promise.all([
         getAllEmployees(),
         getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId),
         getErrorRecords(filters.startDate, filters.endDate, filters.employeeId),
-        getErrorStatistics(filters.startDate, filters.endDate),
-        getCollectiveErrors(filters.startDate, filters.endDate)
+        getErrorStatistics(filters.startDate, filters.endDate)
       ]);
-
+      
       setEmployees(employeesData);
       setAttendances(attendancesData);
       setErrorRecords(errorRecordsData);
       setStatistics(statsData);
-      setCollectiveErrors(collectiveErrorsData);
-
+      
       // Processar dados dos funcionários com erros
       processEmployeeErrorData(employeesData, attendancesData, errorRecordsData);
     } catch (error) {
@@ -119,8 +118,10 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
   };
 
   useEffect(() => {
-    loadData();
-  }, [filters.startDate, filters.endDate, filters.employeeId]);
+    if (!isEditingDate.startDate && !isEditingDate.endDate) {
+      loadData();
+    }
+  }, [filters, isEditingDate]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -142,6 +143,14 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
 
   const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleDateFocus = (field: 'startDate' | 'endDate') => {
+    setIsEditingDate(prev => ({ ...prev, [field]: true }));
+  };
+
+  const handleDateBlur = (field: 'startDate' | 'endDate') => {
+    setIsEditingDate(prev => ({ ...prev, [field]: false }));
   };
 
   const resetErrorForm = () => {
@@ -201,7 +210,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
         errorFormData.employeeId,
         errorFormData.date,
         errorCount,
-        errorFormData.observations ? sanitizeObservations(errorFormData.observations) : null,
+        errorFormData.observations.trim() || null,
         userId
       );
 
@@ -296,6 +305,8 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
               type="date"
               value={filters.startDate}
               onChange={(e) => handleDateChange('startDate', e.target.value)}
+              onFocus={() => handleDateFocus('startDate')}
+              onBlur={() => handleDateBlur('startDate')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
@@ -308,6 +319,8 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
               type="date"
               value={filters.endDate}
               onChange={(e) => handleDateChange('endDate', e.target.value)}
+              onFocus={() => handleDateFocus('endDate')}
+              onBlur={() => handleDateBlur('endDate')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
@@ -332,7 +345,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
         </div>
 
         {/* Estatísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-red-50 p-4 rounded-lg border border-red-200">
             <div className="flex items-center justify-between">
               <span className="text-red-800 font-medium">Total de Erros</span>
@@ -340,7 +353,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
             </div>
             <div className="text-2xl font-bold text-red-600">{statistics.totalErrors}</div>
           </div>
-
+          
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
             <div className="flex items-center justify-between">
               <span className="text-blue-800 font-medium">Funcionários</span>
@@ -348,7 +361,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
             </div>
             <div className="text-2xl font-bold text-blue-600">{filteredEmployees.length}</div>
           </div>
-
+          
           <div className="bg-green-50 p-4 rounded-lg border border-green-200">
             <div className="flex items-center justify-between">
               <span className="text-green-800 font-medium">Dias Trabalhados</span>
@@ -358,34 +371,17 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
               {filteredEmployees.reduce((sum, emp) => sum + emp.workDays, 0)}
             </div>
           </div>
-
-          <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+          
+          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
             <div className="flex items-center justify-between">
-              <span className="text-amber-800 font-medium">Taxa Média</span>
-              <Target className="w-5 h-5 text-amber-600" />
+              <span className="text-purple-800 font-medium">Taxa Média</span>
+              <Target className="w-5 h-5 text-purple-600" />
             </div>
-            <div className="text-2xl font-bold text-amber-600">
-              {filteredEmployees.length > 0
+            <div className="text-2xl font-bold text-purple-600">
+              {filteredEmployees.length > 0 
                 ? (filteredEmployees.reduce((sum, emp) => sum + emp.errorRate, 0) / filteredEmployees.length).toFixed(2)
                 : '0.00'
               }
-            </div>
-          </div>
-
-          <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-            <div className="flex items-center justify-between">
-              <span className="text-orange-800 font-medium text-sm">Taxa Média Erros Coletivos</span>
-              <UsersRound className="w-5 h-5 text-orange-600" />
-            </div>
-            <div className="text-2xl font-bold text-orange-600">
-              {(() => {
-                if (collectiveErrors.length === 0) return '0.00';
-                const startDate = new Date(filters.startDate);
-                const endDate = new Date(filters.endDate);
-                const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                const avgRate = collectiveErrors.length / daysDiff;
-                return avgRate.toFixed(2);
-              })()}
             </div>
           </div>
         </div>
@@ -477,63 +473,12 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
         </div>
       </div>
 
-      {/* Erros Coletivos */}
-      {collectiveErrors.length > 0 && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900 flex items-center">
-              <UsersRound className="w-5 h-5 mr-2 text-orange-600" />
-              Erros Coletivos ({collectiveErrors.length})
-            </h3>
-          </div>
-
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {collectiveErrors.map((collectiveError) => (
-                <div key={collectiveError.id} className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{formatDateBR(collectiveError.date)}</div>
-                      <div className="text-xs text-gray-500">Erro Coletivo</div>
-                    </div>
-                    <UsersRound className="w-5 h-5 text-orange-600" />
-                  </div>
-
-                  <div className="space-y-1 mt-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Total de Erros:</span>
-                      <span className="font-medium text-orange-600">{collectiveError.total_errors}</span>
-                    </div>
-
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Valor por Erro:</span>
-                      <span className="font-medium text-orange-600">R$ {parseFloat(collectiveError.value_per_error.toString()).toFixed(2)}</span>
-                    </div>
-
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Valor Total:</span>
-                      <span className="font-medium text-orange-600">R$ {parseFloat(collectiveError.total_amount.toString()).toFixed(2)}</span>
-                    </div>
-
-                    {collectiveError.observations && (
-                      <div className="mt-2 pt-2 border-t border-orange-200">
-                        <div className="text-xs text-gray-600">{collectiveError.observations}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Lista de Funcionários */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <h3 className="text-lg font-medium text-gray-900">
-              Erros Individuais - Funcionários ({filteredEmployees.length})
+              Funcionários e Erros ({filteredEmployees.length})
             </h3>
             
             <div className="relative">
@@ -612,27 +557,21 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
                         </button>
                         <button
                           onClick={() => {
-                            setExpandedRows(prev => {
-                              const newSet = new Set(prev);
-                              if (newSet.has(employeeData.employee.id)) {
-                                newSet.delete(employeeData.employee.id);
-                              } else {
-                                newSet.add(employeeData.employee.id);
-                              }
-                              return newSet;
-                            });
+                            const row = document.getElementById(`errors-${employeeData.employee.id}`);
+                            if (row) {
+                              row.style.display = row.style.display === 'none' ? '' : 'none';
+                            }
                           }}
                           className="text-blue-600 hover:text-blue-900"
                         >
-                          {expandedRows.has(employeeData.employee.id) ? 'Ocultar Detalhes' : 'Ver Detalhes'}
+                          Ver Detalhes
                         </button>
                       </div>
                     </td>
                   </tr>
                   
                   {/* Detalhes dos Erros */}
-                  {expandedRows.has(employeeData.employee.id) && (
-                  <tr>
+                  <tr id={`errors-${employeeData.employee.id}`} style={{ display: 'none' }}>
                     <td colSpan={5} className="px-6 py-4 bg-gray-50">
                       <div className="space-y-2">
                         <h4 className="font-medium text-gray-900">Registros de Erros:</h4>
@@ -672,7 +611,6 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
                       </div>
                     </td>
                   </tr>
-                  )}
                 </React.Fragment>
               ))}
             </tbody>
