@@ -19,12 +19,28 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 - **Senha**: `684171`
 - **Hash no banco**: `$2b$10$BIiVNDFWP.BbWhgqlTGEt.e07m/NycEM8BDbtTc9fjeU9lac/wys2`
 
-### ⚠️ PROBLEMA COMUM
-Se aparecer erro "Por favor, configure as variáveis VITE_SUPABASE_URL":
-1. Verificar que `.env` tem as credenciais CORRETAS acima
-2. Arquivo NÃO pode começar com linha vazia
-3. Reiniciar servidor: Ctrl+C → `npm run dev`
-4. Hard refresh: Ctrl+Shift+R
+### ⚠️ PROBLEMA CRÍTICO RECORRENTE
+O arquivo `.env` CONTINUA REVERTENDO para credenciais antigas do Bolt Database!
+
+**CAUSA**: Algum processo está sobrescrevendo o arquivo `.env`
+
+**SOLUÇÃO DEFINITIVA:**
+1. **PARE o servidor de desenvolvimento** (Ctrl+C)
+2. **Verifique o arquivo .env**:
+   ```bash
+   cat .env
+   ```
+3. **Se estiver errado, corrija MANUALMENTE**:
+   ```bash
+   VITE_SUPABASE_URL=https://ezfpijdjvarbrwhiutek.supabase.co
+   VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6ZnBpamRqdmFyYnJ3aGl1dGVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4MDc3NzAsImV4cCI6MjA3NDM4Mzc3MH0.r4Gz3yvPWxlH1Q0QWvtvmYKCxuxYML1kMMDg5S_h5uE
+   ```
+4. **Reinicie o servidor**: `npm run dev`
+5. **Hard refresh**: Ctrl+Shift+R
+
+**VERIFICAÇÃO**: O arquivo `.env` DEVE ter "ezfpijdjvarbrwhiutek" na URL, NÃO "0ec90b57d6e95fcbda19832f"
+
+**SCRIPT DE VERIFICAÇÃO**: Execute `./verify-setup.sh` para verificar se tudo está correto
 
 ---
 
