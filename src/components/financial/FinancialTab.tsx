@@ -48,7 +48,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const [showErrorDiscountModal, setShowErrorDiscountModal] = useState(false);
   const [errorDiscountValue, setErrorDiscountValue] = useState<string>('');
 
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     try {
       setLoading(true);
       const [employeesData, paymentsData, attendancesData, errorRecordsData] = await Promise.all([
@@ -57,12 +57,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
         getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId),
         getErrorRecords(filters.startDate, filters.endDate, filters.employeeId)
       ]);
-      
+
       setEmployees(employeesData);
       setPayments(paymentsData);
       setAttendances(attendancesData);
-      
-      // Processar dados financeiros
+
       processFinancialData(employeesData, paymentsData, attendancesData, errorRecordsData);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -70,7 +69,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.startDate, filters.endDate, filters.employeeId]);
 
   const processFinancialData = (employeesData: Employee[], paymentsData: Payment[], attendancesData: Attendance[], errorRecordsData: ErrorRecord[]) => {
     const data: EmployeeFinancialData[] = employeesData.map(employee => {
@@ -100,11 +99,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   };
 
   useEffect(() => {
-    // Só carrega dados se não estiver editando nenhuma data
     if (!isEditingDate.startDate && !isEditingDate.endDate) {
       loadData();
     }
-  }, [filters, isEditingDate]);
+  }, [filters, isEditingDate, loadData]);
 
   const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));

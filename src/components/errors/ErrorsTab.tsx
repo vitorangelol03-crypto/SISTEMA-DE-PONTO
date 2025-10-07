@@ -56,7 +56,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
     }>
   });
 
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     try {
       setLoading(true);
       const [employeesData, attendancesData, errorRecordsData, statsData] = await Promise.all([
@@ -65,12 +65,11 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
         getErrorRecords(filters.startDate, filters.endDate, filters.employeeId),
         getErrorStatistics(filters.startDate, filters.endDate)
       ]);
-      
+
       setEmployees(employeesData);
       setErrorRecords(errorRecordsData);
       setStatistics(statsData);
-      
-      // Processar dados dos funcionários com erros
+
       processEmployeeErrorData(employeesData, attendancesData, errorRecordsData);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -78,7 +77,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.startDate, filters.endDate, filters.employeeId]);
 
   const processEmployeeErrorData = (
     employeesData: Employee[], 
@@ -119,7 +118,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
     if (!isEditingDate.startDate && !isEditingDate.endDate) {
       loadData();
     }
-  }, [filters, isEditingDate]);
+  }, [filters, isEditingDate, loadData]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
