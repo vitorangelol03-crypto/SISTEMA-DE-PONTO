@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Download, Filter, Calendar, User, FileText, RefreshCw, Search } from 'lucide-react';
+import { BarChart3, Download, Filter, FileText, RefreshCw, Search } from 'lucide-react';
 import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/database';
 import { formatDateBR } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx';
@@ -9,7 +9,7 @@ interface ReportsTabProps {
   userId: string;
 }
 
-export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
+export const ReportsTab: React.FC<ReportsTabProps> = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [filteredAttendances, setFilteredAttendances] = useState<Attendance[]>([]);
@@ -262,7 +262,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ userId }) => {
             </label>
             <select
               value={filters.status}
-              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value as any }))}
+              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value as '' | 'present' | 'absent' }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Todos</option>

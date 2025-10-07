@@ -72,7 +72,7 @@ export const createTables = async () => {
 
 export const createDefaultAdmin = async () => {
   try {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('users')
       .select('id')
       .eq('id', '9999')

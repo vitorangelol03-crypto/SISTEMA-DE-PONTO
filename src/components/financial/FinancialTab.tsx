@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Plus, Trash2, RefreshCw, Filter, AlertTriangle, Minus } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { getAllEmployees, getPayments, upsertPayment, deletePayment, getBonuses, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord } from '../../services/database';
+import { getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
@@ -24,9 +24,7 @@ interface EmployeeFinancialData {
 export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [bonuses, setBonuses] = useState<any[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
-  const [errorRecords, setErrorRecords] = useState<ErrorRecord[]>([]);
   const [financialData, setFinancialData] = useState<EmployeeFinancialData[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -53,19 +51,16 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [employeesData, paymentsData, bonusesData, attendancesData, errorRecordsData] = await Promise.all([
+      const [employeesData, paymentsData, attendancesData, errorRecordsData] = await Promise.all([
         getAllEmployees(),
         getPayments(filters.startDate, filters.endDate, filters.employeeId),
-        getBonuses(),
         getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId),
         getErrorRecords(filters.startDate, filters.endDate, filters.employeeId)
       ]);
       
       setEmployees(employeesData);
       setPayments(paymentsData);
-      setBonuses(bonusesData);
       setAttendances(attendancesData);
-      setErrorRecords(errorRecordsData);
       
       // Processar dados financeiros
       processFinancialData(employeesData, paymentsData, attendancesData, errorRecordsData);
@@ -136,8 +131,6 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
     }
 
     try {
-      const startDate = new Date(filters.startDate);
-      const endDate = new Date(filters.endDate);
       
       for (const employeeId of selectedEmployees) {
         const employeeAttendances = attendances.filter(att => 

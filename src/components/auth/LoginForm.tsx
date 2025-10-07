@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react';
-import { loginUser } from '../../services/database';
+import { loginUser, User } from '../../services/database';
 import { isNumericString } from '../../utils/validation';
 import toast from 'react-hot-toast';
 
 interface LoginFormProps {
-  onLogin: (user: any) => void;
+  onLogin: (user: User) => void;
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
@@ -35,7 +35,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
       const user = await loginUser(id, password);
       toast.success('Login realizado com sucesso!');
       onLogin(user);
-    } catch (error) {
+    } catch {
       setError('Credenciais inválidas');
       toast.error('Erro ao fazer login');
     } finally {

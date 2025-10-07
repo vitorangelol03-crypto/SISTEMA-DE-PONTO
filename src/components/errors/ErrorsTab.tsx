@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorRecord, deleteErrorRecord, getErrorStatistics, Employee, Attendance, ErrorRecord } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
@@ -20,7 +20,6 @@ interface EmployeeWithErrors {
 
 export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [errorRecords, setErrorRecords] = useState<ErrorRecord[]>([]);
   const [employeesWithErrors, setEmployeesWithErrors] = useState<EmployeeWithErrors[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,7 +67,6 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
       ]);
       
       setEmployees(employeesData);
-      setAttendances(attendancesData);
       setErrorRecords(errorRecordsData);
       setStatistics(statsData);
       
@@ -217,9 +215,10 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
       toast.success(editingError ? 'Erro atualizado com sucesso!' : 'Erro registrado com sucesso!');
       resetErrorForm();
       loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro ao salvar:', error);
-      toast.error(error.message || 'Erro ao salvar registro');
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar registro';
+      toast.error(errorMessage);
     }
   };
 

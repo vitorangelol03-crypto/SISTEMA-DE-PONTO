@@ -15,7 +15,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
   const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(getBrazilDate());
+  const [selectedDate] = useState(getBrazilDate());
   const [exitTimes, setExitTimes] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [showBonusModal, setShowBonusModal] = useState(false);
@@ -139,7 +139,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       toast.success(`Bonificação de R$ ${amount.toFixed(2)} aplicada para todos os funcionários presentes!`);
       setShowBonusModal(false);
       setBonusAmount('');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro ao aplicar bonificação:', error);
       toast.error(error.message || 'Erro ao aplicar bonificação');
     } finally {

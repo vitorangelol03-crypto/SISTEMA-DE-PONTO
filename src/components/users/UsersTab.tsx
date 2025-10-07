@@ -67,8 +67,9 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
       toast.success('Supervisor criado com sucesso!');
       resetForm();
       loadUsers();
-    } catch (error: any) {
-      toast.error(error.message || 'Erro ao criar supervisor');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao criar supervisor';
+      toast.error(errorMessage);
     }
   };
 

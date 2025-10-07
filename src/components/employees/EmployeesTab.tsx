@@ -89,8 +89,9 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
 
       resetForm();
       loadEmployees();
-    } catch (error: any) {
-      toast.error(error.message || 'Erro ao salvar funcionário');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar funcionário';
+      toast.error(errorMessage);
     }
   };
 
