@@ -10,55 +10,84 @@ interface PaymentRow {
 
 export const exportC6PaymentSheet = async (paymentRows: PaymentRow[]) => {
   try {
-    const templatePath = '/c6-template.xlsx';
-    const response = await fetch(templatePath);
+    const workbook = XLSX.utils.book_new();
 
-    if (!response.ok) {
-      throw new Error('Não foi possível carregar o template do C6');
-    }
+    const worksheetData: any[][] = [
+      ['ATENÇÃO: Não altere o cabeçalho desta planilha'],
+      ['Nome do funcionário', 'Chave ou código Pix', 'Valor', 'Data de pagamento', 'Descrição (opcional)']
+    ];
 
-    const arrayBuffer = await response.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellStyles: true, bookVBA: true });
-
-    const sheetName = 'PIX chave ou código';
-    const worksheet = workbook.Sheets[sheetName];
-
-    if (!worksheet) {
-      throw new Error(`Aba "${sheetName}" não encontrada no template`);
-    }
-
-    const startRow = 3;
-
-    paymentRows.forEach((row, index) => {
-      const rowNum = startRow + index;
-
-      const cellA = `A${rowNum}`;
-      const cellB = `B${rowNum}`;
-      const cellC = `C${rowNum}`;
-      const cellD = `D${rowNum}`;
-      const cellE = `E${rowNum}`;
-
-      worksheet[cellA] = { t: 's', v: row.employeeName };
-      worksheet[cellB] = { t: 's', v: row.pixKey };
-      worksheet[cellC] = { t: 'n', v: row.amount, z: 'R$ #,##0.00' };
-      worksheet[cellD] = { t: 's', v: formatDateForExcel(row.paymentDate) };
-      worksheet[cellE] = { t: 's', v: row.description || '' };
+    paymentRows.forEach(row => {
+      worksheetData.push([
+        row.employeeName,
+        row.pixKey,
+        row.amount,
+        formatDateForExcel(row.paymentDate),
+        row.description || ''
+      ]);
     });
 
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+
+    const columnWidths = [
+      { wch: 40 },
+      { wch: 40 },
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 50 }
+    ];
+    worksheet['!cols'] = columnWidths;
+
     const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-    const newEndRow = startRow + paymentRows.length - 1;
-    if (newEndRow > range.e.r) {
-      range.e.r = newEndRow;
-      worksheet['!ref'] = XLSX.utils.encode_range(range);
+
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      const headerAddress = XLSX.utils.encode_cell({ r: 1, c: col });
+      if (worksheet[headerAddress]) {
+        worksheet[headerAddress].s = {
+          font: { bold: true, sz: 11 },
+          fill: { fgColor: { rgb: 'FFD966' } },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
     }
+
+    for (let row = 2; row <= range.e.r; row++) {
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+        if (worksheet[cellAddress]) {
+          if (col === 2) {
+            worksheet[cellAddress].z = '#,##0.00';
+            worksheet[cellAddress].s = {
+              alignment: { horizontal: 'right', vertical: 'center' }
+            };
+          }
+        }
+      }
+    }
+
+    if (!worksheet['!merges']) {
+      worksheet['!merges'] = [];
+    }
+    worksheet['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } });
+
+    const warningCell = worksheet['A1'];
+    if (warningCell) {
+      warningCell.s = {
+        font: { bold: true, sz: 12 },
+        fill: { fgColor: { rgb: 'FFF2CC' } },
+        alignment: { horizontal: 'center', vertical: 'center' }
+      };
+    }
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'PIX chave ou código');
 
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
     const filename = `Pagamento_C6_${dateStr}.xlsx`;
 
-    XLSX.writeFile(workbook, filename);
+    XLSX.writeFile(workbook, filename, { bookType: 'xlsx', type: 'binary' });
   } catch (error) {
-    console.error('Erro ao processar template:', error);
+    console.error('Erro ao gerar planilha:', error);
     throw error;
   }
 };
