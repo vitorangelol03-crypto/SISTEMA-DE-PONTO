@@ -287,9 +287,9 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId }) => {
     setShowConfirmModal(true);
   };
 
-  const confirmExport = () => {
+  const confirmExport = async () => {
     try {
-      exportC6PaymentSheet(paymentRows);
+      await exportC6PaymentSheet(paymentRows);
       setShowConfirmModal(false);
       toast.success('Planilha gerada com sucesso!');
     } catch (error) {
