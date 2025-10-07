@@ -1,7 +1,7 @@
 import React from 'react';
-import { Clock, Users, BarChart3, Settings, UserCog, DollarSign, AlertTriangle } from 'lucide-react';
+import { Clock, Users, BarChart3, Settings, UserCog, DollarSign, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 
-export type TabType = 'attendance' | 'employees' | 'reports' | 'settings' | 'users' | 'financial' | 'errors';
+export type TabType = 'attendance' | 'employees' | 'reports' | 'settings' | 'users' | 'financial' | 'errors' | 'c6payment';
 
 interface TabNavigationProps {
   activeTab: TabType;
@@ -19,6 +19,7 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
     { id: 'employees' as TabType, name: 'Funcionários', icon: Users },
     { id: 'reports' as TabType, name: 'Relatórios', icon: BarChart3 },
     { id: 'financial' as TabType, name: 'Financeiro', icon: DollarSign },
+    { id: 'c6payment' as TabType, name: 'Pagamento C6', icon: FileSpreadsheet },
     { id: 'errors' as TabType, name: 'Erros', icon: AlertTriangle },
     { id: 'settings' as TabType, name: 'Configurações', icon: Settings },
     ...(userRole === 'admin' ? [{ id: 'users' as TabType, name: 'Usuários', icon: UserCog }] : [])

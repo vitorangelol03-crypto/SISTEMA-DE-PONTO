@@ -10,6 +10,7 @@ import { SettingsTab } from './components/settings/SettingsTab';
 import { UsersTab } from './components/users/UsersTab';
 import { FinancialTab } from './components/financial/FinancialTab';
 import { ErrorsTab } from './components/errors/ErrorsTab';
+import { C6PaymentTab } from './components/c6payment/C6PaymentTab';
 import { useAuth } from './hooks/useAuth';
 import { initializeSystem } from './services/database';
 
@@ -52,6 +53,8 @@ function App() {
         return <ReportsTab userId={user.id} />;
       case 'financial':
         return <FinancialTab userId={user.id} />;
+      case 'c6payment':
+        return <C6PaymentTab userId={user.id} />;
       case 'errors':
         return <ErrorsTab userId={user.id} />;
       case 'settings':
