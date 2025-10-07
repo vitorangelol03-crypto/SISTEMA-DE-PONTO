@@ -10,7 +10,7 @@ interface PaymentRow {
 
 export const exportC6PaymentSheet = async (paymentRows: PaymentRow[]) => {
   try {
-    const templatePath = '/src/components/c6payment/c6-template-pagar-salarios-via-pix (1).xlsx';
+    const templatePath = '/c6-template.xlsx';
     const response = await fetch(templatePath);
 
     if (!response.ok) {
@@ -18,7 +18,7 @@ export const exportC6PaymentSheet = async (paymentRows: PaymentRow[]) => {
     }
 
     const arrayBuffer = await response.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellStyles: true });
+    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellStyles: true, bookVBA: true });
 
     const sheetName = 'PIX chave ou código';
     const worksheet = workbook.Sheets[sheetName];
