@@ -205,5 +205,25 @@ Este arquivo documenta todas as mudanças, decisões técnicas e contexto do pro
 
 ---
 
+## Sessão: 2025-11-03 (continuação)
+
+### Template C6 Atualizado
+
+**Ação Realizada:**
+- Recebi o arquivo original do template C6: `c6-template-pagar-salarios-via-pix (1).xlsx`
+- Copiei o arquivo para `/public/c6-template.xlsx` para ser usado pela aplicação
+- Verifiquei que o código já estava configurado corretamente para usar o template
+- Build realizado com sucesso
+
+**Arquivos Envolvidos:**
+- `/public/c6-template.xlsx` - Template original do C6 Bank agora disponível
+
+**Resultado:**
+- Sistema agora usa o template oficial do C6 Bank
+- Exportação manterá 100% da formatação original
+- Compatibilidade total garantida com o sistema do banco
+
+---
+
 **Última Atualização:** 2025-11-03
-**Versão:** 1.1.0
+**Versão:** 1.1.1
