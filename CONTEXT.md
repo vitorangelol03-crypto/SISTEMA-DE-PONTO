@@ -177,5 +177,33 @@ Este arquivo documenta todas as mudanças, decisões técnicas e contexto do pro
 
 ---
 
-**Última Atualização:** 2025-10-06
-**Versão:** 1.0.0
+## Sessão: 2025-11-03
+
+### Atualização do Sistema de Exportação C6
+
+**Problema Identificado:**
+- A exportação da planilha C6 estava gerando um arquivo do zero
+- Faltava manter o formato exato do template original do C6 Bank
+- Risco de incompatibilidade com o sistema do banco
+
+**Solução Aplicada:**
+- Modificado `src/utils/c6Export.ts` para carregar o template original localizado em `/public/c6-template.xlsx`
+- Sistema agora lê o template original via fetch, preservando toda formatação, estilos e estrutura
+- Insere os dados dos pagamentos a partir da linha 6 (índice 5), mantendo cabeçalhos e instruções originais
+- Mantém todas as abas e configurações do arquivo original do C6
+
+**Arquivos Modificados:**
+- `src/utils/c6Export.ts` - Refatorado para usar template original
+
+**Benefícios:**
+- Garante 100% de compatibilidade com o sistema do C6 Bank
+- Mantém toda formatação, cores, bordas e validações do template oficial
+- Reduz riscos de rejeição de arquivo pelo banco
+- Código mais simples e confiável
+
+**Status:** ✅ Concluído e testado (build bem-sucedido)
+
+---
+
+**Última Atualização:** 2025-11-03
+**Versão:** 1.1.0
