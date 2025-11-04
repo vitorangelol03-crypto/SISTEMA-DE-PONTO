@@ -23,23 +23,26 @@ export interface ImportValidationResult {
 export const generateEmployeeTemplate = (): void => {
   const wb = XLSX.utils.book_new();
 
-  const headers = ['Nome Completo', 'CPF', 'Chave PIX (Opcional)'];
-  const example = ['João da Silva', '123.456.789-00', 'joao@email.com'];
+  const headers = ['Nome Completo', 'CPF', 'Chave PIX (Opcional)', 'INSTRUÇÕES'];
+  const example = ['João da Silva', '123.456.789-00', 'joao@email.com', ''];
   const instructions = [
-    'INSTRUÇÕES:',
-    '1. Preencha uma linha para cada funcionário',
-    '2. Nome deve ter pelo menos 3 caracteres',
-    '3. CPF deve ser válido (apenas números ou formatado)',
-    '4. Chave PIX é opcional (CPF, email, telefone ou chave aleatória)',
-    '5. Não altere ou remova esta linha de cabeçalho',
-    '6. Salve o arquivo e faça o upload no sistema'
+    ['', '', '', ''],
+    ['', '', '', '1. Preencha uma linha para cada funcionário nas colunas A, B e C'],
+    ['', '', '', '2. Nome deve ter pelo menos 3 caracteres'],
+    ['', '', '', '3. CPF deve ser válido (apenas números ou formatado)'],
+    ['', '', '', '4. Chave PIX é opcional (CPF, email, telefone ou chave aleatória)'],
+    ['', '', '', '5. Não altere ou remova esta linha de cabeçalho'],
+    ['', '', '', '6. Salve o arquivo e faça o upload no sistema'],
+    ['', '', '', ''],
+    ['', '', '', 'Exemplos de preenchimento:'],
+    ['', '', '', 'Maria Santos | 987.654.321-00 | maria@email.com'],
+    ['', '', '', 'Pedro Costa | 11122233344 | (11) 98765-4321']
   ];
 
   const data = [
     headers,
     example,
-    [],
-    ...instructions.map(inst => [inst, '', ''])
+    ...instructions
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(data);
@@ -47,7 +50,8 @@ export const generateEmployeeTemplate = (): void => {
   ws['!cols'] = [
     { wch: 35 },
     { wch: 18 },
-    { wch: 30 }
+    { wch: 30 },
+    { wch: 60 }
   ];
 
   const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
