@@ -8,9 +8,10 @@ import toast from 'react-hot-toast';
 
 interface AttendanceTabProps {
   userId: string;
+  hasPermission: (permission: string) => boolean;
 }
 
-export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
+export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermission }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
@@ -235,13 +236,15 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
               <span>Atualizar</span>
             </button>
 
-            <button
-              onClick={() => setShowBonusModal(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-            >
-              <Gift className="w-4 h-4" />
-              <span>Bonificação</span>
-            </button>
+            {hasPermission('financial.applyBonus') && (
+              <button
+                onClick={() => setShowBonusModal(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              >
+                <Gift className="w-4 h-4" />
+                <span>Bonificação</span>
+              </button>
+            )}
           </div>
         </div>
         
@@ -278,7 +281,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
       </div>
 
       {/* Ações em Massa */}
-      {selectedEmployees.size > 0 && (
+      {selectedEmployees.size > 0 && hasPermission('attendance.mark') && (
         <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg shadow">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center space-x-2">
@@ -286,7 +289,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
                 {selectedEmployees.size} funcionário(s) selecionado(s)
               </span>
             </div>
-            
+
             <div className="flex space-x-3">
               <button
                 onClick={() => handleBulkMarkAttendance('present')}
@@ -296,7 +299,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
                 <CheckCircle className="w-4 h-4" />
                 <span>{bulkMarkingLoading ? 'Marcando...' : 'Marcar como Presente'}</span>
               </button>
-              
+
               <button
                 onClick={() => handleBulkMarkAttendance('absent')}
                 disabled={bulkMarkingLoading}
@@ -305,7 +308,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
                 <XCircle className="w-4 h-4" />
                 <span>{bulkMarkingLoading ? 'Marcando...' : 'Marcar como Falta'}</span>
               </button>
-              
+
               <button
                 onClick={() => setSelectedEmployees(new Set())}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
@@ -324,19 +327,21 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
               Funcionários ({filteredEmployees.length})
             </h3>
             
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Buscar por nome ou CPF..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 sm:w-64"
-              />
-            </div>
+            {hasPermission('attendance.search') && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nome ou CPF..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 sm:w-64"
+                />
+              </div>
+            )}
           </div>
           
-          {filteredEmployees.length > 0 && (
+          {filteredEmployees.length > 0 && hasPermission('attendance.mark') && (
             <div className="mt-4 flex items-center space-x-4">
               <button
                 onClick={selectAllEmployees}
@@ -344,7 +349,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
               >
                 {selectedEmployees.size === filteredEmployees.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
               </button>
-              
+
               {selectedEmployees.size > 0 && (
                 <span className="text-sm text-gray-600">
                   {selectedEmployees.size} de {filteredEmployees.length} selecionados
@@ -358,14 +363,16 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  <input
-                    type="checkbox"
-                    checked={selectedEmployees.size === filteredEmployees.length && filteredEmployees.length > 0}
-                    onChange={selectAllEmployees}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                </th>
+                {hasPermission('attendance.mark') && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={selectedEmployees.size === filteredEmployees.length && filteredEmployees.length > 0}
+                      onChange={selectAllEmployees}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
+                )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Funcionário
                 </th>
@@ -386,14 +393,16 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
                 
                 return (
                   <tr key={employee.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={selectedEmployees.has(employee.id)}
-                        onChange={() => toggleEmployeeSelection(employee.id)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                    </td>
+                    {hasPermission('attendance.mark') && (
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedEmployees.has(employee.id)}
+                          onChange={() => toggleEmployeeSelection(employee.id)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      </td>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900">{employee.name}</div>
@@ -424,22 +433,30 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
                       <div className="flex space-x-2">
                         <button
                           onClick={() => handleMarkAttendance(employee.id, 'present')}
+                          disabled={!hasPermission('attendance.mark')}
                           className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white transition-colors ${
-                            status === 'present'
+                            !hasPermission('attendance.mark')
+                              ? 'bg-gray-300 cursor-not-allowed opacity-50'
+                              : status === 'present'
                               ? 'bg-green-600 hover:bg-green-700'
                               : 'bg-green-500 hover:bg-green-600'
                           }`}
+                          title={!hasPermission('attendance.mark') ? 'Você não tem permissão para marcar presença' : ''}
                         >
                           <CheckCircle className="w-3 h-3 mr-1" />
                           Presente
                         </button>
                         <button
                           onClick={() => handleMarkAttendance(employee.id, 'absent')}
+                          disabled={!hasPermission('attendance.mark')}
                           className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white transition-colors ${
-                            status === 'absent'
+                            !hasPermission('attendance.mark')
+                              ? 'bg-gray-300 cursor-not-allowed opacity-50'
+                              : status === 'absent'
                               ? 'bg-red-600 hover:bg-red-700'
                               : 'bg-red-500 hover:bg-red-600'
                           }`}
+                          title={!hasPermission('attendance.mark') ? 'Você não tem permissão para marcar presença' : ''}
                         >
                           <XCircle className="w-3 h-3 mr-1" />
                           Falta
@@ -453,7 +470,13 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId }) => {
                           value={exitTimes[employee.id] || ''}
                           onChange={(e) => handleExitTimeChange(employee.id, e.target.value)}
                           onBlur={() => updateExitTime(employee.id)}
-                          className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-blue-500 focus:border-blue-500"
+                          disabled={!hasPermission('attendance.edit')}
+                          className={`border rounded-md px-2 py-1 text-sm ${
+                            !hasPermission('attendance.edit')
+                              ? 'bg-gray-100 cursor-not-allowed opacity-50 border-gray-200'
+                              : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                          }`}
+                          title={!hasPermission('attendance.edit') ? 'Você não tem permissão para editar horário de saída' : ''}
                         />
                       </div>
                     </td>

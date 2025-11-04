@@ -7,9 +7,10 @@ import toast from 'react-hot-toast';
 
 interface ReportsTabProps {
   userId: string;
+  hasPermission: (permission: string) => boolean;
 }
 
-export const ReportsTab: React.FC<ReportsTabProps> = () => {
+export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [filteredAttendances, setFilteredAttendances] = useState<Attendance[]>([]);

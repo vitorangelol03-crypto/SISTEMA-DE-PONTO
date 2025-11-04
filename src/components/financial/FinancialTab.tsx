@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 
 interface FinancialTabProps {
   userId: string;
+  hasPermission: (permission: string) => boolean;
 }
 
 interface EmployeeFinancialData {
@@ -21,7 +22,7 @@ interface EmployeeFinancialData {
   totalEarned: number;
 }
 
-export const FinancialTab: React.FC<FinancialTabProps> = ({ userId }) => {
+export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermission }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);

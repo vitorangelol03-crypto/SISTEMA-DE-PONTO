@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 
 interface ErrorsTabProps {
   userId: string;
+  hasPermission: (permission: string) => boolean;
 }
 
 interface EmployeeWithErrors {
@@ -18,7 +19,7 @@ interface EmployeeWithErrors {
   errorRecords: ErrorRecord[];
 }
 
-export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId }) => {
+export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [errorRecords, setErrorRecords] = useState<ErrorRecord[]>([]);
   const [employeesWithErrors, setEmployeesWithErrors] = useState<EmployeeWithErrors[]>([]);

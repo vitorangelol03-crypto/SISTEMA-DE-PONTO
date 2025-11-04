@@ -27,9 +27,10 @@ import { format, subMonths } from 'date-fns';
 
 interface DataManagementTabProps {
   userId: string;
+  hasPermission: (permission: string) => boolean;
 }
 
-export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId }) => {
+export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, hasPermission }) => {
   const [statistics, setStatistics] = useState<DataStatistics | null>(null);
   const [retentionSettings, setRetentionSettings] = useState<DataRetentionSettings[]>([]);
   const [autoCleanupConfig, setAutoCleanupConfig] = useState<AutoCleanupConfig | null>(null);

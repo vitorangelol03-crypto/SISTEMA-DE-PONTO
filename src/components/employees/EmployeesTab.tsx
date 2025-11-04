@@ -7,9 +7,10 @@ import toast from 'react-hot-toast';
 
 interface EmployeesTabProps {
   userId: string;
+  hasPermission: (permission: string) => boolean;
 }
 
-export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
+export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermission }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -273,21 +274,25 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
               />
             </div>
             
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-            >
-              <Upload className="w-4 h-4" />
-              <span>Importar</span>
-            </button>
+            {hasPermission('employees.import') && (
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Importar</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => setShowForm(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Novo Funcionário</span>
-            </button>
+            {hasPermission('employees.create') && (
+              <button
+                onClick={() => setShowForm(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Novo Funcionário</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -413,20 +418,24 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
-                      <button
-                        onClick={() => handleEdit(employee)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                        title="Editar"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(employee)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {hasPermission('employees.edit') && (
+                        <button
+                          onClick={() => handleEdit(employee)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                          title="Editar"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {hasPermission('employees.delete') && (
+                        <button
+                          onClick={() => handleDelete(employee)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

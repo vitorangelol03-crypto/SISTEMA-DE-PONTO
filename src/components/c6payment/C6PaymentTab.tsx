@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 
 interface C6PaymentTabProps {
   userId: string;
+  hasPermission: (permission: string) => boolean;
 }
 
 interface PaymentRow {
@@ -18,7 +19,7 @@ interface PaymentRow {
   description: string;
 }
 
-export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId }) => {
+export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermission }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([]);
