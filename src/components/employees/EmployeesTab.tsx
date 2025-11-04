@@ -255,30 +255,32 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h2 className="text-xl font-semibold flex items-center">
-            <Users className="w-5 h-5 mr-2 text-blue-600" />
-            Funcionários ({employees.length})
-          </h2>
-          
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Buscar por nome ou CPF..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 sm:w-64"
-              />
-            </div>
-            
+    <div className="space-y-4 sm:space-y-6">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg sm:text-xl font-semibold flex items-center">
+              <Users className="w-5 h-5 mr-2 text-blue-600" />
+              Funcionários ({employees.length})
+            </h2>
+          </div>
+
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Buscar por nome ou CPF..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+            />
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             {hasPermission('employees.import') && (
               <button
                 onClick={() => setShowImportModal(true)}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors min-h-[48px] font-medium"
               >
                 <Upload className="w-4 h-4" />
                 <span>Importar</span>
@@ -288,7 +290,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
             {hasPermission('employees.create') && (
               <button
                 onClick={() => setShowForm(true)}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors min-h-[48px] font-medium"
               >
                 <Plus className="w-4 h-4" />
                 <span>Novo Funcionário</span>
@@ -315,28 +317,28 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Nome Completo *
                 </label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
                   placeholder="Digite o nome completo"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   CPF *
                 </label>
                 <input
                   type="text"
                   value={formData.cpf}
                   onChange={(e) => handleCPFChange(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
                   placeholder="000.000.000-00"
                   maxLength={14}
                   required
@@ -344,30 +346,30 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Chave PIX (opcional)
                 </label>
                 <input
                   type="text"
                   value={formData.pixKey}
                   onChange={(e) => setFormData(prev => ({ ...prev, pixKey: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
                   placeholder="CPF, e-mail, telefone ou chave aleatória"
                 />
               </div>
             </div>
 
-            <div className="flex space-x-3 pt-4">
+            <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors min-h-[48px] font-medium"
               >
                 {editingEmployee ? 'Atualizar' : 'Cadastrar'}
               </button>
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors min-h-[48px] font-medium"
               >
                 Cancelar
               </button>
@@ -377,7 +379,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       )}
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Desktop View - Tabela */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -422,7 +425,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                       {hasPermission('employees.edit') && (
                         <button
                           onClick={() => handleEdit(employee)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors min-h-[44px] min-w-[44px]"
                           title="Editar"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -431,7 +434,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                       {hasPermission('employees.delete') && (
                         <button
                           onClick={() => handleDelete(employee)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors min-h-[44px] min-w-[44px]"
                           title="Excluir"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -443,6 +446,47 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile View - Cards */}
+        <div className="md:hidden divide-y divide-gray-200">
+          {filteredEmployees.map((employee) => (
+            <div key={employee.id} className="p-4 hover:bg-gray-50">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <h4 className="text-sm font-medium text-gray-900">{employee.name}</h4>
+                  <p className="text-xs text-gray-500 mt-1">CPF: {formatCPF(employee.cpf)}</p>
+                  {employee.pix_key && (
+                    <p className="text-xs text-gray-500 mt-1">PIX: {employee.pix_key}</p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-2">
+                    Cadastrado em {new Date(employee.created_at).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-3">
+                {hasPermission('employees.edit') && (
+                  <button
+                    onClick={() => handleEdit(employee)}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors min-h-[48px]"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span>Editar</span>
+                  </button>
+                )}
+                {hasPermission('employees.delete') && (
+                  <button
+                    onClick={() => handleDelete(employee)}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors min-h-[48px]"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Excluir</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
 
         {filteredEmployees.length === 0 && (

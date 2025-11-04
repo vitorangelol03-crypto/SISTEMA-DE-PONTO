@@ -253,29 +253,29 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
           <span className="font-medium">{today}</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-            <div className="flex items-center justify-between">
-              <span className="text-green-800 font-medium">Presentes</span>
-              <CheckCircle className="w-5 h-5 text-green-600" />
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
+          <div className="bg-green-50 p-3 sm:p-4 rounded-lg border border-green-200">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-xs sm:text-sm text-green-800 font-medium mb-1 sm:mb-0">Presentes</span>
+              <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
             </div>
-            <div className="text-2xl font-bold text-green-600">{present}</div>
+            <div className="text-xl sm:text-2xl font-bold text-green-600">{present}</div>
           </div>
-          
-          <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-            <div className="flex items-center justify-between">
-              <span className="text-red-800 font-medium">Faltas</span>
-              <XCircle className="w-5 h-5 text-red-600" />
+
+          <div className="bg-red-50 p-3 sm:p-4 rounded-lg border border-red-200">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-xs sm:text-sm text-red-800 font-medium mb-1 sm:mb-0">Faltas</span>
+              <XCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
             </div>
-            <div className="text-2xl font-bold text-red-600">{absent}</div>
+            <div className="text-xl sm:text-2xl font-bold text-red-600">{absent}</div>
           </div>
-          
-          <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-            <div className="flex items-center justify-between">
-              <span className="text-yellow-800 font-medium">Não Marcados</span>
-              <AlertCircle className="w-5 h-5 text-yellow-600" />
+
+          <div className="bg-yellow-50 p-3 sm:p-4 rounded-lg border border-yellow-200">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-xs sm:text-sm text-yellow-800 font-medium mb-1 sm:mb-0">Pendentes</span>
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" />
             </div>
-            <div className="text-2xl font-bold text-yellow-600">{notMarked}</div>
+            <div className="text-xl sm:text-2xl font-bold text-yellow-600">{notMarked}</div>
           </div>
         </div>
       </div>
@@ -321,31 +321,31 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       )}
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <h3 className="text-lg font-medium text-gray-900">
               Funcionários ({filteredEmployees.length})
             </h3>
-            
+
             {hasPermission('attendance.search') && (
-              <div className="relative">
+              <div className="relative w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
                   placeholder="Buscar por nome ou CPF..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 sm:w-64"
+                  className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-base"
                 />
               </div>
             )}
           </div>
-          
+
           {filteredEmployees.length > 0 && hasPermission('attendance.mark') && (
             <div className="mt-4 flex items-center space-x-4">
               <button
                 onClick={selectAllEmployees}
-                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium min-h-[44px] flex items-center"
               >
                 {selectedEmployees.size === filteredEmployees.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
               </button>
@@ -358,8 +358,9 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
             </div>
           )}
         </div>
-        
-        <div className="overflow-x-auto">
+
+        {/* Desktop View - Tabela */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -369,7 +370,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                       type="checkbox"
                       checked={selectedEmployees.size === filteredEmployees.length && filteredEmployees.length > 0}
                       onChange={selectAllEmployees}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5"
                     />
                   </th>
                 )}
@@ -390,7 +391,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredEmployees.map((employee) => {
                 const status = getAttendanceStatus(employee.id);
-                
+
                 return (
                   <tr key={employee.id} className="hover:bg-gray-50">
                     {hasPermission('attendance.mark') && (
@@ -399,7 +400,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                           type="checkbox"
                           checked={selectedEmployees.has(employee.id)}
                           onChange={() => toggleEmployeeSelection(employee.id)}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5"
                         />
                       </td>
                     )}
@@ -434,7 +435,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                         <button
                           onClick={() => handleMarkAttendance(employee.id, 'present')}
                           disabled={!hasPermission('attendance.mark')}
-                          className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white transition-colors ${
+                          className={`inline-flex items-center px-3 py-2 border border-transparent text-xs font-medium rounded-md text-white transition-colors min-h-[44px] ${
                             !hasPermission('attendance.mark')
                               ? 'bg-gray-300 cursor-not-allowed opacity-50'
                               : status === 'present'
@@ -443,13 +444,13 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                           }`}
                           title={!hasPermission('attendance.mark') ? 'Você não tem permissão para marcar presença' : ''}
                         >
-                          <CheckCircle className="w-3 h-3 mr-1" />
+                          <CheckCircle className="w-4 h-4 mr-1" />
                           Presente
                         </button>
                         <button
                           onClick={() => handleMarkAttendance(employee.id, 'absent')}
                           disabled={!hasPermission('attendance.mark')}
-                          className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white transition-colors ${
+                          className={`inline-flex items-center px-3 py-2 border border-transparent text-xs font-medium rounded-md text-white transition-colors min-h-[44px] ${
                             !hasPermission('attendance.mark')
                               ? 'bg-gray-300 cursor-not-allowed opacity-50'
                               : status === 'absent'
@@ -458,7 +459,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                           }`}
                           title={!hasPermission('attendance.mark') ? 'Você não tem permissão para marcar presença' : ''}
                         >
-                          <XCircle className="w-3 h-3 mr-1" />
+                          <XCircle className="w-4 h-4 mr-1" />
                           Falta
                         </button>
                       </div>
@@ -471,7 +472,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                           onChange={(e) => handleExitTimeChange(employee.id, e.target.value)}
                           onBlur={() => updateExitTime(employee.id)}
                           disabled={!hasPermission('attendance.edit')}
-                          className={`border rounded-md px-2 py-1 text-sm ${
+                          className={`border rounded-md px-3 py-2 text-base min-h-[44px] ${
                             !hasPermission('attendance.edit')
                               ? 'bg-gray-100 cursor-not-allowed opacity-50 border-gray-200'
                               : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
@@ -485,6 +486,97 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile View - Cards */}
+        <div className="md:hidden divide-y divide-gray-200">
+          {filteredEmployees.map((employee) => {
+            const status = getAttendanceStatus(employee.id);
+
+            return (
+              <div key={employee.id} className="p-4 hover:bg-gray-50">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-start space-x-3 flex-1">
+                    {hasPermission('attendance.mark') && (
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployees.has(employee.id)}
+                        onChange={() => toggleEmployeeSelection(employee.id)}
+                        className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <h4 className="text-sm font-medium text-gray-900">{employee.name}</h4>
+                      <p className="text-xs text-gray-500 mt-1">CPF: {employee.cpf}</p>
+                    </div>
+                  </div>
+
+                  {status === 'present' && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      Presente
+                    </span>
+                  )}
+                  {status === 'absent' && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                      <XCircle className="w-3 h-3 mr-1" />
+                      Falta
+                    </span>
+                  )}
+                  {!status && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      Pendente
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  {hasPermission('attendance.mark') && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleMarkAttendance(employee.id, 'present')}
+                        className={`flex-1 inline-flex items-center justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-lg text-white transition-colors min-h-[48px] ${
+                          status === 'present'
+                            ? 'bg-green-600 hover:bg-green-700'
+                            : 'bg-green-500 hover:bg-green-600'
+                        }`}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Presente
+                      </button>
+                      <button
+                        onClick={() => handleMarkAttendance(employee.id, 'absent')}
+                        className={`flex-1 inline-flex items-center justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-lg text-white transition-colors min-h-[48px] ${
+                          status === 'absent'
+                            ? 'bg-red-600 hover:bg-red-700'
+                            : 'bg-red-500 hover:bg-red-600'
+                        }`}
+                      >
+                        <XCircle className="w-4 h-4 mr-2" />
+                        Falta
+                      </button>
+                    </div>
+                  )}
+
+                  {hasPermission('attendance.edit') && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Horário de Saída
+                      </label>
+                      <input
+                        type="time"
+                        value={exitTimes[employee.id] || ''}
+                        onChange={(e) => handleExitTimeChange(employee.id, e.target.value)}
+                        onBlur={() => updateExitTime(employee.id)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-3 text-base focus:ring-blue-500 focus:border-blue-500 min-h-[48px]"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {filteredEmployees.length === 0 && employees.length > 0 && (
@@ -506,22 +598,24 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
 
       {/* Modal de Bonificação */}
       {showBonusModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium flex items-center">
-                <Gift className="w-5 h-5 mr-2 text-green-600" />
-                Aplicar Bonificação
-              </h3>
-              <button
-                onClick={() => setShowBonusModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white p-4 sm:p-6 border-b">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base sm:text-lg font-medium flex items-center">
+                  <Gift className="w-5 h-5 mr-2 text-green-600" />
+                  Aplicar Bonificação
+                </h3>
+                <button
+                  onClick={() => setShowBonusModal(false)}
+                  className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            
-            <div className="space-y-4">
+
+            <div className="p-4 sm:p-6 space-y-4">
               <div>
                 <p className="text-sm text-gray-600 mb-2">
                   Data: <strong>{formatDateBR(selectedDate)}</strong>
@@ -530,9 +624,9 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                   Funcionários presentes: <strong>{present}</strong>
                 </p>
               </div>
-              
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Valor da Bonificação (R$)
                 </label>
                 <input
@@ -541,29 +635,31 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                   min="0"
                   value={bonusAmount}
                   onChange={(e) => setBonusAmount(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 text-base min-h-[48px]"
                   placeholder="0.00"
                   autoFocus
                 />
               </div>
-              
-              <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 sm:p-4">
                 <p className="text-sm text-yellow-800">
                   <strong>Atenção:</strong> A bonificação será aplicada para todos os {present} funcionários que estão presentes hoje.
                 </p>
               </div>
-              
-              <div className="flex space-x-3 pt-4">
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 p-4 sm:p-6 border-t">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleBonus}
                   disabled={!bonusAmount || present === 0}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[48px] font-medium"
                 >
                   Confirmar Bonificação
                 </button>
                 <button
                   onClick={() => setShowBonusModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors min-h-[48px] font-medium"
                 >
                   Cancelar
                 </button>

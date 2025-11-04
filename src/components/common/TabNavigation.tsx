@@ -32,13 +32,13 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
   const tabs = allTabs.filter(tab => !tab.permission || hasPermission(tab.permission));
 
   return (
-    <div className="bg-white shadow-sm mb-6">
+    <div className="bg-white shadow-sm mb-4 sm:mb-6">
       <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8 px-4 overflow-x-auto">
+        <nav className="-mb-px flex gap-4 sm:gap-8 px-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
-            
+
             return (
               <button
                 key={tab.id}
@@ -47,15 +47,26 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
                   isActive
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-colors`}
+                } snap-start whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-2 transition-colors min-h-[44px]`}
               >
-                <Icon className="w-4 h-4" />
-                <span>{tab.name}</span>
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden xs:inline sm:inline">{tab.name}</span>
+                <span className="xs:hidden sm:hidden">{tab.name}</span>
               </button>
             );
           })}
         </nav>
       </div>
+
+      <style jsx>{`
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
     </div>
   );
 };
