@@ -118,6 +118,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const handleBulkApply = async () => {
+    if (!hasPermission('financial.applyPayment')) {
+      toast.error('Você não tem permissão para aplicar valores de pagamento');
+      return;
+    }
+
     if (!bulkDailyRate || selectedEmployees.size === 0) {
       toast.error('Selecione funcionários e defina um valor diário');
       return;
@@ -166,6 +171,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const handleSaveEdit = async () => {
+    if (!hasPermission('financial.editPayment')) {
+      toast.error('Você não tem permissão para editar pagamentos');
+      return;
+    }
+
     if (!editingPayment) return;
 
     const dailyRate = parseFloat(editValues.dailyRate) || 0;
@@ -183,6 +193,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const handleDeletePayment = async (paymentId: string) => {
+    if (!hasPermission('financial.deletePayment')) {
+      toast.error('Você não tem permissão para excluir pagamentos');
+      return;
+    }
+
     if (!confirm('Tem certeza que deseja excluir este pagamento?')) return;
 
     try {
@@ -214,6 +229,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const handleClearPayments = async () => {
+    if (!hasPermission('financial.clearPayments')) {
+      toast.error('Você não tem permissão para limpar pagamentos');
+      return;
+    }
+
     if (clearType === 'all') {
       if (!confirm('⚠️ ATENÇÃO: Tem certeza que deseja limpar TODOS os pagamentos do período selecionado?\n\nEsta ação não pode ser desfeita!')) {
         return;
@@ -250,6 +270,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const handleErrorDiscount = async () => {
+    if (!hasPermission('financial.applyDiscount')) {
+      toast.error('Você não tem permissão para aplicar descontos');
+      return;
+    }
+
     const discountValue = parseFloat(errorDiscountValue);
     if (isNaN(discountValue) || discountValue < 0) {
       toast.error('Valor de desconto inválido');
@@ -466,7 +491,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               min="0"
               value={bulkDailyRate}
               onChange={(e) => setBulkDailyRate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              disabled={!hasPermission('financial.applyPayment')}
+              title={!hasPermission('financial.applyPayment') ? 'Você não tem permissão para aplicar valores' : ''}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
               placeholder="0.00"
             />
           </div>
@@ -474,7 +501,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           <div className="flex items-end">
             <button
               onClick={selectAllEmployees}
-              className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+              disabled={!hasPermission('financial.applyPayment')}
+              title={!hasPermission('financial.applyPayment') ? 'Você não tem permissão para selecionar funcionários' : ''}
+              className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {selectedEmployees.size === financialData.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
             </button>
@@ -483,8 +512,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           <div className="flex items-end">
             <button
               onClick={handleBulkApply}
-              disabled={!bulkDailyRate || selectedEmployees.size === 0}
-              className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              disabled={!hasPermission('financial.applyPayment') || !bulkDailyRate || selectedEmployees.size === 0}
+              title={!hasPermission('financial.applyPayment') ? 'Você não tem permissão para aplicar valores' : ''}
+              className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors disabled:bg-gray-300"
             >
               Aplicar ({selectedEmployees.size} selecionados)
             </button>
@@ -493,7 +523,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           <div className="flex items-end">
             <button
               onClick={() => setShowClearModal(true)}
-              className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center justify-center space-x-2"
+              disabled={!hasPermission('financial.clearPayments')}
+              title={!hasPermission('financial.clearPayments') ? 'Você não tem permissão para limpar pagamentos' : ''}
+              className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Trash2 className="w-4 h-4" />
               <span>Limpar Pagamentos</span>
@@ -503,8 +535,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           <div className="flex items-end">
             <button
               onClick={() => setShowErrorDiscountModal(true)}
-              disabled={selectedEmployees.size === 0}
-              className="w-full px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+              disabled={!hasPermission('financial.applyDiscount') || selectedEmployees.size === 0}
+              title={!hasPermission('financial.applyDiscount') ? 'Você não tem permissão para aplicar descontos' : ''}
+              className="w-full px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2 disabled:bg-gray-300"
             >
               <Minus className="w-4 h-4" />
               <span>Descontar Erros</span>
@@ -525,14 +558,16 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  <input
-                    type="checkbox"
-                    checked={selectedEmployees.size === financialData.length && financialData.length > 0}
-                    onChange={selectAllEmployees}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                </th>
+                {hasPermission('financial.applyPayment') && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={selectedEmployees.size === financialData.length && financialData.length > 0}
+                      onChange={selectAllEmployees}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
+                )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Funcionário
                 </th>
@@ -560,14 +595,16 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               {financialData.map((data) => (
                 <React.Fragment key={data.employee.id}>
                   <tr className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={selectedEmployees.has(data.employee.id)}
-                        onChange={() => toggleEmployeeSelection(data.employee.id)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                    </td>
+                    {hasPermission('financial.applyPayment') && (
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedEmployees.has(data.employee.id)}
+                          onChange={() => toggleEmployeeSelection(data.employee.id)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      </td>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900">{data.employee.name}</div>
@@ -696,18 +733,24 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                       Total: R$ {payment.total?.toFixed(2) || '0.00'}
                                     </div>
                                     <div className="flex space-x-1 mt-2">
-                                      <button
-                                        onClick={() => handleEditPayment(data.employee.id, payment.date)}
-                                        className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                                      >
-                                        <Edit2 className="w-3 h-3" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeletePayment(payment.id)}
-                                        className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </button>
+                                      {hasPermission('financial.editPayment') && (
+                                        <button
+                                          onClick={() => handleEditPayment(data.employee.id, payment.date)}
+                                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                          title="Editar pagamento"
+                                        >
+                                          <Edit2 className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                      {hasPermission('financial.deletePayment') && (
+                                        <button
+                                          onClick={() => handleDeletePayment(payment.id)}
+                                          className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                          title="Excluir pagamento"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 )}

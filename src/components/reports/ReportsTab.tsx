@@ -99,6 +99,11 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   };
 
   const exportToExcel = () => {
+    if (!hasPermission('reports.export')) {
+      toast.error('Você não tem permissão para exportar relatórios');
+      return;
+    }
+
     try {
       const data = displayedAttendances.map(att => ({
         'Data': formatDateBR(att.date),
@@ -283,8 +288,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
           
           <button
             onClick={exportToExcel}
-            disabled={displayedAttendances.length === 0}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={!hasPermission('reports.export') || displayedAttendances.length === 0}
+            title={!hasPermission('reports.export') ? 'Você não tem permissão para exportar relatórios' : ''}
+            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors disabled:bg-gray-300"
           >
             <Download className="w-4 h-4" />
             <span>Exportar Excel</span>

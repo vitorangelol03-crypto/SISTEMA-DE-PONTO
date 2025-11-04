@@ -62,7 +62,7 @@ function App() {
       case 'settings':
         return hasPermission('settings.view') ? <SettingsTab hasPermission={hasPermission} /> : null;
       case 'users':
-        return hasPermission('users.view') ? <UsersTab userId={user.id} /> : null;
+        return hasPermission('users.view') ? <UsersTab userId={user.id} hasPermission={hasPermission} /> : null;
       case 'datamanagement':
         return hasPermission('datamanagement.view') ? <DataManagementTab userId={user.id} hasPermission={hasPermission} /> : null;
       default:

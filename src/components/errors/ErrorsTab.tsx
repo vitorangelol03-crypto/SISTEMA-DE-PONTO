@@ -163,6 +163,11 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
   };
 
   const handleAddError = (employeeId?: string, date?: string) => {
+    if (!hasPermission('errors.create')) {
+      toast.error('Você não tem permissão para criar registros de erro');
+      return;
+    }
+
     setErrorFormData({
       employeeId: employeeId || '',
       date: date || getBrazilDate(),
@@ -173,7 +178,12 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
   };
 
   const handleEditError = (employeeId: string, date: string) => {
-    const errorRecord = errorRecords.find(err => 
+    if (!hasPermission('errors.edit')) {
+      toast.error('Você não tem permissão para editar registros de erro');
+      return;
+    }
+
+    const errorRecord = errorRecords.find(err =>
       err.employee_id === employeeId && err.date === date
     );
     
@@ -191,6 +201,12 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
 
   const handleSubmitError = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const permission = editingError ? 'errors.edit' : 'errors.create';
+    if (!hasPermission(permission)) {
+      toast.error('Você não tem permissão para salvar registros de erro');
+      return;
+    }
 
     const errorCount = parseInt(errorFormData.errorCount);
     if (isNaN(errorCount) || errorCount < 0) {
@@ -223,6 +239,11 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
   };
 
   const handleDeleteError = async (errorId: string) => {
+    if (!hasPermission('errors.delete')) {
+      toast.error('Você não tem permissão para excluir registros de erro');
+      return;
+    }
+
     if (!confirm('Tem certeza que deseja excluir este registro de erro?')) return;
 
     try {
@@ -286,7 +307,9 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
             
             <button
               onClick={() => handleAddError()}
-              className="flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
+              disabled={!hasPermission('errors.create')}
+              title={!hasPermission('errors.create') ? 'Você não tem permissão para criar registros de erro' : ''}
+              className="flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" />
               <span>Registrar Erro</span>
@@ -547,13 +570,15 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
-                        <button
-                          onClick={() => handleAddError(employeeData.employee.id, filters.startDate)}
-                          className="p-2 text-orange-600 hover:bg-orange-50 rounded-md transition-colors"
-                          title="Adicionar Erro"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
+                        {hasPermission('errors.create') && (
+                          <button
+                            onClick={() => handleAddError(employeeData.employee.id, filters.startDate)}
+                            className="p-2 text-orange-600 hover:bg-orange-50 rounded-md transition-colors"
+                            title="Adicionar Erro"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             const row = document.getElementById(`errors-${employeeData.employee.id}`);
@@ -588,18 +613,24 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                                   </div>
                                 )}
                                 <div className="flex space-x-1 mt-2">
-                                  <button
-                                    onClick={() => handleEditError(employeeData.employee.id, errorRecord.date)}
-                                    className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                                  >
-                                    <Edit2 className="w-3 h-3" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteError(errorRecord.id)}
-                                    className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
+                                  {hasPermission('errors.edit') && (
+                                    <button
+                                      onClick={() => handleEditError(employeeData.employee.id, errorRecord.date)}
+                                      className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                      title="Editar registro de erro"
+                                    >
+                                      <Edit2 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                  {hasPermission('errors.delete') && (
+                                    <button
+                                      onClick={() => handleDeleteError(errorRecord.id)}
+                                      className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                      title="Excluir registro de erro"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             ))}

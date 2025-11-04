@@ -76,6 +76,11 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
   };
 
   const importFinancialData = async () => {
+    if (!hasPermission('c6payment.import')) {
+      toast.error('Você não tem permissão para importar dados financeiros');
+      return;
+    }
+
     if (!filters.startDate || !filters.endDate) {
       toast.error('Selecione o período para importação');
       return;
@@ -151,11 +156,21 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
   };
 
   const handleEditRow = (row: PaymentRow) => {
+    if (!hasPermission('c6payment.edit')) {
+      toast.error('Você não tem permissão para editar linhas de pagamento');
+      return;
+    }
+
     setEditingRowId(row.id);
     setEditValues({ ...row });
   };
 
   const handleSaveEdit = () => {
+    if (!hasPermission('c6payment.edit')) {
+      toast.error('Você não tem permissão para salvar alterações');
+      return;
+    }
+
     if (!editValues) return;
 
     if (!editValues.employeeName.trim()) {
@@ -187,12 +202,22 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
   };
 
   const handleDeleteRow = (id: string) => {
+    if (!hasPermission('c6payment.delete')) {
+      toast.error('Você não tem permissão para excluir linhas de pagamento');
+      return;
+    }
+
     if (!confirm('Tem certeza que deseja remover esta linha?')) return;
     setPaymentRows(prev => prev.filter(row => row.id !== id));
     toast.success('Linha removida');
   };
 
   const handleAddRow = () => {
+    if (!hasPermission('c6payment.edit')) {
+      toast.error('Você não tem permissão para adicionar linhas de pagamento');
+      return;
+    }
+
     const newRow: PaymentRow = {
       id: `manual-${Date.now()}`,
       employeeName: '',
@@ -225,6 +250,11 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
   };
 
   const handleBulkDateChange = () => {
+    if (!hasPermission('c6payment.bulkEdit')) {
+      toast.error('Você não tem permissão para alterar datas em lote');
+      return;
+    }
+
     if (selectedRows.size === 0) {
       toast.error('Selecione pelo menos uma linha');
       return;
@@ -248,6 +278,11 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
   };
 
   const handleChangeAllDates = () => {
+    if (!hasPermission('c6payment.bulkEdit')) {
+      toast.error('Você não tem permissão para alterar datas em lote');
+      return;
+    }
+
     if (!bulkDate) {
       toast.error('Selecione uma data');
       return;
@@ -271,6 +306,11 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
   };
 
   const handleExportSpreadsheet = () => {
+    if (!hasPermission('c6payment.export')) {
+      toast.error('Você não tem permissão para exportar planilhas C6');
+      return;
+    }
+
     if (paymentRows.length === 0) {
       toast.error('Nenhum dado para exportar');
       return;
@@ -354,8 +394,9 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
               <div className="flex items-end">
                 <button
                   onClick={importFinancialData}
-                  disabled={loading || isEditingDate.startDate || isEditingDate.endDate}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+                  disabled={!hasPermission('c6payment.import') || loading || isEditingDate.startDate || isEditingDate.endDate}
+                  title={!hasPermission('c6payment.import') ? 'Você não tem permissão para importar dados financeiros' : ''}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2 disabled:bg-gray-300"
                 >
                   {loading ? (
                     <>
@@ -379,7 +420,8 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setShowBulkDateModal(true)}
-                  disabled={selectedRows.size === 0}
+                  disabled={!hasPermission('c6payment.bulkEdit') || selectedRows.size === 0}
+                  title={!hasPermission('c6payment.bulkEdit') ? 'Você não tem permissão para alterar datas em lote' : ''}
                   className="px-3 py-2 text-sm bg-orange-50 text-orange-600 rounded-md hover:bg-orange-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
                 >
                   <Calendar className="w-4 h-4" />
@@ -387,20 +429,26 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                 </button>
                 <button
                   onClick={handleAddRow}
-                  className="px-3 py-2 text-sm bg-green-50 text-green-600 rounded-md hover:bg-green-100 transition-colors flex items-center space-x-1"
+                  disabled={!hasPermission('c6payment.edit')}
+                  title={!hasPermission('c6payment.edit') ? 'Você não tem permissão para adicionar linhas' : ''}
+                  className="px-3 py-2 text-sm bg-green-50 text-green-600 rounded-md hover:bg-green-100 transition-colors flex items-center space-x-1 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Adicionar</span>
                 </button>
                 <button
                   onClick={handleClearData}
-                  className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors"
+                  disabled={!hasPermission('c6payment.delete')}
+                  title={!hasPermission('c6payment.delete') ? 'Você não tem permissão para limpar dados' : ''}
+                  className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Limpar Dados
                 </button>
                 <button
                   onClick={() => setDataImported(false)}
-                  className="px-3 py-2 text-sm bg-gray-50 text-gray-600 rounded-md hover:bg-gray-100 transition-colors flex items-center space-x-1"
+                  disabled={!hasPermission('c6payment.import')}
+                  title={!hasPermission('c6payment.import') ? 'Você não tem permissão para reimportar dados' : ''}
+                  className="px-3 py-2 text-sm bg-gray-50 text-gray-600 rounded-md hover:bg-gray-100 transition-colors flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <RefreshCw className="w-4 h-4" />
                   <span>Reimportar</span>
@@ -413,14 +461,16 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.size === paymentRows.length && paymentRows.length > 0}
-                          onChange={selectAllRows}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                      </th>
+                      {hasPermission('c6payment.bulkEdit') && (
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <input
+                            type="checkbox"
+                            checked={selectedRows.size === paymentRows.length && paymentRows.length > 0}
+                            onChange={selectAllRows}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        </th>
+                      )}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Nome do Funcionário
                       </th>
@@ -444,14 +494,16 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                   <tbody className="bg-white divide-y divide-gray-200">
                     {paymentRows.map((row) => (
                       <tr key={row.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <input
-                            type="checkbox"
-                            checked={selectedRows.has(row.id)}
-                            onChange={() => toggleRowSelection(row.id)}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                        </td>
+                        {hasPermission('c6payment.bulkEdit') && (
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={selectedRows.has(row.id)}
+                              onChange={() => toggleRowSelection(row.id)}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                          </td>
+                        )}
                         {editingRowId === row.id ? (
                           <>
                             <td className="px-6 py-4">
@@ -532,18 +584,24 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                               <div className="flex justify-end space-x-2">
-                                <button
-                                  onClick={() => handleEditRow(row)}
-                                  className="text-blue-600 hover:text-blue-900"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteRow(row.id)}
-                                  className="text-red-600 hover:text-red-900"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                {hasPermission('c6payment.edit') && (
+                                  <button
+                                    onClick={() => handleEditRow(row)}
+                                    className="text-blue-600 hover:text-blue-900"
+                                    title="Editar linha"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {hasPermission('c6payment.delete') && (
+                                  <button
+                                    onClick={() => handleDeleteRow(row.id)}
+                                    className="text-red-600 hover:text-red-900"
+                                    title="Excluir linha"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </>
@@ -568,7 +626,9 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
             <div className="flex justify-end">
               <button
                 onClick={handleExportSpreadsheet}
-                className="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center space-x-2 text-lg font-medium"
+                disabled={!hasPermission('c6payment.export')}
+                title={!hasPermission('c6payment.export') ? 'Você não tem permissão para exportar planilhas C6' : ''}
+                className="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center space-x-2 text-lg font-medium disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Download className="w-5 h-5" />
                 <span>Baixar Planilha C6</span>

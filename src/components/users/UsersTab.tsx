@@ -9,9 +9,10 @@ import toast from 'react-hot-toast';
 
 interface UsersTabProps {
   userId: string;
+  hasPermission: (permission: string) => boolean;
 }
 
-export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
+export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -53,6 +54,11 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!hasPermission('users.create')) {
+      toast.error('Você não tem permissão para criar supervisores');
+      return;
+    }
+
     if (!formData.id.trim() || !isNumericString(formData.id.trim())) {
       toast.error('ID deve conter apenas números');
       return;
@@ -80,6 +86,11 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
   };
 
   const handleDelete = async (user: User) => {
+    if (!hasPermission('users.delete')) {
+      toast.error('Você não tem permissão para excluir supervisores');
+      return;
+    }
+
     if (user.id === '9999') {
       toast.error('Não é possível excluir o administrador principal');
       return;
@@ -100,6 +111,11 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
   };
 
   const handleManagePermissions = async (user: User) => {
+    if (!hasPermission('users.managePermissions')) {
+      toast.error('Você não tem permissão para gerenciar permissões');
+      return;
+    }
+
     try {
       const permissions = await getUserPermissions(user.id);
       setSelectedUser(user);
@@ -138,7 +154,9 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
           
           <button
             onClick={() => setShowForm(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            disabled={!hasPermission('users.create')}
+            title={!hasPermission('users.create') ? 'Você não tem permissão para criar supervisores' : ''}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
             <span>Criar Supervisor</span>
@@ -311,14 +329,16 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                     <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => handleManagePermissions(user)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                        title="Gerenciar Permissões"
-                      >
-                        <Shield className="w-4 h-4" />
-                      </button>
-                      {user.id !== '9999' && (
+                      {hasPermission('users.managePermissions') && (
+                        <button
+                          onClick={() => handleManagePermissions(user)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                          title="Gerenciar Permissões"
+                        >
+                          <Shield className="w-4 h-4" />
+                        </button>
+                      )}
+                      {hasPermission('users.delete') && user.id !== '9999' && (
                         <button
                           onClick={() => handleDelete(user)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
