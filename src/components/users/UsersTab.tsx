@@ -101,7 +101,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
     }
 
     try {
-      await deleteUser(user.id);
+      await deleteUser(user.id, userId);
       toast.success('Supervisor excluído com sucesso!');
       loadUsers();
     } catch (error) {

@@ -201,7 +201,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     if (!confirm('Tem certeza que deseja excluir este pagamento?')) return;
 
     try {
-      await deletePayment(paymentId);
+      await deletePayment(paymentId, userId);
       toast.success('Pagamento excluído com sucesso!');
       loadData();
     } catch (error) {
@@ -251,7 +251,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
     try {
       if (clearType === 'all') {
-        await clearAllPayments(filters.startDate, filters.endDate);
+        await clearAllPayments(filters.startDate, filters.endDate, userId);
         toast.success('Todos os pagamentos foram limpos com sucesso!');
       } else {
         for (const employeeId of selectedEmployees) {

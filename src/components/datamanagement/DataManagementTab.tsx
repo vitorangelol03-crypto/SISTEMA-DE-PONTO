@@ -267,7 +267,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
         const recordsDeleted: Record<string, number> = {};
 
         for (const dataType of selectedDataTypes) {
-          const count = await deleteOldRecords(dataType, startDate, endDate, selectedEmployee);
+          const count = await deleteOldRecords(dataType, startDate, endDate, selectedEmployee, userId);
           recordsDeleted[dataType] = count;
         }
 

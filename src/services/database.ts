@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { getUserPermissions, hasPermission as checkPermission } from './permissions';
 
 export interface User {
   id: string;
@@ -109,6 +110,42 @@ export const initializeSystem = async () => {
   }
 };
 
+// Permission validation helper
+interface PermissionCheckResult {
+  allowed: boolean;
+  error?: string;
+}
+
+async function validatePermission(
+  userId: string,
+  permission: string
+): Promise<PermissionCheckResult> {
+  // Admin (ID 9999) always has all permissions
+  if (userId === '9999') {
+    return { allowed: true };
+  }
+
+  const userPermissions = await getUserPermissions(userId);
+
+  if (!userPermissions) {
+    return {
+      allowed: false,
+      error: 'Permissões não encontradas para este usuário'
+    };
+  }
+
+  const hasAccess = checkPermission(userPermissions, permission);
+
+  if (!hasAccess) {
+    return {
+      allowed: false,
+      error: `Você não tem permissão para: ${permission}`
+    };
+  }
+
+  return { allowed: true };
+}
+
 // Auth functions
 export const loginUser = async (id: string, password: string): Promise<User | null> => {
   const { data, error } = await supabase
@@ -137,6 +174,11 @@ export const getAllUsers = async (): Promise<User[]> => {
 };
 
 export const createUser = async (id: string, password: string, role: 'supervisor', createdBy: string): Promise<void> => {
+  const permissionCheck = await validatePermission(createdBy, 'users.create');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('users')
     .insert([{
@@ -154,7 +196,16 @@ export const createUser = async (id: string, password: string, role: 'supervisor
   }
 };
 
-export const deleteUser = async (id: string): Promise<void> => {
+export const deleteUser = async (id: string, userId: string): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'users.delete');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  if (id === '9999') {
+    throw new Error('Não é possível excluir o administrador principal');
+  }
+
   const { error } = await supabase
     .from('users')
     .delete()
@@ -175,6 +226,11 @@ export const getAllEmployees = async (): Promise<Employee[]> => {
 };
 
 export const createEmployee = async (name: string, cpf: string, pixKey: string | null, createdBy: string): Promise<void> => {
+  const permissionCheck = await validatePermission(createdBy, 'employees.create');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('employees')
     .insert([{
@@ -192,7 +248,12 @@ export const createEmployee = async (name: string, cpf: string, pixKey: string |
   }
 };
 
-export const updateEmployee = async (id: string, name: string, cpf: string, pixKey: string | null): Promise<void> => {
+export const updateEmployee = async (id: string, name: string, cpf: string, pixKey: string | null, userId: string): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'employees.edit');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('employees')
     .update({ name, cpf, pix_key: pixKey })
@@ -206,7 +267,12 @@ export const updateEmployee = async (id: string, name: string, cpf: string, pixK
   }
 };
 
-export const deleteEmployee = async (id: string): Promise<void> => {
+export const deleteEmployee = async (id: string, userId: string): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'employees.delete');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('employees')
     .delete()
@@ -229,6 +295,11 @@ export const bulkCreateEmployees = async (
   employees: Array<{ name: string; cpf: string; pixKey: string | null }>,
   createdBy: string
 ): Promise<BulkEmployeeResult> => {
+  const permissionCheck = await validatePermission(createdBy, 'employees.import');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const result: BulkEmployeeResult = {
     success: [],
     errors: []
@@ -322,12 +393,17 @@ export const getTodayAttendance = async (): Promise<Attendance[]> => {
 };
 
 export const markAttendance = async (
-  employeeId: string, 
-  date: string, 
-  status: 'present' | 'absent', 
-  exitTime: string | null, 
+  employeeId: string,
+  date: string,
+  status: 'present' | 'absent',
+  exitTime: string | null,
   markedBy: string
 ): Promise<void> => {
+  const permissionCheck = await validatePermission(markedBy, 'attendance.mark');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('attendance')
     .upsert([{
@@ -336,7 +412,7 @@ export const markAttendance = async (
       status,
       exit_time: exitTime,
       marked_by: markedBy
-    }], { 
+    }], {
       onConflict: 'employee_id,date'
     });
 
@@ -346,8 +422,16 @@ export const markAttendance = async (
 export const getAttendanceHistory = async (
   startDate?: string,
   endDate?: string,
-  employeeId?: string
+  employeeId?: string,
+  userId?: string
 ): Promise<Attendance[]> => {
+  if (userId) {
+    const permissionCheck = await validatePermission(userId, 'attendance.search');
+    if (!permissionCheck.allowed) {
+      throw new Error(permissionCheck.error || 'Permissão negada');
+    }
+  }
+
   let query = supabase
     .from('attendance')
     .select(`
@@ -419,8 +503,13 @@ export const upsertPayment = async (
   bonus: number,
   createdBy: string
 ): Promise<void> => {
+  const permissionCheck = await validatePermission(createdBy, 'financial.editRate');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const total = dailyRate + bonus;
-  
+
   const { error } = await supabase
     .from('payments')
     .upsert([{
@@ -431,14 +520,19 @@ export const upsertPayment = async (
       total,
       created_by: createdBy,
       updated_at: new Date().toISOString()
-    }], { 
+    }], {
       onConflict: 'employee_id,date'
     });
 
   if (error) throw error;
 };
 
-export const deletePayment = async (id: string): Promise<void> => {
+export const deletePayment = async (id: string, userId: string): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'financial.delete');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('payments')
     .delete()
@@ -471,8 +565,16 @@ export const clearEmployeePayments = async (
 
 export const clearAllPayments = async (
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  userId?: string
 ): Promise<void> => {
+  if (userId) {
+    const permissionCheck = await validatePermission(userId, 'financial.clear');
+    if (!permissionCheck.allowed) {
+      throw new Error(permissionCheck.error || 'Permissão negada');
+    }
+  }
+
   let query = supabase.from('payments').delete();
 
   if (startDate) {
@@ -526,6 +628,11 @@ export const applyBonusToAllPresent = async (
   bonusAmount: number,
   createdBy: string
 ): Promise<void> => {
+  const permissionCheck = await validatePermission(createdBy, 'financial.applyBonus');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   // Buscar todos os funcionários presentes no dia
   const { data: attendances, error: attendanceError } = await supabase
     .from('attendance')
@@ -610,6 +717,11 @@ export const upsertErrorRecord = async (
   observations: string | null,
   createdBy: string
 ): Promise<void> => {
+  const permissionCheck = await validatePermission(createdBy, 'errors.create');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('error_records')
     .upsert([{
@@ -619,14 +731,19 @@ export const upsertErrorRecord = async (
       observations,
       created_by: createdBy,
       updated_at: new Date().toISOString()
-    }], { 
+    }], {
       onConflict: 'employee_id,date'
     });
 
   if (error) throw error;
 };
 
-export const deleteErrorRecord = async (id: string): Promise<void> => {
+export const deleteErrorRecord = async (id: string, userId: string): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'errors.delete');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('error_records')
     .delete()
@@ -758,6 +875,11 @@ export const updateDataRetentionSettings = async (
   retentionMonths: number,
   updatedBy: string
 ): Promise<void> => {
+  const permissionCheck = await validatePermission(updatedBy, 'datamanagement.configRetention');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('data_retention_settings')
     .update({
@@ -784,6 +906,11 @@ export const updateAutoCleanupConfig = async (
   config: Partial<AutoCleanupConfig>,
   updatedBy: string
 ): Promise<void> => {
+  const permissionCheck = await validatePermission(updatedBy, 'datamanagement.autoCleanup');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('auto_cleanup_config')
     .update({
@@ -855,8 +982,16 @@ export const deleteOldRecords = async (
   dataType: string,
   startDate?: string,
   endDate?: string,
-  employeeId?: string
+  employeeId?: string,
+  userId?: string
 ): Promise<number> => {
+  if (userId) {
+    const permissionCheck = await validatePermission(userId, 'datamanagement.manualCleanup');
+    if (!permissionCheck.allowed) {
+      throw new Error(permissionCheck.error || 'Permissão negada');
+    }
+  }
+
   let query = supabase.from(dataType).delete();
 
   if (startDate) query = query.gte('date', startDate);

@@ -247,7 +247,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
     if (!confirm('Tem certeza que deseja excluir este registro de erro?')) return;
 
     try {
-      await deleteErrorRecord(errorId);
+      await deleteErrorRecord(errorId, userId);
       toast.success('Registro de erro excluído com sucesso!');
       loadData();
     } catch (error) {

@@ -84,7 +84,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
           editingEmployee.id,
           formData.name.trim(),
           cpfNumbers,
-          formData.pixKey.trim() || null
+          formData.pixKey.trim() || null,
+          userId
         );
         toast.success('Funcionário atualizado com sucesso!');
       } else {
@@ -121,7 +122,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     }
 
     try {
-      await deleteEmployee(employee.id);
+      await deleteEmployee(employee.id, userId);
       toast.success('Funcionário excluído com sucesso!');
       loadEmployees();
     } catch (error) {
