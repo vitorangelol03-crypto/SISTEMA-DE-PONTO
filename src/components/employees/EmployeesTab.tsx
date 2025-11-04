@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw } from 'lucide-react';
-import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee } from '../../services/database';
+import React, { useState, useEffect, useRef } from 'react';
+import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee, bulkCreateEmployees } from '../../services/database';
 import { validateCPF, formatCPF } from '../../utils/validation';
+import { generateEmployeeTemplate, parseEmployeeSpreadsheet, generateErrorReport, generateImportReport, ImportValidationResult } from '../../utils/employeeImport';
 import toast from 'react-hot-toast';
 
 interface EmployeesTabProps {
@@ -20,6 +21,14 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
     cpf: '',
     pixKey: ''
   });
+
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importValidation, setImportValidation] = useState<ImportValidationResult | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importStep, setImportStep] = useState<'upload' | 'preview' | 'result'>('upload');
+  const [importResult, setImportResult] = useState<{ success: number; errors: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadEmployees = async () => {
     try {
@@ -125,6 +134,115 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
     setFormData(prev => ({ ...prev, cpf: formatted }));
   };
 
+  const handleDownloadTemplate = () => {
+    try {
+      generateEmployeeTemplate();
+      toast.success('Template baixado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao gerar template:', error);
+      toast.error('Erro ao gerar template');
+    }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      toast.error('Formato inválido. Use arquivos .xlsx ou .xls');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Arquivo muito grande. Tamanho máximo: 5MB');
+      return;
+    }
+
+    setImportFile(file);
+  };
+
+  const handleProcessFile = async () => {
+    if (!importFile) return;
+
+    try {
+      setImporting(true);
+      const result = await parseEmployeeSpreadsheet(importFile);
+
+      if (result.valid.length === 0 && result.errors.length === 0) {
+        toast.error('Planilha vazia ou sem dados válidos');
+        return;
+      }
+
+      setImportValidation(result);
+      setImportStep('preview');
+
+      if (result.errors.length > 0) {
+        toast.error(`${result.errors.length} erro(s) encontrado(s) na planilha`);
+      } else {
+        toast.success(`${result.valid.length} funcionário(s) válido(s) encontrado(s)`);
+      }
+    } catch (error) {
+      console.error('Erro ao processar arquivo:', error);
+      toast.error(error instanceof Error ? error.message : 'Erro ao processar arquivo');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleDownloadErrors = () => {
+    if (!importValidation) return;
+    try {
+      generateErrorReport(importValidation.errors, importValidation.duplicateCPFs);
+      toast.success('Relatório de erros baixado!');
+    } catch (error) {
+      console.error('Erro ao gerar relatório:', error);
+      toast.error('Erro ao gerar relatório de erros');
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importValidation || importValidation.valid.length === 0) return;
+
+    try {
+      setImporting(true);
+      const result = await bulkCreateEmployees(importValidation.valid, userId);
+
+      setImportResult({
+        success: result.success.length,
+        errors: result.errors.length
+      });
+
+      setImportStep('result');
+
+      if (result.success.length > 0) {
+        toast.success(`${result.success.length} funcionário(s) importado(s) com sucesso!`);
+        loadEmployees();
+      }
+
+      if (result.errors.length > 0) {
+        toast.error(`${result.errors.length} erro(s) durante a importação`);
+        const successData = result.success.map(emp => ({ name: emp.name, cpf: emp.cpf }));
+        generateImportReport(result.success.length, result.errors.length, successData, result.errors);
+      }
+    } catch (error) {
+      console.error('Erro na importação:', error);
+      toast.error('Erro ao importar funcionários');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleCloseImportModal = () => {
+    setShowImportModal(false);
+    setImportFile(null);
+    setImportValidation(null);
+    setImportStep('upload');
+    setImportResult(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -155,6 +273,14 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
               />
             </div>
             
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Importar</span>
+            </button>
+
             <button
               onClick={() => setShowForm(true)}
               className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -324,6 +450,323 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId }) => {
           </div>
         )}
       </div>
+
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-xl font-semibold flex items-center">
+                <FileSpreadsheet className="w-5 h-5 mr-2 text-green-600" />
+                Importar Funcionários em Massa
+              </h3>
+              <button
+                onClick={handleCloseImportModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {importStep === 'upload' && (
+                <div className="space-y-6">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="font-medium text-blue-900 mb-2">Como funciona:</h4>
+                    <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
+                      <li>Baixe a planilha template clicando no botão abaixo</li>
+                      <li>Preencha com os dados dos funcionários (Nome, CPF e PIX opcional)</li>
+                      <li>Salve o arquivo Excel</li>
+                      <li>Faça o upload da planilha preenchida</li>
+                    </ol>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <button
+                      onClick={handleDownloadTemplate}
+                      className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Download className="w-5 h-5" />
+                      <span>Baixar Planilha Template</span>
+                    </button>
+                  </div>
+
+                  <div className="border-t pt-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      Selecionar Arquivo Excel:
+                    </label>
+
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        id="file-upload"
+                      />
+                      <label
+                        htmlFor="file-upload"
+                        className="cursor-pointer flex flex-col items-center"
+                      >
+                        <Upload className="w-12 h-12 text-gray-400 mb-3" />
+                        <span className="text-sm text-gray-600 mb-1">
+                          Clique para selecionar ou arraste o arquivo aqui
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          Formatos aceitos: .xlsx, .xls (máx. 5MB)
+                        </span>
+                      </label>
+                    </div>
+
+                    {importFile && (
+                      <div className="mt-4 p-4 bg-gray-50 rounded-lg flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <FileSpreadsheet className="w-5 h-5 text-green-600" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{importFile.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {(importFile.size / 1024).toFixed(2)} KB
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setImportFile(null)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h4 className="font-medium text-yellow-900 mb-2 flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-2" />
+                      Atenção:
+                    </h4>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-yellow-800">
+                      <li>Nome deve ter pelo menos 3 caracteres</li>
+                      <li>CPF deve ser válido e único</li>
+                      <li>Chave PIX é opcional</li>
+                      <li>CPFs duplicados serão ignorados</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {importStep === 'preview' && importValidation && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-green-700">Funcionários Válidos</span>
+                        <span className="text-2xl font-bold text-green-600">
+                          {importValidation.valid.length}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-red-700">Erros Encontrados</span>
+                        <span className="text-2xl font-bold text-red-600">
+                          {importValidation.errors.length}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {importValidation.valid.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                        <CheckCircle className="w-5 h-5 mr-2 text-green-600" />
+                        Funcionários que serão importados:
+                      </h4>
+                      <div className="border rounded-lg overflow-hidden">
+                        <div className="max-h-64 overflow-y-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                  Nome
+                                </th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                  CPF
+                                </th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                  Chave PIX
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {importValidation.valid.map((emp, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50">
+                                  <td className="px-4 py-2 text-sm text-gray-900">{emp.name}</td>
+                                  <td className="px-4 py-2 text-sm text-gray-600">
+                                    {formatCPF(emp.cpf)}
+                                  </td>
+                                  <td className="px-4 py-2 text-sm text-gray-600">
+                                    {emp.pixKey || '-'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {importValidation.errors.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium text-gray-900 flex items-center">
+                          <AlertCircle className="w-5 h-5 mr-2 text-red-600" />
+                          Erros encontrados na planilha:
+                        </h4>
+                        <button
+                          onClick={handleDownloadErrors}
+                          className="text-sm text-blue-600 hover:text-blue-700 flex items-center space-x-1"
+                        >
+                          <Download className="w-4 h-4" />
+                          <span>Baixar Relatório</span>
+                        </button>
+                      </div>
+                      <div className="border border-red-200 rounded-lg overflow-hidden">
+                        <div className="max-h-48 overflow-y-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-red-50">
+                              <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-red-700 uppercase">
+                                  Linha
+                                </th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-red-700 uppercase">
+                                  Campo
+                                </th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-red-700 uppercase">
+                                  Erro
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {importValidation.errors.slice(0, 10).map((err, idx) => (
+                                <tr key={idx}>
+                                  <td className="px-4 py-2 text-sm text-gray-900">{err.row}</td>
+                                  <td className="px-4 py-2 text-sm text-gray-600">{err.field}</td>
+                                  <td className="px-4 py-2 text-sm text-red-600">{err.message}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {importValidation.errors.length > 10 && (
+                          <div className="bg-gray-50 px-4 py-2 text-sm text-gray-600 text-center">
+                            ... e mais {importValidation.errors.length - 10} erro(s)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {importStep === 'result' && importResult && (
+                <div className="space-y-6">
+                  <div className="text-center py-8">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                      <CheckCircle className="w-10 h-10 text-green-600" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                      Importação Concluída!
+                    </h3>
+                    <p className="text-gray-600">
+                      {importResult.success} de {importResult.success + importResult.errors} funcionários importados
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                      <div className="text-3xl font-bold text-green-600 mb-1">
+                        {importResult.success}
+                      </div>
+                      <div className="text-sm text-green-700">Importados com Sucesso</div>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+                      <div className="text-3xl font-bold text-red-600 mb-1">
+                        {importResult.errors}
+                      </div>
+                      <div className="text-sm text-red-700">Erros</div>
+                    </div>
+                  </div>
+
+                  {importResult.errors > 0 && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <p className="text-sm text-yellow-800">
+                        Um relatório detalhado com os erros foi baixado automaticamente.
+                        Verifique os erros e tente importar novamente os funcionários que falharam.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t p-6 bg-gray-50">
+              <div className="flex justify-end space-x-3">
+                {importStep === 'upload' && (
+                  <>
+                    <button
+                      onClick={handleCloseImportModal}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleProcessFile}
+                      disabled={!importFile || importing}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                      {importing && <RefreshCw className="w-4 h-4 animate-spin" />}
+                      <span>{importing ? 'Processando...' : 'Processar Planilha'}</span>
+                    </button>
+                  </>
+                )}
+
+                {importStep === 'preview' && (
+                  <>
+                    <button
+                      onClick={() => setImportStep('upload')}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      onClick={handleConfirmImport}
+                      disabled={!importValidation || importValidation.valid.length === 0 || importing}
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                      {importing && <RefreshCw className="w-4 h-4 animate-spin" />}
+                      <span>
+                        {importing
+                          ? 'Importando...'
+                          : `Importar ${importValidation?.valid.length || 0} Funcionário(s)`}
+                      </span>
+                    </button>
+                  </>
+                )}
+
+                {importStep === 'result' && (
+                  <button
+                    onClick={handleCloseImportModal}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Concluir
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

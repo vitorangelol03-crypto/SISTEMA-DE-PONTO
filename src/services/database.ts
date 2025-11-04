@@ -215,6 +215,87 @@ export const deleteEmployee = async (id: string): Promise<void> => {
   if (error) throw error;
 };
 
+export interface BulkEmployeeResult {
+  success: Employee[];
+  errors: Array<{
+    row: number;
+    name: string;
+    cpf: string;
+    error: string;
+  }>;
+}
+
+export const bulkCreateEmployees = async (
+  employees: Array<{ name: string; cpf: string; pixKey: string | null }>,
+  createdBy: string
+): Promise<BulkEmployeeResult> => {
+  const result: BulkEmployeeResult = {
+    success: [],
+    errors: []
+  };
+
+  const existingEmployees = await getAllEmployees();
+  const existingCPFs = new Set(existingEmployees.map(emp => emp.cpf));
+
+  for (let i = 0; i < employees.length; i++) {
+    const employee = employees[i];
+    const rowNumber = i + 2;
+
+    if (existingCPFs.has(employee.cpf)) {
+      result.errors.push({
+        row: rowNumber,
+        name: employee.name,
+        cpf: employee.cpf,
+        error: 'CPF já cadastrado no sistema'
+      });
+      continue;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .insert([{
+          name: employee.name,
+          cpf: employee.cpf,
+          pix_key: employee.pixKey,
+          created_by: createdBy
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '23505') {
+          result.errors.push({
+            row: rowNumber,
+            name: employee.name,
+            cpf: employee.cpf,
+            error: 'CPF já cadastrado'
+          });
+        } else {
+          result.errors.push({
+            row: rowNumber,
+            name: employee.name,
+            cpf: employee.cpf,
+            error: error.message || 'Erro desconhecido'
+          });
+        }
+      } else if (data) {
+        result.success.push(data);
+        existingCPFs.add(employee.cpf);
+      }
+    } catch (error) {
+      result.errors.push({
+        row: rowNumber,
+        name: employee.name,
+        cpf: employee.cpf,
+        error: error instanceof Error ? error.message : 'Erro ao inserir funcionário'
+      });
+    }
+  }
+
+  return result;
+};
+
 // Attendance functions
 export const getTodayAttendance = async (): Promise<Attendance[]> => {
   // Usar data local do Brasil (UTC-3)
