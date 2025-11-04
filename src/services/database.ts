@@ -887,3 +887,271 @@ export const getCleanupLogs = async (limit: number = 50): Promise<CleanupLog[]> 
   if (error) throw error;
   return data || [];
 };
+
+// Monitoring and Audit functions
+export interface MonitoringSetting {
+  id: string;
+  setting_key: string;
+  setting_value: any;
+  description: string;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export interface UsageMetric {
+  id: string;
+  user_id: string | null;
+  metric_type: string;
+  module: string | null;
+  metric_value: number;
+  metric_unit: string;
+  metadata: Record<string, any> | null;
+  recorded_at: string;
+  created_at: string;
+}
+
+export interface PerformanceMetric {
+  id: string;
+  metric_name: string;
+  metric_value: number;
+  module: string | null;
+  operation: string | null;
+  metadata: Record<string, any> | null;
+  recorded_at: string;
+  created_at: string;
+}
+
+export const getMonitoringSettings = async (): Promise<MonitoringSetting[]> => {
+  const { data, error } = await supabase
+    .from('monitoring_settings')
+    .select('*')
+    .order('setting_key');
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const updateMonitoringSetting = async (
+  settingKey: string,
+  settingValue: any,
+  updatedBy: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('monitoring_settings')
+    .update({
+      setting_value: settingValue,
+      updated_by: updatedBy,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('setting_key', settingKey);
+
+  if (error) throw error;
+};
+
+export const recordUsageMetric = async (
+  userId: string | null,
+  metricType: string,
+  module: string | null,
+  metricValue: number,
+  metricUnit: string,
+  metadata?: Record<string, any>
+): Promise<void> => {
+  const { error } = await supabase.from('usage_metrics').insert({
+    user_id: userId,
+    metric_type: metricType,
+    module,
+    metric_value: metricValue,
+    metric_unit: metricUnit,
+    metadata,
+  });
+
+  if (error) throw error;
+};
+
+export const recordPerformanceMetric = async (
+  metricName: string,
+  metricValue: number,
+  module?: string,
+  operation?: string,
+  metadata?: Record<string, any>
+): Promise<void> => {
+  const { error } = await supabase.from('performance_metrics').insert({
+    metric_name: metricName,
+    metric_value: metricValue,
+    module,
+    operation,
+    metadata,
+  });
+
+  if (error) throw error;
+};
+
+export const getUsageMetrics = async (filters: {
+  startDate?: string;
+  endDate?: string;
+  metricType?: string;
+  module?: string;
+  limit?: number;
+}): Promise<UsageMetric[]> => {
+  let query = supabase
+    .from('usage_metrics')
+    .select('*')
+    .order('recorded_at', { ascending: false });
+
+  if (filters.startDate) {
+    query = query.gte('recorded_at', filters.startDate);
+  }
+
+  if (filters.endDate) {
+    query = query.lte('recorded_at', filters.endDate);
+  }
+
+  if (filters.metricType) {
+    query = query.eq('metric_type', filters.metricType);
+  }
+
+  if (filters.module) {
+    query = query.eq('module', filters.module);
+  }
+
+  if (filters.limit) {
+    query = query.limit(filters.limit);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const getPerformanceMetrics = async (filters: {
+  startDate?: string;
+  endDate?: string;
+  metricName?: string;
+  module?: string;
+  limit?: number;
+}): Promise<PerformanceMetric[]> => {
+  let query = supabase
+    .from('performance_metrics')
+    .select('*')
+    .order('recorded_at', { ascending: false });
+
+  if (filters.startDate) {
+    query = query.gte('recorded_at', filters.startDate);
+  }
+
+  if (filters.endDate) {
+    query = query.lte('recorded_at', filters.endDate);
+  }
+
+  if (filters.metricName) {
+    query = query.eq('metric_name', filters.metricName);
+  }
+
+  if (filters.module) {
+    query = query.eq('module', filters.module);
+  }
+
+  if (filters.limit) {
+    query = query.limit(filters.limit);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const getUsageStats = async (startDate?: string, endDate?: string) => {
+  let query = supabase
+    .from('usage_metrics')
+    .select('metric_type, module, metric_value, metric_unit');
+
+  if (startDate) {
+    query = query.gte('recorded_at', startDate);
+  }
+
+  if (endDate) {
+    query = query.lte('recorded_at', endDate);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+
+  const stats = {
+    totalMetrics: data?.length || 0,
+    metricsByType: {} as Record<string, number>,
+    metricsByModule: {} as Record<string, number>,
+    averageValues: {} as Record<string, number>,
+  };
+
+  const typeValues: Record<string, number[]> = {};
+
+  data?.forEach((metric) => {
+    stats.metricsByType[metric.metric_type] = (stats.metricsByType[metric.metric_type] || 0) + 1;
+
+    if (metric.module) {
+      stats.metricsByModule[metric.module] = (stats.metricsByModule[metric.module] || 0) + 1;
+    }
+
+    if (!typeValues[metric.metric_type]) {
+      typeValues[metric.metric_type] = [];
+    }
+    typeValues[metric.metric_type].push(metric.metric_value);
+  });
+
+  Object.entries(typeValues).forEach(([type, values]) => {
+    const sum = values.reduce((a, b) => a + b, 0);
+    stats.averageValues[type] = sum / values.length;
+  });
+
+  return stats;
+};
+
+export const getPerformanceStats = async (startDate?: string, endDate?: string) => {
+  let query = supabase
+    .from('performance_metrics')
+    .select('metric_name, module, metric_value');
+
+  if (startDate) {
+    query = query.gte('recorded_at', startDate);
+  }
+
+  if (endDate) {
+    query = query.lte('recorded_at', endDate);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+
+  const stats = {
+    totalMetrics: data?.length || 0,
+    metricsByName: {} as Record<string, number>,
+    metricsByModule: {} as Record<string, number>,
+    averageValues: {} as Record<string, number>,
+  };
+
+  const nameValues: Record<string, number[]> = {};
+
+  data?.forEach((metric) => {
+    stats.metricsByName[metric.metric_name] = (stats.metricsByName[metric.metric_name] || 0) + 1;
+
+    if (metric.module) {
+      stats.metricsByModule[metric.module] = (stats.metricsByModule[metric.module] || 0) + 1;
+    }
+
+    if (!nameValues[metric.metric_name]) {
+      nameValues[metric.metric_name] = [];
+    }
+    nameValues[metric.metric_name].push(metric.metric_value);
+  });
+
+  Object.entries(nameValues).forEach(([name, values]) => {
+    const sum = values.reduce((a, b) => a + b, 0);
+    stats.averageValues[name] = sum / values.length;
+  });
+
+  return stats;
+};
