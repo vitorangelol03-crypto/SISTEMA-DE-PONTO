@@ -154,6 +154,48 @@ Este arquivo documenta todas as mudanças, decisões técnicas e contexto do pro
 - Services para lógica de banco de dados
 - Utils para funções auxiliares
 
+### IMPORTANTE: Gerenciamento do Banco de Dados Supabase
+
+**SEMPRE que for necessário modificar o banco de dados:**
+
+1. **Usar as ferramentas MCP do Supabase disponíveis no chat:**
+   - `mcp__supabase__list_tables` - Listar todas as tabelas
+   - `mcp__supabase__apply_migration` - Aplicar migrations (DDL)
+   - `mcp__supabase__execute_sql` - Executar queries SQL
+
+2. **NUNCA sugerir ao usuário fazer alterações manualmente no Supabase**
+   - O banco está hospedado remotamente
+   - Todas as alterações devem ser feitas via comandos no chat
+   - Usar as ferramentas MCP automaticamente aplica as mudanças no banco remoto
+
+3. **Processo correto para alterações:**
+   - Identificar a necessidade (criar tabela, adicionar coluna, etc)
+   - Escrever o SQL adequado seguindo as boas práticas
+   - Executar `mcp__supabase__apply_migration` com o SQL
+   - Atualizar o código TypeScript conforme necessário
+   - Documentar a mudança no CONTEXT.md
+
+4. **Formato das Migrations:**
+   ```sql
+   /*
+     # Título da Migration
+
+     1. Descrição
+        - Detalhes
+     2. Segurança
+        - Políticas RLS
+   */
+
+   -- SQL aqui
+   ```
+
+**Exemplo de uso correto:**
+```
+Ao invés de dizer: "Você precisa criar uma tabela 'products' no Supabase..."
+
+Fazer: Usar mcp__supabase__apply_migration com o SQL completo para criar a tabela automaticamente
+```
+
 ---
 
 ## Histórico de Atualizações
