@@ -152,20 +152,74 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId }) 
       const workbook = XLSX.utils.book_new();
 
       for (const dataType of selectedDataTypes) {
-        let data: any[] = [];
+        let rawData: any[] = [];
+        let formattedData: any[] = [];
 
         if (dataType === 'attendance') {
-          data = await getAttendanceHistory(startDate, endDate, selectedEmployee);
+          rawData = await getAttendanceHistory(startDate, endDate, selectedEmployee);
+          formattedData = rawData.map(item => ({
+            'Nome do Funcionário': item.employees?.name || 'N/A',
+            'CPF': item.employees?.cpf || 'N/A',
+            'Data': format(new Date(item.date + 'T00:00:00'), 'dd/MM/yyyy'),
+            'Status': item.status === 'present' ? 'Presente' : 'Falta',
+            'Horário de Saída': item.exit_time || '-',
+            'Marcado por': item.marked_by,
+            'Data de Criação': format(new Date(item.created_at), 'dd/MM/yyyy HH:mm:ss')
+          }));
         } else if (dataType === 'payments') {
-          data = await getPayments(startDate, endDate, selectedEmployee);
+          rawData = await getPayments(startDate, endDate, selectedEmployee);
+          formattedData = rawData.map(item => ({
+            'Nome do Funcionário': item.employees?.name || 'N/A',
+            'CPF': item.employees?.cpf || 'N/A',
+            'Data': format(new Date(item.date + 'T00:00:00'), 'dd/MM/yyyy'),
+            'Taxa Diária (R$)': item.daily_rate.toFixed(2).replace('.', ','),
+            'Bônus (R$)': item.bonus.toFixed(2).replace('.', ','),
+            'Total (R$)': item.total.toFixed(2).replace('.', ','),
+            'Criado por': item.created_by,
+            'Data de Criação': format(new Date(item.created_at), 'dd/MM/yyyy HH:mm:ss'),
+            'Última Atualização': format(new Date(item.updated_at), 'dd/MM/yyyy HH:mm:ss')
+          }));
         } else if (dataType === 'error_records') {
-          data = await getErrorRecords(startDate, endDate, selectedEmployee);
+          rawData = await getErrorRecords(startDate, endDate, selectedEmployee);
+          formattedData = rawData.map(item => ({
+            'Nome do Funcionário': item.employees?.name || 'N/A',
+            'CPF': item.employees?.cpf || 'N/A',
+            'Data': format(new Date(item.date + 'T00:00:00'), 'dd/MM/yyyy'),
+            'Quantidade de Erros': item.error_count,
+            'Observações': item.observations || '-',
+            'Criado por': item.created_by,
+            'Data de Criação': format(new Date(item.created_at), 'dd/MM/yyyy HH:mm:ss'),
+            'Última Atualização': format(new Date(item.updated_at), 'dd/MM/yyyy HH:mm:ss')
+          }));
         } else if (dataType === 'bonuses') {
-          data = await getBonuses();
+          rawData = await getBonuses();
+          if (startDate) {
+            rawData = rawData.filter(b => b.date >= startDate);
+          }
+          if (endDate) {
+            rawData = rawData.filter(b => b.date <= endDate);
+          }
+          formattedData = rawData.map(item => ({
+            'Data': format(new Date(item.date + 'T00:00:00'), 'dd/MM/yyyy'),
+            'Valor (R$)': item.amount.toFixed(2).replace('.', ','),
+            'Criado por': item.created_by,
+            'Data de Criação': format(new Date(item.created_at), 'dd/MM/yyyy HH:mm:ss')
+          }));
         }
 
-        if (data.length > 0) {
-          const worksheet = XLSX.utils.json_to_sheet(data);
+        if (formattedData.length > 0) {
+          const worksheet = XLSX.utils.json_to_sheet(formattedData);
+
+          // Ajustar largura das colunas
+          const colWidths = Object.keys(formattedData[0]).map(key => {
+            if (key.includes('Nome')) return { wch: 30 };
+            if (key.includes('CPF')) return { wch: 15 };
+            if (key.includes('Data')) return { wch: 12 };
+            if (key.includes('Observações')) return { wch: 40 };
+            return { wch: 18 };
+          });
+          worksheet['!cols'] = colWidths;
+
           XLSX.utils.book_append_sheet(workbook, worksheet, dataTypeLabels[dataType]);
         }
       }
