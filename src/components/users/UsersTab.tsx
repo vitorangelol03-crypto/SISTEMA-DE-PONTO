@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { UserCog, Plus, Trash2, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { UserCog, Plus, Trash2, Eye, EyeOff, RefreshCw, Shield } from 'lucide-react';
 import { getAllUsers, createUser, deleteUser, User } from '../../services/database';
 import { isValidPassword, isNumericString } from '../../utils/validation';
+import { getUserPermissions } from '../../services/permissions';
+import { UserPermissions } from '../../types/permissions';
+import { PermissionsModal } from '../permissions/PermissionsModal';
 import toast from 'react-hot-toast';
 
 interface UsersTabProps {
@@ -14,6 +17,9 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
   const [showForm, setShowForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [userPermissions, setUserPermissions] = useState<UserPermissions | null>(null);
   const [formData, setFormData] = useState({
     id: '',
     password: '',
@@ -91,6 +97,25 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
       console.error('Erro ao excluir supervisor:', error);
       toast.error('Erro ao excluir supervisor');
     }
+  };
+
+  const handleManagePermissions = async (user: User) => {
+    try {
+      const permissions = await getUserPermissions(user.id);
+      setSelectedUser(user);
+      setUserPermissions(permissions);
+      setShowPermissionsModal(true);
+    } catch (error) {
+      console.error('Erro ao carregar permissões:', error);
+      toast.error('Erro ao carregar permissões');
+    }
+  };
+
+  const handlePermissionsSaved = () => {
+    toast.success('Permissões atualizadas com sucesso!');
+    setShowPermissionsModal(false);
+    setSelectedUser(null);
+    setUserPermissions(null);
   };
 
   if (loading) {
@@ -251,7 +276,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Criado por
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Ações
                 </th>
               </tr>
@@ -284,18 +309,25 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
                       {user.created_by || 'Sistema'}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    {user.id !== '9999' ? (
+                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                    <div className="flex items-center justify-center gap-2">
                       <button
-                        onClick={() => handleDelete(user)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                        title="Excluir Supervisor"
+                        onClick={() => handleManagePermissions(user)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                        title="Gerenciar Permissões"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Shield className="w-4 h-4" />
                       </button>
-                    ) : (
-                      <span className="text-gray-400 text-xs">-</span>
-                    )}
+                      {user.id !== '9999' && (
+                        <button
+                          onClick={() => handleDelete(user)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          title="Excluir Supervisor"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -311,6 +343,22 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId }) => {
           </div>
         )}
       </div>
+
+      {showPermissionsModal && selectedUser && (
+        <PermissionsModal
+          isOpen={showPermissionsModal}
+          onClose={() => {
+            setShowPermissionsModal(false);
+            setSelectedUser(null);
+            setUserPermissions(null);
+          }}
+          userId={selectedUser.id}
+          userName={`${selectedUser.role === 'admin' ? 'Admin' : 'Supervisor'} - ID: ${selectedUser.id}`}
+          currentPermissions={userPermissions}
+          currentUserId={userId}
+          onSaved={handlePermissionsSaved}
+        />
+      )}
     </div>
   );
 };

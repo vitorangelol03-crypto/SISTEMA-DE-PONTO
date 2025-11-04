@@ -13,14 +13,15 @@ import { ErrorsTab } from './components/errors/ErrorsTab';
 import { C6PaymentTab } from './components/c6payment/C6PaymentTab';
 import { DataManagementTab } from './components/datamanagement/DataManagementTab';
 import { useAuth } from './hooks/useAuth';
+import { usePermissions } from './hooks/usePermissions';
 import { initializeSystem } from './services/database';
 
 function App() {
   const { user, loading, login, logout } = useAuth();
+  const { hasPermission } = usePermissions(user?.id || null);
   const [activeTab, setActiveTab] = useState<TabType>('attendance');
 
   useEffect(() => {
-    // Inicializar sistema na primeira carga
     initializeSystem();
   }, []);
 
@@ -47,25 +48,25 @@ function App() {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'attendance':
-        return <AttendanceTab userId={user.id} />;
+        return hasPermission('attendance.view') ? <AttendanceTab userId={user.id} hasPermission={hasPermission} /> : null;
       case 'employees':
-        return <EmployeesTab userId={user.id} />;
+        return hasPermission('employees.view') ? <EmployeesTab userId={user.id} hasPermission={hasPermission} /> : null;
       case 'reports':
-        return <ReportsTab userId={user.id} />;
+        return hasPermission('reports.view') ? <ReportsTab userId={user.id} hasPermission={hasPermission} /> : null;
       case 'financial':
-        return <FinancialTab userId={user.id} />;
+        return hasPermission('financial.view') ? <FinancialTab userId={user.id} hasPermission={hasPermission} /> : null;
       case 'c6payment':
-        return <C6PaymentTab userId={user.id} />;
+        return hasPermission('c6payment.view') ? <C6PaymentTab userId={user.id} hasPermission={hasPermission} /> : null;
       case 'errors':
-        return <ErrorsTab userId={user.id} />;
+        return hasPermission('errors.view') ? <ErrorsTab userId={user.id} hasPermission={hasPermission} /> : null;
       case 'settings':
-        return <SettingsTab />;
+        return hasPermission('settings.view') ? <SettingsTab hasPermission={hasPermission} /> : null;
       case 'users':
-        return user.role === 'admin' ? <UsersTab userId={user.id} /> : null;
+        return hasPermission('users.view') ? <UsersTab userId={user.id} /> : null;
       case 'datamanagement':
-        return user.role === 'admin' ? <DataManagementTab userId={user.id} /> : null;
+        return hasPermission('datamanagement.view') ? <DataManagementTab userId={user.id} hasPermission={hasPermission} /> : null;
       default:
-        return <AttendanceTab userId={user.id} />;
+        return hasPermission('attendance.view') ? <AttendanceTab userId={user.id} hasPermission={hasPermission} /> : null;
     }
   };
 
@@ -76,6 +77,7 @@ function App() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           userRole={user.role}
+          hasPermission={hasPermission}
         />
         {renderTabContent()}
       </Layout>

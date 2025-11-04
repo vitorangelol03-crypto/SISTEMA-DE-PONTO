@@ -7,26 +7,28 @@ interface TabNavigationProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   userRole: 'admin' | 'supervisor';
+  hasPermission: (permission: string) => boolean;
 }
 
 export const TabNavigation: React.FC<TabNavigationProps> = ({
   activeTab,
   onTabChange,
-  userRole
+  userRole,
+  hasPermission
 }) => {
-  const tabs = [
-    { id: 'attendance' as TabType, name: 'Ponto', icon: Clock },
-    { id: 'employees' as TabType, name: 'Funcionários', icon: Users },
-    { id: 'reports' as TabType, name: 'Relatórios', icon: BarChart3 },
-    { id: 'financial' as TabType, name: 'Financeiro', icon: DollarSign },
-    { id: 'c6payment' as TabType, name: 'Pagamento C6', icon: FileSpreadsheet },
-    { id: 'errors' as TabType, name: 'Erros', icon: AlertTriangle },
-    { id: 'settings' as TabType, name: 'Configurações', icon: Settings },
-    ...(userRole === 'admin' ? [
-      { id: 'users' as TabType, name: 'Usuários', icon: UserCog },
-      { id: 'datamanagement' as TabType, name: 'Gerenciamento', icon: Database }
-    ] : [])
+  const allTabs = [
+    { id: 'attendance' as TabType, name: 'Ponto', icon: Clock, permission: 'attendance.view' },
+    { id: 'employees' as TabType, name: 'Funcionários', icon: Users, permission: 'employees.view' },
+    { id: 'reports' as TabType, name: 'Relatórios', icon: BarChart3, permission: 'reports.view' },
+    { id: 'financial' as TabType, name: 'Financeiro', icon: DollarSign, permission: 'financial.view' },
+    { id: 'c6payment' as TabType, name: 'Pagamento C6', icon: FileSpreadsheet, permission: 'c6payment.view' },
+    { id: 'errors' as TabType, name: 'Erros', icon: AlertTriangle, permission: 'errors.view' },
+    { id: 'settings' as TabType, name: 'Configurações', icon: Settings, permission: 'settings.view' },
+    { id: 'users' as TabType, name: 'Usuários', icon: UserCog, permission: 'users.view' },
+    { id: 'datamanagement' as TabType, name: 'Gerenciamento', icon: Database, permission: 'datamanagement.view' }
   ];
+
+  const tabs = allTabs.filter(tab => hasPermission(tab.permission));
 
   return (
     <div className="bg-white shadow-sm mb-6">
