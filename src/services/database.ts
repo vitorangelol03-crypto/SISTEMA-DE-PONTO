@@ -566,21 +566,17 @@ export const getErrorStatistics = async (
     errorRate: number;
   }>;
 }> => {
-  // Buscar registros de erro
   const errorRecords = await getErrorRecords(startDate, endDate);
-  
-  // Buscar presenças para calcular taxa de erro
+
   const attendances = await getAttendanceHistory(startDate, endDate);
   const presentAttendances = attendances.filter(att => att.status === 'present');
-  
-  // Calcular estatísticas por funcionário
+
   const employeeMap = new Map<string, {
     employee: Employee;
     totalErrors: number;
     workDays: number;
   }>();
 
-  // Inicializar com funcionários que trabalharam
   presentAttendances.forEach(att => {
     if (att.employees) {
       const key = att.employee_id;
@@ -595,7 +591,6 @@ export const getErrorStatistics = async (
     }
   });
 
-  // Adicionar erros
   errorRecords.forEach(error => {
     if (error.employees) {
       const key = error.employee_id;
@@ -621,4 +616,193 @@ export const getErrorStatistics = async (
     totalErrors,
     employeeStats
   };
+};
+
+export interface DataRetentionSettings {
+  id: string;
+  data_type: 'attendance' | 'payments' | 'error_records' | 'bonuses' | 'collective_errors';
+  retention_months: number;
+  is_active: boolean;
+  updated_by: string;
+  updated_at: string;
+}
+
+export interface AutoCleanupConfig {
+  id: string;
+  is_enabled: boolean;
+  frequency: 'daily' | 'weekly' | 'monthly';
+  preferred_time: string;
+  last_run: string | null;
+  next_run: string | null;
+  updated_by: string;
+  updated_at: string;
+}
+
+export interface CleanupLog {
+  id: string;
+  user_id: string;
+  cleanup_type: 'manual' | 'automatic';
+  data_types_cleaned: string[];
+  start_date: string | null;
+  end_date: string | null;
+  records_deleted: Record<string, number>;
+  backup_generated: boolean;
+  backup_filename: string | null;
+  status: 'success' | 'error' | 'partial';
+  error_message: string | null;
+  execution_time_ms: number | null;
+  created_at: string;
+}
+
+export interface DataStatistics {
+  attendance: { count: number; oldestDate: string | null; newestDate: string | null };
+  payments: { count: number; oldestDate: string | null; newestDate: string | null };
+  error_records: { count: number; oldestDate: string | null; newestDate: string | null };
+  bonuses: { count: number; oldestDate: string | null; newestDate: string | null };
+  totalRecords: number;
+}
+
+export const getDataRetentionSettings = async (): Promise<DataRetentionSettings[]> => {
+  const { data, error } = await supabase
+    .from('data_retention_settings')
+    .select('*')
+    .order('data_type');
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const updateDataRetentionSettings = async (
+  dataType: string,
+  retentionMonths: number,
+  updatedBy: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('data_retention_settings')
+    .update({
+      retention_months: retentionMonths,
+      updated_by: updatedBy,
+      updated_at: new Date().toISOString()
+    })
+    .eq('data_type', dataType);
+
+  if (error) throw error;
+};
+
+export const getAutoCleanupConfig = async (): Promise<AutoCleanupConfig | null> => {
+  const { data, error } = await supabase
+    .from('auto_cleanup_config')
+    .select('*')
+    .single();
+
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
+};
+
+export const updateAutoCleanupConfig = async (
+  config: Partial<AutoCleanupConfig>,
+  updatedBy: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('auto_cleanup_config')
+    .update({
+      ...config,
+      updated_by: updatedBy,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', config.id);
+
+  if (error) throw error;
+};
+
+export const getDataStatistics = async (): Promise<DataStatistics> => {
+  const [attendance, payments, errorRecords, bonuses] = await Promise.all([
+    supabase.from('attendance').select('date', { count: 'exact' }).order('date', { ascending: true }),
+    supabase.from('payments').select('date', { count: 'exact' }).order('date', { ascending: true }),
+    supabase.from('error_records').select('date', { count: 'exact' }).order('date', { ascending: true }),
+    supabase.from('bonuses').select('date', { count: 'exact' }).order('date', { ascending: true })
+  ]);
+
+  return {
+    attendance: {
+      count: attendance.count || 0,
+      oldestDate: attendance.data && attendance.data.length > 0 ? attendance.data[0].date : null,
+      newestDate: attendance.data && attendance.data.length > 0 ? attendance.data[attendance.data.length - 1].date : null
+    },
+    payments: {
+      count: payments.count || 0,
+      oldestDate: payments.data && payments.data.length > 0 ? payments.data[0].date : null,
+      newestDate: payments.data && payments.data.length > 0 ? payments.data[payments.data.length - 1].date : null
+    },
+    error_records: {
+      count: errorRecords.count || 0,
+      oldestDate: errorRecords.data && errorRecords.data.length > 0 ? errorRecords.data[0].date : null,
+      newestDate: errorRecords.data && errorRecords.data.length > 0 ? errorRecords.data[errorRecords.data.length - 1].date : null
+    },
+    bonuses: {
+      count: bonuses.count || 0,
+      oldestDate: bonuses.data && bonuses.data.length > 0 ? bonuses.data[0].date : null,
+      newestDate: bonuses.data && bonuses.data.length > 0 ? bonuses.data[bonuses.data.length - 1].date : null
+    },
+    totalRecords: (attendance.count || 0) + (payments.count || 0) + (errorRecords.count || 0) + (bonuses.count || 0)
+  };
+};
+
+export const previewCleanupData = async (
+  dataTypes: string[],
+  startDate?: string,
+  endDate?: string,
+  employeeId?: string
+): Promise<Record<string, number>> => {
+  const counts: Record<string, number> = {};
+
+  for (const dataType of dataTypes) {
+    let query = supabase.from(dataType).select('id', { count: 'exact', head: true });
+
+    if (startDate) query = query.gte('date', startDate);
+    if (endDate) query = query.lte('date', endDate);
+    if (employeeId && dataType !== 'bonuses') query = query.eq('employee_id', employeeId);
+
+    const { count } = await query;
+    counts[dataType] = count || 0;
+  }
+
+  return counts;
+};
+
+export const deleteOldRecords = async (
+  dataType: string,
+  startDate?: string,
+  endDate?: string,
+  employeeId?: string
+): Promise<number> => {
+  let query = supabase.from(dataType).delete();
+
+  if (startDate) query = query.gte('date', startDate);
+  if (endDate) query = query.lte('date', endDate);
+  if (employeeId && dataType !== 'bonuses') query = query.eq('employee_id', employeeId);
+
+  const { data, error, count } = await query.select('id');
+
+  if (error) throw error;
+  return count || data?.length || 0;
+};
+
+export const createCleanupLog = async (log: Omit<CleanupLog, 'id' | 'created_at'>): Promise<void> => {
+  const { error } = await supabase
+    .from('cleanup_logs')
+    .insert([log]);
+
+  if (error) throw error;
+};
+
+export const getCleanupLogs = async (limit: number = 50): Promise<CleanupLog[]> => {
+  const { data, error } = await supabase
+    .from('cleanup_logs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data || [];
 };

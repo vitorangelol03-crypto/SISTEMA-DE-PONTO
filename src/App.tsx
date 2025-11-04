@@ -11,6 +11,7 @@ import { UsersTab } from './components/users/UsersTab';
 import { FinancialTab } from './components/financial/FinancialTab';
 import { ErrorsTab } from './components/errors/ErrorsTab';
 import { C6PaymentTab } from './components/c6payment/C6PaymentTab';
+import { DataManagementTab } from './components/datamanagement/DataManagementTab';
 import { useAuth } from './hooks/useAuth';
 import { initializeSystem } from './services/database';
 
@@ -61,6 +62,8 @@ function App() {
         return <SettingsTab />;
       case 'users':
         return user.role === 'admin' ? <UsersTab userId={user.id} /> : null;
+      case 'datamanagement':
+        return user.role === 'admin' ? <DataManagementTab userId={user.id} /> : null;
       default:
         return <AttendanceTab userId={user.id} />;
     }
