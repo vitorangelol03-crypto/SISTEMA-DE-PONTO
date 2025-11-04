@@ -12,6 +12,8 @@ import { FinancialTab } from './components/financial/FinancialTab';
 import { ErrorsTab } from './components/errors/ErrorsTab';
 import { C6PaymentTab } from './components/c6payment/C6PaymentTab';
 import { DataManagementTab } from './components/datamanagement/DataManagementTab';
+import { TutorialTab } from './components/tutorial/TutorialTab';
+import { HelpButton } from './components/tutorial/HelpButton';
 import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
 import { initializeSystem } from './services/database';
@@ -65,6 +67,8 @@ function App() {
         return hasPermission('users.view') ? <UsersTab userId={user.id} hasPermission={hasPermission} /> : null;
       case 'datamanagement':
         return hasPermission('datamanagement.view') ? <DataManagementTab userId={user.id} hasPermission={hasPermission} /> : null;
+      case 'tutorial':
+        return <TutorialTab hasPermission={hasPermission} />;
       default:
         return hasPermission('attendance.view') ? <AttendanceTab userId={user.id} hasPermission={hasPermission} /> : null;
     }
@@ -80,6 +84,7 @@ function App() {
           hasPermission={hasPermission}
         />
         {renderTabContent()}
+        <HelpButton currentTab={activeTab} hasPermission={hasPermission} />
       </Layout>
       <Toaster position="top-right" />
     </>
