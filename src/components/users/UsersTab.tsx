@@ -65,7 +65,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
     }
 
     if (!isValidPassword(formData.password)) {
-      toast.error('Senha deve ter pelo menos 6 caracteres');
+      toast.error('Senha deve ter pelo menos 4 caracteres');
       return;
     }
 

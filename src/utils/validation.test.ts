@@ -38,14 +38,15 @@ describe('validation.ts - Funções de Validação', () => {
   });
 
   describe('isValidPassword', () => {
-    it('deve aceitar senhas com 6 ou mais caracteres', () => {
+    it('deve aceitar senhas com 4 ou mais caracteres', () => {
+      expect(isValidPassword('1234')).toBe(true);
       expect(isValidPassword('123456')).toBe(true);
       expect(isValidPassword('senhaForte123')).toBe(true);
     });
 
-    it('deve rejeitar senhas com menos de 6 caracteres', () => {
-      expect(isValidPassword('12345')).toBe(false);
-      expect(isValidPassword('abc')).toBe(false);
+    it('deve rejeitar senhas com menos de 4 caracteres', () => {
+      expect(isValidPassword('123')).toBe(false);
+      expect(isValidPassword('ab')).toBe(false);
       expect(isValidPassword('')).toBe(false);
     });
   });

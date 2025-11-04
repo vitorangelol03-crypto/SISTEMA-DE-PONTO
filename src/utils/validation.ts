@@ -34,7 +34,7 @@ export const formatCPF = (cpf: string): string => {
 };
 
 export const isValidPassword = (password: string): boolean => {
-  return password.length >= 6;
+  return password.length >= 4;
 };
 
 export const isNumericString = (str: string): boolean => {
