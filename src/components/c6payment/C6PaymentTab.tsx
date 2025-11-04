@@ -289,7 +289,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId }) => {
 
   const confirmExport = async () => {
     try {
-      await exportC6PaymentSheet(paymentRows);
+      await exportC6PaymentSheet(paymentRows, filters.startDate, filters.endDate);
       setShowConfirmModal(false);
       toast.success('Planilha gerada com sucesso!');
     } catch (error) {
