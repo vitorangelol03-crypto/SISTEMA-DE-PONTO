@@ -1,5 +1,24 @@
 import { supabase } from '../lib/supabase';
-import { UserPermissions, UserPermissionRecord, PermissionLog, DEFAULT_ADMIN_PERMISSIONS } from '../types/permissions';
+import { UserPermissions, UserPermissionRecord, PermissionLog, DEFAULT_ADMIN_PERMISSIONS, DEFAULT_SUPERVISOR_PERMISSIONS } from '../types/permissions';
+
+function mergePermissionsWithDefaults(existingPermissions: UserPermissions | null): UserPermissions {
+  if (!existingPermissions) {
+    return DEFAULT_SUPERVISOR_PERMISSIONS;
+  }
+
+  const merged: UserPermissions = { ...DEFAULT_SUPERVISOR_PERMISSIONS };
+
+  for (const module in merged) {
+    if (module in existingPermissions) {
+      merged[module as keyof UserPermissions] = {
+        ...merged[module as keyof UserPermissions],
+        ...existingPermissions[module as keyof UserPermissions]
+      };
+    }
+  }
+
+  return merged;
+}
 
 export async function getUserPermissions(userId: string): Promise<UserPermissions | null> {
   try {
@@ -14,7 +33,8 @@ export async function getUserPermissions(userId: string): Promise<UserPermission
       return null;
     }
 
-    return data?.permissions || null;
+    const permissions = data?.permissions || null;
+    return mergePermissionsWithDefaults(permissions);
   } catch (error) {
     console.error('Erro ao buscar permissões:', error);
     return null;
