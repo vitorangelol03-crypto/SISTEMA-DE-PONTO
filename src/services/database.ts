@@ -419,6 +419,19 @@ export const markAttendance = async (
   if (error) throw error;
 };
 
+export const deleteAttendance = async (
+  employeeId: string,
+  date: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('attendance')
+    .delete()
+    .eq('employee_id', employeeId)
+    .eq('date', date);
+
+  if (error) throw error;
+};
+
 export const getAttendanceHistory = async (
   startDate?: string,
   endDate?: string,

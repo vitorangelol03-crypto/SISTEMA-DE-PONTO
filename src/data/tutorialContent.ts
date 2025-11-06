@@ -29,6 +29,11 @@ export const tutorialsContent: Tutorial[] = [
       {
         title: 'Buscar histórico',
         description: 'Use o campo de busca no topo para encontrar funcionários específicos por nome ou CPF. Use a seleção de data para consultar presenças de dias anteriores.',
+      },
+      {
+        title: 'Resetar marcações',
+        description: 'Se uma marcação foi feita incorretamente, você pode resetar o registro individual clicando no botão "Reset" ao lado do funcionário, ou resetar todos os registros do dia usando o botão "Reset Geral".',
+        tips: ['O reset remove completamente o registro de ponto', 'Use com cuidado pois a ação não pode ser desfeita', 'O funcionário voltará ao status "Não marcado"']
       }
     ],
     useCases: [
@@ -46,12 +51,24 @@ export const tutorialsContent: Tutorial[] = [
         title: 'Marcação em massa',
         description: 'Para marcar vários funcionários de uma vez, use as caixas de seleção e clique em "Marcar Selecionados".',
         example: 'Exemplo: Todos os funcionários da equipe A chegaram juntos. Selecione todos e clique no botão de marcação em massa.'
+      },
+      {
+        title: 'Correção de erro',
+        description: 'Quando marcar presença para o funcionário errado, use o botão Reset para remover a marcação e poder marcar corretamente.',
+        example: 'Exemplo: Você marcou João Silva como presente, mas era João Santos. Clique em "Reset" ao lado de João Silva e depois marque João Santos corretamente.'
+      },
+      {
+        title: 'Reset geral do dia',
+        description: 'Se houve um problema generalizado nas marcações do dia, você pode resetar todos os registros de uma vez.',
+        example: 'Exemplo: Sistema registrou horários incorretos para todos. Use "Reset Geral" para limpar todas as marcações e refazer.'
       }
     ],
     tips: [
       'Sempre verifique o horário exibido no topo da tela para garantir precisão',
       'Use o filtro de busca para encontrar funcionários rapidamente em listas grandes',
-      'As marcações são permanentes e criam registros no histórico'
+      'As marcações são permanentes e criam registros no histórico',
+      'Use a função Reset quando marcar o funcionário errado - é mais rápido que editar',
+      'O Reset Geral só aparece quando há pelo menos uma marcação no dia'
     ]
   },
   {

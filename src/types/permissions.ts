@@ -6,6 +6,7 @@ export interface AttendancePermissions extends TabPermissions {
   mark: boolean;
   edit: boolean;
   search: boolean;
+  reset: boolean;
 }
 
 export interface EmployeesPermissions extends TabPermissions {
@@ -73,7 +74,7 @@ export interface UserPermissions {
 }
 
 export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: true, edit: true, search: true },
+  attendance: { view: true, mark: true, edit: true, search: true, reset: true },
   employees: { view: true, create: true, edit: true, delete: true, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: true, editBonus: true, delete: true, clear: true, applyBonus: true },
@@ -85,7 +86,7 @@ export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
 };
 
 export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: true, edit: false, search: true },
+  attendance: { view: true, mark: true, edit: false, search: true, reset: false },
   employees: { view: true, create: true, edit: true, delete: false, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: false, editBonus: true, delete: false, clear: false, applyBonus: true },
@@ -97,7 +98,7 @@ export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
 };
 
 export const DEFAULT_READONLY_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: false, edit: false, search: true },
+  attendance: { view: true, mark: false, edit: false, search: true, reset: false },
   employees: { view: true, create: false, edit: false, delete: false, import: false },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: false, editBonus: false, delete: false, clear: false, applyBonus: false },
@@ -133,7 +134,8 @@ export const PERMISSION_LABELS = {
     view: 'Ver aba',
     mark: 'Marcar presença',
     edit: 'Editar horário de saída',
-    search: 'Buscar histórico'
+    search: 'Buscar histórico',
+    reset: 'Resetar registros de ponto'
   },
   employees: {
     title: 'Funcionários',

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { getAllEmployees, getTodayAttendance, markAttendance, Employee, Attendance, createBonus, applyBonusToAllPresent } from '../../services/database';
+import { getAllEmployees, getTodayAttendance, markAttendance, Employee, Attendance, createBonus, applyBonusToAllPresent, deleteAttendance } from '../../services/database';
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 
@@ -23,6 +23,9 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [bonusAmount, setBonusAmount] = useState<string>('');
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [bulkMarkingLoading, setBulkMarkingLoading] = useState(false);
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
+  const [resetType, setResetType] = useState<'single' | 'all'>('single');
+  const [employeeToReset, setEmployeeToReset] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
@@ -191,7 +194,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       if (successCount > 0) {
         toast.success(`${successCount} funcionário(s) marcado(s) como ${status === 'present' ? 'presente' : 'falta'}`);
       }
-      
+
       if (errorCount > 0) {
         toast.error(`Erro ao marcar ${errorCount} funcionário(s)`);
       }
@@ -203,6 +206,39 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       toast.error('Erro na marcação em massa');
     } finally {
       setBulkMarkingLoading(false);
+    }
+  };
+
+  const handleResetAttendance = async (employeeId: string) => {
+    setEmployeeToReset(employeeId);
+    setResetType('single');
+    setShowResetConfirmModal(true);
+  };
+
+  const handleResetAllAttendance = () => {
+    setResetType('all');
+    setShowResetConfirmModal(true);
+  };
+
+  const confirmReset = async () => {
+    try {
+      if (resetType === 'single' && employeeToReset) {
+        await deleteAttendance(employeeToReset, selectedDate);
+        toast.success('Registro de ponto resetado com sucesso');
+      } else if (resetType === 'all') {
+        const attendanceIds = attendances.map(att => att.employee_id);
+        for (const empId of attendanceIds) {
+          await deleteAttendance(empId, selectedDate);
+        }
+        toast.success('Todos os registros de ponto foram resetados');
+      }
+      await loadData();
+    } catch (error) {
+      console.error('Erro ao resetar presença:', error);
+      toast.error('Erro ao resetar presença');
+    } finally {
+      setShowResetConfirmModal(false);
+      setEmployeeToReset(null);
     }
   };
 
@@ -243,6 +279,16 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
               >
                 <Gift className="w-4 h-4" />
                 <span>Bonificação</span>
+              </button>
+            )}
+
+            {hasPermission('attendance.reset') && present > 0 && (
+              <button
+                onClick={handleResetAllAttendance}
+                className="flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Reset Geral</span>
               </button>
             )}
           </div>
@@ -462,6 +508,16 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                           <XCircle className="w-4 h-4 mr-1" />
                           Falta
                         </button>
+                        {status && hasPermission('attendance.reset') && (
+                          <button
+                            onClick={() => handleResetAttendance(employee.id)}
+                            className="inline-flex items-center px-3 py-2 border border-orange-300 text-xs font-medium rounded-md text-orange-700 bg-orange-50 hover:bg-orange-100 transition-colors min-h-[44px]"
+                            title="Resetar marcação"
+                          >
+                            <RotateCcw className="w-4 h-4 mr-1" />
+                            Reset
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -557,6 +613,16 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                         Falta
                       </button>
                     </div>
+                  )}
+
+                  {status && hasPermission('attendance.reset') && (
+                    <button
+                      onClick={() => handleResetAttendance(employee.id)}
+                      className="w-full inline-flex items-center justify-center px-4 py-3 border border-orange-300 text-sm font-medium rounded-lg text-orange-700 bg-orange-50 hover:bg-orange-100 transition-colors min-h-[48px]"
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Resetar Marcação
+                    </button>
                   )}
 
                   {hasPermission('attendance.edit') && (
@@ -659,6 +725,63 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                 </button>
                 <button
                   onClick={() => setShowBonusModal(false)}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors min-h-[48px] font-medium"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Reset */}
+      {showResetConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium flex items-center text-orange-600">
+                  <RotateCcw className="w-5 h-5 mr-2" />
+                  Confirmar Reset
+                </h3>
+                <button
+                  onClick={() => setShowResetConfirmModal(false)}
+                  className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mb-6">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-yellow-800 font-medium">
+                    ⚠️ Atenção: Esta ação não pode ser desfeita!
+                  </p>
+                </div>
+
+                {resetType === 'single' ? (
+                  <p className="text-sm text-gray-600">
+                    Você está prestes a resetar o registro de ponto deste funcionário para hoje.
+                    O registro será completamente removido e o status voltará para "Não marcado".
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    Você está prestes a resetar <strong>TODOS</strong> os registros de ponto de hoje ({present} funcionário{present !== 1 ? 's' : ''}).
+                    Todos os registros serão completamente removidos.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={confirmReset}
+                  className="flex-1 px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors min-h-[48px] font-medium"
+                >
+                  Confirmar Reset
+                </button>
+                <button
+                  onClick={() => setShowResetConfirmModal(false)}
                   className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors min-h-[48px] font-medium"
                 >
                   Cancelar
