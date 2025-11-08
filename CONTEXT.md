@@ -4,6 +4,78 @@ Este arquivo documenta todas as mudanças, decisões técnicas e contexto do pro
 
 ---
 
+## Sessão: 2025-11-08
+
+### Implementação: Sistema Avançado de Gerenciamento de Ponto com Histórico e Controle de Bonificações
+
+**Status:** EM ANDAMENTO
+
+#### 1. Banco de Dados
+
+**Implementado:**
+- ✅ Criada tabela `bonus_removals` com estrutura completa
+  - Campos: id, employee_id, date, bonus_amount_removed, observation, removed_by, removed_at, created_at
+  - Constraint de observação: mínimo 10 e máximo 500 caracteres
+  - Índices otimizados para consultas rápidas
+  - RLS habilitado com políticas de segurança
+  - Comentários de documentação em todas as colunas
+
+**Arquivo:** `supabase/migrations/create_bonus_removals_table.sql`
+
+#### 2. Sistema de Permissões
+
+**Implementado:**
+- ✅ Adicionadas novas permissões em `AttendancePermissions`:
+  - `viewHistory`: Visualizar dias anteriores
+  - `editHistory`: Editar registros de dias anteriores
+- ✅ Adicionadas novas permissões em `FinancialPermissions`:
+  - `removeBonus`: Remover bonificação individual
+  - `removeBonusBulk`: Remover todas bonificações de um dia
+- ✅ Atualizados perfis padrão:
+  - Admin: todas permissões como true
+  - Supervisor: viewHistory=true, editHistory=true, removeBonus=true, removeBonusBulk=false
+  - ReadOnly: viewHistory=true, editHistory=false, removeBonus=false, removeBonusBulk=false
+- ✅ Adicionados labels descritivos no PERMISSION_LABELS
+
+**Arquivo:** `src/types/permissions.ts`
+
+#### 3. Funções de Banco de Dados
+
+**Implementado:**
+- ✅ Novas interfaces:
+  - `BonusRemoval`: interface para remoções de bonificação
+  - `BonusInfo`: interface para informações de bonificação do dia
+- ✅ Novas funções:
+  - `getBonusInfoForDate(date)`: retorna informações de bonificação aplicada
+  - `removeBonusFromEmployee(employeeId, date, observation, userId)`: remove bonificação individual
+  - `removeAllBonusesForDate(date, observation, userId)`: remove todas bonificações de um dia
+  - `getBonusRemovalHistory(employeeId?, startDate?, endDate?)`: busca histórico de remoções
+- ✅ Validações implementadas:
+  - Observação obrigatória (10-500 caracteres)
+  - Verificação de permissões
+  - Validação de bonificação existente
+  - Registro em audit_logs
+  - Atualização automática de totais de pagamento
+
+**Arquivo:** `src/services/database.ts`
+
+#### 4. Pendências
+
+**A Implementar:**
+- ⏳ Atualizar componente AttendanceTab.tsx:
+  - Adicionar navegação de datas (seletor + botões anterior/próximo/hoje)
+  - Adicionar card de informações de bonificação
+  - Adicionar botões de remover bonificação (individual e em massa)
+  - Adicionar modais de remoção com campo de observação
+  - Atualizar loadData para carregar bonusInfo e payments
+  - Implementar validações para edição de histórico
+- ⏳ Adicionar histórico de remoções na aba Financeiro
+- ⏳ Atualizar tutoriais e documentação
+- ⏳ Testar todas as funcionalidades
+- ⏳ Executar build final
+
+---
+
 ## Sessão: 2025-10-06
 
 ### Melhorias Implementadas

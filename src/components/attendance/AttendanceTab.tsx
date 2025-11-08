@@ -1,8 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift, RotateCcw } from 'lucide-react';
-import { format } from 'date-fns';
+import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift, RotateCcw, ChevronLeft, ChevronRight, Home, Trash2 } from 'lucide-react';
+import { format, parseISO, addDays, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { getAllEmployees, getTodayAttendance, markAttendance, Employee, Attendance, createBonus, applyBonusToAllPresent, deleteAttendance } from '../../services/database';
+import {
+  getAllEmployees,
+  getAttendanceHistory,
+  markAttendance,
+  Employee,
+  Attendance,
+  createBonus,
+  applyBonusToAllPresent,
+  deleteAttendance,
+  getBonusInfoForDate,
+  removeBonusFromEmployee,
+  removeAllBonusesForDate,
+  BonusInfo,
+  getPayments,
+  Payment
+} from '../../services/database';
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 
@@ -15,8 +30,10 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [bonusInfo, setBonusInfo] = useState<BonusInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedDate] = useState(getBrazilDate());
+  const [selectedDate, setSelectedDate] = useState(getBrazilDate());
   const [exitTimes, setExitTimes] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [showBonusModal, setShowBonusModal] = useState(false);
@@ -26,20 +43,31 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
   const [resetType, setResetType] = useState<'single' | 'all'>('single');
   const [employeeToReset, setEmployeeToReset] = useState<string | null>(null);
+  const [showRemoveBonusModal, setShowRemoveBonusModal] = useState(false);
+  const [bonusRemovalObservation, setBonusRemovalObservation] = useState('');
+  const [employeeToRemoveBonus, setEmployeeToRemoveBonus] = useState<string | null>(null);
+  const [showRemoveAllBonusModal, setShowRemoveAllBonusModal] = useState(false);
+  const [removeAllBonusObservation, setRemoveAllBonusObservation] = useState('');
+  const [removingBonus, setRemovingBonus] = useState(false);
 
-  const loadData = async () => {
+  const isViewingToday = selectedDate === getBrazilDate();
+
+  const loadData = async (date: string = selectedDate) => {
     try {
       setLoading(true);
-      const [employeesData, attendancesData] = await Promise.all([
+      const [employeesData, attendancesData, bonusData, paymentsData] = await Promise.all([
         getAllEmployees(),
-        getTodayAttendance()
+        getAttendanceHistory(date, date),
+        getBonusInfoForDate(date),
+        getPayments(date, date)
       ]);
-      
+
       setEmployees(employeesData);
       setFilteredEmployees(employeesData);
       setAttendances(attendancesData);
-      
-      // Inicializar horários de saída
+      setBonusInfo(bonusData);
+      setPayments(paymentsData);
+
       const exitTimesMap: Record<string, string> = {};
       attendancesData.forEach(att => {
         if (att.exit_time) {
@@ -56,8 +84,10 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (hasPermission('attendance.viewHistory') || isViewingToday) {
+      loadData(selectedDate);
+    }
+  }, [selectedDate]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -77,16 +107,53 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     setFilteredEmployees(filtered);
   }, [searchTerm, employees]);
 
+  const handleDateChange = (newDate: string) => {
+    if (!hasPermission('attendance.viewHistory') && newDate !== getBrazilDate()) {
+      toast.error('Você não tem permissão para visualizar dias anteriores');
+      return;
+    }
+    setSelectedDate(newDate);
+    setSearchTerm('');
+    setSelectedEmployees(new Set());
+  };
+
+  const goToPreviousDay = () => {
+    const prevDate = format(subDays(parseISO(selectedDate), 1), 'yyyy-MM-dd');
+    handleDateChange(prevDate);
+  };
+
+  const goToNextDay = () => {
+    const nextDate = format(addDays(parseISO(selectedDate), 1), 'yyyy-MM-dd');
+    const today = getBrazilDate();
+    if (nextDate <= today) {
+      handleDateChange(nextDate);
+    }
+  };
+
+  const goToToday = () => {
+    handleDateChange(getBrazilDate());
+  };
+
   const getAttendanceStatus = (employeeId: string) => {
     const attendance = attendances.find(att => att.employee_id === employeeId);
     return attendance?.status || null;
   };
 
+  const getEmployeeBonus = (employeeId: string): number => {
+    const payment = payments.find(p => p.employee_id === employeeId);
+    return payment?.bonus ? parseFloat(payment.bonus.toString()) : 0;
+  };
+
   const handleMarkAttendance = async (employeeId: string, status: 'present' | 'absent') => {
+    if (!isViewingToday && !hasPermission('attendance.editHistory')) {
+      toast.error('Você não tem permissão para editar registros de dias anteriores');
+      return;
+    }
+
     try {
       const exitTime = exitTimes[employeeId] || null;
       await markAttendance(employeeId, selectedDate, status, exitTime, userId);
-      await loadData();
+      await loadData(selectedDate);
       toast.success(`Presença marcada como ${status === 'present' ? 'presente' : 'falta'}`);
     } catch (error) {
       console.error('Erro ao marcar presença:', error);
@@ -102,6 +169,11 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   };
 
   const updateExitTime = async (employeeId: string) => {
+    if (!isViewingToday && !hasPermission('attendance.editHistory')) {
+      toast.error('Você não tem permissão para editar registros de dias anteriores');
+      return;
+    }
+
     try {
       const currentStatus = getAttendanceStatus(employeeId);
       if (currentStatus) {
@@ -134,20 +206,81 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     }
 
     try {
-      // Criar registro de bonificação
       await createBonus(selectedDate, amount, userId);
-      
-      // Aplicar bonificação para todos os presentes
       await applyBonusToAllPresent(selectedDate, amount, userId);
-      
+
       toast.success(`Bonificação de R$ ${amount.toFixed(2)} aplicada para todos os funcionários presentes!`);
       setShowBonusModal(false);
       setBonusAmount('');
+      await loadData(selectedDate);
     } catch (error) {
       console.error('Erro ao aplicar bonificação:', error);
       toast.error(error.message || 'Erro ao aplicar bonificação');
+    }
+  };
+
+  const handleRemoveBonus = (employeeId: string) => {
+    setEmployeeToRemoveBonus(employeeId);
+    setBonusRemovalObservation('');
+    setShowRemoveBonusModal(true);
+  };
+
+  const confirmRemoveBonus = async () => {
+    if (!employeeToRemoveBonus) return;
+
+    if (bonusRemovalObservation.trim().length < 10) {
+      toast.error('Observação deve ter no mínimo 10 caracteres');
+      return;
+    }
+
+    setRemovingBonus(true);
+    try {
+      await removeBonusFromEmployee(
+        employeeToRemoveBonus,
+        selectedDate,
+        bonusRemovalObservation,
+        userId
+      );
+      toast.success('Bonificação removida com sucesso');
+      setShowRemoveBonusModal(false);
+      setBonusRemovalObservation('');
+      setEmployeeToRemoveBonus(null);
+      await loadData(selectedDate);
+    } catch (error) {
+      console.error('Erro ao remover bonificação:', error);
+      toast.error(error.message || 'Erro ao remover bonificação');
     } finally {
-      loadData();
+      setRemovingBonus(false);
+    }
+  };
+
+  const handleRemoveAllBonus = () => {
+    setRemoveAllBonusObservation('');
+    setShowRemoveAllBonusModal(true);
+  };
+
+  const confirmRemoveAllBonus = async () => {
+    if (removeAllBonusObservation.trim().length < 10) {
+      toast.error('Observação deve ter no mínimo 10 caracteres');
+      return;
+    }
+
+    setRemovingBonus(true);
+    try {
+      const count = await removeAllBonusesForDate(
+        selectedDate,
+        removeAllBonusObservation,
+        userId
+      );
+      toast.success(`${count} bonificação(ões) removida(s) com sucesso`);
+      setShowRemoveAllBonusModal(false);
+      setRemoveAllBonusObservation('');
+      await loadData(selectedDate);
+    } catch (error) {
+      console.error('Erro ao remover bonificações:', error);
+      toast.error(error.message || 'Erro ao remover bonificações');
+    } finally {
+      setRemovingBonus(false);
     }
   };
 
@@ -172,6 +305,11 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const handleBulkMarkAttendance = async (status: 'present' | 'absent') => {
     if (selectedEmployees.size === 0) {
       toast.error('Selecione pelo menos um funcionário');
+      return;
+    }
+
+    if (!isViewingToday && !hasPermission('attendance.editHistory')) {
+      toast.error('Você não tem permissão para editar registros de dias anteriores');
       return;
     }
 
@@ -210,12 +348,22 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   };
 
   const handleResetAttendance = async (employeeId: string) => {
+    if (!isViewingToday && !hasPermission('attendance.editHistory')) {
+      toast.error('Você não tem permissão para editar registros de dias anteriores');
+      return;
+    }
+
     setEmployeeToReset(employeeId);
     setResetType('single');
     setShowResetConfirmModal(true);
   };
 
   const handleResetAllAttendance = () => {
+    if (!isViewingToday && !hasPermission('attendance.editHistory')) {
+      toast.error('Você não tem permissão para editar registros de dias anteriores');
+      return;
+    }
+
     setResetType('all');
     setShowResetConfirmModal(true);
   };
@@ -232,7 +380,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
         }
         toast.success('Todos os registros de ponto foram resetados');
       }
-      await loadData();
+      await loadData(selectedDate);
     } catch (error) {
       console.error('Erro ao resetar presença:', error);
       toast.error('Erro ao resetar presença');
@@ -252,51 +400,130 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   }
 
   const { present, absent, notMarked } = getStatusCounts();
-  
-  const today = format(getBrazilDateTime(), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+
+  const displayDate = format(parseISO(selectedDate), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
 
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold flex items-center">
-            <Clock className="w-5 h-5 mr-2 text-blue-600" />
-            Controle de Ponto
-          </h2>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={loadData}
-              className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>Atualizar</span>
-            </button>
-
-            {hasPermission('financial.applyBonus') && (
+        <div className="flex flex-col space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold flex items-center">
+              <Clock className="w-5 h-5 mr-2 text-blue-600" />
+              Controle de Ponto
+            </h2>
+            <div className="flex items-center space-x-3">
               <button
-                onClick={() => setShowBonusModal(true)}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                onClick={() => loadData(selectedDate)}
+                className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
               >
-                <Gift className="w-4 h-4" />
-                <span>Bonificação</span>
+                <RefreshCw className="w-4 h-4" />
+                <span>Atualizar</span>
               </button>
-            )}
 
-            {hasPermission('attendance.reset') && present > 0 && (
-              <button
-                onClick={handleResetAllAttendance}
-                className="flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>Reset Geral</span>
-              </button>
-            )}
+              {hasPermission('financial.applyBonus') && isViewingToday && (
+                <button
+                  onClick={() => setShowBonusModal(true)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                >
+                  <Gift className="w-4 h-4" />
+                  <span>Bonificação</span>
+                </button>
+              )}
+
+              {hasPermission('attendance.reset') && present > 0 && (
+                <button
+                  onClick={handleResetAllAttendance}
+                  className="flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Reset Geral</span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-        
-        <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600">
-          <Calendar className="w-4 h-4" />
-          <span className="font-medium">{today}</span>
+
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-3 md:space-y-0 border-t pt-4">
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={goToPreviousDay}
+                disabled={!hasPermission('attendance.viewHistory')}
+                className="flex items-center space-x-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Dia Anterior"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Anterior</span>
+              </button>
+
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => handleDateChange(e.target.value)}
+                max={getBrazilDate()}
+                disabled={!hasPermission('attendance.viewHistory')}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+
+              <button
+                onClick={goToNextDay}
+                disabled={!hasPermission('attendance.viewHistory') || isViewingToday}
+                className="flex items-center space-x-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Próximo Dia"
+              >
+                <span className="hidden sm:inline">Próximo</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              {!isViewingToday && (
+                <button
+                  onClick={goToToday}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  <Home className="w-4 h-4" />
+                  <span>Hoje</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-2 text-sm">
+              <Calendar className="w-4 h-4 text-gray-500" />
+              <span className="font-medium text-gray-700">{displayDate}</span>
+              {!isViewingToday && (
+                <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded">
+                  VISUALIZANDO HISTÓRICO
+                </span>
+              )}
+            </div>
+          </div>
+
+          {bonusInfo && bonusInfo.hasBonus && (
+            <div className="border-t pt-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Gift className="w-5 h-5 text-green-600" />
+                      <h3 className="text-lg font-semibold text-green-800">Bonificação Aplicada</h3>
+                    </div>
+                    <div className="space-y-1 text-sm text-green-700">
+                      <p><strong>Valor:</strong> R$ {bonusInfo.amount.toFixed(2)}</p>
+                      <p><strong>Funcionários:</strong> {bonusInfo.employeesCount}</p>
+                      <p><strong>Aplicada em:</strong> {format(parseISO(bonusInfo.appliedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                    </div>
+                  </div>
+                  {hasPermission('financial.removeBonusBulk') && (
+                    <button
+                      onClick={handleRemoveAllBonus}
+                      className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Remover Todas</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6">

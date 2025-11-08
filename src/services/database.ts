@@ -62,6 +62,26 @@ export interface ErrorRecord {
   employees?: Employee;
 }
 
+export interface BonusRemoval {
+  id: string;
+  employee_id: string;
+  date: string;
+  bonus_amount_removed: number;
+  observation: string;
+  removed_by: string;
+  removed_at: string;
+  created_at: string;
+  employees?: Employee;
+}
+
+export interface BonusInfo {
+  hasBonus: boolean;
+  amount: number;
+  appliedBy: string;
+  appliedAt: string;
+  employeesCount: number;
+}
+
 export const createTables = async () => {
   try {
     // Verificar se as tabelas existem, se não existir o Supabase já as criou automaticamente
@@ -686,6 +706,229 @@ export const applyBonusToAllPresent = async (
         onConflict: 'employee_id,date'
       });
   }
+};
+
+// Bonus info and removal functions
+export const getBonusInfoForDate = async (date: string): Promise<BonusInfo> => {
+  // Buscar bonus do dia
+  const { data: bonus } = await supabase
+    .from('bonuses')
+    .select('*')
+    .eq('date', date)
+    .maybeSingle();
+
+  if (!bonus) {
+    return {
+      hasBonus: false,
+      amount: 0,
+      appliedBy: '',
+      appliedAt: '',
+      employeesCount: 0
+    };
+  }
+
+  // Contar quantos funcionários receberam a bonificação
+  const { data: payments } = await supabase
+    .from('payments')
+    .select('employee_id')
+    .eq('date', date)
+    .gt('bonus', 0);
+
+  return {
+    hasBonus: true,
+    amount: parseFloat(bonus.amount.toString()),
+    appliedBy: bonus.created_by,
+    appliedAt: bonus.created_at,
+    employeesCount: payments?.length || 0
+  };
+};
+
+export const removeBonusFromEmployee = async (
+  employeeId: string,
+  date: string,
+  observation: string,
+  userId: string
+): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'financial.removeBonus');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  // Validar observação
+  if (!observation || observation.trim().length < 10) {
+    throw new Error('Observação deve ter no mínimo 10 caracteres');
+  }
+  if (observation.length > 500) {
+    throw new Error('Observação deve ter no máximo 500 caracteres');
+  }
+
+  // Buscar pagamento do funcionário
+  const { data: payment } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .eq('date', date)
+    .maybeSingle();
+
+  if (!payment || payment.bonus === 0) {
+    throw new Error('Este funcionário não possui bonificação para remover');
+  }
+
+  const bonusAmount = parseFloat(payment.bonus.toString());
+
+  // Registrar remoção
+  const { error: removalError } = await supabase
+    .from('bonus_removals')
+    .insert([{
+      employee_id: employeeId,
+      date,
+      bonus_amount_removed: bonusAmount,
+      observation: observation.trim(),
+      removed_by: userId
+    }]);
+
+  if (removalError) throw removalError;
+
+  // Atualizar pagamento removendo a bonificação
+  const newTotal = parseFloat(payment.daily_rate.toString());
+  const { error: updateError } = await supabase
+    .from('payments')
+    .update({
+      bonus: 0,
+      total: newTotal,
+      updated_at: new Date().toISOString()
+    })
+    .eq('employee_id', employeeId)
+    .eq('date', date);
+
+  if (updateError) throw updateError;
+
+  // Registrar no audit log
+  try {
+    await supabase.from('audit_logs').insert([{
+      user_id: userId,
+      action_type: 'update',
+      module: 'financial',
+      entity_type: 'bonus_removal',
+      entity_id: employeeId,
+      old_data: { bonus: bonusAmount },
+      new_data: { bonus: 0 },
+      description: `Bonificação removida: R$ ${bonusAmount.toFixed(2)} - ${observation}`
+    }]);
+  } catch (error) {
+    console.error('Erro ao registrar no audit log:', error);
+  }
+};
+
+export const removeAllBonusesForDate = async (
+  date: string,
+  observation: string,
+  userId: string
+): Promise<number> => {
+  const permissionCheck = await validatePermission(userId, 'financial.removeBonusBulk');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  // Validar observação
+  if (!observation || observation.trim().length < 10) {
+    throw new Error('Observação deve ter no mínimo 10 caracteres');
+  }
+  if (observation.length > 500) {
+    throw new Error('Observação deve ter no máximo 500 caracteres');
+  }
+
+  // Buscar todos os pagamentos com bonificação no dia
+  const { data: payments, error: paymentsError } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('date', date)
+    .gt('bonus', 0);
+
+  if (paymentsError) throw paymentsError;
+
+  if (!payments || payments.length === 0) {
+    throw new Error('Nenhuma bonificação encontrada para este dia');
+  }
+
+  let removedCount = 0;
+
+  // Remover bonificação de cada funcionário
+  for (const payment of payments) {
+    const bonusAmount = parseFloat(payment.bonus.toString());
+
+    // Registrar remoção
+    await supabase.from('bonus_removals').insert([{
+      employee_id: payment.employee_id,
+      date,
+      bonus_amount_removed: bonusAmount,
+      observation: observation.trim(),
+      removed_by: userId
+    }]);
+
+    // Atualizar pagamento
+    const newTotal = parseFloat(payment.daily_rate.toString());
+    await supabase
+      .from('payments')
+      .update({
+        bonus: 0,
+        total: newTotal,
+        updated_at: new Date().toISOString()
+      })
+      .eq('employee_id', payment.employee_id)
+      .eq('date', date);
+
+    removedCount++;
+  }
+
+  // Registrar no audit log
+  try {
+    await supabase.from('audit_logs').insert([{
+      user_id: userId,
+      action_type: 'bulk_action',
+      module: 'financial',
+      entity_type: 'bonus_removal_bulk',
+      description: `Remoção em massa: ${removedCount} bonificações removidas - ${observation}`
+    }]);
+  } catch (error) {
+    console.error('Erro ao registrar no audit log:', error);
+  }
+
+  return removedCount;
+};
+
+export const getBonusRemovalHistory = async (
+  employeeId?: string,
+  startDate?: string,
+  endDate?: string
+): Promise<BonusRemoval[]> => {
+  let query = supabase
+    .from('bonus_removals')
+    .select(`
+      *,
+      employees (
+        id,
+        name,
+        cpf
+      )
+    `);
+
+  if (employeeId) {
+    query = query.eq('employee_id', employeeId);
+  }
+
+  if (startDate) {
+    query = query.gte('date', startDate);
+  }
+
+  if (endDate) {
+    query = query.lte('date', endDate);
+  }
+
+  const { data, error } = await query.order('removed_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
 };
 
 // Error functions

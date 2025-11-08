@@ -7,6 +7,8 @@ export interface AttendancePermissions extends TabPermissions {
   edit: boolean;
   search: boolean;
   reset: boolean;
+  viewHistory: boolean;
+  editHistory: boolean;
 }
 
 export interface EmployeesPermissions extends TabPermissions {
@@ -29,6 +31,8 @@ export interface FinancialPermissions extends TabPermissions {
   delete: boolean;
   clear: boolean;
   applyBonus: boolean;
+  removeBonus: boolean;
+  removeBonusBulk: boolean;
 }
 
 export interface C6PaymentPermissions extends TabPermissions {
@@ -74,10 +78,10 @@ export interface UserPermissions {
 }
 
 export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: true, edit: true, search: true, reset: true },
+  attendance: { view: true, mark: true, edit: true, search: true, reset: true, viewHistory: true, editHistory: true },
   employees: { view: true, create: true, edit: true, delete: true, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
-  financial: { view: true, viewPayments: true, editRate: true, editBonus: true, delete: true, clear: true, applyBonus: true },
+  financial: { view: true, viewPayments: true, editRate: true, editBonus: true, delete: true, clear: true, applyBonus: true, removeBonus: true, removeBonusBulk: true },
   c6payment: { view: true, generate: true, export: true },
   errors: { view: true, create: true, edit: true, delete: true, viewStats: true },
   settings: { view: true, editDailyRate: true, editOther: true },
@@ -86,10 +90,10 @@ export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
 };
 
 export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: true, edit: false, search: true, reset: false },
+  attendance: { view: true, mark: true, edit: false, search: true, reset: false, viewHistory: true, editHistory: true },
   employees: { view: true, create: true, edit: true, delete: false, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
-  financial: { view: true, viewPayments: true, editRate: false, editBonus: true, delete: false, clear: false, applyBonus: true },
+  financial: { view: true, viewPayments: true, editRate: false, editBonus: true, delete: false, clear: false, applyBonus: true, removeBonus: true, removeBonusBulk: false },
   c6payment: { view: true, generate: true, export: true },
   errors: { view: true, create: true, edit: true, delete: false, viewStats: true },
   settings: { view: false, editDailyRate: false, editOther: false },
@@ -98,10 +102,10 @@ export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
 };
 
 export const DEFAULT_READONLY_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: false, edit: false, search: true, reset: false },
+  attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false },
   employees: { view: true, create: false, edit: false, delete: false, import: false },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
-  financial: { view: true, viewPayments: true, editRate: false, editBonus: false, delete: false, clear: false, applyBonus: false },
+  financial: { view: true, viewPayments: true, editRate: false, editBonus: false, delete: false, clear: false, applyBonus: false, removeBonus: false, removeBonusBulk: false },
   c6payment: { view: true, generate: false, export: false },
   errors: { view: true, create: false, edit: false, delete: false, viewStats: true },
   settings: { view: false, editDailyRate: false, editOther: false },
@@ -135,7 +139,9 @@ export const PERMISSION_LABELS = {
     mark: 'Marcar presença',
     edit: 'Editar horário de saída',
     search: 'Buscar histórico',
-    reset: 'Resetar registros de ponto'
+    reset: 'Resetar registros de ponto',
+    viewHistory: 'Visualizar dias anteriores',
+    editHistory: 'Editar registros de dias anteriores'
   },
   employees: {
     title: 'Funcionários',
@@ -160,7 +166,9 @@ export const PERMISSION_LABELS = {
     editBonus: 'Editar bônus',
     delete: 'Excluir pagamentos',
     clear: 'Limpar período',
-    applyBonus: 'Aplicar bonificação'
+    applyBonus: 'Aplicar bonificação',
+    removeBonus: 'Remover bonificação individual',
+    removeBonusBulk: 'Remover todas bonificações de um dia'
   },
   c6payment: {
     title: 'Pagamento C6',
