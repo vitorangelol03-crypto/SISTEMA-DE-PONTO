@@ -111,6 +111,155 @@ export const tutorialsContent: Tutorial[] = [
     ]
   },
   {
+    id: 'attendance-bonus-removal',
+    category: 'attendance',
+    title: 'Remoção de Bonificações',
+    description: 'Como remover bonificações individuais ou em massa com registro de auditoria',
+    icon: 'Trash2',
+    requiredPermission: 'financial.removeBonus',
+    steps: [
+      {
+        title: 'Identificar bonificação aplicada',
+        description: 'Na aba de Ponto, selecione a data que tem bonificação aplicada. Funcionários com bônus mostrarão o valor em verde ao lado do nome.',
+      },
+      {
+        title: 'Remover bonificação individual',
+        description: 'Clique no ícone de lixeira ao lado do valor da bonificação do funcionário. Um modal de confirmação será exibido.',
+        tips: ['Apenas funcionários com bonificação aplicada terão o botão de remover', 'O botão aparece em vermelho para chamar atenção']
+      },
+      {
+        title: 'Digite observação obrigatória',
+        description: 'No modal, digite uma observação explicando o motivo da remoção. A observação deve ter entre 10 e 500 caracteres.',
+        tips: ['Seja específico sobre o motivo', 'A observação ficará registrada permanentemente para auditoria', 'Exemplos: "Bonificação aplicada por engano", "Funcionário não cumpriu meta"']
+      },
+      {
+        title: 'Confirmar remoção',
+        description: 'Revise o valor que será removido e clique em "Confirmar Remoção". O bônus será removido e o pagamento recalculado automaticamente.',
+      },
+      {
+        title: 'Remoção em massa',
+        description: 'Para remover todas as bonificações do dia de uma vez, clique em "Remover Todas Bonificações" no card de informações do bônus.',
+        tips: ['Esta opção aparece apenas se houver bonificações aplicadas no dia', 'Também requer observação obrigatória', 'Use com cuidado pois afeta todos os funcionários']
+      },
+      {
+        title: 'Verificar remoção',
+        description: 'Após a remoção, o valor do bônus desaparecerá da visualização do funcionário. O registro da remoção fica no histórico.',
+      }
+    ],
+    useCases: [
+      {
+        title: 'Correção de erro',
+        description: 'Quando um bônus foi aplicado incorretamente ou para o funcionário errado.',
+        example: 'Exemplo: Bônus de R$ 50,00 foi aplicado para João, mas deveria ser para José. Remova de João com observação "Aplicado para funcionário errado" e aplique para José.'
+      },
+      {
+        title: 'Não cumprimento de meta',
+        description: 'Se descobrir que um funcionário não cumpriu os requisitos para o bônus.',
+        example: 'Exemplo: Pedro recebeu bônus de produtividade, mas análise posterior mostrou que não bateu a meta. Remova com observação "Meta não atingida conforme auditoria".'
+      },
+      {
+        title: 'Ajuste de valores',
+        description: 'Quando o valor do bônus está incorreto e precisa ser corrigido.',
+        example: 'Exemplo: Bônus de R$ 100,00 foi aplicado, mas o correto seria R$ 50,00. Remova com observação "Valor incorreto - será reaplicado com valor correto".'
+      },
+      {
+        title: 'Cancelamento geral',
+        description: 'Quando todos os bônus do dia precisam ser cancelados.',
+        example: 'Exemplo: Bônus foi aplicado no dia errado. Use remoção em massa com observação "Aplicado na data incorreta - será reaplicado na data correta".'
+      },
+      {
+        title: 'Mudança de política',
+        description: 'Quando houver mudança na política de bonificação que afeta bônus já aplicados.',
+        example: 'Exemplo: Nova diretriz cancela bônus para determinada situação. Remova com observação "Cancelado conforme nova política empresarial de 15/11/2024".'
+      }
+    ],
+    tips: [
+      'SEMPRE forneça uma observação clara e detalhada do motivo da remoção',
+      'A observação é permanente e será vista em auditorias - seja profissional',
+      'Verifique duas vezes antes de confirmar a remoção',
+      'Para remoções em massa, certifique-se que realmente quer remover de todos',
+      'O histórico de remoções fica disponível na aba Financeiro > Histórico de Remoções',
+      'Remoções não podem ser desfeitas - se precisar reaplicar, use a função de bonificação novamente',
+      'Seu ID de usuário fica registrado junto com a remoção para rastreabilidade'
+    ]
+  },
+  {
+    id: 'financial-bonus-history',
+    category: 'financial',
+    title: 'Histórico de Remoções de Bonificação',
+    description: 'Como visualizar e exportar o histórico completo de remoções de bonificação',
+    icon: 'History',
+    requiredPermission: 'financial.viewHistory',
+    steps: [
+      {
+        title: 'Acessar aba Financeiro',
+        description: 'Clique na aba "Financeiro" no menu principal.',
+      },
+      {
+        title: 'Acessar histórico de remoções',
+        description: 'Clique no botão "Histórico de Remoções" que fica no topo da página, ao lado do botão "Pagamentos".',
+      },
+      {
+        title: 'Visualizar estatísticas',
+        description: 'No topo da página de histórico, você verá cards com estatísticas: total de remoções, valor total removido e funcionários afetados.',
+      },
+      {
+        title: 'Filtrar por período',
+        description: 'Use os campos de "Data Inicial" e "Data Final" para filtrar remoções de um período específico.',
+        tips: ['Por padrão, mostra apenas o dia atual', 'Ajuste as datas para ver histórico mais amplo']
+      },
+      {
+        title: 'Filtrar por funcionário',
+        description: 'Use o dropdown "Funcionário" para ver apenas remoções de um funcionário específico.',
+      },
+      {
+        title: 'Analisar detalhes',
+        description: 'A tabela mostra todas as informações: data da bonificação, funcionário, valor removido, observação, quem removeu e quando.',
+      },
+      {
+        title: 'Exportar para Excel',
+        description: 'Clique no botão "Exportar Excel" no canto superior direito para baixar o histórico filtrado em formato Excel.',
+        tips: ['O arquivo inclui todas as colunas visíveis na tela', 'Nome do arquivo inclui o período filtrado para fácil organização']
+      }
+    ],
+    useCases: [
+      {
+        title: 'Auditoria mensal',
+        description: 'Revise todas as remoções de bonificação feitas durante o mês para auditoria.',
+        example: 'Exemplo: No final do mês, filtre por período de 01 a 30 e exporte para Excel. Analise os motivos e verifique conformidade.'
+      },
+      {
+        title: 'Análise de funcionário específico',
+        description: 'Investigue remoções de bonificação de um funcionário particular.',
+        example: 'Exemplo: RH precisa entender por que Pedro teve 3 bonificações removidas. Filtre por "Pedro Silva" e analise as observações.'
+      },
+      {
+        title: 'Relatório para gestão',
+        description: 'Gere relatórios de remoções para apresentar à gestão.',
+        example: 'Exemplo: Gestor solicitou relatório de remoções do trimestre. Filtre janeiro a março e exporte para incluir na apresentação.'
+      },
+      {
+        title: 'Investigação de inconsistência',
+        description: 'Quando houver discrepância nos pagamentos, use o histórico para rastrear remoções.',
+        example: 'Exemplo: Funcionário questiona pagamento menor. Consulte histórico para verificar se houve remoção de bônus e o motivo.'
+      },
+      {
+        title: 'Controle de qualidade',
+        description: 'Monitore padrões de remoção para identificar problemas sistemáticos.',
+        example: 'Exemplo: Muitas remoções por "engano" podem indicar necessidade de treinamento ou melhoria no processo.'
+      }
+    ],
+    tips: [
+      'Use o histórico regularmente para manter controle de qualidade',
+      'Exporte e arquive relatórios mensais para registros permanentes',
+      'Preste atenção em padrões: muitas remoções podem indicar problemas no processo',
+      'As observações são a chave para entender o motivo - leia com atenção',
+      'Verifique se as remoções estão sendo justificadas adequadamente',
+      'Use filtros combinados (período + funcionário) para análises específicas',
+      'O histórico é imutável - não pode ser editado ou excluído, garantindo auditoria confiável'
+    ]
+  },
+  {
     id: 'employees-management',
     category: 'employees',
     title: 'Gerenciamento de Funcionários',

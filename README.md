@@ -19,7 +19,10 @@ Sistema completo de controle de ponto e gestão de funcionários desenvolvido pa
 
 ### Bonificações
 - Aplicação de bonificações para funcionários presentes
-- Histórico de bonificações
+- Remoção individual de bonificações com observação obrigatória
+- Remoção em massa de bonificações com justificativa
+- Histórico completo de remoções com auditoria
+- Exportação do histórico para Excel
 - Cálculo automático no relatório financeiro
 
 ### Relatórios Financeiros
@@ -30,6 +33,11 @@ Sistema completo de controle de ponto e gestão de funcionários desenvolvido pa
   - Valor por dia
   - Bonificações recebidas
   - Total a receber
+- Histórico de remoções de bonificação com:
+  - Filtros por período e funcionário
+  - Detalhamento completo de cada remoção
+  - Observações obrigatórias para auditoria
+  - Identificação do responsável pela remoção
 - Exportação para Excel e PDF
 - Visualização gráfica de presença vs faltas
 
@@ -127,12 +135,32 @@ npm run lint     # Executa linter
 
 O sistema utiliza as seguintes tabelas no Supabase:
 
+### Tabelas Principais
 - **users** - Usuários do sistema
 - **employees** - Funcionários cadastrados
 - **attendance** - Registro de presença
 - **bonuses** - Bonificações aplicadas
-- **employee_bonuses** - Bonificações por funcionário
-- **errors** - Registro de problemas
+- **payments** - Pagamentos realizados
+- **error_records** - Registro de problemas operacionais
+- **bonus_removals** - Histórico de remoções de bonificação com observações
+
+### Tabelas de Permissões
+- **user_permissions** - Permissões granulares por usuário
+- **permission_logs** - Histórico de mudanças em permissões
+
+### Tabelas de Auditoria e Monitoramento
+- **audit_logs** - Registros de auditoria de todas as ações
+- **activity_logs** - Logs de atividades do sistema
+- **error_logs** - Logs de erros técnicos
+- **usage_metrics** - Métricas de uso do sistema
+- **performance_metrics** - Métricas de performance
+
+### Tabelas de Configuração
+- **feature_versions** - Versionamento de funcionalidades
+- **data_retention_settings** - Configurações de retenção de dados
+- **auto_cleanup_config** - Configuração de limpeza automática
+- **cleanup_logs** - Histórico de limpezas realizadas
+- **monitoring_settings** - Configurações de monitoramento
 
 ## Segurança
 
@@ -153,6 +181,48 @@ O sistema utiliza as seguintes tabelas no Supabase:
 
 Sistema desenvolvido para uso interno. Para suporte, entre em contato com o administrador do sistema.
 
+## Funcionalidades de Remoção de Bonificação
+
+### Como Funciona
+O sistema permite a remoção de bonificações já aplicadas, mantendo registro completo para auditoria.
+
+### Remoção Individual
+1. Acesse a aba "Ponto"
+2. Selecione a data desejada
+3. Localize o funcionário com bonificação aplicada
+4. Clique no botão de remover bonificação (ícone de lixeira ao lado do valor)
+5. Digite uma observação obrigatória (10-500 caracteres) explicando o motivo
+6. Confirme a remoção
+
+### Remoção em Massa
+1. Na aba "Ponto", com bonificações aplicadas na data
+2. Clique em "Remover Todas Bonificações"
+3. Digite uma observação obrigatória explicando o motivo da remoção em massa
+4. Confirme a operação
+
+### Visualização do Histórico
+1. Acesse a aba "Financeiro"
+2. Clique no botão "Histórico de Remoções"
+3. Use os filtros para:
+   - Selecionar período (data inicial e final)
+   - Filtrar por funcionário específico
+   - Ver todas as remoções ou de um funcionário
+4. Exporte o histórico para Excel clicando em "Exportar Excel"
+
+### Informações Registradas
+Cada remoção de bonificação registra:
+- Data da bonificação removida
+- Funcionário afetado
+- Valor da bonificação removida
+- Observação obrigatória (motivo)
+- Usuário responsável pela remoção
+- Data e hora exata da remoção
+
+### Permissões Necessárias
+- **Remover bonificação individual**: `financial.removeBonus`
+- **Remover bonificação em massa**: `financial.removeBonusBulk`
+- **Visualizar histórico**: `financial.viewHistory`
+
 ## Versão
 
-1.0.0
+2.7.0

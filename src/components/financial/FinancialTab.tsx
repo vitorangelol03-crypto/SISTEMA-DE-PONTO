@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord } from '../../services/database';
+import { getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getBonusRemovalHistory, BonusRemoval } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 
 interface FinancialTabProps {
   userId: string;
@@ -28,18 +29,19 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [financialData, setFinancialData] = useState<EmployeeFinancialData[]>([]);
   const [loading, setLoading] = useState(true);
-  
+  const [activeView, setActiveView] = useState<'financial' | 'history'>('financial');
+
   const [filters, setFilters] = useState({
     startDate: getBrazilDate(),
     endDate: getBrazilDate(),
     employeeId: ''
   });
-  
+
   const [isEditingDate, setIsEditingDate] = useState({
     startDate: false,
     endDate: false
   });
-  
+
   const [bulkDailyRate, setBulkDailyRate] = useState<string>('');
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [editingPayment, setEditingPayment] = useState<{employeeId: string, date: string} | null>(null);
@@ -48,6 +50,14 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const [clearType, setClearType] = useState<'all' | 'selected'>('selected');
   const [showErrorDiscountModal, setShowErrorDiscountModal] = useState(false);
   const [errorDiscountValue, setErrorDiscountValue] = useState<string>('');
+
+  const [bonusRemovals, setBonusRemovals] = useState<BonusRemoval[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyFilters, setHistoryFilters] = useState({
+    startDate: getBrazilDate(),
+    endDate: getBrazilDate(),
+    employeeId: ''
+  });
 
   const loadData = React.useCallback(async () => {
     try {
@@ -294,33 +304,33 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         // Para cada erro registrado, aplicar desconto
         for (const errorRecord of employeeData.errorRecords) {
           const discountAmount = errorRecord.error_count * discountValue;
-          
+
           // Buscar pagamento existente
-          const existingPayment = payments.find(pay => 
+          const existingPayment = payments.find(pay =>
             pay.employee_id === employeeId && pay.date === errorRecord.date
           );
-          
+
           if (existingPayment) {
             // Aplicar desconto mantendo a diária original, mas reduzindo o total
             const originalDailyRate = existingPayment.daily_rate || 0;
             const originalBonus = existingPayment.bonus || 0;
             const newTotal = Math.max(0, originalDailyRate + originalBonus - discountAmount);
-            
+
             await upsertPayment(
-              employeeId, 
-              errorRecord.date, 
-              originalDailyRate, 
-              originalBonus, 
+              employeeId,
+              errorRecord.date,
+              originalDailyRate,
+              originalBonus,
               userId
             );
-            
+
             // Atualizar o total manualmente no banco
             const { error: updateError } = await supabase
               .from('payments')
               .update({ total: newTotal })
               .eq('employee_id', employeeId)
               .eq('date', errorRecord.date);
-              
+
             if (updateError) {
               console.error('Erro ao atualizar total:', updateError);
             }
@@ -328,21 +338,21 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             // Se não existe pagamento, criar um com desconto
             const discountedTotal = Math.max(0, -discountAmount);
             await upsertPayment(employeeId, errorRecord.date, 0, 0, userId);
-            
+
             // Atualizar o total para refletir o desconto
             const { error: updateError } = await supabase
               .from('payments')
               .update({ total: discountedTotal })
               .eq('employee_id', employeeId)
               .eq('date', errorRecord.date);
-              
+
             if (updateError) {
               console.error('Erro ao criar pagamento com desconto:', updateError);
             }
           }
         }
       }
-      
+
       toast.success(`Desconto de R$ ${discountValue.toFixed(2)} por erro aplicado com sucesso!`);
       setShowErrorDiscountModal(false);
       setErrorDiscountValue('');
@@ -353,6 +363,59 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       toast.error('Erro ao aplicar desconto por erros');
     }
   };
+
+  const loadBonusRemovalHistory = async () => {
+    if (!hasPermission('financial.viewHistory')) {
+      toast.error('Você não tem permissão para visualizar o histórico');
+      return;
+    }
+
+    try {
+      setLoadingHistory(true);
+      const history = await getBonusRemovalHistory(
+        historyFilters.employeeId || undefined,
+        historyFilters.startDate,
+        historyFilters.endDate
+      );
+      setBonusRemovals(history);
+    } catch (error) {
+      console.error('Erro ao carregar histórico:', error);
+      toast.error('Erro ao carregar histórico de remoções');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const exportHistoryToExcel = () => {
+    if (bonusRemovals.length === 0) {
+      toast.error('Nenhum dado para exportar');
+      return;
+    }
+
+    const data = bonusRemovals.map(removal => ({
+      'Data': formatDateBR(removal.date),
+      'Funcionário': removal.employees?.name || 'N/A',
+      'CPF': formatCPF(removal.employees?.cpf || ''),
+      'Valor Removido (R$)': removal.bonus_amount_removed.toFixed(2),
+      'Observação': removal.observation,
+      'Removido Por': removal.removed_by,
+      'Data da Remoção': formatDateBR(removal.removed_at.split('T')[0])
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Histórico de Remoções');
+
+    const fileName = `historico_remocoes_${historyFilters.startDate}_${historyFilters.endDate}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    toast.success('Histórico exportado com sucesso!');
+  };
+
+  useEffect(() => {
+    if (activeView === 'history') {
+      loadBonusRemovalHistory();
+    }
+  }, [activeView, historyFilters]);
 
   if (loading) {
     return (
@@ -374,106 +437,232 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             <DollarSign className="w-5 h-5 mr-2 text-green-600" />
             Gestão Financeira
           </h2>
-          
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={loadData}
+              className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Atualizar</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Navegação entre visualizações */}
+        <div className="flex space-x-2 mb-4">
           <button
-            onClick={loadData}
-            className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+            onClick={() => setActiveView('financial')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
+              activeView === 'financial'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
           >
-            <RefreshCw className="w-4 h-4" />
-            <span>Atualizar</span>
+            <DollarSign className="w-4 h-4" />
+            <span>Pagamentos</span>
+          </button>
+          <button
+            onClick={() => setActiveView('history')}
+            disabled={!hasPermission('financial.viewHistory')}
+            title={!hasPermission('financial.viewHistory') ? 'Você não tem permissão para visualizar o histórico' : ''}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              activeView === 'history'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            <span>Histórico de Remoções</span>
           </button>
         </div>
 
-        {/* Filtros */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Data Inicial
-            </label>
-            <input
-              type="date"
-              value={filters.startDate}
-              onChange={(e) => handleDateChange('startDate', e.target.value)}
-              onFocus={() => handleDateFocus('startDate')}
-              onBlur={() => handleDateBlur('startDate')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
+        {/* Filtros - Pagamentos */}
+        {activeView === 'financial' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Data Inicial
+              </label>
+              <input
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => handleDateChange('startDate', e.target.value)}
+                onFocus={() => handleDateFocus('startDate')}
+                onBlur={() => handleDateBlur('startDate')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Data Final
-            </label>
-            <input
-              type="date"
-              value={filters.endDate}
-              onChange={(e) => handleDateChange('endDate', e.target.value)}
-              onFocus={() => handleDateFocus('endDate')}
-              onBlur={() => handleDateBlur('endDate')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Data Final
+              </label>
+              <input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => handleDateChange('endDate', e.target.value)}
+                onFocus={() => handleDateFocus('endDate')}
+                onBlur={() => handleDateBlur('endDate')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Funcionário
-            </label>
-            <select
-              value={filters.employeeId}
-              onChange={(e) => setFilters(prev => ({ ...prev, employeeId: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Todos</option>
-              {employees.map(employee => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Funcionário
+              </label>
+              <select
+                value={filters.employeeId}
+                onChange={(e) => setFilters(prev => ({ ...prev, employeeId: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Todos</option>
+                {employees.map(employee => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Estatísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-            <div className="flex items-center justify-between">
-              <span className="text-green-800 font-medium">Total Ganho</span>
-              <DollarSign className="w-5 h-5 text-green-600" />
+        {/* Filtros - Histórico */}
+        {activeView === 'history' && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Data Inicial
+              </label>
+              <input
+                type="date"
+                value={historyFilters.startDate}
+                onChange={(e) => setHistoryFilters(prev => ({ ...prev, startDate: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
+              />
             </div>
-            <div className="text-2xl font-bold text-green-600">
-              R$ {totalEarnings.toFixed(2)}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Data Final
+              </label>
+              <input
+                type="date"
+                value={historyFilters.endDate}
+                onChange={(e) => setHistoryFilters(prev => ({ ...prev, endDate: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Funcionário
+              </label>
+              <select
+                value={historyFilters.employeeId}
+                onChange={(e) => setHistoryFilters(prev => ({ ...prev, employeeId: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
+              >
+                <option value="">Todos</option>
+                {employees.map(employee => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={exportHistoryToExcel}
+                disabled={bonusRemovals.length === 0}
+                className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+              >
+                <Download className="w-4 h-4" />
+                <span>Exportar Excel</span>
+              </button>
             </div>
           </div>
-          
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-            <div className="flex items-center justify-between">
-              <span className="text-blue-800 font-medium">Funcionários</span>
-              <Users className="w-5 h-5 text-blue-600" />
+        )}
+
+        {/* Estatísticas - Pagamentos */}
+        {activeView === 'financial' && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+              <div className="flex items-center justify-between">
+                <span className="text-green-800 font-medium">Total Ganho</span>
+                <DollarSign className="w-5 h-5 text-green-600" />
+              </div>
+              <div className="text-2xl font-bold text-green-600">
+                R$ {totalEarnings.toFixed(2)}
+              </div>
             </div>
-            <div className="text-2xl font-bold text-blue-600">{financialData.length}</div>
+
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <div className="flex items-center justify-between">
+                <span className="text-blue-800 font-medium">Funcionários</span>
+                <Users className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="text-2xl font-bold text-blue-600">{financialData.length}</div>
+            </div>
+
+            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+              <div className="flex items-center justify-between">
+                <span className="text-purple-800 font-medium">Dias Trabalhados</span>
+                <Calendar className="w-5 h-5 text-purple-600" />
+              </div>
+              <div className="text-2xl font-bold text-purple-600">
+                {financialData.reduce((sum, data) => sum + data.workDays, 0)}
+              </div>
+            </div>
+
+            <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+              <div className="flex items-center justify-between">
+                <span className="text-orange-800 font-medium">Pagamentos</span>
+                <Calculator className="w-5 h-5 text-orange-600" />
+              </div>
+              <div className="text-2xl font-bold text-orange-600">{payments.length}</div>
+            </div>
           </div>
-          
-          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-            <div className="flex items-center justify-between">
-              <span className="text-purple-800 font-medium">Dias Trabalhados</span>
-              <Calendar className="w-5 h-5 text-purple-600" />
+        )}
+
+        {/* Estatísticas - Histórico */}
+        {activeView === 'history' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+              <div className="flex items-center justify-between">
+                <span className="text-purple-800 font-medium">Total de Remoções</span>
+                <History className="w-5 h-5 text-purple-600" />
+              </div>
+              <div className="text-2xl font-bold text-purple-600">{bonusRemovals.length}</div>
             </div>
-            <div className="text-2xl font-bold text-purple-600">
-              {financialData.reduce((sum, data) => sum + data.workDays, 0)}
+
+            <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+              <div className="flex items-center justify-between">
+                <span className="text-red-800 font-medium">Valor Total Removido</span>
+                <DollarSign className="w-5 h-5 text-red-600" />
+              </div>
+              <div className="text-2xl font-bold text-red-600">
+                R$ {bonusRemovals.reduce((sum, r) => sum + Number(r.bonus_amount_removed), 0).toFixed(2)}
+              </div>
+            </div>
+
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <div className="flex items-center justify-between">
+                <span className="text-blue-800 font-medium">Funcionários Afetados</span>
+                <Users className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="text-2xl font-bold text-blue-600">
+                {new Set(bonusRemovals.map(r => r.employee_id)).size}
+              </div>
             </div>
           </div>
-          
-          <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-            <div className="flex items-center justify-between">
-              <span className="text-orange-800 font-medium">Pagamentos</span>
-              <Calculator className="w-5 h-5 text-orange-600" />
-            </div>
-            <div className="text-2xl font-bold text-orange-600">{payments.length}</div>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Aplicação em Lote */}
+      {/* Aplicação em Lote - apenas na visualização de pagamentos */}
+      {activeView === 'financial' && (
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-medium mb-4 flex items-center">
           <Calculator className="w-5 h-5 mr-2 text-blue-600" />
@@ -545,8 +734,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           </div>
         </div>
       </div>
+      )}
 
-      {/* Lista de Funcionários */}
+      {/* Lista de Funcionários - apenas na visualização de pagamentos */}
+      {activeView === 'financial' && (
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">
@@ -798,6 +989,107 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           </div>
         )}
       </div>
+      )}
+
+      {/* Histórico de Remoções de Bonificação */}
+      {activeView === 'history' && (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+              <History className="w-5 h-5 mr-2 text-purple-600" />
+              Histórico de Remoções de Bonificação
+            </h3>
+          </div>
+
+          {loadingHistory ? (
+            <div className="flex items-center justify-center h-64">
+              <RefreshCw className="w-6 h-6 animate-spin text-purple-600" />
+              <span className="ml-2">Carregando histórico...</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Data da Bonificação
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Funcionário
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Valor Removido
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Observação
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Removido Por
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Data da Remoção
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {bonusRemovals.map((removal) => (
+                    <tr key={removal.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          {formatDateBR(removal.date)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm font-medium text-gray-900">
+                          {removal.employees?.name || 'N/A'}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {removal.employees?.cpf ? formatCPF(removal.employees.cpf) : 'N/A'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                          R$ {Number(removal.bonus_amount_removed).toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 max-w-md">
+                        <div className="text-sm text-gray-900 break-words">
+                          {removal.observation}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {removal.removed_by}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {formatDateBR(removal.removed_at.split('T')[0])}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {removal.removed_at.split('T')[1]?.substring(0, 5) || ''}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {bonusRemovals.length === 0 && (
+                <div className="text-center py-8">
+                  <History className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Nenhuma remoção de bonificação encontrada
+                  </h3>
+                  <p className="text-gray-500">
+                    Ajuste os filtros ou aguarde remoções serem registradas no período selecionado.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Modal de Limpeza de Pagamentos */}
       {showClearModal && (
