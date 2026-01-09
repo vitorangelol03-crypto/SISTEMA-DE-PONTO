@@ -15,6 +15,7 @@ export interface Employee {
   cpf: string;
   pix_key: string | null;
   pix_type: string | null;
+  employment_type: string | null;
   address: string | null;
   neighborhood: string | null;
   city: string | null;
@@ -257,6 +258,7 @@ export const createEmployee = async (
   pixKey: string | null,
   createdBy: string,
   pixType?: string | null,
+  employmentType?: string | null,
   address?: string | null,
   neighborhood?: string | null,
   city?: string | null,
@@ -275,6 +277,7 @@ export const createEmployee = async (
       cpf,
       pix_key: pixKey,
       pix_type: pixType,
+      employment_type: employmentType,
       address,
       neighborhood,
       city,
@@ -298,6 +301,7 @@ export const updateEmployee = async (
   pixKey: string | null,
   userId: string,
   pixType?: string | null,
+  employmentType?: string | null,
   address?: string | null,
   neighborhood?: string | null,
   city?: string | null,
@@ -316,6 +320,7 @@ export const updateEmployee = async (
       cpf,
       pix_key: pixKey,
       pix_type: pixType,
+      employment_type: employmentType,
       address,
       neighborhood,
       city,

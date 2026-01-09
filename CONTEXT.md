@@ -2666,3 +2666,86 @@ Expansão completa e bem-sucedida do cadastro de funcionários. O sistema agora 
 **Versão Final:** 2.8.0
 **Última Atualização:** 2026-01-09
 **Build:** Sucesso (25.74s)
+
+## [2026-01-09] - Campo Tipo de Vínculo (Diarista/Carteira Assinada)
+
+### Objetivo
+Adicionar campo de tipo de vínculo empregatício aos funcionários para facilitar a gestão e separação entre diaristas e funcionários com carteira assinada.
+
+### Alterações Implementadas
+
+**1. Database (src/services/database.ts)**
+- ✅ Adicionado campo `employment_type` na interface Employee
+- ✅ Atualizada função `createEmployee` para aceitar e salvar o tipo de vínculo
+- ✅ Atualizada função `updateEmployee` para aceitar e salvar o tipo de vínculo
+
+**2. Formulário de Funcionários (src/components/employees/EmployeesTab.tsx)**
+- ✅ Adicionado campo `employmentType` no state do formulário
+- ✅ Criado select com opções: "Diarista" e "Carteira Assinada"
+- ✅ Campo posicionado após "Tipo de Chave PIX"
+- ✅ Funcionalidade de edição incluindo o novo campo
+
+**3. Visualização na Tabela**
+- ✅ Nova coluna "Tipo de Vínculo" na tabela desktop
+- ✅ Badge colorido para melhor visualização:
+  - Azul para "Diarista"
+  - Verde para "Carteira Assinada"
+- ✅ Tipo de vínculo também exibido nos cards mobile
+
+**4. Sistema de Filtros**
+- ✅ Novo filtro "Todos os vínculos" junto com cidade e estado
+- ✅ Grid de 3 colunas para os filtros (cidade, estado, vínculo)
+- ✅ Badge de filtro ativo com botão de remoção
+- ✅ Botão "Limpar todos" inclui o novo filtro
+
+### Detalhes Técnicos
+
+**Campo de Banco de Dados:**
+```typescript
+employment_type: string | null  // Valores: "Diarista" | "Carteira Assinada" | null
+```
+
+**Opções do Select:**
+- Diarista
+- Carteira Assinada
+- (vazio) - quando não definido
+
+**Cores dos Badges:**
+- Diarista: `bg-blue-100 text-blue-800`
+- Carteira Assinada: `bg-green-100 text-green-800`
+
+### Benefícios
+
+**Para o Usuário:**
+- ✅ Fácil identificação visual do tipo de vínculo de cada funcionário
+- ✅ Filtro rápido para visualizar apenas diaristas ou apenas carteira assinada
+- ✅ Gestão facilitada de diferentes tipos de contratação
+
+**Para o Sistema:**
+- ✅ Campo opcional - não quebra dados existentes
+- ✅ Mantém consistência com os outros campos opcionais
+- ✅ Types TypeScript atualizados e validados
+- ✅ Código limpo e bem organizado
+
+### Testes Realizados
+
+- ✅ Build do projeto concluído com sucesso (21.45s)
+- ✅ Sem erros de TypeScript
+- ✅ Validação de interface Employee atualizada
+- ✅ Formulários responsivos em mobile e desktop
+
+### Arquivos Modificados
+
+1. `src/services/database.ts` - Interface e funções CRUD
+2. `src/components/employees/EmployeesTab.tsx` - UI e lógica de filtros
+
+### Conclusão da Sessão
+
+Implementação completa e bem-sucedida do campo de tipo de vínculo empregatício. O sistema agora permite fácil identificação e filtragem de funcionários por tipo de contratação (Diarista ou Carteira Assinada), mantendo total retrocompatibilidade com dados existentes.
+
+---
+
+**Status:** ✅ Concluído
+**Versão Final:** 2.9.0
+**Última Atualização:** 2026-01-09
+**Build:** Sucesso (21.45s)

@@ -19,11 +19,13 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   const [searchTerm, setSearchTerm] = useState('');
   const [cityFilter, setCityFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('');
+  const [employmentTypeFilter, setEmploymentTypeFilter] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     cpf: '',
     pixKey: '',
     pixType: '',
+    employmentType: '',
     address: '',
     neighborhood: '',
     city: '',
@@ -64,11 +66,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
       const matchesCity = !cityFilter || employee.city?.toLowerCase().includes(cityFilter.toLowerCase());
       const matchesState = !stateFilter || employee.state === stateFilter;
+      const matchesEmploymentType = !employmentTypeFilter || employee.employment_type === employmentTypeFilter;
 
-      return matchesSearch && matchesCity && matchesState;
+      return matchesSearch && matchesCity && matchesState && matchesEmploymentType;
     });
     setFilteredEmployees(filtered);
-  }, [searchTerm, cityFilter, stateFilter, employees]);
+  }, [searchTerm, cityFilter, stateFilter, employmentTypeFilter, employees]);
 
   const resetForm = () => {
     setFormData({
@@ -76,6 +79,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       cpf: '',
       pixKey: '',
       pixType: '',
+      employmentType: '',
       address: '',
       neighborhood: '',
       city: '',
@@ -110,6 +114,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
           formData.pixKey.trim() || null,
           userId,
           formData.pixType.trim() || null,
+          formData.employmentType.trim() || null,
           formData.address.trim() || null,
           formData.neighborhood.trim() || null,
           formData.city.trim() || null,
@@ -124,6 +129,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
           formData.pixKey.trim() || null,
           userId,
           formData.pixType.trim() || null,
+          formData.employmentType.trim() || null,
           formData.address.trim() || null,
           formData.neighborhood.trim() || null,
           formData.city.trim() || null,
@@ -148,6 +154,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       cpf: formatCPF(employee.cpf),
       pixKey: employee.pix_key || '',
       pixType: employee.pix_type || '',
+      employmentType: employee.employment_type || '',
       address: employee.address || '',
       neighborhood: employee.neighborhood || '',
       city: employee.city || '',
@@ -317,7 +324,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="relative w-full">
               <input
                 type="text"
@@ -364,10 +371,22 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                 <option value="TO">Tocantins</option>
               </select>
             </div>
+
+            <div className="relative w-full">
+              <select
+                value={employmentTypeFilter}
+                onChange={(e) => setEmploymentTypeFilter(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+              >
+                <option value="">Todos os vínculos</option>
+                <option value="Diarista">Diarista</option>
+                <option value="Carteira Assinada">Carteira Assinada</option>
+              </select>
+            </div>
           </div>
 
-          {(cityFilter || stateFilter) && (
-            <div className="flex items-center gap-2">
+          {(cityFilter || stateFilter || employmentTypeFilter) && (
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm text-gray-600">Filtros ativos:</span>
               {cityFilter && (
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
@@ -391,10 +410,22 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   </button>
                 </span>
               )}
+              {employmentTypeFilter && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                  Vínculo: {employmentTypeFilter}
+                  <button
+                    onClick={() => setEmploymentTypeFilter('')}
+                    className="hover:text-blue-900"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
               <button
                 onClick={() => {
                   setCityFilter('');
                   setStateFilter('');
+                  setEmploymentTypeFilter('');
                 }}
                 className="text-sm text-gray-600 hover:text-gray-800 underline"
               >
@@ -499,6 +530,21 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   <option value="Email">Email</option>
                   <option value="Telefone">Telefone</option>
                   <option value="Aleatória">Chave Aleatória</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de Vínculo (opcional)
+                </label>
+                <select
+                  value={formData.employmentType}
+                  onChange={(e) => setFormData(prev => ({ ...prev, employmentType: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                >
+                  <option value="">Selecione o tipo</option>
+                  <option value="Diarista">Diarista</option>
+                  <option value="Carteira Assinada">Carteira Assinada</option>
                 </select>
               </div>
 
@@ -628,6 +674,9 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   CPF
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Tipo de Vínculo
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Chave PIX
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -646,6 +695,19 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">{formatCPF(employee.cpf)}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {employee.employment_type ? (
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        employee.employment_type === 'Diarista'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {employee.employment_type}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-gray-400">-</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">
@@ -691,7 +753,18 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
             <div key={employee.id} className="p-4 hover:bg-gray-50">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
-                  <h4 className="text-sm font-medium text-gray-900">{employee.name}</h4>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="text-sm font-medium text-gray-900">{employee.name}</h4>
+                    {employee.employment_type && (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        employee.employment_type === 'Diarista'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {employee.employment_type}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500 mt-1">CPF: {formatCPF(employee.cpf)}</p>
                   {employee.pix_key && (
                     <p className="text-xs text-gray-500 mt-1">PIX: {employee.pix_key}</p>
