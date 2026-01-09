@@ -14,6 +14,12 @@ export interface Employee {
   name: string;
   cpf: string;
   pix_key: string | null;
+  pix_type: string | null;
+  address: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
   created_by: string;
   created_at: string;
 }
@@ -245,7 +251,18 @@ export const getAllEmployees = async (): Promise<Employee[]> => {
   return data || [];
 };
 
-export const createEmployee = async (name: string, cpf: string, pixKey: string | null, createdBy: string): Promise<void> => {
+export const createEmployee = async (
+  name: string,
+  cpf: string,
+  pixKey: string | null,
+  createdBy: string,
+  pixType?: string | null,
+  address?: string | null,
+  neighborhood?: string | null,
+  city?: string | null,
+  state?: string | null,
+  zipCode?: string | null
+): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'employees.create');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
@@ -257,6 +274,12 @@ export const createEmployee = async (name: string, cpf: string, pixKey: string |
       name,
       cpf,
       pix_key: pixKey,
+      pix_type: pixType,
+      address,
+      neighborhood,
+      city,
+      state,
+      zip_code: zipCode,
       created_by: createdBy
     }]);
 
@@ -268,7 +291,19 @@ export const createEmployee = async (name: string, cpf: string, pixKey: string |
   }
 };
 
-export const updateEmployee = async (id: string, name: string, cpf: string, pixKey: string | null, userId: string): Promise<void> => {
+export const updateEmployee = async (
+  id: string,
+  name: string,
+  cpf: string,
+  pixKey: string | null,
+  userId: string,
+  pixType?: string | null,
+  address?: string | null,
+  neighborhood?: string | null,
+  city?: string | null,
+  state?: string | null,
+  zipCode?: string | null
+): Promise<void> => {
   const permissionCheck = await validatePermission(userId, 'employees.edit');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
@@ -276,7 +311,17 @@ export const updateEmployee = async (id: string, name: string, cpf: string, pixK
 
   const { error } = await supabase
     .from('employees')
-    .update({ name, cpf, pix_key: pixKey })
+    .update({
+      name,
+      cpf,
+      pix_key: pixKey,
+      pix_type: pixType,
+      address,
+      neighborhood,
+      city,
+      state,
+      zip_code: zipCode
+    })
     .eq('id', id);
 
   if (error) {
@@ -312,7 +357,17 @@ export interface BulkEmployeeResult {
 }
 
 export const bulkCreateEmployees = async (
-  employees: Array<{ name: string; cpf: string; pixKey: string | null }>,
+  employees: Array<{
+    name: string;
+    cpf: string;
+    pixKey: string | null;
+    pixType?: string | null;
+    address?: string | null;
+    neighborhood?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zipCode?: string | null;
+  }>,
   createdBy: string
 ): Promise<BulkEmployeeResult> => {
   const permissionCheck = await validatePermission(createdBy, 'employees.import');
@@ -349,6 +404,12 @@ export const bulkCreateEmployees = async (
           name: employee.name,
           cpf: employee.cpf,
           pix_key: employee.pixKey,
+          pix_type: employee.pixType,
+          address: employee.address,
+          neighborhood: employee.neighborhood,
+          city: employee.city,
+          state: employee.state,
+          zip_code: employee.zipCode,
           created_by: createdBy
         }])
         .select()

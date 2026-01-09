@@ -2460,3 +2460,209 @@ Todas as funcionalidades relacionadas ao histórico de remoções de bonificaç�
 **Versão Final:** 2.7.0
 **Última Atualização:** 2025-11-08
 **Próximo Passo:** Build e deploy em produção
+
+
+---
+
+## 📋 Sessão 9 - Expansão do Cadastro de Funcionários com Dados de Endereço e PIX
+
+**Data:** 2026-01-09
+**Objetivo:** Adicionar campos de endereço completo e tipo de chave PIX ao cadastro de funcionários, incluindo filtros avançados
+
+### Implementações Realizadas
+
+#### 1. Migration do Banco de Dados
+
+**Implementado:**
+- ✅ Criada migration `20260109191944_add_employee_address_and_pix_fields.sql`
+- ✅ Adicionados 7 novos campos à tabela `employees`:
+  - `pix_type` (tipo de chave PIX: CPF, Email, Telefone, Aleatória)
+  - `address` (endereço completo)
+  - `neighborhood` (bairro)
+  - `city` (cidade)
+  - `state` (estado/UF)
+  - `zip_code` (CEP)
+- ✅ Todos os campos opcionais (NULL permitido)
+- ✅ Uso de blocos DO $$ para evitar erros em migrations idempotentes
+
+**Arquivo:** `supabase/migrations/20260109191944_add_employee_address_and_pix_fields.sql`
+
+#### 2. Atualização dos Tipos TypeScript
+
+**Implementado:**
+- ✅ Interface `Employee` atualizada com os 7 novos campos
+- ✅ Funções `createEmployee` e `updateEmployee` modificadas para aceitar novos parâmetros opcionais
+- ✅ Função `bulkCreateEmployees` atualizada para importação em massa com novos campos
+- ✅ Interface `EmployeeImportData` expandida
+
+**Arquivos:**
+- `src/services/database.ts`
+- `src/utils/employeeImport.ts`
+
+#### 3. Formulário de Cadastro de Funcionários
+
+**Implementado:**
+- ✅ Novo campo select para "Tipo de Chave PIX" com opções: CPF, Email, Telefone, Aleatória
+- ✅ Campo de texto para "Endereço" (endereço completo)
+- ✅ Campo de texto para "Bairro"
+- ✅ Campo de texto para "Cidade"
+- ✅ Select dropdown para "Estado" com todos os 27 estados brasileiros
+- ✅ Campo de texto para "CEP" com máscara
+- ✅ Grid responsivo 2 colunas para organização dos campos
+- ✅ Todos os novos campos marcados como opcionais
+
+**Arquivo:** `src/components/employees/EmployeesTab.tsx`
+
+**Layout do Formulário:**
+```
+┌─────────────────────┬─────────────────────┐
+│ Nome Completo *     │ CPF *               │
+├─────────────────────┼─────────────────────┤
+│ Chave PIX           │ Tipo PIX            │
+├─────────────────────┴─────────────────────┤
+│ Endereço                                  │
+├─────────────────────┬─────────────────────┤
+│ Bairro              │ Cidade              │
+├─────────────────────┼─────────────────────┤
+│ Estado              │ CEP                 │
+└─────────────────────┴─────────────────────┘
+```
+
+#### 4. Sistema de Filtros Avançados
+
+**Implementado:**
+- ✅ Filtro por cidade (busca parcial, case-insensitive)
+- ✅ Filtro por estado (dropdown com todos os estados)
+- ✅ Indicadores visuais de filtros ativos (badges)
+- ✅ Botão para remover filtros individuais
+- ✅ Botão "Limpar todos" para resetar todos os filtros
+- ✅ Filtros funcionam em conjunto com a busca existente
+- ✅ Design responsivo mobile-first
+
+**Arquivo:** `src/components/employees/EmployeesTab.tsx`
+
+**Funcionalidades dos Filtros:**
+- Busca por nome/CPF (existente) + Cidade + Estado
+- Todos os filtros podem ser usados simultaneamente
+- Lógica AND: mostra apenas funcionários que correspondem a TODOS os filtros ativos
+- Feedback visual claro de quais filtros estão ativos
+
+#### 5. Importação Excel Atualizada
+
+**Implementado:**
+- ✅ Template Excel expandido com 9 colunas:
+  1. Nome Completo *
+  2. CPF *
+  3. Chave PIX
+  4. Tipo PIX
+  5. Endereço
+  6. Bairro
+  7. Cidade
+  8. Estado
+  9. CEP
+- ✅ Função `generateEmployeeTemplate()` atualizada
+- ✅ Função `parseEmployeeSpreadsheet()` modificada para ler todos os novos campos
+- ✅ Instruções detalhadas na coluna de ajuda
+- ✅ Exemplo de preenchimento atualizado
+- ✅ Larguras de coluna otimizadas
+
+**Arquivo:** `src/utils/employeeImport.ts`
+
+**Instruções no Template:**
+1. Preencha uma linha para cada funcionário
+2. Nome e CPF são obrigatórios
+3. Nome deve ter pelo menos 3 caracteres
+4. CPF deve ser válido
+5. Chave PIX é opcional
+6. Tipo PIX: CPF, Email, Telefone ou Aleatória
+7. Dados de endereço são opcionais
+8. Não altere ou remova a linha de cabeçalho
+9. Salve o arquivo e faça o upload no sistema
+
+#### 6. Exportação C6
+
+**Status:** Não modificada
+**Motivo:** A exportação C6 já utiliza corretamente o campo `pix_key` para pagamentos. As informações adicionais (tipo de PIX, endereço) são para fins de cadastro interno e não são necessárias no formato de exportação do Banco C6.
+
+**Arquivo:** `src/utils/c6Export.ts` (sem alterações)
+
+### Arquivos Modificados
+
+1. ✅ `supabase/migrations/20260109191944_add_employee_address_and_pix_fields.sql` (NOVO)
+2. ✅ `src/services/database.ts`
+3. ✅ `src/components/employees/EmployeesTab.tsx`
+4. ✅ `src/utils/employeeImport.ts`
+
+### Melhorias de UX
+
+**Formulário:**
+- Grid responsivo que se adapta a mobile (1 coluna) e desktop (2 colunas)
+- Labels claras indicando campos obrigatórios (*)
+- Campos opcionais claramente marcados
+- Organização lógica dos campos relacionados
+- Select de estados em ordem alfabética
+- Máscara de CEP (00000-000)
+
+**Filtros:**
+- Busca em tempo real conforme digitação
+- Indicadores visuais claros de filtros ativos
+- Fácil remoção de filtros individuais ou todos de uma vez
+- Mantém a busca por nome/CPF funcionando em paralelo
+- Design consistente com o resto do sistema
+
+### Casos de Uso Atendidos
+
+1. **Cadastro Completo de Funcionários**
+   - Administrador pode registrar dados completos de endereço
+   - Útil para envio de correspondências, documentos fiscais
+
+2. **Organização por Tipo de PIX**
+   - Facilita identificação do tipo de chave
+   - Ajuda na validação e troubleshooting de pagamentos
+
+3. **Filtros Geográficos**
+   - Encontrar funcionários de uma cidade específica
+   - Listar todos os funcionários de um estado
+   - Útil para relatórios regionais e gestão de equipes
+
+4. **Importação em Massa**
+   - Permite importar funcionários com dados completos
+   - Template Excel guia o usuário no preenchimento correto
+   - Validação mantida apenas nos campos obrigatórios (nome e CPF)
+
+### Benefícios Alcançados
+
+**Para Administradores:**
+- ✅ Cadastro mais completo e profissional de funcionários
+- ✅ Filtros avançados facilitam gestão de equipes grandes
+- ✅ Dados organizados para múltiplos propósitos (pagamentos, correspondência, relatórios)
+- ✅ Flexibilidade: novos campos são opcionais, não quebra fluxo existente
+
+**Para o Sistema:**
+- ✅ Base de dados mais rica sem perder retrocompatibilidade
+- ✅ Migrations idempotentes (podem ser executadas múltiplas vezes)
+- ✅ Código limpo e bem organizado
+- ✅ Types TypeScript totalmente consistentes
+
+**Para Importação/Exportação:**
+- ✅ Template Excel mais completo
+- ✅ Mantém compatibilidade com sistema do Banco C6
+- ✅ Validações inteligentes (apenas campos obrigatórios são validados)
+
+### Testes Realizados
+
+- ✅ Build do projeto concluído com sucesso
+- ✅ Sem erros de TypeScript
+- ✅ Migrations testadas e validadas
+- ✅ Formulários responsivos em mobile e desktop
+
+### Conclusão da Sessão
+
+Expansão completa e bem-sucedida do cadastro de funcionários. O sistema agora suporta dados de endereço completo e tipo de chave PIX, mantendo total retrocompatibilidade com dados existentes. Os filtros avançados facilitam muito a gestão de grandes volumes de funcionários.
+
+---
+
+**Status:** ✅ Concluído
+**Versão Final:** 2.8.0
+**Última Atualização:** 2026-01-09
+**Build:** Sucesso (25.74s)

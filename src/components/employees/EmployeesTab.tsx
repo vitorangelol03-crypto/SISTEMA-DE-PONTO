@@ -17,10 +17,18 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [cityFilter, setCityFilter] = useState('');
+  const [stateFilter, setStateFilter] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     cpf: '',
-    pixKey: ''
+    pixKey: '',
+    pixType: '',
+    address: '',
+    neighborhood: '',
+    city: '',
+    state: '',
+    zipCode: ''
   });
 
   const [showImportModal, setShowImportModal] = useState(false);
@@ -50,15 +58,30 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   }, []);
 
   useEffect(() => {
-    const filtered = employees.filter(employee =>
-      employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.cpf.includes(searchTerm.replace(/\D/g, ''))
-    );
+    const filtered = employees.filter(employee => {
+      const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        employee.cpf.includes(searchTerm.replace(/\D/g, ''));
+
+      const matchesCity = !cityFilter || employee.city?.toLowerCase().includes(cityFilter.toLowerCase());
+      const matchesState = !stateFilter || employee.state === stateFilter;
+
+      return matchesSearch && matchesCity && matchesState;
+    });
     setFilteredEmployees(filtered);
-  }, [searchTerm, employees]);
+  }, [searchTerm, cityFilter, stateFilter, employees]);
 
   const resetForm = () => {
-    setFormData({ name: '', cpf: '', pixKey: '' });
+    setFormData({
+      name: '',
+      cpf: '',
+      pixKey: '',
+      pixType: '',
+      address: '',
+      neighborhood: '',
+      city: '',
+      state: '',
+      zipCode: ''
+    });
     setEditingEmployee(null);
     setShowForm(false);
   };
@@ -78,14 +101,20 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
     try {
       const cpfNumbers = formData.cpf.replace(/\D/g, '');
-      
+
       if (editingEmployee) {
         await updateEmployee(
           editingEmployee.id,
           formData.name.trim(),
           cpfNumbers,
           formData.pixKey.trim() || null,
-          userId
+          userId,
+          formData.pixType.trim() || null,
+          formData.address.trim() || null,
+          formData.neighborhood.trim() || null,
+          formData.city.trim() || null,
+          formData.state.trim() || null,
+          formData.zipCode.trim() || null
         );
         toast.success('Funcionário atualizado com sucesso!');
       } else {
@@ -93,7 +122,13 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
           formData.name.trim(),
           cpfNumbers,
           formData.pixKey.trim() || null,
-          userId
+          userId,
+          formData.pixType.trim() || null,
+          formData.address.trim() || null,
+          formData.neighborhood.trim() || null,
+          formData.city.trim() || null,
+          formData.state.trim() || null,
+          formData.zipCode.trim() || null
         );
         toast.success('Funcionário cadastrado com sucesso!');
       }
@@ -111,7 +146,13 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     setFormData({
       name: employee.name,
       cpf: formatCPF(employee.cpf),
-      pixKey: employee.pix_key || ''
+      pixKey: employee.pix_key || '',
+      pixType: employee.pix_type || '',
+      address: employee.address || '',
+      neighborhood: employee.neighborhood || '',
+      city: employee.city || '',
+      state: employee.state || '',
+      zipCode: employee.zip_code || ''
     });
     setShowForm(true);
   };
@@ -276,6 +317,92 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
             />
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="relative w-full">
+              <input
+                type="text"
+                placeholder="Filtrar por cidade..."
+                value={cityFilter}
+                onChange={(e) => setCityFilter(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+              />
+            </div>
+
+            <div className="relative w-full">
+              <select
+                value={stateFilter}
+                onChange={(e) => setStateFilter(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+              >
+                <option value="">Todos os estados</option>
+                <option value="AC">Acre</option>
+                <option value="AL">Alagoas</option>
+                <option value="AP">Amapá</option>
+                <option value="AM">Amazonas</option>
+                <option value="BA">Bahia</option>
+                <option value="CE">Ceará</option>
+                <option value="DF">Distrito Federal</option>
+                <option value="ES">Espírito Santo</option>
+                <option value="GO">Goiás</option>
+                <option value="MA">Maranhão</option>
+                <option value="MT">Mato Grosso</option>
+                <option value="MS">Mato Grosso do Sul</option>
+                <option value="MG">Minas Gerais</option>
+                <option value="PA">Pará</option>
+                <option value="PB">Paraíba</option>
+                <option value="PR">Paraná</option>
+                <option value="PE">Pernambuco</option>
+                <option value="PI">Piauí</option>
+                <option value="RJ">Rio de Janeiro</option>
+                <option value="RN">Rio Grande do Norte</option>
+                <option value="RS">Rio Grande do Sul</option>
+                <option value="RO">Rondônia</option>
+                <option value="RR">Roraima</option>
+                <option value="SC">Santa Catarina</option>
+                <option value="SP">São Paulo</option>
+                <option value="SE">Sergipe</option>
+                <option value="TO">Tocantins</option>
+              </select>
+            </div>
+          </div>
+
+          {(cityFilter || stateFilter) && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Filtros ativos:</span>
+              {cityFilter && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                  Cidade: {cityFilter}
+                  <button
+                    onClick={() => setCityFilter('')}
+                    className="hover:text-blue-900"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+              {stateFilter && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                  Estado: {stateFilter}
+                  <button
+                    onClick={() => setStateFilter('')}
+                    className="hover:text-blue-900"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+              <button
+                onClick={() => {
+                  setCityFilter('');
+                  setStateFilter('');
+                }}
+                className="text-sm text-gray-600 hover:text-gray-800 underline"
+              >
+                Limpar todos
+              </button>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             {hasPermission('employees.import') && (
               <button
@@ -345,7 +472,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Chave PIX (opcional)
                 </label>
@@ -354,7 +481,117 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   value={formData.pixKey}
                   onChange={(e) => setFormData(prev => ({ ...prev, pixKey: e.target.value }))}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
-                  placeholder="CPF, e-mail, telefone ou chave aleatória"
+                  placeholder="Digite a chave PIX"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de Chave PIX (opcional)
+                </label>
+                <select
+                  value={formData.pixType}
+                  onChange={(e) => setFormData(prev => ({ ...prev, pixType: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                >
+                  <option value="">Selecione o tipo</option>
+                  <option value="CPF">CPF</option>
+                  <option value="Email">Email</option>
+                  <option value="Telefone">Telefone</option>
+                  <option value="Aleatória">Chave Aleatória</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Endereço (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                  placeholder="Rua, número, complemento"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Bairro (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.neighborhood}
+                  onChange={(e) => setFormData(prev => ({ ...prev, neighborhood: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                  placeholder="Digite o bairro"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Cidade (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.city}
+                  onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                  placeholder="Digite a cidade"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Estado (opcional)
+                </label>
+                <select
+                  value={formData.state}
+                  onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                >
+                  <option value="">Selecione o estado</option>
+                  <option value="AC">Acre</option>
+                  <option value="AL">Alagoas</option>
+                  <option value="AP">Amapá</option>
+                  <option value="AM">Amazonas</option>
+                  <option value="BA">Bahia</option>
+                  <option value="CE">Ceará</option>
+                  <option value="DF">Distrito Federal</option>
+                  <option value="ES">Espírito Santo</option>
+                  <option value="GO">Goiás</option>
+                  <option value="MA">Maranhão</option>
+                  <option value="MT">Mato Grosso</option>
+                  <option value="MS">Mato Grosso do Sul</option>
+                  <option value="MG">Minas Gerais</option>
+                  <option value="PA">Pará</option>
+                  <option value="PB">Paraíba</option>
+                  <option value="PR">Paraná</option>
+                  <option value="PE">Pernambuco</option>
+                  <option value="PI">Piauí</option>
+                  <option value="RJ">Rio de Janeiro</option>
+                  <option value="RN">Rio Grande do Norte</option>
+                  <option value="RS">Rio Grande do Sul</option>
+                  <option value="RO">Rondônia</option>
+                  <option value="RR">Roraima</option>
+                  <option value="SC">Santa Catarina</option>
+                  <option value="SP">São Paulo</option>
+                  <option value="SE">Sergipe</option>
+                  <option value="TO">Tocantins</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  CEP (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.zipCode}
+                  onChange={(e) => setFormData(prev => ({ ...prev, zipCode: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                  placeholder="00000-000"
+                  maxLength={9}
                 />
               </div>
             </div>

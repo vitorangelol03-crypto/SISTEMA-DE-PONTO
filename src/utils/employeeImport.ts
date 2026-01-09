@@ -5,6 +5,12 @@ export interface EmployeeImportData {
   name: string;
   cpf: string;
   pixKey: string | null;
+  pixType?: string | null;
+  address?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
 }
 
 export interface ValidationError {
@@ -23,20 +29,41 @@ export interface ImportValidationResult {
 export const generateEmployeeTemplate = (): void => {
   const wb = XLSX.utils.book_new();
 
-  const headers = ['Nome Completo', 'CPF', 'Chave PIX (Opcional)', 'INSTRUÇÕES'];
-  const example = ['João da Silva', '123.456.789-00', 'joao@email.com', ''];
+  const headers = [
+    'Nome Completo',
+    'CPF',
+    'Chave PIX (Opcional)',
+    'Tipo PIX (Opcional)',
+    'Endereço (Opcional)',
+    'Bairro (Opcional)',
+    'Cidade (Opcional)',
+    'Estado (Opcional)',
+    'CEP (Opcional)',
+    'INSTRUÇÕES'
+  ];
+  const example = [
+    'João da Silva',
+    '123.456.789-00',
+    'joao@email.com',
+    'Email',
+    'Rua das Flores, 123',
+    'Centro',
+    'São Paulo',
+    'SP',
+    '01234-567',
+    ''
+  ];
   const instructions = [
-    ['', '', '', ''],
-    ['', '', '', '1. Preencha uma linha para cada funcionário nas colunas A, B e C'],
-    ['', '', '', '2. Nome deve ter pelo menos 3 caracteres'],
-    ['', '', '', '3. CPF deve ser válido (apenas números ou formatado)'],
-    ['', '', '', '4. Chave PIX é opcional (CPF, email, telefone ou chave aleatória)'],
-    ['', '', '', '5. Não altere ou remova esta linha de cabeçalho'],
-    ['', '', '', '6. Salve o arquivo e faça o upload no sistema'],
-    ['', '', '', ''],
-    ['', '', '', 'Exemplos de preenchimento:'],
-    ['', '', '', 'Maria Santos | 987.654.321-00 | maria@email.com'],
-    ['', '', '', 'Pedro Costa | 11122233344 | (11) 98765-4321']
+    ['', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '1. Preencha uma linha para cada funcionário'],
+    ['', '', '', '', '', '', '', '', '', '2. Nome e CPF são obrigatórios'],
+    ['', '', '', '', '', '', '', '', '', '3. Nome deve ter pelo menos 3 caracteres'],
+    ['', '', '', '', '', '', '', '', '', '4. CPF deve ser válido (apenas números ou formatado)'],
+    ['', '', '', '', '', '', '', '', '', '5. Chave PIX é opcional'],
+    ['', '', '', '', '', '', '', '', '', '6. Tipo PIX: CPF, Email, Telefone ou Aleatória'],
+    ['', '', '', '', '', '', '', '', '', '7. Dados de endereço são opcionais'],
+    ['', '', '', '', '', '', '', '', '', '8. Não altere ou remova a linha de cabeçalho'],
+    ['', '', '', '', '', '', '', '', '', '9. Salve o arquivo e faça o upload no sistema']
   ];
 
   const data = [
@@ -48,10 +75,16 @@ export const generateEmployeeTemplate = (): void => {
   const ws = XLSX.utils.aoa_to_sheet(data);
 
   ws['!cols'] = [
-    { wch: 35 },
-    { wch: 18 },
+    { wch: 25 },
+    { wch: 15 },
+    { wch: 25 },
+    { wch: 15 },
     { wch: 30 },
-    { wch: 60 }
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 50 }
   ];
 
   const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
@@ -149,6 +182,12 @@ export const parseEmployeeSpreadsheet = (file: File): Promise<ImportValidationRe
           const name = String(row[0] || '').trim();
           const cpfRaw = String(row[1] || '').trim();
           const pixKey = row[2] ? String(row[2]).trim() : null;
+          const pixType = row[3] ? String(row[3]).trim() : null;
+          const address = row[4] ? String(row[4]).trim() : null;
+          const neighborhood = row[5] ? String(row[5]).trim() : null;
+          const city = row[6] ? String(row[6]).trim() : null;
+          const state = row[7] ? String(row[7]).trim() : null;
+          const zipCode = row[8] ? String(row[8]).trim() : null;
 
           const rowErrors = validateEmployeeData(name, cpfRaw, pixKey || '', rowNumber);
 
@@ -174,7 +213,13 @@ export const parseEmployeeSpreadsheet = (file: File): Promise<ImportValidationRe
           valid.push({
             name,
             cpf: cpfNumbers,
-            pixKey: pixKey || null
+            pixKey: pixKey || null,
+            pixType: pixType || null,
+            address: address || null,
+            neighborhood: neighborhood || null,
+            city: city || null,
+            state: state || null,
+            zipCode: zipCode || null
           });
         }
 
