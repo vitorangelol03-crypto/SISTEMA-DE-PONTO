@@ -4,6 +4,7 @@ import { getAllEmployees, getPayments, Employee, Payment } from '../../services/
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { exportC6PaymentSheet } from '../../utils/c6Export';
 import toast from 'react-hot-toast';
+import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 
 interface C6PaymentTabProps {
   userId: string;
@@ -28,7 +29,8 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
 
   const [filters, setFilters] = useState({
     startDate: getBrazilDate(),
-    endDate: getBrazilDate()
+    endDate: getBrazilDate(),
+    employmentType: 'all' as EmploymentType
   });
 
   const [isEditingDate, setIsEditingDate] = useState({
@@ -88,7 +90,8 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
 
     try {
       setLoading(true);
-      const paymentsData = await getPayments(filters.startDate, filters.endDate, '');
+      const employmentType = filters.employmentType === 'all' ? undefined : filters.employmentType;
+      const paymentsData = await getPayments(filters.startDate, filters.endDate, '', employmentType);
 
       if (paymentsData.length === 0) {
         toast.error('Nenhum pagamento encontrado no período selecionado');
@@ -362,7 +365,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
           <div className="space-y-4">
             <h3 className="text-lg font-medium">1. Importar Dados Financeiros</h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Data Inicial
@@ -390,6 +393,12 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
+
+              <EmploymentTypeFilter
+                value={filters.employmentType}
+                onChange={(value) => setFilters(prev => ({ ...prev, employmentType: value }))}
+                showLabel={true}
+              />
 
               <div className="flex items-end">
                 <button

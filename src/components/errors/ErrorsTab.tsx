@@ -5,6 +5,7 @@ import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorReco
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
+import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 
 interface ErrorsTabProps {
   userId: string;
@@ -30,7 +31,8 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
   const [filters, setFilters] = useState({
     startDate: getBrazilDate(),
     endDate: getBrazilDate(),
-    employeeId: ''
+    employeeId: '',
+    employmentType: 'all' as EmploymentType
   });
   
   const [isEditingDate, setIsEditingDate] = useState({
@@ -60,10 +62,11 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
   const loadData = React.useCallback(async () => {
     try {
       setLoading(true);
+      const employmentType = filters.employmentType === 'all' ? undefined : filters.employmentType;
       const [employeesData, attendancesData, errorRecordsData, statsData] = await Promise.all([
-        getAllEmployees(),
-        getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId),
-        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId),
+        getAllEmployees(employmentType),
+        getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId, undefined, employmentType),
+        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId, employmentType),
         getErrorStatistics(filters.startDate, filters.endDate)
       ]);
 
@@ -78,7 +81,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
     } finally {
       setLoading(false);
     }
-  }, [filters.startDate, filters.endDate, filters.employeeId]);
+  }, [filters.startDate, filters.endDate, filters.employeeId, filters.employmentType]);
 
   const processEmployeeErrorData = (
     employeesData: Employee[], 
@@ -318,7 +321,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
         </div>
 
         {/* Filtros */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Data Inicial
@@ -364,6 +367,12 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
               ))}
             </select>
           </div>
+
+          <EmploymentTypeFilter
+            value={filters.employmentType}
+            onChange={(value) => setFilters(prev => ({ ...prev, employmentType: value }))}
+            showLabel={true}
+          />
         </div>
 
         {/* Estatísticas */}

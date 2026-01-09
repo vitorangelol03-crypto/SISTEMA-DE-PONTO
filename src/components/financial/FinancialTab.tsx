@@ -5,6 +5,7 @@ import { getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, P
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
+import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 import * as XLSX from 'xlsx';
 
 interface FinancialTabProps {
@@ -34,7 +35,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const [filters, setFilters] = useState({
     startDate: getBrazilDate(),
     endDate: getBrazilDate(),
-    employeeId: ''
+    employeeId: '',
+    employmentType: 'all' as EmploymentType
   });
 
   const [isEditingDate, setIsEditingDate] = useState({
@@ -62,11 +64,12 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const loadData = React.useCallback(async () => {
     try {
       setLoading(true);
+      const employmentTypeFilter = filters.employmentType === 'all' ? undefined : filters.employmentType;
       const [employeesData, paymentsData, attendancesData, errorRecordsData] = await Promise.all([
-        getAllEmployees(),
-        getPayments(filters.startDate, filters.endDate, filters.employeeId),
-        getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId),
-        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId)
+        getAllEmployees(employmentTypeFilter),
+        getPayments(filters.startDate, filters.endDate, filters.employeeId, employmentTypeFilter),
+        getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId, undefined, employmentTypeFilter),
+        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId, employmentTypeFilter)
       ]);
 
       setEmployees(employeesData);
@@ -80,7 +83,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     } finally {
       setLoading(false);
     }
-  }, [filters.startDate, filters.endDate, filters.employeeId]);
+  }, [filters.startDate, filters.endDate, filters.employeeId, filters.employmentType]);
 
   const processFinancialData = (employeesData: Employee[], paymentsData: Payment[], attendancesData: Attendance[], errorRecordsData: ErrorRecord[]) => {
     const data: EmployeeFinancialData[] = employeesData.map(employee => {
@@ -479,7 +482,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
         {/* Filtros - Pagamentos */}
         {activeView === 'financial' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Data Inicial
@@ -525,6 +528,12 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 ))}
               </select>
             </div>
+
+            <EmploymentTypeFilter
+              value={filters.employmentType}
+              onChange={(value) => setFilters(prev => ({ ...prev, employmentType: value }))}
+              showLabel={true}
+            />
           </div>
         )}
 
@@ -798,7 +807,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                     )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{data.employee.name}</div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-medium text-gray-900">{data.employee.name}</span>
+                          <EmploymentTypeBadge type={data.employee.employment_type || undefined} />
+                        </div>
                         <div className="text-sm text-gray-500">{formatCPF(data.employee.cpf)}</div>
                       </div>
                     </td>

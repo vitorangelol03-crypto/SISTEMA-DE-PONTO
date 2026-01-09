@@ -4,6 +4,7 @@ import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../
 import { formatDateBR } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
+import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 
 interface ReportsTabProps {
   userId: string;
@@ -21,17 +22,19 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
     startDate: '',
     endDate: '',
     employeeId: '',
-    status: '' as '' | 'present' | 'absent'
+    status: '' as '' | 'present' | 'absent',
+    employmentType: 'all' as EmploymentType
   });
 
   const loadData = async () => {
     try {
       setLoading(true);
+      const employmentType = filters.employmentType === 'all' ? undefined : filters.employmentType;
       const [employeesData, attendancesData] = await Promise.all([
-        getAllEmployees(),
-        getAttendanceHistory()
+        getAllEmployees(employmentType),
+        getAttendanceHistory(undefined, undefined, undefined, undefined, employmentType)
       ]);
-      
+
       setEmployees(employeesData);
       setAttendances(attendancesData);
       setFilteredAttendances(attendancesData);
@@ -45,7 +48,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [filters.employmentType]);
 
   useEffect(() => {
     let filtered = [...attendances];
@@ -145,7 +148,8 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       startDate: '',
       endDate: '',
       employeeId: '',
-      status: ''
+      status: '',
+      employmentType: 'all'
     });
   };
 
@@ -276,6 +280,12 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
               <option value="absent">Falta</option>
             </select>
           </div>
+
+          <EmploymentTypeFilter
+            value={filters.employmentType}
+            onChange={(value) => setFilters(prev => ({ ...prev, employmentType: value }))}
+            showLabel={true}
+          />
         </div>
 
         <div className="flex space-x-3">

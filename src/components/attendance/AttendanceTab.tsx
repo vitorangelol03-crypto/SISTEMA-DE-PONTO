@@ -20,6 +20,7 @@ import {
 } from '../../services/database';
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
+import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 
 interface AttendanceTabProps {
   userId: string;
@@ -36,6 +37,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [selectedDate, setSelectedDate] = useState(getBrazilDate());
   const [exitTimes, setExitTimes] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [employmentTypeFilter, setEmploymentTypeFilter] = useState<EmploymentType>('all');
   const [showBonusModal, setShowBonusModal] = useState(false);
   const [bonusAmount, setBonusAmount] = useState<string>('');
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
@@ -55,11 +57,12 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const loadData = async (date: string = selectedDate) => {
     try {
       setLoading(true);
+      const employmentType = employmentTypeFilter === 'all' ? undefined : employmentTypeFilter;
       const [employeesData, attendancesData, bonusData, paymentsData] = await Promise.all([
-        getAllEmployees(),
-        getAttendanceHistory(date, date),
+        getAllEmployees(employmentType),
+        getAttendanceHistory(date, date, undefined, undefined, employmentType),
         getBonusInfoForDate(date),
-        getPayments(date, date)
+        getPayments(date, date, undefined, employmentType)
       ]);
 
       setEmployees(employeesData);
@@ -87,7 +90,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     if (hasPermission('attendance.viewHistory') || isViewingToday) {
       loadData(selectedDate);
     }
-  }, [selectedDate]);
+  }, [selectedDate, employmentTypeFilter]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -600,18 +603,27 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
               Funcionários ({filteredEmployees.length})
             </h3>
 
-            {hasPermission('attendance.search') && (
-              <div className="relative w-full sm:w-auto">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Buscar por nome ou CPF..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-base"
-                />
-              </div>
-            )}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <EmploymentTypeFilter
+                value={employmentTypeFilter}
+                onChange={setEmploymentTypeFilter}
+                showLabel={false}
+                className="w-full sm:w-48"
+              />
+
+              {hasPermission('attendance.search') && (
+                <div className="relative w-full sm:w-auto">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por nome ou CPF..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-base"
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {filteredEmployees.length > 0 && hasPermission('attendance.mark') && (
@@ -682,7 +694,10 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                     )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-medium text-gray-900">{employee.name}</span>
+                          <EmploymentTypeBadge type={employee.employment_type || undefined} />
+                        </div>
                         <div className="text-sm text-gray-500">CPF: {employee.cpf}</div>
                       </div>
                     </td>
@@ -816,8 +831,11 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                       />
                     )}
                     <div className="flex-1">
-                      <h4 className="text-sm font-medium text-gray-900">{employee.name}</h4>
-                      <p className="text-xs text-gray-500 mt-1">CPF: {employee.cpf}</p>
+                      <div className="flex items-center space-x-2 mb-1">
+                        <h4 className="text-sm font-medium text-gray-900">{employee.name}</h4>
+                        <EmploymentTypeBadge type={employee.employment_type || undefined} />
+                      </div>
+                      <p className="text-xs text-gray-500">CPF: {employee.cpf}</p>
                     </div>
                   </div>
 

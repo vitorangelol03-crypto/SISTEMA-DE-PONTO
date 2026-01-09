@@ -242,11 +242,16 @@ export const deleteUser = async (id: string, userId: string): Promise<void> => {
 };
 
 // Employee functions
-export const getAllEmployees = async (): Promise<Employee[]> => {
-  const { data, error } = await supabase
+export const getAllEmployees = async (employmentType?: string): Promise<Employee[]> => {
+  let query = supabase
     .from('employees')
-    .select('*')
-    .order('name');
+    .select('*');
+
+  if (employmentType && employmentType !== 'all') {
+    query = query.eq('employment_type', employmentType);
+  }
+
+  const { data, error } = await query.order('name');
 
   if (error) throw error;
   return data || [];
@@ -522,7 +527,8 @@ export const getAttendanceHistory = async (
   startDate?: string,
   endDate?: string,
   employeeId?: string,
-  userId?: string
+  userId?: string,
+  employmentType?: string
 ): Promise<Attendance[]> => {
   if (userId) {
     const permissionCheck = await validatePermission(userId, 'attendance.search');
@@ -538,18 +544,19 @@ export const getAttendanceHistory = async (
       employees (
         id,
         name,
-        cpf
+        cpf,
+        employment_type
       )
     `);
 
   if (startDate) {
     query = query.gte('date', startDate);
   }
-  
+
   if (endDate) {
     query = query.lte('date', endDate);
   }
-  
+
   if (employeeId) {
     query = query.eq('employee_id', employeeId);
   }
@@ -557,6 +564,13 @@ export const getAttendanceHistory = async (
   const { data, error } = await query.order('date', { ascending: false });
 
   if (error) throw error;
+
+  if (employmentType && employmentType !== 'all' && data) {
+    return data.filter(attendance =>
+      attendance.employees?.employment_type === employmentType
+    );
+  }
+
   return data || [];
 };
 
@@ -564,7 +578,8 @@ export const getAttendanceHistory = async (
 export const getPayments = async (
   startDate?: string,
   endDate?: string,
-  employeeId?: string
+  employeeId?: string,
+  employmentType?: string
 ): Promise<Payment[]> => {
   let query = supabase
     .from('payments')
@@ -573,18 +588,19 @@ export const getPayments = async (
       employees (
         id,
         name,
-        cpf
+        cpf,
+        employment_type
       )
     `);
 
   if (startDate) {
     query = query.gte('date', startDate);
   }
-  
+
   if (endDate) {
     query = query.lte('date', endDate);
   }
-  
+
   if (employeeId) {
     query = query.eq('employee_id', employeeId);
   }
@@ -592,6 +608,13 @@ export const getPayments = async (
   const { data, error } = await query.order('date', { ascending: false });
 
   if (error) throw error;
+
+  if (employmentType && employmentType !== 'all' && data) {
+    return data.filter(payment =>
+      payment.employees?.employment_type === employmentType
+    );
+  }
+
   return data || [];
 };
 
@@ -1001,7 +1024,8 @@ export const getBonusRemovalHistory = async (
 export const getErrorRecords = async (
   startDate?: string,
   endDate?: string,
-  employeeId?: string
+  employeeId?: string,
+  employmentType?: string
 ): Promise<ErrorRecord[]> => {
   let query = supabase
     .from('error_records')
@@ -1010,18 +1034,19 @@ export const getErrorRecords = async (
       employees (
         id,
         name,
-        cpf
+        cpf,
+        employment_type
       )
     `);
 
   if (startDate) {
     query = query.gte('date', startDate);
   }
-  
+
   if (endDate) {
     query = query.lte('date', endDate);
   }
-  
+
   if (employeeId) {
     query = query.eq('employee_id', employeeId);
   }
@@ -1029,6 +1054,13 @@ export const getErrorRecords = async (
   const { data, error } = await query.order('date', { ascending: false });
 
   if (error) throw error;
+
+  if (employmentType && employmentType !== 'all' && data) {
+    return data.filter(errorRecord =>
+      errorRecord.employees?.employment_type === employmentType
+    );
+  }
+
   return data || [];
 };
 
