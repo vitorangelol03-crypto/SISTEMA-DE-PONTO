@@ -654,6 +654,9 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Bonificação
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Ações
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -702,6 +705,30 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                           Não marcado
                         </span>
                       )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {(() => {
+                        const bonus = getEmployeeBonus(employee.id);
+                        if (bonus > 0) {
+                          return (
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm font-medium text-green-600">
+                                R$ {bonus.toFixed(2)}
+                              </span>
+                              {hasPermission('financial.removeBonus') && (
+                                <button
+                                  onClick={() => handleRemoveBonus(employee.id)}
+                                  className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  title="Remover bonificação"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        }
+                        return <span className="text-sm text-gray-400">-</span>;
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex space-x-2">
@@ -794,24 +821,48 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                     </div>
                   </div>
 
-                  {status === 'present' && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      <CheckCircle className="w-3 h-3 mr-1" />
-                      Presente
-                    </span>
-                  )}
-                  {status === 'absent' && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                      <XCircle className="w-3 h-3 mr-1" />
-                      Falta
-                    </span>
-                  )}
-                  {!status && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                      <AlertCircle className="w-3 h-3 mr-1" />
-                      Pendente
-                    </span>
-                  )}
+                  <div className="flex flex-col items-end space-y-2">
+                    {status === 'present' && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Presente
+                      </span>
+                    )}
+                    {status === 'absent' && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <XCircle className="w-3 h-3 mr-1" />
+                        Falta
+                      </span>
+                    )}
+                    {!status && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        <AlertCircle className="w-3 h-3 mr-1" />
+                        Pendente
+                      </span>
+                    )}
+                    {(() => {
+                      const bonus = getEmployeeBonus(employee.id);
+                      if (bonus > 0) {
+                        return (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm font-medium text-green-600">
+                              Bônus: R$ {bonus.toFixed(2)}
+                            </span>
+                            {hasPermission('financial.removeBonus') && (
+                              <button
+                                onClick={() => handleRemoveBonus(employee.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Remover bonificação"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
                 </div>
 
                 <div className="space-y-3">
