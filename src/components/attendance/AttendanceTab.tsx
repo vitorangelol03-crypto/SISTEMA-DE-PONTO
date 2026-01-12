@@ -1087,6 +1087,223 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
           </div>
         </div>
       )}
+
+      {/* Modal de Remoção de Bonificação Individual */}
+      {showRemoveBonusModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white p-4 sm:p-6 border-b">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base sm:text-lg font-medium flex items-center text-red-600">
+                  <Trash2 className="w-5 h-5 mr-2" />
+                  Remover Bonificação
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowRemoveBonusModal(false);
+                    setBonusRemovalObservation('');
+                    setEmployeeToRemoveBonus(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  disabled={removingBonus}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 space-y-4">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-800 font-medium mb-2">
+                  ⚠️ Atenção: Esta ação não pode ser desfeita!
+                </p>
+                <p className="text-sm text-yellow-700">
+                  Você está prestes a remover a bonificação deste funcionário. A ação será registrada no histórico de auditoria.
+                </p>
+              </div>
+
+              {employeeToRemoveBonus && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600 mb-1">
+                    <strong>Funcionário:</strong> {employees.find(e => e.id === employeeToRemoveBonus)?.name}
+                  </p>
+                  <p className="text-sm text-gray-600 mb-1">
+                    <strong>Valor:</strong> R$ {getEmployeeBonus(employeeToRemoveBonus).toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <strong>Data:</strong> {formatDateBR(selectedDate)}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Observação <span className="text-red-600">*</span>
+                </label>
+                <textarea
+                  value={bonusRemovalObservation}
+                  onChange={(e) => setBonusRemovalObservation(e.target.value)}
+                  placeholder="Descreva o motivo da remoção da bonificação (mínimo 10 caracteres)"
+                  rows={4}
+                  disabled={removingBonus}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 text-base resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  autoFocus
+                />
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className={`${
+                    bonusRemovalObservation.length < 10
+                      ? 'text-red-600'
+                      : bonusRemovalObservation.length > 500
+                      ? 'text-red-600'
+                      : 'text-green-600'
+                  }`}>
+                    {bonusRemovalObservation.length < 10
+                      ? `Faltam ${10 - bonusRemovalObservation.length} caracteres`
+                      : bonusRemovalObservation.length > 500
+                      ? `Excedeu ${bonusRemovalObservation.length - 500} caracteres`
+                      : 'Observação válida'}
+                  </span>
+                  <span className={`${bonusRemovalObservation.length > 500 ? 'text-red-600' : 'text-gray-500'}`}>
+                    {bonusRemovalObservation.length}/500
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 p-4 sm:p-6 border-t">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={confirmRemoveBonus}
+                  disabled={bonusRemovalObservation.trim().length < 10 || bonusRemovalObservation.length > 500 || removingBonus}
+                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[48px] font-medium"
+                >
+                  {removingBonus ? 'Removendo...' : 'Confirmar Remoção'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRemoveBonusModal(false);
+                    setBonusRemovalObservation('');
+                    setEmployeeToRemoveBonus(null);
+                  }}
+                  disabled={removingBonus}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors min-h-[48px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Remoção de Todas as Bonificações */}
+      {showRemoveAllBonusModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white p-4 sm:p-6 border-b">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base sm:text-lg font-medium flex items-center text-red-600">
+                  <Trash2 className="w-5 h-5 mr-2" />
+                  Remover Todas as Bonificações
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowRemoveAllBonusModal(false);
+                    setRemoveAllBonusObservation('');
+                  }}
+                  className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  disabled={removingBonus}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-red-800 font-bold mb-2">
+                  ⚠️ ATENÇÃO: AÇÃO IRREVERSÍVEL!
+                </p>
+                <p className="text-sm text-red-700">
+                  Você está prestes a remover <strong>TODAS</strong> as bonificações do dia. Esta ação afetará múltiplos funcionários e será registrada no histórico de auditoria.
+                </p>
+              </div>
+
+              {bonusInfo && (
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                  <p className="text-sm text-gray-600">
+                    <strong>Data:</strong> {formatDateBR(selectedDate)}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <strong>Funcionários Afetados:</strong> {bonusInfo.employeesCount}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <strong>Valor por Funcionário:</strong> R$ {bonusInfo.amount.toFixed(2)}
+                  </p>
+                  <p className="text-sm font-semibold text-gray-900 pt-2 border-t border-gray-200">
+                    <strong>Total a Remover:</strong> R$ {(bonusInfo.amount * bonusInfo.employeesCount).toFixed(2)}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Observação <span className="text-red-600">*</span>
+                </label>
+                <textarea
+                  value={removeAllBonusObservation}
+                  onChange={(e) => setRemoveAllBonusObservation(e.target.value)}
+                  placeholder="Descreva o motivo da remoção em massa das bonificações (mínimo 10 caracteres)"
+                  rows={4}
+                  disabled={removingBonus}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 text-base resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  autoFocus
+                />
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className={`${
+                    removeAllBonusObservation.length < 10
+                      ? 'text-red-600'
+                      : removeAllBonusObservation.length > 500
+                      ? 'text-red-600'
+                      : 'text-green-600'
+                  }`}>
+                    {removeAllBonusObservation.length < 10
+                      ? `Faltam ${10 - removeAllBonusObservation.length} caracteres`
+                      : removeAllBonusObservation.length > 500
+                      ? `Excedeu ${removeAllBonusObservation.length - 500} caracteres`
+                      : 'Observação válida'}
+                  </span>
+                  <span className={`${removeAllBonusObservation.length > 500 ? 'text-red-600' : 'text-gray-500'}`}>
+                    {removeAllBonusObservation.length}/500
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 p-4 sm:p-6 border-t">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={confirmRemoveAllBonus}
+                  disabled={removeAllBonusObservation.trim().length < 10 || removeAllBonusObservation.length > 500 || removingBonus}
+                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[48px] font-medium"
+                >
+                  {removingBonus ? 'Removendo...' : 'Confirmar Remoção em Massa'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRemoveAllBonusModal(false);
+                    setRemoveAllBonusObservation('');
+                  }}
+                  disabled={removingBonus}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors min-h-[48px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -2749,3 +2749,237 @@ Implementação completa e bem-sucedida do campo de tipo de vínculo empregatíc
 **Versão Final:** 2.9.0
 **Última Atualização:** 2026-01-09
 **Build:** Sucesso (21.45s)
+
+---
+
+## Sessão: 2026-01-12
+
+### Implementação: Modais de Remoção de Bonificação (Individual e em Massa)
+
+**Status:** ✅ CONCLUÍDO
+
+**Contexto:**
+O sistema já possuía todo o backend para remoção de bonificações (tabela `bonus_removals`, funções no `database.ts`, permissões configuradas), mas faltava a interface visual completa. Os estados e handlers estavam declarados no componente `AttendanceTab`, mas os modais não estavam sendo renderizados.
+
+#### 1. Modal de Remoção Individual
+
+**Implementado:**
+- ✅ Modal completo com confirmação de remoção individual
+- ✅ Exibe dados do funcionário (nome, valor da bonificação, data)
+- ✅ Campo de observação obrigatória com validação em tempo real
+- ✅ Contador de caracteres (10-500 caracteres)
+- ✅ Feedback visual do estado da validação (cores: vermelho/verde)
+- ✅ Alerta destacado sobre ação irreversível
+- ✅ Estado de loading durante processamento
+- ✅ Botões desabilitados durante carregamento
+- ✅ Limpeza automática de campos ao fechar
+- ✅ Design responsivo (mobile e desktop)
+
+**Funcionalidades:**
+- Dispara quando usuário clica no botão de lixeira ao lado da bonificação
+- Valida permissão `financial.removeBonus`
+- Observação obrigatória (min 10, max 500 caracteres)
+- Registra remoção na tabela `bonus_removals`
+- Atualiza pagamento removendo bonificação
+- Registra no `audit_logs` para auditoria
+- Recarrega dados automaticamente após sucesso
+- Mostra toast de confirmação
+
+**UX:**
+- Header sticky com título e botão de fechar
+- Card amarelo com aviso de ação irreversível
+- Card cinza com dados do funcionário e valor
+- Textarea com placeholder descritivo
+- Validação visual em tempo real
+- Footer sticky com botões de ação
+- Botão vermelho para confirmar (destaque)
+- Botão branco para cancelar
+
+#### 2. Modal de Remoção em Massa
+
+**Implementado:**
+- ✅ Modal completo com confirmação de remoção em massa
+- ✅ Exibe estatísticas: data, qtd funcionários, valor individual e total
+- ✅ Campo de observação obrigatória com validação em tempo real
+- ✅ Contador de caracteres (10-500 caracteres)
+- ✅ Feedback visual do estado da validação
+- ✅ Alerta vermelho DESTACADO sobre ação irreversível em massa
+- ✅ Estado de loading durante processamento
+- ✅ Botões desabilitados durante carregamento
+- ✅ Limpeza automática de campos ao fechar
+- ✅ Design responsivo (mobile e desktop)
+
+**Funcionalidades:**
+- Dispara quando usuário clica em "Remover Todas" no card de bonificação
+- Valida permissão `financial.removeBonusBulk`
+- Observação obrigatória (min 10, max 500 caracteres)
+- Remove bonificação de TODOS os funcionários do dia
+- Registra cada remoção na tabela `bonus_removals`
+- Atualiza todos os pagamentos
+- Registra no `audit_logs` como `bulk_action`
+- Retorna quantidade de bonificações removidas
+- Recarrega dados automaticamente após sucesso
+- Mostra toast com contagem de remoções
+
+**UX:**
+- Header sticky com título e botão de fechar
+- Card VERMELHO com aviso em NEGRITO de ação irreversível em massa
+- Card cinza com estatísticas detalhadas (data, qtd, valores)
+- Cálculo automático do total a remover
+- Textarea com placeholder descritivo
+- Validação visual em tempo real
+- Footer sticky com botões de ação
+- Botão vermelho para confirmar com texto explícito "Remoção em Massa"
+- Botão branco para cancelar
+
+#### 3. Integração com Sistema Existente
+
+**Estados já existentes (reutilizados):**
+```typescript
+const [showRemoveBonusModal, setShowRemoveBonusModal] = useState(false);
+const [bonusRemovalObservation, setBonusRemovalObservation] = useState('');
+const [employeeToRemoveBonus, setEmployeeToRemoveBonus] = useState<string | null>(null);
+const [showRemoveAllBonusModal, setShowRemoveAllBonusModal] = useState(false);
+const [removeAllBonusObservation, setRemoveAllBonusObservation] = useState('');
+const [removingBonus, setRemovingBonus] = useState(false);
+```
+
+**Handlers já existentes (reutilizados):**
+- `handleRemoveBonus(employeeId)`: Prepara modal individual
+- `confirmRemoveBonus()`: Executa remoção individual
+- `handleRemoveAllBonus()`: Prepara modal em massa
+- `confirmRemoveAllBonus()`: Executa remoção em massa
+
+**Backend já existente (não modificado):**
+- `removeBonusFromEmployee()` em `database.ts`
+- `removeAllBonusesForDate()` em `database.ts`
+- `getBonusInfoForDate()` em `database.ts`
+- Tabela `bonus_removals` no Supabase
+- Permissões configuradas em `permissions.ts`
+
+#### 4. Validações e Segurança
+
+**Validações Frontend:**
+- ✅ Observação: mínimo 10 caracteres
+- ✅ Observação: máximo 500 caracteres
+- ✅ Trim automático na observação
+- ✅ Botões desabilitados quando validação falha
+- ✅ Loading state previne múltiplos cliques
+- ✅ Limpeza de campos ao fechar/cancelar
+
+**Validações Backend:**
+- ✅ Verificação de permissão antes de executar
+- ✅ Validação de observação no servidor
+- ✅ Verificação se bonificação realmente existe
+- ✅ Transações atômicas (bonus_removals + payments + audit_logs)
+- ✅ Registro de auditoria para rastreabilidade
+
+**Segurança:**
+- ✅ RLS habilitado na tabela bonus_removals
+- ✅ Políticas de segurança configuradas
+- ✅ Permissões granulares (individual vs bulk)
+- ✅ Ações registradas no audit_logs com user_id
+- ✅ Observação obrigatória para justificativa
+
+#### 5. Comportamento dos Botões
+
+**Botão Individual (ícone de lixeira):**
+- Aparece ao lado de cada bonificação na lista
+- Visível apenas se: `hasPermission('financial.removeBonus')`
+- Cor: vermelho (texto e ícone)
+- Hover: fundo vermelho claro
+- Abre modal de remoção individual
+
+**Botão em Massa ("Remover Todas"):**
+- Aparece no card de bonificação aplicada (topo da página)
+- Visível apenas se: `hasPermission('financial.removeBonusBulk')`
+- Cor: vermelho com ícone de lixeira
+- Posição: canto superior direito do card verde de bonificação
+- Abre modal de remoção em massa
+
+#### 6. Fluxo Completo de Uso
+
+**Remoção Individual:**
+1. Usuário vê lista de funcionários com bonificações
+2. Clica no ícone de lixeira ao lado do valor
+3. Modal abre com dados do funcionário
+4. Usuário lê alerta de ação irreversível
+5. Digita observação (min 10 caracteres)
+6. Sistema valida em tempo real
+7. Usuário clica "Confirmar Remoção"
+8. Sistema processa e mostra loading
+9. Bonificação é removida
+10. Toast de sucesso aparece
+11. Modal fecha automaticamente
+12. Dados recarregam e valor some da lista
+
+**Remoção em Massa:**
+1. Usuário vê card verde de bonificação aplicada
+2. Clica em "Remover Todas" (botão vermelho)
+3. Modal abre com estatísticas detalhadas
+4. Usuário vê alerta VERMELHO em destaque
+5. Analisa quantidade de funcionários e valor total
+6. Digita observação justificando remoção em massa
+7. Sistema valida em tempo real
+8. Usuário clica "Confirmar Remoção em Massa"
+9. Sistema processa todos os funcionários
+10. Toast mostra quantidade removida
+11. Modal fecha automaticamente
+12. Dados recarregam e card de bonificação desaparece
+
+### Arquivos Modificados
+
+1. ✅ `src/components/attendance/AttendanceTab.tsx`
+   - Adicionado Modal de Remoção Individual (linhas 1091-1197)
+   - Adicionado Modal de Remoção em Massa (linhas 1199-1306)
+
+### Testes Realizados
+
+- ✅ Build bem-sucedido sem erros
+- ✅ TypeScript compilando corretamente
+- ✅ Importações corretas (Trash2 icon já estava importado)
+- ✅ Estados e handlers já estavam implementados
+- ✅ Integração com backend já testada anteriormente
+
+### Observações Técnicas
+
+**Design System:**
+- Cores consistentes com o resto do sistema
+- Tailwind classes padronizadas
+- Responsividade mobile-first
+- Acessibilidade: min-h-[44px] para touch targets
+- z-index: 50 para sobreposição correta
+
+**Diferenças entre os Modais:**
+1. **Individual**: Alerta amarelo, foco em um funcionário
+2. **Massa**: Alerta vermelho, estatísticas de múltiplos funcionários
+3. **Individual**: Botão "Confirmar Remoção"
+4. **Massa**: Botão "Confirmar Remoção em Massa" (mais explícito)
+
+**Estados Compartilhados:**
+- `removingBonus`: usado por ambos os modais para loading state
+- Garante que apenas um modal pode estar processando por vez
+
+### Benefícios Alcançados
+
+**Para Administradores:**
+- ✅ Interface visual completa para remoção de bonificações
+- ✅ Confirmação clara antes de ações destrutivas
+- ✅ Obrigatoriedade de justificativa (observação)
+- ✅ Feedback visual de validação em tempo real
+- ✅ Estatísticas claras antes de remoção em massa
+
+**Para o Sistema:**
+- ✅ Funcionalidade completa end-to-end
+- ✅ Auditoria completa de todas as remoções
+- ✅ Rastreabilidade total (quem, quando, por quê)
+- ✅ Segurança reforçada com permissões granulares
+- ✅ UX consistente com resto do sistema
+
+**Para Compliance:**
+- ✅ Justificativa obrigatória em todas as remoções
+- ✅ Histórico completo na tabela bonus_removals
+- ✅ Registro no audit_logs para auditoria externa
+- ✅ Impossível remover sem deixar rastro
+- ✅ Dados do removedor (user_id) sempre registrados
+
