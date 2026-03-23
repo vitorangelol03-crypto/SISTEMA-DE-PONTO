@@ -7,6 +7,7 @@ import { HelpButton } from './components/tutorial/HelpButton';
 import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
 import { initializeSystem } from './services/database';
+import { EmployeeClockIn } from './components/employee-clock/EmployeeClockIn';
 
 const AttendanceTab = lazy(() => import('./components/attendance/AttendanceTab').then(m => ({ default: m.AttendanceTab })));
 const EmployeesTab = lazy(() => import('./components/employees/EmployeesTab').then(m => ({ default: m.EmployeesTab })));
@@ -24,9 +25,24 @@ function App() {
   const { hasPermission } = usePermissions(user?.id || null);
   const [activeTab, setActiveTab] = useState<TabType>('attendance');
 
+  // Verifica se a URL indica modo de registro de ponto do funcionário
+  const isClockMode =
+    window.location.pathname === '/clock' ||
+    new URLSearchParams(window.location.search).get('mode') === 'clock';
+
   useEffect(() => {
     initializeSystem();
   }, []);
+
+  // Tela de registro de ponto — não exige login de supervisor
+  if (isClockMode) {
+    return (
+      <>
+        <EmployeeClockIn />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
 
   if (loading) {
     return (

@@ -6,6 +6,7 @@ import {
   getAllEmployees,
   getAttendanceHistory,
   markAttendance,
+  setManualTime,
   Employee,
   Attendance,
   createBonus,
@@ -21,6 +22,7 @@ import {
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
+import { AttendanceApprovalPanel } from './AttendanceApprovalPanel';
 
 interface AttendanceTabProps {
   userId: string;
@@ -36,6 +38,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(getBrazilDate());
   const [exitTimes, setExitTimes] = useState<Record<string, string>>({});
+  const [manualTimes, setManualTimes] = useState<Record<string, { entry: string; exit: string }>>({});
+  const [savingManualTime, setSavingManualTime] = useState<Record<string, boolean>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [employmentTypeFilter, setEmploymentTypeFilter] = useState<EmploymentType>('all');
   const [showBonusModal, setShowBonusModal] = useState(false);
@@ -51,6 +55,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [showRemoveAllBonusModal, setShowRemoveAllBonusModal] = useState(false);
   const [removeAllBonusObservation, setRemoveAllBonusObservation] = useState('');
   const [removingBonus, setRemovingBonus] = useState(false);
+  const [activeView, setActiveView] = useState<'attendance' | 'approvals'>('attendance');
 
   const isViewingToday = selectedDate === getBrazilDate();
 
@@ -72,12 +77,27 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       setPayments(paymentsData);
 
       const exitTimesMap: Record<string, string> = {};
+      const manualTimesMap: Record<string, { entry: string; exit: string }> = {};
+
+      const isoToBrazilHMS = (iso: string): string => {
+        const d = new Date(iso);
+        // UTC-3: subtract 3 h then read the time part of the ISO string
+        const brazil = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+        return brazil.toISOString().split('T')[1].substring(0, 8);
+      };
+
       attendancesData.forEach(att => {
         if (att.exit_time) {
           exitTimesMap[att.employee_id] = att.exit_time;
         }
+        manualTimesMap[att.employee_id] = {
+          entry: att.entry_time    ? isoToBrazilHMS(att.entry_time)    : '',
+          exit:  att.exit_time_full ? isoToBrazilHMS(att.exit_time_full) : '',
+        };
       });
+
       setExitTimes(exitTimesMap);
+      setManualTimes(manualTimesMap);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados');
@@ -91,6 +111,15 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       loadData(selectedDate);
     }
   }, [selectedDate, employmentTypeFilter]);
+
+  // Polling automático a cada 30s quando está visualizando hoje
+  useEffect(() => {
+    if (!isViewingToday) return;
+    const interval = setInterval(() => {
+      loadData(selectedDate);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isViewingToday, selectedDate, employmentTypeFilter]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -165,10 +194,37 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   };
 
   const handleExitTimeChange = (employeeId: string, time: string) => {
-    setExitTimes(prev => ({
+    setExitTimes(prev => ({ ...prev, [employeeId]: time }));
+  };
+
+  const handleManualTimeChange = (employeeId: string, field: 'entry' | 'exit', value: string) => {
+    setManualTimes(prev => ({
       ...prev,
-      [employeeId]: time
+      [employeeId]: { ...(prev[employeeId] ?? { entry: '', exit: '' }), [field]: value },
     }));
+  };
+
+  const handleSaveManualTime = async (employeeId: string) => {
+    if (!hasPermission('attendance.edit')) {
+      toast.error('Você não tem permissão para editar horários');
+      return;
+    }
+    const times = manualTimes[employeeId];
+    if (!times?.entry || !times?.exit) {
+      toast.error('Preencha entrada e saída antes de salvar');
+      return;
+    }
+    setSavingManualTime(prev => ({ ...prev, [employeeId]: true }));
+    try {
+      await setManualTime(employeeId, selectedDate, times.entry, times.exit);
+      toast.success('Horário salvo');
+      await loadData(selectedDate);
+    } catch (err) {
+      console.error('Erro ao salvar horário manual:', err);
+      toast.error(err instanceof Error ? err.message : 'Erro ao salvar horário');
+    } finally {
+      setSavingManualTime(prev => ({ ...prev, [employeeId]: false }));
+    }
   };
 
   const updateExitTime = async (employeeId: string) => {
@@ -194,8 +250,9 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     const filteredAttendances = attendances.filter(att => 
       filteredEmployees.some(emp => emp.id === att.employee_id)
     );
-    const present = filteredAttendances.filter(att => att.status === 'present').length;
-    const absent = filteredAttendances.filter(att => att.status === 'absent').length;
+    // Inclui como presente: status 'present' OU quem bateu entrada via tela de funcionário
+    const present = filteredAttendances.filter(att => att.status === 'present' || att.entry_time != null).length;
+    const absent = filteredAttendances.filter(att => att.status === 'absent' && att.entry_time == null).length;
     const notMarked = filteredEmployees.length - filteredAttendances.length;
     
     return { present, absent, notMarked };
@@ -408,6 +465,35 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
 
   return (
     <div className="space-y-6">
+      {/* Seletor de sub-aba */}
+      <div className="flex border-b border-gray-200 bg-white rounded-t-lg shadow px-4">
+        <button
+          onClick={() => setActiveView('attendance')}
+          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeView === 'attendance'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Controle de Ponto
+        </button>
+        <button
+          onClick={() => setActiveView('approvals')}
+          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+            activeView === 'approvals'
+              ? 'border-yellow-500 text-yellow-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Aprovações Pendentes
+        </button>
+      </div>
+
+      {activeView === 'approvals' && (
+        <AttendanceApprovalPanel userId={userId} />
+      )}
+
+      <div style={{ display: activeView === 'attendance' ? '' : 'none' }}>
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex flex-col space-y-4">
           <div className="flex items-center justify-between">
@@ -672,7 +758,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                   Ações
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Horário de Saída
+                  Entrada / Saída
                 </th>
               </tr>
             </thead>
@@ -789,22 +875,54 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="time"
-                          value={exitTimes[employee.id] || ''}
-                          onChange={(e) => handleExitTimeChange(employee.id, e.target.value)}
-                          onBlur={() => updateExitTime(employee.id)}
-                          disabled={!hasPermission('attendance.edit')}
-                          className={`border rounded-md px-3 py-2 text-base min-h-[44px] ${
-                            !hasPermission('attendance.edit')
-                              ? 'bg-gray-100 cursor-not-allowed opacity-50 border-gray-200'
-                              : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-                          }`}
-                          title={!hasPermission('attendance.edit') ? 'Você não tem permissão para editar horário de saída' : ''}
-                        />
-                      </div>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {hasPermission('attendance.edit') ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="time"
+                            step="1"
+                            value={manualTimes[employee.id]?.entry ?? ''}
+                            onChange={(e) => handleManualTimeChange(employee.id, 'entry', e.target.value)}
+                            className="w-[100px] border border-gray-300 rounded px-1 py-1 text-xs focus:ring-blue-500 focus:border-blue-500"
+                            title="Horário de entrada"
+                          />
+                          <span className="text-gray-400 text-xs">→</span>
+                          <input
+                            type="time"
+                            step="1"
+                            value={manualTimes[employee.id]?.exit ?? ''}
+                            onChange={(e) => handleManualTimeChange(employee.id, 'exit', e.target.value)}
+                            className="w-[100px] border border-gray-300 rounded px-1 py-1 text-xs focus:ring-blue-500 focus:border-blue-500"
+                            title="Horário de saída"
+                          />
+                          <button
+                            onClick={() => handleSaveManualTime(employee.id)}
+                            disabled={savingManualTime[employee.id] || !manualTimes[employee.id]?.entry || !manualTimes[employee.id]?.exit}
+                            className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs"
+                            title="Salvar horário"
+                          >
+                            {savingManualTime[employee.id] ? '…' : '💾'}
+                          </button>
+                        </div>
+                      ) : (
+                        (() => {
+                          const att = attendances.find(a => a.employee_id === employee.id);
+                          const fmt = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                          if (att?.entry_time && att?.exit_time_full) {
+                            return (
+                              <div className="text-xs font-mono">
+                                <span className="text-green-700">{fmt(att.entry_time)}</span>
+                                <span className="text-gray-400 mx-1">→</span>
+                                <span className="text-orange-600">{fmt(att.exit_time_full)}</span>
+                              </div>
+                            );
+                          }
+                          if (att?.entry_time) {
+                            return <div className="text-xs font-mono text-green-700">{fmt(att.entry_time)}</div>;
+                          }
+                          return <span className="text-xs text-gray-400">-</span>;
+                        })()
+                      )}
                     </td>
                   </tr>
                 );
@@ -921,20 +1039,58 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                     </button>
                   )}
 
-                  {hasPermission('attendance.edit') && (
+                  {hasPermission('attendance.edit') ? (
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Horário de Saída
-                      </label>
-                      <input
-                        type="time"
-                        value={exitTimes[employee.id] || ''}
-                        onChange={(e) => handleExitTimeChange(employee.id, e.target.value)}
-                        onBlur={() => updateExitTime(employee.id)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-3 text-base focus:ring-blue-500 focus:border-blue-500 min-h-[48px]"
-                      />
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Entrada / Saída</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="time"
+                          step="1"
+                          value={manualTimes[employee.id]?.entry ?? ''}
+                          onChange={(e) => handleManualTimeChange(employee.id, 'entry', e.target.value)}
+                          className="flex-1 border border-gray-300 rounded-lg px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 min-h-[44px]"
+                          title="Entrada"
+                        />
+                        <span className="text-gray-400 text-xs">→</span>
+                        <input
+                          type="time"
+                          step="1"
+                          value={manualTimes[employee.id]?.exit ?? ''}
+                          onChange={(e) => handleManualTimeChange(employee.id, 'exit', e.target.value)}
+                          className="flex-1 border border-gray-300 rounded-lg px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 min-h-[44px]"
+                          title="Saída"
+                        />
+                        <button
+                          onClick={() => handleSaveManualTime(employee.id)}
+                          disabled={savingManualTime[employee.id] || !manualTimes[employee.id]?.entry || !manualTimes[employee.id]?.exit}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm min-h-[44px]"
+                          title="Salvar horário"
+                        >
+                          {savingManualTime[employee.id] ? '…' : '💾'}
+                        </button>
+                      </div>
                     </div>
-                  )}
+                  ) : (() => {
+                    const att = attendances.find(a => a.employee_id === employee.id);
+                    const fmt = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    if (att?.entry_time && att?.exit_time_full) {
+                      return (
+                        <div className="bg-gray-50 rounded-lg px-3 py-2 text-sm font-mono">
+                          <span className="text-green-700">{fmt(att.entry_time)}</span>
+                          <span className="text-gray-400 mx-2">→</span>
+                          <span className="text-orange-600">{fmt(att.exit_time_full)}</span>
+                        </div>
+                      );
+                    }
+                    if (att?.entry_time) {
+                      return (
+                        <div className="bg-green-50 rounded-lg px-3 py-2 text-sm font-mono text-green-700">
+                          Entrada: {fmt(att.entry_time)}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
             );
@@ -1030,6 +1186,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
           </div>
         </div>
       )}
+      </div> {/* fim wrapper activeView attendance */}
 
       {/* Modal de Confirmação de Reset */}
       {showResetConfirmModal && (

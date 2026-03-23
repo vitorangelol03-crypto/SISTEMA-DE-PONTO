@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X } from 'lucide-react';
-import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee, bulkCreateEmployees } from '../../services/database';
+import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound } from 'lucide-react';
+import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee, bulkCreateEmployees, setEmployeePin, resetEmployeePin } from '../../services/database';
 import { validateCPF, formatCPF } from '../../utils/validation';
 import { generateEmployeeTemplate, parseEmployeeSpreadsheet, generateErrorReport, generateImportReport, ImportValidationResult } from '../../utils/employeeImport';
 import toast from 'react-hot-toast';
@@ -32,6 +32,13 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     state: '',
     zipCode: ''
   });
+
+  const [pinModal, setPinModal] = useState<{ employee: Employee } | null>(null);
+  const [pinInput, setPinInput] = useState('');
+  const [pinLoading, setPinLoading] = useState(false);
+
+  const [resetModal, setResetModal] = useState<{ employee: Employee } | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -290,6 +297,41 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     setImportResult(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSetPin = async () => {
+    if (!pinModal) return;
+    if (!/^\d{4,6}$/.test(pinInput)) {
+      toast.error('PIN deve ser numérico com 4 a 6 dígitos');
+      return;
+    }
+    setPinLoading(true);
+    try {
+      await setEmployeePin(pinModal.employee.id, pinInput);
+      toast.success('PIN definido com sucesso!');
+      setPinModal(null);
+      setPinInput('');
+      loadEmployees();
+    } catch {
+      toast.error('Erro ao definir PIN');
+    } finally {
+      setPinLoading(false);
+    }
+  };
+
+  const handleResetPin = async () => {
+    if (!resetModal) return;
+    setResetLoading(true);
+    try {
+      await resetEmployeePin(resetModal.employee.id);
+      toast.success('PIN resetado com sucesso!');
+      setResetModal(null);
+      loadEmployees();
+    } catch {
+      toast.error('Erro ao resetar PIN');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -680,6 +722,9 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   Chave PIX
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  PIN
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Cadastrado em
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -712,6 +757,35 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">
                       {employee.pix_key || '-'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {employee.pin_configured ? (
+                        <span className="text-sm font-medium text-green-700">Configurado ✓</span>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">Não configurado</span>
+                      )}
+                      {hasPermission('employees.edit') && (
+                        <>
+                          <button
+                            onClick={() => { setPinModal({ employee }); setPinInput(''); }}
+                            className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                            title="Definir PIN"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                          </button>
+                          {employee.pin_configured && (
+                            <button
+                              onClick={() => setResetModal({ employee })}
+                              className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                              title="Resetar PIN"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -769,6 +843,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   {employee.pix_key && (
                     <p className="text-xs text-gray-500 mt-1">PIX: {employee.pix_key}</p>
                   )}
+                  <p className="text-xs mt-1">
+                    PIN:{' '}
+                    {employee.pin_configured
+                      ? <span className="text-green-700 font-medium">Configurado ✓</span>
+                      : <span className="italic text-gray-400">Não configurado</span>}
+                  </p>
                   <p className="text-xs text-gray-400 mt-2">
                     Cadastrado em {new Date(employee.created_at).toLocaleDateString('pt-BR')}
                   </p>
@@ -783,6 +863,24 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   >
                     <Edit2 className="w-4 h-4" />
                     <span>Editar</span>
+                  </button>
+                )}
+                {hasPermission('employees.edit') && (
+                  <button
+                    onClick={() => { setPinModal({ employee }); setPinInput(''); }}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors min-h-[48px]"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    <span>PIN</span>
+                  </button>
+                )}
+                {hasPermission('employees.edit') && employee.pin_configured && (
+                  <button
+                    onClick={() => setResetModal({ employee })}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors min-h-[48px]"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>Reset</span>
                   </button>
                 )}
                 {hasPermission('employees.delete') && (
@@ -814,6 +912,95 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
           </div>
         )}
       </div>
+
+      {/* Modal de PIN */}
+      {pinModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-purple-600" />
+                Definir PIN — {pinModal.employee.name.split(' ')[0]}
+              </h3>
+              <button onClick={() => setPinModal(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-gray-600">
+                O PIN é usado pelo funcionário para registrar o ponto na tela de auto-atendimento.
+                Deve ter 4 a 6 dígitos numéricos.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Novo PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="\d*"
+                  value={pinInput}
+                  onChange={e => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="4 a 6 dígitos"
+                  maxLength={6}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-center text-xl font-mono tracking-widest focus:border-purple-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleSetPin}
+                  disabled={pinLoading || pinInput.length < 4}
+                  className="flex-1 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                >
+                  {pinLoading ? 'Salvando...' : 'Salvar PIN'}
+                </button>
+                <button
+                  onClick={() => setPinModal(null)}
+                  className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de reset de PIN */}
+      {resetModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h3 className="text-lg font-semibold flex items-center gap-2 text-red-700">
+                <X className="w-5 h-5" />
+                Resetar PIN
+              </h3>
+              <button onClick={() => setResetModal(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-gray-600">
+                Tem certeza que deseja resetar o PIN de <strong>{resetModal.employee.name}</strong>?
+                O funcionário precisará definir um novo PIN no próximo acesso.
+              </p>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleResetPin}
+                  disabled={resetLoading}
+                  className="flex-1 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                >
+                  {resetLoading ? 'Resetando...' : 'Confirmar Reset'}
+                </button>
+                <button
+                  onClick={() => setResetModal(null)}
+                  className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showImportModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

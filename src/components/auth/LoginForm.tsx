@@ -139,6 +139,16 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
               Esqueceu a senha?
             </button>
           </div>
+
+          <div className="border-t pt-4">
+            <button
+              type="button"
+              onClick={() => window.location.href = '/?mode=clock'}
+              className="w-full py-2 px-4 border-2 border-blue-600 text-blue-600 text-sm font-medium rounded-md hover:bg-blue-50 transition-colors"
+            >
+              Sou funcionário — Registrar Ponto
+            </button>
+          </div>
         </form>
       </div>
     </div>

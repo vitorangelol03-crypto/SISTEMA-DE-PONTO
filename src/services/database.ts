@@ -13,6 +13,8 @@ export interface Employee {
   id: string;
   name: string;
   cpf: string;
+  pin: string | null;
+  pin_configured: boolean | null;
   pix_key: string | null;
   pix_type: string | null;
   employment_type: string | null;
@@ -31,6 +33,16 @@ export interface Attendance {
   date: string;
   status: 'present' | 'absent';
   exit_time: string | null;
+  entry_time: string | null;
+  exit_time_full: string | null;
+  hours_worked: number | null;
+  night_hours: number | null;
+  night_additional: number | null;
+  approval_status: 'pending' | 'approved' | 'rejected' | 'manual' | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejection_reason: string | null;
+  clock_source: 'manual' | 'employee_self' | null;
   marked_by: string;
   created_at: string;
   employees?: Employee;
@@ -1643,4 +1655,303 @@ export const getPerformanceStats = async (startDate?: string, endDate?: string) 
   });
 
   return stats;
+};
+
+// ─── Clock-in / Clock-out functions ───────────────────────────────────────────
+
+/** Retorna a data atual no fuso horário do Brasil (UTC-3) como string YYYY-MM-DD */
+function getBrazilDateString(): string {
+  const now = new Date();
+  const brazilOffset = -3 * 60;
+  const local = new Date(now.getTime() + brazilOffset * 60 * 1000);
+  return local.toISOString().split('T')[0];
+}
+
+/**
+ * Calcula horas noturnas (22h–05h) de um intervalo entry → exit.
+ * Retorna { hoursWorked, nightHours } em horas decimais.
+ */
+function calcHours(entry: Date, exit: Date): { hoursWorked: number; nightHours: number } {
+  const diffMs = exit.getTime() - entry.getTime();
+  const hoursWorked = diffMs / (1000 * 60 * 60);
+
+  // Verifica minuto a minuto quais partes caem no horário noturno (22h–05h) no fuso de Brasília (UTC-3).
+  // Os timestamps são UTC, então convertemos: hBRT = (utcHour - 3 + 24) % 24
+  // Noite em BRT: hBRT >= 22 OU hBRT < 5
+  let nightMinutes = 0;
+  const step = 60 * 1000; // 1 minuto
+  for (let t = entry.getTime(); t < exit.getTime(); t += step) {
+    const utcHour = new Date(t).getUTCHours();
+    const hBRT = (utcHour - 3 + 24) % 24;
+    if (hBRT >= 22 || hBRT < 5) nightMinutes++;
+  }
+  const nightHours = nightMinutes / 60;
+
+  return { hoursWorked: Math.round(hoursWorked * 100) / 100, nightHours: Math.round(nightHours * 100) / 100 };
+}
+
+/** Busca o histórico de attendance de um funcionário nos últimos N dias. */
+export const getEmployeeAttendanceHistory = async (
+  employeeId: string,
+  days: number = 30
+): Promise<Attendance[]> => {
+  const endDate = getBrazilDateString();
+  const startMs = new Date(endDate).getTime() - (days - 1) * 24 * 60 * 60 * 1000;
+  const startDate = new Date(startMs).toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('attendance')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('date', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+};
+
+/** Busca funcionário por CPF. Retorna null se não encontrar. */
+export const getEmployeeByCpf = async (cpf: string): Promise<Employee | null> => {
+  const cpfNumbers = cpf.replace(/\D/g, '');
+  const { data, error } = await supabase
+    .from('employees')
+    .select('*')
+    .eq('cpf', cpfNumbers)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+};
+
+/** Busca o registro de attendance de hoje para um funcionário específico. */
+export const getEmployeeTodayAttendance = async (employeeId: string): Promise<Attendance | null> => {
+  const today = getBrazilDateString();
+  const { data, error } = await supabase
+    .from('attendance')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .eq('date', today)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+};
+
+/** Funcionário registra entrada. */
+export const clockIn = async (employeeId: string): Promise<Attendance> => {
+  const today = getBrazilDateString();
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('attendance')
+    .upsert([{
+      employee_id: employeeId,
+      date: today,
+      status: 'present',
+      entry_time: now,
+      clock_source: 'employee_self',
+      approval_status: 'pending',
+    }], { onConflict: 'employee_id,date' })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+/** Funcionário registra saída. Calcula horas trabalhadas e horas noturnas. */
+export const clockOut = async (employeeId: string, dailyRate?: number): Promise<Attendance> => {
+  const today = getBrazilDateString();
+  const now = new Date();
+
+  // Busca o registro de hoje para obter o entry_time
+  const existing = await getEmployeeTodayAttendance(employeeId);
+  if (!existing || !existing.entry_time) {
+    throw new Error('Nenhuma entrada registrada hoje para calcular a saída');
+  }
+
+  const entry = new Date(existing.entry_time);
+  const { hoursWorked, nightHours } = calcHours(entry, now);
+
+  // Adicional noturno: 20% sobre o valor proporcional das horas noturnas
+  let nightAdditional = 0;
+  if (nightHours > 0 && hoursWorked > 0 && dailyRate && dailyRate > 0) {
+    const hourlyRate = dailyRate / hoursWorked;
+    nightAdditional = Math.round(nightHours * hourlyRate * 0.2 * 100) / 100;
+  }
+
+  const { data, error } = await supabase
+    .from('attendance')
+    .update({
+      exit_time_full: now.toISOString(),
+      hours_worked: hoursWorked,
+      night_hours: nightHours,
+      night_additional: nightAdditional,
+    })
+    .eq('employee_id', employeeId)
+    .eq('date', today)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+/**
+ * Supervisor insere / edita horário manualmente.
+ * entryTime e exitTime chegam como "HH:MM:SS" no horário de Brasília (UTC-3).
+ * Se exitTime < entryTime, assume turno que passa da meia-noite (acrescenta 1 dia).
+ */
+export const setManualTime = async (
+  employeeId: string,
+  date: string,
+  entryTime: string,
+  exitTime: string,
+): Promise<Attendance> => {
+  const entry = new Date(`${date}T${entryTime}-03:00`);
+  let exit  = new Date(`${date}T${exitTime}-03:00`);
+
+  if (exit <= entry) {
+    // turno noturno que passa da meia-noite
+    exit = new Date(exit.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  const { hoursWorked, nightHours } = calcHours(entry, exit);
+
+  const { data, error } = await supabase
+    .from('attendance')
+    .upsert([{
+      employee_id: employeeId,
+      date,
+      status: 'present',
+      entry_time: entry.toISOString(),
+      exit_time_full: exit.toISOString(),
+      hours_worked: hoursWorked,
+      night_hours: nightHours,
+      clock_source: 'manual',
+      approval_status: 'manual',
+    }], { onConflict: 'employee_id,date' })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+/** Busca registros pendentes de aprovação, opcionalmente filtrados por data. */
+export const getPendingApprovals = async (date?: string): Promise<Attendance[]> => {
+  let query = supabase
+    .from('attendance')
+    .select(`
+      *,
+      employees (
+        id,
+        name,
+        cpf,
+        employment_type
+      )
+    `)
+    .eq('approval_status', 'pending')
+    .order('date', { ascending: false });
+
+  if (date) {
+    query = query.eq('date', date);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+};
+
+/** Aprova um registro de attendance. */
+export const approveAttendance = async (attendanceId: string, supervisorId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('attendance')
+    .update({
+      approval_status: 'approved',
+      approved_by: supervisorId,
+      approved_at: new Date().toISOString(),
+    })
+    .eq('id', attendanceId);
+
+  if (error) throw error;
+};
+
+/** Rejeita um registro de attendance com motivo. */
+export const rejectAttendance = async (
+  attendanceId: string,
+  supervisorId: string,
+  reason: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('attendance')
+    .update({
+      approval_status: 'rejected',
+      approved_by: supervisorId,
+      approved_at: new Date().toISOString(),
+      rejection_reason: reason,
+    })
+    .eq('id', attendanceId);
+
+  if (error) throw error;
+};
+
+/** Aprova em lote uma lista de IDs de attendance, processando em chunks de 50. */
+export const bulkApproveAttendance = async (ids: string[], supervisorId: string): Promise<void> => {
+  const chunkSize = 50;
+  const approvedAt = new Date().toISOString();
+
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const { error } = await supabase
+      .from('attendance')
+      .update({
+        approval_status: 'approved',
+        approved_by: supervisorId,
+        approved_at: approvedAt,
+      })
+      .in('id', chunk);
+
+    if (error) throw error;
+  }
+};
+
+// ─── PIN functions ─────────────────────────────────────────────────────────────
+
+/** Define ou altera o PIN de um funcionário e marca como configurado. */
+export const setEmployeePin = async (employeeId: string, pin: string): Promise<void> => {
+  if (!/^\d{4,6}$/.test(pin)) {
+    throw new Error('PIN deve ser numérico com 4 a 6 dígitos');
+  }
+
+  const { error } = await supabase
+    .from('employees')
+    .update({ pin, pin_configured: true })
+    .eq('id', employeeId);
+
+  if (error) throw error;
+};
+
+/** Reseta o PIN do funcionário — exige nova criação no próximo acesso. */
+export const resetEmployeePin = async (employeeId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('employees')
+    .update({ pin: null, pin_configured: false })
+    .eq('id', employeeId);
+
+  if (error) throw error;
+};
+
+/** Verifica se o PIN fornecido corresponde ao PIN do funcionário. */
+export const verifyEmployeePin = async (employeeId: string, pin: string): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('pin')
+    .eq('id', employeeId)
+    .single();
+
+  if (error) throw error;
+  if (!data?.pin) return false;
+  return data.pin === pin;
 };
