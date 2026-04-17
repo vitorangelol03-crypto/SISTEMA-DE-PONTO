@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart3, Download, Filter, FileText, RefreshCw, Search, Printer } from 'lucide-react';
-import { getAllEmployees, getAttendanceHistory, Employee, Attendance } from '../../services/database';
+import { getAllEmployees, getAttendanceHistory, getPayments, Employee, Attendance, Payment } from '../../services/database';
 import { formatDateBR } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx-js-style';
 import toast from 'react-hot-toast';
@@ -14,6 +14,7 @@ interface ReportsTabProps {
 export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [filteredAttendances, setFilteredAttendances] = useState<Attendance[]>([]);
   const [displayedAttendances, setDisplayedAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,13 +33,15 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
     try {
       setLoading(true);
       const employmentType = filters.employmentType === 'all' ? undefined : filters.employmentType;
-      const [employeesData, attendancesData] = await Promise.all([
+      const [employeesData, attendancesData, paymentsData] = await Promise.all([
         getAllEmployees(employmentType),
-        getAttendanceHistory(undefined, undefined, undefined, undefined, employmentType)
+        getAttendanceHistory(undefined, undefined, undefined, undefined, employmentType),
+        getPayments(undefined, undefined, undefined, employmentType)
       ]);
 
       setEmployees(employeesData);
       setAttendances(attendancesData);
+      setPayments(paymentsData);
       setFilteredAttendances(attendancesData);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -111,6 +114,65 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
     return { total, present, absent, presenceRate };
   };
 
+  // Mapa rápido payment por "employeeId|date" para o dataset atual
+  const paymentIndex = React.useMemo(() => {
+    const map = new Map<string, Payment>();
+    payments.forEach(p => map.set(`${p.employee_id}|${p.date}`, p));
+    return map;
+  }, [payments]);
+
+  const getBonusForAttendance = (att: Attendance): { b: number; c1: number; c2: number } => {
+    const payment = paymentIndex.get(`${att.employee_id}|${att.date}`);
+    return {
+      b: payment?.bonus_b ? parseFloat(payment.bonus_b.toString()) : 0,
+      c1: payment?.bonus_c1 ? parseFloat(payment.bonus_c1.toString()) : 0,
+      c2: payment?.bonus_c2 ? parseFloat(payment.bonus_c2.toString()) : 0,
+    };
+  };
+
+  // Resumo do período agregado por funcionário (considera os attendances filtrados não-rejeitados)
+  interface EmployeeSummary {
+    employeeId: string;
+    name: string;
+    cpf: string;
+    presentDays: number;
+    bCount: number;
+    bTotal: number;
+    c1Count: number;
+    c1Total: number;
+    c2Count: number;
+    c2Total: number;
+  }
+
+  const periodSummary = React.useMemo((): EmployeeSummary[] => {
+    const rows = displayedAttendances.filter(att => att.approval_status !== 'rejected');
+    const map = new Map<string, EmployeeSummary>();
+
+    rows.forEach(att => {
+      const key = att.employee_id;
+      if (!map.has(key)) {
+        map.set(key, {
+          employeeId: att.employee_id,
+          name: att.employees?.name ?? 'N/A',
+          cpf: att.employees?.cpf ?? '',
+          presentDays: 0,
+          bCount: 0, bTotal: 0,
+          c1Count: 0, c1Total: 0,
+          c2Count: 0, c2Total: 0,
+        });
+      }
+      const entry = map.get(key)!;
+      if (att.status === 'present') entry.presentDays++;
+
+      const { b, c1, c2 } = getBonusForAttendance(att);
+      if (b > 0) { entry.bCount++; entry.bTotal += b; }
+      if (c1 > 0) { entry.c1Count++; entry.c1Total += c1; }
+      if (c2 > 0) { entry.c2Count++; entry.c2Total += c2; }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [displayedAttendances, paymentIndex]);
+
   const exportToPDF = () => {
     if (!hasPermission('reports.export')) {
       toast.error('Você não tem permissão para exportar relatórios');
@@ -135,7 +197,11 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       pending: 'Pendente', approved: 'Aprovado', manual: 'Manual',
     };
 
-    const tableRows = rows.map(att => `
+    const formatMoney = (v: number) => v > 0 ? `R$ ${v.toFixed(2)}` : '-';
+
+    const tableRows = rows.map(att => {
+      const { b, c1, c2 } = getBonusForAttendance(att);
+      return `
       <tr>
         <td>${formatDateBR(att.date)}</td>
         <td>${att.employees?.name ?? 'N/A'}</td>
@@ -144,7 +210,20 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
         <td>${formatT(att.exit_time_full)}</td>
         <td>${formatH(att.hours_worked)}</td>
         <td>${formatH(att.night_hours)}</td>
+        <td>${formatMoney(b)}</td>
+        <td>${formatMoney(c1)}</td>
+        <td>${formatMoney(c2)}</td>
         <td>${att.approval_status ? (approvalLabel[att.approval_status] ?? att.approval_status) : '-'}</td>
+      </tr>`;
+    }).join('');
+
+    const summaryRows = periodSummary.map(s => `
+      <tr>
+        <td>${s.name}</td>
+        <td>${s.presentDays}</td>
+        <td>${s.bCount} / R$ ${s.bTotal.toFixed(2)}</td>
+        <td>${s.c1Count} / R$ ${s.c1Total.toFixed(2)}</td>
+        <td>${s.c2Count} / R$ ${s.c2Total.toFixed(2)}</td>
       </tr>`).join('');
 
     const html = `<!DOCTYPE html>
@@ -155,11 +234,13 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   <style>
     body { font-family: Arial, sans-serif; font-size: 10px; margin: 20px; color: #111; }
     h1 { font-size: 14px; margin-bottom: 4px; }
+    h2 { font-size: 12px; margin-top: 20px; margin-bottom: 6px; }
     p { font-size: 10px; color: #555; margin: 0 0 12px; }
-    table { width: 100%; border-collapse: collapse; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
     th { background: #2563EB; color: #fff; padding: 6px 8px; text-align: left; font-size: 9px; text-transform: uppercase; }
     td { padding: 4px 8px; border-bottom: 1px solid #e5e7eb; font-size: 10px; }
     tr:nth-child(even) td { background: #f9fafb; }
+    table.summary th { background: #7C3AED; }
     @media print { @page { margin: 15mm; } }
   </style>
 </head>
@@ -171,10 +252,24 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       <tr>
         <th>Data</th><th>Funcionário</th><th>Status</th>
         <th>Entrada</th><th>Saída</th><th>Horas</th>
-        <th>Hs Noturnas</th><th>Aprovação</th>
+        <th>Hs Noturnas</th><th>Bon. B</th><th>Bon. C1</th><th>Bon. C2</th><th>Aprovação</th>
       </tr>
     </thead>
     <tbody>${tableRows}</tbody>
+  </table>
+
+  <h2>Resumo do Período</h2>
+  <table class="summary">
+    <thead>
+      <tr>
+        <th>Funcionário</th>
+        <th>Dias Presentes</th>
+        <th>B (qtd / total)</th>
+        <th>C1 (qtd / total)</th>
+        <th>C2 (qtd / total)</th>
+      </tr>
+    </thead>
+    <tbody>${summaryRows}</tbody>
   </table>
   <script>window.addEventListener('load', () => { window.print(); });<\/script>
 </body>
@@ -215,7 +310,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
 
       const headers = [
         'Data', 'Funcionário', 'CPF', 'Status', 'Entrada', 'Saída',
-        'Horas Trabalhadas', 'Horas Noturnas', 'Adicional Noturno', 'Aprovação',
+        'Horas Trabalhadas', 'Horas Noturnas', 'Adicional Noturno',
+        'Bon. B', 'Bon. C1', 'Bon. C2',
+        'Aprovação',
         'Horário Saída (legado)', 'Marcado por'
       ];
 
@@ -246,6 +343,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       exportRows.forEach((att, rowIdx) => {
         const r = rowIdx + 1;
         const approvalStatus = att.approval_status ?? '';
+        const { b, c1, c2 } = getBonusForAttendance(att);
         const values = [
           formatDateBR(att.date),
           att.employees?.name || 'N/A',
@@ -256,6 +354,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
           formatHoursExcel(att.hours_worked ?? null),
           formatHoursExcel(att.night_hours ?? null),
           att.night_additional != null ? `R$ ${Number(att.night_additional).toFixed(2)}` : '-',
+          b > 0 ? `R$ ${b.toFixed(2)}` : '-',
+          c1 > 0 ? `R$ ${c1.toFixed(2)}` : '-',
+          c2 > 0 ? `R$ ${c2.toFixed(2)}` : '-',
           approvalLabel[approvalStatus] ?? (approvalStatus || '-'),
           att.exit_time || '-',
           att.marked_by || '-',
@@ -295,10 +396,77 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       ws['!cols'] = [
         { wch: 12 }, { wch: 28 }, { wch: 15 }, { wch: 10 },
         { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 14 },
-        { wch: 16 }, { wch: 12 }, { wch: 16 }, { wch: 12 }
+        { wch: 16 },
+        { wch: 12 }, { wch: 12 }, { wch: 12 },
+        { wch: 12 }, { wch: 16 }, { wch: 12 }
       ];
 
       XLSX.utils.book_append_sheet(wb, ws, 'Relatório de Ponto');
+
+      // Segunda aba: Resumo do Período
+      const summaryHeaders = [
+        'Funcionário', 'CPF', 'Dias Presentes',
+        'Qtd B', 'Total B (R$)',
+        'Qtd C1', 'Total C1 (R$)',
+        'Qtd C2', 'Total C2 (R$)'
+      ];
+      const wsSummary: XLSX.WorkSheet = {};
+      summaryHeaders.forEach((h, c) => {
+        const cell = XLSX.utils.encode_cell({ r: 0, c });
+        wsSummary[cell] = {
+          v: h, t: 's',
+          s: {
+            font: { bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { fgColor: { rgb: '7C3AED' } },
+            alignment: { horizontal: 'center' as const },
+            border: {
+              bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
+              right:  { style: 'thin', color: { rgb: 'CCCCCC' } },
+            },
+          },
+        };
+      });
+
+      periodSummary.forEach((s, rowIdx) => {
+        const r = rowIdx + 1;
+        const values = [
+          s.name,
+          s.cpf,
+          s.presentDays,
+          s.bCount,
+          Number(s.bTotal.toFixed(2)),
+          s.c1Count,
+          Number(s.c1Total.toFixed(2)),
+          s.c2Count,
+          Number(s.c2Total.toFixed(2)),
+        ];
+        values.forEach((val, c) => {
+          const cell = XLSX.utils.encode_cell({ r, c });
+          const isNumeric = typeof val === 'number';
+          wsSummary[cell] = {
+            v: val, t: isNumeric ? 'n' : 's',
+            s: {
+              border: {
+                bottom: { style: 'thin', color: { rgb: 'EEEEEE' } },
+                right:  { style: 'thin', color: { rgb: 'EEEEEE' } },
+              },
+            },
+          };
+        });
+      });
+
+      wsSummary['!ref'] = XLSX.utils.encode_range({
+        s: { r: 0, c: 0 },
+        e: { r: periodSummary.length, c: summaryHeaders.length - 1 }
+      });
+      wsSummary['!cols'] = [
+        { wch: 28 }, { wch: 15 }, { wch: 14 },
+        { wch: 8 }, { wch: 14 },
+        { wch: 8 }, { wch: 14 },
+        { wch: 8 }, { wch: 14 }
+      ];
+
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumo');
 
       const fileName = `relatorio-ponto-${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(wb, fileName);
@@ -545,6 +713,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Horas</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hs Noturnas</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adic. Noturno</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bon. B</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bon. C1</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bon. C2</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aprovação</th>
               </tr>
             </thead>
@@ -564,6 +735,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                   manual:   { label: '📝 Manual',    cls: 'bg-gray-100 text-gray-700' },
                 };
                 const ab = attendance.approval_status ? approvalBadge[attendance.approval_status] : null;
+                const { b: bonusB, c1: bonusC1, c2: bonusC2 } = getBonusForAttendance(attendance);
 
                 return (
                   <tr key={attendance.id} className="hover:bg-gray-50">
@@ -589,6 +761,15 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                       {attendance.night_additional != null && attendance.night_additional > 0
                         ? `R$ ${Number(attendance.night_additional).toFixed(2)}`
                         : '-'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+                      {bonusB > 0 ? `R$ ${bonusB.toFixed(2)}` : '-'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+                      {bonusC1 > 0 ? `R$ ${bonusC1.toFixed(2)}` : '-'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+                      {bonusC2 > 0 ? `R$ ${bonusC2.toFixed(2)}` : '-'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {ab ? (
@@ -620,6 +801,94 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
           </div>
         )}
       </div>
+
+      {periodSummary.length > 0 && (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200 bg-purple-50">
+            <h3 className="text-lg font-medium text-purple-900 flex items-center">
+              <BarChart3 className="w-5 h-5 mr-2 text-purple-600" />
+              Resumo do Período ({periodSummary.length} funcionário{periodSummary.length !== 1 ? 's' : ''})
+            </h3>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-purple-600">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">Funcionário</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">Dias Presentes</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">B (qtd / total)</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">C1 (qtd / total)</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">C2 (qtd / total)</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200 text-sm">
+                {periodSummary.map((s) => (
+                  <tr key={s.employeeId} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="font-medium text-gray-900">{s.name}</div>
+                      <div className="text-xs text-gray-500">{s.cpf}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-center font-medium text-gray-900">
+                      {s.presentDays}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-center text-gray-700">
+                      {s.bCount > 0 ? (
+                        <span>
+                          <span className="font-medium text-gray-900">{s.bCount}</span>
+                          <span className="text-gray-500"> / </span>
+                          <span className="font-medium text-green-700">R$ {s.bTotal.toFixed(2)}</span>
+                        </span>
+                      ) : <span className="text-gray-400">-</span>}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-center text-gray-700">
+                      {s.c1Count > 0 ? (
+                        <span>
+                          <span className="font-medium text-gray-900">{s.c1Count}</span>
+                          <span className="text-gray-500"> / </span>
+                          <span className="font-medium text-green-700">R$ {s.c1Total.toFixed(2)}</span>
+                        </span>
+                      ) : <span className="text-gray-400">-</span>}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-center text-gray-700">
+                      {s.c2Count > 0 ? (
+                        <span>
+                          <span className="font-medium text-gray-900">{s.c2Count}</span>
+                          <span className="text-gray-500"> / </span>
+                          <span className="font-medium text-green-700">R$ {s.c2Total.toFixed(2)}</span>
+                        </span>
+                      ) : <span className="text-gray-400">-</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-purple-50">
+                <tr>
+                  <td className="px-4 py-3 font-semibold text-purple-900">TOTAL</td>
+                  <td className="px-4 py-3 text-center font-semibold text-purple-900">
+                    {periodSummary.reduce((sum, s) => sum + s.presentDays, 0)}
+                  </td>
+                  <td className="px-4 py-3 text-center font-semibold text-purple-900">
+                    {periodSummary.reduce((sum, s) => sum + s.bCount, 0)}
+                    <span className="text-purple-700"> / </span>
+                    R$ {periodSummary.reduce((sum, s) => sum + s.bTotal, 0).toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3 text-center font-semibold text-purple-900">
+                    {periodSummary.reduce((sum, s) => sum + s.c1Count, 0)}
+                    <span className="text-purple-700"> / </span>
+                    R$ {periodSummary.reduce((sum, s) => sum + s.c1Total, 0).toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3 text-center font-semibold text-purple-900">
+                    {periodSummary.reduce((sum, s) => sum + s.c2Count, 0)}
+                    <span className="text-purple-700"> / </span>
+                    R$ {periodSummary.reduce((sum, s) => sum + s.c2Total, 0).toFixed(2)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

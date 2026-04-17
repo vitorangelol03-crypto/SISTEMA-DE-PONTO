@@ -89,7 +89,7 @@ function App() {
         case 'errors':
           return hasPermission('errors.view') ? <ErrorsTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'settings':
-          return hasPermission('settings.view') ? <SettingsTab hasPermission={hasPermission} /> : null;
+          return hasPermission('settings.view') ? <SettingsTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'users':
           return hasPermission('users.view') ? <UsersTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'datamanagement':

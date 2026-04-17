@@ -68,8 +68,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
   useEffect(() => {
     const filtered = employees.filter(employee => {
-      const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        employee.cpf.includes(searchTerm.replace(/\D/g, ''));
+      const searchNumbers = searchTerm.replace(/\D/g, '');
+      const nameMatch = searchTerm
+        ? employee.name.toLowerCase().includes(searchTerm.toLowerCase())
+        : true;
+      const cpfMatch = searchNumbers ? employee.cpf.includes(searchNumbers) : false;
+      const matchesSearch = !searchTerm || nameMatch || cpfMatch;
 
       const matchesCity = !cityFilter || employee.city?.toLowerCase().includes(cityFilter.toLowerCase());
       const matchesState = !stateFilter || employee.state === stateFilter;
@@ -1081,7 +1085,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                           </div>
                         </div>
                         <button
-                          onClick={() => setImportFile(null)}
+                          onClick={() => {
+                            setImportFile(null);
+                            if (fileInputRef.current) {
+                              fileInputRef.current.value = '';
+                            }
+                          }}
                           className="text-red-600 hover:text-red-700"
                         >
                           <X className="w-5 h-5" />

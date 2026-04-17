@@ -911,13 +911,43 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                     <div className="text-xs text-gray-600">
                                       Diária: R$ {payment.daily_rate?.toFixed(2) || '0.00'}
                                     </div>
-                                    <div className="text-xs text-gray-600">
-                                      Bônus: R$ {payment.bonus?.toFixed(2) || '0.00'}
-                                    </div>
+                                    {(() => {
+                                      const bonusB = Number(payment.bonus_b ?? 0);
+                                      const bonusC1 = Number(payment.bonus_c1 ?? 0);
+                                      const bonusC2 = Number(payment.bonus_c2 ?? 0);
+                                      const bonusTotal = Number(payment.bonus ?? 0);
+                                      const sumParts = bonusB + bonusC1 + bonusC2;
+                                      const mismatch = Math.abs(bonusTotal - sumParts) > 0.009;
+
+                                      return (
+                                        <>
+                                          <div className="text-xs text-gray-600">
+                                            Bônus B: R$ {bonusB.toFixed(2)}
+                                          </div>
+                                          <div className="text-xs text-gray-600">
+                                            Bônus C1: R$ {bonusC1.toFixed(2)}
+                                          </div>
+                                          <div className="text-xs text-gray-600">
+                                            Bônus C2: R$ {bonusC2.toFixed(2)}
+                                          </div>
+                                          <div className="text-xs text-gray-700 font-medium border-t border-gray-200 mt-1 pt-1">
+                                            Bônus Total: R$ {bonusTotal.toFixed(2)}
+                                          </div>
+                                          {mismatch && (
+                                            <div
+                                              className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 mt-1"
+                                              title={`Soma B+C1+C2 = R$ ${sumParts.toFixed(2)} / Bônus salvo = R$ ${bonusTotal.toFixed(2)}`}
+                                            >
+                                              ⚠️ Valor editado manualmente
+                                            </div>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
                                     {(() => {
                                       const errorRecord = data.errorRecords.find(err => err.date === payment.date);
                                       if (!errorRecord || errorRecord.error_count === 0) return null;
-                                      
+
                                       // Calcular valor real do desconto por erro
                                       // Valor esperado (diária + bônus) - valor real pago = desconto total
                                       // Desconto total / quantidade de erros = valor por erro
@@ -925,7 +955,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                       const actualValue = payment.total || 0;
                                       const totalDiscount = expectedValue - actualValue;
                                       const valuePerError = totalDiscount > 0 ? totalDiscount / errorRecord.error_count : 0;
-                                      
+
                                      return valuePerError > 0 ? (
                                         <div className="text-xs text-red-600">
                                           Erros: -{errorRecord.error_count} × R$ {valuePerError.toFixed(2)} = -R$ {totalDiscount.toFixed(2)}

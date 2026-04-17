@@ -48,12 +48,17 @@ export interface Attendance {
   employees?: Employee;
 }
 
+export type BonusType = 'B' | 'C1' | 'C2';
+
 export interface Payment {
   id: string;
   employee_id: string;
   date: string;
   daily_rate: number;
   bonus: number;
+  bonus_b: number;
+  bonus_c1: number;
+  bonus_c2: number;
   total: number;
   created_by: string;
   created_at: string;
@@ -65,6 +70,7 @@ export interface Bonus {
   id: string;
   date: string;
   amount: number;
+  bonus_type: BonusType;
   created_by: string;
   created_at: string;
 }
@@ -86,6 +92,7 @@ export interface BonusRemoval {
   employee_id: string;
   date: string;
   bonus_amount_removed: number;
+  bonus_type: BonusType | null;
   observation: string;
   removed_by: string;
   removed_at: string;
@@ -93,13 +100,26 @@ export interface BonusRemoval {
   employees?: Employee;
 }
 
-export interface BonusInfo {
+export interface BonusTypeInfo {
   hasBonus: boolean;
   amount: number;
   appliedBy: string;
   appliedAt: string;
   employeesCount: number;
 }
+
+export interface BonusInfo {
+  hasAny: boolean;
+  B: BonusTypeInfo;
+  C1: BonusTypeInfo;
+  C2: BonusTypeInfo;
+}
+
+const BONUS_COLUMNS: Record<BonusType, 'bonus_b' | 'bonus_c1' | 'bonus_c2'> = {
+  B: 'bonus_b',
+  C1: 'bonus_c1',
+  C2: 'bonus_c2',
+};
 
 export const createTables = async () => {
   try {
@@ -742,16 +762,18 @@ export const getBonuses = async (): Promise<Bonus[]> => {
 export const createBonus = async (
   date: string,
   amount: number,
-  createdBy: string
+  createdBy: string,
+  type: BonusType
 ): Promise<void> => {
   const { error } = await supabase
     .from('bonuses')
     .upsert([{
       date,
       amount,
+      bonus_type: type,
       created_by: createdBy
-    }], { 
-      onConflict: 'date'
+    }], {
+      onConflict: 'date,bonus_type'
     });
 
   if (error) throw error;
@@ -760,7 +782,8 @@ export const createBonus = async (
 export const applyBonusToAllPresent = async (
   date: string,
   bonusAmount: number,
-  createdBy: string
+  createdBy: string,
+  type: BonusType
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'financial.applyBonus');
   if (!permissionCheck.allowed) {
@@ -775,7 +798,7 @@ export const applyBonusToAllPresent = async (
     .eq('status', 'present');
 
   if (attendanceError) throw attendanceError;
-  
+
   if (!attendances || attendances.length === 0) {
     throw new Error('Nenhum funcionário presente encontrado para este dia');
   }
@@ -788,10 +811,18 @@ export const applyBonusToAllPresent = async (
       .select('*')
       .eq('employee_id', attendance.employee_id)
       .eq('date', date)
-      .single();
+      .maybeSingle();
 
-    const currentDailyRate = existingPayment?.daily_rate || 0;
-    const newTotal = currentDailyRate + bonusAmount;
+    const currentDailyRate = parseFloat((existingPayment?.daily_rate ?? 0).toString());
+    const currentB = parseFloat((existingPayment?.bonus_b ?? 0).toString());
+    const currentC1 = parseFloat((existingPayment?.bonus_c1 ?? 0).toString());
+    const currentC2 = parseFloat((existingPayment?.bonus_c2 ?? 0).toString());
+
+    const newB = type === 'B' ? bonusAmount : currentB;
+    const newC1 = type === 'C1' ? bonusAmount : currentC1;
+    const newC2 = type === 'C2' ? bonusAmount : currentC2;
+    const newBonus = newB + newC1 + newC2;
+    const newTotal = currentDailyRate + newBonus;
 
     await supabase
       .from('payments')
@@ -799,56 +830,88 @@ export const applyBonusToAllPresent = async (
         employee_id: attendance.employee_id,
         date,
         daily_rate: currentDailyRate,
-        bonus: bonusAmount,
+        bonus_b: newB,
+        bonus_c1: newC1,
+        bonus_c2: newC2,
+        bonus: newBonus,
         total: newTotal,
         created_by: createdBy,
         updated_at: new Date().toISOString()
-      }], { 
+      }], {
         onConflict: 'employee_id,date'
       });
   }
+
+  // Garantir registro na tabela bonuses (para auditoria)
+  await supabase
+    .from('bonuses')
+    .upsert([{
+      date,
+      amount: bonusAmount,
+      bonus_type: type,
+      created_by: createdBy
+    }], {
+      onConflict: 'date,bonus_type'
+    });
 };
 
 // Bonus info and removal functions
 export const getBonusInfoForDate = async (date: string): Promise<BonusInfo> => {
-  // Buscar bonus do dia
-  const { data: bonus } = await supabase
+  const empty = (): BonusTypeInfo => ({
+    hasBonus: false,
+    amount: 0,
+    appliedBy: '',
+    appliedAt: '',
+    employeesCount: 0,
+  });
+
+  const info: BonusInfo = {
+    hasAny: false,
+    B: empty(),
+    C1: empty(),
+    C2: empty(),
+  };
+
+  // Buscar bonuses do dia (pode ter até 3: B, C1, C2)
+  const { data: bonuses } = await supabase
     .from('bonuses')
     .select('*')
-    .eq('date', date)
-    .maybeSingle();
+    .eq('date', date);
 
-  if (!bonus) {
-    return {
-      hasBonus: false,
-      amount: 0,
-      appliedBy: '',
-      appliedAt: '',
-      employeesCount: 0
-    };
+  if (!bonuses || bonuses.length === 0) {
+    return info;
   }
 
-  // Contar quantos funcionários receberam a bonificação
-  const { data: payments } = await supabase
-    .from('payments')
-    .select('employee_id')
-    .eq('date', date)
-    .gt('bonus', 0);
+  for (const bonus of bonuses) {
+    const type = bonus.bonus_type as BonusType | null;
+    if (!type || !(type in BONUS_COLUMNS)) continue;
 
-  return {
-    hasBonus: true,
-    amount: parseFloat(bonus.amount.toString()),
-    appliedBy: bonus.created_by,
-    appliedAt: bonus.created_at,
-    employeesCount: payments?.length || 0
-  };
+    const column = BONUS_COLUMNS[type];
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('employee_id')
+      .eq('date', date)
+      .gt(column, 0);
+
+    info[type] = {
+      hasBonus: true,
+      amount: parseFloat(bonus.amount.toString()),
+      appliedBy: bonus.created_by,
+      appliedAt: bonus.created_at,
+      employeesCount: payments?.length || 0,
+    };
+    info.hasAny = true;
+  }
+
+  return info;
 };
 
 export const removeBonusFromEmployee = async (
   employeeId: string,
   date: string,
   observation: string,
-  userId: string
+  userId: string,
+  type: BonusType
 ): Promise<void> => {
   const permissionCheck = await validatePermission(userId, 'financial.removeBonus');
   if (!permissionCheck.allowed) {
@@ -863,6 +926,8 @@ export const removeBonusFromEmployee = async (
     throw new Error('Observação deve ter no máximo 500 caracteres');
   }
 
+  const column = BONUS_COLUMNS[type];
+
   // Buscar pagamento do funcionário
   const { data: payment } = await supabase
     .from('payments')
@@ -871,11 +936,10 @@ export const removeBonusFromEmployee = async (
     .eq('date', date)
     .maybeSingle();
 
-  if (!payment || payment.bonus === 0) {
-    throw new Error('Este funcionário não possui bonificação para remover');
+  const typeAmount = payment ? parseFloat((payment[column] ?? 0).toString()) : 0;
+  if (!payment || typeAmount === 0) {
+    throw new Error(`Este funcionário não possui bonificação ${type} para remover`);
   }
-
-  const bonusAmount = parseFloat(payment.bonus.toString());
 
   // Registrar remoção
   const { error: removalError } = await supabase
@@ -883,19 +947,31 @@ export const removeBonusFromEmployee = async (
     .insert([{
       employee_id: employeeId,
       date,
-      bonus_amount_removed: bonusAmount,
+      bonus_amount_removed: typeAmount,
+      bonus_type: type,
       observation: observation.trim(),
       removed_by: userId
     }]);
 
   if (removalError) throw removalError;
 
-  // Atualizar pagamento removendo a bonificação
-  const newTotal = parseFloat(payment.daily_rate.toString());
+  // Zerar apenas a coluna do tipo removido e recalcular bonus/total
+  const currentB = parseFloat((payment.bonus_b ?? 0).toString());
+  const currentC1 = parseFloat((payment.bonus_c1 ?? 0).toString());
+  const currentC2 = parseFloat((payment.bonus_c2 ?? 0).toString());
+  const newB = type === 'B' ? 0 : currentB;
+  const newC1 = type === 'C1' ? 0 : currentC1;
+  const newC2 = type === 'C2' ? 0 : currentC2;
+  const newBonus = newB + newC1 + newC2;
+  const newTotal = parseFloat(payment.daily_rate.toString()) + newBonus;
+
   const { error: updateError } = await supabase
     .from('payments')
     .update({
-      bonus: 0,
+      bonus_b: newB,
+      bonus_c1: newC1,
+      bonus_c2: newC2,
+      bonus: newBonus,
       total: newTotal,
       updated_at: new Date().toISOString()
     })
@@ -912,9 +988,9 @@ export const removeBonusFromEmployee = async (
       module: 'financial',
       entity_type: 'bonus_removal',
       entity_id: employeeId,
-      old_data: { bonus: bonusAmount },
-      new_data: { bonus: 0 },
-      description: `Bonificação removida: R$ ${bonusAmount.toFixed(2)} - ${observation}`
+      old_data: { [column]: typeAmount },
+      new_data: { [column]: 0 },
+      description: `Bonificação ${type} removida: R$ ${typeAmount.toFixed(2)} - ${observation}`
     }]);
   } catch (error) {
     console.error('Erro ao registrar no audit log:', error);
@@ -953,25 +1029,40 @@ export const removeAllBonusesForDate = async (
   }
 
   let removedCount = 0;
+  const types: BonusType[] = ['B', 'C1', 'C2'];
 
-  // Remover bonificação de cada funcionário
+  // Remover todas as bonificações (B, C1 e C2) de cada funcionário
   for (const payment of payments) {
-    const bonusAmount = parseFloat(payment.bonus.toString());
+    const perTypeAmount: Record<BonusType, number> = {
+      B: parseFloat((payment.bonus_b ?? 0).toString()),
+      C1: parseFloat((payment.bonus_c1 ?? 0).toString()),
+      C2: parseFloat((payment.bonus_c2 ?? 0).toString()),
+    };
 
-    // Registrar remoção
-    await supabase.from('bonus_removals').insert([{
-      employee_id: payment.employee_id,
-      date,
-      bonus_amount_removed: bonusAmount,
-      observation: observation.trim(),
-      removed_by: userId
-    }]);
+    // Registrar remoção — uma linha por tipo não-zero
+    const removalsToInsert = types
+      .filter((t) => perTypeAmount[t] > 0)
+      .map((t) => ({
+        employee_id: payment.employee_id,
+        date,
+        bonus_amount_removed: perTypeAmount[t],
+        bonus_type: t,
+        observation: observation.trim(),
+        removed_by: userId,
+      }));
 
-    // Atualizar pagamento
+    if (removalsToInsert.length > 0) {
+      await supabase.from('bonus_removals').insert(removalsToInsert);
+    }
+
+    // Atualizar pagamento zerando tudo
     const newTotal = parseFloat(payment.daily_rate.toString());
     await supabase
       .from('payments')
       .update({
+        bonus_b: 0,
+        bonus_c1: 0,
+        bonus_c2: 0,
         bonus: 0,
         total: newTotal,
         updated_at: new Date().toISOString()
@@ -980,6 +1071,18 @@ export const removeAllBonusesForDate = async (
       .eq('date', date);
 
     removedCount++;
+  }
+
+  // Remover as linhas da tabela `bonuses` (registry do dia) — sem isso,
+  // getBonusInfoForDate continua enxergando as bonificações e os cards
+  // B/C1/C2 permanecem visíveis na UI mesmo após zerar os payments.
+  const { error: bonusRegistryError } = await supabase
+    .from('bonuses')
+    .delete()
+    .eq('date', date);
+
+  if (bonusRegistryError) {
+    console.error('Erro ao limpar registry de bonuses:', bonusRegistryError);
   }
 
   // Registrar no audit log
@@ -996,6 +1099,63 @@ export const removeAllBonusesForDate = async (
   }
 
   return removedCount;
+};
+
+// Helper: limpa os registros da tabela `bonuses` para um dia específico.
+// Usado no Reset Geral do ponto para garantir que os cards B/C1/C2 sumam.
+export const clearBonusRegistryForDate = async (date: string): Promise<void> => {
+  const { error } = await supabase
+    .from('bonuses')
+    .delete()
+    .eq('date', date);
+
+  if (error) throw error;
+};
+
+// ─── Valores padrão de Bonificação (tabela bonus_defaults) ──────────────
+// Retorna um mapa { B, C1, C2 } com os valores padrão persistidos.
+// Se algum tipo não existir na tabela, retorna 0 para esse tipo.
+export const getBonusDefaults = async (): Promise<{ B: number; C1: number; C2: number }> => {
+  const { data, error } = await supabase
+    .from('bonus_defaults')
+    .select('bonus_type, default_amount');
+
+  if (error) throw error;
+
+  const defaults: { B: number; C1: number; C2: number } = { B: 0, C1: 0, C2: 0 };
+  for (const row of data || []) {
+    const type = row.bonus_type as BonusType;
+    if (type === 'B' || type === 'C1' || type === 'C2') {
+      defaults[type] = Number(row.default_amount) || 0;
+    }
+  }
+  return defaults;
+};
+
+// Atualiza o valor padrão de um tipo. Restrito ao admin (ID 9999).
+export const updateBonusDefault = async (
+  type: BonusType,
+  amount: number,
+  updatedBy: string
+): Promise<void> => {
+  if (updatedBy !== '9999') {
+    throw new Error('Apenas o administrador pode alterar os valores padrão de bonificação');
+  }
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error('Valor inválido');
+  }
+
+  const { error } = await supabase
+    .from('bonus_defaults')
+    .update({
+      default_amount: amount,
+      updated_by: updatedBy,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('bonus_type', type);
+
+  if (error) throw error;
 };
 
 export const getBonusRemovalHistory = async (

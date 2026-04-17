@@ -9,15 +9,17 @@ import {
   setManualTime,
   Employee,
   Attendance,
-  createBonus,
   applyBonusToAllPresent,
   deleteAttendance,
   getBonusInfoForDate,
   removeBonusFromEmployee,
   removeAllBonusesForDate,
+  clearBonusRegistryForDate,
   BonusInfo,
+  BonusType,
   getPayments,
-  Payment
+  Payment,
+  getBonusDefaults
 } from '../../services/database';
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
@@ -43,7 +45,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [searchTerm, setSearchTerm] = useState('');
   const [employmentTypeFilter, setEmploymentTypeFilter] = useState<EmploymentType>('all');
   const [showBonusModal, setShowBonusModal] = useState(false);
-  const [bonusAmount, setBonusAmount] = useState<string>('');
+  const [bonusAmounts, setBonusAmounts] = useState<Record<BonusType, string>>({ B: '', C1: '', C2: '' });
+  const [applyingBonus, setApplyingBonus] = useState<Record<BonusType, boolean>>({ B: false, C1: false, C2: false });
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [bulkMarkingLoading, setBulkMarkingLoading] = useState(false);
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
@@ -52,6 +55,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [showRemoveBonusModal, setShowRemoveBonusModal] = useState(false);
   const [bonusRemovalObservation, setBonusRemovalObservation] = useState('');
   const [employeeToRemoveBonus, setEmployeeToRemoveBonus] = useState<string | null>(null);
+  const [bonusTypeToRemove, setBonusTypeToRemove] = useState<BonusType | null>(null);
   const [showRemoveAllBonusModal, setShowRemoveAllBonusModal] = useState(false);
   const [removeAllBonusObservation, setRemoveAllBonusObservation] = useState('');
   const [removingBonus, setRemovingBonus] = useState(false);
@@ -171,9 +175,13 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     return attendance?.status || null;
   };
 
-  const getEmployeeBonus = (employeeId: string): number => {
+  const getEmployeeBonusByType = (employeeId: string): Record<BonusType, number> => {
     const payment = payments.find(p => p.employee_id === employeeId);
-    return payment?.bonus ? parseFloat(payment.bonus.toString()) : 0;
+    return {
+      B: payment?.bonus_b ? parseFloat(payment.bonus_b.toString()) : 0,
+      C1: payment?.bonus_c1 ? parseFloat(payment.bonus_c1.toString()) : 0,
+      C2: payment?.bonus_c2 ? parseFloat(payment.bonus_c2.toString()) : 0,
+    };
   };
 
   const handleMarkAttendance = async (employeeId: string, status: 'present' | 'absent') => {
@@ -258,35 +266,62 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     return { present, absent, notMarked };
   };
 
-  const handleBonus = async () => {
-    const amount = parseFloat(bonusAmount);
+  // Abre o modal de Bonificação e pré-preenche com os valores padrão salvos
+  // na tabela `bonus_defaults`. Se já houver algo digitado em um campo, não
+  // sobrescreve (preserva o que o supervisor pode ter começado a editar).
+  const openBonusModal = async () => {
+    setShowBonusModal(true);
+    try {
+      const defaults = await getBonusDefaults();
+      setBonusAmounts(prev => ({
+        B: prev.B || (defaults.B > 0 ? String(defaults.B) : ''),
+        C1: prev.C1 || (defaults.C1 > 0 ? String(defaults.C1) : ''),
+        C2: prev.C2 || (defaults.C2 > 0 ? String(defaults.C2) : ''),
+      }));
+    } catch (error) {
+      console.error('Erro ao carregar valores padrão de bonificação:', error);
+      // Não bloqueia o modal — apenas não pré-preenche.
+    }
+  };
+
+  const handleApplyBonusType = async (type: BonusType) => {
+    const amount = parseFloat(bonusAmounts[type]);
     if (isNaN(amount) || amount <= 0) {
-      toast.error('Valor de bonificação inválido');
+      toast.error(`Valor da bonificação ${type} inválido`);
       return;
     }
 
+    setApplyingBonus(prev => ({ ...prev, [type]: true }));
     try {
-      await createBonus(selectedDate, amount, userId);
-      await applyBonusToAllPresent(selectedDate, amount, userId);
-
-      toast.success(`Bonificação de R$ ${amount.toFixed(2)} aplicada para todos os funcionários presentes!`);
-      setShowBonusModal(false);
-      setBonusAmount('');
+      await applyBonusToAllPresent(selectedDate, amount, userId, type);
+      toast.success(`Bonificação ${type} de R$ ${amount.toFixed(2)} aplicada!`);
+      setBonusAmounts(prev => ({ ...prev, [type]: '' }));
       await loadData(selectedDate);
     } catch (error) {
       console.error('Erro ao aplicar bonificação:', error);
-      toast.error(error.message || 'Erro ao aplicar bonificação');
+      toast.error((error as Error).message || 'Erro ao aplicar bonificação');
+    } finally {
+      setApplyingBonus(prev => ({ ...prev, [type]: false }));
     }
   };
 
   const handleRemoveBonus = (employeeId: string) => {
+    const byType = getEmployeeBonusByType(employeeId);
+    const availableTypes = (['B', 'C1', 'C2'] as BonusType[]).filter(t => byType[t] > 0);
+
+    if (availableTypes.length === 0) {
+      toast.error('Este funcionário não possui bonificação para remover');
+      return;
+    }
+
     setEmployeeToRemoveBonus(employeeId);
+    setBonusTypeToRemove(availableTypes[0]);
     setBonusRemovalObservation('');
     setShowRemoveBonusModal(true);
   };
 
   const confirmRemoveBonus = async () => {
-    if (!employeeToRemoveBonus) return;
+    if (!employeeToRemoveBonus || !bonusTypeToRemove) return;
 
     if (bonusRemovalObservation.trim().length < 10) {
       toast.error('Observação deve ter no mínimo 10 caracteres');
@@ -299,16 +334,18 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
         employeeToRemoveBonus,
         selectedDate,
         bonusRemovalObservation,
-        userId
+        userId,
+        bonusTypeToRemove
       );
-      toast.success('Bonificação removida com sucesso');
+      toast.success(`Bonificação ${bonusTypeToRemove} removida com sucesso`);
       setShowRemoveBonusModal(false);
       setBonusRemovalObservation('');
       setEmployeeToRemoveBonus(null);
+      setBonusTypeToRemove(null);
       await loadData(selectedDate);
     } catch (error) {
       console.error('Erro ao remover bonificação:', error);
-      toast.error(error.message || 'Erro ao remover bonificação');
+      toast.error((error as Error).message || 'Erro ao remover bonificação');
     } finally {
       setRemovingBonus(false);
     }
@@ -338,7 +375,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       await loadData(selectedDate);
     } catch (error) {
       console.error('Erro ao remover bonificações:', error);
-      toast.error(error.message || 'Erro ao remover bonificações');
+      const message = error instanceof Error ? error.message : 'Erro ao remover bonificações';
+      toast.error(message);
     } finally {
       setRemovingBonus(false);
     }
@@ -438,6 +476,13 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
         for (const empId of attendanceIds) {
           await deleteAttendance(empId, selectedDate);
         }
+        // Reset geral também apaga as bonificações do dia — sem isso, os cards
+        // B/C1/C2 continuam visíveis porque getBonusInfoForDate lê da tabela `bonuses`.
+        try {
+          await clearBonusRegistryForDate(selectedDate);
+        } catch (bonusError) {
+          console.error('Erro ao limpar bonuses do dia no reset geral:', bonusError);
+        }
         toast.success('Todos os registros de ponto foram resetados');
       }
       await loadData(selectedDate);
@@ -512,7 +557,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
 
               {hasPermission('financial.applyBonus') && isViewingToday && (
                 <button
-                  onClick={() => setShowBonusModal(true)}
+                  onClick={openBonusModal}
                   className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
                 >
                   <Gift className="w-4 h-4" />
@@ -520,7 +565,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                 </button>
               )}
 
-              {hasPermission('attendance.reset') && present > 0 && (
+              {hasPermission('attendance.reset') && attendances.length > 0 && (
                 <button
                   onClick={handleResetAllAttendance}
                   className="flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
@@ -585,25 +630,51 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
             </div>
           </div>
 
-          {bonusInfo && bonusInfo.hasBonus && (
+          {bonusInfo && bonusInfo.hasAny && (
             <div className="border-t pt-4">
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
+                    <div className="flex items-center space-x-2 mb-3">
                       <Gift className="w-5 h-5 text-green-600" />
-                      <h3 className="text-lg font-semibold text-green-800">Bonificação Aplicada</h3>
+                      <h3 className="text-lg font-semibold text-green-800">Bonificações Aplicadas</h3>
                     </div>
-                    <div className="space-y-1 text-sm text-green-700">
-                      <p><strong>Valor:</strong> R$ {bonusInfo.amount.toFixed(2)}</p>
-                      <p><strong>Funcionários:</strong> {bonusInfo.employeesCount}</p>
-                      <p><strong>Aplicada em:</strong> {format(parseISO(bonusInfo.appliedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {(['B', 'C1', 'C2'] as BonusType[]).map(type => {
+                        const info = bonusInfo[type];
+                        return (
+                          <div
+                            key={type}
+                            className={`rounded-md border p-3 ${
+                              info.hasBonus
+                                ? 'bg-white border-green-300'
+                                : 'bg-gray-50 border-gray-200 opacity-60'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-bold text-green-800">Tipo {type}</span>
+                              {info.hasBonus && <Gift className="w-4 h-4 text-green-600" />}
+                            </div>
+                            {info.hasBonus ? (
+                              <div className="text-xs text-green-700 space-y-0.5">
+                                <p><strong>R$ {info.amount.toFixed(2)}</strong></p>
+                                <p>{info.employeesCount} funcionário(s)</p>
+                                <p className="text-gray-500">
+                                  {format(parseISO(info.appliedAt), "dd/MM HH:mm", { locale: ptBR })}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-400">Não aplicada</p>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   {hasPermission('financial.removeBonusBulk') && (
                     <button
                       onClick={handleRemoveAllBonus}
-                      className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                      className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors whitespace-nowrap self-start"
                     >
                       <Trash2 className="w-4 h-4" />
                       <span>Remover Todas</span>
@@ -809,26 +880,35 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {(() => {
-                        const bonus = getEmployeeBonus(employee.id);
-                        if (bonus > 0) {
-                          return (
-                            <div className="flex items-center space-x-2">
-                              <span className="text-sm font-medium text-green-600">
-                                R$ {bonus.toFixed(2)}
-                              </span>
-                              {hasPermission('financial.removeBonus') && (
-                                <button
-                                  onClick={() => handleRemoveBonus(employee.id)}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                  title="Remover bonificação"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                        const byType = getEmployeeBonusByType(employee.id);
+                        const total = byType.B + byType.C1 + byType.C2;
+                        if (total === 0) {
+                          return <span className="text-sm text-gray-400">-</span>;
+                        }
+                        return (
+                          <div className="flex items-center space-x-2">
+                            <div className="text-xs space-y-0.5">
+                              {byType.B > 0 && (
+                                <div className="text-green-700"><strong>B:</strong> R$ {byType.B.toFixed(2)}</div>
+                              )}
+                              {byType.C1 > 0 && (
+                                <div className="text-green-700"><strong>C1:</strong> R$ {byType.C1.toFixed(2)}</div>
+                              )}
+                              {byType.C2 > 0 && (
+                                <div className="text-green-700"><strong>C2:</strong> R$ {byType.C2.toFixed(2)}</div>
                               )}
                             </div>
-                          );
-                        }
-                        return <span className="text-sm text-gray-400">-</span>;
+                            {hasPermission('financial.removeBonus') && (
+                              <button
+                                onClick={() => handleRemoveBonus(employee.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Remover bonificação"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        );
                       })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -977,26 +1057,27 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                       </span>
                     )}
                     {(() => {
-                      const bonus = getEmployeeBonus(employee.id);
-                      if (bonus > 0) {
-                        return (
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm font-medium text-green-600">
-                              Bônus: R$ {bonus.toFixed(2)}
-                            </span>
-                            {hasPermission('financial.removeBonus') && (
-                              <button
-                                onClick={() => handleRemoveBonus(employee.id)}
-                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Remover bonificação"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
+                      const byType = getEmployeeBonusByType(employee.id);
+                      const total = byType.B + byType.C1 + byType.C2;
+                      if (total === 0) return null;
+                      return (
+                        <div className="flex items-center space-x-2">
+                          <div className="text-xs text-green-700 space-y-0.5 text-right">
+                            {byType.B > 0 && <div>B: R$ {byType.B.toFixed(2)}</div>}
+                            {byType.C1 > 0 && <div>C1: R$ {byType.C1.toFixed(2)}</div>}
+                            {byType.C2 > 0 && <div>C2: R$ {byType.C2.toFixed(2)}</div>}
                           </div>
-                        );
-                      }
-                      return null;
+                          {hasPermission('financial.removeBonus') && (
+                            <button
+                              onClick={() => handleRemoveBonus(employee.id)}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Remover bonificação"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      );
                     })()}
                   </div>
                 </div>
@@ -1114,15 +1195,15 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
         )}
       </div>
 
-      {/* Modal de Bonificação */}
+      {/* Modal de Bonificação — 3 tipos independentes */}
       {showBonusModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white p-4 sm:p-6 border-b">
               <div className="flex items-center justify-between">
                 <h3 className="text-base sm:text-lg font-medium flex items-center">
                   <Gift className="w-5 h-5 mr-2 text-green-600" />
-                  Aplicar Bonificação
+                  Bonificação do Dia — {formatDateBR(selectedDate)}
                 </h3>
                 <button
                   onClick={() => setShowBonusModal(false)}
@@ -1134,54 +1215,62 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
             </div>
 
             <div className="p-4 sm:p-6 space-y-4">
-              <div>
-                <p className="text-sm text-gray-600 mb-2">
-                  Data: <strong>{formatDateBR(selectedDate)}</strong>
-                </p>
-                <p className="text-sm text-gray-600 mb-4">
-                  Funcionários presentes: <strong>{present}</strong>
-                </p>
-              </div>
+              <p className="text-sm text-gray-600">
+                Funcionários presentes: <strong>{present}</strong>
+              </p>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Valor da Bonificação (R$)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={bonusAmount}
-                  onChange={(e) => setBonusAmount(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 text-base min-h-[48px]"
-                  placeholder="0.00"
-                  autoFocus
-                />
-              </div>
+              {(['B', 'C1', 'C2'] as BonusType[]).map(type => {
+                const currentInfo = bonusInfo?.[type];
+                const applied = currentInfo?.hasBonus ? currentInfo.amount : 0;
+                const busy = applyingBonus[type];
+                return (
+                  <div key={type} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-gray-800">Tipo {type}</span>
+                      {applied > 0 && (
+                        <span className="text-xs text-green-700 bg-green-50 px-2 py-1 rounded">
+                          Já aplicada: R$ {applied.toFixed(2)} ({currentInfo?.employeesCount ?? 0} func.)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={bonusAmounts[type]}
+                        onChange={(e) => setBonusAmounts(prev => ({ ...prev, [type]: e.target.value }))}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 text-base min-h-[44px]"
+                        placeholder="R$ 0.00"
+                        disabled={busy}
+                      />
+                      <button
+                        onClick={() => handleApplyBonusType(type)}
+                        disabled={busy || !bonusAmounts[type] || present === 0}
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px] font-medium whitespace-nowrap"
+                      >
+                        {busy ? 'Aplicando...' : `Aplicar ${type}`}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
 
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 sm:p-4">
-                <p className="text-sm text-yellow-800">
-                  <strong>Atenção:</strong> A bonificação será aplicada para todos os {present} funcionários que estão presentes hoje.
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-xs text-yellow-800">
+                  Cada tipo é aplicado separadamente para os {present} funcionário(s) presente(s).
+                  Aplicar o mesmo tipo novamente substitui o valor anterior.
                 </p>
               </div>
             </div>
 
             <div className="sticky bottom-0 bg-gray-50 p-4 sm:p-6 border-t">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  onClick={handleBonus}
-                  disabled={!bonusAmount || present === 0}
-                  className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[48px] font-medium"
-                >
-                  Confirmar Bonificação
-                </button>
-                <button
-                  onClick={() => setShowBonusModal(false)}
-                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors min-h-[48px] font-medium"
-                >
-                  Cancelar
-                </button>
-              </div>
+              <button
+                onClick={() => setShowBonusModal(false)}
+                className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors min-h-[48px] font-medium"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
@@ -1220,7 +1309,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                   </p>
                 ) : (
                   <p className="text-sm text-gray-600">
-                    Você está prestes a resetar <strong>TODOS</strong> os registros de ponto de hoje ({present} funcionário{present !== 1 ? 's' : ''}).
+                    Você está prestes a resetar <strong>TODOS</strong> os registros de ponto de hoje ({attendances.length} registro{attendances.length !== 1 ? 's' : ''}).
                     Todos os registros serão completamente removidos.
                   </p>
                 )}
@@ -1260,6 +1349,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                     setShowRemoveBonusModal(false);
                     setBonusRemovalObservation('');
                     setEmployeeToRemoveBonus(null);
+                    setBonusTypeToRemove(null);
                   }}
                   className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
                   disabled={removingBonus}
@@ -1279,19 +1369,56 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                 </p>
               </div>
 
-              {employeeToRemoveBonus && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">
-                    <strong>Funcionário:</strong> {employees.find(e => e.id === employeeToRemoveBonus)?.name}
-                  </p>
-                  <p className="text-sm text-gray-600 mb-1">
-                    <strong>Valor:</strong> R$ {getEmployeeBonus(employeeToRemoveBonus).toFixed(2)}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Data:</strong> {formatDateBR(selectedDate)}
-                  </p>
-                </div>
-              )}
+              {employeeToRemoveBonus && (() => {
+                const byType = getEmployeeBonusByType(employeeToRemoveBonus);
+                const availableTypes = (['B', 'C1', 'C2'] as BonusType[]).filter(t => byType[t] > 0);
+                return (
+                  <>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <p className="text-sm text-gray-600 mb-1">
+                        <strong>Funcionário:</strong> {employees.find(e => e.id === employeeToRemoveBonus)?.name}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <strong>Data:</strong> {formatDateBR(selectedDate)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Tipo de bonificação a remover <span className="text-red-600">*</span>
+                      </label>
+                      <div className="space-y-2">
+                        {availableTypes.map(t => (
+                          <label
+                            key={t}
+                            className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${
+                              bonusTypeToRemove === t
+                                ? 'border-red-500 bg-red-50'
+                                : 'border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="radio"
+                                name="bonusTypeToRemove"
+                                value={t}
+                                checked={bonusTypeToRemove === t}
+                                onChange={() => setBonusTypeToRemove(t)}
+                                className="text-red-600 focus:ring-red-500"
+                                disabled={removingBonus}
+                              />
+                              <span className="font-medium text-gray-800">Tipo {t}</span>
+                            </div>
+                            <span className="text-sm font-semibold text-green-700">
+                              R$ {byType[t].toFixed(2)}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1331,7 +1458,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={confirmRemoveBonus}
-                  disabled={bonusRemovalObservation.trim().length < 10 || bonusRemovalObservation.length > 500 || removingBonus}
+                  disabled={bonusRemovalObservation.trim().length < 10 || bonusRemovalObservation.length > 500 || removingBonus || !bonusTypeToRemove}
                   className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[48px] font-medium"
                 >
                   {removingBonus ? 'Removendo...' : 'Confirmar Remoção'}
@@ -1341,6 +1468,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                     setShowRemoveBonusModal(false);
                     setBonusRemovalObservation('');
                     setEmployeeToRemoveBonus(null);
+                    setBonusTypeToRemove(null);
                   }}
                   disabled={removingBonus}
                   className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors min-h-[48px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1386,22 +1514,29 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                 </p>
               </div>
 
-              {bonusInfo && (
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                  <p className="text-sm text-gray-600">
-                    <strong>Data:</strong> {formatDateBR(selectedDate)}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Funcionários Afetados:</strong> {bonusInfo.employeesCount}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Valor por Funcionário:</strong> R$ {bonusInfo.amount.toFixed(2)}
-                  </p>
-                  <p className="text-sm font-semibold text-gray-900 pt-2 border-t border-gray-200">
-                    <strong>Total a Remover:</strong> R$ {(bonusInfo.amount * bonusInfo.employeesCount).toFixed(2)}
-                  </p>
-                </div>
-              )}
+              {bonusInfo && bonusInfo.hasAny && (() => {
+                const types: BonusType[] = ['B', 'C1', 'C2'];
+                const active = types.filter(t => bonusInfo[t].hasBonus);
+                const totalValue = active.reduce(
+                  (sum, t) => sum + bonusInfo[t].amount * bonusInfo[t].employeesCount,
+                  0
+                );
+                return (
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                    <p className="text-sm text-gray-600">
+                      <strong>Data:</strong> {formatDateBR(selectedDate)}
+                    </p>
+                    {active.map(t => (
+                      <p key={t} className="text-sm text-gray-600">
+                        <strong>Tipo {t}:</strong> R$ {bonusInfo[t].amount.toFixed(2)} × {bonusInfo[t].employeesCount} func. = R$ {(bonusInfo[t].amount * bonusInfo[t].employeesCount).toFixed(2)}
+                      </p>
+                    ))}
+                    <p className="text-sm font-semibold text-gray-900 pt-2 border-t border-gray-200">
+                      <strong>Total a Remover:</strong> R$ {totalValue.toFixed(2)}
+                    </p>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

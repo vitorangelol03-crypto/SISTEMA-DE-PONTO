@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle, ShieldAlert } from 'lucide-react';
 import {
   getEmployeeByCpf,
   getEmployeeTodayAttendance,
@@ -39,6 +39,22 @@ const APPROVAL_BADGE: Record<string, { label: string; cls: string }> = {
 };
 
 type Step = 'cpf' | 'pin' | 'setup-pin' | 'dashboard' | 'error';
+type GeoAlert = null | 'denied' | 'unavailable';
+
+/** Solicita geolocalização. Resolve com a position, ou rejeita com o código do erro. */
+function requestGeolocation(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject({ code: 2 }); // POSITION_UNAVAILABLE
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 10_000,
+      maximumAge: 0,
+    });
+  });
+}
 
 function formatCPFMask(value: string): string {
   const d = value.replace(/\D/g, '').slice(0, 11);
@@ -65,6 +81,7 @@ export const EmployeeClockIn: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [clockLoading, setClockLoading] = useState(false);
   const [clockMsg, setClockMsg] = useState('');
+  const [geoAlert, setGeoAlert] = useState<GeoAlert>(null);
 
   // ─── Load dashboard data ──────────────────────────────────────────────────
 
@@ -171,11 +188,31 @@ export const EmployeeClockIn: React.FC = () => {
 
   // ─── Clock in / out ───────────────────────────────────────────────────────
 
+  /** Verifica geolocalização antes de qualquer batida de ponto. */
+  const checkGeolocation = async (): Promise<boolean> => {
+    try {
+      await requestGeolocation();
+      return true;
+    } catch (err: unknown) {
+      const code = (err as GeolocationPositionError)?.code;
+      if (code === 1) {
+        // PERMISSION_DENIED — possível tentativa de burla
+        setGeoAlert('denied');
+      } else {
+        // POSITION_UNAVAILABLE (2) ou TIMEOUT (3)
+        setGeoAlert('unavailable');
+      }
+      return false;
+    }
+  };
+
   const handleClockIn = async () => {
     if (!employee) return;
     setClockLoading(true);
     setClockMsg('');
     try {
+      const geoOk = await checkGeolocation();
+      if (!geoOk) return;
       await clockIn(employee.id);
       setClockMsg(`✅ Entrada registrada às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`);
       await loadDashboard(employee);
@@ -191,6 +228,8 @@ export const EmployeeClockIn: React.FC = () => {
     setClockLoading(true);
     setClockMsg('');
     try {
+      const geoOk = await checkGeolocation();
+      if (!geoOk) return;
       const att = await clockOut(employee.id);
       setClockMsg(`✅ Saída registrada às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — ${formatHours(att.hours_worked)}`);
       await loadDashboard(employee);
@@ -588,6 +627,53 @@ export const EmployeeClockIn: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* ── MODAL GEOLOCALIZAÇÃO ── */}
+      {geoAlert === 'denied' && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-red-900 rounded-2xl shadow-2xl max-w-sm w-full text-white overflow-hidden">
+            <div className="p-6 text-center space-y-4">
+              <ShieldAlert className="w-16 h-16 mx-auto text-red-300" />
+              <h2 className="text-xl font-black uppercase tracking-wide">
+                Atenção
+              </h2>
+              <p className="text-base font-bold leading-relaxed">
+                Por tentativas de burlar o sistema, sua bonificação total
+                da semana será retida. Favor falar com Clayton.
+              </p>
+              <button
+                onClick={() => setGeoAlert(null)}
+                className="w-full py-3 bg-white text-red-900 font-bold text-lg rounded-xl hover:bg-red-100 transition-colors mt-2"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {geoAlert === 'unavailable' && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
+            <div className="p-6 text-center space-y-4">
+              <AlertCircle className="w-14 h-14 mx-auto text-amber-500" />
+              <h2 className="text-lg font-bold text-gray-800">
+                Localização indisponível
+              </h2>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Localização necessária para registrar o ponto.
+                Ative o GPS e tente novamente.
+              </p>
+              <button
+                onClick={() => setGeoAlert(null)}
+                className="w-full py-3 bg-blue-600 text-white font-bold text-lg rounded-xl hover:bg-blue-700 transition-colors"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

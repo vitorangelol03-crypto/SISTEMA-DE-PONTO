@@ -226,7 +226,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                   </button>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Mínimo de 6 caracteres
+                  Mínimo de 4 caracteres
                 </p>
               </div>
 

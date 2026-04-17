@@ -1,7 +1,73 @@
-import React from 'react';
-import { Settings, Info, Database, Shield, Clock } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Settings, Info, Database, Shield, Clock, DollarSign, Save } from 'lucide-react';
+import toast from 'react-hot-toast';
+import {
+  getBonusDefaults,
+  updateBonusDefault,
+  BonusType,
+} from '../../services/database';
 
-export const SettingsTab: React.FC = () => {
+interface SettingsTabProps {
+  userId: string;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  hasPermission: (permission: string) => boolean;
+}
+
+export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
+  const isAdmin = userId === '9999';
+
+  const [bonusDefaults, setBonusDefaults] = useState<Record<BonusType, string>>({
+    B: '',
+    C1: '',
+    C2: '',
+  });
+  const [loadingDefaults, setLoadingDefaults] = useState(true);
+  const [savingType, setSavingType] = useState<BonusType | null>(null);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setLoadingDefaults(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const defaults = await getBonusDefaults();
+        if (cancelled) return;
+        setBonusDefaults({
+          B: defaults.B.toFixed(2),
+          C1: defaults.C1.toFixed(2),
+          C2: defaults.C2.toFixed(2),
+        });
+      } catch (error) {
+        console.error('Erro ao carregar valores padrão de bonificação:', error);
+        toast.error('Erro ao carregar valores padrão de bonificação');
+      } finally {
+        if (!cancelled) setLoadingDefaults(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAdmin]);
+
+  const handleSaveBonusDefault = async (type: BonusType) => {
+    const parsed = parseFloat(bonusDefaults[type]);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      toast.error('Valor inválido');
+      return;
+    }
+    setSavingType(type);
+    try {
+      await updateBonusDefault(type, parsed, userId);
+      toast.success(`Valor padrão de ${type} atualizado para R$ ${parsed.toFixed(2)}`);
+      setBonusDefaults(prev => ({ ...prev, [type]: parsed.toFixed(2) }));
+    } catch (error) {
+      console.error('Erro ao salvar valor padrão de bonificação:', error);
+      toast.error((error as Error).message || 'Erro ao salvar valor padrão');
+    } finally {
+      setSavingType(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-lg shadow">
@@ -64,9 +130,66 @@ export const SettingsTab: React.FC = () => {
         </div>
       </div>
 
+      {isAdmin && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h3 className="text-lg font-semibold flex items-center mb-2 text-gray-800">
+            <DollarSign className="w-5 h-5 mr-2 text-emerald-600" />
+            Valores Padrão de Bonificação
+          </h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Esses valores são sugeridos automaticamente ao abrir o modal de Bonificação
+            na aba Ponto. O supervisor ainda pode alterá-los antes de aplicar.
+          </p>
+
+          {loadingDefaults ? (
+            <p className="text-sm text-gray-500">Carregando valores atuais...</p>
+          ) : (
+            <div className="space-y-3 max-w-md">
+              {(['B', 'C1', 'C2'] as BonusType[]).map(type => {
+                const saving = savingType === type;
+                return (
+                  <div key={type} className="flex items-center gap-3">
+                    <label className="w-20 text-sm font-medium text-gray-700">
+                      Tipo {type}
+                    </label>
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-sm text-gray-500">R$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={bonusDefaults[type]}
+                        onChange={(e) =>
+                          setBonusDefaults(prev => ({ ...prev, [type]: e.target.value }))
+                        }
+                        disabled={saving}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-base"
+                        placeholder="0.00"
+                      />
+                      <button
+                        onClick={() => handleSaveBonusDefault(type)}
+                        disabled={saving}
+                        className="flex items-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50 transition-colors font-medium"
+                      >
+                        <Save className="w-4 h-4" />
+                        {saving ? 'Salvando...' : 'Salvar'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <p className="text-xs text-gray-500 pt-2">
+                Visível apenas para o administrador (ID 9999).
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold mb-4 text-gray-800">Instruções de Uso</h3>
-        
+
         <div className="space-y-4 text-sm text-gray-600">
           <div>
             <h4 className="font-medium text-gray-800 mb-2">👨‍💼 Administradores (ID: 9999)</h4>
