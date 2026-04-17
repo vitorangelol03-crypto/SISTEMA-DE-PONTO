@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Settings, Info, Database, Shield, Clock, DollarSign, Save } from 'lucide-react';
+import { Settings, Info, Database, Shield, Clock, DollarSign, Save, ShieldOff, Unlock, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getBonusDefaults,
   updateBonusDefault,
+  getBlockedEmployeesThisWeek,
+  unblockEmployeeBonus,
   BonusType,
 } from '../../services/database';
 
@@ -23,6 +25,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
   });
   const [loadingDefaults, setLoadingDefaults] = useState(true);
   const [savingType, setSavingType] = useState<BonusType | null>(null);
+  const [blockedEmployees, setBlockedEmployees] = useState<{ employee_id: string; name: string; reason: string; blocked_since: string }[]>([]);
+  const [loadingBlocks, setLoadingBlocks] = useState(true);
+  const [unblockingId, setUnblockingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -48,6 +53,39 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
     })();
     return () => { cancelled = true; };
   }, [isAdmin]);
+
+  const loadBlocked = async () => {
+    setLoadingBlocks(true);
+    try {
+      const data = await getBlockedEmployeesThisWeek();
+      setBlockedEmployees(data);
+    } catch (error) {
+      console.error('Erro ao carregar bloqueios:', error);
+    } finally {
+      setLoadingBlocks(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setLoadingBlocks(false);
+      return;
+    }
+    loadBlocked();
+  }, [isAdmin]);
+
+  const handleUnblock = async (employeeId: string) => {
+    setUnblockingId(employeeId);
+    try {
+      await unblockEmployeeBonus(employeeId, userId);
+      toast.success('Bonificação desbloqueada');
+      await loadBlocked();
+    } catch (error) {
+      toast.error((error as Error).message || 'Erro ao desbloquear');
+    } finally {
+      setUnblockingId(null);
+    }
+  };
 
   const handleSaveBonusDefault = async (type: BonusType) => {
     const parsed = parseFloat(bonusDefaults[type]);
@@ -182,6 +220,77 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
               <p className="text-xs text-gray-500 pt-2">
                 Visível apenas para o administrador (ID 9999).
               </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold flex items-center text-gray-800">
+              <ShieldOff className="w-5 h-5 mr-2 text-red-600" />
+              Bloqueios de Bonificação
+              {blockedEmployees.length > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800">
+                  {blockedEmployees.length}
+                </span>
+              )}
+            </h3>
+            <button
+              onClick={loadBlocked}
+              className="flex items-center gap-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Atualizar
+            </button>
+          </div>
+
+          <p className="text-sm text-gray-600 mb-4">
+            Funcionários com bonificação bloqueada na semana atual por tentativa de fraude de geolocalização.
+          </p>
+
+          {loadingBlocks ? (
+            <p className="text-sm text-gray-500">Carregando bloqueios...</p>
+          ) : blockedEmployees.length === 0 ? (
+            <div className="text-center py-6 text-gray-400">
+              <Shield className="w-10 h-10 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">Nenhum bloqueio ativo esta semana</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Funcionário</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Motivo</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data do bloqueio</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {blockedEmployees.map(b => (
+                    <tr key={b.employee_id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-medium text-gray-900">{b.name}</td>
+                      <td className="px-4 py-3 text-gray-700">{b.reason}</td>
+                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                        {new Date(b.blocked_since).toLocaleDateString('pt-BR')} às{' '}
+                        {new Date(b.blocked_since).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleUnblock(b.employee_id)}
+                          disabled={unblockingId === b.employee_id}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-100 text-green-700 text-xs font-medium rounded-md hover:bg-green-200 disabled:opacity-50 transition-colors"
+                        >
+                          <Unlock className="w-3.5 h-3.5" />
+                          {unblockingId === b.employee_id ? 'Desbloqueando...' : 'Desbloquear'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

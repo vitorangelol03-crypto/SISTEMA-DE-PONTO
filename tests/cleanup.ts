@@ -41,7 +41,7 @@ function readDotEnv(): Record<string, string> {
 }
 
 let _client: SupabaseClient | null = null;
-function getClient(): SupabaseClient {
+export function getClient(): SupabaseClient {
   if (_client) return _client;
   const env = { ...readDotEnv(), ...process.env };
   const url = env.VITE_SUPABASE_URL;
@@ -94,6 +94,8 @@ export async function deleteTestEmployees(): Promise<number> {
   await supabase.from('attendance').delete().in('employee_id', ids);
   await supabase.from('payments').delete().in('employee_id', ids);
   await supabase.from('bonus_removals').delete().in('employee_id', ids);
+  await supabase.from('geo_fraud_attempts').delete().in('employee_id', ids);
+  await supabase.from('bonus_blocks').delete().in('employee_id', ids);
 
   const { error: delErr } = await supabase.from('employees').delete().in('id', ids);
   if (delErr) throw delErr;
@@ -152,13 +154,21 @@ export async function cleanupTodaySince(sinceIso: string): Promise<{
     paymentsReset++;
   }
 
-  // Também apaga quaisquer bonus_removals criadas durante a suíte, caso um
-  // teste tenha gerado registros de remoção com outro texto de observação.
   await supabase
     .from('bonus_removals')
     .delete()
     .gte('created_at', sinceIso)
     .eq('date', today);
+
+  await supabase
+    .from('geo_fraud_attempts')
+    .delete()
+    .gte('created_at', sinceIso);
+
+  await supabase
+    .from('bonus_blocks')
+    .delete()
+    .gte('created_at', sinceIso);
 
   return {
     bonuses: (delBonuses || []).length,

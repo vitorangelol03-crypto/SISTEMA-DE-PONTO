@@ -45,6 +45,13 @@ export interface Attendance {
   clock_source: 'manual' | 'employee_self' | null;
   marked_by: string;
   created_at: string;
+  entry_latitude?: number | null;
+  entry_longitude?: number | null;
+  entry_accuracy?: number | null;
+  exit_latitude?: number | null;
+  exit_longitude?: number | null;
+  geo_valid?: boolean | null;
+  geo_distance_meters?: number | null;
   employees?: Employee;
 }
 
@@ -783,14 +790,14 @@ export const applyBonusToAllPresent = async (
   date: string,
   bonusAmount: number,
   createdBy: string,
-  type: BonusType
-): Promise<void> => {
+  type: BonusType,
+  excludeEmployeeIds?: string[]
+): Promise<{ applied: number; skipped: number }> => {
   const permissionCheck = await validatePermission(createdBy, 'financial.applyBonus');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
-  // Buscar todos os funcionários presentes no dia
   const { data: attendances, error: attendanceError } = await supabase
     .from('attendance')
     .select('employee_id')
@@ -803,9 +810,15 @@ export const applyBonusToAllPresent = async (
     throw new Error('Nenhum funcionário presente encontrado para este dia');
   }
 
-  // Aplicar bonificação para cada funcionário presente
+  let applied = 0;
+  let skipped = 0;
+
   for (const attendance of attendances) {
-    // Buscar pagamento existente ou criar novo
+    if (excludeEmployeeIds?.includes(attendance.employee_id)) {
+      skipped++;
+      continue;
+    }
+
     const { data: existingPayment } = await supabase
       .from('payments')
       .select('*')
@@ -840,9 +853,10 @@ export const applyBonusToAllPresent = async (
       }], {
         onConflict: 'employee_id,date'
       });
+
+    applied++;
   }
 
-  // Garantir registro na tabela bonuses (para auditoria)
   await supabase
     .from('bonuses')
     .upsert([{
@@ -853,6 +867,8 @@ export const applyBonusToAllPresent = async (
     }], {
       onConflict: 'date,bonus_type'
     });
+
+  return { applied, skipped };
 };
 
 // Bonus info and removal functions
@@ -1820,7 +1836,7 @@ export const getPerformanceStats = async (startDate?: string, endDate?: string) 
 // ─── Clock-in / Clock-out functions ───────────────────────────────────────────
 
 /** Retorna a data atual no fuso horário do Brasil (UTC-3) como string YYYY-MM-DD */
-function getBrazilDateString(): string {
+export function getBrazilDateString(): string {
   const now = new Date();
   const brazilOffset = -3 * 60;
   const local = new Date(now.getTime() + brazilOffset * 60 * 1000);
@@ -1899,20 +1915,33 @@ export const getEmployeeTodayAttendance = async (employeeId: string): Promise<At
 };
 
 /** Funcionário registra entrada. */
-export const clockIn = async (employeeId: string): Promise<Attendance> => {
+export const clockIn = async (
+  employeeId: string,
+  geoData?: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number }
+): Promise<Attendance> => {
   const today = getBrazilDateString();
   const now = new Date().toISOString();
 
+  const record: Record<string, unknown> = {
+    employee_id: employeeId,
+    date: today,
+    status: 'present',
+    entry_time: now,
+    clock_source: 'employee_self',
+    approval_status: 'pending',
+  };
+
+  if (geoData) {
+    record.entry_latitude = geoData.latitude;
+    record.entry_longitude = geoData.longitude;
+    record.entry_accuracy = geoData.accuracy;
+    record.geo_valid = geoData.geo_valid;
+    record.geo_distance_meters = geoData.geo_distance_meters;
+  }
+
   const { data, error } = await supabase
     .from('attendance')
-    .upsert([{
-      employee_id: employeeId,
-      date: today,
-      status: 'present',
-      entry_time: now,
-      clock_source: 'employee_self',
-      approval_status: 'pending',
-    }], { onConflict: 'employee_id,date' })
+    .upsert([record], { onConflict: 'employee_id,date' })
     .select()
     .single();
 
@@ -1921,11 +1950,14 @@ export const clockIn = async (employeeId: string): Promise<Attendance> => {
 };
 
 /** Funcionário registra saída. Calcula horas trabalhadas e horas noturnas. */
-export const clockOut = async (employeeId: string, dailyRate?: number): Promise<Attendance> => {
+export const clockOut = async (
+  employeeId: string,
+  dailyRate?: number,
+  geoData?: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number }
+): Promise<Attendance> => {
   const today = getBrazilDateString();
   const now = new Date();
 
-  // Busca o registro de hoje para obter o entry_time
   const existing = await getEmployeeTodayAttendance(employeeId);
   if (!existing || !existing.entry_time) {
     throw new Error('Nenhuma entrada registrada hoje para calcular a saída');
@@ -1934,21 +1966,29 @@ export const clockOut = async (employeeId: string, dailyRate?: number): Promise<
   const entry = new Date(existing.entry_time);
   const { hoursWorked, nightHours } = calcHours(entry, now);
 
-  // Adicional noturno: 20% sobre o valor proporcional das horas noturnas
   let nightAdditional = 0;
   if (nightHours > 0 && hoursWorked > 0 && dailyRate && dailyRate > 0) {
     const hourlyRate = dailyRate / hoursWorked;
     nightAdditional = Math.round(nightHours * hourlyRate * 0.2 * 100) / 100;
   }
 
+  const updateRecord: Record<string, unknown> = {
+    exit_time_full: now.toISOString(),
+    hours_worked: hoursWorked,
+    night_hours: nightHours,
+    night_additional: nightAdditional,
+  };
+
+  if (geoData) {
+    updateRecord.exit_latitude = geoData.latitude;
+    updateRecord.exit_longitude = geoData.longitude;
+    updateRecord.geo_valid = geoData.geo_valid;
+    updateRecord.geo_distance_meters = geoData.geo_distance_meters;
+  }
+
   const { data, error } = await supabase
     .from('attendance')
-    .update({
-      exit_time_full: now.toISOString(),
-      hours_worked: hoursWorked,
-      night_hours: nightHours,
-      night_additional: nightAdditional,
-    })
+    .update(updateRecord)
     .eq('employee_id', employeeId)
     .eq('date', today)
     .select()
@@ -2114,4 +2154,173 @@ export const verifyEmployeePin = async (employeeId: string, pin: string): Promis
   if (error) throw error;
   if (!data?.pin) return false;
   return data.pin === pin;
+};
+
+// ─── Geolocation & Fraud functions ───────────────────────────────────────────
+
+export const getGeoConfig = async (): Promise<{
+  latitude: number;
+  longitude: number;
+  allowed_radius_meters: number;
+  block_outside: boolean;
+}> => {
+  const { data, error } = await supabase
+    .from('geolocation_config')
+    .select('latitude, longitude, allowed_radius_meters, block_outside')
+    .limit(1)
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
+}
+
+export const registerFraudAttempt = async (
+  employeeId: string,
+  date: string,
+  lat: number | null,
+  lon: number | null,
+  distanceMeters: number | null,
+  clockType: 'entry' | 'exit'
+): Promise<void> => {
+  const { error } = await supabase.from('geo_fraud_attempts').insert([{
+    employee_id: employeeId,
+    date,
+    latitude: lat,
+    longitude: lon,
+    distance_meters: distanceMeters,
+    clock_type: clockType,
+  }]);
+  if (error) throw error;
+};
+
+function getWeekBounds(): { weekStart: string; weekEnd: string } {
+  const now = new Date();
+  const brazilOffset = -3 * 60;
+  const local = new Date(now.getTime() + brazilOffset * 60 * 1000);
+  const day = local.getUTCDay();
+  const diffToMon = day === 0 ? -6 : 1 - day;
+  const monday = new Date(local);
+  monday.setUTCDate(local.getUTCDate() + diffToMon);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  return { weekStart: fmt(monday), weekEnd: fmt(sunday) };
+}
+
+export const blockEmployeeBonus = async (
+  employeeId: string,
+  reason: string
+): Promise<void> => {
+  const { weekStart, weekEnd } = getWeekBounds();
+  const { error } = await supabase
+    .from('bonus_blocks')
+    .upsert([{
+      employee_id: employeeId,
+      week_start: weekStart,
+      week_end: weekEnd,
+      reason,
+    }], { onConflict: 'employee_id,week_start' });
+  if (error) throw error;
+};
+
+export const isEmployeeBonusBlocked = async (
+  employeeId: string
+): Promise<{ blocked: boolean; reason?: string }> => {
+  const { weekStart } = getWeekBounds();
+  const { data, error } = await supabase
+    .from('bonus_blocks')
+    .select('reason')
+    .eq('employee_id', employeeId)
+    .eq('week_start', weekStart)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return { blocked: false };
+  return { blocked: true, reason: data.reason };
+};
+
+export const getBlockedEmployeesThisWeek = async (): Promise<
+  { employee_id: string; name: string; reason: string; blocked_since: string }[]
+> => {
+  const { weekStart } = getWeekBounds();
+  const { data, error } = await supabase
+    .from('bonus_blocks')
+    .select('employee_id, reason, created_at, employees (name)')
+    .eq('week_start', weekStart);
+  if (error) throw error;
+  return (data || []).map((row: Record<string, unknown>) => ({
+    employee_id: row.employee_id as string,
+    name: (row.employees as Record<string, unknown>)?.name as string ?? 'Desconhecido',
+    reason: row.reason as string,
+    blocked_since: row.created_at as string,
+  }));
+};
+
+export const unblockEmployeeBonus = async (
+  employeeId: string,
+  adminId: string
+): Promise<void> => {
+  if (adminId !== '9999') {
+    throw new Error('Apenas o administrador pode desbloquear bonificação');
+  }
+  const { weekStart } = getWeekBounds();
+  const { error } = await supabase
+    .from('bonus_blocks')
+    .delete()
+    .eq('employee_id', employeeId)
+    .eq('week_start', weekStart);
+  if (error) throw error;
+};
+
+export const saveFlaggedGeoAttempt = async (
+  employeeId: string,
+  clockType: 'entry' | 'exit',
+  latitude: number,
+  longitude: number,
+  accuracy: number,
+  distanceMeters: number
+): Promise<void> => {
+  const today = getBrazilDateString();
+  const now = new Date().toISOString();
+
+  if (clockType === 'entry') {
+    await supabase
+      .from('attendance')
+      .upsert([{
+        employee_id: employeeId,
+        date: today,
+        status: 'present',
+        entry_time: now,
+        entry_latitude: latitude,
+        entry_longitude: longitude,
+        entry_accuracy: accuracy,
+        geo_valid: false,
+        geo_distance_meters: distanceMeters,
+        approval_status: 'pending',
+        clock_source: 'employee_self',
+      }], { onConflict: 'employee_id,date' });
+  } else {
+    await supabase
+      .from('attendance')
+      .update({
+        exit_latitude: latitude,
+        exit_longitude: longitude,
+        geo_valid: false,
+        geo_distance_meters: distanceMeters,
+      })
+      .eq('employee_id', employeeId)
+      .eq('date', today);
+  }
 };

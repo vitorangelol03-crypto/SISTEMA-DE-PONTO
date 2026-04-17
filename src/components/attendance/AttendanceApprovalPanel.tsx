@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, CheckCheck } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, CheckCheck, MapPin } from 'lucide-react';
 import {
   getPendingApprovals,
   approveAttendance,
@@ -42,8 +42,15 @@ function formatDateBR(d: string): string {
 /** Verifica alertas de fraude num registro */
 function fraudAlerts(att: Attendance): string[] {
   const alerts: string[] = [];
+  if (att.geo_valid === false) {
+    const dist = att.geo_distance_meters;
+    if (dist != null) {
+      alerts.push(`Fora da área permitida — ${dist}m do local`);
+    } else {
+      alerts.push('Localização inválida / negada');
+    }
+  }
   if (att.entry_time) {
-    // Converte UTC para Brasília (UTC-3) antes de checar o horário
     const utcH = new Date(att.entry_time).getUTCHours();
     const hBRT = (utcH - 3 + 24) % 24;
     if (hBRT < 5 || hBRT >= 23) alerts.push('Entrada fora do horário esperado (antes das 05h ou depois das 23h)');
@@ -271,9 +278,31 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
                         {att.night_hours ? `${formatHours(att.night_hours)}` : '-'}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${badge.cls}`}>
-                          {badge.label}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${badge.cls}`}>
+                            {badge.label}
+                          </span>
+                          {att.entry_latitude != null && att.entry_longitude != null && (
+                            <a
+                              href={`https://maps.google.com/?q=${att.entry_latitude},${att.entry_longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold cursor-pointer ${att.geo_valid === false ? 'bg-red-100 text-red-800 hover:bg-red-200' : 'bg-green-100 text-green-800 hover:bg-green-200'}`}
+                            >
+                              <MapPin className="w-3 h-3" />
+                              {att.geo_valid === false ? 'Fora da área' : 'Dentro da área'}
+                              {att.geo_distance_meters != null && (
+                                <span className="font-normal">({att.geo_distance_meters}m)</span>
+                              )}
+                            </a>
+                          )}
+                          {att.geo_valid === false && !att.entry_latitude && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                              <MapPin className="w-3 h-3" />
+                              Localização negada
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         {alerts.length > 0 ? (

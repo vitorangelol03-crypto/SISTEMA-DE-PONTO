@@ -4,8 +4,6 @@ import {
   getEmployeeByCpf,
   getEmployeeTodayAttendance,
   getEmployeeAttendanceHistory,
-  clockIn,
-  clockOut,
   verifyEmployeePin,
   setEmployeePin,
   Employee,
@@ -186,24 +184,52 @@ export const EmployeeClockIn: React.FC = () => {
     }
   };
 
-  // ─── Clock in / out ───────────────────────────────────────────────────────
+  // ─── Clock in / out (server-side validation via Edge Function) ─────────
 
-  /** Verifica geolocalização antes de qualquer batida de ponto. */
-  const checkGeolocation = async (): Promise<boolean> => {
+  const EDGE_FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/clock-in-validated`;
+
+  const callClockValidated = async (
+    clockType: 'entry' | 'exit',
+  ): Promise<{ success: boolean; fraud: boolean; distance_meters: number | null; attendance?: Attendance; error?: string }> => {
+    if (!employee) throw new Error('Funcionário não carregado');
+
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+    let accuracy: number | null = null;
+
     try {
-      await requestGeolocation();
-      return true;
+      const position = await requestGeolocation();
+      latitude = position.coords.latitude;
+      longitude = position.coords.longitude;
+      accuracy = position.coords.accuracy;
     } catch (err: unknown) {
       const code = (err as GeolocationPositionError)?.code;
-      if (code === 1) {
-        // PERMISSION_DENIED — possível tentativa de burla
-        setGeoAlert('denied');
-      } else {
-        // POSITION_UNAVAILABLE (2) ou TIMEOUT (3)
+      if (code === 2 || code === 3) {
         setGeoAlert('unavailable');
+        return { success: false, fraud: false, distance_meters: null };
       }
-      return false;
+      // code === 1 (denied) or unknown → send null coords, server handles as fraud
     }
+
+    const res = await fetch(EDGE_FN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        employee_id: employee.id,
+        cpf: employee.cpf,
+        clock_type: clockType,
+        latitude,
+        longitude,
+        accuracy,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro no servidor');
+    return data;
   };
 
   const handleClockIn = async () => {
@@ -211,9 +237,12 @@ export const EmployeeClockIn: React.FC = () => {
     setClockLoading(true);
     setClockMsg('');
     try {
-      const geoOk = await checkGeolocation();
-      if (!geoOk) return;
-      await clockIn(employee.id);
+      const result = await callClockValidated('entry');
+      if (result.fraud) {
+        setGeoAlert('denied');
+        return;
+      }
+      if (!result.success) return;
       setClockMsg(`✅ Entrada registrada às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`);
       await loadDashboard(employee);
     } catch (err) {
@@ -228,10 +257,14 @@ export const EmployeeClockIn: React.FC = () => {
     setClockLoading(true);
     setClockMsg('');
     try {
-      const geoOk = await checkGeolocation();
-      if (!geoOk) return;
-      const att = await clockOut(employee.id);
-      setClockMsg(`✅ Saída registrada às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — ${formatHours(att.hours_worked)}`);
+      const result = await callClockValidated('exit');
+      if (result.fraud) {
+        setGeoAlert('denied');
+        return;
+      }
+      if (!result.success) return;
+      const att = result.attendance;
+      setClockMsg(`✅ Saída registrada às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — ${att ? formatHours(att.hours_worked) : ''}`);
       await loadDashboard(employee);
     } catch (err) {
       setClockMsg(`❌ ${err instanceof Error ? err.message : 'Erro ao registrar saída'}`);
