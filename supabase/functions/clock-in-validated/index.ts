@@ -129,12 +129,9 @@ Deno.serve(async (req: Request) => {
 
     let distance = 0;
     let geoValid = true;
-    let fraud = false;
 
     if (config) {
       if (!hasCoords) {
-        // No coordinates = denied permission or spoofing
-        fraud = true;
         geoValid = false;
 
         await supabase.from("geo_fraud_attempts").insert([
@@ -148,96 +145,100 @@ Deno.serve(async (req: Request) => {
           },
         ]);
 
-        const { weekStart, weekEnd } = getWeekBounds();
-        await supabase.from("bonus_blocks").upsert(
-          [
-            {
-              employee_id,
-              week_start: weekStart,
-              week_end: weekEnd,
-              reason: "Localização não fornecida",
-            },
-          ],
-          { onConflict: "employee_id,week_start" },
-        );
-
-        return new Response(
-          JSON.stringify({
-            success: false,
-            fraud: true,
-            distance_meters: null,
-            message: "Localização não fornecida",
-          }),
-          { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-        );
-      }
-
-      distance = calcDistance(
-        latitude,
-        longitude,
-        Number(config.latitude),
-        Number(config.longitude),
-      );
-
-      if (config.block_outside && distance > (config.allowed_radius_meters ?? 200)) {
-        fraud = true;
-        geoValid = false;
-
-        await supabase.from("geo_fraud_attempts").insert([
-          {
-            employee_id,
-            date: today,
-            latitude,
-            longitude,
-            distance_meters: distance,
-            clock_type,
-          },
-        ]);
-
-        const { weekStart, weekEnd } = getWeekBounds();
-        await supabase.from("bonus_blocks").upsert(
-          [
-            {
-              employee_id,
-              week_start: weekStart,
-              week_end: weekEnd,
-              reason: `Fora da área permitida (${distance}m)`,
-            },
-          ],
-          { onConflict: "employee_id,week_start" },
-        );
-
-        // Save flagged attendance anyway
         if (clock_type === "entry") {
-          await supabase.from("attendance").upsert(
+          const { weekStart, weekEnd } = getWeekBounds();
+          await supabase.from("bonus_blocks").upsert(
             [
               {
                 employee_id,
-                date: today,
-                status: "present",
-                entry_time: now,
-                entry_latitude: latitude,
-                entry_longitude: longitude,
-                entry_accuracy: accuracy,
-                geo_valid: false,
-                geo_distance_meters: distance,
-                approval_status: "pending",
-                clock_source: "employee_self",
+                week_start: weekStart,
+                week_end: weekEnd,
+                reason: "Localização não fornecida",
               },
             ],
-            { onConflict: "employee_id,date" },
+            { onConflict: "employee_id,week_start" },
+          );
+
+          return new Response(
+            JSON.stringify({
+              success: false,
+              fraud: true,
+              distance_meters: null,
+              message: "Localização não fornecida",
+            }),
+            { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
           );
         }
+        // exit without coords: fall through to normal exit with geoValid=false
+      }
 
-        return new Response(
-          JSON.stringify({
-            success: false,
-            fraud: true,
-            distance_meters: distance,
-            message: `Fora da área permitida (${distance}m)`,
-          }),
-          { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      if (hasCoords) {
+        distance = calcDistance(
+          latitude,
+          longitude,
+          Number(config.latitude),
+          Number(config.longitude),
         );
+
+        if (config.block_outside && distance > (config.allowed_radius_meters ?? 200)) {
+          geoValid = false;
+
+          await supabase.from("geo_fraud_attempts").insert([
+            {
+              employee_id,
+              date: today,
+              latitude,
+              longitude,
+              distance_meters: distance,
+              clock_type,
+            },
+          ]);
+
+          if (clock_type === "entry") {
+            const { weekStart, weekEnd } = getWeekBounds();
+            await supabase.from("bonus_blocks").upsert(
+              [
+                {
+                  employee_id,
+                  week_start: weekStart,
+                  week_end: weekEnd,
+                  reason: `Fora da área permitida (${distance}m)`,
+                },
+              ],
+              { onConflict: "employee_id,week_start" },
+            );
+
+            await supabase.from("attendance").upsert(
+              [
+                {
+                  employee_id,
+                  date: today,
+                  status: "present",
+                  entry_time: now,
+                  entry_latitude: latitude,
+                  entry_longitude: longitude,
+                  entry_accuracy: accuracy,
+                  geo_valid: false,
+                  geo_distance_meters: distance,
+                  approval_status: "pending",
+                  clock_source: "employee_self",
+                },
+              ],
+              { onConflict: "employee_id,date" },
+            );
+
+            return new Response(
+              JSON.stringify({
+                success: false,
+                fraud: true,
+                distance_meters: distance,
+                message: `Fora da área permitida (${distance}m)`,
+              }),
+              { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+            );
+          }
+          // exit outside area: fall through to normal exit with geoValid=false
+        }
       }
     }
 
@@ -321,9 +322,9 @@ Deno.serve(async (req: Request) => {
       updateRecord.exit_latitude = latitude;
       updateRecord.exit_longitude = longitude;
       updateRecord.exit_accuracy = accuracy;
-      updateRecord.geo_valid = geoValid;
-      updateRecord.geo_distance_meters = distance;
     }
+    updateRecord.geo_valid = geoValid;
+    updateRecord.geo_distance_meters = distance;
 
     const { data: att, error: updErr } = await supabase
       .from("attendance")
@@ -344,6 +345,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         fraud: false,
+        geo_warning: !geoValid,
         distance_meters: distance,
         attendance: att,
       }),

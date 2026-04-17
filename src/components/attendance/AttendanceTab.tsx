@@ -20,7 +20,7 @@ import {
   getPayments,
   Payment,
   getBonusDefaults,
-  getBlockedEmployeesThisWeek
+  getBlockedEmployeesThisWeek,
 } from '../../services/database';
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
@@ -62,7 +62,6 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [removingBonus, setRemovingBonus] = useState(false);
   const [activeView, setActiveView] = useState<'attendance' | 'approvals'>('attendance');
   const [blockedEmployees, setBlockedEmployees] = useState<{ employee_id: string; name: string; reason: string; blocked_since: string }[]>([]);
-
   const isViewingToday = selectedDate === getBrazilDate();
 
   const loadData = async (date: string = selectedDate) => {

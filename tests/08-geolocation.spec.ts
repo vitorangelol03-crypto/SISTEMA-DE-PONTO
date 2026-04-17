@@ -28,6 +28,7 @@ async function loginEmployee(page: Page) {
 test.describe('Geolocalização (/clock)', () => {
   const supabase = getClient();
   let employeeId: string;
+  let originalConfig: Record<string, unknown> | null = null;
 
   test.beforeAll(async () => {
     // Remove leftover from crashed previous run
@@ -45,21 +46,22 @@ test.describe('Geolocalização (/clock)', () => {
       await supabase.from('employees').delete().eq('id', existing.id);
     }
 
-    // Ensure geolocation_config exists
-    const { data: config } = await supabase
+    // Save original config and set test config
+    const { data: geoConfig } = await supabase
       .from('geolocation_config')
       .select('*')
       .limit(1)
       .maybeSingle();
 
-    if (!config) {
-      await supabase.from('geolocation_config').insert([{
-        latitude: VALID_LAT,
-        longitude: VALID_LON,
-        allowed_radius_meters: 200,
-        block_outside: true,
-      }]);
-    }
+    originalConfig = geoConfig;
+
+    await supabase.from('geolocation_config').upsert([{
+      id: geoConfig?.id ?? 'default',
+      latitude: VALID_LAT,
+      longitude: VALID_LON,
+      allowed_radius_meters: 200,
+      block_outside: true,
+    }]);
 
     // Create test employee
     const { data, error } = await supabase
@@ -84,6 +86,9 @@ test.describe('Geolocalização (/clock)', () => {
       await supabase.from('bonus_blocks').delete().eq('employee_id', employeeId);
       await supabase.from('payments').delete().eq('employee_id', employeeId);
       await supabase.from('employees').delete().eq('id', employeeId);
+    }
+    if (originalConfig) {
+      await supabase.from('geolocation_config').upsert([originalConfig]);
     }
   });
 

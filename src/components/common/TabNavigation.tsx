@@ -1,7 +1,7 @@
 import React from 'react';
-import { Clock, Users, BarChart3, Settings, UserCog, DollarSign, AlertTriangle, FileSpreadsheet, Database, BookOpen } from 'lucide-react';
+import { Clock, Users, BarChart3, Settings, UserCog, DollarSign, AlertTriangle, FileSpreadsheet, Database, BookOpen, Shield } from 'lucide-react';
 
-export type TabType = 'attendance' | 'employees' | 'reports' | 'settings' | 'users' | 'financial' | 'errors' | 'c6payment' | 'datamanagement' | 'tutorial';
+export type TabType = 'attendance' | 'employees' | 'reports' | 'settings' | 'users' | 'financial' | 'errors' | 'c6payment' | 'datamanagement' | 'tutorial' | 'admin';
 
 interface TabNavigationProps {
   activeTab: TabType;
@@ -26,7 +26,8 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
     { id: 'settings' as TabType, name: 'Configurações', icon: Settings, permission: 'settings.view' },
     { id: 'users' as TabType, name: 'Usuários', icon: UserCog, permission: 'users.view' },
     { id: 'datamanagement' as TabType, name: 'Gerenciamento', icon: Database, permission: 'datamanagement.view' },
-    { id: 'tutorial' as TabType, name: 'Ajuda', icon: BookOpen, permission: null }
+    { id: 'tutorial' as TabType, name: 'Ajuda', icon: BookOpen, permission: null },
+    { id: 'admin' as TabType, name: 'Admin', icon: Shield, permission: null }
   ];
 
   const tabs = allTabs.filter(tab => !tab.permission || hasPermission(tab.permission));

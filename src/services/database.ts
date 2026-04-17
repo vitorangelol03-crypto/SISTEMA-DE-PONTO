@@ -2324,3 +2324,197 @@ export const saveFlaggedGeoAttempt = async (
       .eq('date', today);
   }
 };
+
+export interface GeoAlert {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  date: string;
+  entry_time: string | null;
+  exit_time_full: string | null;
+  entry_latitude: number | null;
+  entry_longitude: number | null;
+  exit_latitude: number | null;
+  exit_longitude: number | null;
+  geo_distance_meters: number | null;
+  clock_source: string | null;
+}
+
+export const getGeoAlerts = async (): Promise<GeoAlert[]> => {
+  const endDate = getBrazilDateString();
+  const startMs = new Date(endDate).getTime() - 29 * 24 * 60 * 60 * 1000;
+  const startDate = new Date(startMs).toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('attendance')
+    .select('id, employee_id, date, entry_time, exit_time_full, entry_latitude, entry_longitude, exit_latitude, exit_longitude, geo_distance_meters, clock_source, employees (name)')
+    .eq('geo_valid', false)
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('date', { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    employee_id: row.employee_id as string,
+    employee_name: (row.employees as Record<string, unknown>)?.name as string ?? 'Desconhecido',
+    date: row.date as string,
+    entry_time: row.entry_time as string | null,
+    exit_time_full: row.exit_time_full as string | null,
+    entry_latitude: row.entry_latitude as number | null,
+    entry_longitude: row.entry_longitude as number | null,
+    exit_latitude: row.exit_latitude as number | null,
+    exit_longitude: row.exit_longitude as number | null,
+    geo_distance_meters: row.geo_distance_meters as number | null,
+    clock_source: row.clock_source as string | null,
+  }));
+};
+
+// ─── Admin Secret ───────────────────────────────────────────────────────────
+
+export const verifyAdminSecret = async (password: string): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from('admin_secret')
+    .select('password_hash')
+    .eq('id', 'default')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return false;
+  return data.password_hash === password;
+};
+
+export const updateAdminSecret = async (newPassword: string): Promise<void> => {
+  const { error } = await supabase
+    .from('admin_secret')
+    .update({ password_hash: newPassword, updated_at: new Date().toISOString() })
+    .eq('id', 'default');
+  if (error) throw error;
+};
+
+export interface GeoRecord {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  date: string;
+  entry_time: string | null;
+  exit_time_full: string | null;
+  entry_latitude: number | null;
+  entry_longitude: number | null;
+  entry_accuracy: number | null;
+  exit_latitude: number | null;
+  exit_longitude: number | null;
+  exit_accuracy: number | null;
+  geo_valid: boolean | null;
+  geo_distance_meters: number | null;
+}
+
+export const getGeoRecords = async (filters?: {
+  startDate?: string;
+  endDate?: string;
+  employeeId?: string;
+}): Promise<GeoRecord[]> => {
+  let query = supabase
+    .from('attendance')
+    .select('id, employee_id, date, entry_time, exit_time_full, entry_latitude, entry_longitude, entry_accuracy, exit_latitude, exit_longitude, exit_accuracy, geo_valid, geo_distance_meters, employees (name)')
+    .not('entry_latitude', 'is', null)
+    .order('date', { ascending: false })
+    .limit(200);
+
+  if (filters?.startDate) query = query.gte('date', filters.startDate);
+  if (filters?.endDate) query = query.lte('date', filters.endDate);
+  if (filters?.employeeId) query = query.eq('employee_id', filters.employeeId);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return (data || []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    employee_id: row.employee_id as string,
+    employee_name: (row.employees as Record<string, unknown>)?.name as string ?? 'Desconhecido',
+    date: row.date as string,
+    entry_time: row.entry_time as string | null,
+    exit_time_full: row.exit_time_full as string | null,
+    entry_latitude: row.entry_latitude as number | null,
+    entry_longitude: row.entry_longitude as number | null,
+    entry_accuracy: row.entry_accuracy as number | null,
+    exit_latitude: row.exit_latitude as number | null,
+    exit_longitude: row.exit_longitude as number | null,
+    exit_accuracy: row.exit_accuracy as number | null,
+    geo_valid: row.geo_valid as boolean | null,
+    geo_distance_meters: row.geo_distance_meters as number | null,
+  }));
+};
+
+export interface FraudAttempt {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  date: string;
+  attempted_at: string;
+  latitude: number | null;
+  longitude: number | null;
+  distance_meters: number | null;
+  clock_type: string;
+}
+
+export const getFraudAttempts = async (): Promise<FraudAttempt[]> => {
+  const { data, error } = await supabase
+    .from('geo_fraud_attempts')
+    .select('id, employee_id, date, attempted_at, latitude, longitude, distance_meters, clock_type, employees (name)')
+    .order('attempted_at', { ascending: false })
+    .limit(200);
+
+  if (error) throw error;
+
+  return (data || []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    employee_id: row.employee_id as string,
+    employee_name: (row.employees as Record<string, unknown>)?.name as string ?? 'Desconhecido',
+    date: row.date as string,
+    attempted_at: row.attempted_at as string,
+    latitude: row.latitude as number | null,
+    longitude: row.longitude as number | null,
+    distance_meters: row.distance_meters as number | null,
+    clock_type: row.clock_type as string,
+  }));
+};
+
+export interface BonusBlock {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  week_start: string;
+  week_end: string;
+  reason: string;
+  created_at: string;
+}
+
+export const getBonusBlocks = async (): Promise<BonusBlock[]> => {
+  const { data, error } = await supabase
+    .from('bonus_blocks')
+    .select('id, employee_id, week_start, week_end, reason, created_at, employees (name)')
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) throw error;
+
+  return (data || []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    employee_id: row.employee_id as string,
+    employee_name: (row.employees as Record<string, unknown>)?.name as string ?? 'Desconhecido',
+    week_start: row.week_start as string,
+    week_end: row.week_end as string,
+    reason: row.reason as string,
+    created_at: row.created_at as string,
+  }));
+};
+
+export const unblockBonus = async (employeeId: string, weekStart: string): Promise<void> => {
+  const { error } = await supabase
+    .from('bonus_blocks')
+    .delete()
+    .eq('employee_id', employeeId)
+    .eq('week_start', weekStart);
+  if (error) throw error;
+};

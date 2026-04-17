@@ -19,6 +19,7 @@ const ErrorsTab = lazy(() => import('./components/errors/ErrorsTab').then(m => (
 const C6PaymentTab = lazy(() => import('./components/c6payment/C6PaymentTab').then(m => ({ default: m.C6PaymentTab })));
 const DataManagementTab = lazy(() => import('./components/datamanagement/DataManagementTab').then(m => ({ default: m.DataManagementTab })));
 const TutorialTab = lazy(() => import('./components/tutorial/TutorialTab').then(m => ({ default: m.TutorialTab })));
+const AdminTab = lazy(() => import('./components/admin/AdminTab').then(m => ({ default: m.AdminTab })));
 
 function App() {
   const { user, loading, login, logout } = useAuth();
@@ -96,6 +97,8 @@ function App() {
           return hasPermission('datamanagement.view') ? <DataManagementTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'tutorial':
           return <TutorialTab hasPermission={hasPermission} />;
+        case 'admin':
+          return <AdminTab userId={user.id} />;
         default:
           return hasPermission('attendance.view') ? <AttendanceTab userId={user.id} hasPermission={hasPermission} /> : null;
       }

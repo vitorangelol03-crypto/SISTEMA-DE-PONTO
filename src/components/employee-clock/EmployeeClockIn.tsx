@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle } from 'lucide-react';
 import {
   getEmployeeByCpf,
   getEmployeeTodayAttendance,
@@ -37,7 +37,6 @@ const APPROVAL_BADGE: Record<string, { label: string; cls: string }> = {
 };
 
 type Step = 'cpf' | 'pin' | 'setup-pin' | 'dashboard' | 'error';
-type GeoAlert = null | 'denied' | 'unavailable';
 
 /** Solicita geolocalização. Resolve com a position, ou rejeita com o código do erro. */
 function requestGeolocation(): Promise<GeolocationPosition> {
@@ -79,7 +78,6 @@ export const EmployeeClockIn: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [clockLoading, setClockLoading] = useState(false);
   const [clockMsg, setClockMsg] = useState('');
-  const [geoAlert, setGeoAlert] = useState<GeoAlert>(null);
 
   // ─── Load dashboard data ──────────────────────────────────────────────────
 
@@ -190,7 +188,7 @@ export const EmployeeClockIn: React.FC = () => {
 
   const callClockValidated = async (
     clockType: 'entry' | 'exit',
-  ): Promise<{ success: boolean; fraud: boolean; distance_meters: number | null; attendance?: Attendance; error?: string }> => {
+  ): Promise<{ success: boolean; fraud: boolean; geo_warning?: boolean; distance_meters: number | null; attendance?: Attendance; error?: string }> => {
     if (!employee) throw new Error('Funcionário não carregado');
 
     let latitude: number | null = null;
@@ -202,13 +200,8 @@ export const EmployeeClockIn: React.FC = () => {
       latitude = position.coords.latitude;
       longitude = position.coords.longitude;
       accuracy = position.coords.accuracy;
-    } catch (err: unknown) {
-      const code = (err as GeolocationPositionError)?.code;
-      if (code === 2 || code === 3) {
-        setGeoAlert('unavailable');
-        return { success: false, fraud: false, distance_meters: null };
-      }
-      // code === 1 (denied) or unknown → send null coords, server handles as fraud
+    } catch {
+      // GPS denied/unavailable/timeout → send null coords, server handles silently
     }
 
     const res = await fetch(EDGE_FN_URL, {
@@ -238,15 +231,14 @@ export const EmployeeClockIn: React.FC = () => {
     setClockMsg('');
     try {
       const result = await callClockValidated('entry');
-      if (result.fraud) {
-        setGeoAlert('denied');
+      if (!result.success) {
+        setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
         return;
       }
-      if (!result.success) return;
       setClockMsg(`✅ Entrada registrada às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`);
       await loadDashboard(employee);
-    } catch (err) {
-      setClockMsg(`❌ ${err instanceof Error ? err.message : 'Erro ao registrar entrada'}`);
+    } catch {
+      setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
     } finally {
       setClockLoading(false);
     }
@@ -258,16 +250,16 @@ export const EmployeeClockIn: React.FC = () => {
     setClockMsg('');
     try {
       const result = await callClockValidated('exit');
-      if (result.fraud) {
-        setGeoAlert('denied');
+      if (!result.success) {
+        setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
         return;
       }
-      if (!result.success) return;
       const att = result.attendance;
-      setClockMsg(`✅ Saída registrada às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — ${att ? formatHours(att.hours_worked) : ''}`);
+      const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      setClockMsg(`✅ Saída registrada às ${time} — ${att ? formatHours(att.hours_worked) : ''}`);
       await loadDashboard(employee);
-    } catch (err) {
-      setClockMsg(`❌ ${err instanceof Error ? err.message : 'Erro ao registrar saída'}`);
+    } catch {
+      setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
     } finally {
       setClockLoading(false);
     }
@@ -661,52 +653,6 @@ export const EmployeeClockIn: React.FC = () => {
         )}
       </div>
 
-      {/* ── MODAL GEOLOCALIZAÇÃO ── */}
-      {geoAlert === 'denied' && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
-          <div className="bg-red-900 rounded-2xl shadow-2xl max-w-sm w-full text-white overflow-hidden">
-            <div className="p-6 text-center space-y-4">
-              <ShieldAlert className="w-16 h-16 mx-auto text-red-300" />
-              <h2 className="text-xl font-black uppercase tracking-wide">
-                Atenção
-              </h2>
-              <p className="text-base font-bold leading-relaxed">
-                Por tentativas de burlar o sistema, sua bonificação total
-                da semana será retida. Favor falar com Clayton.
-              </p>
-              <button
-                onClick={() => setGeoAlert(null)}
-                className="w-full py-3 bg-white text-red-900 font-bold text-lg rounded-xl hover:bg-red-100 transition-colors mt-2"
-              >
-                Entendi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {geoAlert === 'unavailable' && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
-            <div className="p-6 text-center space-y-4">
-              <AlertCircle className="w-14 h-14 mx-auto text-amber-500" />
-              <h2 className="text-lg font-bold text-gray-800">
-                Localização indisponível
-              </h2>
-              <p className="text-sm text-gray-600 leading-relaxed">
-                Localização necessária para registrar o ponto.
-                Ative o GPS e tente novamente.
-              </p>
-              <button
-                onClick={() => setGeoAlert(null)}
-                className="w-full py-3 bg-blue-600 text-white font-bold text-lg rounded-xl hover:bg-blue-700 transition-colors"
-              >
-                Entendi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
