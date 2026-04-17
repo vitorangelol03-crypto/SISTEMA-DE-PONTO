@@ -40,8 +40,8 @@ async function applyBonus(page: Page, type: 'B' | 'C1' | 'C2', amount: string) {
   await expect(applyBtn).toBeEnabled({ timeout: 5_000 });
   await applyBtn.click();
 
-  // Espera toast "Bonificação X de R$..."
-  await expect(page.getByText(new RegExp(`Bonificação ${type} de R\\$`))).toBeVisible({ timeout: 10_000 });
+  // Espera toast de sucesso
+  await expect(page.getByText(new RegExp(`Bonificação ${type} aplicada com sucesso`))).toBeVisible({ timeout: 10_000 });
 
   // Fecha modal
   await page.getByRole('button', { name: /^Fechar$/ }).click();

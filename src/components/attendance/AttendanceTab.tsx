@@ -20,7 +20,6 @@ import {
   getPayments,
   Payment,
   getBonusDefaults,
-  getBlockedEmployeesThisWeek,
 } from '../../services/database';
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
@@ -61,7 +60,6 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [removeAllBonusObservation, setRemoveAllBonusObservation] = useState('');
   const [removingBonus, setRemovingBonus] = useState(false);
   const [activeView, setActiveView] = useState<'attendance' | 'approvals'>('attendance');
-  const [blockedEmployees, setBlockedEmployees] = useState<{ employee_id: string; name: string; reason: string; blocked_since: string }[]>([]);
   const isViewingToday = selectedDate === getBrazilDate();
 
   const loadData = async (date: string = selectedDate) => {
@@ -273,16 +271,12 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const openBonusModal = async () => {
     setShowBonusModal(true);
     try {
-      const [defaults, blocked] = await Promise.all([
-        getBonusDefaults(),
-        getBlockedEmployeesThisWeek(),
-      ]);
+      const defaults = await getBonusDefaults();
       setBonusAmounts(prev => ({
         B: prev.B || (defaults.B > 0 ? String(defaults.B) : ''),
         C1: prev.C1 || (defaults.C1 > 0 ? String(defaults.C1) : ''),
         C2: prev.C2 || (defaults.C2 > 0 ? String(defaults.C2) : ''),
       }));
-      setBlockedEmployees(blocked);
     } catch (error) {
       console.error('Erro ao carregar dados do modal de bonificação:', error);
     }
@@ -297,13 +291,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
 
     setApplyingBonus(prev => ({ ...prev, [type]: true }));
     try {
-      const blockedIds = blockedEmployees.map(b => b.employee_id);
-      const result = await applyBonusToAllPresent(selectedDate, amount, userId, type, blockedIds);
-      if (result.skipped > 0) {
-        toast.success(`Bonificação ${type} aplicada para ${result.applied} funcionários. ${result.skipped} bloqueados foram ignorados.`);
-      } else {
-        toast.success(`Bonificação ${type} de R$ ${amount.toFixed(2)} aplicada para ${result.applied} funcionários!`);
-      }
+      await applyBonusToAllPresent(selectedDate, amount, userId, type);
+      toast.success(`Bonificação ${type} aplicada com sucesso.`);
       setBonusAmounts(prev => ({ ...prev, [type]: '' }));
       await loadData(selectedDate);
     } catch (error) {
@@ -1227,26 +1216,6 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
               <p className="text-sm text-gray-600">
                 Funcionários presentes: <strong>{present}</strong>
               </p>
-
-              {blockedEmployees.length > 0 && (
-                <div className="border-2 border-red-300 bg-red-50 rounded-lg p-4">
-                  <h4 className="text-sm font-bold text-red-800 mb-2 flex items-center gap-2">
-                    <span>🚫</span> Funcionários com bonificação bloqueada esta semana
-                  </h4>
-                  <ul className="space-y-1">
-                    {blockedEmployees.map(b => (
-                      <li key={b.employee_id} className="text-sm text-red-700">
-                        <strong>{b.name}</strong> — {b.reason}
-                        {b.blocked_since && (
-                          <span className="text-red-500 text-xs ml-1">
-                            em {new Date(b.blocked_since).toLocaleDateString('pt-BR')} às {new Date(b.blocked_since).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
 
               {(['B', 'C1', 'C2'] as BonusType[]).map(type => {
                 const currentInfo = bonusInfo?.[type];

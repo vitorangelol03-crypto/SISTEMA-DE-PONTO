@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN, loginAs, goToTab } from './helpers';
+import { ADMIN, loginAs } from './helpers';
 import { getClient } from './cleanup';
 
 const TEST_NAME = 'PW Test Blocked Employee';
@@ -26,13 +26,12 @@ function todayIso(): string {
   return local.toISOString().slice(0, 10);
 }
 
-test.describe('Bloqueio de Bonificação', () => {
+test.describe('Bloqueio de Bonificação (silencioso)', () => {
   const supabase = getClient();
   let employeeId: string;
   const today = todayIso();
 
   test.beforeAll(async () => {
-    // Remove leftover from crashed previous run
     const { data: existing } = await supabase
       .from('employees')
       .select('id')
@@ -82,8 +81,7 @@ test.describe('Bloqueio de Bonificação', () => {
     }
   });
 
-  test('modal de bonificação mostra funcionário bloqueado', async ({ page }) => {
-    // Mark test employee as present
+  test('modal de bonificação NÃO mostra seção de bloqueio (silencioso)', async ({ page }) => {
     await supabase.from('attendance').upsert([{
       employee_id: employeeId,
       date: today,
@@ -91,7 +89,6 @@ test.describe('Bloqueio de Bonificação', () => {
       marked_by: '9999',
     }], { onConflict: 'employee_id,date' });
 
-    // Block bonus for this week
     const { weekStart, weekEnd } = getWeekBounds();
     await supabase.from('bonus_blocks').upsert([{
       employee_id: employeeId,
@@ -104,17 +101,15 @@ test.describe('Bloqueio de Bonificação', () => {
     await page.getByRole('button', { name: /^Bonificação$/ }).click();
     await expect(page.getByRole('heading', { name: /Bonificação do Dia/ })).toBeVisible();
 
-    // Should show the blocked employees section inside the modal
-    const blockedSection = page.locator('.bg-red-50');
-    await expect(blockedSection.getByText(/bonificação bloqueada/i)).toBeVisible({ timeout: 10_000 });
-    await expect(blockedSection.getByText(TEST_NAME)).toBeVisible();
-    await expect(blockedSection.getByText(/fraude/i)).toBeVisible();
+    // Blocked section must NOT appear inside modal (blocking is now silent)
+    const modal = page.locator('[role="dialog"], .fixed').filter({ has: page.getByRole('heading', { name: /Bonificação do Dia/ }) });
+    await expect(modal.getByText(/bonificação bloqueada/i)).not.toBeVisible();
+    await expect(modal.getByText(TEST_NAME)).not.toBeVisible();
 
     await page.getByRole('button', { name: /^Fechar$/ }).click();
   });
 
-  test('aplicar bonificação ignora funcionário bloqueado', async ({ page }) => {
-    // Mark test employee as present
+  test('bonificação é aplicada normalmente mesmo com bloqueio ativo', async ({ page }) => {
     await supabase.from('attendance').upsert([{
       employee_id: employeeId,
       date: today,
@@ -122,7 +117,6 @@ test.describe('Bloqueio de Bonificação', () => {
       marked_by: '9999',
     }], { onConflict: 'employee_id,date' });
 
-    // Block bonus
     const { weekStart, weekEnd } = getWeekBounds();
     await supabase.from('bonus_blocks').upsert([{
       employee_id: employeeId,
@@ -133,7 +127,6 @@ test.describe('Bloqueio de Bonificação', () => {
 
     await loginAs(page, ADMIN);
 
-    // Open bonus modal and apply B=10
     await page.getByRole('button', { name: /^Bonificação$/ }).click();
     await expect(page.getByRole('heading', { name: /Bonificação do Dia/ })).toBeVisible();
 
@@ -142,28 +135,12 @@ test.describe('Bloqueio de Bonificação', () => {
     await block.locator('input[type="number"]').fill('10');
     await page.getByRole('button', { name: 'Aplicar B', exact: true }).click();
 
-    // Toast should mention blocked employees were skipped
-    await expect(
-      page.getByText(/bloqueados foram ignorados/i)
-        .or(page.getByText(/Bonificação B/i))
-    ).toBeVisible({ timeout: 10_000 });
-
-    // Verify blocked employee did NOT receive payment
-    await expect.poll(async () => {
-      const { data } = await supabase
-        .from('payments')
-        .select('bonus_b')
-        .eq('employee_id', employeeId)
-        .eq('date', today)
-        .maybeSingle();
-      return data?.bonus_b ?? 0;
-    }, { timeout: 10_000 }).toBe(0);
+    await expect(page.getByText(/Bonificação B aplicada com sucesso/)).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole('button', { name: /^Fechar$/ }).click();
   });
 
-  test('configurações: seção bloqueios aparece e desbloquear funciona', async ({ page }) => {
-    // Block bonus
+  test('configurações NÃO mostra seção de bloqueios (removida)', async ({ page }) => {
     const { weekStart, weekEnd } = getWeekBounds();
     await supabase.from('bonus_blocks').upsert([{
       employee_id: employeeId,
@@ -173,29 +150,10 @@ test.describe('Bloqueio de Bonificação', () => {
     }], { onConflict: 'employee_id,week_start' });
 
     await loginAs(page, ADMIN);
-    await goToTab(page, 'Configurações');
+    await page.getByRole('button', { name: /^Configurações$/ }).first().click();
 
-    // Bloqueios section should appear
-    await expect(page.getByText(/Bloqueios de Bonificação/)).toBeVisible({ timeout: 10_000 });
-
-    // Blocked employee in the table
-    await expect(page.getByText(TEST_NAME)).toBeVisible({ timeout: 10_000 });
-
-    // Click unblock
-    await page.getByRole('button', { name: /Desbloquear/ }).first().click();
-
-    // Success toast
-    await expect(page.getByText(/desbloqueada/i)).toBeVisible({ timeout: 10_000 });
-
-    // Employee should disappear from the table
-    await expect(page.getByText(TEST_NAME)).not.toBeVisible({ timeout: 5_000 });
-
-    // Verify in DB
-    const { data: blocks } = await supabase
-      .from('bonus_blocks')
-      .select('*')
-      .eq('employee_id', employeeId)
-      .eq('week_start', weekStart);
-    expect(blocks?.length ?? 0).toBe(0);
+    // The "Bloqueios de Bonificação" section was removed from settings
+    await expect(page.getByText(/Bloqueios de Bonificação/)).not.toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('button', { name: /Desbloquear/ })).not.toBeVisible();
   });
 });

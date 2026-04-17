@@ -2539,16 +2539,24 @@ export const previewAdminCleanup = async (monthsOld: number): Promise<{
   cutoff.setMonth(cutoff.getMonth() - monthsOld);
   const cutoffDate = cutoff.toISOString().split('T')[0];
 
-  const [fraud, blocks, geo] = await Promise.all([
-    supabase.from('geo_fraud_attempts').select('id', { count: 'exact', head: true }).lt('date', cutoffDate),
-    supabase.from('bonus_blocks').select('id', { count: 'exact', head: true }).lt('week_end', cutoffDate),
-    supabase.from('attendance').select('id', { count: 'exact', head: true }).not('entry_latitude', 'is', null).lt('date', cutoffDate),
+  const safeCount = async (query: Promise<{ count: number | null; error: unknown }>): Promise<number> => {
+    try {
+      const result = await query;
+      if (result.error) { console.error('Preview count error:', result.error); return 0; }
+      return result.count || 0;
+    } catch { return 0; }
+  };
+
+  const [fraudCount, blocksCount, geoCount] = await Promise.all([
+    safeCount(supabase.from('geo_fraud_attempts').select('id', { count: 'exact', head: true }).lt('date', cutoffDate)),
+    safeCount(supabase.from('bonus_blocks').select('id', { count: 'exact', head: true }).lt('week_end', cutoffDate)),
+    safeCount(supabase.from('attendance').select('id', { count: 'exact', head: true }).not('entry_latitude', 'is', null).lt('date', cutoffDate)),
   ]);
 
   return {
-    fraud_attempts: fraud.count || 0,
-    bonus_blocks: blocks.count || 0,
-    geo_records: geo.count || 0,
+    fraud_attempts: fraudCount,
+    bonus_blocks: blocksCount,
+    geo_records: geoCount,
   };
 };
 
@@ -2566,25 +2574,27 @@ export const runAdminCleanup = async (
   let geoCleaned = 0;
 
   if (tables.fraud) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('geo_fraud_attempts')
       .delete()
       .lt('date', cutoffDate)
       .select('id');
+    if (error) console.error('Cleanup fraud error:', error);
     fraudDeleted = data?.length || 0;
   }
 
   if (tables.blocks) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('bonus_blocks')
       .delete()
       .lt('week_end', cutoffDate)
       .select('id');
+    if (error) console.error('Cleanup blocks error:', error);
     blocksDeleted = data?.length || 0;
   }
 
   if (tables.geo) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('attendance')
       .update({
         entry_latitude: null,
@@ -2592,31 +2602,36 @@ export const runAdminCleanup = async (
         entry_accuracy: null,
         exit_latitude: null,
         exit_longitude: null,
-        exit_accuracy: null,
       })
       .not('entry_latitude', 'is', null)
       .lt('date', cutoffDate)
       .select('id');
+    if (error) console.error('Cleanup geo error:', error);
     geoCleaned = data?.length || 0;
   }
 
   const totalDeleted = fraudDeleted + blocksDeleted + geoCleaned;
 
-  const { data: logData, error: logError } = await supabase
-    .from('admin_cleanup_logs')
-    .insert([{
-      performed_by: performedBy,
-      months_old: monthsOld,
-      fraud_attempts_deleted: fraudDeleted,
-      bonus_blocks_deleted: blocksDeleted,
-      geo_records_cleaned: geoCleaned,
-      total_deleted: totalDeleted,
-    }])
-    .select('id')
-    .single();
+  let logId = '';
+  try {
+    const { data: logData } = await supabase
+      .from('admin_cleanup_logs')
+      .insert([{
+        performed_by: performedBy,
+        months_old: monthsOld,
+        fraud_attempts_deleted: fraudDeleted,
+        bonus_blocks_deleted: blocksDeleted,
+        geo_records_cleaned: geoCleaned,
+        total_deleted: totalDeleted,
+      }])
+      .select('id')
+      .single();
+    logId = logData?.id || '';
+  } catch (logErr) {
+    console.error('Cleanup log insert error:', logErr);
+  }
 
-  if (logError) throw logError;
-  return { deleted: totalDeleted, log_id: logData.id };
+  return { deleted: totalDeleted, log_id: logId };
 };
 
 export const getAdminCleanupConfig = async (): Promise<AdminCleanupConfig | null> => {

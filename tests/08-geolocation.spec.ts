@@ -130,7 +130,7 @@ test.describe('Geolocalização (/clock)', () => {
     }, { timeout: 10_000 }).toBe(true);
   });
 
-  test('fora do raio: modal vermelho + fraude registrada + bonus bloqueado', async ({ page }) => {
+  test('fora do raio: ponto registrado silenciosamente, fraude registrada server-side', async ({ page }) => {
     await page.addInitScript(({ lat, lon }) => {
       (navigator as any).geolocation.getCurrentPosition = (success: PositionCallback) => {
         success({
@@ -146,11 +146,11 @@ test.describe('Geolocalização (/clock)', () => {
     await loginEmployee(page);
     await page.getByRole('button', { name: /REGISTRAR ENTRADA/ }).click();
 
-    // Red fraud modal
-    await expect(page.getByText(/bonificação/i)).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/Clayton/i)).toBeVisible();
+    // No red modal — only generic message (success or error)
+    await expect(page.getByText(/Clayton/i)).not.toBeVisible();
+    await expect(page.getByText(/Entrada registrada|Erro ao registrar/)).toBeVisible({ timeout: 15_000 });
 
-    // Verify fraud attempt in DB
+    // Fraud attempt still logged server-side
     await expect.poll(async () => {
       const { data } = await supabase
         .from('geo_fraud_attempts')
@@ -158,18 +158,9 @@ test.describe('Geolocalização (/clock)', () => {
         .eq('employee_id', employeeId);
       return (data ?? []).length;
     }, { timeout: 10_000 }).toBeGreaterThan(0);
-
-    // Verify bonus blocked
-    await expect.poll(async () => {
-      const { data } = await supabase
-        .from('bonus_blocks')
-        .select('*')
-        .eq('employee_id', employeeId);
-      return (data ?? []).length;
-    }, { timeout: 10_000 }).toBeGreaterThan(0);
   });
 
-  test('permissão negada: modal vermelho + bonus bloqueado', async ({ page }) => {
+  test('permissão negada: coleta silenciosa, sem modal vermelho', async ({ page }) => {
     await page.addInitScript(() => {
       (navigator as any).geolocation.getCurrentPosition = (
         _success: PositionCallback,
@@ -188,20 +179,12 @@ test.describe('Geolocalização (/clock)', () => {
     await loginEmployee(page);
     await page.getByRole('button', { name: /REGISTRAR ENTRADA/ }).click();
 
-    await expect(page.getByText(/bonificação/i)).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/Clayton/i)).toBeVisible();
-
-    // Verify bonus blocked
-    await expect.poll(async () => {
-      const { data } = await supabase
-        .from('bonus_blocks')
-        .select('*')
-        .eq('employee_id', employeeId);
-      return (data ?? []).length;
-    }, { timeout: 10_000 }).toBeGreaterThan(0);
+    // No red modal — no mention of Clayton or bonificação retida
+    await expect(page.getByText(/Clayton/i)).not.toBeVisible();
+    await expect(page.getByText(/Entrada registrada|Erro ao registrar/)).toBeVisible({ timeout: 15_000 });
   });
 
-  test('erro técnico GPS: mensagem amigável, sem bloqueio, sem fraude', async ({ page }) => {
+  test('erro técnico GPS: envia ao servidor com coords null, sem modal', async ({ page }) => {
     await page.addInitScript(() => {
       (navigator as any).geolocation.getCurrentPosition = (
         _success: PositionCallback,
@@ -220,24 +203,9 @@ test.describe('Geolocalização (/clock)', () => {
     await loginEmployee(page);
     await page.getByRole('button', { name: /REGISTRAR ENTRADA/ }).click();
 
-    // Friendly modal (not red fraud modal)
-    await expect(page.getByText(/Localização indisponível|GPS/i).first()).toBeVisible({ timeout: 15_000 });
-
-    // Should NOT show the fraud text
+    // No geo modal at all — only generic message
+    await expect(page.getByText(/Localização indisponível/i)).not.toBeVisible();
     await expect(page.getByText(/Clayton/i)).not.toBeVisible();
-
-    // No bonus block
-    const { data: blocks } = await supabase
-      .from('bonus_blocks')
-      .select('*')
-      .eq('employee_id', employeeId);
-    expect(blocks?.length ?? 0).toBe(0);
-
-    // No fraud attempt
-    const { data: frauds } = await supabase
-      .from('geo_fraud_attempts')
-      .select('*')
-      .eq('employee_id', employeeId);
-    expect(frauds?.length ?? 0).toBe(0);
+    await expect(page.getByText(/Entrada registrada|Erro ao registrar/)).toBeVisible({ timeout: 15_000 });
   });
 });

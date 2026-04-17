@@ -269,8 +269,9 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
       setCleanupPreview(null);
       setCleanupConfirmText('');
       loadData();
-    } catch {
-      toast.error('Erro ao executar limpeza');
+    } catch (err) {
+      console.error('Erro ao executar limpeza:', err);
+      toast.error(`Erro ao executar limpeza: ${err instanceof Error ? err.message : 'desconhecido'}`);
     } finally {
       setCleanupLoading(false);
     }
