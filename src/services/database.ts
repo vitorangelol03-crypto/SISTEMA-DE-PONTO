@@ -2518,3 +2518,175 @@ export const unblockBonus = async (employeeId: string, weekStart: string): Promi
     .eq('week_start', weekStart);
   if (error) throw error;
 };
+
+// ─── Admin Cleanup functions ───────────────────────────────────────────────
+
+export interface AdminCleanupConfig {
+  id: string;
+  enabled: boolean;
+  interval_months: number;
+  last_cleanup_at: string | null;
+  next_cleanup_at: string | null;
+  updated_at: string;
+}
+
+export const previewAdminCleanup = async (monthsOld: number): Promise<{
+  fraud_attempts: number;
+  bonus_blocks: number;
+  geo_records: number;
+}> => {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - monthsOld);
+  const cutoffDate = cutoff.toISOString().split('T')[0];
+
+  const [fraud, blocks, geo] = await Promise.all([
+    supabase.from('geo_fraud_attempts').select('id', { count: 'exact', head: true }).lt('date', cutoffDate),
+    supabase.from('bonus_blocks').select('id', { count: 'exact', head: true }).lt('week_end', cutoffDate),
+    supabase.from('attendance').select('id', { count: 'exact', head: true }).not('entry_latitude', 'is', null).lt('date', cutoffDate),
+  ]);
+
+  return {
+    fraud_attempts: fraud.count || 0,
+    bonus_blocks: blocks.count || 0,
+    geo_records: geo.count || 0,
+  };
+};
+
+export const runAdminCleanup = async (
+  monthsOld: number,
+  tables: { fraud: boolean; blocks: boolean; geo: boolean },
+  performedBy: string
+): Promise<{ deleted: number; log_id: string }> => {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - monthsOld);
+  const cutoffDate = cutoff.toISOString().split('T')[0];
+
+  let fraudDeleted = 0;
+  let blocksDeleted = 0;
+  let geoCleaned = 0;
+
+  if (tables.fraud) {
+    const { data } = await supabase
+      .from('geo_fraud_attempts')
+      .delete()
+      .lt('date', cutoffDate)
+      .select('id');
+    fraudDeleted = data?.length || 0;
+  }
+
+  if (tables.blocks) {
+    const { data } = await supabase
+      .from('bonus_blocks')
+      .delete()
+      .lt('week_end', cutoffDate)
+      .select('id');
+    blocksDeleted = data?.length || 0;
+  }
+
+  if (tables.geo) {
+    const { data } = await supabase
+      .from('attendance')
+      .update({
+        entry_latitude: null,
+        entry_longitude: null,
+        entry_accuracy: null,
+        exit_latitude: null,
+        exit_longitude: null,
+        exit_accuracy: null,
+      })
+      .not('entry_latitude', 'is', null)
+      .lt('date', cutoffDate)
+      .select('id');
+    geoCleaned = data?.length || 0;
+  }
+
+  const totalDeleted = fraudDeleted + blocksDeleted + geoCleaned;
+
+  const { data: logData, error: logError } = await supabase
+    .from('admin_cleanup_logs')
+    .insert([{
+      performed_by: performedBy,
+      months_old: monthsOld,
+      fraud_attempts_deleted: fraudDeleted,
+      bonus_blocks_deleted: blocksDeleted,
+      geo_records_cleaned: geoCleaned,
+      total_deleted: totalDeleted,
+    }])
+    .select('id')
+    .single();
+
+  if (logError) throw logError;
+  return { deleted: totalDeleted, log_id: logData.id };
+};
+
+export const getAdminCleanupConfig = async (): Promise<AdminCleanupConfig | null> => {
+  const { data, error } = await supabase
+    .from('admin_cleanup_config')
+    .select('*')
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+};
+
+export const updateAdminCleanupConfig = async (
+  enabled: boolean,
+  intervalMonths: number
+): Promise<void> => {
+  const now = new Date();
+  const next = new Date(now);
+  next.setMonth(next.getMonth() + intervalMonths);
+
+  const { data: existing } = await supabase
+    .from('admin_cleanup_config')
+    .select('id')
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase
+      .from('admin_cleanup_config')
+      .update({
+        enabled,
+        interval_months: intervalMonths,
+        next_cleanup_at: enabled ? next.toISOString() : null,
+        updated_at: now.toISOString(),
+      })
+      .eq('id', existing.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('admin_cleanup_config')
+      .insert([{
+        enabled,
+        interval_months: intervalMonths,
+        last_cleanup_at: null,
+        next_cleanup_at: enabled ? next.toISOString() : null,
+      }]);
+    if (error) throw error;
+  }
+};
+
+export const runAutoCleanup = async (): Promise<boolean> => {
+  const config = await getAdminCleanupConfig();
+  if (!config || !config.enabled || !config.next_cleanup_at) return false;
+
+  const now = new Date();
+  if (now < new Date(config.next_cleanup_at)) return false;
+
+  await runAdminCleanup(config.interval_months, { fraud: true, blocks: true, geo: true }, 'system');
+
+  const newNext = new Date(now);
+  newNext.setMonth(newNext.getMonth() + config.interval_months);
+
+  const { error } = await supabase
+    .from('admin_cleanup_config')
+    .update({
+      last_cleanup_at: now.toISOString(),
+      next_cleanup_at: newNext.toISOString(),
+      updated_at: now.toISOString(),
+    })
+    .eq('id', config.id);
+  if (error) throw error;
+  return true;
+};
