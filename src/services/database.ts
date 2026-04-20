@@ -1575,28 +1575,9 @@ export const distributeTriageErrors = async (
 
   if (distError) throw distError;
 
+  // Triage discount é rastreado apenas em triage_distribution_employees.
+  // Não modificamos payments.total — a UI deduz ao exibir (evita dupla contagem).
   for (const emp of employees) {
-    const { data: empPayments } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('employee_id', emp.employee_id)
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .order('date', { ascending: false });
-
-    if (empPayments && empPayments.length > 0) {
-      const latest = empPayments[0];
-      const oldTotal = Number(latest.total ?? 0);
-      const newTotal = Math.max(0, oldTotal - valuePerEmployee);
-
-      const { error: updateError } = await supabase
-        .from('payments')
-        .update({ total: newTotal, updated_at: new Date().toISOString() })
-        .eq('id', latest.id);
-
-      if (updateError) throw updateError;
-    }
-
     const { error: detailError } = await supabase
       .from('triage_distribution_employees')
       .insert([{

@@ -28,6 +28,9 @@ interface EmployeeFinancialData {
   payments: Payment[];
   errorRecords: ErrorRecord[];
   totalErrors: number;
+  totalErrorValue: number;
+  totalTriageDiscount: number;
+  totalEarnedGross: number;
   totalEarned: number;
   triageDiscounts: TriageDiscount[];
 }
@@ -124,8 +127,18 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       const workDays = employeeAttendances.filter(att => att.status === 'present').length;
       const absences = employeeAttendances.filter(att => att.status === 'absent').length;
       const customExitDays = employeeAttendances.filter(att => att.status === 'present' && att.exit_time).length;
-      const totalErrors = employeeErrors.reduce((sum, err) => sum + err.error_count, 0);
-      const totalEarned = employeePayments.reduce((sum, pay) => sum + (pay.total || 0), 0);
+      const totalErrors = employeeErrors
+        .filter(e => (e.error_type ?? 'quantity') === 'quantity')
+        .reduce((sum, err) => sum + (err.error_count ?? 0), 0);
+      const totalErrorValue = employeeErrors
+        .filter(e => e.error_type === 'value')
+        .reduce((sum, err) => sum + Number(err.error_value ?? 0), 0);
+      const totalTriageDiscount = triageDiscounts.reduce((s, t) => s + t.value_deducted, 0);
+      // payments.total já reflete desconto manual de erros quantidade aplicados
+      // via botão "Descontar Erros". Erros tipo value e triagem não tocam
+      // payments.total — são deduzidos aqui na exibição.
+      const totalEarnedGross = employeePayments.reduce((sum, pay) => sum + (pay.total || 0), 0);
+      const totalEarned = Math.max(0, totalEarnedGross - totalErrorValue - totalTriageDiscount);
 
       return {
         employee,
@@ -135,6 +148,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         payments: employeePayments,
         errorRecords: employeeErrors,
         totalErrors,
+        totalErrorValue,
+        totalTriageDiscount,
+        totalEarnedGross,
         totalEarned,
         triageDiscounts
       };
@@ -337,15 +353,15 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         const employeeData = financialData.find(data => data.employee.id === employeeId);
         if (!employeeData) continue;
 
-        // Para cada erro registrado, aplicar desconto.
-        // - type 'quantity': desconto = error_count × discountValue (como antes)
-        // - type 'value': desconto = error_value diretamente (valor já é o R$ a descontar)
+        // Para cada erro, aplicar desconto em payments.total APENAS para tipo
+        // 'quantity' (valor/unidade × quantidade). Erros tipo 'value' são
+        // deduzidos automaticamente na exibição — modificar payments.total
+        // aqui causaria dupla contagem.
         for (const errorRecord of employeeData.errorRecords) {
           const isValueType = (errorRecord.error_type ?? 'quantity') === 'value';
-          const discountAmount = isValueType
-            ? Number(errorRecord.error_value ?? 0)
-            : errorRecord.error_count * discountValue;
+          if (isValueType) continue;
 
+          const discountAmount = errorRecord.error_count * discountValue;
           if (discountAmount <= 0) continue;
 
           // Buscar pagamento existente
@@ -870,20 +886,50 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        data.totalErrors === 0 
+                      {(() => {
+                        const hasQty = data.totalErrors > 0;
+                        const hasVal = data.totalErrorValue > 0;
+                        const empty = !hasQty && !hasVal;
+                        const severity = hasVal || data.totalErrors > 5 ? 'red' : hasQty ? 'yellow' : 'green';
+                        const cls = severity === 'green'
                           ? 'bg-green-100 text-green-800'
-                          : data.totalErrors <= 5
+                          : severity === 'yellow'
                           ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {data.totalErrors} erros
-                      </span>
+                          : 'bg-red-100 text-red-800';
+                        const valStr = `R$ ${data.totalErrorValue.toFixed(2).replace('.', ',')}`;
+                        const label = empty
+                          ? '0 erros'
+                          : hasQty && hasVal
+                          ? `${data.totalErrors} erros + ${valStr}`
+                          : hasVal
+                          ? valStr
+                          : `${data.totalErrors} erros`;
+                        return (
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${cls}`}>
+                            {label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-green-600">
-                        R$ {data.totalEarned.toFixed(2)}
+                        R$ {data.totalEarned.toFixed(2).replace('.', ',')}
                       </div>
+                      {(data.totalErrorValue > 0 || data.totalTriageDiscount > 0) && (
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          Bruto: R$ {data.totalEarnedGross.toFixed(2).replace('.', ',')}
+                        </div>
+                      )}
+                      {data.totalErrorValue > 0 && (
+                        <div className="text-xs text-red-600">
+                          -R$ {data.totalErrorValue.toFixed(2).replace('.', ',')} erro valor
+                        </div>
+                      )}
+                      {data.totalTriageDiscount > 0 && (
+                        <div className="text-xs text-red-600">
+                          -R$ {data.totalTriageDiscount.toFixed(2).replace('.', ',')} triagem
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
@@ -1013,9 +1059,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                         </div>
                                       ) : null;
                                     })()}
-                                    <div className="text-sm font-medium text-green-600">
-                                      Total: R$ {payment.total?.toFixed(2) || '0.00'}
-                                    </div>
+                                    {(() => {
+                                      const errForDay = data.errorRecords.find(err => err.date === payment.date);
+                                      const valueDiscountForDay = errForDay?.error_type === 'value' ? Number(errForDay.error_value ?? 0) : 0;
+                                      const rawTotal = Number(payment.total ?? 0);
+                                      const displayTotal = Math.max(0, rawTotal - valueDiscountForDay);
+                                      return (
+                                        <div className="text-sm font-medium text-green-600">
+                                          Total: R$ {displayTotal.toFixed(2).replace('.', ',')}
+                                          {valueDiscountForDay > 0 && (
+                                            <span className="text-[11px] text-gray-500 ml-2">
+                                              (bruto R$ {rawTotal.toFixed(2).replace('.', ',')})
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                     <div className="flex space-x-1 mt-2">
                                       {hasPermission('financial.editPayment') && (
                                         <button
