@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift, RotateCcw, ChevronLeft, ChevronRight, Home, Trash2 } from 'lucide-react';
 import { format, parseISO, addDays, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -62,9 +62,12 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [activeView, setActiveView] = useState<'attendance' | 'approvals'>('attendance');
   const isViewingToday = selectedDate === getBrazilDate();
 
-  const loadData = async (date: string = selectedDate) => {
+  // `silent = true` é usado pelo polling a cada 30s: não liga o spinner
+  // de "Carregando..." e só atualiza o state se os dados realmente mudaram.
+  // Isso elimina o flash de re-render completo da tela.
+  const loadData = useCallback(async (date: string = selectedDate, silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const employmentType = employmentTypeFilter === 'all' ? undefined : employmentTypeFilter;
       const [employeesData, attendancesData, bonusData, paymentsData] = await Promise.all([
         getAllEmployees(employmentType),
@@ -73,11 +76,13 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
         getPayments(date, date, undefined, employmentType)
       ]);
 
-      setEmployees(employeesData);
-      setFilteredEmployees(employeesData);
-      setAttendances(attendancesData);
-      setBonusInfo(bonusData);
-      setPayments(paymentsData);
+      // Merge inteligente: compara via JSON.stringify e só atualiza o state
+      // se houve mudança real. Assim, no polling sem novidades, as refs dos
+      // arrays continuam as mesmas e o React não re-renderiza os filhos.
+      setEmployees(prev => JSON.stringify(prev) === JSON.stringify(employeesData) ? prev : employeesData);
+      setAttendances(prev => JSON.stringify(prev) === JSON.stringify(attendancesData) ? prev : attendancesData);
+      setBonusInfo(prev => JSON.stringify(prev) === JSON.stringify(bonusData) ? prev : bonusData);
+      setPayments(prev => JSON.stringify(prev) === JSON.stringify(paymentsData) ? prev : paymentsData);
 
       const exitTimesMap: Record<string, string> = {};
       const manualTimesMap: Record<string, { entry: string; exit: string }> = {};
@@ -99,29 +104,33 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
         };
       });
 
-      setExitTimes(exitTimesMap);
-      setManualTimes(manualTimesMap);
+      setExitTimes(prev => JSON.stringify(prev) === JSON.stringify(exitTimesMap) ? prev : exitTimesMap);
+      setManualTimes(prev => JSON.stringify(prev) === JSON.stringify(manualTimesMap) ? prev : manualTimesMap);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
-      toast.error('Erro ao carregar dados');
+      if (!silent) toast.error('Erro ao carregar dados');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, [selectedDate, employmentTypeFilter]);
 
   useEffect(() => {
     if (hasPermission('attendance.viewHistory') || isViewingToday) {
       loadData(selectedDate);
     }
+    // loadData é estável via useCallback; depende de selectedDate/employmentTypeFilter
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, employmentTypeFilter]);
 
-  // Polling automático a cada 30s quando está visualizando hoje
+  // Polling automático a cada 30s quando está visualizando hoje — silencioso,
+  // sem spinner e sem re-render se nada mudou (merge inteligente no loadData).
   useEffect(() => {
     if (!isViewingToday) return;
     const interval = setInterval(() => {
-      loadData(selectedDate);
+      loadData(selectedDate, true);
     }, 30000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isViewingToday, selectedDate, employmentTypeFilter]);
 
   useEffect(() => {
@@ -169,19 +178,19 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     handleDateChange(getBrazilDate());
   };
 
-  const getAttendanceStatus = (employeeId: string) => {
+  const getAttendanceStatus = useCallback((employeeId: string) => {
     const attendance = attendances.find(att => att.employee_id === employeeId);
     return attendance?.status || null;
-  };
+  }, [attendances]);
 
-  const getEmployeeBonusByType = (employeeId: string): Record<BonusType, number> => {
+  const getEmployeeBonusByType = useCallback((employeeId: string): Record<BonusType, number> => {
     const payment = payments.find(p => p.employee_id === employeeId);
     return {
       B: payment?.bonus_b ? parseFloat(payment.bonus_b.toString()) : 0,
       C1: payment?.bonus_c1 ? parseFloat(payment.bonus_c1.toString()) : 0,
       C2: payment?.bonus_c2 ? parseFloat(payment.bonus_c2.toString()) : 0,
     };
-  };
+  }, [payments]);
 
   const handleMarkAttendance = async (employeeId: string, status: 'present' | 'absent') => {
     if (!isViewingToday && !hasPermission('attendance.editHistory')) {
@@ -253,17 +262,17 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     }
   };
 
-  const getStatusCounts = () => {
-    const filteredAttendances = attendances.filter(att => 
+  const statusCounts = useMemo(() => {
+    const filteredAttendances = attendances.filter(att =>
       filteredEmployees.some(emp => emp.id === att.employee_id)
     );
     // Inclui como presente: status 'present' OU quem bateu entrada via tela de funcionário
     const present = filteredAttendances.filter(att => att.status === 'present' || att.entry_time != null).length;
     const absent = filteredAttendances.filter(att => att.status === 'absent' && att.entry_time == null).length;
     const notMarked = filteredEmployees.length - filteredAttendances.length;
-    
+
     return { present, absent, notMarked };
-  };
+  }, [attendances, filteredEmployees]);
 
   // Abre o modal de Bonificação e pré-preenche com os valores padrão salvos
   // na tabela `bonus_defaults`. Se já houver algo digitado em um campo, não
@@ -502,7 +511,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     );
   }
 
-  const { present, absent, notMarked } = getStatusCounts();
+  const { present, absent, notMarked } = statusCounts;
 
   const displayDate = format(parseISO(selectedDate), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
 

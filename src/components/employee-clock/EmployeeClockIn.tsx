@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle } from 'lucide-react';
 import {
   getEmployeeByCpf,
@@ -79,31 +79,43 @@ export const EmployeeClockIn: React.FC = () => {
   const [clockLoading, setClockLoading] = useState(false);
   const [clockMsg, setClockMsg] = useState('');
 
+  // Guards anti-duplo-clique e watchdog do botão de ponto
+  const inFlightClockRef = useRef(false);
+  const clockWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ─── Load dashboard data ──────────────────────────────────────────────────
 
-  const loadDashboard = async (emp: Employee) => {
-    setLoading(true);
+  const loadDashboard = useCallback(async (emp: Employee, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [today, hist] = await Promise.all([
         getEmployeeTodayAttendance(emp.id),
         getEmployeeAttendanceHistory(emp.id, 30),
       ]);
-      setTodayRecord(today);
-      setHistory(hist);
+      // Merge inteligente: só atualiza o state se houve mudança real
+      setTodayRecord(prev => JSON.stringify(prev) === JSON.stringify(today) ? prev : today);
+      setHistory(prev => JSON.stringify(prev) === JSON.stringify(hist) ? prev : hist);
     } catch {
-      setErrorMsg('Erro ao carregar dados. Tente novamente.');
-      setStep('error');
+      if (!silent) {
+        setErrorMsg('Erro ao carregar dados. Tente novamente.');
+        setStep('error');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
-  // Atualiza dashboard a cada 30s enquanto está na tela
+  // Atualiza dashboard a cada 30s enquanto está na tela (silencioso — sem flash)
   useEffect(() => {
     if (step !== 'dashboard' || !employee) return;
-    const interval = setInterval(() => loadDashboard(employee), 30000);
+    const interval = setInterval(() => loadDashboard(employee, true), 30000);
     return () => clearInterval(interval);
-  }, [step, employee]);
+  }, [step, employee, loadDashboard]);
+
+  // Limpa watchdog ao desmontar
+  useEffect(() => () => {
+    if (clockWatchdogRef.current) clearTimeout(clockWatchdogRef.current);
+  }, []);
 
   // ─── CPF ────────────────────────────────────────────────────────────────────
 
@@ -225,45 +237,55 @@ export const EmployeeClockIn: React.FC = () => {
     return data;
   };
 
-  const handleClockIn = async () => {
+  const performClock = async (type: 'entry' | 'exit') => {
     if (!employee) return;
+    // Guard síncrono: bloqueia qualquer segundo clique enquanto um registro
+    // estiver em voo (ou no debounce de 3s pós-clique). React schedula o
+    // setClockLoading, mas o ref é atualizado imediatamente.
+    if (inFlightClockRef.current) return;
+    inFlightClockRef.current = true;
+
     setClockLoading(true);
     setClockMsg('');
+
+    // Watchdog: se a Edge Function travar, reabilita o botão em 15s
+    if (clockWatchdogRef.current) clearTimeout(clockWatchdogRef.current);
+    clockWatchdogRef.current = setTimeout(() => {
+      setClockLoading(false);
+      setClockMsg('❌ Tempo esgotado. Verifique sua conexão e tente novamente.');
+      inFlightClockRef.current = false;
+      clockWatchdogRef.current = null;
+    }, 15_000);
+
     try {
-      const result = await callClockValidated('entry');
+      const result = await callClockValidated(type);
       if (!result.success) {
         setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
         return;
       }
-      setClockMsg(`✅ Entrada registrada às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`);
-      await loadDashboard(employee);
+      const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      if (type === 'entry') {
+        setClockMsg(`✅ Entrada registrada às ${time}`);
+      } else {
+        const att = result.attendance;
+        setClockMsg(`✅ Saída registrada às ${time}${att ? ` — ${formatHours(att.hours_worked)}` : ''}`);
+      }
+      await loadDashboard(employee, true); // silent: sem spinner piscando no card
     } catch {
       setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
     } finally {
+      if (clockWatchdogRef.current) {
+        clearTimeout(clockWatchdogRef.current);
+        clockWatchdogRef.current = null;
+      }
       setClockLoading(false);
+      // Debounce de 3s — evita duplo clique mesmo que o usuário insista
+      setTimeout(() => { inFlightClockRef.current = false; }, 3000);
     }
   };
 
-  const handleClockOut = async () => {
-    if (!employee) return;
-    setClockLoading(true);
-    setClockMsg('');
-    try {
-      const result = await callClockValidated('exit');
-      if (!result.success) {
-        setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
-        return;
-      }
-      const att = result.attendance;
-      const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      setClockMsg(`✅ Saída registrada às ${time} — ${att ? formatHours(att.hours_worked) : ''}`);
-      await loadDashboard(employee);
-    } catch {
-      setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
-    } finally {
-      setClockLoading(false);
-    }
-  };
+  const handleClockIn = () => performClock('entry');
+  const handleClockOut = () => performClock('exit');
 
   const handleLogout = () => {
     setStep('cpf');
@@ -537,18 +559,24 @@ export const EmployeeClockIn: React.FC = () => {
                       <button
                         onClick={handleClockIn}
                         disabled={clockLoading}
-                        className="w-full py-4 bg-green-600 text-white font-bold text-lg rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                        aria-busy={clockLoading}
+                        className="w-full py-4 bg-green-600 text-white font-bold text-lg rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        {clockLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Clock className="w-5 h-5" /> REGISTRAR ENTRADA</>}
+                        {clockLoading
+                          ? <><Loader2 className="w-5 h-5 animate-spin" /> Registrando...</>
+                          : <><Clock className="w-5 h-5" /> REGISTRAR ENTRADA</>}
                       </button>
                     )}
                     {hasEntry && !hasExit && (
                       <button
                         onClick={handleClockOut}
                         disabled={clockLoading}
-                        className="w-full py-4 bg-orange-500 text-white font-bold text-lg rounded-xl hover:bg-orange-600 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                        aria-busy={clockLoading}
+                        className="w-full py-4 bg-orange-500 text-white font-bold text-lg rounded-xl hover:bg-orange-600 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        {clockLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Clock className="w-5 h-5" /> REGISTRAR SAÍDA</>}
+                        {clockLoading
+                          ? <><Loader2 className="w-5 h-5 animate-spin" /> Registrando...</>
+                          : <><Clock className="w-5 h-5" /> REGISTRAR SAÍDA</>}
                       </button>
                     )}
                     {hasEntry && hasExit && (
