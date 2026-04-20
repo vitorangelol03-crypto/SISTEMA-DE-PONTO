@@ -221,8 +221,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   };
 
   const handleSaveManualTime = async (employeeId: string) => {
-    if (!hasPermission('attendance.edit')) {
-      toast.error('Você não tem permissão para editar horários');
+    if (!hasPermission('attendance.manualTime')) {
+      toast.error('Você não tem permissão para inserir horário manual');
       return;
     }
     const times = manualTimes[employeeId];
@@ -232,7 +232,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     }
     setSavingManualTime(prev => ({ ...prev, [employeeId]: true }));
     try {
-      await setManualTime(employeeId, selectedDate, times.entry, times.exit);
+      await setManualTime(employeeId, selectedDate, times.entry, times.exit, userId);
       toast.success('Horário salvo');
       await loadData(selectedDate);
     } catch (err) {

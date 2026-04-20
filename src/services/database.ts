@@ -82,11 +82,15 @@ export interface Bonus {
   created_at: string;
 }
 
+export type ErrorType = 'quantity' | 'value';
+
 export interface ErrorRecord {
   id: string;
   employee_id: string;
   date: string;
   error_count: number;
+  error_type: ErrorType;
+  error_value: number;
   observations: string | null;
   created_by: string;
   created_at: string;
@@ -798,6 +802,12 @@ export const applyBonusToAllPresent = async (
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
+  const typeSpecificPermission = `financial.applyBonus${type}`;
+  const typeCheck = await validatePermission(createdBy, typeSpecificPermission);
+  if (!typeCheck.allowed) {
+    throw new Error(typeCheck.error || `Permissão negada para bônus ${type}`);
+  }
+
   const { data: attendances, error: attendanceError } = await supabase
     .from('attendance')
     .select('employee_id')
@@ -932,6 +942,11 @@ export const removeBonusFromEmployee = async (
   const permissionCheck = await validatePermission(userId, 'financial.removeBonus');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  const byTypeCheck = await validatePermission(userId, 'financial.removeBonusByType');
+  if (!byTypeCheck.allowed) {
+    throw new Error(byTypeCheck.error || 'Permissão negada para remover bônus por tipo');
   }
 
   // Validar observação
@@ -1257,19 +1272,31 @@ export const upsertErrorRecord = async (
   date: string,
   errorCount: number,
   observations: string | null,
-  createdBy: string
+  createdBy: string,
+  errorType: ErrorType = 'quantity',
+  errorValue: number = 0
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'errors.create');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
+  if (errorType === 'value') {
+    const valueCheck = await validatePermission(createdBy, 'errors.createByValue');
+    if (!valueCheck.allowed) {
+      throw new Error(valueCheck.error || 'Permissão negada para lançar erro por valor');
+    }
+  }
+
+  // Se for tipo 'value', error_count é irrelevante; se for 'quantity', error_value é.
   const { error } = await supabase
     .from('error_records')
     .upsert([{
       employee_id: employeeId,
       date,
-      error_count: errorCount,
+      error_count: errorType === 'quantity' ? errorCount : 0,
+      error_type: errorType,
+      error_value: errorType === 'value' ? errorValue : 0,
       observations,
       created_by: createdBy,
       updated_at: new Date().toISOString()
@@ -1299,6 +1326,8 @@ export const getErrorStatistics = async (
   endDate?: string
 ): Promise<{
   totalErrors: number;
+  totalQuantityErrors: number;
+  totalValueErrors: number;
   employeeStats: Array<{
     employee: Employee;
     totalErrors: number;
@@ -1341,7 +1370,10 @@ export const getErrorStatistics = async (
           workDays: 0
         });
       }
-      employeeMap.get(key)!.totalErrors += error.error_count;
+      // errorRate tradicional só considera erros por QUANTIDADE
+      if ((error.error_type ?? 'quantity') === 'quantity') {
+        employeeMap.get(key)!.totalErrors += error.error_count;
+      }
     }
   });
 
@@ -1350,12 +1382,281 @@ export const getErrorStatistics = async (
     errorRate: stat.workDays > 0 ? (stat.totalErrors / stat.workDays) : 0
   }));
 
-  const totalErrors = errorRecords.reduce((sum, record) => sum + record.error_count, 0);
+  const totalQuantityErrors = errorRecords
+    .filter(r => (r.error_type ?? 'quantity') === 'quantity')
+    .reduce((sum, r) => sum + (r.error_count ?? 0), 0);
+
+  const totalValueErrors = errorRecords
+    .filter(r => r.error_type === 'value')
+    .reduce((sum, r) => sum + Number(r.error_value ?? 0), 0);
 
   return {
-    totalErrors,
+    totalErrors: totalQuantityErrors,
+    totalQuantityErrors,
+    totalValueErrors,
     employeeStats
   };
+};
+
+// ─── Triagem (erros coletivos distribuídos) ───────────────────────────────────
+
+export interface TriageError {
+  id: string;
+  date: string;
+  error_count: number;
+  observations: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TriageDistribution {
+  id: string;
+  period_start: string;
+  period_end: string;
+  total_errors: number;
+  value_per_error: number;
+  total_employees: number;
+  total_deducted: number;
+  distributed_by: string | null;
+  distributed_at: string;
+  observations: string | null;
+}
+
+export interface TriageDistributionEmployee {
+  id: string;
+  distribution_id: string;
+  employee_id: string;
+  errors_share: number;
+  value_deducted: number;
+  created_at: string;
+}
+
+export const getTriageErrors = async (
+  startDate?: string,
+  endDate?: string
+): Promise<TriageError[]> => {
+  let query = supabase.from('triage_errors').select('*');
+  if (startDate) query = query.gte('date', startDate);
+  if (endDate) query = query.lte('date', endDate);
+  const { data, error } = await query.order('date', { ascending: false });
+  if (error) throw error;
+  return data || [];
+};
+
+export const upsertTriageError = async (
+  date: string,
+  errorCount: number,
+  observations: string | null,
+  createdBy: string
+): Promise<void> => {
+  const permissionCheck = await validatePermission(createdBy, 'errors.createTriage');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  const { error } = await supabase
+    .from('triage_errors')
+    .upsert([{
+      date,
+      error_count: errorCount,
+      observations,
+      created_by: createdBy,
+      updated_at: new Date().toISOString(),
+    }], { onConflict: 'date' });
+
+  if (error) throw error;
+};
+
+export const deleteTriageError = async (id: string, userId: string): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'errors.createTriage');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  const { error } = await supabase.from('triage_errors').delete().eq('id', id);
+  if (error) throw error;
+};
+
+export const getTriageSummary = async (
+  startDate: string,
+  endDate: string
+): Promise<{
+  totalErrors: number;
+  days: number;
+  errorsByDay: { date: string; count: number }[];
+}> => {
+  const errors = await getTriageErrors(startDate, endDate);
+  return {
+    totalErrors: errors.reduce((s, e) => s + (e.error_count || 0), 0),
+    days: errors.length,
+    errorsByDay: errors.map(e => ({ date: e.date, count: e.error_count })),
+  };
+};
+
+export const getEmployeesPresentInPeriod = async (
+  startDate: string,
+  endDate: string
+): Promise<{ employee_id: string; name: string; days_present: number }[]> => {
+  const { data, error } = await supabase
+    .from('attendance')
+    .select('employee_id, employees(name)')
+    .eq('status', 'present')
+    .gte('date', startDate)
+    .lte('date', endDate);
+
+  if (error) throw error;
+
+  const map = new Map<string, { employee_id: string; name: string; days_present: number }>();
+  (data || []).forEach((att: { employee_id: string; employees: { name: string } | { name: string }[] | null }) => {
+    const emp = Array.isArray(att.employees) ? att.employees[0] : att.employees;
+    const name = emp?.name || '';
+    const entry = map.get(att.employee_id);
+    if (entry) {
+      entry.days_present += 1;
+    } else {
+      map.set(att.employee_id, { employee_id: att.employee_id, name, days_present: 1 });
+    }
+  });
+
+  return Array.from(map.values()).sort((a, b) => b.days_present - a.days_present);
+};
+
+export const distributeTriageErrors = async (
+  startDate: string,
+  endDate: string,
+  valuePerError: number,
+  distributedBy: string
+): Promise<{
+  distributionId: string;
+  totalErrors: number;
+  totalEmployees: number;
+  totalDeducted: number;
+  errorsPerEmployee: number;
+}> => {
+  const permissionCheck = await validatePermission(distributedBy, 'errors.distributeTriage');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  if (valuePerError <= 0) throw new Error('Valor por erro deve ser maior que zero');
+
+  const summary = await getTriageSummary(startDate, endDate);
+  if (summary.totalErrors <= 0) {
+    throw new Error('Nenhum erro de triagem registrado no período');
+  }
+
+  const employees = await getEmployeesPresentInPeriod(startDate, endDate);
+  if (employees.length === 0) {
+    throw new Error('Nenhum funcionário presente no período');
+  }
+
+  const errorsPerEmployee = Math.floor(summary.totalErrors / employees.length);
+  if (errorsPerEmployee <= 0) {
+    throw new Error('Erros por funcionário resultou em zero — aumente o período ou reduza funcionários');
+  }
+
+  const valuePerEmployee = Math.round(errorsPerEmployee * valuePerError * 100) / 100;
+  const totalDeducted = Math.round(valuePerEmployee * employees.length * 100) / 100;
+
+  const { data: distribution, error: distError } = await supabase
+    .from('triage_error_distributions')
+    .insert([{
+      period_start: startDate,
+      period_end: endDate,
+      total_errors: summary.totalErrors,
+      value_per_error: valuePerError,
+      total_employees: employees.length,
+      total_deducted: totalDeducted,
+      distributed_by: distributedBy,
+    }])
+    .select()
+    .single();
+
+  if (distError) throw distError;
+
+  for (const emp of employees) {
+    const { data: empPayments } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('employee_id', emp.employee_id)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: false });
+
+    if (empPayments && empPayments.length > 0) {
+      const latest = empPayments[0];
+      const oldTotal = Number(latest.total ?? 0);
+      const newTotal = Math.max(0, oldTotal - valuePerEmployee);
+
+      const { error: updateError } = await supabase
+        .from('payments')
+        .update({ total: newTotal, updated_at: new Date().toISOString() })
+        .eq('id', latest.id);
+
+      if (updateError) throw updateError;
+    }
+
+    const { error: detailError } = await supabase
+      .from('triage_distribution_employees')
+      .insert([{
+        distribution_id: distribution.id,
+        employee_id: emp.employee_id,
+        errors_share: errorsPerEmployee,
+        value_deducted: valuePerEmployee,
+      }]);
+
+    if (detailError) throw detailError;
+  }
+
+  return {
+    distributionId: distribution.id,
+    totalErrors: summary.totalErrors,
+    totalEmployees: employees.length,
+    totalDeducted,
+    errorsPerEmployee,
+  };
+};
+
+export const getTriageDistributionsForEmployees = async (
+  employeeIds: string[],
+  startDate: string,
+  endDate: string
+): Promise<Array<{
+  employee_id: string;
+  period_start: string;
+  period_end: string;
+  value_deducted: number;
+  errors_share: number;
+}>> => {
+  if (employeeIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('triage_distribution_employees')
+    .select('employee_id, errors_share, value_deducted, triage_error_distributions!inner(period_start, period_end)')
+    .in('employee_id', employeeIds)
+    .gte('triage_error_distributions.period_start', startDate)
+    .lte('triage_error_distributions.period_end', endDate);
+
+  if (error) throw error;
+
+  return (data || []).map((row: {
+    employee_id: string;
+    errors_share: number;
+    value_deducted: number;
+    triage_error_distributions: { period_start: string; period_end: string } | { period_start: string; period_end: string }[];
+  }) => {
+    const dist = Array.isArray(row.triage_error_distributions)
+      ? row.triage_error_distributions[0]
+      : row.triage_error_distributions;
+    return {
+      employee_id: row.employee_id,
+      period_start: dist.period_start,
+      period_end: dist.period_end,
+      value_deducted: Number(row.value_deducted),
+      errors_share: row.errors_share,
+    };
+  });
 };
 
 export interface DataRetentionSettings {
@@ -2008,7 +2309,13 @@ export const setManualTime = async (
   date: string,
   entryTime: string,
   exitTime: string,
+  userId: string,
 ): Promise<Attendance> => {
+  const permissionCheck = await validatePermission(userId, 'attendance.manualTime');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const entry = new Date(`${date}T${entryTime}-03:00`);
   let exit  = new Date(`${date}T${exitTime}-03:00`);
 
@@ -2066,6 +2373,11 @@ export const getPendingApprovals = async (date?: string): Promise<Attendance[]> 
 
 /** Aprova um registro de attendance. */
 export const approveAttendance = async (attendanceId: string, supervisorId: string): Promise<void> => {
+  const permissionCheck = await validatePermission(supervisorId, 'attendance.approve');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('attendance')
     .update({
@@ -2084,6 +2396,11 @@ export const rejectAttendance = async (
   supervisorId: string,
   reason: string
 ): Promise<void> => {
+  const permissionCheck = await validatePermission(supervisorId, 'attendance.reject');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const { error } = await supabase
     .from('attendance')
     .update({
@@ -2099,6 +2416,11 @@ export const rejectAttendance = async (
 
 /** Aprova em lote uma lista de IDs de attendance, processando em chunks de 50. */
 export const bulkApproveAttendance = async (ids: string[], supervisorId: string): Promise<void> => {
+  const permissionCheck = await validatePermission(supervisorId, 'attendance.bulkApprove');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
   const chunkSize = 50;
   const approvedAt = new Date().toISOString();
 

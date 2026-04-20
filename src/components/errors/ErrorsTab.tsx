@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target } from 'lucide-react';
+import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target, Package, FileSearch } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorRecord, deleteErrorRecord, getErrorStatistics, Employee, Attendance, ErrorRecord } from '../../services/database';
+import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorRecord, deleteErrorRecord, getErrorStatistics, Employee, Attendance, ErrorRecord, ErrorType } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
+import { TriageTab } from './TriageTab';
 
 interface ErrorsTabProps {
   userId: string;
@@ -21,6 +22,7 @@ interface EmployeeWithErrors {
 }
 
 export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'individual' | 'triage'>('individual');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [errorRecords, setErrorRecords] = useState<ErrorRecord[]>([]);
   const [employeesWithErrors, setEmployeesWithErrors] = useState<EmployeeWithErrors[]>([]);
@@ -45,12 +47,16 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
   const [errorFormData, setErrorFormData] = useState({
     employeeId: '',
     date: getBrazilDate(),
+    errorType: 'quantity' as ErrorType,
     errorCount: '',
+    errorValue: '',
     observations: ''
   });
 
   const [statistics, setStatistics] = useState({
     totalErrors: 0,
+    totalQuantityErrors: 0,
+    totalValueErrors: 0,
     employeeStats: [] as Array<{
       employee: Employee;
       totalErrors: number;
@@ -158,7 +164,9 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
     setErrorFormData({
       employeeId: '',
       date: getBrazilDate(),
+      errorType: 'quantity',
       errorCount: '',
+      errorValue: '',
       observations: ''
     });
     setEditingError(null);
@@ -174,7 +182,9 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
     setErrorFormData({
       employeeId: employeeId || '',
       date: date || getBrazilDate(),
+      errorType: 'quantity',
       errorCount: '',
+      errorValue: '',
       observations: ''
     });
     setShowErrorForm(true);
@@ -189,13 +199,16 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
     const errorRecord = errorRecords.find(err =>
       err.employee_id === employeeId && err.date === date
     );
-    
+
     if (errorRecord) {
+      const type: ErrorType = (errorRecord.error_type ?? 'quantity');
       setEditingError({ employeeId, date });
       setErrorFormData({
         employeeId,
         date,
-        errorCount: errorRecord.error_count.toString(),
+        errorType: type,
+        errorCount: type === 'quantity' ? errorRecord.error_count.toString() : '',
+        errorValue: type === 'value' ? Number(errorRecord.error_value ?? 0).toFixed(2) : '',
         observations: errorRecord.observations || ''
       });
       setShowErrorForm(true);
@@ -211,14 +224,30 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
       return;
     }
 
-    const errorCount = parseInt(errorFormData.errorCount);
-    if (isNaN(errorCount) || errorCount < 0) {
-      toast.error('Quantidade de erros inválida');
+    if (!errorFormData.employeeId) {
+      toast.error('Selecione um funcionário');
       return;
     }
 
-    if (!errorFormData.employeeId) {
-      toast.error('Selecione um funcionário');
+    let errorCount = 0;
+    let errorValue = 0;
+
+    if (errorFormData.errorType === 'quantity') {
+      errorCount = parseInt(errorFormData.errorCount);
+      if (isNaN(errorCount) || errorCount < 0) {
+        toast.error('Quantidade de erros inválida');
+        return;
+      }
+    } else {
+      errorValue = parseFloat(errorFormData.errorValue.replace(',', '.'));
+      if (isNaN(errorValue) || errorValue <= 0) {
+        toast.error('Valor do erro inválido (deve ser maior que zero)');
+        return;
+      }
+    }
+
+    if (!errorFormData.observations.trim()) {
+      toast.error('Observação é obrigatória');
       return;
     }
 
@@ -227,8 +256,10 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
         errorFormData.employeeId,
         errorFormData.date,
         errorCount,
-        errorFormData.observations.trim() || null,
-        userId
+        errorFormData.observations.trim(),
+        userId,
+        errorFormData.errorType,
+        errorValue
       );
 
       toast.success(editingError ? 'Erro atualizado com sucesso!' : 'Erro registrado com sucesso!');
@@ -291,6 +322,37 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
 
   return (
     <div className="space-y-6">
+      <div className="bg-white p-2 rounded-lg shadow flex gap-2">
+        <button
+          onClick={() => setActiveSubTab('individual')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeSubTab === 'individual'
+              ? 'bg-orange-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          <Package className="w-4 h-4" />
+          Erros Individuais
+        </button>
+        {hasPermission('errors.viewTriage') && (
+          <button
+            onClick={() => setActiveSubTab('triage')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeSubTab === 'triage'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <FileSearch className="w-4 h-4" />
+            Triagem
+          </button>
+        )}
+      </div>
+
+      {activeSubTab === 'triage' ? (
+        <TriageTab userId={userId} hasPermission={hasPermission} />
+      ) : (
+      <>
       {/* Header */}
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex items-center justify-between mb-4">
@@ -382,7 +444,12 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
               <span className="text-red-800 font-medium">Total de Erros</span>
               <AlertTriangle className="w-5 h-5 text-red-600" />
             </div>
-            <div className="text-2xl font-bold text-red-600">{statistics.totalErrors}</div>
+            <div className="text-2xl font-bold text-red-600">{statistics.totalQuantityErrors}</div>
+            {statistics.totalValueErrors > 0 && (
+              <div className="text-xs text-red-700 mt-1 font-semibold">
+                + R$ {statistics.totalValueErrors.toFixed(2).replace('.', ',')} em valor
+              </div>
+            )}
           </div>
           
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
@@ -610,11 +677,25 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                         <h4 className="font-medium text-gray-900">Registros de Erros:</h4>
                         {employeeData.errorRecords.length > 0 ? (
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                            {employeeData.errorRecords.map((errorRecord) => (
+                            {employeeData.errorRecords.map((errorRecord) => {
+                              const type: ErrorType = (errorRecord.error_type ?? 'quantity');
+                              const isValue = type === 'value';
+                              return (
                               <div key={errorRecord.id} className="bg-white p-3 rounded border">
-                                <div className="text-sm font-medium">{formatDateBR(errorRecord.date)}</div>
-                                <div className="text-sm text-red-600 font-medium">
-                                  {errorRecord.error_count} erro(s)
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="text-sm font-medium">{formatDateBR(errorRecord.date)}</div>
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                    isValue
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-blue-100 text-blue-700'
+                                  }`}>
+                                    {isValue ? '💰 Valor' : '📦 Quantidade'}
+                                  </span>
+                                </div>
+                                <div className="text-sm text-red-600 font-bold">
+                                  {isValue
+                                    ? `R$ ${Number(errorRecord.error_value ?? 0).toFixed(2).replace('.', ',')}`
+                                    : `${errorRecord.error_count} erro(s)`}
                                 </div>
                                 {errorRecord.observations && (
                                   <div className="text-xs text-gray-600 mt-1">
@@ -642,7 +723,8 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                                   )}
                                 </div>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         ) : (
                           <p className="text-sm text-gray-500">Nenhum erro registrado para este período.</p>
@@ -723,23 +805,75 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Quantidade de Erros *
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de Erro *
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={errorFormData.errorCount}
-                  onChange={(e) => setErrorFormData(prev => ({ ...prev, errorCount: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
-                  placeholder="0"
-                  required
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { v: 'quantity', label: '📦 Por Quantidade' },
+                    { v: 'value', label: '💰 Por Valor (R$)' },
+                  ] as const).map(opt => (
+                    <label
+                      key={opt.v}
+                      className={`flex items-center justify-center gap-2 px-3 py-2 border-2 rounded-md cursor-pointer transition-colors text-sm font-medium ${
+                        errorFormData.errorType === opt.v
+                          ? 'border-orange-500 bg-orange-50 text-orange-700'
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="errorType"
+                        value={opt.v}
+                        checked={errorFormData.errorType === opt.v}
+                        onChange={() => setErrorFormData(prev => ({ ...prev, errorType: opt.v }))}
+                        className="sr-only"
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
               </div>
+
+              {errorFormData.errorType === 'quantity' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Quantidade de Erros *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={errorFormData.errorCount}
+                    onChange={(e) => setErrorFormData(prev => ({ ...prev, errorCount: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="0"
+                    required
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Valor do Erro (R$) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={errorFormData.errorValue}
+                    onChange={(e) => setErrorFormData(prev => ({ ...prev, errorValue: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="0,00"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Este valor será descontado diretamente do pagamento.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Observações (opcional)
+                  Observações *
                 </label>
                 <textarea
                   value={errorFormData.observations}
@@ -747,6 +881,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
                   rows={3}
                   placeholder="Descreva os erros ou observações..."
+                  required
                 />
               </div>
               
@@ -768,6 +903,8 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
             </form>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

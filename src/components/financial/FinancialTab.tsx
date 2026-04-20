@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getBonusRemovalHistory, BonusRemoval } from '../../services/database';
+import { getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getBonusRemovalHistory, BonusRemoval, getTriageDistributionsForEmployees } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
@@ -13,6 +13,13 @@ interface FinancialTabProps {
   hasPermission: (permission: string) => boolean;
 }
 
+interface TriageDiscount {
+  period_start: string;
+  period_end: string;
+  value_deducted: number;
+  errors_share: number;
+}
+
 interface EmployeeFinancialData {
   employee: Employee;
   workDays: number;
@@ -22,6 +29,7 @@ interface EmployeeFinancialData {
   errorRecords: ErrorRecord[];
   totalErrors: number;
   totalEarned: number;
+  triageDiscounts: TriageDiscount[];
 }
 
 export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermission }) => {
@@ -72,11 +80,19 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         getErrorRecords(filters.startDate, filters.endDate, filters.employeeId, employmentTypeFilter)
       ]);
 
+      const triageData = employeesData.length > 0
+        ? await getTriageDistributionsForEmployees(
+            employeesData.map(e => e.id),
+            filters.startDate,
+            filters.endDate
+          )
+        : [];
+
       setEmployees(employeesData);
       setPayments(paymentsData);
       setAttendances(attendancesData);
 
-      processFinancialData(employeesData, paymentsData, attendancesData, errorRecordsData);
+      processFinancialData(employeesData, paymentsData, attendancesData, errorRecordsData, triageData);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados financeiros');
@@ -85,18 +101,32 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     }
   }, [filters.startDate, filters.endDate, filters.employeeId, filters.employmentType]);
 
-  const processFinancialData = (employeesData: Employee[], paymentsData: Payment[], attendancesData: Attendance[], errorRecordsData: ErrorRecord[]) => {
+  const processFinancialData = (
+    employeesData: Employee[],
+    paymentsData: Payment[],
+    attendancesData: Attendance[],
+    errorRecordsData: ErrorRecord[],
+    triageData: Array<{ employee_id: string; period_start: string; period_end: string; value_deducted: number; errors_share: number }>
+  ) => {
     const data: EmployeeFinancialData[] = employeesData.map(employee => {
       const employeeAttendances = attendancesData.filter(att => att.employee_id === employee.id);
       const employeePayments = paymentsData.filter(pay => pay.employee_id === employee.id);
       const employeeErrors = errorRecordsData.filter(err => err.employee_id === employee.id);
-      
+      const triageDiscounts = triageData
+        .filter(t => t.employee_id === employee.id)
+        .map(t => ({
+          period_start: t.period_start,
+          period_end: t.period_end,
+          value_deducted: t.value_deducted,
+          errors_share: t.errors_share,
+        }));
+
       const workDays = employeeAttendances.filter(att => att.status === 'present').length;
       const absences = employeeAttendances.filter(att => att.status === 'absent').length;
       const customExitDays = employeeAttendances.filter(att => att.status === 'present' && att.exit_time).length;
       const totalErrors = employeeErrors.reduce((sum, err) => sum + err.error_count, 0);
       const totalEarned = employeePayments.reduce((sum, pay) => sum + (pay.total || 0), 0);
-      
+
       return {
         employee,
         workDays,
@@ -105,10 +135,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         payments: employeePayments,
         errorRecords: employeeErrors,
         totalErrors,
-        totalEarned
+        totalEarned,
+        triageDiscounts
       };
     });
-    
+
     setFinancialData(data);
   };
 
@@ -288,7 +319,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       return;
     }
 
-    const discountValue = parseFloat(errorDiscountValue);
+    // Valor por erro (aplicado só aos registros tipo 'quantity').
+    // Para registros tipo 'value', o desconto sai do próprio error_value.
+    const discountValue = errorDiscountValue.trim() === '' ? 0 : parseFloat(errorDiscountValue);
     if (isNaN(discountValue) || discountValue < 0) {
       toast.error('Valor de desconto inválido');
       return;
@@ -304,9 +337,16 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         const employeeData = financialData.find(data => data.employee.id === employeeId);
         if (!employeeData) continue;
 
-        // Para cada erro registrado, aplicar desconto
+        // Para cada erro registrado, aplicar desconto.
+        // - type 'quantity': desconto = error_count × discountValue (como antes)
+        // - type 'value': desconto = error_value diretamente (valor já é o R$ a descontar)
         for (const errorRecord of employeeData.errorRecords) {
-          const discountAmount = errorRecord.error_count * discountValue;
+          const isValueType = (errorRecord.error_type ?? 'quantity') === 'value';
+          const discountAmount = isValueType
+            ? Number(errorRecord.error_value ?? 0)
+            : errorRecord.error_count * discountValue;
+
+          if (discountAmount <= 0) continue;
 
           // Buscar pagamento existente
           const existingPayment = payments.find(pay =>
@@ -946,19 +986,30 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                     })()}
                                     {(() => {
                                       const errorRecord = data.errorRecords.find(err => err.date === payment.date);
-                                      if (!errorRecord || errorRecord.error_count === 0) return null;
+                                      if (!errorRecord) return null;
+                                      const isValueType = (errorRecord.error_type ?? 'quantity') === 'value';
 
-                                      // Calcular valor real do desconto por erro
-                                      // Valor esperado (diária + bônus) - valor real pago = desconto total
-                                      // Desconto total / quantidade de erros = valor por erro
+                                      // Desconto total aplicado = diária + bônus - total pago
                                       const expectedValue = (payment.daily_rate || 0) + (payment.bonus || 0);
                                       const actualValue = payment.total || 0;
                                       const totalDiscount = expectedValue - actualValue;
-                                      const valuePerError = totalDiscount > 0 ? totalDiscount / errorRecord.error_count : 0;
 
-                                     return valuePerError > 0 ? (
+                                      if (isValueType) {
+                                        const valueDiscount = Number(errorRecord.error_value ?? 0);
+                                        if (valueDiscount <= 0) return null;
+                                        return (
+                                          <div className="text-xs text-red-600">
+                                            Desconto por erro (valor): -R$ {valueDiscount.toFixed(2)}
+                                          </div>
+                                        );
+                                      }
+
+                                      // quantity
+                                      if (errorRecord.error_count === 0) return null;
+                                      const valuePerError = totalDiscount > 0 ? totalDiscount / errorRecord.error_count : 0;
+                                      return valuePerError > 0 ? (
                                         <div className="text-xs text-red-600">
-                                          Erros: -{errorRecord.error_count} × R$ {valuePerError.toFixed(2)} = -R$ {totalDiscount.toFixed(2)}
+                                          Desconto por erro ({errorRecord.error_count} unidades): -{errorRecord.error_count} × R$ {valuePerError.toFixed(2)} = -R$ {totalDiscount.toFixed(2)}
                                         </div>
                                       ) : null;
                                     })()}
@@ -994,15 +1045,40 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                           <p className="text-sm text-gray-500">Nenhum pagamento registrado para este período.</p>
                         )}
                         
+                        {data.triageDiscounts.length > 0 && (
+                          <div className="mt-4">
+                            <h4 className="font-medium text-gray-900 mb-2">Descontos de Triagem:</h4>
+                            <div className="space-y-1">
+                              {data.triageDiscounts.map((t, idx) => (
+                                <div key={idx} className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                                  Desconto triagem (período {formatDateBR(t.period_start)} a {formatDateBR(t.period_end)}): <span className="font-semibold">-R$ {t.value_deducted.toFixed(2).replace('.', ',')}</span>
+                                  <span className="text-xs text-gray-600 ml-2">({t.errors_share} erros)</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {data.errorRecords.length > 0 && (
                           <div className="mt-4">
                             <h4 className="font-medium text-gray-900 mb-2">Erros Registrados:</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                              {data.errorRecords.map((errorRecord) => (
+                              {data.errorRecords.map((errorRecord) => {
+                                const isValue = (errorRecord.error_type ?? 'quantity') === 'value';
+                                return (
                                 <div key={errorRecord.id} className="bg-red-50 p-3 rounded border border-red-200">
-                                  <div className="text-sm font-medium">{formatDateBR(errorRecord.date)}</div>
-                                  <div className="text-sm text-red-600 font-medium">
-                                    {errorRecord.error_count} erro(s)
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="text-sm font-medium">{formatDateBR(errorRecord.date)}</div>
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                      isValue ? 'bg-red-200 text-red-800' : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                      {isValue ? '💰 Valor' : '📦 Quantidade'}
+                                    </span>
+                                  </div>
+                                  <div className="text-sm text-red-600 font-bold">
+                                    {isValue
+                                      ? `R$ ${Number(errorRecord.error_value ?? 0).toFixed(2).replace('.', ',')}`
+                                      : `${errorRecord.error_count} erro(s)`}
                                   </div>
                                   {errorRecord.observations && (
                                     <div className="text-xs text-gray-600 mt-1">
@@ -1010,7 +1086,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                     </div>
                                   )}
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         )}
@@ -1243,7 +1320,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Valor do Desconto por Erro (R$)
+                  Valor do Desconto por Erro (R$) — apenas tipo Quantidade
                 </label>
                 <input
                   type="number"
@@ -1255,18 +1332,25 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                   placeholder="0.00"
                   autoFocus
                 />
-              </div>
-              
-              <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
-                <p className="text-sm text-yellow-800">
-                  <strong>Como funciona:</strong> O valor será multiplicado pela quantidade de erros de cada funcionário e descontado dos pagamentos correspondentes.
+                <p className="mt-1 text-xs text-gray-500">
+                  Pode deixar vazio se os funcionários selecionados só têm erros tipo "Valor".
                 </p>
               </div>
-              
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+                <p className="text-sm text-yellow-800">
+                  <strong>Como funciona:</strong>
+                </p>
+                <ul className="text-sm text-yellow-800 list-disc pl-5 mt-1 space-y-0.5">
+                  <li><strong>Tipo Quantidade:</strong> valor acima × quantidade de erros do dia.</li>
+                  <li><strong>Tipo Valor:</strong> usa direto o valor em R$ registrado no erro.</li>
+                </ul>
+              </div>
+
               <div className="flex space-x-3 pt-4">
                 <button
                   onClick={handleErrorDiscount}
-                  disabled={!errorDiscountValue || selectedEmployees.size === 0}
+                  disabled={selectedEmployees.size === 0}
                   className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Aplicar Desconto

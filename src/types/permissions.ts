@@ -9,6 +9,10 @@ export interface AttendancePermissions extends TabPermissions {
   reset: boolean;
   viewHistory: boolean;
   editHistory: boolean;
+  approve: boolean;
+  reject: boolean;
+  bulkApprove: boolean;
+  manualTime: boolean;
 }
 
 export interface EmployeesPermissions extends TabPermissions {
@@ -31,7 +35,11 @@ export interface FinancialPermissions extends TabPermissions {
   delete: boolean;
   clear: boolean;
   applyBonus: boolean;
+  applyBonusB: boolean;
+  applyBonusC1: boolean;
+  applyBonusC2: boolean;
   removeBonus: boolean;
+  removeBonusByType: boolean;
   removeBonusBulk: boolean;
 }
 
@@ -42,9 +50,13 @@ export interface C6PaymentPermissions extends TabPermissions {
 
 export interface ErrorsPermissions extends TabPermissions {
   create: boolean;
+  createByValue: boolean;
   edit: boolean;
   delete: boolean;
   viewStats: boolean;
+  viewTriage: boolean;
+  createTriage: boolean;
+  distributeTriage: boolean;
 }
 
 export interface SettingsPermissions extends TabPermissions {
@@ -78,36 +90,36 @@ export interface UserPermissions {
 }
 
 export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: true, edit: true, search: true, reset: true, viewHistory: true, editHistory: true },
+  attendance: { view: true, mark: true, edit: true, search: true, reset: true, viewHistory: true, editHistory: true, approve: true, reject: true, bulkApprove: true, manualTime: true },
   employees: { view: true, create: true, edit: true, delete: true, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
-  financial: { view: true, viewPayments: true, editRate: true, editBonus: true, delete: true, clear: true, applyBonus: true, removeBonus: true, removeBonusBulk: true },
+  financial: { view: true, viewPayments: true, editRate: true, editBonus: true, delete: true, clear: true, applyBonus: true, applyBonusB: true, applyBonusC1: true, applyBonusC2: true, removeBonus: true, removeBonusByType: true, removeBonusBulk: true },
   c6payment: { view: true, generate: true, export: true },
-  errors: { view: true, create: true, edit: true, delete: true, viewStats: true },
+  errors: { view: true, create: true, createByValue: true, edit: true, delete: true, viewStats: true, viewTriage: true, createTriage: true, distributeTriage: true },
   settings: { view: true, editDailyRate: true, editOther: true },
   users: { view: true, create: true, delete: true, managePermissions: true },
   datamanagement: { view: true, viewStats: true, configRetention: true, manualCleanup: true, autoCleanup: true }
 };
 
 export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: true, edit: false, search: true, reset: false, viewHistory: true, editHistory: true },
+  attendance: { view: true, mark: true, edit: false, search: true, reset: false, viewHistory: true, editHistory: true, approve: true, reject: true, bulkApprove: false, manualTime: false },
   employees: { view: true, create: true, edit: true, delete: false, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
-  financial: { view: true, viewPayments: true, editRate: false, editBonus: true, delete: false, clear: false, applyBonus: true, removeBonus: true, removeBonusBulk: false },
+  financial: { view: true, viewPayments: true, editRate: false, editBonus: true, delete: false, clear: false, applyBonus: true, applyBonusB: false, applyBonusC1: false, applyBonusC2: false, removeBonus: true, removeBonusByType: false, removeBonusBulk: false },
   c6payment: { view: true, generate: true, export: true },
-  errors: { view: true, create: true, edit: true, delete: false, viewStats: true },
+  errors: { view: true, create: true, createByValue: false, edit: true, delete: false, viewStats: true, viewTriage: true, createTriage: true, distributeTriage: true },
   settings: { view: false, editDailyRate: false, editOther: false },
   users: { view: false, create: false, delete: false, managePermissions: false },
   datamanagement: { view: false, viewStats: false, configRetention: false, manualCleanup: false, autoCleanup: false }
 };
 
 export const DEFAULT_READONLY_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false },
+  attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false, approve: false, reject: false, bulkApprove: false, manualTime: false },
   employees: { view: true, create: false, edit: false, delete: false, import: false },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
-  financial: { view: true, viewPayments: true, editRate: false, editBonus: false, delete: false, clear: false, applyBonus: false, removeBonus: false, removeBonusBulk: false },
+  financial: { view: true, viewPayments: true, editRate: false, editBonus: false, delete: false, clear: false, applyBonus: false, applyBonusB: false, applyBonusC1: false, applyBonusC2: false, removeBonus: false, removeBonusByType: false, removeBonusBulk: false },
   c6payment: { view: true, generate: false, export: false },
-  errors: { view: true, create: false, edit: false, delete: false, viewStats: true },
+  errors: { view: true, create: false, createByValue: false, edit: false, delete: false, viewStats: true, viewTriage: false, createTriage: false, distributeTriage: false },
   settings: { view: false, editDailyRate: false, editOther: false },
   users: { view: false, create: false, delete: false, managePermissions: false },
   datamanagement: { view: false, viewStats: false, configRetention: false, manualCleanup: false, autoCleanup: false }
@@ -141,7 +153,11 @@ export const PERMISSION_LABELS = {
     search: 'Buscar histórico',
     reset: 'Resetar registros de ponto',
     viewHistory: 'Visualizar dias anteriores',
-    editHistory: 'Editar registros de dias anteriores'
+    editHistory: 'Editar registros de dias anteriores',
+    approve: 'Aprovar ponto pendente',
+    reject: 'Rejeitar ponto pendente',
+    bulkApprove: 'Aprovar ponto em lote',
+    manualTime: 'Inserir horário manual (entrada/saída)'
   },
   employees: {
     title: 'Funcionários',
@@ -166,8 +182,12 @@ export const PERMISSION_LABELS = {
     editBonus: 'Editar bônus',
     delete: 'Excluir pagamentos',
     clear: 'Limpar período',
-    applyBonus: 'Aplicar bonificação',
+    applyBonus: 'Aplicar bonificação (qualquer tipo)',
+    applyBonusB: 'Aplicar bonificação tipo B',
+    applyBonusC1: 'Aplicar bonificação tipo C1',
+    applyBonusC2: 'Aplicar bonificação tipo C2',
     removeBonus: 'Remover bonificação individual',
+    removeBonusByType: 'Remover bonificação por tipo específico',
     removeBonusBulk: 'Remover todas bonificações de um dia'
   },
   c6payment: {
@@ -179,10 +199,14 @@ export const PERMISSION_LABELS = {
   errors: {
     title: 'Erros',
     view: 'Ver aba',
-    create: 'Criar registro',
+    create: 'Criar erro por quantidade',
+    createByValue: 'Criar erro por valor (R$)',
     edit: 'Editar',
     delete: 'Excluir',
-    viewStats: 'Ver estatísticas'
+    viewStats: 'Ver estatísticas',
+    viewTriage: 'Ver aba Triagem',
+    createTriage: 'Registrar erros de triagem',
+    distributeTriage: 'Distribuir erros de triagem entre funcionários'
   },
   settings: {
     title: 'Configurações',
