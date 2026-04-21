@@ -4,10 +4,10 @@ import {
   getTriageErrors,
   upsertTriageError,
   deleteTriageError,
-  getTriageSummary,
-  getEmployeesPresentInPeriod,
+  computeTriageDistribution,
   distributeTriageErrors,
   TriageError,
+  TriageDistributionPreview,
 } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
@@ -17,14 +17,8 @@ interface TriageTabProps {
   hasPermission: (permission: string) => boolean;
 }
 
-interface Preview {
-  totalErrors: number;
-  days: number;
-  employees: { employee_id: string; name: string; days_present: number }[];
-  errorsPerEmployee: number;
+interface Preview extends TriageDistributionPreview {
   valuePerError: number;
-  valuePerEmployee: number;
-  totalDeducted: number;
 }
 
 export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) => {
@@ -132,40 +126,20 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
 
     setCalculating(true);
     try {
-      const [summary, employees] = await Promise.all([
-        getTriageSummary(distRange.startDate, distRange.endDate),
-        getEmployeesPresentInPeriod(distRange.startDate, distRange.endDate),
-      ]);
+      const result = await computeTriageDistribution(distRange.startDate, distRange.endDate, value);
 
-      if (summary.totalErrors <= 0) {
+      if (result.totalErrors <= 0) {
         toast.error('Nenhum erro de triagem no período');
         setPreview(null);
         return;
       }
-      if (employees.length === 0) {
-        toast.error('Nenhum funcionário presente no período');
+      if (result.perEmployee.length === 0) {
+        toast.error('Nenhum funcionário presente nos dias com erro');
         setPreview(null);
         return;
       }
 
-      const errorsPerEmployee = Math.floor(summary.totalErrors / employees.length);
-      if (errorsPerEmployee <= 0) {
-        toast.error('Erros por funcionário resultou em zero — aumente o período');
-        setPreview(null);
-        return;
-      }
-      const valuePerEmployee = Math.round(errorsPerEmployee * value * 100) / 100;
-      const totalDeducted = Math.round(valuePerEmployee * employees.length * 100) / 100;
-
-      setPreview({
-        totalErrors: summary.totalErrors,
-        days: summary.days,
-        employees,
-        errorsPerEmployee,
-        valuePerError: value,
-        valuePerEmployee,
-        totalDeducted,
-      });
+      setPreview({ ...result, valuePerError: value });
     } catch (err) {
       console.error(err);
       toast.error('Erro ao calcular');
@@ -180,7 +154,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
       toast.error('Sem permissão para distribuir erros');
       return;
     }
-    if (!confirm(`Confirmar distribuição? R$ ${preview.totalDeducted.toFixed(2).replace('.', ',')} serão descontados de ${preview.employees.length} funcionários.`)) {
+    if (!confirm(`Confirmar distribuição? R$ ${preview.totalDeducted.toFixed(2).replace('.', ',')} serão descontados de ${preview.perEmployee.length} funcionários.`)) {
       return;
     }
     setConfirming(true);
@@ -366,23 +340,41 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
                 <div className="text-xl font-bold text-gray-900">{preview.days}</div>
               </div>
               <div>
-                <div className="text-gray-600">Funcionários presentes</div>
-                <div className="text-xl font-bold text-gray-900">{preview.employees.length}</div>
+                <div className="text-gray-600">Funcionários atingidos</div>
+                <div className="text-xl font-bold text-gray-900">{preview.totalEmployees}</div>
               </div>
               <div>
-                <div className="text-gray-600">Erros/funcionário</div>
-                <div className="text-xl font-bold text-orange-600">{preview.errorsPerEmployee}</div>
+                <div className="text-gray-600">Valor por erro</div>
+                <div className="text-xl font-bold text-orange-600">R$ {preview.valuePerError.toFixed(2).replace('.', ',')}</div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-md p-3 mb-4 max-h-48 overflow-y-auto">
+              <div className="text-sm font-medium mb-2">Detalhamento por dia:</div>
+              <div className="space-y-1">
+                {preview.perDay.map(d => {
+                  const dateBR = d.date.split('-').reverse().join('/');
+                  return (
+                    <div key={d.date} className="text-sm py-1 border-b border-gray-100 last:border-b-0 flex justify-between">
+                      <span className="text-gray-800">Dia {dateBR}</span>
+                      <span className="text-gray-600">
+                        {d.errors} erros ÷ {d.present} presentes = <span className="font-semibold text-orange-600">{d.errorsPerPerson} erros/pessoa</span>
+                        {d.remainder > 0 && <span className="text-xs text-gray-500 ml-1">(resto: {d.remainder})</span>}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             <div className="bg-white rounded-md p-3 mb-4 max-h-64 overflow-y-auto">
               <div className="text-sm font-medium mb-2">Preview da distribuição:</div>
               <div className="space-y-1">
-                {preview.employees.map(emp => (
+                {preview.perEmployee.map(emp => (
                   <div key={emp.employee_id} className="flex justify-between text-sm py-1 border-b border-gray-100 last:border-b-0">
                     <span className="text-gray-800">{emp.name}</span>
                     <span className="text-gray-600">
-                      {emp.days_present} dias · {preview.errorsPerEmployee} erros · <span className="font-semibold text-red-600">-R$ {preview.valuePerEmployee.toFixed(2).replace('.', ',')}</span>
+                      {emp.days_present} dias · {emp.total_errors} erros · <span className="font-semibold text-red-600">-R$ {emp.value_deducted.toFixed(2).replace('.', ',')}</span>
                     </span>
                   </div>
                 ))}
