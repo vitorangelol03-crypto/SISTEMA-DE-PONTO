@@ -7,6 +7,7 @@ import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 import { TriageTab } from './TriageTab';
+import { PaymentPeriodsTab } from './PaymentPeriodsTab';
 
 interface ErrorsTabProps {
   userId: string;
@@ -22,7 +23,7 @@ interface EmployeeWithErrors {
 }
 
 export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'individual' | 'triage'>('individual');
+  const [activeSubTab, setActiveSubTab] = useState<'individual' | 'triage' | 'periods'>('individual');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [errorRecords, setErrorRecords] = useState<ErrorRecord[]>([]);
   const [employeesWithErrors, setEmployeesWithErrors] = useState<EmployeeWithErrors[]>([]);
@@ -347,10 +348,23 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
             Triagem
           </button>
         )}
+        <button
+          onClick={() => setActiveSubTab('periods')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeSubTab === 'periods'
+              ? 'bg-purple-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          Períodos de Pagamento
+        </button>
       </div>
 
       {activeSubTab === 'triage' ? (
         <TriageTab userId={userId} hasPermission={hasPermission} />
+      ) : activeSubTab === 'periods' ? (
+        <PaymentPeriodsTab userId={userId} hasPermission={hasPermission} />
       ) : (
       <>
       {/* Header */}

@@ -6,7 +6,7 @@ import { TabNavigation, TabType } from './components/common/TabNavigation';
 import { HelpButton } from './components/tutorial/HelpButton';
 import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
-import { initializeSystem } from './services/database';
+import { initializeSystem, autoCreateWeeklyPeriod } from './services/database';
 import { EmployeeClockIn } from './components/employee-clock/EmployeeClockIn';
 
 const AttendanceTab = lazy(() => import('./components/attendance/AttendanceTab').then(m => ({ default: m.AttendanceTab })));
@@ -33,6 +33,7 @@ function App() {
 
   useEffect(() => {
     initializeSystem();
+    autoCreateWeeklyPeriod().catch(err => console.error('autoCreateWeeklyPeriod falhou:', err));
   }, []);
 
   // Tela de registro de ponto — não exige login de supervisor

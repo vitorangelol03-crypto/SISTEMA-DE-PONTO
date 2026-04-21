@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle, AlertTriangle } from 'lucide-react';
+import { EmployeeErrorsView } from './EmployeeErrorsView';
 import {
   getEmployeeByCpf,
   getEmployeeTodayAttendance,
@@ -65,6 +66,7 @@ function formatCPFMask(value: string): string {
 
 export const EmployeeClockIn: React.FC = () => {
   const [step, setStep] = useState<Step>('cpf');
+  const [dashTab, setDashTab] = useState<'clock' | 'errors'>('clock');
   const [cpfInput, setCpfInput] = useState('');
   const [pin, setPin] = useState('');
   const [setupField, setSetupField] = useState<'new' | 'confirm'>('new');
@@ -498,7 +500,37 @@ export const EmployeeClockIn: React.FC = () => {
               </button>
             </div>
 
+            {/* ── Tab switcher ── */}
+            <div className="flex border-b border-gray-200 bg-white">
+              <button
+                onClick={() => setDashTab('clock')}
+                className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
+                  dashTab === 'clock'
+                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Clock className="w-4 h-4" />
+                Meu Ponto
+              </button>
+              <button
+                onClick={() => setDashTab('errors')}
+                className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
+                  dashTab === 'errors'
+                    ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <AlertTriangle className="w-4 h-4" />
+                Meus Erros
+              </button>
+            </div>
+
             <div className="overflow-y-auto max-h-[80vh] pb-4">
+              {dashTab === 'errors' ? (
+                <EmployeeErrorsView employeeId={employee.id} />
+              ) : (
+              <>
               {/* ── Card do dia ── */}
               <div className="m-4 p-4 border-2 border-blue-200 rounded-xl bg-blue-50 space-y-3">
                 <h2 className="font-semibold text-blue-900 text-sm uppercase tracking-wide">📅 Hoje</h2>
@@ -662,6 +694,8 @@ export const EmployeeClockIn: React.FC = () => {
                   </div>
                 )}
               </div>
+              </>
+              )}
             </div>
           </>
         )}

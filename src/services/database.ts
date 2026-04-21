@@ -1398,6 +1398,243 @@ export const getErrorStatistics = async (
   };
 };
 
+// ─── Períodos de pagamento ────────────────────────────────────────────────────
+
+export type PaymentPeriodStatus = 'open' | 'paid';
+
+export interface PaymentPeriod {
+  id: string;
+  start_date: string;
+  end_date: string;
+  payment_date: string;
+  label: string | null;
+  status: PaymentPeriodStatus;
+  created_by: string | null;
+  created_at: string;
+}
+
+export const getPaymentPeriods = async (): Promise<PaymentPeriod[]> => {
+  const { data, error } = await supabase
+    .from('payment_periods')
+    .select('*')
+    .order('start_date', { ascending: false });
+  if (error) throw error;
+  return data || [];
+};
+
+export const createPaymentPeriod = async (
+  startDate: string,
+  endDate: string,
+  paymentDate: string,
+  label: string | null,
+  createdBy: string
+): Promise<PaymentPeriod> => {
+  if (startDate > endDate) throw new Error('Data inicial deve ser anterior à final');
+
+  const { data, error } = await supabase
+    .from('payment_periods')
+    .insert([{
+      start_date: startDate,
+      end_date: endDate,
+      payment_date: paymentDate,
+      label,
+      status: 'open',
+      created_by: createdBy,
+    }])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+};
+
+export const closePaymentPeriod = async (periodId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('payment_periods')
+    .update({ status: 'paid' })
+    .eq('id', periodId);
+  if (error) throw error;
+};
+
+export const getPaymentPeriodConfig = async (): Promise<{ auto_weekly: boolean }> => {
+  const { data, error } = await supabase
+    .from('payment_period_config')
+    .select('auto_weekly')
+    .eq('id', 1)
+    .maybeSingle();
+  if (error) throw error;
+  return { auto_weekly: data?.auto_weekly ?? true };
+};
+
+export const setPaymentPeriodAutoWeekly = async (enabled: boolean, updatedBy: string): Promise<void> => {
+  const { error } = await supabase
+    .from('payment_period_config')
+    .upsert([{ id: 1, auto_weekly: enabled, updated_by: updatedBy, updated_at: new Date().toISOString() }], {
+      onConflict: 'id',
+    });
+  if (error) throw error;
+};
+
+/**
+ * Auto-cria o período semanal atual (segunda a domingo) se não existir,
+ * e fecha períodos vencidos (end_date < hoje) que ainda estão 'open'.
+ * Se a config `auto_weekly` estiver desativada, não cria, apenas fecha
+ * períodos vencidos.
+ */
+export const autoCreateWeeklyPeriod = async (): Promise<void> => {
+  const config = await getPaymentPeriodConfig();
+
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+
+  // Fecha períodos vencidos (end_date < hoje, status 'open')
+  await supabase
+    .from('payment_periods')
+    .update({ status: 'paid' })
+    .eq('status', 'open')
+    .lt('end_date', todayStr);
+
+  if (!config.auto_weekly) return;
+
+  // Segunda a domingo da semana atual
+  const dayOfWeek = today.getDay(); // 0=dom, 1=seg...
+  const offsetToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + offsetToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  const mondayStr = monday.toISOString().slice(0, 10);
+  const sundayStr = sunday.toISOString().slice(0, 10);
+
+  const { data: existing } = await supabase
+    .from('payment_periods')
+    .select('id')
+    .eq('start_date', mondayStr)
+    .eq('end_date', sundayStr)
+    .maybeSingle();
+
+  if (existing) return;
+
+  const label = `Semana ${mondayStr.slice(8, 10)}/${mondayStr.slice(5, 7)} a ${sundayStr.slice(8, 10)}/${sundayStr.slice(5, 7)}`;
+
+  await supabase
+    .from('payment_periods')
+    .insert([{
+      start_date: mondayStr,
+      end_date: sundayStr,
+      payment_date: sundayStr,
+      label,
+      status: 'open',
+      created_by: 'auto',
+    }]);
+};
+
+export const getEmployeeErrorPeriods = async (
+  employeeId: string
+): Promise<Array<{ period: PaymentPeriod; has_errors: boolean; total_errors: number }>> => {
+  const periods = await getPaymentPeriods();
+  if (periods.length === 0) return [];
+
+  const results: Array<{ period: PaymentPeriod; has_errors: boolean; total_errors: number }> = [];
+  for (const period of periods) {
+    const { data: indErrors } = await supabase
+      .from('error_records')
+      .select('error_count, error_type')
+      .eq('employee_id', employeeId)
+      .gte('date', period.start_date)
+      .lte('date', period.end_date);
+
+    const { data: triageDist } = await supabase
+      .from('triage_distribution_employees')
+      .select('errors_share, triage_error_distributions!inner(period_start, period_end)')
+      .eq('employee_id', employeeId)
+      .gte('triage_error_distributions.period_start', period.start_date)
+      .lte('triage_error_distributions.period_end', period.end_date);
+
+    const indCount = (indErrors || [])
+      .filter((e: { error_type: string | null }) => (e.error_type ?? 'quantity') === 'quantity')
+      .reduce((s: number, e: { error_count: number }) => s + (e.error_count ?? 0), 0);
+    const indValueCount = (indErrors || []).filter((e: { error_type: string | null }) => e.error_type === 'value').length;
+    const triageCount = (triageDist || []).reduce((s: number, t: { errors_share: number }) => s + (t.errors_share ?? 0), 0);
+
+    const total = indCount + indValueCount + triageCount;
+    results.push({ period, has_errors: total > 0, total_errors: total });
+  }
+  return results;
+};
+
+export const getEmployeeErrorsByPeriod = async (
+  employeeId: string,
+  periodId: string
+): Promise<{
+  period: PaymentPeriod;
+  individual_errors: Array<{ date: string; error_type: ErrorType; error_count: number; observations: string | null }>;
+  triage_errors: Array<{ date: string; errors_share: number; observations: string | null }>;
+  total_individual: number;
+  total_triage: number;
+}> => {
+  const { data: period, error: periodErr } = await supabase
+    .from('payment_periods')
+    .select('*')
+    .eq('id', periodId)
+    .single();
+  if (periodErr) throw periodErr;
+
+  const { data: indErrors, error: indErr } = await supabase
+    .from('error_records')
+    .select('date, error_type, error_count, observations')
+    .eq('employee_id', employeeId)
+    .gte('date', period.start_date)
+    .lte('date', period.end_date)
+    .order('date', { ascending: true });
+  if (indErr) throw indErr;
+
+  const { data: triageDetails, error: triErr } = await supabase
+    .from('triage_distribution_employees')
+    .select('errors_share, triage_error_distributions!inner(period_start, period_end, observations)')
+    .eq('employee_id', employeeId)
+    .gte('triage_error_distributions.period_start', period.start_date)
+    .lte('triage_error_distributions.period_end', period.end_date);
+  if (triErr) throw triErr;
+
+  const individual_errors = (indErrors || []).map(e => ({
+    date: e.date,
+    error_type: (e.error_type ?? 'quantity') as ErrorType,
+    error_count: e.error_count ?? 0,
+    observations: e.observations,
+  }));
+
+  type TriageRow = {
+    errors_share: number;
+    triage_error_distributions:
+      | { period_start: string; period_end: string; observations: string | null }
+      | { period_start: string; period_end: string; observations: string | null }[];
+  };
+  const triage_errors = (triageDetails as TriageRow[] | null ?? []).map(row => {
+    const dist = Array.isArray(row.triage_error_distributions)
+      ? row.triage_error_distributions[0]
+      : row.triage_error_distributions;
+    return {
+      date: dist.period_start,
+      errors_share: row.errors_share,
+      observations: dist.observations,
+    };
+  });
+
+  const total_individual = individual_errors.reduce((s, e) => {
+    return s + (e.error_type === 'quantity' ? e.error_count : 1);
+  }, 0);
+  const total_triage = triage_errors.reduce((s, t) => s + t.errors_share, 0);
+
+  return {
+    period: period as PaymentPeriod,
+    individual_errors,
+    triage_errors,
+    total_individual,
+    total_triage,
+  };
+};
+
 // ─── Triagem (erros coletivos distribuídos) ───────────────────────────────────
 
 export interface TriageError {
