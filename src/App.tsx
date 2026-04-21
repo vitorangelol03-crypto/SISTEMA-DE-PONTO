@@ -8,6 +8,7 @@ import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
 import { initializeSystem, autoCreateWeeklyPeriod } from './services/database';
 import { EmployeeClockIn } from './components/employee-clock/EmployeeClockIn';
+import { EmployeeErrorsPage } from './components/employee-clock/EmployeeErrorsPage';
 
 const AttendanceTab = lazy(() => import('./components/attendance/AttendanceTab').then(m => ({ default: m.AttendanceTab })));
 const EmployeesTab = lazy(() => import('./components/employees/EmployeesTab').then(m => ({ default: m.EmployeesTab })));
@@ -31,6 +32,11 @@ function App() {
     window.location.pathname === '/clock' ||
     new URLSearchParams(window.location.search).get('mode') === 'clock';
 
+  // Modo de consulta de erros pelo funcionário (sem geolocalização)
+  const isErrorsMode =
+    window.location.pathname === '/erros' ||
+    new URLSearchParams(window.location.search).get('mode') === 'erros';
+
   useEffect(() => {
     initializeSystem();
     autoCreateWeeklyPeriod().catch(err => console.error('autoCreateWeeklyPeriod falhou:', err));
@@ -41,6 +47,16 @@ function App() {
     return (
       <>
         <EmployeeClockIn />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
+
+  // Tela de consulta de erros pelo funcionário
+  if (isErrorsMode) {
+    return (
+      <>
+        <EmployeeErrorsPage />
         <Toaster position="top-right" />
       </>
     );

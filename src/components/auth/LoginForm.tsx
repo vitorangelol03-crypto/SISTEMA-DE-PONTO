@@ -140,13 +140,20 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
             </button>
           </div>
 
-          <div className="border-t pt-4">
+          <div className="border-t pt-4 space-y-2">
             <button
               type="button"
               onClick={() => window.location.href = '/?mode=clock'}
               className="w-full py-2 px-4 border-2 border-blue-600 text-blue-600 text-sm font-medium rounded-md hover:bg-blue-50 transition-colors"
             >
               Sou funcionário — Registrar Ponto
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.href = '/?mode=erros'}
+              className="w-full py-2 px-4 border-2 border-orange-600 text-orange-600 text-sm font-medium rounded-md hover:bg-orange-50 transition-colors"
+            >
+              Ver meus erros
             </button>
           </div>
         </form>
