@@ -9,27 +9,27 @@ interface TutorialDetailProps {
 
 export const TutorialDetail: React.FC<TutorialDetailProps> = ({ tutorial, onClose }) => {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg max-w-[95vw] sm:max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
               <span className="text-xl">📚</span>
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">{tutorial.title}</h2>
-              <p className="text-sm text-gray-500">{tutorial.description}</p>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-xl font-bold text-gray-900 truncate">{tutorial.title}</h2>
+              <p className="text-xs sm:text-sm text-gray-500 truncate">{tutorial.description}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center flex-shrink-0"
           >
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
-        <div className="p-6 space-y-8">
+        <div className="p-4 sm:p-6 space-y-6 sm:space-y-8">
           <section>
             <div className="flex items-center space-x-2 mb-4">
               <Book className="w-5 h-5 text-blue-600" />

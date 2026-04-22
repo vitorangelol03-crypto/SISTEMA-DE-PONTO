@@ -144,19 +144,19 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h2 className="text-xl font-semibold flex items-center">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <h2 className="text-lg sm:text-xl font-semibold flex items-center">
             <UserCog className="w-5 h-5 mr-2 text-blue-600" />
             Gestão de Usuários ({users.length})
           </h2>
-          
+
           <button
             onClick={() => setShowForm(true)}
             disabled={!hasPermission('users.create')}
             title={!hasPermission('users.create') ? 'Você não tem permissão para criar supervisores' : ''}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] w-full sm:w-auto"
           >
             <Plus className="w-4 h-4" />
             <span>Criar Supervisor</span>
@@ -165,19 +165,19 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
       </div>
 
       {showForm && (
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium">Criar Novo Supervisor</h3>
+            <h3 className="text-base sm:text-lg font-medium">Criar Novo Supervisor</h3>
             <button
               onClick={resetForm}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               ✕
             </button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   ID do Usuário *
@@ -191,7 +191,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                     const value = e.target.value.replace(/\D/g, '');
                     setFormData(prev => ({ ...prev, id: value }));
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
                   placeholder="Digite apenas números (ex: 1001)"
                   required
                 />
@@ -209,19 +209,19 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                     type={showPassword ? 'text' : 'password'}
                     value={formData.password}
                     onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
                     placeholder="Digite uma senha segura"
                     required
                   />
                   <button
                     type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center min-h-[44px]"
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
+                      <EyeOff className="h-5 w-5 text-gray-400" />
                     ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
+                      <Eye className="h-5 w-5 text-gray-400" />
                     )}
                   </button>
                 </div>
@@ -239,36 +239,36 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                     type={showConfirmPassword ? 'text' : 'password'}
                     value={formData.confirmPassword}
                     onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
                     placeholder="Confirme a senha"
                     required
                   />
                   <button
                     type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center min-h-[44px]"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
                     {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
+                      <EyeOff className="h-5 w-5 text-gray-400" />
                     ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
+                      <Eye className="h-5 w-5 text-gray-400" />
                     )}
                   </button>
                 </div>
               </div>
             </div>
 
-            <div className="flex space-x-3 pt-4">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4">
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors min-h-[44px] w-full sm:w-auto"
               >
                 Criar Supervisor
               </button>
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                className="px-4 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px] w-full sm:w-auto"
               >
                 Cancelar
               </button>
@@ -278,7 +278,8 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
       )}
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Desktop: tabela */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -355,11 +356,59 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
           </table>
         </div>
 
+        {/* Mobile: cards */}
+        <div className="md:hidden divide-y divide-gray-200">
+          {users.map((user) => (
+            <div key={user.id} className="p-4 hover:bg-gray-50">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-medium text-gray-900">ID: {user.id}</span>
+                    <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
+                      user.role === 'admin'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}>
+                      {user.role === 'admin' ? 'Admin' : 'Supervisor'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Criado em: {user.id === '9999' ? 'Sistema' : new Date(user.created_at).toLocaleDateString('pt-BR')}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Criado por: {user.created_by || 'Sistema'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {hasPermission('users.managePermissions') && (
+                  <button
+                    onClick={() => handleManagePermissions(user)}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors min-h-[44px]"
+                  >
+                    <Shield className="w-4 h-4" />
+                    <span>Permissões</span>
+                  </button>
+                )}
+                {hasPermission('users.delete') && user.id !== '9999' && (
+                  <button
+                    onClick={() => handleDelete(user)}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm text-red-700 bg-red-50 rounded-md hover:bg-red-100 transition-colors min-h-[44px]"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Excluir</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
         {users.length === 0 && (
-          <div className="text-center py-8">
+          <div className="text-center py-8 px-4">
             <UserCog className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum usuário encontrado</h3>
-            <p className="text-gray-500">Clique em "Criar Supervisor" para adicionar supervisores.</p>
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">Nenhum usuário encontrado</h3>
+            <p className="text-sm text-gray-500">Clique em "Criar Supervisor" para adicionar supervisores.</p>
           </div>
         )}
       </div>

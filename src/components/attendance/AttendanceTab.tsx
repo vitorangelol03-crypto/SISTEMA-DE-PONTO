@@ -518,27 +518,29 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   return (
     <div className="space-y-6">
       {/* Seletor de sub-aba */}
-      <div className="flex border-b border-gray-200 bg-white rounded-t-lg shadow px-4">
-        <button
-          onClick={() => setActiveView('attendance')}
-          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-            activeView === 'attendance'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Controle de Ponto
-        </button>
-        <button
-          onClick={() => setActiveView('approvals')}
-          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
-            activeView === 'approvals'
-              ? 'border-yellow-500 text-yellow-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Aprovações Pendentes
-        </button>
+      <div className="overflow-x-auto border-b border-gray-200 bg-white rounded-t-lg shadow">
+        <div className="flex min-w-max px-2 sm:px-4">
+          <button
+            onClick={() => setActiveView('attendance')}
+            className={`px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap min-h-[44px] ${
+              activeView === 'attendance'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Controle de Ponto
+          </button>
+          <button
+            onClick={() => setActiveView('approvals')}
+            className={`px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 whitespace-nowrap min-h-[44px] ${
+              activeView === 'approvals'
+                ? 'border-yellow-500 text-yellow-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Aprovações Pendentes
+          </button>
+        </div>
       </div>
 
       {activeView === 'approvals' && (
@@ -548,15 +550,15 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       <div style={{ display: activeView === 'attendance' ? '' : 'none' }}>
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex flex-col space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold flex items-center">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h2 className="text-lg sm:text-xl font-semibold flex items-center">
               <Clock className="w-5 h-5 mr-2 text-blue-600" />
               Controle de Ponto
             </h2>
-            <div className="flex items-center space-x-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
               <button
                 onClick={() => loadData(selectedDate)}
-                className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+                className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors min-h-[44px] w-full sm:w-auto"
               >
                 <RefreshCw className="w-4 h-4" />
                 <span>Atualizar</span>
@@ -565,7 +567,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
               {hasPermission('financial.applyBonus') && isViewingToday && (
                 <button
                   onClick={openBonusModal}
-                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors min-h-[44px] w-full sm:w-auto"
                 >
                   <Gift className="w-4 h-4" />
                   <span>Bonificação</span>
@@ -575,7 +577,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
               {hasPermission('attendance.reset') && attendances.length > 0 && (
                 <button
                   onClick={handleResetAllAttendance}
-                  className="flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors min-h-[44px] w-full sm:w-auto"
                 >
                   <RotateCcw className="w-4 h-4" />
                   <span>Reset Geral</span>
@@ -640,11 +642,11 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
           {bonusInfo && bonusInfo.hasAny && (
             <div className="border-t pt-4">
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-2 mb-3">
-                      <Gift className="w-5 h-5 text-green-600" />
-                      <h3 className="text-lg font-semibold text-green-800">Bonificações Aplicadas</h3>
+                      <Gift className="w-5 h-5 text-green-600 flex-shrink-0" />
+                      <h3 className="text-base sm:text-lg font-semibold text-green-800">Bonificações Aplicadas</h3>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       {(['B', 'C1', 'C2'] as BonusType[]).map(type => {
@@ -681,7 +683,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                   {hasPermission('financial.removeBonusBulk') && (
                     <button
                       onClick={handleRemoveAllBonus}
-                      className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors whitespace-nowrap self-start"
+                      className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors whitespace-nowrap self-start min-h-[44px] w-full md:w-auto"
                     >
                       <Trash2 className="w-4 h-4" />
                       <span>Remover Todas</span>
@@ -693,29 +695,29 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
-          <div className="bg-green-50 p-3 sm:p-4 rounded-lg border border-green-200">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-xs sm:text-sm text-green-800 font-medium mb-1 sm:mb-0">Presentes</span>
-              <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-green-800 font-medium">Presentes</span>
+              <CheckCircle className="w-5 h-5 text-green-600" />
             </div>
-            <div className="text-xl sm:text-2xl font-bold text-green-600">{present}</div>
+            <div className="text-2xl font-bold text-green-600 mt-1">{present}</div>
           </div>
 
-          <div className="bg-red-50 p-3 sm:p-4 rounded-lg border border-red-200">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-xs sm:text-sm text-red-800 font-medium mb-1 sm:mb-0">Faltas</span>
-              <XCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
+          <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-red-800 font-medium">Faltas</span>
+              <XCircle className="w-5 h-5 text-red-600" />
             </div>
-            <div className="text-xl sm:text-2xl font-bold text-red-600">{absent}</div>
+            <div className="text-2xl font-bold text-red-600 mt-1">{absent}</div>
           </div>
 
-          <div className="bg-yellow-50 p-3 sm:p-4 rounded-lg border border-yellow-200">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-xs sm:text-sm text-yellow-800 font-medium mb-1 sm:mb-0">Pendentes</span>
-              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" />
+          <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-yellow-800 font-medium">Pendentes</span>
+              <AlertCircle className="w-5 h-5 text-yellow-600" />
             </div>
-            <div className="text-xl sm:text-2xl font-bold text-yellow-600">{notMarked}</div>
+            <div className="text-2xl font-bold text-yellow-600 mt-1">{notMarked}</div>
           </div>
         </div>
       </div>
@@ -723,18 +725,18 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       {/* Ações em Massa */}
       {selectedEmployees.size > 0 && hasPermission('attendance.mark') && (
         <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg shadow">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <div className="flex items-center space-x-2">
-              <span className="text-blue-800 font-medium">
+              <span className="text-blue-800 font-medium text-sm">
                 {selectedEmployees.size} funcionário(s) selecionado(s)
               </span>
             </div>
 
-            <div className="flex space-x-3">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button
                 onClick={() => handleBulkMarkAttendance('present')}
                 disabled={bulkMarkingLoading}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px] w-full sm:w-auto"
               >
                 <CheckCircle className="w-4 h-4" />
                 <span>{bulkMarkingLoading ? 'Marcando...' : 'Marcar como Presente'}</span>
@@ -743,7 +745,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
               <button
                 onClick={() => handleBulkMarkAttendance('absent')}
                 disabled={bulkMarkingLoading}
-                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px] w-full sm:w-auto"
               >
                 <XCircle className="w-4 h-4" />
                 <span>{bulkMarkingLoading ? 'Marcando...' : 'Marcar como Falta'}</span>
@@ -751,7 +753,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
 
               <button
                 onClick={() => setSelectedEmployees(new Set())}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px] w-full sm:w-auto"
               >
                 Cancelar Seleção
               </button>

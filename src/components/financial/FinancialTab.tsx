@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, FileText } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, FileText, Search } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getBonusRemovalHistory, BonusRemoval, getTriageDistributionsForEmployees } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
@@ -71,6 +71,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     endDate: getBrazilDate(),
     employeeId: ''
   });
+
+  // Busca em tempo real por nome do funcionário (filtragem client-side)
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [historyEmployeeSearch, setHistoryEmployeeSearch] = useState('');
+
+  const displayedFinancialData = React.useMemo(() => {
+    const q = employeeSearch.trim().toLowerCase();
+    if (!q) return financialData;
+    return financialData.filter(d => d.employee.name.toLowerCase().includes(q));
+  }, [financialData, employeeSearch]);
+
+  const displayedBonusRemovals = React.useMemo(() => {
+    const q = historyEmployeeSearch.trim().toLowerCase();
+    if (!q) return bonusRemovals;
+    return bonusRemovals.filter(r => (r.employees?.name ?? '').toLowerCase().includes(q));
+  }, [bonusRemovals, historyEmployeeSearch]);
 
   const loadData = React.useCallback(async () => {
     try {
@@ -281,10 +297,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const selectAllEmployees = () => {
-    if (selectedEmployees.size === financialData.length) {
+    if (selectedEmployees.size === displayedFinancialData.length) {
       setSelectedEmployees(new Set());
     } else {
-      setSelectedEmployees(new Set(financialData.map(data => data.employee.id)));
+      setSelectedEmployees(new Set(displayedFinancialData.map(data => data.employee.id)));
     }
   };
 
@@ -446,12 +462,12 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const exportHistoryToExcel = () => {
-    if (bonusRemovals.length === 0) {
+    if (displayedBonusRemovals.length === 0) {
       toast.error('Nenhum dado para exportar');
       return;
     }
 
-    const data = bonusRemovals.map(removal => ({
+    const data = displayedBonusRemovals.map(removal => ({
       'Data': formatDateBR(removal.date),
       'Funcionário': removal.employees?.name || 'N/A',
       'CPF': formatCPF(removal.employees?.cpf || ''),
@@ -485,22 +501,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     );
   }
 
-  const totalEarnings = financialData.reduce((sum, data) => sum + data.totalEarned, 0);
+  const totalEarnings = displayedFinancialData.reduce((sum, data) => sum + data.totalEarned, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold flex items-center">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-lg sm:text-xl font-semibold flex items-center">
             <DollarSign className="w-5 h-5 mr-2 text-green-600" />
             Gestão Financeira
           </h2>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center">
             <button
               onClick={loadData}
-              className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+              className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors min-h-[44px] w-full sm:w-auto"
             >
               <RefreshCw className="w-4 h-4" />
               <span>Atualizar</span>
@@ -509,10 +525,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         </div>
 
         {/* Navegação entre visualizações */}
-        <div className="flex space-x-2 mb-4">
+        <div className="flex flex-col sm:flex-row gap-2 mb-4 overflow-x-auto">
           <button
             onClick={() => setActiveView('financial')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md transition-colors min-h-[44px] whitespace-nowrap ${
               activeView === 'financial'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -525,7 +541,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             onClick={() => setActiveView('history')}
             disabled={!hasPermission('financial.viewHistory')}
             title={!hasPermission('financial.viewHistory') ? 'Você não tem permissão para visualizar o histórico' : ''}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] whitespace-nowrap ${
               activeView === 'history'
                 ? 'bg-purple-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -538,7 +554,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
         {/* Filtros - Pagamentos */}
         {activeView === 'financial' && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Data Inicial
@@ -549,7 +565,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 onChange={(e) => handleDateChange('startDate', e.target.value)}
                 onFocus={() => handleDateFocus('startDate')}
                 onBlur={() => handleDateBlur('startDate')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
               />
             </div>
 
@@ -563,7 +579,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 onChange={(e) => handleDateChange('endDate', e.target.value)}
                 onFocus={() => handleDateFocus('endDate')}
                 onBlur={() => handleDateBlur('endDate')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
               />
             </div>
 
@@ -571,18 +587,26 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Funcionário
               </label>
-              <select
-                value={filters.employeeId}
-                onChange={(e) => setFilters(prev => ({ ...prev, employeeId: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Todos</option>
-                {employees.map(employee => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                <input
+                  type="text"
+                  value={employeeSearch}
+                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                  placeholder="Buscar funcionário..."
+                  className="w-full pl-9 pr-9 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
+                />
+                {employeeSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setEmployeeSearch('')}
+                    aria-label="Limpar busca"
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 min-h-[32px] min-w-[32px] flex items-center justify-center"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             <EmploymentTypeFilter
@@ -595,7 +619,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
         {/* Filtros - Histórico */}
         {activeView === 'history' && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Data Inicial
@@ -604,7 +628,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 type="date"
                 value={historyFilters.startDate}
                 onChange={(e) => setHistoryFilters(prev => ({ ...prev, startDate: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500 min-h-[44px] text-sm"
               />
             </div>
 
@@ -616,7 +640,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 type="date"
                 value={historyFilters.endDate}
                 onChange={(e) => setHistoryFilters(prev => ({ ...prev, endDate: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500 min-h-[44px] text-sm"
               />
             </div>
 
@@ -624,25 +648,33 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Funcionário
               </label>
-              <select
-                value={historyFilters.employeeId}
-                onChange={(e) => setHistoryFilters(prev => ({ ...prev, employeeId: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
-              >
-                <option value="">Todos</option>
-                {employees.map(employee => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                <input
+                  type="text"
+                  value={historyEmployeeSearch}
+                  onChange={(e) => setHistoryEmployeeSearch(e.target.value)}
+                  placeholder="Buscar funcionário..."
+                  className="w-full pl-9 pr-9 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500 min-h-[44px] text-sm"
+                />
+                {historyEmployeeSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryEmployeeSearch('')}
+                    aria-label="Limpar busca"
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 min-h-[32px] min-w-[32px] flex items-center justify-center"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="flex items-end">
               <button
                 onClick={exportHistoryToExcel}
-                disabled={bonusRemovals.length === 0}
-                className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+                disabled={displayedBonusRemovals.length === 0}
+                className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 min-h-[44px]"
               >
                 <Download className="w-4 h-4" />
                 <span>Exportar Excel</span>
@@ -653,7 +685,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
         {/* Estatísticas - Pagamentos */}
         {activeView === 'financial' && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-green-50 p-4 rounded-lg border border-green-200">
               <div className="flex items-center justify-between">
                 <span className="text-green-800 font-medium">Total Ganho</span>
@@ -669,7 +701,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 <span className="text-blue-800 font-medium">Funcionários</span>
                 <Users className="w-5 h-5 text-blue-600" />
               </div>
-              <div className="text-2xl font-bold text-blue-600">{financialData.length}</div>
+              <div className="text-2xl font-bold text-blue-600">{displayedFinancialData.length}</div>
             </div>
 
             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
@@ -678,7 +710,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 <Calendar className="w-5 h-5 text-purple-600" />
               </div>
               <div className="text-2xl font-bold text-purple-600">
-                {financialData.reduce((sum, data) => sum + data.workDays, 0)}
+                {displayedFinancialData.reduce((sum, data) => sum + data.workDays, 0)}
               </div>
             </div>
 
@@ -694,13 +726,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
         {/* Estatísticas - Histórico */}
         {activeView === 'history' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
               <div className="flex items-center justify-between">
                 <span className="text-purple-800 font-medium">Total de Remoções</span>
                 <History className="w-5 h-5 text-purple-600" />
               </div>
-              <div className="text-2xl font-bold text-purple-600">{bonusRemovals.length}</div>
+              <div className="text-2xl font-bold text-purple-600">{displayedBonusRemovals.length}</div>
             </div>
 
             <div className="bg-red-50 p-4 rounded-lg border border-red-200">
@@ -709,7 +741,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 <DollarSign className="w-5 h-5 text-red-600" />
               </div>
               <div className="text-2xl font-bold text-red-600">
-                R$ {bonusRemovals.reduce((sum, r) => sum + Number(r.bonus_amount_removed), 0).toFixed(2)}
+                R$ {displayedBonusRemovals.reduce((sum, r) => sum + Number(r.bonus_amount_removed), 0).toFixed(2)}
               </div>
             </div>
 
@@ -719,7 +751,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 <Users className="w-5 h-5 text-blue-600" />
               </div>
               <div className="text-2xl font-bold text-blue-600">
-                {new Set(bonusRemovals.map(r => r.employee_id)).size}
+                {new Set(displayedBonusRemovals.map(r => r.employee_id)).size}
               </div>
             </div>
           </div>
@@ -728,13 +760,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
       {/* Aplicação em Lote - apenas na visualização de pagamentos */}
       {activeView === 'financial' && (
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-medium mb-4 flex items-center">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+        <h3 className="text-base sm:text-lg font-medium mb-4 flex items-center">
           <Calculator className="w-5 h-5 mr-2 text-blue-600" />
           Aplicar Valor em Lote
         </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Valor por Dia (R$)
@@ -747,51 +779,51 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               onChange={(e) => setBulkDailyRate(e.target.value)}
               disabled={!hasPermission('financial.applyPayment')}
               title={!hasPermission('financial.applyPayment') ? 'Você não tem permissão para aplicar valores' : ''}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed min-h-[44px] text-sm"
               placeholder="0.00"
             />
           </div>
-          
+
           <div className="flex items-end">
             <button
               onClick={selectAllEmployees}
               disabled={!hasPermission('financial.applyPayment')}
               title={!hasPermission('financial.applyPayment') ? 'Você não tem permissão para selecionar funcionários' : ''}
-              className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 min-h-[44px]"
             >
-              {selectedEmployees.size === financialData.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+              {selectedEmployees.size === displayedFinancialData.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
             </button>
           </div>
-          
+
           <div className="flex items-end">
             <button
               onClick={handleBulkApply}
               disabled={!hasPermission('financial.applyPayment') || !bulkDailyRate || selectedEmployees.size === 0}
               title={!hasPermission('financial.applyPayment') ? 'Você não tem permissão para aplicar valores' : ''}
-              className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors disabled:bg-gray-300"
+              className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors disabled:bg-gray-300 min-h-[44px]"
             >
               Aplicar ({selectedEmployees.size} selecionados)
             </button>
           </div>
-          
+
           <div className="flex items-end">
             <button
               onClick={() => setShowClearModal(true)}
               disabled={!hasPermission('financial.clearPayments')}
               title={!hasPermission('financial.clearPayments') ? 'Você não tem permissão para limpar pagamentos' : ''}
-              className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
             >
               <Trash2 className="w-4 h-4" />
               <span>Limpar Pagamentos</span>
             </button>
           </div>
-          
-          <div className="flex items-end">
+
+          <div className="flex items-end sm:col-span-2 lg:col-span-1">
             <button
               onClick={() => setShowErrorDiscountModal(true)}
               disabled={!hasPermission('financial.applyDiscount') || selectedEmployees.size === 0}
               title={!hasPermission('financial.applyDiscount') ? 'Você não tem permissão para aplicar descontos' : ''}
-              className="w-full px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2 disabled:bg-gray-300"
+              className="w-full px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 disabled:bg-gray-300 min-h-[44px]"
             >
               <Minus className="w-4 h-4" />
               <span>Descontar Erros</span>
@@ -804,13 +836,14 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       {/* Lista de Funcionários - apenas na visualização de pagamentos */}
       {activeView === 'financial' && (
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+          <h3 className="text-base sm:text-lg font-medium text-gray-900">
             Funcionários e Pagamentos
           </h3>
         </div>
-        
-        <div className="overflow-x-auto">
+
+        {/* Desktop: tabela */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -818,7 +851,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     <input
                       type="checkbox"
-                      checked={selectedEmployees.size === financialData.length && financialData.length > 0}
+                      checked={selectedEmployees.size === displayedFinancialData.length && displayedFinancialData.length > 0}
                       onChange={selectAllEmployees}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
@@ -848,7 +881,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {financialData.map((data) => (
+              {displayedFinancialData.map((data) => (
                 <React.Fragment key={data.employee.id}>
                   <tr className="hover:bg-gray-50">
                     {hasPermission('financial.applyPayment') && (
@@ -1159,11 +1192,131 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           </table>
         </div>
 
-        {financialData.length === 0 && (
-          <div className="text-center py-8">
+        {/* Mobile: cards */}
+        <div className="md:hidden divide-y divide-gray-200">
+          {displayedFinancialData.map((data) => (
+            <div key={data.employee.id} className="p-4 hover:bg-gray-50">
+              <div className="flex items-start gap-3 mb-3">
+                {hasPermission('financial.applyPayment') && (
+                  <input
+                    type="checkbox"
+                    checked={selectedEmployees.has(data.employee.id)}
+                    onChange={() => toggleEmployeeSelection(data.employee.id)}
+                    className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-medium text-gray-900 truncate">{data.employee.name}</span>
+                    <EmploymentTypeBadge type={data.employee.employment_type || undefined} />
+                  </div>
+                  <div className="text-xs text-gray-500">{formatCPF(data.employee.cpf)}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="bg-green-50 rounded p-2">
+                  <span className="text-xs text-green-800 block">Dias Trab.</span>
+                  <span className="text-sm font-semibold text-green-700">{data.workDays}</span>
+                </div>
+                <div className="bg-red-50 rounded p-2">
+                  <span className="text-xs text-red-800 block">Faltas</span>
+                  <span className="text-sm font-semibold text-red-700">{data.absences}</span>
+                </div>
+                <div className="bg-blue-50 rounded p-2">
+                  <span className="text-xs text-blue-800 block">Saídas Pers.</span>
+                  <span className="text-sm font-semibold text-blue-700">{data.customExitDays}</span>
+                </div>
+                <div className="bg-yellow-50 rounded p-2">
+                  <span className="text-xs text-yellow-800 block">Erros</span>
+                  <span className="text-sm font-semibold text-yellow-700">
+                    {data.totalErrors > 0 || data.totalErrorValue > 0
+                      ? `${data.totalErrors}${data.totalErrorValue > 0 ? ` + R$${data.totalErrorValue.toFixed(2)}` : ''}`
+                      : '0'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded p-2 mb-3">
+                <span className="text-xs text-gray-500 block">Total Ganho</span>
+                <span className="text-base font-bold text-green-600">
+                  R$ {data.totalEarned.toFixed(2).replace('.', ',')}
+                </span>
+                {(data.totalErrorValue > 0 || data.totalTriageDiscount > 0) && (
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    Bruto: R$ {data.totalEarnedGross.toFixed(2).replace('.', ',')}
+                    {data.totalErrorValue > 0 && <div className="text-red-600">-R$ {data.totalErrorValue.toFixed(2).replace('.', ',')} erro valor</div>}
+                    {data.totalTriageDiscount > 0 && <div className="text-red-600">-R$ {data.totalTriageDiscount.toFixed(2).replace('.', ',')} triagem</div>}
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => {
+                  const row = document.getElementById(`payments-m-${data.employee.id}`);
+                  if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+                }}
+                className="w-full px-4 py-2 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors text-sm font-medium min-h-[44px]"
+              >
+                Ver Detalhes
+              </button>
+
+              <div id={`payments-m-${data.employee.id}`} style={{ display: 'none' }} className="mt-3 p-3 bg-gray-50 rounded-lg space-y-2">
+                {data.payments.length > 0 ? (
+                  data.payments.map((payment) => {
+                    const bonusB = Number(payment.bonus_b ?? 0);
+                    const bonusC1 = Number(payment.bonus_c1 ?? 0);
+                    const bonusC2 = Number(payment.bonus_c2 ?? 0);
+                    const bonusTotal = Number(payment.bonus ?? 0);
+                    return (
+                      <div key={payment.id} className="bg-white p-3 rounded border text-sm">
+                        <div className="font-medium mb-1">{formatDateBR(payment.date)}</div>
+                        <div className="text-xs text-gray-600 space-y-0.5">
+                          <div>Diária: R$ {payment.daily_rate?.toFixed(2) || '0.00'}</div>
+                          <div>Bônus B: R$ {bonusB.toFixed(2)} · C1: R$ {bonusC1.toFixed(2)} · C2: R$ {bonusC2.toFixed(2)}</div>
+                          <div className="font-medium border-t border-gray-200 mt-1 pt-1">Bônus Total: R$ {bonusTotal.toFixed(2)}</div>
+                        </div>
+                        <div className="text-sm font-medium text-green-600 mt-1">
+                          Total: R$ {Number(payment.total ?? 0).toFixed(2).replace('.', ',')}
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          {hasPermission('financial.editPayment') && (
+                            <button
+                              onClick={() => handleEditPayment(data.employee.id, payment.date)}
+                              className="flex-1 py-2 bg-blue-50 text-blue-600 rounded text-xs font-medium min-h-[40px]"
+                            >
+                              <Edit2 className="w-3 h-3 inline mr-1" /> Editar
+                            </button>
+                          )}
+                          {hasPermission('financial.deletePayment') && (
+                            <button
+                              onClick={() => handleDeletePayment(payment.id)}
+                              className="flex-1 py-2 bg-red-50 text-red-600 rounded text-xs font-medium min-h-[40px]"
+                            >
+                              <Trash2 className="w-3 h-3 inline mr-1" /> Excluir
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-gray-500">Nenhum pagamento registrado.</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {displayedFinancialData.length === 0 && (
+          <div className="text-center py-8 px-4">
             <DollarSign className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum dado financeiro encontrado</h3>
-            <p className="text-gray-500">Ajuste os filtros ou aguarde mais registros serem criados.</p>
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">Nenhum dado financeiro encontrado</h3>
+            <p className="text-sm text-gray-500">
+              {employeeSearch
+                ? 'Tente ajustar o termo de busca.'
+                : 'Ajuste os filtros ou aguarde mais registros serem criados.'}
+            </p>
           </div>
         )}
       </div>
@@ -1172,8 +1325,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       {/* Histórico de Remoções de Bonificação */}
       {activeView === 'history' && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+          <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 flex items-center">
               <History className="w-5 h-5 mr-2 text-purple-600" />
               Histórico de Remoções de Bonificação
             </h3>
@@ -1185,7 +1338,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               <span className="ml-2">Carregando histórico...</span>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="hidden md:block overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -1210,7 +1364,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {bonusRemovals.map((removal) => (
+                  {displayedBonusRemovals.map((removal) => (
                     <tr key={removal.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
@@ -1253,39 +1407,72 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 </tbody>
               </table>
 
-              {bonusRemovals.length === 0 && (
-                <div className="text-center py-8">
-                  <History className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    Nenhuma remoção de bonificação encontrada
-                  </h3>
-                  <p className="text-gray-500">
-                    Ajuste os filtros ou aguarde remoções serem registradas no período selecionado.
-                  </p>
-                </div>
-              )}
             </div>
+
+            {/* Mobile: cards */}
+            <div className="md:hidden divide-y divide-gray-200">
+              {displayedBonusRemovals.map((removal) => (
+                <div key={removal.id} className="p-4 hover:bg-gray-50">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">{removal.employees?.name || 'N/A'}</div>
+                      <div className="text-xs text-gray-500">{removal.employees?.cpf ? formatCPF(removal.employees.cpf) : 'N/A'}</div>
+                    </div>
+                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 whitespace-nowrap">
+                      R$ {Number(removal.bonus_amount_removed).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                    <div className="bg-gray-50 rounded p-2">
+                      <span className="text-gray-500 block">Data Bonificação</span>
+                      <span className="text-gray-800 font-medium">{formatDateBR(removal.date)}</span>
+                    </div>
+                    <div className="bg-gray-50 rounded p-2">
+                      <span className="text-gray-500 block">Data Remoção</span>
+                      <span className="text-gray-800 font-medium">{formatDateBR(removal.removed_at.split('T')[0])}</span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-700 mb-1"><strong>Removido por:</strong> {removal.removed_by}</div>
+                  <div className="text-xs text-gray-700 break-words"><strong>Obs:</strong> {removal.observation}</div>
+                </div>
+              ))}
+            </div>
+
+            {displayedBonusRemovals.length === 0 && (
+              <div className="text-center py-8 px-4">
+                <History className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">
+                  Nenhuma remoção de bonificação encontrada
+                </h3>
+                <p className="text-sm text-gray-500">
+                  {historyEmployeeSearch
+                    ? 'Tente ajustar o termo de busca.'
+                    : 'Ajuste os filtros ou aguarde remoções serem registradas no período selecionado.'}
+                </p>
+              </div>
+            )}
+            </>
           )}
         </div>
       )}
 
       {/* Modal de Limpeza de Pagamentos */}
       {showClearModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow-xl max-w-[95vw] sm:max-w-md w-full max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium flex items-center text-red-600">
+              <h3 className="text-base sm:text-lg font-medium flex items-center text-red-600">
                 <AlertTriangle className="w-5 h-5 mr-2" />
                 Limpar Pagamentos
               </h3>
               <button
                 onClick={() => setShowClearModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 ✕
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div className="bg-red-50 border border-red-200 rounded-md p-3">
                 <p className="text-sm text-red-800">
@@ -1329,18 +1516,18 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 </div>
               </div>
               
-              <div className="flex space-x-3 pt-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4">
                 <button
                   onClick={handleClearPayments}
                   disabled={clearType === 'selected' && selectedEmployees.size === 0}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 min-h-[44px]"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Confirmar Limpeza</span>
                 </button>
                 <button
                   onClick={() => setShowClearModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px]"
                 >
                   Cancelar
                 </button>
@@ -1352,16 +1539,16 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
       {/* Modal de Desconto por Erros */}
       {showErrorDiscountModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow-xl max-w-[95vw] sm:max-w-md w-full max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium flex items-center text-orange-600">
+              <h3 className="text-base sm:text-lg font-medium flex items-center text-orange-600">
                 <Minus className="w-5 h-5 mr-2" />
                 Descontar por Erros
               </h3>
               <button
                 onClick={() => setShowErrorDiscountModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 ✕
               </button>
@@ -1406,17 +1593,17 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 </ul>
               </div>
 
-              <div className="flex space-x-3 pt-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4">
                 <button
                   onClick={handleErrorDiscount}
                   disabled={selectedEmployees.size === 0}
-                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="flex-1 px-4 py-3 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
                 >
                   Aplicar Desconto
                 </button>
                 <button
                   onClick={() => setShowErrorDiscountModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px]"
                 >
                   Cancelar
                 </button>

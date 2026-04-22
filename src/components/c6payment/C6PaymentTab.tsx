@@ -648,16 +648,16 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
       </div>
 
       {showBulkDateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow-xl max-w-[95vw] sm:max-w-md w-full max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium flex items-center text-orange-600">
+              <h3 className="text-base sm:text-lg font-medium flex items-center text-orange-600">
                 <Calendar className="w-5 h-5 mr-2" />
                 Alterar Data de Pagamento
               </h3>
               <button
                 onClick={() => setShowBulkDateModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 ✕
               </button>
@@ -672,7 +672,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                   type="date"
                   value={bulkDate}
                   onChange={(e) => setBulkDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 min-h-[44px] text-sm"
                   autoFocus
                 />
               </div>
@@ -689,20 +689,20 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                 <button
                   onClick={handleBulkDateChange}
                   disabled={!bulkDate || selectedRows.size === 0}
-                  className="w-full px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="w-full px-4 py-3 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
                 >
                   Alterar Selecionados
                 </button>
                 <button
                   onClick={handleChangeAllDates}
                   disabled={!bulkDate}
-                  className="w-full px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="w-full px-4 py-3 bg-orange-500 text-white rounded-md hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
                 >
                   Alterar Todos
                 </button>
                 <button
                   onClick={() => setShowBulkDateModal(false)}
-                  className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                  className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px]"
                 >
                   Cancelar
                 </button>
@@ -713,16 +713,16 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
       )}
 
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow-xl max-w-[95vw] sm:max-w-md w-full max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium flex items-center text-green-600">
+              <h3 className="text-base sm:text-lg font-medium flex items-center text-green-600">
                 <Check className="w-5 h-5 mr-2" />
                 Confirmar Exportação
               </h3>
               <button
                 onClick={() => setShowConfirmModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 ✕
               </button>
@@ -744,17 +744,17 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                 A planilha será gerada no formato exato do Banco C6 e o download iniciará automaticamente.
               </p>
 
-              <div className="flex space-x-3 pt-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4">
                 <button
                   onClick={confirmExport}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+                  className="flex-1 px-4 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center justify-center gap-2 min-h-[44px]"
                 >
                   <Download className="w-4 h-4" />
                   <span>Confirmar e Baixar</span>
                 </button>
                 <button
                   onClick={() => setShowConfirmModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px]"
                 >
                   Cancelar
                 </button>

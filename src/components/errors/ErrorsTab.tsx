@@ -322,43 +322,45 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
   const chartData = getChartData();
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-2 rounded-lg shadow flex gap-2">
-        <button
-          onClick={() => setActiveSubTab('individual')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeSubTab === 'individual'
-              ? 'bg-orange-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          Erros Individuais
-        </button>
-        {hasPermission('errors.viewTriage') && (
+    <div className="space-y-4 sm:space-y-6">
+      <div className="bg-white p-2 rounded-lg shadow overflow-x-auto">
+        <div className="flex gap-2 min-w-max">
           <button
-            onClick={() => setActiveSubTab('triage')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeSubTab === 'triage'
-                ? 'bg-blue-600 text-white'
+            onClick={() => setActiveSubTab('individual')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors min-h-[44px] whitespace-nowrap ${
+              activeSubTab === 'individual'
+                ? 'bg-orange-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            <FileSearch className="w-4 h-4" />
-            Triagem
+            <Package className="w-4 h-4" />
+            Erros Individuais
           </button>
-        )}
-        <button
-          onClick={() => setActiveSubTab('periods')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeSubTab === 'periods'
-              ? 'bg-purple-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          Períodos de Pagamento
-        </button>
+          {hasPermission('errors.viewTriage') && (
+            <button
+              onClick={() => setActiveSubTab('triage')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors min-h-[44px] whitespace-nowrap ${
+                activeSubTab === 'triage'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <FileSearch className="w-4 h-4" />
+              Triagem
+            </button>
+          )}
+          <button
+            onClick={() => setActiveSubTab('periods')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors min-h-[44px] whitespace-nowrap ${
+              activeSubTab === 'periods'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            Períodos de Pagamento
+          </button>
+        </div>
       </div>
 
       {activeSubTab === 'triage' ? (
@@ -368,27 +370,27 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
       ) : (
       <>
       {/* Header */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold flex items-center">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-lg sm:text-xl font-semibold flex items-center">
             <AlertTriangle className="w-5 h-5 mr-2 text-orange-600" />
             Gestão de Erros
           </h2>
-          
-          <div className="flex space-x-3">
+
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button
               onClick={loadData}
-              className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+              className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors min-h-[44px] w-full sm:w-auto"
             >
               <RefreshCw className="w-4 h-4" />
               <span>Atualizar</span>
             </button>
-            
+
             <button
               onClick={() => handleAddError()}
               disabled={!hasPermission('errors.create')}
               title={!hasPermission('errors.create') ? 'Você não tem permissão para criar registros de erro' : ''}
-              className="flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] w-full sm:w-auto"
             >
               <Plus className="w-4 h-4" />
               <span>Registrar Erro</span>
@@ -397,7 +399,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
         </div>
 
         {/* Filtros */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Data Inicial
@@ -408,7 +410,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
               onChange={(e) => handleDateChange('startDate', e.target.value)}
               onFocus={() => handleDateFocus('startDate')}
               onBlur={() => handleDateBlur('startDate')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 min-h-[44px] text-sm"
             />
           </div>
 
@@ -422,7 +424,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
               onChange={(e) => handleDateChange('endDate', e.target.value)}
               onFocus={() => handleDateFocus('endDate')}
               onBlur={() => handleDateBlur('endDate')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 min-h-[44px] text-sm"
             />
           </div>
 
@@ -433,7 +435,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
             <select
               value={filters.employeeId}
               onChange={(e) => setFilters(prev => ({ ...prev, employeeId: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 min-h-[44px] text-sm"
             >
               <option value="">Todos</option>
               {employees.map(employee => (
@@ -452,7 +454,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
         </div>
 
         {/* Estatísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-red-50 p-4 rounded-lg border border-red-200">
             <div className="flex items-center justify-between">
               <span className="text-red-800 font-medium">Total de Erros</span>
@@ -587,26 +589,27 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
 
       {/* Lista de Funcionários */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <h3 className="text-lg font-medium text-gray-900">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            <h3 className="text-base sm:text-lg font-medium text-gray-900">
               Funcionários e Erros ({filteredEmployees.length})
             </h3>
-            
-            <div className="relative">
+
+            <div className="relative w-full sm:w-auto">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
                 placeholder="Buscar por nome ou CPF..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 sm:w-64"
+                className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 min-h-[44px] text-sm"
               />
             </div>
           </div>
         </div>
-        
-        <div className="overflow-x-auto">
+
+        {/* Desktop: tabela */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -752,13 +755,122 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
           </table>
         </div>
 
+        {/* Mobile: cards */}
+        <div className="md:hidden divide-y divide-gray-200">
+          {filteredEmployees.map((employeeData) => (
+            <div key={employeeData.employee.id} className="p-4 hover:bg-gray-50">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900 truncate">{employeeData.employee.name}</div>
+                  <div className="text-xs text-gray-500">{formatCPF(employeeData.employee.cpf)}</div>
+                </div>
+                {hasPermission('errors.create') && (
+                  <button
+                    onClick={() => handleAddError(employeeData.employee.id, filters.startDate)}
+                    className="p-2 text-orange-600 hover:bg-orange-50 rounded-md transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                    title="Adicionar Erro"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="bg-blue-50 rounded p-2">
+                  <span className="text-xs text-blue-800 block">Dias</span>
+                  <span className="text-sm font-semibold text-blue-700">{employeeData.workDays}</span>
+                </div>
+                <div className={`rounded p-2 ${
+                  employeeData.totalErrors === 0
+                    ? 'bg-green-50'
+                    : employeeData.totalErrors <= 5
+                    ? 'bg-yellow-50'
+                    : 'bg-red-50'
+                }`}>
+                  <span className="text-xs block opacity-80">Erros</span>
+                  <span className={`text-sm font-semibold ${
+                    employeeData.totalErrors === 0
+                      ? 'text-green-700'
+                      : employeeData.totalErrors <= 5
+                      ? 'text-yellow-700'
+                      : 'text-red-700'
+                  }`}>{employeeData.totalErrors}</span>
+                </div>
+                <div className="bg-gray-50 rounded p-2">
+                  <span className="text-xs text-gray-500 block">Taxa</span>
+                  <span className="text-sm font-semibold text-gray-700">{employeeData.errorRate.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  const row = document.getElementById(`errors-m-${employeeData.employee.id}`);
+                  if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+                }}
+                className="w-full px-4 py-2 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors text-sm font-medium min-h-[44px]"
+              >
+                Ver Detalhes
+              </button>
+
+              <div id={`errors-m-${employeeData.employee.id}`} style={{ display: 'none' }} className="mt-3 space-y-2">
+                {employeeData.errorRecords.length > 0 ? (
+                  employeeData.errorRecords.map((errorRecord) => {
+                    const type: ErrorType = (errorRecord.error_type ?? 'quantity');
+                    const isValue = type === 'value';
+                    return (
+                      <div key={errorRecord.id} className="bg-gray-50 p-3 rounded border">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-sm font-medium">{formatDateBR(errorRecord.date)}</div>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            isValue ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {isValue ? '💰 Valor' : '📦 Qtd'}
+                          </span>
+                        </div>
+                        <div className="text-sm text-red-600 font-bold">
+                          {isValue
+                            ? `R$ ${Number(errorRecord.error_value ?? 0).toFixed(2).replace('.', ',')}`
+                            : `${errorRecord.error_count} erro(s)`}
+                        </div>
+                        {errorRecord.observations && (
+                          <div className="text-xs text-gray-600 mt-1">{errorRecord.observations}</div>
+                        )}
+                        <div className="flex gap-2 mt-2">
+                          {hasPermission('errors.edit') && (
+                            <button
+                              onClick={() => handleEditError(employeeData.employee.id, errorRecord.date)}
+                              className="flex-1 py-2 bg-blue-50 text-blue-600 rounded text-xs font-medium min-h-[40px]"
+                            >
+                              <Edit2 className="w-3 h-3 inline mr-1" /> Editar
+                            </button>
+                          )}
+                          {hasPermission('errors.delete') && (
+                            <button
+                              onClick={() => handleDeleteError(errorRecord.id)}
+                              className="flex-1 py-2 bg-red-50 text-red-600 rounded text-xs font-medium min-h-[40px]"
+                            >
+                              <Trash2 className="w-3 h-3 inline mr-1" /> Excluir
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-gray-500 px-2">Nenhum erro registrado.</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
         {filteredEmployees.length === 0 && (
-          <div className="text-center py-8">
+          <div className="text-center py-8 px-4">
             <AlertTriangle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum funcionário encontrado</h3>
-            <p className="text-gray-500">
-              {searchTerm 
-                ? 'Tente ajustar os termos de busca.' 
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">Nenhum funcionário encontrado</h3>
+            <p className="text-sm text-gray-500">
+              {searchTerm
+                ? 'Tente ajustar os termos de busca.'
                 : 'Nenhum funcionário trabalhou no período selecionado.'
               }
             </p>
@@ -768,22 +880,23 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
 
       {/* Modal de Registro de Erro */}
       {showErrorForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium flex items-center">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-[95vw] sm:max-w-md w-full max-h-[95vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b">
+              <h3 className="text-base sm:text-lg font-medium flex items-center">
                 <AlertTriangle className="w-5 h-5 mr-2 text-orange-600" />
                 {editingError ? 'Editar Erro' : 'Registrar Erro'}
               </h3>
               <button
                 onClick={resetErrorForm}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 ✕
               </button>
             </div>
-            
-            <form onSubmit={handleSubmitError} className="space-y-4">
+
+            <form onSubmit={handleSubmitError} className="flex flex-col flex-1 overflow-hidden">
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Funcionário *
@@ -791,7 +904,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                 <select
                   value={errorFormData.employeeId}
                   onChange={(e) => setErrorFormData(prev => ({ ...prev, employeeId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 min-h-[44px] text-sm"
                   required
                   disabled={!!editingError}
                 >
@@ -812,7 +925,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                   type="date"
                   value={errorFormData.date}
                   onChange={(e) => setErrorFormData(prev => ({ ...prev, date: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 min-h-[44px] text-sm"
                   required
                   disabled={!!editingError}
                 />
@@ -859,7 +972,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                     min="0"
                     value={errorFormData.errorCount}
                     onChange={(e) => setErrorFormData(prev => ({ ...prev, errorCount: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 min-h-[44px] text-sm"
                     placeholder="0"
                     required
                   />
@@ -875,7 +988,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                     step="0.01"
                     value={errorFormData.errorValue}
                     onChange={(e) => setErrorFormData(prev => ({ ...prev, errorValue: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 min-h-[44px] text-sm"
                     placeholder="0,00"
                     required
                   />
@@ -892,28 +1005,31 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                 <textarea
                   value={errorFormData.observations}
                   onChange={(e) => setErrorFormData(prev => ({ ...prev, observations: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 min-h-[44px] text-sm"
                   rows={3}
                   placeholder="Descreva os erros ou observações..."
                   required
                 />
               </div>
               
-              <div className="flex space-x-3 pt-4">
+            </div>
+            <div className="p-4 sm:p-6 border-t bg-gray-50">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
+                  className="flex-1 px-4 py-3 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors min-h-[44px]"
                 >
                   {editingError ? 'Atualizar' : 'Registrar'}
                 </button>
                 <button
                   type="button"
                   onClick={resetErrorForm}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px]"
                 >
                   Cancelar
                 </button>
               </div>
+            </div>
             </form>
           </div>
         </div>

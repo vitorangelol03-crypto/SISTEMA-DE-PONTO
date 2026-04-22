@@ -501,24 +501,24 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   const stats = getStatistics();
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold flex items-center">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-lg sm:text-xl font-semibold flex items-center">
             <BarChart3 className="w-5 h-5 mr-2 text-blue-600" />
             Relatórios e Estatísticas
           </h2>
-          
+
           <button
             onClick={loadData}
-            className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+            className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors min-h-[44px] w-full sm:w-auto"
           >
             <RefreshCw className="w-4 h-4" />
             <span>Atualizar</span>
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
             <div className="flex items-center justify-between">
               <span className="text-blue-800 font-medium">Total</span>
@@ -553,13 +553,13 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex items-center space-x-2 mb-4">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+        <div className="flex items-center gap-2 mb-4">
           <Filter className="w-5 h-5 text-gray-600" />
-          <h3 className="text-lg font-medium">Filtros</h3>
+          <h3 className="text-base sm:text-lg font-medium">Filtros</h3>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Data Inicial
@@ -568,7 +568,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
               type="date"
               value={filters.startDate}
               onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
             />
           </div>
 
@@ -580,7 +580,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
               type="date"
               value={filters.endDate}
               onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
             />
           </div>
 
@@ -591,7 +591,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
             <select
               value={filters.employeeId}
               onChange={(e) => setFilters(prev => ({ ...prev, employeeId: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
             >
               <option value="">Todos</option>
               {employees.map(employee => (
@@ -609,7 +609,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
             <select
               value={filters.status}
               onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value as '' | 'present' | 'absent' }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
             >
               <option value="">Todos</option>
               <option value="present">Presente</option>
@@ -630,7 +630,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
             <select
               value={filters.approvalStatus}
               onChange={(e) => setFilters(prev => ({ ...prev, approvalStatus: e.target.value as typeof filters.approvalStatus }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
             >
               <option value="">Todos</option>
               <option value="pending">🟡 Pendente</option>
@@ -641,20 +641,20 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3">
           <button
             onClick={clearFilters}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px] w-full sm:w-auto"
           >
             Limpar Filtros
           </button>
 
-          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-700">
+          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-700 min-h-[44px] px-1">
             <input
               type="checkbox"
               checked={showRejected}
               onChange={(e) => setShowRejected(e.target.checked)}
-              className="w-4 h-4 accent-red-500"
+              className="w-5 h-5 accent-red-500"
             />
             Mostrar rejeitados
           </label>
@@ -663,7 +663,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
             onClick={exportToExcel}
             disabled={!hasPermission('reports.export') || displayedAttendances.length === 0}
             title={!hasPermission('reports.export') ? 'Você não tem permissão para exportar relatórios' : ''}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors disabled:bg-gray-300"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors disabled:bg-gray-300 min-h-[44px] w-full sm:w-auto"
           >
             <Download className="w-4 h-4" />
             <span>Exportar Excel</span>
@@ -673,7 +673,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
             onClick={exportToPDF}
             disabled={!hasPermission('reports.export') || displayedAttendances.length === 0}
             title={!hasPermission('reports.export') ? 'Você não tem permissão para exportar relatórios' : ''}
-            className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors disabled:bg-gray-300"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors disabled:bg-gray-300 min-h-[44px] w-full sm:w-auto"
           >
             <Printer className="w-4 h-4" />
             <span>Exportar PDF</span>
@@ -682,25 +682,25 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <h3 className="text-lg font-medium text-gray-900">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            <h3 className="text-base sm:text-lg font-medium text-gray-900">
               Registros de Ponto ({displayedAttendances.length})
             </h3>
-            
-            <div className="relative">
+
+            <div className="relative w-full sm:w-auto">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
                 placeholder="Buscar por nome ou CPF..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 sm:w-64"
+                className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
               />
             </div>
           </div>
         </div>
-        
+
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -804,8 +804,8 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
 
       {periodSummary.length > 0 && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-purple-50">
-            <h3 className="text-lg font-medium text-purple-900 flex items-center">
+          <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-purple-50">
+            <h3 className="text-base sm:text-lg font-medium text-purple-900 flex items-center">
               <BarChart3 className="w-5 h-5 mr-2 text-purple-600" />
               Resumo do Período ({periodSummary.length} funcionário{periodSummary.length !== 1 ? 's' : ''})
             </h3>

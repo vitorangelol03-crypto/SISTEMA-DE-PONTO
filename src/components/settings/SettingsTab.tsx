@@ -69,9 +69,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold flex items-center mb-6">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+        <h2 className="text-lg sm:text-xl font-semibold flex items-center mb-6">
           <Settings className="w-5 h-5 mr-2 text-blue-600" />
           Configurações do Sistema
         </h2>
@@ -131,8 +131,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
       </div>
 
       {isAdmin && (
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold flex items-center mb-2 text-gray-800">
+        <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+          <h3 className="text-base sm:text-lg font-semibold flex items-center mb-2 text-gray-800">
             <DollarSign className="w-5 h-5 mr-2 text-emerald-600" />
             Valores Padrão de Bonificação
           </h3>
@@ -144,12 +144,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
           {loadingDefaults ? (
             <p className="text-sm text-gray-500">Carregando valores atuais...</p>
           ) : (
-            <div className="space-y-3 max-w-md">
+            <div className="space-y-4 max-w-md">
               {(['B', 'C1', 'C2'] as BonusType[]).map(type => {
                 const saving = savingType === type;
                 return (
-                  <div key={type} className="flex items-center gap-3">
-                    <label className="w-20 text-sm font-medium text-gray-700">
+                  <div key={type} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                    <label className="w-full sm:w-20 text-sm font-medium text-gray-700">
                       Tipo {type}
                     </label>
                     <div className="flex items-center gap-2 flex-1">
@@ -163,13 +163,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
                           setBonusDefaults(prev => ({ ...prev, [type]: e.target.value }))
                         }
                         disabled={saving}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-base"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-base min-h-[44px]"
                         placeholder="0.00"
                       />
                       <button
                         onClick={() => handleSaveBonusDefault(type)}
                         disabled={saving}
-                        className="flex items-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50 transition-colors font-medium"
+                        className="flex items-center justify-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50 transition-colors font-medium min-h-[44px] whitespace-nowrap"
                       >
                         <Save className="w-4 h-4" />
                         {saving ? 'Salvando...' : 'Salvar'}
@@ -187,8 +187,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
         </div>
       )}
 
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-4 text-gray-800">Instruções de Uso</h3>
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+        <h3 className="text-base sm:text-lg font-semibold mb-4 text-gray-800">Instruções de Uso</h3>
 
         <div className="space-y-4 text-sm text-gray-600">
           <div>

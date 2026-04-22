@@ -130,20 +130,20 @@ export function PermissionsModal({
   });
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Shield className="w-6 h-6 text-blue-600" />
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Gerenciar Permissões</h2>
-                <p className="text-sm text-gray-600">{userName}</p>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-[95vw] sm:max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+        <div className="p-4 sm:p-6 border-b border-gray-200">
+          <div className="flex items-start justify-between mb-4 gap-2">
+            <div className="flex items-center gap-3 min-w-0">
+              <Shield className="w-6 h-6 text-blue-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-xl font-bold text-gray-900 truncate">Gerenciar Permissões</h2>
+                <p className="text-xs sm:text-sm text-gray-600 truncate">{userName}</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-gray-400 hover:text-gray-600 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center flex-shrink-0"
             >
               <X className="w-6 h-6" />
             </button>
@@ -152,25 +152,25 @@ export function PermissionsModal({
           <div className="flex flex-wrap gap-2 mb-4">
             <button
               onClick={() => applyTemplate(DEFAULT_ADMIN_PERMISSIONS)}
-              className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium"
+              className="px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium min-h-[40px]"
             >
               Acesso Total
             </button>
             <button
               onClick={() => applyTemplate(DEFAULT_SUPERVISOR_PERMISSIONS)}
-              className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
+              className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium min-h-[40px]"
             >
               Supervisor
             </button>
             <button
               onClick={() => applyTemplate(DEFAULT_READONLY_PERMISSIONS)}
-              className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+              className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium min-h-[40px]"
             >
               Apenas Visualização
             </button>
             <button
               onClick={() => setPermissions(currentPermissions || DEFAULT_READONLY_PERMISSIONS)}
-              className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors text-sm font-medium flex items-center gap-1"
+              className="px-3 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors text-sm font-medium flex items-center gap-1 min-h-[40px]"
             >
               <RotateCcw className="w-4 h-4" />
               Resetar
@@ -184,12 +184,12 @@ export function PermissionsModal({
               placeholder="Buscar permissões..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] text-sm"
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="space-y-3">
             {filteredSections.map(section => {
               const sectionKey = section as keyof UserPermissions;
@@ -264,17 +264,17 @@ export function PermissionsModal({
           </div>
         </div>
 
-        <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+        <div className="p-4 sm:p-6 border-t border-gray-200 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+            className="w-full sm:w-auto px-4 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium min-h-[44px]"
           >
             Cancelar
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full sm:w-auto px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
           >
             <Save className="w-5 h-5" />
             {saving ? 'Salvando...' : 'Salvar Permissões'}

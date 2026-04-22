@@ -155,24 +155,24 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
             )}
           </h3>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
             <input
               type="date"
               value={dateFilter}
               onChange={e => setDateFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 min-h-[44px] w-full sm:w-auto"
             />
             {dateFilter && (
               <button
                 onClick={() => setDateFilter('')}
-                className="text-xs text-gray-500 hover:text-gray-700 underline"
+                className="text-sm text-gray-500 hover:text-gray-700 underline min-h-[44px] flex items-center"
               >
                 Limpar filtro
               </button>
             )}
             <button
               onClick={load}
-              className="flex items-center gap-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+              className="flex items-center justify-center gap-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors min-h-[44px] w-full sm:w-auto"
             >
               <RefreshCw className="w-4 h-4" />
               Atualizar
@@ -181,14 +181,14 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
         </div>
 
         {selected.size > 0 && (
-          <div className="mt-3 flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
             <span className="text-sm text-green-800 font-medium">
               {selected.size} selecionado(s)
             </span>
             <button
               onClick={handleBulkApprove}
               disabled={actionLoading}
-              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
+              className="flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:w-auto"
             >
               <CheckCheck className="w-4 h-4" />
               Aprovar Todos
@@ -211,7 +211,8 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Desktop: tabela */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
@@ -321,19 +322,105 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
               </tbody>
             </table>
           </div>
+
+          {/* Mobile: cards */}
+          <div className="md:hidden divide-y divide-gray-200">
+            {records.map(att => {
+              const alerts = fraudAlerts(att);
+              const statusKey = (att.approval_status ?? 'pending') as ApprovalStatus;
+              const badge = STATUS_BADGE[statusKey] ?? STATUS_BADGE.pending;
+
+              return (
+                <div key={att.id} className={`p-4 ${selected.has(att.id) ? 'bg-green-50' : 'hover:bg-gray-50'}`}>
+                  <div className="flex items-start gap-3 mb-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(att.id)}
+                      onChange={() => toggleSelect(att.id)}
+                      className="mt-1 rounded border-gray-300 w-5 h-5"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <h4 className="text-sm font-semibold text-gray-900 truncate">{att.employees?.name ?? '-'}</h4>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${badge.cls}`}>
+                          {badge.label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500">CPF: {att.employees?.cpf ?? ''}</p>
+                      <p className="text-xs text-gray-500">Data: {formatDateBR(att.date)}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                    <div className="bg-gray-50 rounded px-2 py-1">
+                      <span className="text-xs text-gray-500 block">Entrada</span>
+                      <span className="text-gray-800 font-mono">{formatTime(att.entry_time)}</span>
+                    </div>
+                    <div className="bg-gray-50 rounded px-2 py-1">
+                      <span className="text-xs text-gray-500 block">Saída</span>
+                      <span className="text-gray-800 font-mono">{formatTime(att.exit_time_full)}</span>
+                    </div>
+                    <div className="bg-gray-50 rounded px-2 py-1">
+                      <span className="text-xs text-gray-500 block">Horas</span>
+                      <span className="text-gray-800">{formatHours(att.hours_worked)}</span>
+                    </div>
+                    <div className="bg-gray-50 rounded px-2 py-1">
+                      <span className="text-xs text-gray-500 block">Noturnas</span>
+                      <span className="text-gray-800">{att.night_hours ? formatHours(att.night_hours) : '-'}</span>
+                    </div>
+                  </div>
+
+                  {alerts.length > 0 && (
+                    <div className="mb-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                      <div className="flex items-start gap-1">
+                        <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                          {alerts.map((a, i) => (
+                            <p key={i} className="text-xs text-amber-700">{a}</p>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={() => handleApprove(att.id)}
+                      disabled={actionLoading}
+                      className="flex items-center justify-center gap-1 px-3 py-2 bg-green-100 text-green-700 text-sm font-medium rounded-md hover:bg-green-200 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:flex-1"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Aprovar
+                    </button>
+                    <button
+                      onClick={() => {
+                        setRejectModal({ id: att.id, name: att.employees?.name ?? 'Funcionário' });
+                        setRejectReason('');
+                      }}
+                      disabled={actionLoading}
+                      className="flex items-center justify-center gap-1 px-3 py-2 bg-red-100 text-red-700 text-sm font-medium rounded-md hover:bg-red-200 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:flex-1"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Rejeitar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* Modal de rejeição */}
       {rejectModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-            <div className="p-5 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] sm:max-w-md max-h-[95vh] flex flex-col">
+            <div className="p-4 sm:p-5 border-b">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">
                 Rejeitar registro — {rejectModal.name}
               </h3>
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Motivo da rejeição *
@@ -346,17 +433,19 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500 text-sm resize-none"
                 />
               </div>
-              <div className="flex gap-3">
+            </div>
+            <div className="p-4 sm:p-5 border-t bg-gray-50">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <button
                   onClick={handleRejectConfirm}
                   disabled={actionLoading || rejectReason.trim().length < 5}
-                  className="flex-1 py-2.5 bg-red-600 text-white font-medium rounded-md hover:bg-red-700 disabled:opacity-50 transition-colors"
+                  className="flex-1 py-3 bg-red-600 text-white font-medium rounded-md hover:bg-red-700 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:w-auto"
                 >
                   {actionLoading ? 'Rejeitando...' : 'Confirmar Rejeição'}
                 </button>
                 <button
                   onClick={() => setRejectModal(null)}
-                  className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                  className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px] w-full sm:w-auto"
                 >
                   Cancelar
                 </button>

@@ -505,14 +505,14 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       </div>
 
       {showForm && (
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium">
+            <h3 className="text-base sm:text-lg font-medium">
               {editingEmployee ? 'Editar Funcionário' : 'Novo Funcionário'}
             </h3>
             <button
               onClick={resetForm}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               ✕
             </button>
@@ -828,11 +828,11 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
         {/* Mobile View - Cards */}
         <div className="md:hidden divide-y divide-gray-200">
           {filteredEmployees.map((employee) => (
-            <div key={employee.id} className="p-4 hover:bg-gray-50">
+            <div key={employee.id} className="p-4 hover:bg-gray-50 overflow-hidden">
               <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h4 className="text-sm font-medium text-gray-900">{employee.name}</h4>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <h4 className="text-sm font-medium text-gray-900 break-words">{employee.name}</h4>
                     {employee.employment_type && (
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                         employee.employment_type === 'Diarista'
@@ -843,9 +843,9 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">CPF: {formatCPF(employee.cpf)}</p>
+                  <p className="text-xs text-gray-500 mt-1 break-words">CPF: {formatCPF(employee.cpf)}</p>
                   {employee.pix_key && (
-                    <p className="text-xs text-gray-500 mt-1">PIX: {employee.pix_key}</p>
+                    <p className="text-xs text-gray-500 mt-1 break-words">PIX: {employee.pix_key}</p>
                   )}
                   <p className="text-xs mt-1">
                     PIN:{' '}
@@ -859,40 +859,40 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                 </div>
               </div>
 
-              <div className="flex gap-2 mt-3">
+              <div className="grid grid-cols-2 gap-2 mt-3">
                 {hasPermission('employees.edit') && (
                   <button
                     onClick={() => handleEdit(employee)}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors min-h-[48px]"
+                    className="w-full inline-flex items-center justify-center gap-1 px-2 py-3 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors min-h-[48px]"
                   >
-                    <Edit2 className="w-4 h-4" />
+                    <Edit2 className="w-4 h-4 flex-shrink-0" />
                     <span>Editar</span>
                   </button>
                 )}
                 {hasPermission('employees.edit') && (
                   <button
                     onClick={() => { setPinModal({ employee }); setPinInput(''); }}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors min-h-[48px]"
+                    className="w-full inline-flex items-center justify-center gap-1 px-2 py-3 text-sm font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors min-h-[48px]"
                   >
-                    <KeyRound className="w-4 h-4" />
+                    <KeyRound className="w-4 h-4 flex-shrink-0" />
                     <span>PIN</span>
                   </button>
                 )}
                 {hasPermission('employees.edit') && employee.pin_configured && (
                   <button
                     onClick={() => setResetModal({ employee })}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors min-h-[48px]"
+                    className="w-full inline-flex items-center justify-center gap-1 px-2 py-3 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors min-h-[48px]"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-4 h-4 flex-shrink-0" />
                     <span>Reset</span>
                   </button>
                 )}
                 {hasPermission('employees.delete') && (
                   <button
                     onClick={() => handleDelete(employee)}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors min-h-[48px]"
+                    className="w-full inline-flex items-center justify-center gap-1 px-2 py-3 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors min-h-[48px]"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4 flex-shrink-0" />
                     <span>Excluir</span>
                   </button>
                 )}
@@ -1007,22 +1007,22 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       )}
 
       {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-6 border-b">
-              <h3 className="text-xl font-semibold flex items-center">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-[95vw] sm:max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b">
+              <h3 className="text-base sm:text-xl font-semibold flex items-center">
                 <FileSpreadsheet className="w-5 h-5 mr-2 text-green-600" />
-                Importar Funcionários em Massa
+                <span className="truncate">Importar Funcionários em Massa</span>
               </h3>
               <button
                 onClick={handleCloseImportModal}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center flex-shrink-0"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               {importStep === 'upload' && (
                 <div className="space-y-6">
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -1116,7 +1116,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
               {importStep === 'preview' && importValidation && (
                 <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-green-700">Funcionários Válidos</span>
@@ -1142,7 +1142,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                         Funcionários que serão importados:
                       </h4>
                       <div className="border rounded-lg overflow-hidden">
-                        <div className="max-h-64 overflow-y-auto">
+                        <div className="max-h-64 overflow-y-auto overflow-x-auto">
                           <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                               <tr>
@@ -1192,7 +1192,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                         </button>
                       </div>
                       <div className="border border-red-200 rounded-lg overflow-hidden">
-                        <div className="max-h-48 overflow-y-auto">
+                        <div className="max-h-48 overflow-y-auto overflow-x-auto">
                           <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-red-50">
                               <tr>
@@ -1243,14 +1243,14 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 sm:p-6 text-center">
                       <div className="text-3xl font-bold text-green-600 mb-1">
                         {importResult.success}
                       </div>
                       <div className="text-sm text-green-700">Importados com Sucesso</div>
                     </div>
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 sm:p-6 text-center">
                       <div className="text-3xl font-bold text-red-600 mb-1">
                         {importResult.errors}
                       </div>
@@ -1270,20 +1270,20 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
               )}
             </div>
 
-            <div className="border-t p-6 bg-gray-50">
-              <div className="flex justify-end space-x-3">
+            <div className="border-t p-4 sm:p-6 bg-gray-50">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
                 {importStep === 'upload' && (
                   <>
                     <button
                       onClick={handleCloseImportModal}
-                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                      className="w-full sm:w-auto px-4 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px]"
                     >
                       Cancelar
                     </button>
                     <button
                       onClick={handleProcessFile}
                       disabled={!importFile || importing}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                      className="w-full sm:w-auto px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[44px]"
                     >
                       {importing && <RefreshCw className="w-4 h-4 animate-spin" />}
                       <span>{importing ? 'Processando...' : 'Processar Planilha'}</span>
@@ -1295,14 +1295,14 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   <>
                     <button
                       onClick={() => setImportStep('upload')}
-                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                      className="w-full sm:w-auto px-4 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px]"
                     >
                       Voltar
                     </button>
                     <button
                       onClick={handleConfirmImport}
                       disabled={!importValidation || importValidation.valid.length === 0 || importing}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                      className="w-full sm:w-auto px-4 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[44px]"
                     >
                       {importing && <RefreshCw className="w-4 h-4 animate-spin" />}
                       <span>
@@ -1317,7 +1317,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                 {importStep === 'result' && (
                   <button
                     onClick={handleCloseImportModal}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    className="w-full sm:w-auto px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors min-h-[44px]"
                   >
                     Concluir
                   </button>

@@ -43,8 +43,8 @@ function getBrazilToday(): string {
 
 const FilterBar: React.FC<{ children: React.ReactNode; onClear: () => void; count: number; total: number }> = ({ children, onClear, count, total }) => (
   <div className="mb-3 space-y-2">
-    <div className="flex flex-wrap items-end gap-3">{children}
-      <button onClick={onClear} className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-md">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end gap-2 sm:gap-3">{children}
+      <button onClick={onClear} className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-md min-h-[44px] w-full sm:w-auto flex items-center justify-center">
         <X className="w-3 h-3 inline mr-1" />Limpar filtros
       </button>
     </div>
@@ -53,14 +53,14 @@ const FilterBar: React.FC<{ children: React.ReactNode; onClear: () => void; coun
 );
 
 const FilterField: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <div>
+  <div className="w-full">
     <label className="block text-xs text-gray-500 mb-1">{label}</label>
     {children}
   </div>
 );
 
-const inputCls = 'px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-gray-500 focus:outline-none';
-const selectCls = `${inputCls} min-w-[140px]`;
+const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-gray-500 focus:outline-none min-h-[44px]';
+const selectCls = `${inputCls} lg:min-w-[140px]`;
 
 export const AdminTab: React.FC<AdminTabProps> = () => {
   // ─── Auth ─────────────────────────────────────────────────────────────────
@@ -365,12 +365,12 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
 
   // ─── Main panel ───────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-800">Painel Admin</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <h2 className="text-base sm:text-lg font-semibold text-gray-800">Painel Admin</h2>
         <button onClick={loadData} disabled={loading}
-          className="flex items-center gap-1 px-4 py-2 bg-gray-800 text-white text-sm rounded-md hover:bg-gray-900 disabled:opacity-50 transition-colors">
+          className="flex items-center justify-center gap-1 px-4 py-2 bg-gray-800 text-white text-sm rounded-md hover:bg-gray-900 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:w-auto">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Recarregar
         </button>
@@ -379,7 +379,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {/* SECTION 1: Geo Records                                             */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white p-5 rounded-lg shadow">
+      <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
         <h3 className="text-base font-semibold flex items-center gap-2 text-gray-800 mb-3">
           <MapPin className="w-5 h-5 text-blue-600" />
           Registros de Geolocalização
@@ -470,7 +470,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {/* SECTION 2: Fraud Attempts                                          */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white p-5 rounded-lg shadow">
+      <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
         <h3 className="text-base font-semibold flex items-center gap-2 text-gray-800 mb-3">
           <AlertTriangle className="w-5 h-5 text-red-600" />
           Tentativas Suspeitas
@@ -552,7 +552,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {/* SECTION 3: Bonus Blocks                                            */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white p-5 rounded-lg shadow">
+      <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
         <h3 className="text-base font-semibold flex items-center gap-2 text-gray-800 mb-3">
           <ShieldOff className="w-5 h-5 text-amber-600" />
           Bloqueios de Bonificação
@@ -621,7 +621,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {/* SECTION 5: Manual Cleanup                                          */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white p-5 rounded-lg shadow">
+      <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
         <h3 className="text-base font-semibold flex items-center gap-2 text-gray-800 mb-4">
           <Trash2 className="w-5 h-5 text-gray-600" />
           Limpeza de Dados
@@ -671,7 +671,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
           {cleanupPreview && (
             <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
               <p className="text-sm font-medium text-amber-800">Registros que serão processados:</p>
-              <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 text-center">
                 {cleanupTables.fraud && (
                   <div className="bg-white rounded-lg p-2">
                     <p className="text-lg font-bold text-red-600">{cleanupPreview.fraud_attempts}</p>
@@ -723,7 +723,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {/* SECTION 6: Auto Cleanup                                            */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white p-5 rounded-lg shadow">
+      <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
         <h3 className="text-base font-semibold flex items-center gap-2 text-gray-800 mb-4">
           <Settings className="w-5 h-5 text-gray-600" />
           Limpeza Automática
@@ -742,7 +742,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
               )}
             </div>
 
-            <div className="flex items-end gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3">
               <FilterField label="Intervalo">
                 <select value={autoInterval} onChange={e => setAutoInterval(Number(e.target.value))} className={selectCls}>
                   <option value={3}>A cada 3 meses</option>
@@ -752,7 +752,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
               </FilterField>
               {autoInterval !== (autoConfig?.interval_months ?? 6) && (
                 <button onClick={handleSaveAutoInterval} disabled={autoSaving}
-                  className="px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                  className="px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:w-auto">
                   Salvar
                 </button>
               )}
@@ -769,11 +769,11 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
               </p>
             )}
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-2">
               <button
                 onClick={handleToggleAuto}
                 disabled={autoSaving}
-                className={`flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-md disabled:opacity-50 transition-colors ${
+                className={`flex items-center justify-center gap-1 px-4 py-2 text-sm font-medium rounded-md disabled:opacity-50 transition-colors min-h-[44px] w-full sm:w-auto ${
                   autoConfig?.enabled
                     ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                     : 'bg-green-600 text-white hover:bg-green-700'
@@ -784,7 +784,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
               <button
                 onClick={handleRunAutoNow}
                 disabled={autoRunning}
-                className="flex items-center gap-1 px-4 py-2 bg-amber-100 text-amber-700 text-sm font-medium rounded-md hover:bg-amber-200 disabled:opacity-50 transition-colors"
+                className="flex items-center justify-center gap-1 px-4 py-2 bg-amber-100 text-amber-700 text-sm font-medium rounded-md hover:bg-amber-200 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:w-auto"
               >
                 <Play className="w-4 h-4" />
                 {autoRunning ? 'Executando...' : 'Executar agora'}
@@ -797,7 +797,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {/* SECTION 7: Change Password                                         */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white p-5 rounded-lg shadow max-w-md">
+      <div className="bg-white p-4 sm:p-5 rounded-lg shadow max-w-md">
         <h3 className="text-base font-semibold flex items-center gap-2 text-gray-800 mb-4">
           <Key className="w-5 h-5 text-gray-600" />
           Alterar Senha Admin
@@ -808,19 +808,19 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
             value={newPassword}
             onChange={e => setNewPassword(e.target.value)}
             placeholder="Nova senha"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-gray-500 focus:outline-none"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-gray-500 focus:outline-none min-h-[44px]"
           />
           <input
             type="password"
             value={confirmPassword}
             onChange={e => setConfirmPassword(e.target.value)}
             placeholder="Confirmar nova senha"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-gray-500 focus:outline-none"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-gray-500 focus:outline-none min-h-[44px]"
           />
           <button
             onClick={handleChangePassword}
             disabled={savingPassword || !newPassword}
-            className="w-full py-2 bg-gray-800 text-white text-sm font-semibold rounded-md hover:bg-gray-900 disabled:opacity-50 transition-colors"
+            className="w-full py-3 bg-gray-800 text-white text-sm font-semibold rounded-md hover:bg-gray-900 disabled:opacity-50 transition-colors min-h-[44px]"
           >
             {savingPassword ? 'Salvando...' : 'Salvar nova senha'}
           </button>

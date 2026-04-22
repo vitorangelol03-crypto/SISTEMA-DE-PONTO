@@ -129,24 +129,24 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold flex items-center">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h3 className="text-base sm:text-lg font-semibold flex items-center">
             <Calendar className="w-5 h-5 mr-2 text-purple-600" />
             Períodos de Pagamento
           </h3>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <button
               onClick={handleCloseCurrent}
-              className="px-3 py-2 text-sm bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 flex items-center gap-1"
+              className="px-3 py-2 text-sm bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 flex items-center justify-center gap-1 min-h-[44px]"
             >
               <Lock className="w-4 h-4" />
               Fechar período atual
             </button>
             <button
               onClick={() => setShowForm(true)}
-              className="px-3 py-2 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 flex items-center gap-1"
+              className="px-3 py-2 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 flex items-center justify-center gap-1 min-h-[44px]"
             >
               <Plus className="w-4 h-4" />
               Novo Período
@@ -224,24 +224,24 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow-xl max-w-[95vw] sm:max-w-md w-full max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium flex items-center">
+              <h3 className="text-base sm:text-lg font-medium flex items-center">
                 <Plus className="w-5 h-5 mr-2 text-purple-600" />
                 Novo Período de Pagamento
               </h3>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center">✕</button>
             </div>
             <form onSubmit={handleCreate} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Início *</label>
                   <input
                     type="date"
                     value={formData.startDate}
                     onChange={e => setFormData(p => ({ ...p, startDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[44px] text-sm"
                     required
                   />
                 </div>
@@ -251,7 +251,7 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
                     type="date"
                     value={formData.endDate}
                     onChange={e => setFormData(p => ({ ...p, endDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[44px] text-sm"
                     required
                   />
                 </div>
@@ -262,7 +262,7 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
                   type="date"
                   value={formData.paymentDate}
                   onChange={e => setFormData(p => ({ ...p, paymentDate: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[44px] text-sm"
                   required
                 />
               </div>
@@ -273,21 +273,21 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
                   value={formData.label}
                   onChange={e => setFormData(p => ({ ...p, label: e.target.value }))}
                   placeholder="Ex: Semana 16"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[44px] text-sm"
                 />
               </div>
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-2">
                 <button
                   type="submit"
                   disabled={saving}
-                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-300"
+                  className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-300 min-h-[44px]"
                 >
                   {saving ? 'Salvando...' : 'Criar'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 min-h-[44px]"
                 >
                   Cancelar
                 </button>
