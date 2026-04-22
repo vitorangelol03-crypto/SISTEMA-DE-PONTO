@@ -56,8 +56,9 @@ test.describe('Permissões — Admin 9999 completo', () => {
 
     await expect(page.getByRole('heading', { name: /Gerenciar Permissões/ })).toBeVisible();
 
-    // Escopa dentro do modal (max-w-4xl) para não colidir com tabs do fundo
-    const modal = page.locator('.max-w-4xl');
+    // Escopa dentro do modal — usa class*=max-w-4xl para bater tanto com
+    // `max-w-4xl` quanto com variantes responsivas (`sm:max-w-4xl`).
+    const modal = page.locator('[class*="max-w-4xl"]');
 
     await modal.getByRole('button', { name: /^Ponto/ }).click();
     await expect(modal.getByText('Aprovar ponto pendente')).toBeVisible();

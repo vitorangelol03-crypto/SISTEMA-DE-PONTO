@@ -10,7 +10,7 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       <header className="bg-white shadow-sm border-b sticky top-0 z-40">
         <div className="px-3 sm:px-4 lg:px-8">
           <div className="flex justify-between items-center h-14 sm:h-16">

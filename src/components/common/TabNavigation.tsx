@@ -67,18 +67,20 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
 
       {/* DRAWER mobile */}
       {drawerOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
+        <>
+          {/* Overlay: fixed full-screen, z-50 */}
           <div
-            className="fixed inset-0 bg-black bg-opacity-50"
+            className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-50"
             onClick={() => setDrawerOpen(false)}
             aria-hidden="true"
           />
-          <aside className="relative ml-auto w-72 max-w-[85vw] bg-white shadow-xl flex flex-col h-full">
+          {/* Drawer: fixed à direita, z-60 (acima do overlay) */}
+          <aside className="md:hidden fixed top-0 right-0 h-full w-4/5 max-w-[280px] bg-white shadow-xl flex flex-col z-[60]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
               <h2 className="font-bold text-gray-900">Menu</h2>
               <button
                 onClick={() => setDrawerOpen(false)}
-                className="p-2 hover:bg-gray-100 rounded-md"
+                className="p-2 hover:bg-gray-100 rounded-md min-h-[44px] min-w-[44px] flex items-center justify-center"
                 aria-label="Fechar menu"
               >
                 <X className="w-5 h-5 text-gray-600" />
@@ -105,7 +107,7 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
               })}
             </nav>
           </aside>
-        </div>
+        </>
       )}
 
       {/* DESKTOP: navegação horizontal */}

@@ -64,6 +64,8 @@ test.describe('Geolocalização (/clock)', () => {
     }]);
 
     // Create test employee
+    // face_recognition_enabled=false: estes testes focam em geolocalização,
+    // não queremos o gate facial interceptando o clique de ponto.
     const { data, error } = await supabase
       .from('employees')
       .insert([{
@@ -71,6 +73,7 @@ test.describe('Geolocalização (/clock)', () => {
         cpf: TEST_CPF,
         pin: TEST_PIN,
         pin_configured: true,
+        face_recognition_enabled: false,
         created_by: '9999',
       }])
       .select('id')

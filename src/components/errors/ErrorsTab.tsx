@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target, Package, FileSearch } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Area, ComposedChart, LabelList, Cell } from 'recharts';
 import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorRecord, deleteErrorRecord, getErrorStatistics, Employee, Attendance, ErrorRecord, ErrorType } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
@@ -304,6 +304,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
   const getChartData = () => {
     return filteredEmployees.slice(0, 10).map(item => ({
       name: item.employee.name.split(' ')[0],
+      fullName: item.employee.name,
       erros: item.totalErrors,
       taxa: parseFloat(item.errorRate.toFixed(2))
     }));
@@ -323,42 +324,44 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="bg-white p-2 rounded-lg shadow overflow-x-auto">
-        <div className="flex gap-2 min-w-max">
+      <div className="bg-white p-2 rounded-lg shadow">
+        <div className="flex justify-center gap-1 sm:gap-2">
           <button
             onClick={() => setActiveSubTab('individual')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors min-h-[44px] whitespace-nowrap ${
+            className={`w-1/3 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors min-h-[44px] ${
               activeSubTab === 'individual'
                 ? 'bg-orange-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            <Package className="w-4 h-4" />
-            Erros Individuais
+            <Package className="w-4 h-4 flex-shrink-0" />
+            <span className="sm:hidden">Individuais</span>
+            <span className="hidden sm:inline">Erros Individuais</span>
           </button>
           {hasPermission('errors.viewTriage') && (
             <button
               onClick={() => setActiveSubTab('triage')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors min-h-[44px] whitespace-nowrap ${
+              className={`w-1/3 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors min-h-[44px] ${
                 activeSubTab === 'triage'
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              <FileSearch className="w-4 h-4" />
-              Triagem
+              <FileSearch className="w-4 h-4 flex-shrink-0" />
+              <span>Triagem</span>
             </button>
           )}
           <button
             onClick={() => setActiveSubTab('periods')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors min-h-[44px] whitespace-nowrap ${
+            className={`w-1/3 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors min-h-[44px] ${
               activeSubTab === 'periods'
                 ? 'bg-purple-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            <Calendar className="w-4 h-4" />
-            Períodos de Pagamento
+            <Calendar className="w-4 h-4 flex-shrink-0" />
+            <span className="sm:hidden">Períodos</span>
+            <span className="hidden sm:inline">Períodos de Pagamento</span>
           </button>
         </div>
       </div>
@@ -502,35 +505,106 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
       </div>
 
       {/* Gráficos */}
-      {chartData.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-medium mb-4">Erros por Funcionário</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="erros" fill="#ef4444" />
+      {chartData.length > 0 && (() => {
+        const totalErrors = chartData.reduce((sum, d) => sum + d.erros, 0);
+
+        const ErrorsTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: { fullName: string; erros: number } }> }) => {
+          if (!active || !payload || !payload.length) return null;
+          const d = payload[0].payload;
+          const pct = totalErrors > 0 ? ((d.erros / totalErrors) * 100).toFixed(1) : '0.0';
+          return (
+            <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+              <p className="font-semibold text-gray-900 mb-1">{d.fullName}</p>
+              <p className="text-red-600"><span className="font-bold">{d.erros}</span> erro(s)</p>
+              <p className="text-gray-500">{pct}% do total</p>
+            </div>
+          );
+        };
+
+        const RateTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: { fullName: string; taxa: number } }> }) => {
+          if (!active || !payload || !payload.length) return null;
+          const d = payload[0].payload;
+          return (
+            <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+              <p className="font-semibold text-gray-900 mb-1">{d.fullName}</p>
+              <p className="text-orange-600"><span className="font-bold">{d.taxa}</span> erros/dia</p>
+            </div>
+          );
+        };
+
+        return (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-gradient-to-br from-white to-gray-50 p-4 sm:p-6 rounded-xl shadow-md border border-gray-100">
+            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2 text-gray-800">
+              <span>📊</span>
+              <span>Erros por Funcionário</span>
+            </h3>
+            <ResponsiveContainer width="100%" height={typeof window !== 'undefined' && window.innerWidth < 768 ? 200 : 300}>
+              <BarChart data={chartData} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="errorBarGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#991b1b" stopOpacity={0.95} />
+                    <stop offset="100%" stopColor="#f97316" stopOpacity={0.85} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={{ stroke: '#d1d5db' }} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip content={<ErrorsTooltip />} cursor={{ fill: 'rgba(249, 115, 22, 0.08)' }} />
+                <Bar dataKey="erros" fill="url(#errorBarGradient)" radius={[6, 6, 0, 0]} animationDuration={800}>
+                  <LabelList dataKey="erros" position="top" style={{ fontSize: 11, fontWeight: 600, fill: '#991b1b' }} />
+                  {chartData.map((_, idx) => (
+                    <Cell key={idx} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-medium mb-4">Taxa de Erros</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="taxa" fill="#f97316" />
-              </BarChart>
+          <div className="bg-gradient-to-br from-white to-gray-50 p-4 sm:p-6 rounded-xl shadow-md border border-gray-100">
+            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2 text-gray-800">
+              <span>📈</span>
+              <span>Taxa de Erros por Dia</span>
+            </h3>
+            <ResponsiveContainer width="100%" height={typeof window !== 'undefined' && window.innerWidth < 768 ? 200 : 300}>
+              <ComposedChart data={chartData} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="rateAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f97316" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="rateLineGradient" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#dc2626" />
+                    <stop offset="100%" stopColor="#f97316" />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={{ stroke: '#d1d5db' }} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+                <Tooltip content={<RateTooltip />} cursor={{ stroke: '#f97316', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <Area type="monotone" dataKey="taxa" stroke="none" fill="url(#rateAreaGradient)" animationDuration={800} />
+                <Line
+                  type="monotone"
+                  dataKey="taxa"
+                  stroke="url(#rateLineGradient)"
+                  strokeWidth={3}
+                  dot={{ r: 4, fill: '#f97316', stroke: '#fff', strokeWidth: 2 }}
+                  activeDot={{ r: 6, fill: '#dc2626', stroke: '#fff', strokeWidth: 2 }}
+                  animationDuration={800}
+                >
+                  <LabelList
+                    dataKey="taxa"
+                    position="top"
+                    style={{ fontSize: '11px', fill: '#dc2626', fontWeight: 600 }}
+                    formatter={(v: number) => v.toFixed(1)}
+                  />
+                </Line>
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Melhores e Piores */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

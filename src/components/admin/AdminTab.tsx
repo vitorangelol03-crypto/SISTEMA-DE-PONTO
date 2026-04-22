@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Lock, MapPin, AlertTriangle, ShieldOff, Key, RefreshCw, Unlock, Trash2, Settings, Play, X } from 'lucide-react';
+import { Lock, MapPin, AlertTriangle, ShieldOff, Key, RefreshCw, Unlock, Trash2, Settings, Play, X, ScanFace, RotateCcw, CheckCircle2, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   verifyAdminSecret,
@@ -14,11 +14,17 @@ import {
   getAdminCleanupConfig,
   updateAdminCleanupConfig,
   runAutoCleanup,
+  getFaceRecognitionConfig,
+  setFaceRecognitionGlobal,
+  setFaceRecognitionForEmployee,
+  resetFaceForEmployee,
+  getFaceAuthAttempts,
   GeoRecord,
   FraudAttempt,
   BonusBlock,
   Employee,
   AdminCleanupConfig,
+  FaceAuthAttempt,
 } from '../../services/database';
 
 interface AdminTabProps {
@@ -114,6 +120,19 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
 
+  // ─── Face Recognition ────────────────────────────────────────────────────
+  const [faceGlobalEnabled, setFaceGlobalEnabled] = useState(false);
+  const [faceGlobalLoading, setFaceGlobalLoading] = useState(true);
+  const [faceGlobalSaving, setFaceGlobalSaving] = useState(false);
+  const [faceEmpSaving, setFaceEmpSaving] = useState<string | null>(null);
+  const [faceResetting, setFaceResetting] = useState<string | null>(null);
+  const [faceAttempts, setFaceAttempts] = useState<FaceAuthAttempt[]>([]);
+  const [faceAttemptsLoading, setFaceAttemptsLoading] = useState(false);
+  const [faceDateStart, setFaceDateStart] = useState('');
+  const [faceDateEnd, setFaceDateEnd] = useState('');
+  const [faceEmployeeFilter, setFaceEmployeeFilter] = useState('');
+  const [faceResultFilter, setFaceResultFilter] = useState<'' | 'success' | 'fail'>('');
+
   // ─── Auth handler ─────────────────────────────────────────────────────────
   const handleAuth = async () => {
     setAuthLoading(true);
@@ -167,10 +186,42 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
     }
   };
 
+  const loadFaceConfig = async () => {
+    setFaceGlobalLoading(true);
+    try {
+      const cfg = await getFaceRecognitionConfig();
+      setFaceGlobalEnabled(cfg.enabled);
+    } catch (err) {
+      console.error('Erro ao carregar config facial:', err);
+    } finally {
+      setFaceGlobalLoading(false);
+    }
+  };
+
+  const loadFaceAttempts = async () => {
+    setFaceAttemptsLoading(true);
+    try {
+      const attempts = await getFaceAuthAttempts({
+        startDate: faceDateStart || undefined,
+        endDate: faceDateEnd || undefined,
+        employeeId: faceEmployeeFilter || undefined,
+        success: faceResultFilter === 'success' ? true : faceResultFilter === 'fail' ? false : undefined,
+      });
+      setFaceAttempts(attempts);
+    } catch (err) {
+      console.error('Erro ao carregar tentativas faciais:', err);
+      toast.error('Erro ao carregar histórico facial');
+    } finally {
+      setFaceAttemptsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!authenticated) return;
     loadData();
     loadCleanupConfig();
+    loadFaceConfig();
+    loadFaceAttempts();
     runAutoCleanup().then(ran => {
       if (ran) {
         toast.success('Limpeza automática executada');
@@ -178,7 +229,14 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
         loadCleanupConfig();
       }
     }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authenticated]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    loadFaceAttempts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [faceDateStart, faceDateEnd, faceEmployeeFilter, faceResultFilter]);
 
   // ─── Filtered data (client-side) ─────────────────────────────────────────
   const filteredGeo = useMemo(() => geoRecords.filter(r => {
@@ -328,6 +386,57 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
     return `https://maps.google.com/?q=${lat},${lon}`;
   };
 
+  const handleToggleFaceGlobal = async () => {
+    const next = !faceGlobalEnabled;
+    setFaceGlobalSaving(true);
+    try {
+      await setFaceRecognitionGlobal(next, 'admin');
+      setFaceGlobalEnabled(next);
+      toast.success(next ? 'Reconhecimento facial ativado globalmente' : 'Reconhecimento facial desativado');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao atualizar configuração');
+    } finally {
+      setFaceGlobalSaving(false);
+    }
+  };
+
+  const handleToggleFaceEmployee = async (employeeId: string, currentEnabled: boolean) => {
+    setFaceEmpSaving(employeeId);
+    try {
+      await setFaceRecognitionForEmployee(employeeId, !currentEnabled, 'admin');
+      setEmployees(prev => prev.map(e => e.id === employeeId ? { ...e, face_recognition_enabled: !currentEnabled } : e));
+      toast.success(!currentEnabled ? 'Ativado para o funcionário' : 'Desativado para o funcionário');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao atualizar funcionário');
+    } finally {
+      setFaceEmpSaving(null);
+    }
+  };
+
+  const handleResetFace = async (employeeId: string, employeeName: string) => {
+    if (!confirm(`Resetar cadastro facial de ${employeeName}?\n\nO funcionário precisará recadastrar o rosto no próximo acesso.`)) return;
+    setFaceResetting(employeeId);
+    try {
+      await resetFaceForEmployee(employeeId, 'admin');
+      setEmployees(prev => prev.map(e => e.id === employeeId ? {
+        ...e,
+        face_registered: false,
+        face_descriptor: null,
+        face_photo_url: null,
+        face_reset_requested: true,
+        face_registered_at: null,
+      } : e));
+      toast.success(`Cadastro facial de ${employeeName} resetado`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao resetar cadastro facial');
+    } finally {
+      setFaceResetting(null);
+    }
+  };
+
   const EmployeeSelect: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => (
     <select value={value} onChange={e => onChange(e.target.value)} className={selectCls}>
       <option value="">Todos</option>
@@ -338,23 +447,23 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
   // ─── Auth screen ──────────────────────────────────────────────────────────
   if (!authenticated) {
     return (
-      <div className="max-w-sm mx-auto mt-12">
-        <div className="bg-white p-8 rounded-lg shadow text-center">
+      <div className="max-w-[95vw] sm:max-w-sm mx-auto mt-8 sm:mt-12 px-2">
+        <div className="bg-white p-6 sm:p-8 rounded-lg shadow text-center">
           <Lock className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Acesso restrito</h2>
+          <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-4">Acesso restrito</h2>
           <input
             type="password"
             value={password}
             onChange={e => setPassword(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAuth()}
             placeholder="Senha"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-center text-lg mb-3 focus:border-blue-500 focus:outline-none"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-center text-lg mb-3 focus:border-blue-500 focus:outline-none min-h-[48px]"
           />
           {authError && <p className="text-sm text-red-600 mb-3">{authError}</p>}
           <button
             onClick={handleAuth}
             disabled={authLoading || !password}
-            className="w-full py-3 bg-gray-800 text-white font-semibold rounded-lg hover:bg-gray-900 disabled:opacity-50 transition-colors"
+            className="w-full py-3 bg-gray-800 text-white font-semibold rounded-lg hover:bg-gray-900 disabled:opacity-50 transition-colors min-h-[48px]"
           >
             {authLoading ? 'Verificando...' : 'Entrar'}
           </button>
@@ -413,7 +522,9 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
         ) : filteredGeo.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">Nenhum registro encontrado</p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Desktop: tabela */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 text-xs">
               <thead className="bg-gray-50">
                 <tr>
@@ -464,6 +575,418 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile: cards */}
+          <div className="md:hidden space-y-3">
+            {filteredGeo.map(r => {
+              const entryLink = mapsLink(r.entry_latitude, r.entry_longitude);
+              const exitLink = mapsLink(r.exit_latitude, r.exit_longitude);
+              return (
+                <div key={r.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-gray-900 break-words">{r.employee_name}</div>
+                      <div className="text-xs text-gray-500">{formatDateBR(r.date)}</div>
+                    </div>
+                    {r.geo_valid === false ? (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 whitespace-nowrap">Fora</span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 whitespace-nowrap">Dentro</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-green-50 rounded p-2">
+                      <span className="text-gray-500 block">Entrada</span>
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-gray-800">{formatTime(r.entry_time)}</span>
+                        {entryLink && (
+                          <a href={entryLink} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-white text-blue-700 rounded hover:bg-blue-100 border border-blue-200">
+                            <MapPin className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <div className="bg-orange-50 rounded p-2">
+                      <span className="text-gray-500 block">Saída</span>
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-gray-800">{formatTime(r.exit_time_full)}</span>
+                        {exitLink && (
+                          <a href={exitLink} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-white text-orange-700 rounded hover:bg-orange-100 border border-orange-200">
+                            <MapPin className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    <strong>Distância:</strong> {r.geo_distance_meters != null ? `${r.geo_distance_meters}m` : '-'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          </>
+        )}
+      </div>
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* SECTION 1B: Face Recognition — Global                              */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
+        <h3 className="text-base font-semibold flex items-center gap-2 text-gray-800 mb-3">
+          <ScanFace className="w-5 h-5 text-purple-600" />
+          Reconhecimento Facial — Configuração Global
+        </h3>
+
+        {faceGlobalLoading ? (
+          <p className="text-sm text-gray-500">Carregando configuração...</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800">Reconhecimento facial ativo para todos</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {faceGlobalEnabled
+                    ? 'Funcionários precisam passar pela validação facial ao bater ponto.'
+                    : 'Funcionários podem bater ponto sem validação facial.'}
+                </p>
+              </div>
+              <button
+                onClick={handleToggleFaceGlobal}
+                disabled={faceGlobalSaving}
+                className={`relative inline-flex items-center h-8 rounded-full w-14 transition-colors disabled:opacity-50 flex-shrink-0 ${
+                  faceGlobalEnabled ? 'bg-green-600' : 'bg-gray-300'
+                }`}
+                aria-label="Alternar reconhecimento facial global"
+              >
+                <span
+                  className={`inline-block w-6 h-6 transform bg-white rounded-full shadow transition-transform ${
+                    faceGlobalEnabled ? 'translate-x-7' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {!faceGlobalEnabled && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800">
+                  Atenção: com o reconhecimento facial desativado, qualquer pessoa pode bater ponto apenas com o PIN.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* SECTION 1C: Face Recognition — Per Employee                        */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
+        <h3 className="text-base font-semibold flex items-center gap-2 text-gray-800 mb-3">
+          <ScanFace className="w-5 h-5 text-purple-600" />
+          Controle por Funcionário
+        </h3>
+
+        {employees.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">Nenhum funcionário cadastrado</p>
+        ) : (
+          <>
+          {/* Desktop: tabela */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-gray-500 uppercase font-medium">Funcionário</th>
+                  <th className="px-3 py-2 text-left text-gray-500 uppercase font-medium">Face Cadastrada</th>
+                  <th className="px-3 py-2 text-left text-gray-500 uppercase font-medium">Reconhecimento</th>
+                  <th className="px-3 py-2 text-right text-gray-500 uppercase font-medium">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {employees.map(e => {
+                  const enabled = !!e.face_recognition_enabled;
+                  const registered = !!e.face_registered;
+                  return (
+                    <tr key={e.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-medium text-gray-800">{e.name}</td>
+                      <td className="px-3 py-2">
+                        {registered ? (
+                          <span className="inline-flex items-center gap-1 text-green-700">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Sim
+                            {e.face_registered_at && (
+                              <span className="text-gray-500 ml-1">
+                                ({new Date(e.face_registered_at).toLocaleDateString('pt-BR')})
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-gray-400">
+                            <XCircle className="w-3.5 h-3.5" />
+                            Não
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => handleToggleFaceEmployee(e.id, enabled)}
+                          disabled={faceEmpSaving === e.id}
+                          className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors disabled:opacity-50 ${
+                            enabled ? 'bg-green-600' : 'bg-gray-300'
+                          }`}
+                          aria-label="Alternar reconhecimento facial"
+                        >
+                          <span
+                            className={`inline-block w-5 h-5 transform bg-white rounded-full transition-transform ${
+                              enabled ? 'translate-x-5' : 'translate-x-0.5'
+                            }`}
+                          />
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {registered && (
+                          <button
+                            onClick={() => handleResetFace(e.id, e.name)}
+                            disabled={faceResetting === e.id}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-md hover:bg-amber-200 disabled:opacity-50 transition-colors"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            {faceResetting === e.id ? '...' : 'Reset Facial'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: cards */}
+          <div className="md:hidden space-y-3">
+            {employees.map(e => {
+              const enabled = !!e.face_recognition_enabled;
+              const registered = !!e.face_registered;
+              return (
+                <div key={e.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-gray-900 break-words">{e.name}</div>
+                      <div className="mt-1">
+                        {registered ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-green-700">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Face cadastrada
+                            {e.face_registered_at && (
+                              <span className="text-gray-500 ml-1">
+                                ({new Date(e.face_registered_at).toLocaleDateString('pt-BR')})
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                            <XCircle className="w-3.5 h-3.5" />
+                            Sem cadastro facial
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleToggleFaceEmployee(e.id, enabled)}
+                      disabled={faceEmpSaving === e.id}
+                      className={`relative inline-flex items-center h-7 rounded-full w-12 transition-colors disabled:opacity-50 flex-shrink-0 ${
+                        enabled ? 'bg-green-600' : 'bg-gray-300'
+                      }`}
+                      aria-label="Alternar reconhecimento facial"
+                    >
+                      <span
+                        className={`inline-block w-5 h-5 transform bg-white rounded-full transition-transform ${
+                          enabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  {registered && (
+                    <button
+                      onClick={() => handleResetFace(e.id, e.name)}
+                      disabled={faceResetting === e.id}
+                      className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 bg-amber-100 text-amber-700 text-sm font-medium rounded-md hover:bg-amber-200 disabled:opacity-50 transition-colors min-h-[44px]"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      {faceResetting === e.id ? 'Resetando...' : 'Reset Facial'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          </>
+        )}
+      </div>
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* SECTION 1D: Face Recognition — History                             */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white p-4 sm:p-5 rounded-lg shadow">
+        <h3 className="text-base font-semibold flex items-center gap-2 text-gray-800 mb-3">
+          <ScanFace className="w-5 h-5 text-purple-600" />
+          Histórico de Tentativas Faciais
+        </h3>
+
+        {(() => {
+          const total = faceAttempts.length;
+          const successes = faceAttempts.filter(a => a.success).length;
+          const failures = total - successes;
+          const rate = total > 0 ? ((successes / total) * 100).toFixed(1) : '0.0';
+          return (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <div className="text-xs text-gray-500">Total</div>
+                <div className="text-xl font-bold text-gray-800">{total}</div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                <div className="text-xs text-green-700">Sucessos</div>
+                <div className="text-xl font-bold text-green-700">{successes}</div>
+              </div>
+              <div className="bg-red-50 rounded-lg p-3 border border-red-200">
+                <div className="text-xs text-red-700">Falhas</div>
+                <div className="text-xl font-bold text-red-700">{failures}</div>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                <div className="text-xs text-blue-700">Taxa de Sucesso</div>
+                <div className="text-xl font-bold text-blue-700">{rate}%</div>
+              </div>
+            </div>
+          );
+        })()}
+
+        <FilterBar
+          count={faceAttempts.length}
+          total={faceAttempts.length}
+          onClear={() => { setFaceDateStart(''); setFaceDateEnd(''); setFaceEmployeeFilter(''); setFaceResultFilter(''); }}
+        >
+          <FilterField label="Data início">
+            <input type="date" value={faceDateStart} onChange={e => setFaceDateStart(e.target.value)} className={inputCls} />
+          </FilterField>
+          <FilterField label="Data fim">
+            <input type="date" value={faceDateEnd} onChange={e => setFaceDateEnd(e.target.value)} className={inputCls} />
+          </FilterField>
+          <FilterField label="Funcionário">
+            <EmployeeSelect value={faceEmployeeFilter} onChange={setFaceEmployeeFilter} />
+          </FilterField>
+          <FilterField label="Resultado">
+            <select value={faceResultFilter} onChange={e => setFaceResultFilter(e.target.value as typeof faceResultFilter)} className={selectCls}>
+              <option value="">Todos</option>
+              <option value="success">Sucesso</option>
+              <option value="fail">Falha</option>
+            </select>
+          </FilterField>
+        </FilterBar>
+
+        {faceAttemptsLoading ? (
+          <p className="text-sm text-gray-500">Carregando...</p>
+        ) : faceAttempts.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">Nenhuma tentativa registrada</p>
+        ) : (
+          <>
+          {/* Desktop: tabela */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-gray-500 uppercase font-medium">Data/Hora</th>
+                  <th className="px-3 py-2 text-left text-gray-500 uppercase font-medium">Funcionário</th>
+                  <th className="px-3 py-2 text-left text-gray-500 uppercase font-medium">Tipo</th>
+                  <th className="px-3 py-2 text-left text-gray-500 uppercase font-medium">Resultado</th>
+                  <th className="px-3 py-2 text-left text-gray-500 uppercase font-medium">Confiança</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {faceAttempts.map(a => {
+                  const dt = new Date(a.attempted_at);
+                  const dateStr = dt.toLocaleDateString('pt-BR');
+                  const timeStr = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                  return (
+                    <tr key={a.id} className={a.success ? 'hover:bg-green-50' : 'hover:bg-red-50'}>
+                      <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{dateStr} {timeStr}</td>
+                      <td className="px-3 py-2 font-medium text-gray-800">{a.employee_name}</td>
+                      <td className="px-3 py-2">
+                        {a.clock_type ? (
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${a.clock_type === 'entry' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                            {a.clock_type === 'entry' ? 'Entrada' : 'Saída'}
+                          </span>
+                        ) : <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {a.success ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Sucesso
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                            <XCircle className="w-3 h-3" />
+                            Falha
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700">
+                        {a.confidence != null ? `${(a.confidence * 100).toFixed(1)}%` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: cards */}
+          <div className="md:hidden space-y-3">
+            {faceAttempts.map(a => {
+              const dt = new Date(a.attempted_at);
+              const dateStr = dt.toLocaleDateString('pt-BR');
+              const timeStr = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+              return (
+                <div key={a.id} className={`border rounded-lg p-3 space-y-2 ${a.success ? 'border-green-200 bg-green-50/30' : 'border-red-200 bg-red-50/30'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-gray-900 break-words">{a.employee_name}</div>
+                      <div className="text-xs text-gray-500">{dateStr} · {timeStr}</div>
+                    </div>
+                    {a.success ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 whitespace-nowrap">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Sucesso
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 whitespace-nowrap">
+                        <XCircle className="w-3 h-3" />
+                        Falha
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-white rounded p-2 border border-gray-100">
+                      <span className="text-gray-500 block">Tipo</span>
+                      <span className="text-gray-800 font-medium">
+                        {a.clock_type === 'entry' ? 'Entrada' : a.clock_type === 'exit' ? 'Saída' : '—'}
+                      </span>
+                    </div>
+                    <div className="bg-white rounded p-2 border border-gray-100">
+                      <span className="text-gray-500 block">Confiança</span>
+                      <span className="text-gray-800 font-medium">
+                        {a.confidence != null ? `${(a.confidence * 100).toFixed(1)}%` : '—'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          </>
         )}
       </div>
 
@@ -502,7 +1025,9 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
         {filteredFraud.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">Nenhuma tentativa encontrada</p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Desktop: tabela */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 text-xs">
               <thead className="bg-gray-50">
                 <tr>
@@ -546,6 +1071,48 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile: cards */}
+          <div className="md:hidden space-y-3">
+            {filteredFraud.map(f => {
+              const link = mapsLink(f.latitude, f.longitude);
+              return (
+                <div key={f.id} className="border border-red-200 bg-red-50/30 rounded-lg p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-gray-900 break-words">{f.employee_name}</div>
+                      <div className="text-xs text-gray-500">{formatDateBR(f.date)}</div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${f.clock_type === 'entry' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                      {f.clock_type === 'entry' ? 'Entrada' : 'Saída'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-white rounded p-2 border border-gray-100">
+                      <span className="text-gray-500 block">Distância</span>
+                      <span className="text-gray-800 font-medium">{f.distance_meters != null ? `${f.distance_meters}m` : 'negada'}</span>
+                    </div>
+                    <div className="bg-white rounded p-2 border border-gray-100">
+                      <span className="text-gray-500 block">Coordenadas</span>
+                      <span className="text-gray-800 font-mono text-[10px] break-all">
+                        {f.latitude != null ? `${Number(f.latitude).toFixed(4)}, ${Number(f.longitude).toFixed(4)}` : '-'}
+                      </span>
+                    </div>
+                  </div>
+                  {link ? (
+                    <a href={link} target="_blank" rel="noopener noreferrer"
+                      className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 min-h-[44px]">
+                      <MapPin className="w-4 h-4" />
+                      Ver no Mapa
+                    </a>
+                  ) : (
+                    <span className="block text-center text-xs text-gray-400">Sem localização registrada</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          </>
         )}
       </div>
 
@@ -580,7 +1147,9 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
         {filteredBlocks.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">Nenhum bloqueio encontrado</p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Desktop: tabela */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 text-xs">
               <thead className="bg-gray-50">
                 <tr>
@@ -615,6 +1184,36 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile: cards */}
+          <div className="md:hidden space-y-3">
+            {filteredBlocks.map(b => (
+              <div key={b.id} className="border border-amber-200 bg-amber-50/30 rounded-lg p-3 space-y-2">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900 break-words">{b.employee_name}</div>
+                  <div className="text-xs text-gray-600 mt-0.5">
+                    <strong>Semana:</strong> {formatDateBR(b.week_start)} — {formatDateBR(b.week_end)}
+                  </div>
+                </div>
+                <div className="text-xs text-gray-700 break-words bg-white rounded p-2 border border-gray-100">
+                  <strong className="block text-gray-500 mb-0.5">Motivo:</strong>
+                  {b.reason}
+                </div>
+                <div className="text-xs text-gray-500">
+                  <strong>Bloqueado em:</strong> {new Date(b.created_at).toLocaleDateString('pt-BR')} {new Date(b.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+                <button
+                  onClick={() => handleUnblock(b.employee_id, b.week_start)}
+                  disabled={unblockingId === b.employee_id}
+                  className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 bg-green-100 text-green-700 text-sm font-medium rounded-md hover:bg-green-200 disabled:opacity-50 transition-colors min-h-[44px]"
+                >
+                  <Unlock className="w-4 h-4" />
+                  {unblockingId === b.employee_id ? 'Desbloqueando...' : 'Desbloquear'}
+                </button>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </div>
 
@@ -639,30 +1238,30 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Tabelas a limpar:</label>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               {[
                 { key: 'fraud' as const, label: 'geo_fraud_attempts' },
                 { key: 'blocks' as const, label: 'bonus_blocks (expirados)' },
                 { key: 'geo' as const, label: 'geo records no attendance (só coords)' },
               ].map(({ key, label }) => (
-                <label key={key} className="flex items-center gap-2 text-sm text-gray-700">
+                <label key={key} className="flex items-center gap-2 text-sm text-gray-700 min-h-[40px] break-words">
                   <input
                     type="checkbox"
                     checked={cleanupTables[key]}
                     onChange={e => { setCleanupTables(prev => ({ ...prev, [key]: e.target.checked })); setCleanupPreview(null); }}
-                    className="rounded border-gray-300"
+                    className="rounded border-gray-300 w-5 h-5 flex-shrink-0"
                   />
-                  {label}
+                  <span className="break-all">{label}</span>
                 </label>
               ))}
             </div>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button
               onClick={handlePreview}
               disabled={previewLoading || (!cleanupTables.fraud && !cleanupTables.blocks && !cleanupTables.geo)}
-              className="flex items-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 text-sm font-medium rounded-md hover:bg-blue-200 disabled:opacity-50 transition-colors"
+              className="flex items-center justify-center gap-1 px-4 py-2 bg-blue-100 text-blue-700 text-sm font-medium rounded-md hover:bg-blue-200 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:w-auto"
             >
               {previewLoading ? 'Calculando...' : 'Pré-visualizar'}
             </button>

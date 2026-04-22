@@ -6,9 +6,12 @@ import {
   getEmployeeAttendanceHistory,
   verifyEmployeePin,
   setEmployeePin,
+  getFaceRecognitionConfig,
   Employee,
   Attendance,
 } from '../../services/database';
+import { FaceRegistration } from './FaceRegistration';
+import { FaceVerification } from './FaceVerification';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -36,7 +39,7 @@ const APPROVAL_BADGE: Record<string, { label: string; cls: string }> = {
   manual:   { label: '📝 Manual',               cls: 'bg-gray-100 text-gray-700' },
 };
 
-type Step = 'cpf' | 'pin' | 'setup-pin' | 'dashboard' | 'error';
+type Step = 'cpf' | 'pin' | 'setup-pin' | 'face-register' | 'dashboard' | 'error';
 
 /** Solicita geolocalização. Resolve com a position, ou rejeita com o código do erro. */
 function requestGeolocation(): Promise<GeolocationPosition> {
@@ -79,6 +82,10 @@ export const EmployeeClockIn: React.FC = () => {
   const [clockLoading, setClockLoading] = useState(false);
   const [clockMsg, setClockMsg] = useState('');
 
+  // Facial: se ativo, verifica rosto ao clicar em Registrar Entrada/Saída
+  const [faceGateActive, setFaceGateActive] = useState(false);
+  const [pendingClockType, setPendingClockType] = useState<'entry' | 'exit' | null>(null);
+
   // Guards anti-duplo-clique e watchdog do botão de ponto
   const inFlightClockRef = useRef(false);
   const clockWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -116,6 +123,34 @@ export const EmployeeClockIn: React.FC = () => {
   useEffect(() => () => {
     if (clockWatchdogRef.current) clearTimeout(clockWatchdogRef.current);
   }, []);
+
+  // ─── Face recognition gate ────────────────────────────────────────────────
+  // Decide o próximo passo após autenticação por PIN:
+  // - Primeiro acesso (ou admin pediu reset) com facial ativo → face-register
+  // - Caso contrário → dashboard direto; a verificação facial acontece no
+  //   momento de bater o ponto (gate controlado por faceGateActive).
+  const continueAfterPin = useCallback(async (emp: Employee) => {
+    try {
+      const cfg = await getFaceRecognitionConfig();
+      const empEnabled = emp.face_recognition_enabled !== false; // null/undefined = habilitado por padrão
+      const activeGlobally = cfg.enabled && empEnabled;
+
+      if (activeGlobally && (!emp.face_registered || emp.face_reset_requested)) {
+        setFaceGateActive(true); // após cadastrar, próximos pontos vão exigir verificação
+        setStep('face-register');
+        return;
+      }
+
+      setFaceGateActive(activeGlobally && !!emp.face_registered && !emp.face_reset_requested);
+      await loadDashboard(emp);
+      setStep('dashboard');
+    } catch (err) {
+      console.error('Erro no gate facial, seguindo sem facial:', err);
+      setFaceGateActive(false);
+      await loadDashboard(emp);
+      setStep('dashboard');
+    }
+  }, [loadDashboard]);
 
   // ─── CPF ────────────────────────────────────────────────────────────────────
 
@@ -161,8 +196,7 @@ export const EmployeeClockIn: React.FC = () => {
         setStep('error');
         return;
       }
-      await loadDashboard(employee);
-      setStep('dashboard');
+      await continueAfterPin(employee);
     } catch {
       setErrorMsg('Erro ao verificar PIN. Tente novamente.');
       setStep('error');
@@ -185,8 +219,7 @@ export const EmployeeClockIn: React.FC = () => {
     setSetupError('');
     try {
       await setEmployeePin(employee.id, newPin);
-      await loadDashboard(employee);
-      setStep('dashboard');
+      await continueAfterPin(employee);
     } catch (err) {
       setSetupError(err instanceof Error ? err.message : 'Erro ao salvar PIN');
     } finally {
@@ -237,7 +270,8 @@ export const EmployeeClockIn: React.FC = () => {
     return data;
   };
 
-  const performClock = async (type: 'entry' | 'exit') => {
+  // Executa a batida de ponto de fato (chamada à Edge Function + feedback)
+  const executeClock = async (type: 'entry' | 'exit') => {
     if (!employee) return;
     // Guard síncrono: bloqueia qualquer segundo clique enquanto um registro
     // estiver em voo (ou no debounce de 3s pós-clique). React schedula o
@@ -284,8 +318,46 @@ export const EmployeeClockIn: React.FC = () => {
     }
   };
 
+  // Entrada principal do botão de ponto:
+  // - se facial está ativo → abre overlay de verificação; ao acertar, chama executeClock
+  // - se não está ativo → executa direto
+  const performClock = (type: 'entry' | 'exit') => {
+    if (!employee) return;
+    if (inFlightClockRef.current || pendingClockType) return;
+    setClockMsg('');
+    if (faceGateActive) {
+      setPendingClockType(type);
+      return;
+    }
+    executeClock(type);
+  };
+
   const handleClockIn = () => performClock('entry');
   const handleClockOut = () => performClock('exit');
+
+  // ─── Face recognition completion handlers ────────────────────────────────
+  const handleFaceRegistrationComplete = async () => {
+    if (!employee) return;
+    // Recarrega employee p/ pegar face_registered atualizado e pula pro dashboard
+    try {
+      const fresh = await getEmployeeByCpf(employee.cpf);
+      if (fresh) setEmployee(fresh);
+    } catch { /* segue com o que tem */ }
+    setFaceGateActive(true); // agora cadastrado, próximas batidas precisam verificar
+    await loadDashboard(employee);
+    setStep('dashboard');
+  };
+
+  const handleFaceClockVerifySuccess = () => {
+    const type = pendingClockType;
+    setPendingClockType(null);
+    if (type) executeClock(type);
+  };
+
+  const handleFaceClockVerifyFail = () => {
+    setPendingClockType(null);
+    setClockMsg('❌ Reconhecimento facial falhou. Procure o supervisor.');
+  };
 
   const handleLogout = () => {
     setStep('cpf');
@@ -298,6 +370,8 @@ export const EmployeeClockIn: React.FC = () => {
     setTodayRecord(null);
     setHistory([]);
     setClockMsg('');
+    setFaceGateActive(false);
+    setPendingClockType(null);
   };
 
   // ─── Resume do mês ────────────────────────────────────────────────────────
@@ -679,7 +753,27 @@ export const EmployeeClockIn: React.FC = () => {
             </div>
           </>
         )}
+
       </div>
+
+      {/* ── FACE REGISTRATION (overlay full-screen — primeiro acesso) ── */}
+      {step === 'face-register' && employee && (
+        <FaceRegistration
+          employee={employee}
+          onComplete={handleFaceRegistrationComplete}
+          onSkip={handleLogout}
+        />
+      )}
+
+      {/* ── FACE VERIFICATION (overlay disparado pelo botão de ponto) ── */}
+      {step === 'dashboard' && pendingClockType && employee && (
+        <FaceVerification
+          employee={employee}
+          onSuccess={handleFaceClockVerifySuccess}
+          onFail={handleFaceClockVerifyFail}
+          clockType={pendingClockType}
+        />
+      )}
 
     </div>
   );

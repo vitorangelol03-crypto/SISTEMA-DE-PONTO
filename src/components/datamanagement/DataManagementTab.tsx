@@ -348,62 +348,64 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
         </div>
       </div>
 
-      <div className="flex gap-2 border-b border-gray-200 pb-4">
-        <button
-          onClick={() => setActiveSection('overview')}
-          className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-            activeSection === 'overview'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4" />
-          Visão Geral
-        </button>
-        <button
-          onClick={() => setActiveSection('retention')}
-          className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-            activeSection === 'retention'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          Retenção de Dados
-        </button>
-        <button
-          onClick={() => setActiveSection('manual')}
-          className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-            activeSection === 'manual'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <Trash2 className="w-4 h-4" />
-          Limpeza Manual
-        </button>
-        <button
-          onClick={() => setActiveSection('automatic')}
-          className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-            activeSection === 'automatic'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <Settings className="w-4 h-4" />
-          Limpeza Automática
-        </button>
-        <button
-          onClick={() => setActiveSection('logs')}
-          className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-            activeSection === 'logs'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          Histórico
-        </button>
+      <div className="overflow-x-auto border-b border-gray-200 pb-4">
+        <div className="flex gap-2 min-w-max">
+          <button
+            onClick={() => setActiveSection('overview')}
+            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap min-h-[44px] ${
+              activeSection === 'overview'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4 flex-shrink-0" />
+            <span>Visão Geral</span>
+          </button>
+          <button
+            onClick={() => setActiveSection('retention')}
+            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap min-h-[44px] ${
+              activeSection === 'retention'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <Clock className="w-4 h-4 flex-shrink-0" />
+            <span>Retenção</span>
+          </button>
+          <button
+            onClick={() => setActiveSection('manual')}
+            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap min-h-[44px] ${
+              activeSection === 'manual'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <Trash2 className="w-4 h-4 flex-shrink-0" />
+            <span>Limpeza Manual</span>
+          </button>
+          <button
+            onClick={() => setActiveSection('automatic')}
+            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap min-h-[44px] ${
+              activeSection === 'automatic'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <Settings className="w-4 h-4 flex-shrink-0" />
+            <span>Limpeza Automática</span>
+          </button>
+          <button
+            onClick={() => setActiveSection('logs')}
+            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap min-h-[44px] ${
+              activeSection === 'logs'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <Calendar className="w-4 h-4 flex-shrink-0" />
+            <span>Histórico</span>
+          </button>
+        </div>
       </div>
 
       {activeSection === 'overview' && statistics && (

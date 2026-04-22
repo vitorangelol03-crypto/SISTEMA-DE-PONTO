@@ -13,6 +13,13 @@ export default defineConfig({
       filename: 'dist/stats.html',
     }),
   ],
+  server: {
+    host: true,
+    https: false,
+    headers: {
+      'Permissions-Policy': 'camera=*, microphone=*',
+    },
+  },
   optimizeDeps: {
     exclude: ['lucide-react'],
   },

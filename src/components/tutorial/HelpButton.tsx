@@ -38,7 +38,7 @@ export const HelpButton: React.FC<HelpButtonProps> = ({ currentTab, hasPermissio
     <>
       <button
         onClick={() => setShowModal(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center group z-40"
+        className="hidden sm:flex fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all items-center justify-center group z-40"
         title="Ajuda"
       >
         <HelpCircle className="w-6 h-6" />

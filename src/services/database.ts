@@ -25,6 +25,12 @@ export interface Employee {
   zip_code: string | null;
   created_by: string;
   created_at: string;
+  face_recognition_enabled?: boolean | null;
+  face_reset_requested?: boolean | null;
+  face_registered?: boolean | null;
+  face_photo_url?: string | null;
+  face_descriptor?: string | null;
+  face_registered_at?: string | null;
 }
 
 export interface Attendance {
@@ -3346,4 +3352,205 @@ export const runAutoCleanup = async (): Promise<boolean> => {
     .eq('id', config.id);
   if (error) throw error;
   return true;
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// Face Recognition
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface FaceRecognitionConfig {
+  enabled: boolean;
+}
+
+export interface FaceAuthAttempt {
+  id: string;
+  employee_id: string | null;
+  employee_name: string;
+  attempted_at: string;
+  success: boolean;
+  confidence: number | null;
+  clock_type: 'entry' | 'exit' | null;
+}
+
+export const getFaceRecognitionConfig = async (): Promise<FaceRecognitionConfig> => {
+  const { data, error } = await supabase
+    .from('face_recognition_config')
+    .select('enabled')
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return { enabled: !!data?.enabled };
+};
+
+export const setFaceRecognitionGlobal = async (
+  enabled: boolean,
+  updatedBy: string
+): Promise<void> => {
+  const now = new Date().toISOString();
+  const { data: existing } = await supabase
+    .from('face_recognition_config')
+    .select('id')
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase
+      .from('face_recognition_config')
+      .update({ enabled, updated_by: updatedBy, updated_at: now })
+      .eq('id', existing.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('face_recognition_config')
+      .insert([{ enabled, updated_by: updatedBy }]);
+    if (error) throw error;
+  }
+};
+
+export const setFaceRecognitionForEmployee = async (
+  employeeId: string,
+  enabled: boolean,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  updatedBy: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('employees')
+    .update({ face_recognition_enabled: enabled })
+    .eq('id', employeeId);
+  if (error) throw error;
+};
+
+export const resetFaceForEmployee = async (
+  employeeId: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  updatedBy: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('employees')
+    .update({
+      face_registered: false,
+      face_descriptor: null,
+      face_photo_url: null,
+      face_reset_requested: true,
+      face_registered_at: null,
+    })
+    .eq('id', employeeId);
+  if (error) throw error;
+};
+
+export const saveFaceData = async (
+  employeeId: string,
+  photoUrl: string | null,
+  descriptor: number[]
+): Promise<void> => {
+  const { error } = await supabase
+    .from('employees')
+    .update({
+      face_photo_url: photoUrl,
+      face_descriptor: descriptor,
+      face_registered: true,
+      face_reset_requested: false,
+      face_registered_at: new Date().toISOString(),
+    })
+    .eq('id', employeeId);
+  if (error) throw error;
+};
+
+export const getFaceDescriptor = async (employeeId: string): Promise<number[] | null> => {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('face_descriptor')
+    .eq('id', employeeId)
+    .maybeSingle();
+  if (error) throw error;
+  const raw = data?.face_descriptor;
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw as number[];
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as number[]) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+export const logFaceAttempt = async (
+  employeeId: string,
+  success: boolean,
+  confidence: number | null,
+  clockType: 'entry' | 'exit' | null
+): Promise<void> => {
+  const { error } = await supabase
+    .from('face_auth_attempts')
+    .insert([{
+      employee_id: employeeId,
+      success,
+      confidence,
+      clock_type: clockType,
+    }]);
+  if (error) {
+    // Não queremos quebrar o fluxo de autenticação por falha de log
+    console.error('logFaceAttempt falhou:', error);
+  }
+};
+
+export const getFaceAuthAttempts = async (filters?: {
+  startDate?: string;
+  endDate?: string;
+  employeeId?: string;
+  success?: boolean;
+}): Promise<FaceAuthAttempt[]> => {
+  let query = supabase
+    .from('face_auth_attempts')
+    .select(`
+      id,
+      employee_id,
+      attempted_at,
+      success,
+      confidence,
+      clock_type,
+      employees ( name )
+    `);
+
+  if (filters?.startDate) {
+    query = query.gte('attempted_at', `${filters.startDate}T00:00:00`);
+  }
+  if (filters?.endDate) {
+    query = query.lte('attempted_at', `${filters.endDate}T23:59:59`);
+  }
+  if (filters?.employeeId) {
+    query = query.eq('employee_id', filters.employeeId);
+  }
+  if (typeof filters?.success === 'boolean') {
+    query = query.eq('success', filters.success);
+  }
+
+  const { data, error } = await query.order('attempted_at', { ascending: false });
+  if (error) throw error;
+
+  type Row = {
+    id: string;
+    employee_id: string | null;
+    attempted_at: string;
+    success: boolean;
+    confidence: number | null;
+    clock_type: 'entry' | 'exit' | null;
+    employees?: { name?: string | null } | Array<{ name?: string | null }> | null;
+  };
+
+  return (data as Row[] | null ?? []).map(r => {
+    const emp = Array.isArray(r.employees) ? r.employees[0] : r.employees;
+    return {
+      id: r.id,
+      employee_id: r.employee_id,
+      employee_name: emp?.name ?? '—',
+      attempted_at: r.attempted_at,
+      success: r.success,
+      confidence: r.confidence,
+      clock_type: r.clock_type,
+    };
+  });
 };

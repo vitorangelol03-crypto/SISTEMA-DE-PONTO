@@ -152,24 +152,26 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
                     <label className="w-full sm:w-20 text-sm font-medium text-gray-700">
                       Tipo {type}
                     </label>
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="text-sm text-gray-500">R$</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={bonusDefaults[type]}
-                        onChange={(e) =>
-                          setBonusDefaults(prev => ({ ...prev, [type]: e.target.value }))
-                        }
-                        disabled={saving}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-base min-h-[44px]"
-                        placeholder="0.00"
-                      />
+                    <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-2">
+                      <div className="flex items-center gap-2 flex-1 w-full">
+                        <span className="text-sm text-gray-500">R$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={bonusDefaults[type]}
+                          onChange={(e) =>
+                            setBonusDefaults(prev => ({ ...prev, [type]: e.target.value }))
+                          }
+                          disabled={saving}
+                          className="flex-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-base min-h-[44px]"
+                          placeholder="0.00"
+                        />
+                      </div>
                       <button
                         onClick={() => handleSaveBonusDefault(type)}
                         disabled={saving}
-                        className="flex items-center justify-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50 transition-colors font-medium min-h-[44px] whitespace-nowrap"
+                        className="w-full sm:w-auto flex items-center justify-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50 transition-colors font-medium min-h-[44px] whitespace-nowrap"
                       >
                         <Save className="w-4 h-4" />
                         {saving ? 'Salvando...' : 'Salvar'}
