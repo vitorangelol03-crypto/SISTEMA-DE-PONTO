@@ -3387,6 +3387,10 @@ export const setFaceRecognitionGlobal = async (
   updatedBy: string
 ): Promise<void> => {
   const now = new Date().toISOString();
+  // updated_by é FK para users.id; só inclui no payload se for um id válido
+  // (string não-vazia). Coluna é nullable, então ausência é aceita.
+  const auditor = updatedBy && updatedBy.trim() ? updatedBy.trim() : null;
+
   const { data: existing } = await supabase
     .from('face_recognition_config')
     .select('id')
@@ -3396,13 +3400,13 @@ export const setFaceRecognitionGlobal = async (
   if (existing) {
     const { error } = await supabase
       .from('face_recognition_config')
-      .update({ enabled, updated_by: updatedBy, updated_at: now })
+      .update({ enabled, updated_by: auditor, updated_at: now })
       .eq('id', existing.id);
     if (error) throw error;
   } else {
     const { error } = await supabase
       .from('face_recognition_config')
-      .insert([{ enabled, updated_by: updatedBy }]);
+      .insert([{ enabled, updated_by: auditor }]);
     if (error) throw error;
   }
 };

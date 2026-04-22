@@ -68,7 +68,7 @@ const FilterField: React.FC<{ label: string; children: React.ReactNode }> = ({ l
 const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-gray-500 focus:outline-none min-h-[44px]';
 const selectCls = `${inputCls} lg:min-w-[140px]`;
 
-export const AdminTab: React.FC<AdminTabProps> = () => {
+export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
   // ─── Auth ─────────────────────────────────────────────────────────────────
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
@@ -390,7 +390,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
     const next = !faceGlobalEnabled;
     setFaceGlobalSaving(true);
     try {
-      await setFaceRecognitionGlobal(next, 'admin');
+      await setFaceRecognitionGlobal(next, userId);
       setFaceGlobalEnabled(next);
       toast.success(next ? 'Reconhecimento facial ativado globalmente' : 'Reconhecimento facial desativado');
     } catch (err) {
@@ -404,7 +404,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
   const handleToggleFaceEmployee = async (employeeId: string, currentEnabled: boolean) => {
     setFaceEmpSaving(employeeId);
     try {
-      await setFaceRecognitionForEmployee(employeeId, !currentEnabled, 'admin');
+      await setFaceRecognitionForEmployee(employeeId, !currentEnabled, userId);
       setEmployees(prev => prev.map(e => e.id === employeeId ? { ...e, face_recognition_enabled: !currentEnabled } : e));
       toast.success(!currentEnabled ? 'Ativado para o funcionário' : 'Desativado para o funcionário');
     } catch (err) {
@@ -419,7 +419,7 @@ export const AdminTab: React.FC<AdminTabProps> = () => {
     if (!confirm(`Resetar cadastro facial de ${employeeName}?\n\nO funcionário precisará recadastrar o rosto no próximo acesso.`)) return;
     setFaceResetting(employeeId);
     try {
-      await resetFaceForEmployee(employeeId, 'admin');
+      await resetFaceForEmployee(employeeId, userId);
       setEmployees(prev => prev.map(e => e.id === employeeId ? {
         ...e,
         face_registered: false,

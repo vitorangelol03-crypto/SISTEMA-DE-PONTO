@@ -103,10 +103,13 @@ export async function deleteTestEmployees(): Promise<number> {
 }
 
 /**
- * Apaga registros de `bonuses`, `attendance` e reseta colunas de bônus em
- * `payments` — mas apenas para a data de hoje e apenas para linhas criadas
- * em/depois de `sinceIso`. Isso garante que registros legítimos preexistentes
- * sejam preservados.
+ * Limpa artefatos de testes criados em/depois de `sinceIso`.
+ *
+ * ⚠️ PROTEÇÃO: NUNCA deleta/modifica registros cuja `date` seja o dia atual
+ * em BRT. Um incidente anterior apagou dados reais de hoje quando o filtro
+ * por `created_at >= sinceIso` coincidiu com a janela de uso real do app.
+ * A limpeza de artefatos de teste do dia atual é feita via
+ * `deleteTestEmployees()`, que escopa por funcionários com prefixo PW Test.
  */
 export async function cleanupTodaySince(sinceIso: string): Promise<{
   bonuses: number;
@@ -116,30 +119,43 @@ export async function cleanupTodaySince(sinceIso: string): Promise<{
   const supabase = getClient();
   const today = todayIso();
 
-  const { data: delBonuses } = await supabase
-    .from('bonuses')
-    .delete()
-    .eq('date', today)
-    .gte('created_at', sinceIso)
-    .select('id');
+  // eslint-disable-next-line no-console
+  console.warn(`PROTEÇÃO: cleanup preservando todos os registros com date=${today} (dia atual BRT).`);
 
+  // attendance: apaga apenas de datas passadas, dentro da janela da suíte.
   const { data: delAttendance } = await supabase
     .from('attendance')
     .delete()
-    .eq('date', today)
+    .neq('date', today)
+    .gte('created_at', sinceIso)
+    .select('id');
+  if (delAttendance && delAttendance.length === 0) {
+    // eslint-disable-next-line no-console
+    console.warn('PROTEÇÃO: tentativa de deletar attendance de hoje bloqueada');
+  }
+
+  // bonuses: mesmo tratamento.
+  const { data: delBonuses } = await supabase
+    .from('bonuses')
+    .delete()
+    .neq('date', today)
     .gte('created_at', sinceIso)
     .select('id');
 
-  // Para payments, não deletamos: apenas zeramos as colunas de bônus se
-  // foram tocadas durante a suíte. Isso evita apagar pagamentos reais.
+  // payments: nunca deletamos; zeramos bônus em linhas NÃO de hoje.
   const { data: touchedPayments } = await supabase
     .from('payments')
-    .select('id, bonus, bonus_b, bonus_c1, bonus_c2, daily_rate, updated_at')
-    .eq('date', today)
+    .select('id, bonus, bonus_b, bonus_c1, bonus_c2, daily_rate, updated_at, date')
+    .neq('date', today)
     .gte('updated_at', sinceIso);
 
   let paymentsReset = 0;
   for (const p of touchedPayments || []) {
+    if (p.date === today) {
+      // eslint-disable-next-line no-console
+      console.warn('PROTEÇÃO: tentativa de deletar payments de hoje bloqueada');
+      continue;
+    }
     const dailyRate = Number(p.daily_rate) || 0;
     await supabase
       .from('payments')
@@ -157,9 +173,18 @@ export async function cleanupTodaySince(sinceIso: string): Promise<{
   await supabase
     .from('bonus_removals')
     .delete()
-    .gte('created_at', sinceIso)
-    .eq('date', today);
+    .neq('date', today)
+    .gte('created_at', sinceIso);
 
+  // error_records tem coluna `date`: protege tambem.
+  await supabase
+    .from('error_records')
+    .delete()
+    .neq('date', today)
+    .gte('created_at', sinceIso);
+
+  // Tabelas sem coluna `date` (apenas created_at/attempted_at): mantemos
+  // scoping pela janela da suíte.
   await supabase
     .from('geo_fraud_attempts')
     .delete()
