@@ -3487,17 +3487,26 @@ export const logFaceAttempt = async (
   confidence: number | null,
   clockType: 'entry' | 'exit' | null
 ): Promise<void> => {
-  const { error } = await supabase
-    .from('face_auth_attempts')
-    .insert([{
+  // `date` é NOT NULL na tabela face_auth_attempts — precisa ser passado
+  // explicitamente no fuso BRT. `attempted_at` também é setado para garantir.
+  try {
+    const payload = {
       employee_id: employeeId,
+      date: getBrazilDateString(),
+      attempted_at: new Date().toISOString(),
       success,
       confidence,
       clock_type: clockType,
-    }]);
-  if (error) {
-    // Não queremos quebrar o fluxo de autenticação por falha de log
-    console.error('logFaceAttempt falhou:', error);
+    };
+    const { error } = await supabase
+      .from('face_auth_attempts')
+      .insert([payload]);
+    if (error) {
+      // Não queremos quebrar o fluxo de autenticação por falha de log
+      console.error('logFaceAttempt falhou:', error, 'payload:', payload);
+    }
+  } catch (err) {
+    console.error('logFaceAttempt exceção:', err);
   }
 };
 
