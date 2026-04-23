@@ -233,6 +233,7 @@ export const EmployeeClockIn: React.FC = () => {
 
   const callClockValidated = async (
     clockType: 'entry' | 'exit',
+    signal?: AbortSignal,
   ): Promise<{ success: boolean; fraud: boolean; geo_warning?: boolean; distance_meters: number | null; attendance?: Attendance; error?: string }> => {
     if (!employee) throw new Error('Funcionário não carregado');
 
@@ -263,6 +264,7 @@ export const EmployeeClockIn: React.FC = () => {
         longitude,
         accuracy,
       }),
+      signal,
     });
 
     const data = await res.json();
@@ -270,7 +272,9 @@ export const EmployeeClockIn: React.FC = () => {
     return data;
   };
 
-  // Executa a batida de ponto de fato (chamada à Edge Function + feedback)
+  // Executa a batida de ponto de fato (chamada à Edge Function + feedback).
+  // Em caso de timeout (30s), consulta o banco para ver se o servidor
+  // registrou mesmo assim antes de mostrar erro ao usuário.
   const executeClock = async (type: 'entry' | 'exit') => {
     if (!employee) return;
     // Guard síncrono: bloqueia qualquer segundo clique enquanto um registro
@@ -282,32 +286,59 @@ export const EmployeeClockIn: React.FC = () => {
     setClockLoading(true);
     setClockMsg('');
 
-    // Watchdog: se a Edge Function travar, reabilita o botão em 15s
+    // AbortController para cortar o fetch em 30s (antes era 15s).
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), 30_000);
+
+    // Watchdog extra (35s): segurança se o try/catch não chegar a rodar.
     if (clockWatchdogRef.current) clearTimeout(clockWatchdogRef.current);
     clockWatchdogRef.current = setTimeout(() => {
       setClockLoading(false);
       setClockMsg('❌ Tempo esgotado. Verifique sua conexão e tente novamente.');
       inFlightClockRef.current = false;
       clockWatchdogRef.current = null;
-    }, 15_000);
+    }, 35_000);
+
+    const now = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     try {
-      const result = await callClockValidated(type);
+      const result = await callClockValidated(type, controller.signal);
       if (!result.success) {
         setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
         return;
       }
-      const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       if (type === 'entry') {
-        setClockMsg(`✅ Entrada registrada às ${time}`);
+        setClockMsg(`✅ Entrada registrada às ${now()}`);
       } else {
         const att = result.attendance;
-        setClockMsg(`✅ Saída registrada às ${time}${att ? ` — ${formatHours(att.hours_worked)}` : ''}`);
+        setClockMsg(`✅ Saída registrada às ${now()}${att ? ` — ${formatHours(att.hours_worked)}` : ''}`);
       }
       await loadDashboard(employee, true); // silent: sem spinner piscando no card
-    } catch {
-      setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
+    } catch (err) {
+      // Timeout (AbortError) → o servidor pode ter registrado mesmo assim.
+      // Consultamos o estado atual antes de declarar falha.
+      const isAbort = err instanceof DOMException && err.name === 'AbortError';
+      if (isAbort) {
+        setClockMsg('⏳ Conexão lenta. Verificando registro...');
+        try {
+          const today = await getEmployeeTodayAttendance(employee.id);
+          const registered = type === 'entry' ? !!today?.entry_time : !!today?.exit_time_full;
+          if (registered) {
+            if (type === 'entry') {
+              setClockMsg(`✅ Entrada registrada às ${now()}`);
+            } else {
+              setClockMsg(`✅ Saída registrada às ${now()}${today ? ` — ${formatHours(today.hours_worked)}` : ''}`);
+            }
+            await loadDashboard(employee, true);
+            return;
+          }
+        } catch { /* sem internet — cai na mensagem final */ }
+        setClockMsg('❌ Tempo esgotado. Verifique sua conexão e tente novamente.');
+      } else {
+        setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
+      }
     } finally {
+      clearTimeout(abortTimer);
       if (clockWatchdogRef.current) {
         clearTimeout(clockWatchdogRef.current);
         clockWatchdogRef.current = null;
