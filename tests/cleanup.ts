@@ -61,6 +61,15 @@ function todayIso(): string {
   return local.toISOString().slice(0, 10);
 }
 
+function yesterdayIso(): string {
+  // Dia anterior no mesmo fuso — usado para proteger contra suítes que
+  // iniciam antes da meia-noite e terminam depois (janela 23:58 → 00:02).
+  const now = new Date();
+  const offset = -3 * 60;
+  const local = new Date(now.getTime() + (now.getTimezoneOffset() + offset) * 60_000 - 86_400_000);
+  return local.toISOString().slice(0, 10);
+}
+
 /**
  * Remove todas as linhas de auditoria (`bonus_removals`) que foram geradas
  * pelos testes, identificadas pelo texto fixo em `observation`.
@@ -118,42 +127,50 @@ export async function cleanupTodaySince(sinceIso: string): Promise<{
 }> {
   const supabase = getClient();
   const today = todayIso();
+  const yesterday = yesterdayIso();
 
   // eslint-disable-next-line no-console
-  console.warn(`PROTEÇÃO: cleanup preservando todos os registros com date=${today} (dia atual BRT).`);
+  console.warn(
+    `PROTEÇÃO: cleanup preservando registros com date=${today} (hoje) e date=${yesterday} (ontem — cobre suítes que atravessam meia-noite).`,
+  );
 
-  // attendance: apaga apenas de datas passadas, dentro da janela da suíte.
+  // attendance: apaga apenas de datas passadas (≤ anteontem), dentro da
+  // janela da suíte.
   const { data: delAttendance } = await supabase
     .from('attendance')
     .delete()
     .neq('date', today)
+    .neq('date', yesterday)
     .gte('created_at', sinceIso)
     .select('id');
-  if (delAttendance && delAttendance.length === 0) {
-    // eslint-disable-next-line no-console
-    console.warn('PROTEÇÃO: tentativa de deletar attendance de hoje bloqueada');
-  }
 
-  // bonuses: mesmo tratamento.
+  // bonuses: mesmo tratamento — protege hoje e ontem.
   const { data: delBonuses } = await supabase
     .from('bonuses')
     .delete()
     .neq('date', today)
+    .neq('date', yesterday)
     .gte('created_at', sinceIso)
     .select('id');
 
-  // payments: nunca deletamos; zeramos bônus em linhas NÃO de hoje.
+  // payments: nunca deletamos; zeramos bônus em linhas que NÃO são hoje/ontem.
+  // Tripla defesa:
+  //  1) SELECT filtra por .neq(today).neq(yesterday)
+  //  2) Loop testa p.date e emite log se bater com protegida
+  //  3) UPDATE repete .neq(today).neq(yesterday) (belt-and-suspenders contra
+  //     race entre SELECT e UPDATE)
   const { data: touchedPayments } = await supabase
     .from('payments')
     .select('id, bonus, bonus_b, bonus_c1, bonus_c2, daily_rate, updated_at, date')
     .neq('date', today)
+    .neq('date', yesterday)
     .gte('updated_at', sinceIso);
 
   let paymentsReset = 0;
   for (const p of touchedPayments || []) {
-    if (p.date === today) {
+    if (p.date === today || p.date === yesterday) {
       // eslint-disable-next-line no-console
-      console.warn('PROTEÇÃO: tentativa de deletar payments de hoje bloqueada');
+      console.warn(`PROTEÇÃO: payment de ${p.date} preservado (hoje ou ontem).`);
       continue;
     }
     const dailyRate = Number(p.daily_rate) || 0;
@@ -166,7 +183,9 @@ export async function cleanupTodaySince(sinceIso: string): Promise<{
         bonus_c2: 0,
         total: dailyRate,
       })
-      .eq('id', p.id);
+      .eq('id', p.id)
+      .neq('date', today)
+      .neq('date', yesterday);
     paymentsReset++;
   }
 
@@ -174,6 +193,7 @@ export async function cleanupTodaySince(sinceIso: string): Promise<{
     .from('bonus_removals')
     .delete()
     .neq('date', today)
+    .neq('date', yesterday)
     .gte('created_at', sinceIso);
 
   // error_records tem coluna `date`: protege tambem.
@@ -181,6 +201,7 @@ export async function cleanupTodaySince(sinceIso: string): Promise<{
     .from('error_records')
     .delete()
     .neq('date', today)
+    .neq('date', yesterday)
     .gte('created_at', sinceIso);
 
   // Tabelas sem coluna `date` (apenas created_at/attempted_at): mantemos
