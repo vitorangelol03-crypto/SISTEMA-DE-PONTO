@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, Check, X, Loader2, RotateCcw } from 'lucide-react';
+import { Camera, X, Loader2, RotateCcw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { saveFaceData, Employee } from '../../services/database';
 import { useFaceApi } from '../../hooks/useFaceApi';
+import { FaceScanFrame, FaceScanVisual } from './FaceScanFrame';
 import toast from 'react-hot-toast';
 
 interface FaceRegistrationProps {
@@ -284,10 +285,13 @@ export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, on
     );
   }
 
-  const hasFace = phase === 'detected' || phase === 'capturing';
-  const ringColor = phase === 'success' ? '#4ade80' // green-400
-    : phase === 'capturing' || phase === 'saving' ? '#60a5fa' // blue-400
-    : hasFace ? '#4ade80' : '#f87171'; // green-400 / red-400
+  const visual: FaceScanVisual =
+    phase === 'no-face'   ? { color: 'blue',  pulse: true,  showScanLine: true,  label: '🔍 Procurando rosto...' }
+  : phase === 'detected'  ? { color: 'green', pulse: true,                        label: '✅ Rosto detectado! Aguarde...' }
+  : phase === 'capturing' ? { color: 'blue',                                       label: '📸 Capturando...' }
+  : phase === 'saving'    ? { color: 'blue',                                       label: '💾 Salvando cadastro...' }
+  : phase === 'success'   ? { color: 'green', flash: 'success',                   label: '✅ Rosto cadastrado!' }
+                          : { color: 'blue',  pulse: true,  showScanLine: true,  label: '🔍 Procurando rosto...' };
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
@@ -332,41 +336,10 @@ export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, on
           }}
         />
 
-        {/* Overlay escuro com recorte circular */}
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          background: 'rgba(0,0,0,0.6)',
-          WebkitMaskImage: 'radial-gradient(circle at center, transparent 140px, black 142px)',
-          maskImage: 'radial-gradient(circle at center, transparent 140px, black 142px)',
-        }} />
-
-        {/* Anel + conteúdo central */}
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          width: 280,
-          height: 280,
-          marginTop: -140,
-          marginLeft: -140,
-          borderRadius: '50%',
-          border: `4px solid ${ringColor}`,
-          transition: 'border-color 300ms',
-          pointerEvents: 'none',
-        }}>
-          {phase === 'detected' && countdown > 0 && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span className="text-white text-7xl font-bold drop-shadow-lg">{countdown}</span>
-            </div>
-          )}
-          {phase === 'success' && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(34,197,94,0.3)', borderRadius: '50%' }}>
-              <Check className="w-24 h-24 text-white drop-shadow-lg" />
-            </div>
-          )}
-        </div>
+        <FaceScanFrame
+          visual={visual}
+          countdown={phase === 'detected' ? countdown : 0}
+        />
 
         {/* Debug badge */}
         <div style={{
@@ -384,28 +357,6 @@ export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, on
         }}>
           stream: {debug.active ? 'ativo' : 'off'} | w: {debug.w} | h: {debug.h} | ready: {debug.ready}{debug.retries > 0 ? ` | retry: ${debug.retries}` : ''}
         </div>
-      </div>
-
-      {/* Bottom instruction */}
-      <div className="relative z-10 px-4 py-5 bg-black/80 text-white text-center">
-        {phase === 'no-face' && (
-          <p className="text-base font-medium">Posicione seu rosto dentro do círculo</p>
-        )}
-        {phase === 'detected' && (
-          <p className="text-base font-medium text-green-300">Perfeito! Segure assim...</p>
-        )}
-        {phase === 'capturing' && (
-          <p className="text-base font-medium text-blue-300">Capturando...</p>
-        )}
-        {phase === 'saving' && (
-          <p className="text-base font-medium text-blue-300 flex items-center justify-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Salvando cadastro...
-          </p>
-        )}
-        {phase === 'success' && (
-          <p className="text-base font-bold text-green-300">✅ Rosto cadastrado com sucesso!</p>
-        )}
       </div>
     </div>
   );

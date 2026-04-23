@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ScanFace, Check, X, Loader2, AlertTriangle } from 'lucide-react';
+import { ScanFace, X, Loader2 } from 'lucide-react';
 import { getFaceDescriptor, logFaceAttempt, Employee } from '../../services/database';
 import { useFaceApi } from '../../hooks/useFaceApi';
+import { FaceScanFrame, FaceScanVisual } from './FaceScanFrame';
 
 interface FaceVerificationProps {
   employee: Employee;
@@ -270,19 +271,13 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
     );
   }
 
-  const flashBg =
-    phase === 'success' ? 'rgba(34,197,94,0.3)'
-    : phase === 'fail-retry' || phase === 'fail-final' ? 'rgba(239,68,68,0.3)'
-    : '';
-
-  const ringColor =
-    phase === 'success' ? '#4ade80' // green-400
-    : phase === 'fail-retry' || phase === 'fail-final' ? '#f87171' // red-400
-    : phase === 'detecting' ? '#60a5fa' // blue-400
-    : '#9ca3af'; // gray-400
-
-  const confPct = Math.round(confidence * 100);
-  const barColor = confidence >= 0.5 ? 'bg-green-500' : confidence >= 0.3 ? 'bg-yellow-500' : 'bg-red-500';
+  const visual: FaceScanVisual =
+    phase === 'no-face'     ? { color: 'blue',  pulse: true, showScanLine: true, label: '🔍 Procurando rosto...' }
+  : phase === 'detecting'   ? { color: 'green', pulse: true,                      label: '🔎 Analisando identidade...' }
+  : phase === 'success'     ? { color: 'green', flash: 'success',                 label: '✅ Identidade confirmada!' }
+  : phase === 'fail-retry'  ? { color: 'red',   flash: 'fail', shake: true,       label: '❌ Não reconhecido. Tente novamente.' }
+  : phase === 'fail-final'  ? { color: 'red',   flash: 'fail', shake: true,       label: '⛔ Muitas tentativas. Procure o supervisor.' }
+                            : { color: 'blue',  pulse: true, showScanLine: true, label: '🔍 Procurando rosto...' };
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
@@ -315,46 +310,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
           }}
         />
 
-        {/* Overlay escuro com recorte circular */}
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          background: 'rgba(0,0,0,0.6)',
-          WebkitMaskImage: 'radial-gradient(circle at center, transparent 140px, black 142px)',
-          maskImage: 'radial-gradient(circle at center, transparent 140px, black 142px)',
-        }} />
-
-        {/* Anel central */}
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          width: 280,
-          height: 280,
-          marginTop: -140,
-          marginLeft: -140,
-          borderRadius: '50%',
-          border: `4px solid ${ringColor}`,
-          transition: 'border-color 300ms',
-          pointerEvents: 'none',
-        }}>
-          {phase === 'success' && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(34,197,94,0.3)', borderRadius: '50%' }}>
-              <Check className="w-24 h-24 text-white drop-shadow-lg" />
-            </div>
-          )}
-          {(phase === 'fail-retry' || phase === 'fail-final') && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(239,68,68,0.3)', borderRadius: '50%' }}>
-              <X className="w-24 h-24 text-white drop-shadow-lg" />
-            </div>
-          )}
-        </div>
-
-        {/* Flash overlay */}
-        {flashBg && (
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: flashBg, transition: 'opacity 300ms' }} />
-        )}
+        <FaceScanFrame visual={visual} confidence={confidence} />
 
         {/* Debug badge */}
         <div style={{
@@ -372,41 +328,6 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
         }}>
           stream: {debug.active ? 'ativo' : 'off'} | w: {debug.w} | h: {debug.h} | ready: {debug.ready}{debug.retries > 0 ? ` | retry: ${debug.retries}` : ''}
         </div>
-      </div>
-
-      {/* Bottom panel */}
-      <div className="relative z-10 px-4 py-4 bg-black/80 text-white">
-        <div className="mb-3">
-          <div className="flex justify-between text-xs mb-1">
-            <span className="text-white/70">Confiança</span>
-            <span className="font-mono">{confPct}%</span>
-          </div>
-          <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-            <div
-              className={`h-full ${barColor} transition-all duration-300`}
-              style={{ width: `${confPct}%` }}
-            />
-          </div>
-        </div>
-
-        {phase === 'no-face' && (
-          <p className="text-sm text-center text-white/90">Posicione seu rosto dentro do círculo</p>
-        )}
-        {phase === 'detecting' && (
-          <p className="text-sm text-center text-blue-300">Analisando...</p>
-        )}
-        {phase === 'success' && (
-          <p className="text-sm text-center font-bold text-green-300">✅ Identidade confirmada!</p>
-        )}
-        {phase === 'fail-retry' && (
-          <p className="text-sm text-center text-red-300">❌ Rosto não reconhecido. Tente novamente.</p>
-        )}
-        {phase === 'fail-final' && (
-          <div className="text-center text-red-300">
-            <AlertTriangle className="w-6 h-6 mx-auto mb-1" />
-            <p className="text-sm font-semibold">Muitas tentativas. Procure o supervisor.</p>
-          </div>
-        )}
       </div>
     </div>
   );
