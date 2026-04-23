@@ -80,7 +80,7 @@ export const EmployeeClockIn: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [clockLoading, setClockLoading] = useState(false);
-  const [clockMsg, setClockMsg] = useState('');
+  const [clockMsg, setClockMsg] = useState<string | null>(null);
 
   // Facial: se ativo, verifica rosto ao clicar em Registrar Entrada/Saída
   const [faceGateActive, setFaceGateActive] = useState(false);
@@ -94,6 +94,9 @@ export const EmployeeClockIn: React.FC = () => {
 
   const loadDashboard = useCallback(async (emp: Employee, silent = false) => {
     if (!silent) setLoading(true);
+    // Reset mensagem residual: evita que um erro antigo persista
+    // quando o polling (30s) ou um reload posterior confirma o registro.
+    setClockMsg(null);
     try {
       const [today, hist] = await Promise.all([
         getEmployeeTodayAttendance(emp.id),
@@ -143,11 +146,13 @@ export const EmployeeClockIn: React.FC = () => {
 
       setFaceGateActive(activeGlobally && !!emp.face_registered && !emp.face_reset_requested);
       await loadDashboard(emp);
+      setClockMsg(null); // entrada fresca no dashboard: zera qualquer msg residual
       setStep('dashboard');
     } catch (err) {
       console.error('Erro no gate facial, seguindo sem facial:', err);
       setFaceGateActive(false);
       await loadDashboard(emp);
+      setClockMsg(null);
       setStep('dashboard');
     }
   }, [loadDashboard]);
@@ -284,7 +289,7 @@ export const EmployeeClockIn: React.FC = () => {
     inFlightClockRef.current = true;
 
     setClockLoading(true);
-    setClockMsg('');
+    setClockMsg(null);
 
     // AbortController para cortar o fetch em 30s (antes era 15s).
     const controller = new AbortController();
@@ -301,19 +306,43 @@ export const EmployeeClockIn: React.FC = () => {
 
     const now = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    try {
-      const result = await callClockValidated(type, controller.signal);
-      if (!result.success) {
-        setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
-        return;
+    // Helper: verifica no banco se o ponto já foi registrado. Usado em
+    // success=false e AbortError — o servidor pode ter gravado mesmo quando
+    // respondeu com erro / timeout.
+    const verifyRegisteredInDb = async (): Promise<boolean> => {
+      try {
+        const today = await getEmployeeTodayAttendance(employee.id);
+        return type === 'entry' ? !!today?.entry_time : !!today?.exit_time_full;
+      } catch {
+        return false;
       }
+    };
+
+    const setSuccessMsg = async (att?: Attendance | null) => {
+      // 1) Limpa qualquer erro residual ANTES de recarregar o dashboard
+      setClockMsg(null);
+      // 2) Recarrega dados (loadDashboard também reseta clockMsg)
+      await loadDashboard(employee, true);
+      // 3) Define a mensagem de sucesso como estado final, após o reload
       if (type === 'entry') {
         setClockMsg(`✅ Entrada registrada às ${now()}`);
       } else {
-        const att = result.attendance;
         setClockMsg(`✅ Saída registrada às ${now()}${att ? ` — ${formatHours(att.hours_worked)}` : ''}`);
       }
-      await loadDashboard(employee, true); // silent: sem spinner piscando no card
+    };
+
+    try {
+      const result = await callClockValidated(type, controller.signal);
+      if (!result.success) {
+        // Mesmo com success=false, o servidor pode ter gravado. Confirma.
+        if (await verifyRegisteredInDb()) {
+          await setSuccessMsg(result.attendance);
+          return;
+        }
+        setClockMsg(result.error ? `❌ ${result.error}` : '❌ Erro ao registrar ponto. Tente novamente.');
+        return;
+      }
+      await setSuccessMsg(result.attendance);
     } catch (err) {
       // Timeout (AbortError) → o servidor pode ter registrado mesmo assim.
       // Consultamos o estado atual antes de declarar falha.
@@ -324,17 +353,17 @@ export const EmployeeClockIn: React.FC = () => {
           const today = await getEmployeeTodayAttendance(employee.id);
           const registered = type === 'entry' ? !!today?.entry_time : !!today?.exit_time_full;
           if (registered) {
-            if (type === 'entry') {
-              setClockMsg(`✅ Entrada registrada às ${now()}`);
-            } else {
-              setClockMsg(`✅ Saída registrada às ${now()}${today ? ` — ${formatHours(today.hours_worked)}` : ''}`);
-            }
-            await loadDashboard(employee, true);
+            await setSuccessMsg(today);
             return;
           }
         } catch { /* sem internet — cai na mensagem final */ }
         setClockMsg('❌ Tempo esgotado. Verifique sua conexão e tente novamente.');
       } else {
+        // Erro genérico → verifica uma última vez no DB antes de declarar falha
+        if (await verifyRegisteredInDb()) {
+          await setSuccessMsg();
+          return;
+        }
         setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
       }
     } finally {
@@ -355,7 +384,7 @@ export const EmployeeClockIn: React.FC = () => {
   const performClock = (type: 'entry' | 'exit') => {
     if (!employee) return;
     if (inFlightClockRef.current || pendingClockType) return;
-    setClockMsg('');
+    setClockMsg(null);
     if (faceGateActive) {
       setPendingClockType(type);
       return;
@@ -376,6 +405,7 @@ export const EmployeeClockIn: React.FC = () => {
     } catch { /* segue com o que tem */ }
     setFaceGateActive(true); // agora cadastrado, próximas batidas precisam verificar
     await loadDashboard(employee);
+    setClockMsg(null); // entrada fresca no dashboard: zera qualquer msg residual
     setStep('dashboard');
   };
 
@@ -400,7 +430,7 @@ export const EmployeeClockIn: React.FC = () => {
     setEmployee(null);
     setTodayRecord(null);
     setHistory([]);
-    setClockMsg('');
+    setClockMsg(null);
     setFaceGateActive(false);
     setPendingClockType(null);
   };
