@@ -1924,15 +1924,17 @@ export const distributeTriageErrors = async (
 
   // Triage discount fica só em triage_distribution_employees; payments.total
   // é preservado (a UI deduz ao exibir para evitar dupla contagem).
-  for (const emp of preview.perEmployee) {
+  // Batch insert: 1 roundtrip em vez de N, sem perda de granularidade.
+  const detailRows = preview.perEmployee.map(emp => ({
+    distribution_id: distribution.id,
+    employee_id: emp.employee_id,
+    errors_share: emp.total_errors,
+    value_deducted: emp.value_deducted,
+  }));
+  if (detailRows.length > 0) {
     const { error: detailError } = await supabase
       .from('triage_distribution_employees')
-      .insert([{
-        distribution_id: distribution.id,
-        employee_id: emp.employee_id,
-        errors_share: emp.total_errors,
-        value_deducted: emp.value_deducted,
-      }]);
+      .insert(detailRows);
     if (detailError) throw detailError;
   }
 
