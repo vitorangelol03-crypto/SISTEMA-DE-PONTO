@@ -27,10 +27,10 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'react-vendor': ['react', 'react-dom'],
           'ui-vendor': ['lucide-react', 'react-hot-toast'],
           'chart-vendor': ['recharts'],
-          'file-vendor': ['xlsx', 'jspdf'],
+          'file-vendor': ['xlsx'],
           'date-vendor': ['date-fns'],
           'supabase-vendor': ['@supabase/supabase-js'],
         },
