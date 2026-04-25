@@ -145,7 +145,7 @@ test.describe('Erros — individuais e triagem', () => {
     await expect(page.getByText(/Preview da distribuição/)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/Total a descontar/)).toBeVisible();
     await expect(page.getByText(/Detalhamento por dia/)).toBeVisible();
-    await expect(page.getByText(/erros\/pessoa/)).toBeVisible();
+    await expect(page.getByText(/pacotes\/pessoa/)).toBeVisible();
 
     // NÃO confirma distribuição — seria destrutivo em payments reais
     await s.from('triage_errors').delete().eq('date', safeDate);

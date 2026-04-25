@@ -1575,7 +1575,7 @@ export const getEmployeeErrorsByPeriod = async (
 ): Promise<{
   period: PaymentPeriod;
   individual_errors: Array<{ date: string; error_type: ErrorType; error_count: number; observations: string | null }>;
-  triage_errors: Array<{ date: string; errors_share: number; observations: string | null }>;
+  triage_errors: Array<{ date: string; errors_share: number; value_deducted: number; observations: string | null }>;
   total_individual: number;
   total_triage: number;
 }> => {
@@ -1597,7 +1597,7 @@ export const getEmployeeErrorsByPeriod = async (
 
   const { data: triageDetails, error: triErr } = await supabase
     .from('triage_distribution_employees')
-    .select('errors_share, triage_error_distributions!inner(period_start, period_end, observations)')
+    .select('errors_share, value_deducted, triage_error_distributions!inner(period_start, period_end, observations)')
     .eq('employee_id', employeeId)
     .gte('triage_error_distributions.period_start', period.start_date)
     .lte('triage_error_distributions.period_end', period.end_date);
@@ -1612,6 +1612,7 @@ export const getEmployeeErrorsByPeriod = async (
 
   type TriageRow = {
     errors_share: number;
+    value_deducted: number;
     triage_error_distributions:
       | { period_start: string; period_end: string; observations: string | null }
       | { period_start: string; period_end: string; observations: string | null }[];
@@ -1623,6 +1624,7 @@ export const getEmployeeErrorsByPeriod = async (
     return {
       date: dist.period_start,
       errors_share: row.errors_share,
+      value_deducted: Number(row.value_deducted),
       observations: dist.observations,
     };
   });
@@ -1643,6 +1645,8 @@ export const getEmployeeErrorsByPeriod = async (
 
 // ─── Triagem (erros coletivos distribuídos) ───────────────────────────────────
 
+export type TriageType = 'quantity' | 'value';
+
 export interface TriageError {
   id: string;
   date: string;
@@ -1651,6 +1655,8 @@ export interface TriageError {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  triage_type: TriageType;
+  direct_value: number;
 }
 
 export interface TriageDistribution {
@@ -1691,18 +1697,30 @@ export const upsertTriageError = async (
   date: string,
   errorCount: number,
   observations: string | null,
-  createdBy: string
+  createdBy: string,
+  triageType: TriageType = 'quantity',
+  directValue: number = 0
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'errors.createTriage');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
+  if (triageType === 'value') {
+    if (!(directValue > 0)) {
+      throw new Error('Valor R$ deve ser maior que zero');
+    }
+  } else if (!(errorCount >= 0)) {
+    throw new Error('Quantidade inválida');
+  }
+
   const { error } = await supabase
     .from('triage_errors')
     .upsert([{
       date,
-      error_count: errorCount,
+      triage_type: triageType,
+      error_count: triageType === 'quantity' ? errorCount : 0,
+      direct_value: triageType === 'value' ? directValue : 0,
       observations,
       created_by: createdBy,
       updated_at: new Date().toISOString(),
@@ -1767,12 +1785,16 @@ export const getEmployeesPresentInPeriod = async (
 
 export interface TriageDistributionPreview {
   totalErrors: number;
+  totalDirectValue: number;
   days: number;
   perDay: Array<{
     date: string;
+    triage_type: TriageType;
     errors: number;
+    direct_value: number;
     present: number;
     errorsPerPerson: number;
+    valuePerPerson: number;
     remainder: number;
   }>;
   perEmployee: Array<{
@@ -1789,13 +1811,11 @@ export interface TriageDistributionPreview {
 /**
  * Calcula a distribuição de erros de triagem SEM efeitos colaterais.
  *
- * Algoritmo:
- *  1. Para cada dia com erro, divide os erros igualmente entre os funcionários
- *     presentes APENAS NAQUELE DIA (floor).
- *  2. O resto (total_erros % n_presentes) é distribuído +1 para os top-N
- *     funcionários por total de dias presentes no período (desempate: quem
- *     trabalhou mais).
- *  3. Acumula por funcionário ao longo dos dias; multiplica por valor/erro.
+ * Suporta dois tipos por dia (triage_type):
+ *  - 'quantity': divide error_count entre presentes; floor + resto para top-N
+ *    (desempate: mais dias presentes). Cada erro vale `valuePerError`.
+ *  - 'value': divide direct_value (R$) entre presentes; resto em centavos
+ *    vai para o primeiro (mais dias presentes). Não usa valuePerError.
  */
 export const computeTriageDistribution = async (
   startDate: string,
@@ -1803,8 +1823,21 @@ export const computeTriageDistribution = async (
   valuePerError: number
 ): Promise<TriageDistributionPreview> => {
   const triageErrors = await getTriageErrors(startDate, endDate);
-  const daysWithErrors = triageErrors.filter(e => (e.error_count ?? 0) > 0);
-  const totalErrors = daysWithErrors.reduce((s, e) => s + e.error_count, 0);
+  const daysWithErrors = triageErrors.filter(e => {
+    const type = (e.triage_type ?? 'quantity') as TriageType;
+    return type === 'value'
+      ? Number(e.direct_value ?? 0) > 0
+      : (e.error_count ?? 0) > 0;
+  });
+
+  const totalErrors = daysWithErrors.reduce((s, e) => {
+    const type = (e.triage_type ?? 'quantity') as TriageType;
+    return type === 'quantity' ? s + (e.error_count ?? 0) : s;
+  }, 0);
+  const totalDirectValue = Math.round(daysWithErrors.reduce((s, e) => {
+    const type = (e.triage_type ?? 'quantity') as TriageType;
+    return type === 'value' ? s + Number(e.direct_value ?? 0) : s;
+  }, 0) * 100) / 100;
 
   const { data: allAttendance, error: attErr } = await supabase
     .from('attendance')
@@ -1827,53 +1860,113 @@ export const computeTriageDistribution = async (
   });
 
   const errorsByEmployee = new Map<string, number>();
+  const valueByEmployee = new Map<string, number>();
   const perDay: TriageDistributionPreview['perDay'] = [];
 
   for (const dayError of daysWithErrors) {
+    const type = (dayError.triage_type ?? 'quantity') as TriageType;
+    const directValue = Number(dayError.direct_value ?? 0);
+    const errorCount = dayError.error_count ?? 0;
     const presentThatDay = attendance.filter(a => a.date === dayError.date);
     const n = presentThatDay.length;
+
     if (n === 0) {
-      perDay.push({ date: dayError.date, errors: dayError.error_count, present: 0, errorsPerPerson: 0, remainder: 0 });
+      perDay.push({
+        date: dayError.date,
+        triage_type: type,
+        errors: type === 'quantity' ? errorCount : 0,
+        direct_value: type === 'value' ? directValue : 0,
+        present: 0,
+        errorsPerPerson: 0,
+        valuePerPerson: 0,
+        remainder: 0,
+      });
       continue;
     }
-    const base = Math.floor(dayError.error_count / n);
-    const remainder = dayError.error_count % n;
 
-    presentThatDay.forEach(a => {
-      errorsByEmployee.set(a.employee_id, (errorsByEmployee.get(a.employee_id) || 0) + base);
-    });
+    const sorted = presentThatDay
+      .map(a => ({ employee_id: a.employee_id, days_present: employeeInfo.get(a.employee_id)?.days_present ?? 0 }))
+      .sort((a, b) => b.days_present - a.days_present || a.employee_id.localeCompare(b.employee_id));
 
-    if (remainder > 0) {
-      const sorted = presentThatDay
-        .map(a => ({ employee_id: a.employee_id, days_present: employeeInfo.get(a.employee_id)?.days_present ?? 0 }))
-        .sort((a, b) => b.days_present - a.days_present || a.employee_id.localeCompare(b.employee_id));
-      for (let i = 0; i < remainder && i < sorted.length; i++) {
-        const eid = sorted[i].employee_id;
-        errorsByEmployee.set(eid, (errorsByEmployee.get(eid) || 0) + 1);
+    if (type === 'value') {
+      const totalCents = Math.round(directValue * 100);
+      const baseCents = Math.floor(totalCents / n);
+      const remCents = totalCents % n;
+      const baseValue = baseCents / 100;
+
+      presentThatDay.forEach(a => {
+        valueByEmployee.set(a.employee_id, (valueByEmployee.get(a.employee_id) || 0) + baseValue);
+      });
+      if (remCents > 0 && sorted.length > 0) {
+        const firstEid = sorted[0].employee_id;
+        valueByEmployee.set(firstEid, (valueByEmployee.get(firstEid) || 0) + remCents / 100);
       }
-    }
 
-    perDay.push({ date: dayError.date, errors: dayError.error_count, present: n, errorsPerPerson: base, remainder });
+      perDay.push({
+        date: dayError.date,
+        triage_type: 'value',
+        errors: 0,
+        direct_value: directValue,
+        present: n,
+        errorsPerPerson: 0,
+        valuePerPerson: baseValue,
+        remainder: remCents,
+      });
+    } else {
+      const base = Math.floor(errorCount / n);
+      const remainder = errorCount % n;
+
+      presentThatDay.forEach(a => {
+        errorsByEmployee.set(a.employee_id, (errorsByEmployee.get(a.employee_id) || 0) + base);
+      });
+      if (remainder > 0) {
+        for (let i = 0; i < remainder && i < sorted.length; i++) {
+          const eid = sorted[i].employee_id;
+          errorsByEmployee.set(eid, (errorsByEmployee.get(eid) || 0) + 1);
+        }
+      }
+
+      perDay.push({
+        date: dayError.date,
+        triage_type: 'quantity',
+        errors: errorCount,
+        direct_value: 0,
+        present: n,
+        errorsPerPerson: base,
+        valuePerPerson: 0,
+        remainder,
+      });
+    }
   }
 
-  const perEmployee = Array.from(errorsByEmployee.entries())
-    .filter(([, errors]) => errors > 0)
-    .map(([employee_id, total_errors]) => {
+  const allEmployeeIds = new Set<string>([
+    ...errorsByEmployee.keys(),
+    ...valueByEmployee.keys(),
+  ]);
+
+  const perEmployee = Array.from(allEmployeeIds)
+    .map(employee_id => {
       const info = employeeInfo.get(employee_id);
+      const total_errors = errorsByEmployee.get(employee_id) || 0;
+      const value_from_quantity = total_errors * valuePerError;
+      const value_from_direct = valueByEmployee.get(employee_id) || 0;
+      const value_deducted = Math.round((value_from_quantity + value_from_direct) * 100) / 100;
       return {
         employee_id,
         name: info?.name || '',
         days_present: info?.days_present || 0,
         total_errors,
-        value_deducted: Math.round(total_errors * valuePerError * 100) / 100,
+        value_deducted,
       };
     })
-    .sort((a, b) => b.total_errors - a.total_errors || b.days_present - a.days_present);
+    .filter(emp => emp.total_errors > 0 || emp.value_deducted > 0)
+    .sort((a, b) => b.value_deducted - a.value_deducted || b.total_errors - a.total_errors || b.days_present - a.days_present);
 
   const totalDeducted = Math.round(perEmployee.reduce((s, e) => s + e.value_deducted, 0) * 100) / 100;
 
   return {
     totalErrors,
+    totalDirectValue,
     days: daysWithErrors.length,
     perDay,
     perEmployee,
@@ -1897,10 +1990,17 @@ export const distributeTriageErrors = async (
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
-  if (valuePerError <= 0) throw new Error('Valor por erro deve ser maior que zero');
+
+  const triageDays = await getTriageErrors(startDate, endDate);
+  const hasQuantityDays = triageDays.some(d =>
+    (d.triage_type ?? 'quantity') === 'quantity' && (d.error_count ?? 0) > 0
+  );
+  if (hasQuantityDays && valuePerError <= 0) {
+    throw new Error('Valor por erro deve ser maior que zero (há dias por quantidade no período)');
+  }
 
   const preview = await computeTriageDistribution(startDate, endDate, valuePerError);
-  if (preview.totalErrors <= 0) {
+  if (preview.totalErrors <= 0 && preview.totalDirectValue <= 0) {
     throw new Error('Nenhum erro de triagem registrado no período');
   }
   if (preview.perEmployee.length === 0) {

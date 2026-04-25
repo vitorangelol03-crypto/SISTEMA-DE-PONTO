@@ -19,7 +19,7 @@ function formatDateBR(d: string): string {
 interface PeriodDetail {
   period: PaymentPeriod;
   individual_errors: Array<{ date: string; error_type: ErrorType; error_count: number; observations: string | null }>;
-  triage_errors: Array<{ date: string; errors_share: number; observations: string | null }>;
+  triage_errors: Array<{ date: string; errors_share: number; value_deducted: number; observations: string | null }>;
   total_individual: number;
   total_triage: number;
 }
@@ -117,31 +117,41 @@ export const EmployeeErrorsView: React.FC<EmployeeErrorsViewProps> = ({ employee
 
               {detail.triage_errors.length > 0 && (
                 <div>
-                  <p className="text-sm font-semibold text-gray-800 mb-2">
-                    Erros de Triagem: {detail.total_triage} {detail.total_triage === 1 ? 'erro' : 'erros'}
-                  </p>
+                  <p className="text-sm font-semibold text-gray-800 mb-2">Triagem</p>
                   <ul className="space-y-1 text-sm">
-                    {detail.triage_errors.map((t, i) => (
-                      <li key={`${t.date}-${i}`} className="flex items-start gap-2 py-1 border-b border-gray-100 last:border-b-0">
-                        <span className="text-gray-500 font-mono text-xs whitespace-nowrap mt-0.5">
-                          {formatDateBR(t.date).slice(0, 5)}
-                        </span>
-                        <span className="text-gray-800 flex-1">
-                          Lote de triagem — <strong>{t.errors_share}</strong> {t.errors_share === 1 ? 'erro atribuído' : 'erros atribuídos'}
-                          {t.observations && <span className="text-xs text-gray-500 ml-1">({t.observations})</span>}
-                        </span>
-                      </li>
-                    ))}
+                    {detail.triage_errors.map((t, i) => {
+                      const isValueOnly = t.errors_share === 0 && t.value_deducted > 0;
+                      return (
+                        <li key={`${t.date}-${i}`} className="flex items-start gap-2 py-1 border-b border-gray-100 last:border-b-0">
+                          <span className="text-gray-500 font-mono text-xs whitespace-nowrap mt-0.5">
+                            {formatDateBR(t.date).slice(0, 5)}
+                          </span>
+                          <span className="text-gray-800 flex-1">
+                            {isValueOnly ? (
+                              <>Desconto de triagem</>
+                            ) : (
+                              <>
+                                Lote de triagem — <strong>{t.errors_share}</strong>{' '}
+                                {t.errors_share === 1 ? 'pacote atribuído' : 'pacotes atribuídos'}
+                              </>
+                            )}
+                            {t.observations && <span className="text-xs text-gray-500 ml-1">({t.observations})</span>}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}
 
-              <div className="pt-3 border-t-2 border-orange-100 flex items-center justify-between">
-                <span className="text-sm font-semibold text-gray-700">Total:</span>
-                <span className="text-lg font-bold text-orange-700">
-                  {total} {total === 1 ? 'erro' : 'erros'}
-                </span>
-              </div>
+              {total > 0 && (
+                <div className="pt-3 border-t-2 border-orange-100 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-gray-700">Total:</span>
+                  <span className="text-lg font-bold text-orange-700">
+                    {total} {total === 1 ? 'erro' : 'erros'}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         );
