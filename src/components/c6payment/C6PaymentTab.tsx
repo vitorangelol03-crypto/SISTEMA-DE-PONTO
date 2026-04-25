@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileSpreadsheet, RefreshCw, Download, Calendar, Edit2, Save, X, Trash2, Plus, Check, AlertTriangle, DollarSign, KeyRound, CheckCircle2 } from 'lucide-react';
-import { getAllEmployees, getPayments, Employee, Payment } from '../../services/database';
+import { getAllEmployees, getEmployeeNetPayments, Employee } from '../../services/database';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { exportC6PaymentSheet } from '../../utils/c6Export';
 import toast from 'react-hot-toast';
@@ -16,13 +16,15 @@ interface PaymentRow {
   employeeName: string;
   pixKey: string;
   amount: number;
+  grossAmount: number;
+  errorValueDiscount: number;
+  triageDiscount: number;
   paymentDate: string;
   description: string;
 }
 
 export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermission }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
   const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [dataImported, setDataImported] = useState(false);
@@ -96,37 +98,27 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
     try {
       setLoading(true);
       const employmentType = filters.employmentType === 'all' ? undefined : filters.employmentType;
-      const paymentsData = await getPayments(filters.startDate, filters.endDate, '', employmentType);
+      const netByEmployee = await getEmployeeNetPayments(filters.startDate, filters.endDate, employmentType);
 
-      if (paymentsData.length === 0) {
+      if (netByEmployee.size === 0) {
         toast.error('Nenhum pagamento encontrado no período selecionado');
         return;
       }
 
-      const employeePaymentMap = new Map<string, { employee: Employee; total: number; }>();
-
-      paymentsData.forEach(payment => {
-        const employee = employees.find(e => e.id === payment.employee_id);
-        if (!employee) return;
-
-        if (!employeePaymentMap.has(employee.id)) {
-          employeePaymentMap.set(employee.id, {
-            employee,
-            total: 0
-          });
-        }
-
-        const current = employeePaymentMap.get(employee.id)!;
-        current.total += payment.total || 0;
-      });
-
       const missingPixKeys: string[] = [];
+      const zeroNetEmployees: string[] = [];
       const rows: PaymentRow[] = [];
       const nextDay = getNextDay(getBrazilDate());
 
-      employeePaymentMap.forEach(({ employee, total }) => {
+      netByEmployee.forEach((net, employeeId) => {
+        const employee = employees.find(e => e.id === employeeId);
+        if (!employee) return;
         if (!employee.pix_key) {
           missingPixKeys.push(employee.name);
+          return;
+        }
+        if (net.net <= 0) {
+          zeroNetEmployees.push(employee.name);
           return;
         }
 
@@ -134,7 +126,10 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
           id: employee.id,
           employeeName: employee.name,
           pixKey: employee.pix_key,
-          amount: total,
+          amount: net.net,
+          grossAmount: net.gross,
+          errorValueDiscount: net.errorValueDiscount,
+          triageDiscount: net.triageDiscount,
           paymentDate: nextDay,
           description: `Pagamento ref. ${formatDateBR(filters.startDate)} a ${formatDateBR(filters.endDate)}`
         });
@@ -147,14 +142,24 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
         );
       }
 
+      if (zeroNetEmployees.length > 0) {
+        toast(
+          `Funcionários sem valor a pagar (descontos zeraram o líquido): ${zeroNetEmployees.join(', ')}`,
+          { duration: 6000, icon: 'ℹ️' }
+        );
+      }
+
       if (rows.length === 0) {
-        toast.error('Nenhum funcionário com chave PIX cadastrada encontrado');
+        toast.error('Nenhum funcionário com chave PIX e valor líquido positivo encontrado');
         return;
       }
 
       setPaymentRows(rows);
       setDataImported(true);
-      toast.success(`${rows.length} pagamento(s) importado(s) com sucesso!`);
+      const withDiscounts = rows.filter(r => r.errorValueDiscount > 0 || r.triageDiscount > 0).length;
+      toast.success(
+        `${rows.length} pagamento(s) importado(s)${withDiscounts > 0 ? ` (${withDiscounts} com descontos aplicados)` : ''}`
+      );
     } catch (error) {
       console.error('Erro ao importar dados:', error);
       toast.error('Erro ao importar dados financeiros');
@@ -231,6 +236,9 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
       employeeName: '',
       pixKey: '',
       amount: 0,
+      grossAmount: 0,
+      errorValueDiscount: 0,
+      triageDiscount: 0,
       paymentDate: getNextDay(getBrazilDate()),
       description: ''
     };
@@ -666,7 +674,18 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                               {row.pixKey}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              R$ {row.amount.toFixed(2)}
+                              <div className="font-semibold text-green-700">R$ {row.amount.toFixed(2)}</div>
+                              {(row.errorValueDiscount > 0 || row.triageDiscount > 0) && (
+                                <div className="text-[11px] text-gray-500 leading-tight mt-0.5" data-testid="c6-breakdown">
+                                  <div>Bruto: R$ {row.grossAmount.toFixed(2)}</div>
+                                  {row.errorValueDiscount > 0 && (
+                                    <div className="text-red-600">-R$ {row.errorValueDiscount.toFixed(2)} erro</div>
+                                  )}
+                                  {row.triageDiscount > 0 && (
+                                    <div className="text-red-600">-R$ {row.triageDiscount.toFixed(2)} triagem</div>
+                                  )}
+                                </div>
+                              )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {formatDateBR(row.paymentDate)}
@@ -816,8 +835,19 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
 
                         <div className="grid grid-cols-2 gap-2 mb-3">
                           <div className="bg-green-50 rounded p-2">
-                            <span className="text-xs text-green-800 block">Valor</span>
+                            <span className="text-xs text-green-800 block">Valor líquido</span>
                             <span className="text-sm font-semibold text-green-700">R$ {row.amount.toFixed(2)}</span>
+                            {(row.errorValueDiscount > 0 || row.triageDiscount > 0) && (
+                              <div className="text-[10px] text-gray-500 leading-tight mt-0.5">
+                                <div>Bruto: R$ {row.grossAmount.toFixed(2)}</div>
+                                {row.errorValueDiscount > 0 && (
+                                  <div className="text-red-600">-R$ {row.errorValueDiscount.toFixed(2)} erro</div>
+                                )}
+                                {row.triageDiscount > 0 && (
+                                  <div className="text-red-600">-R$ {row.triageDiscount.toFixed(2)} triagem</div>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <div className="bg-gray-50 rounded p-2">
                             <span className="text-xs text-gray-500 block">Data</span>

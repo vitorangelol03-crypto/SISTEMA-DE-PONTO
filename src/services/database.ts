@@ -2087,6 +2087,71 @@ export const getTriageDistributionsForEmployees = async (
   });
 };
 
+export interface EmployeeNetPayment {
+  gross: number;
+  errorValueDiscount: number;
+  triageDiscount: number;
+  net: number;
+}
+
+/**
+ * Calcula o valor LÍQUIDO por funcionário no período:
+ *   liquido = max(0, sum(payments.total) - sum(error_records.error_value tipo='value') - sum(triage value_deducted))
+ *
+ * Erros tipo 'quantity' já estão refletidos em payments.total (descontados via "Descontar Erros").
+ * Erros tipo 'value' e triagem NÃO tocam payments.total — são deduzidos aqui.
+ *
+ * Usado pelo C6PaymentTab e qualquer outra tela que precise do valor real a pagar.
+ */
+export const getEmployeeNetPayments = async (
+  startDate: string,
+  endDate: string,
+  employmentType?: string
+): Promise<Map<string, EmployeeNetPayment>> => {
+  const [payments, errorRecords] = await Promise.all([
+    getPayments(startDate, endDate, undefined, employmentType),
+    getErrorRecords(startDate, endDate, undefined, employmentType),
+  ]);
+
+  const result = new Map<string, EmployeeNetPayment>();
+  const ensure = (id: string): EmployeeNetPayment => {
+    let cur = result.get(id);
+    if (!cur) {
+      cur = { gross: 0, errorValueDiscount: 0, triageDiscount: 0, net: 0 };
+      result.set(id, cur);
+    }
+    return cur;
+  };
+
+  payments.forEach(p => {
+    ensure(p.employee_id).gross += Number(p.total ?? 0);
+  });
+
+  errorRecords.forEach(e => {
+    if ((e.error_type ?? 'quantity') === 'value') {
+      ensure(e.employee_id).errorValueDiscount += Number(e.error_value ?? 0);
+    }
+  });
+
+  const employeeIds = Array.from(result.keys());
+  if (employeeIds.length > 0) {
+    const triageData = await getTriageDistributionsForEmployees(employeeIds, startDate, endDate);
+    triageData.forEach(t => {
+      ensure(t.employee_id).triageDiscount += Number(t.value_deducted ?? 0);
+    });
+  }
+
+  result.forEach(v => {
+    const raw = v.gross - v.errorValueDiscount - v.triageDiscount;
+    v.net = Math.max(0, Math.round(raw * 100) / 100);
+    v.gross = Math.round(v.gross * 100) / 100;
+    v.errorValueDiscount = Math.round(v.errorValueDiscount * 100) / 100;
+    v.triageDiscount = Math.round(v.triageDiscount * 100) / 100;
+  });
+
+  return result;
+};
+
 export interface DataRetentionSettings {
   id: string;
   data_type: 'attendance' | 'payments' | 'error_records' | 'bonuses' | 'collective_errors';

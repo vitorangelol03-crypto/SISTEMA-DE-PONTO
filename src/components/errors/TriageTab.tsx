@@ -166,7 +166,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
     try {
       const result = await computeTriageDistribution(distRange.startDate, distRange.endDate, value);
 
-      if (result.totalErrors <= 0) {
+      if (result.totalErrors <= 0 && result.totalDirectValue <= 0) {
         toast.error('Nenhum erro de triagem no período');
         setPreview(null);
         return;
