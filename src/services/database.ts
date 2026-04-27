@@ -132,6 +132,41 @@ export interface BonusInfo {
   C2: BonusTypeInfo;
 }
 
+// ─── Multi-empresa (Sub-fase 1.8) ──────────────────────────────────────────
+export interface Company {
+  id: string;
+  legal_name: string;
+  cnpj: string;
+  display_name: string;
+  city: string;
+  address: string | null;
+  default_function_role: string | null;
+  default_schedule: unknown | null;
+  default_marking_count: 2 | 4;
+  default_geo_lat: number;
+  default_geo_lng: number;
+  default_geo_radius: number;
+  bank_hours_enabled: boolean;
+  admin_secret_password: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BonusTypeRecord {
+  id: string;
+  company_id: string;
+  name: string;
+  code: string;
+  default_value: number;
+  order_index: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Default = Caratinga. Usado quando uma chamada legacy não passa companyId.
+export const DEFAULT_COMPANY_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
+
 const BONUS_COLUMNS: Record<BonusType, 'bonus_b' | 'bonus_c1' | 'bonus_c2'> = {
   B: 'bonus_b',
   C1: 'bonus_c1',
@@ -239,17 +274,20 @@ export const loginUser = async (id: string, password: string): Promise<User | nu
 };
 
 // User functions
-export const getAllUsers = async (): Promise<User[]> => {
-  const { data, error } = await supabase
+export const getAllUsers = async (companyId?: string): Promise<User[]> => {
+  let query = supabase
     .from('users')
-    .select('*')
-    .order('created_at', { ascending: false });
+    .select('*');
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) throw error;
   return data || [];
 };
 
-export const createUser = async (id: string, password: string, role: 'supervisor', createdBy: string): Promise<void> => {
+export const createUser = async (id: string, password: string, role: 'supervisor', createdBy: string, companyId?: string): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'users.create');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
@@ -261,7 +299,8 @@ export const createUser = async (id: string, password: string, role: 'supervisor
       id,
       password,
       role,
-      created_by: createdBy
+      created_by: createdBy,
+      company_id: companyId || DEFAULT_COMPANY_ID,
     }]);
 
   if (error) {
@@ -291,7 +330,7 @@ export const deleteUser = async (id: string, userId: string): Promise<void> => {
 };
 
 // Employee functions
-export const getAllEmployees = async (employmentType?: string): Promise<Employee[]> => {
+export const getAllEmployees = async (employmentType?: string, companyId?: string): Promise<Employee[]> => {
   let query = supabase
     .from('employees')
     .select('*');
@@ -299,6 +338,8 @@ export const getAllEmployees = async (employmentType?: string): Promise<Employee
   if (employmentType && employmentType !== 'all') {
     query = query.eq('employment_type', employmentType);
   }
+
+  if (companyId) query = query.eq('company_id', companyId);
 
   const { data, error } = await query.order('name');
 
@@ -317,7 +358,8 @@ export const createEmployee = async (
   neighborhood?: string | null,
   city?: string | null,
   state?: string | null,
-  zipCode?: string | null
+  zipCode?: string | null,
+  companyId?: string
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'employees.create');
   if (!permissionCheck.allowed) {
@@ -337,7 +379,8 @@ export const createEmployee = async (
       city,
       state,
       zip_code: zipCode,
-      created_by: createdBy
+      created_by: createdBy,
+      company_id: companyId || DEFAULT_COMPANY_ID,
     }]);
 
   if (error) {
@@ -427,19 +470,22 @@ export const bulkCreateEmployees = async (
     state?: string | null;
     zipCode?: string | null;
   }>,
-  createdBy: string
+  createdBy: string,
+  companyId?: string
 ): Promise<BulkEmployeeResult> => {
   const permissionCheck = await validatePermission(createdBy, 'employees.import');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
+  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
+
   const result: BulkEmployeeResult = {
     success: [],
     errors: []
   };
 
-  const existingEmployees = await getAllEmployees();
+  const existingEmployees = await getAllEmployees(undefined, effectiveCompanyId);
   const existingCPFs = new Set(existingEmployees.map(emp => emp.cpf));
 
   for (let i = 0; i < employees.length; i++) {
@@ -469,7 +515,8 @@ export const bulkCreateEmployees = async (
           city: employee.city,
           state: employee.state,
           zip_code: employee.zipCode,
-          created_by: createdBy
+          created_by: createdBy,
+          company_id: effectiveCompanyId,
         }])
         .select()
         .single();
@@ -508,14 +555,14 @@ export const bulkCreateEmployees = async (
 };
 
 // Attendance functions
-export const getTodayAttendance = async (): Promise<Attendance[]> => {
+export const getTodayAttendance = async (companyId?: string): Promise<Attendance[]> => {
   // Usar data local do Brasil (UTC-3)
   const today = new Date();
   const brazilOffset = -3 * 60; // UTC-3 em minutos
   const localTime = new Date(today.getTime() + (brazilOffset * 60 * 1000));
   const todayString = localTime.toISOString().split('T')[0];
-  
-  const { data, error } = await supabase
+
+  let query = supabase
     .from('attendance')
     .select(`
       *,
@@ -525,8 +572,11 @@ export const getTodayAttendance = async (): Promise<Attendance[]> => {
         cpf
       )
     `)
-    .eq('date', todayString)
-    .order('created_at', { ascending: false });
+    .eq('date', todayString);
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) throw error;
   return data || [];
@@ -537,7 +587,8 @@ export const markAttendance = async (
   date: string,
   status: 'present' | 'absent',
   exitTime: string | null,
-  markedBy: string
+  markedBy: string,
+  companyId?: string
 ): Promise<void> => {
   const permissionCheck = await validatePermission(markedBy, 'attendance.mark');
   if (!permissionCheck.allowed) {
@@ -551,7 +602,8 @@ export const markAttendance = async (
       date,
       status,
       exit_time: exitTime,
-      marked_by: markedBy
+      marked_by: markedBy,
+      company_id: companyId || DEFAULT_COMPANY_ID,
     }], {
       onConflict: 'employee_id,date'
     });
@@ -577,7 +629,8 @@ export const getAttendanceHistory = async (
   endDate?: string,
   employeeId?: string,
   userId?: string,
-  employmentType?: string
+  employmentType?: string,
+  companyId?: string
 ): Promise<Attendance[]> => {
   if (userId) {
     const permissionCheck = await validatePermission(userId, 'attendance.search');
@@ -610,6 +663,10 @@ export const getAttendanceHistory = async (
     query = query.eq('employee_id', employeeId);
   }
 
+  if (companyId) {
+    query = query.eq('company_id', companyId);
+  }
+
   const { data, error } = await query.order('date', { ascending: false });
 
   if (error) throw error;
@@ -628,7 +685,8 @@ export const getPayments = async (
   startDate?: string,
   endDate?: string,
   employeeId?: string,
-  employmentType?: string
+  employmentType?: string,
+  companyId?: string
 ): Promise<Payment[]> => {
   let query = supabase
     .from('payments')
@@ -654,6 +712,10 @@ export const getPayments = async (
     query = query.eq('employee_id', employeeId);
   }
 
+  if (companyId) {
+    query = query.eq('company_id', companyId);
+  }
+
   const { data, error } = await query.order('date', { ascending: false });
 
   if (error) throw error;
@@ -672,7 +734,8 @@ export const upsertPayment = async (
   date: string,
   dailyRate: number,
   bonus: number,
-  createdBy: string
+  createdBy: string,
+  companyId?: string
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'financial.editRate');
   if (!permissionCheck.allowed) {
@@ -690,7 +753,8 @@ export const upsertPayment = async (
       bonus,
       total,
       created_by: createdBy,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      company_id: companyId || DEFAULT_COMPANY_ID,
     }], {
       onConflict: 'employee_id,date'
     });
@@ -715,7 +779,8 @@ export const deletePayment = async (id: string, userId: string): Promise<void> =
 export const clearEmployeePayments = async (
   employeeId: string,
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  companyId?: string
 ): Promise<void> => {
   let query = supabase
     .from('payments')
@@ -725,9 +790,13 @@ export const clearEmployeePayments = async (
   if (startDate) {
     query = query.gte('date', startDate);
   }
-  
+
   if (endDate) {
     query = query.lte('date', endDate);
+  }
+
+  if (companyId) {
+    query = query.eq('company_id', companyId);
   }
 
   const { error } = await query;
@@ -737,7 +806,8 @@ export const clearEmployeePayments = async (
 export const clearAllPayments = async (
   startDate?: string,
   endDate?: string,
-  userId?: string
+  userId?: string,
+  companyId?: string
 ): Promise<void> => {
   if (userId) {
     const permissionCheck = await validatePermission(userId, 'financial.clear');
@@ -751,13 +821,17 @@ export const clearAllPayments = async (
   if (startDate) {
     query = query.gte('date', startDate);
   }
-  
+
   if (endDate) {
     query = query.lte('date', endDate);
   }
 
-  // Se não há filtros de data, limpa tudo
-  if (!startDate && !endDate) {
+  if (companyId) {
+    query = query.eq('company_id', companyId);
+  }
+
+  // Se não há filtros de data nem company, limpa tudo
+  if (!startDate && !endDate && !companyId) {
     query = query.neq('id', '00000000-0000-0000-0000-000000000000'); // Condição sempre verdadeira
   }
 
@@ -766,11 +840,14 @@ export const clearAllPayments = async (
 };
 
 // Bonus functions
-export const getBonuses = async (): Promise<Bonus[]> => {
-  const { data, error } = await supabase
+export const getBonuses = async (companyId?: string): Promise<Bonus[]> => {
+  let query = supabase
     .from('bonuses')
-    .select('*')
-    .order('date', { ascending: false });
+    .select('*');
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query.order('date', { ascending: false });
 
   if (error) throw error;
   return data || [];
@@ -780,15 +857,50 @@ export const createBonus = async (
   date: string,
   amount: number,
   createdBy: string,
-  type: BonusType
+  type: BonusType,
+  companyId?: string
 ): Promise<void> => {
+  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
+  const bonusTypeRecord = await getBonusTypeByCode(effectiveCompanyId, type);
+
   const { error } = await supabase
     .from('bonuses')
     .upsert([{
       date,
       amount,
       bonus_type: type,
-      created_by: createdBy
+      bonus_type_id: bonusTypeRecord?.id ?? null,
+      created_by: createdBy,
+      company_id: effectiveCompanyId,
+    }], {
+      onConflict: 'date,bonus_type'
+    });
+
+  if (error) throw error;
+};
+
+// Compat: aceita bonus_type_id direto. Resolve code via lookup para preencher
+// `bonus_type` (texto) na linha — mantém compat com queries antigas.
+export const createBonusByTypeId = async (
+  date: string,
+  amount: number,
+  createdBy: string,
+  bonusTypeId: string
+): Promise<void> => {
+  const bonusTypeRecord = await getBonusTypeById(bonusTypeId);
+  if (!bonusTypeRecord) {
+    throw new Error('Tipo de bônus não encontrado');
+  }
+
+  const { error } = await supabase
+    .from('bonuses')
+    .upsert([{
+      date,
+      amount,
+      bonus_type: bonusTypeRecord.code,
+      bonus_type_id: bonusTypeRecord.id,
+      created_by: createdBy,
+      company_id: bonusTypeRecord.company_id,
     }], {
       onConflict: 'date,bonus_type'
     });
@@ -801,7 +913,8 @@ export const applyBonusToAllPresent = async (
   bonusAmount: number,
   createdBy: string,
   type: BonusType,
-  excludeEmployeeIds?: string[]
+  excludeEmployeeIds?: string[],
+  companyId?: string
 ): Promise<{ applied: number; skipped: number }> => {
   const permissionCheck = await validatePermission(createdBy, 'financial.applyBonus');
   if (!permissionCheck.allowed) {
@@ -814,11 +927,20 @@ export const applyBonusToAllPresent = async (
     throw new Error(typeCheck.error || `Permissão negada para bônus ${type}`);
   }
 
-  const { data: attendances, error: attendanceError } = await supabase
+  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
+  const bonusTypeRecord = await getBonusTypeByCode(effectiveCompanyId, type);
+
+  let attQuery = supabase
     .from('attendance')
     .select('employee_id')
     .eq('date', date)
     .eq('status', 'present');
+
+  if (companyId) {
+    attQuery = attQuery.eq('company_id', companyId);
+  }
+
+  const { data: attendances, error: attendanceError } = await attQuery;
 
   if (attendanceError) throw attendanceError;
 
@@ -853,6 +975,13 @@ export const applyBonusToAllPresent = async (
     const newBonus = newB + newC1 + newC2;
     const newTotal = currentDailyRate + newBonus;
 
+    // bonus_breakdown reflete os valores aplicados por código.
+    const existingBreakdown = (existingPayment?.bonus_breakdown ?? {}) as Record<string, number>;
+    const newBreakdown: Record<string, number> = {
+      ...existingBreakdown,
+      [type]: bonusAmount,
+    };
+
     await supabase
       .from('payments')
       .upsert([{
@@ -864,8 +993,10 @@ export const applyBonusToAllPresent = async (
         bonus_c2: newC2,
         bonus: newBonus,
         total: newTotal,
+        bonus_breakdown: newBreakdown,
         created_by: createdBy,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        company_id: effectiveCompanyId,
       }], {
         onConflict: 'employee_id,date'
       });
@@ -879,7 +1010,9 @@ export const applyBonusToAllPresent = async (
       date,
       amount: bonusAmount,
       bonus_type: type,
-      created_by: createdBy
+      bonus_type_id: bonusTypeRecord?.id ?? null,
+      created_by: createdBy,
+      company_id: effectiveCompanyId,
     }], {
       onConflict: 'date,bonus_type'
     });
@@ -888,7 +1021,7 @@ export const applyBonusToAllPresent = async (
 };
 
 // Bonus info and removal functions
-export const getBonusInfoForDate = async (date: string): Promise<BonusInfo> => {
+export const getBonusInfoForDate = async (date: string, companyId?: string): Promise<BonusInfo> => {
   const empty = (): BonusTypeInfo => ({
     hasBonus: false,
     amount: 0,
@@ -905,10 +1038,12 @@ export const getBonusInfoForDate = async (date: string): Promise<BonusInfo> => {
   };
 
   // Buscar bonuses do dia (pode ter até 3: B, C1, C2)
-  const { data: bonuses } = await supabase
+  let bonusQ = supabase
     .from('bonuses')
     .select('*')
     .eq('date', date);
+  if (companyId) bonusQ = bonusQ.eq('company_id', companyId);
+  const { data: bonuses } = await bonusQ;
 
   if (!bonuses || bonuses.length === 0) {
     return info;
@@ -919,11 +1054,13 @@ export const getBonusInfoForDate = async (date: string): Promise<BonusInfo> => {
     if (!type || !(type in BONUS_COLUMNS)) continue;
 
     const column = BONUS_COLUMNS[type];
-    const { data: payments } = await supabase
+    let paymentsQ = supabase
       .from('payments')
       .select('employee_id')
       .eq('date', date)
       .gt(column, 0);
+    if (companyId) paymentsQ = paymentsQ.eq('company_id', companyId);
+    const { data: payments } = await paymentsQ;
 
     info[type] = {
       hasBonus: true,
@@ -943,7 +1080,8 @@ export const removeBonusFromEmployee = async (
   date: string,
   observation: string,
   userId: string,
-  type: BonusType
+  type: BonusType,
+  companyId?: string
 ): Promise<void> => {
   const permissionCheck = await validatePermission(userId, 'financial.removeBonus');
   if (!permissionCheck.allowed) {
@@ -963,7 +1101,9 @@ export const removeBonusFromEmployee = async (
     throw new Error('Observação deve ter no máximo 500 caracteres');
   }
 
+  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
   const column = BONUS_COLUMNS[type];
+  const bonusTypeRecord = await getBonusTypeByCode(effectiveCompanyId, type);
 
   // Buscar pagamento do funcionário
   const { data: payment } = await supabase
@@ -986,8 +1126,10 @@ export const removeBonusFromEmployee = async (
       date,
       bonus_amount_removed: typeAmount,
       bonus_type: type,
+      bonus_type_id: bonusTypeRecord?.id ?? null,
       observation: observation.trim(),
-      removed_by: userId
+      removed_by: userId,
+      company_id: effectiveCompanyId,
     }]);
 
   if (removalError) throw removalError;
@@ -1002,6 +1144,10 @@ export const removeBonusFromEmployee = async (
   const newBonus = newB + newC1 + newC2;
   const newTotal = parseFloat(payment.daily_rate.toString()) + newBonus;
 
+  const existingBreakdown = (payment.bonus_breakdown ?? {}) as Record<string, number>;
+  const newBreakdown: Record<string, number> = { ...existingBreakdown };
+  delete newBreakdown[type];
+
   const { error: updateError } = await supabase
     .from('payments')
     .update({
@@ -1010,7 +1156,8 @@ export const removeBonusFromEmployee = async (
       bonus_c2: newC2,
       bonus: newBonus,
       total: newTotal,
-      updated_at: new Date().toISOString()
+      bonus_breakdown: newBreakdown,
+      updated_at: new Date().toISOString(),
     })
     .eq('employee_id', employeeId)
     .eq('date', date);
@@ -1037,7 +1184,8 @@ export const removeBonusFromEmployee = async (
 export const removeAllBonusesForDate = async (
   date: string,
   observation: string,
-  userId: string
+  userId: string,
+  companyId?: string
 ): Promise<number> => {
   const permissionCheck = await validatePermission(userId, 'financial.removeBonusBulk');
   if (!permissionCheck.allowed) {
@@ -1052,12 +1200,24 @@ export const removeAllBonusesForDate = async (
     throw new Error('Observação deve ter no máximo 500 caracteres');
   }
 
+  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
+
+  // Pré-resolve UUIDs de tipos para preencher bonus_type_id ao registrar remoções
+  const types: BonusType[] = ['B', 'C1', 'C2'];
+  const typeIdMap: Record<BonusType, string | null> = { B: null, C1: null, C2: null };
+  for (const t of types) {
+    const rec = await getBonusTypeByCode(effectiveCompanyId, t);
+    typeIdMap[t] = rec?.id ?? null;
+  }
+
   // Buscar todos os pagamentos com bonificação no dia
-  const { data: payments, error: paymentsError } = await supabase
+  let paymentsQ = supabase
     .from('payments')
     .select('*')
     .eq('date', date)
     .gt('bonus', 0);
+  if (companyId) paymentsQ = paymentsQ.eq('company_id', companyId);
+  const { data: payments, error: paymentsError } = await paymentsQ;
 
   if (paymentsError) throw paymentsError;
 
@@ -1066,7 +1226,6 @@ export const removeAllBonusesForDate = async (
   }
 
   let removedCount = 0;
-  const types: BonusType[] = ['B', 'C1', 'C2'];
 
   // Remover todas as bonificações (B, C1 e C2) de cada funcionário
   for (const payment of payments) {
@@ -1084,8 +1243,10 @@ export const removeAllBonusesForDate = async (
         date,
         bonus_amount_removed: perTypeAmount[t],
         bonus_type: t,
+        bonus_type_id: typeIdMap[t],
         observation: observation.trim(),
         removed_by: userId,
+        company_id: effectiveCompanyId,
       }));
 
     if (removalsToInsert.length > 0) {
@@ -1102,6 +1263,7 @@ export const removeAllBonusesForDate = async (
         bonus_c2: 0,
         bonus: 0,
         total: newTotal,
+        bonus_breakdown: {},
         updated_at: new Date().toISOString()
       })
       .eq('employee_id', payment.employee_id)
@@ -1113,10 +1275,12 @@ export const removeAllBonusesForDate = async (
   // Remover as linhas da tabela `bonuses` (registry do dia) — sem isso,
   // getBonusInfoForDate continua enxergando as bonificações e os cards
   // B/C1/C2 permanecem visíveis na UI mesmo após zerar os payments.
-  const { error: bonusRegistryError } = await supabase
+  let bonusDel = supabase
     .from('bonuses')
     .delete()
     .eq('date', date);
+  if (companyId) bonusDel = bonusDel.eq('company_id', companyId);
+  const { error: bonusRegistryError } = await bonusDel;
 
   if (bonusRegistryError) {
     console.error('Erro ao limpar registry de bonuses:', bonusRegistryError);
@@ -1140,26 +1304,57 @@ export const removeAllBonusesForDate = async (
 
 // Helper: limpa os registros da tabela `bonuses` para um dia específico.
 // Usado no Reset Geral do ponto para garantir que os cards B/C1/C2 sumam.
-export const clearBonusRegistryForDate = async (date: string): Promise<void> => {
-  const { error } = await supabase
+export const clearBonusRegistryForDate = async (date: string, companyId?: string): Promise<void> => {
+  let query = supabase
     .from('bonuses')
     .delete()
     .eq('date', date);
 
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { error } = await query;
+
   if (error) throw error;
 };
 
-// ─── Valores padrão de Bonificação (tabela bonus_defaults) ──────────────
+// ─── Valores padrão de Bonificação ──────────────────────────────────────────
 // Retorna um mapa { B, C1, C2 } com os valores padrão persistidos.
-// Se algum tipo não existir na tabela, retorna 0 para esse tipo.
-export const getBonusDefaults = async (): Promise<{ B: number; C1: number; C2: number }> => {
-  const { data, error } = await supabase
+// Estratégia (compat dupla): preferencial em `bonus_types` (multi-empresa);
+// fallback para `bonus_defaults` (legacy) caso bonus_types não esteja populado
+// para a empresa.
+export const getBonusDefaults = async (companyId?: string): Promise<{ B: number; C1: number; C2: number }> => {
+  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
+  const defaults: { B: number; C1: number; C2: number } = { B: 0, C1: 0, C2: 0 };
+
+  // 1) Preferencial: bonus_types
+  const { data: btData, error: btErr } = await supabase
+    .from('bonus_types')
+    .select('code, default_value, active')
+    .eq('company_id', effectiveCompanyId)
+    .eq('active', true);
+
+  if (btErr) throw btErr;
+
+  let foundAny = false;
+  for (const row of btData || []) {
+    const code = row.code as BonusType;
+    if (code === 'B' || code === 'C1' || code === 'C2') {
+      defaults[code] = Number(row.default_value) || 0;
+      foundAny = true;
+    }
+  }
+
+  if (foundAny) return defaults;
+
+  // 2) Fallback: bonus_defaults (legacy)
+  let bdQuery = supabase
     .from('bonus_defaults')
     .select('bonus_type, default_amount');
+  if (companyId) bdQuery = bdQuery.eq('company_id', companyId);
+  const { data, error } = await bdQuery;
 
   if (error) throw error;
 
-  const defaults: { B: number; C1: number; C2: number } = { B: 0, C1: 0, C2: 0 };
   for (const row of data || []) {
     const type = row.bonus_type as BonusType;
     if (type === 'B' || type === 'C1' || type === 'C2') {
@@ -1170,10 +1365,12 @@ export const getBonusDefaults = async (): Promise<{ B: number; C1: number; C2: n
 };
 
 // Atualiza o valor padrão de um tipo. Restrito ao admin (ID 9999).
+// Atualiza ambas as tabelas: bonus_types (preferencial) e bonus_defaults (legacy).
 export const updateBonusDefault = async (
   type: BonusType,
   amount: number,
-  updatedBy: string
+  updatedBy: string,
+  companyId?: string
 ): Promise<void> => {
   if (updatedBy !== '9999') {
     throw new Error('Apenas o administrador pode alterar os valores padrão de bonificação');
@@ -1183,7 +1380,20 @@ export const updateBonusDefault = async (
     throw new Error('Valor inválido');
   }
 
-  const { error } = await supabase
+  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
+
+  // Atualiza bonus_types (preferencial — multi-empresa)
+  await supabase
+    .from('bonus_types')
+    .update({
+      default_value: amount,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('company_id', effectiveCompanyId)
+    .eq('code', type);
+
+  // Atualiza bonus_defaults legacy (compat)
+  let bdQuery = supabase
     .from('bonus_defaults')
     .update({
       default_amount: amount,
@@ -1191,6 +1401,8 @@ export const updateBonusDefault = async (
       updated_at: new Date().toISOString(),
     })
     .eq('bonus_type', type);
+  if (companyId) bdQuery = bdQuery.eq('company_id', companyId);
+  const { error } = await bdQuery;
 
   if (error) throw error;
 };
@@ -1198,7 +1410,8 @@ export const updateBonusDefault = async (
 export const getBonusRemovalHistory = async (
   employeeId?: string,
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  companyId?: string
 ): Promise<BonusRemoval[]> => {
   let query = supabase
     .from('bonus_removals')
@@ -1223,6 +1436,10 @@ export const getBonusRemovalHistory = async (
     query = query.lte('date', endDate);
   }
 
+  if (companyId) {
+    query = query.eq('company_id', companyId);
+  }
+
   const { data, error } = await query.order('removed_at', { ascending: false });
 
   if (error) throw error;
@@ -1234,7 +1451,8 @@ export const getErrorRecords = async (
   startDate?: string,
   endDate?: string,
   employeeId?: string,
-  employmentType?: string
+  employmentType?: string,
+  companyId?: string
 ): Promise<ErrorRecord[]> => {
   let query = supabase
     .from('error_records')
@@ -1260,6 +1478,10 @@ export const getErrorRecords = async (
     query = query.eq('employee_id', employeeId);
   }
 
+  if (companyId) {
+    query = query.eq('company_id', companyId);
+  }
+
   const { data, error } = await query.order('date', { ascending: false });
 
   if (error) throw error;
@@ -1280,7 +1502,8 @@ export const upsertErrorRecord = async (
   observations: string | null,
   createdBy: string,
   errorType: ErrorType = 'quantity',
-  errorValue: number = 0
+  errorValue: number = 0,
+  companyId?: string
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'errors.create');
   if (!permissionCheck.allowed) {
@@ -1305,7 +1528,8 @@ export const upsertErrorRecord = async (
       error_value: errorType === 'value' ? errorValue : 0,
       observations,
       created_by: createdBy,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      company_id: companyId || DEFAULT_COMPANY_ID,
     }], {
       onConflict: 'employee_id,date'
     });
@@ -1329,7 +1553,8 @@ export const deleteErrorRecord = async (id: string, userId: string): Promise<voi
 
 export const getErrorStatistics = async (
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  companyId?: string
 ): Promise<{
   totalErrors: number;
   totalQuantityErrors: number;
@@ -1341,9 +1566,9 @@ export const getErrorStatistics = async (
     errorRate: number;
   }>;
 }> => {
-  const errorRecords = await getErrorRecords(startDate, endDate);
+  const errorRecords = await getErrorRecords(startDate, endDate, undefined, undefined, companyId);
 
-  const attendances = await getAttendanceHistory(startDate, endDate);
+  const attendances = await getAttendanceHistory(startDate, endDate, undefined, undefined, undefined, companyId);
   const presentAttendances = attendances.filter(att => att.status === 'present');
 
   const employeeMap = new Map<string, {
@@ -1419,11 +1644,14 @@ export interface PaymentPeriod {
   created_at: string;
 }
 
-export const getPaymentPeriods = async (): Promise<PaymentPeriod[]> => {
-  const { data, error } = await supabase
+export const getPaymentPeriods = async (companyId?: string): Promise<PaymentPeriod[]> => {
+  let query = supabase
     .from('payment_periods')
-    .select('*')
-    .order('start_date', { ascending: false });
+    .select('*');
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query.order('start_date', { ascending: false });
   if (error) throw error;
   return data || [];
 };
@@ -1433,7 +1661,8 @@ export const createPaymentPeriod = async (
   endDate: string,
   paymentDate: string,
   label: string | null,
-  createdBy: string
+  createdBy: string,
+  companyId?: string
 ): Promise<PaymentPeriod> => {
   if (startDate > endDate) throw new Error('Data inicial deve ser anterior à final');
 
@@ -1446,6 +1675,7 @@ export const createPaymentPeriod = async (
       label,
       status: 'open',
       created_by: createdBy,
+      company_id: companyId || DEFAULT_COMPANY_ID,
     }])
     .select()
     .single();
@@ -1461,20 +1691,34 @@ export const closePaymentPeriod = async (periodId: string): Promise<void> => {
   if (error) throw error;
 };
 
-export const getPaymentPeriodConfig = async (): Promise<{ auto_weekly: boolean }> => {
-  const { data, error } = await supabase
+export const getPaymentPeriodConfig = async (companyId?: string): Promise<{ auto_weekly: boolean }> => {
+  let query = supabase
     .from('payment_period_config')
-    .select('auto_weekly')
-    .eq('id', 1)
-    .maybeSingle();
+    .select('auto_weekly');
+
+  // Quando companyId é passado, filtra por empresa.
+  // Quando não é passado, mantém comportamento legacy (id=1, Caratinga).
+  if (companyId) {
+    query = query.eq('company_id', companyId);
+  } else {
+    query = query.eq('id', 1);
+  }
+
+  const { data, error } = await query.maybeSingle();
   if (error) throw error;
   return { auto_weekly: data?.auto_weekly ?? true };
 };
 
-export const setPaymentPeriodAutoWeekly = async (enabled: boolean, updatedBy: string): Promise<void> => {
+export const setPaymentPeriodAutoWeekly = async (enabled: boolean, updatedBy: string, companyId?: string): Promise<void> => {
   const { error } = await supabase
     .from('payment_period_config')
-    .upsert([{ id: 1, auto_weekly: enabled, updated_by: updatedBy, updated_at: new Date().toISOString() }], {
+    .upsert([{
+      id: 1,
+      auto_weekly: enabled,
+      updated_by: updatedBy,
+      updated_at: new Date().toISOString(),
+      company_id: companyId || DEFAULT_COMPANY_ID,
+    }], {
       onConflict: 'id',
     });
   if (error) throw error;
@@ -1486,18 +1730,21 @@ export const setPaymentPeriodAutoWeekly = async (enabled: boolean, updatedBy: st
  * Se a config `auto_weekly` estiver desativada, não cria, apenas fecha
  * períodos vencidos.
  */
-export const autoCreateWeeklyPeriod = async (): Promise<void> => {
-  const config = await getPaymentPeriodConfig();
+export const autoCreateWeeklyPeriod = async (companyId?: string): Promise<void> => {
+  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
+  const config = await getPaymentPeriodConfig(companyId);
 
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
 
   // Fecha períodos vencidos (end_date < hoje, status 'open')
-  await supabase
+  let closeQ = supabase
     .from('payment_periods')
     .update({ status: 'paid' })
     .eq('status', 'open')
     .lt('end_date', todayStr);
+  if (companyId) closeQ = closeQ.eq('company_id', companyId);
+  await closeQ;
 
   if (!config.auto_weekly) return;
 
@@ -1512,12 +1759,13 @@ export const autoCreateWeeklyPeriod = async (): Promise<void> => {
   const mondayStr = monday.toISOString().slice(0, 10);
   const sundayStr = sunday.toISOString().slice(0, 10);
 
-  const { data: existing } = await supabase
+  let existQ = supabase
     .from('payment_periods')
     .select('id')
     .eq('start_date', mondayStr)
-    .eq('end_date', sundayStr)
-    .maybeSingle();
+    .eq('end_date', sundayStr);
+  if (companyId) existQ = existQ.eq('company_id', companyId);
+  const { data: existing } = await existQ.maybeSingle();
 
   if (existing) return;
 
@@ -1532,30 +1780,36 @@ export const autoCreateWeeklyPeriod = async (): Promise<void> => {
       label,
       status: 'open',
       created_by: 'auto',
+      company_id: effectiveCompanyId,
     }]);
 };
 
 export const getEmployeeErrorPeriods = async (
-  employeeId: string
+  employeeId: string,
+  companyId?: string
 ): Promise<Array<{ period: PaymentPeriod; has_errors: boolean; total_errors: number }>> => {
-  const periods = await getPaymentPeriods();
+  const periods = await getPaymentPeriods(companyId);
   if (periods.length === 0) return [];
 
   const results: Array<{ period: PaymentPeriod; has_errors: boolean; total_errors: number }> = [];
   for (const period of periods) {
-    const { data: indErrors } = await supabase
+    let indQ = supabase
       .from('error_records')
       .select('error_count, error_type')
       .eq('employee_id', employeeId)
       .gte('date', period.start_date)
       .lte('date', period.end_date);
+    if (companyId) indQ = indQ.eq('company_id', companyId);
+    const { data: indErrors } = await indQ;
 
-    const { data: triageDist } = await supabase
+    let triQ = supabase
       .from('triage_distribution_employees')
       .select('errors_share, triage_error_distributions!inner(period_start, period_end)')
       .eq('employee_id', employeeId)
       .gte('triage_error_distributions.period_start', period.start_date)
       .lte('triage_error_distributions.period_end', period.end_date);
+    if (companyId) triQ = triQ.eq('company_id', companyId);
+    const { data: triageDist } = await triQ;
 
     const indCount = (indErrors || [])
       .filter((e: { error_type: string | null }) => (e.error_type ?? 'quantity') === 'quantity')
@@ -1571,7 +1825,8 @@ export const getEmployeeErrorPeriods = async (
 
 export const getEmployeeErrorsByPeriod = async (
   employeeId: string,
-  periodId: string
+  periodId: string,
+  companyId?: string
 ): Promise<{
   period: PaymentPeriod;
   individual_errors: Array<{ date: string; error_type: ErrorType; error_count: number; observations: string | null }>;
@@ -1586,21 +1841,24 @@ export const getEmployeeErrorsByPeriod = async (
     .single();
   if (periodErr) throw periodErr;
 
-  const { data: indErrors, error: indErr } = await supabase
+  let indQ = supabase
     .from('error_records')
     .select('date, error_type, error_count, observations')
     .eq('employee_id', employeeId)
     .gte('date', period.start_date)
-    .lte('date', period.end_date)
-    .order('date', { ascending: true });
+    .lte('date', period.end_date);
+  if (companyId) indQ = indQ.eq('company_id', companyId);
+  const { data: indErrors, error: indErr } = await indQ.order('date', { ascending: true });
   if (indErr) throw indErr;
 
-  const { data: triageDetails, error: triErr } = await supabase
+  let triQ = supabase
     .from('triage_distribution_employees')
     .select('errors_share, value_deducted, triage_error_distributions!inner(period_start, period_end, observations)')
     .eq('employee_id', employeeId)
     .gte('triage_error_distributions.period_start', period.start_date)
     .lte('triage_error_distributions.period_end', period.end_date);
+  if (companyId) triQ = triQ.eq('company_id', companyId);
+  const { data: triageDetails, error: triErr } = await triQ;
   if (triErr) throw triErr;
 
   const individual_errors = (indErrors || []).map(e => ({
@@ -1683,11 +1941,13 @@ export interface TriageDistributionEmployee {
 
 export const getTriageErrors = async (
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  companyId?: string
 ): Promise<TriageError[]> => {
   let query = supabase.from('triage_errors').select('*');
   if (startDate) query = query.gte('date', startDate);
   if (endDate) query = query.lte('date', endDate);
+  if (companyId) query = query.eq('company_id', companyId);
   const { data, error } = await query.order('date', { ascending: false });
   if (error) throw error;
   return data || [];
@@ -1699,7 +1959,8 @@ export const upsertTriageError = async (
   observations: string | null,
   createdBy: string,
   triageType: TriageType = 'quantity',
-  directValue: number = 0
+  directValue: number = 0,
+  companyId?: string
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'errors.createTriage');
   if (!permissionCheck.allowed) {
@@ -1724,6 +1985,7 @@ export const upsertTriageError = async (
       observations,
       created_by: createdBy,
       updated_at: new Date().toISOString(),
+      company_id: companyId || DEFAULT_COMPANY_ID,
     }], { onConflict: 'date' });
 
   if (error) throw error;
@@ -1741,13 +2003,14 @@ export const deleteTriageError = async (id: string, userId: string): Promise<voi
 
 export const getTriageSummary = async (
   startDate: string,
-  endDate: string
+  endDate: string,
+  companyId?: string
 ): Promise<{
   totalErrors: number;
   days: number;
   errorsByDay: { date: string; count: number }[];
 }> => {
-  const errors = await getTriageErrors(startDate, endDate);
+  const errors = await getTriageErrors(startDate, endDate, companyId);
   return {
     totalErrors: errors.reduce((s, e) => s + (e.error_count || 0), 0),
     days: errors.length,
@@ -1757,14 +2020,19 @@ export const getTriageSummary = async (
 
 export const getEmployeesPresentInPeriod = async (
   startDate: string,
-  endDate: string
+  endDate: string,
+  companyId?: string
 ): Promise<{ employee_id: string; name: string; days_present: number }[]> => {
-  const { data, error } = await supabase
+  let query = supabase
     .from('attendance')
     .select('employee_id, employees(name)')
     .eq('status', 'present')
     .gte('date', startDate)
     .lte('date', endDate);
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -1820,9 +2088,10 @@ export interface TriageDistributionPreview {
 export const computeTriageDistribution = async (
   startDate: string,
   endDate: string,
-  valuePerError: number
+  valuePerError: number,
+  companyId?: string
 ): Promise<TriageDistributionPreview> => {
-  const triageErrors = await getTriageErrors(startDate, endDate);
+  const triageErrors = await getTriageErrors(startDate, endDate, companyId);
   const daysWithErrors = triageErrors.filter(e => {
     const type = (e.triage_type ?? 'quantity') as TriageType;
     return type === 'value'
@@ -1839,12 +2108,14 @@ export const computeTriageDistribution = async (
     return type === 'value' ? s + Number(e.direct_value ?? 0) : s;
   }, 0) * 100) / 100;
 
-  const { data: allAttendance, error: attErr } = await supabase
+  let attQ = supabase
     .from('attendance')
     .select('employee_id, date, employees(name)')
     .eq('status', 'present')
     .gte('date', startDate)
     .lte('date', endDate);
+  if (companyId) attQ = attQ.eq('company_id', companyId);
+  const { data: allAttendance, error: attErr } = await attQ;
   if (attErr) throw attErr;
 
   type Att = { employee_id: string; date: string; employees: { name: string } | { name: string }[] | null };
@@ -1979,7 +2250,8 @@ export const distributeTriageErrors = async (
   startDate: string,
   endDate: string,
   valuePerError: number,
-  distributedBy: string
+  distributedBy: string,
+  companyId?: string
 ): Promise<{
   distributionId: string;
   totalErrors: number;
@@ -1991,7 +2263,9 @@ export const distributeTriageErrors = async (
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
-  const triageDays = await getTriageErrors(startDate, endDate);
+  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
+
+  const triageDays = await getTriageErrors(startDate, endDate, companyId);
   const hasQuantityDays = triageDays.some(d =>
     (d.triage_type ?? 'quantity') === 'quantity' && (d.error_count ?? 0) > 0
   );
@@ -1999,7 +2273,7 @@ export const distributeTriageErrors = async (
     throw new Error('Valor por erro deve ser maior que zero (há dias por quantidade no período)');
   }
 
-  const preview = await computeTriageDistribution(startDate, endDate, valuePerError);
+  const preview = await computeTriageDistribution(startDate, endDate, valuePerError, companyId);
   if (preview.totalErrors <= 0 && preview.totalDirectValue <= 0) {
     throw new Error('Nenhum erro de triagem registrado no período');
   }
@@ -2017,6 +2291,7 @@ export const distributeTriageErrors = async (
       total_employees: preview.totalEmployees,
       total_deducted: preview.totalDeducted,
       distributed_by: distributedBy,
+      company_id: effectiveCompanyId,
     }])
     .select()
     .single();
@@ -2030,6 +2305,7 @@ export const distributeTriageErrors = async (
     employee_id: emp.employee_id,
     errors_share: emp.total_errors,
     value_deducted: emp.value_deducted,
+    company_id: effectiveCompanyId,
   }));
   if (detailRows.length > 0) {
     const { error: detailError } = await supabase
@@ -2049,7 +2325,8 @@ export const distributeTriageErrors = async (
 export const getTriageDistributionsForEmployees = async (
   employeeIds: string[],
   startDate: string,
-  endDate: string
+  endDate: string,
+  companyId?: string
 ): Promise<Array<{
   employee_id: string;
   period_start: string;
@@ -2059,12 +2336,16 @@ export const getTriageDistributionsForEmployees = async (
 }>> => {
   if (employeeIds.length === 0) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('triage_distribution_employees')
     .select('employee_id, errors_share, value_deducted, triage_error_distributions!inner(period_start, period_end)')
     .in('employee_id', employeeIds)
     .gte('triage_error_distributions.period_start', startDate)
     .lte('triage_error_distributions.period_end', endDate);
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -2106,11 +2387,12 @@ export interface EmployeeNetPayment {
 export const getEmployeeNetPayments = async (
   startDate: string,
   endDate: string,
-  employmentType?: string
+  employmentType?: string,
+  companyId?: string
 ): Promise<Map<string, EmployeeNetPayment>> => {
   const [payments, errorRecords] = await Promise.all([
-    getPayments(startDate, endDate, undefined, employmentType),
-    getErrorRecords(startDate, endDate, undefined, employmentType),
+    getPayments(startDate, endDate, undefined, employmentType, companyId),
+    getErrorRecords(startDate, endDate, undefined, employmentType, companyId),
   ]);
 
   const result = new Map<string, EmployeeNetPayment>();
@@ -2135,7 +2417,7 @@ export const getEmployeeNetPayments = async (
 
   const employeeIds = Array.from(result.keys());
   if (employeeIds.length > 0) {
-    const triageData = await getTriageDistributionsForEmployees(employeeIds, startDate, endDate);
+    const triageData = await getTriageDistributionsForEmployees(employeeIds, startDate, endDate, companyId);
     triageData.forEach(t => {
       ensure(t.employee_id).triageDiscount += Number(t.value_deducted ?? 0);
     });
@@ -2259,12 +2541,18 @@ export const updateAutoCleanupConfig = async (
   if (error) throw error;
 };
 
-export const getDataStatistics = async (): Promise<DataStatistics> => {
+export const getDataStatistics = async (companyId?: string): Promise<DataStatistics> => {
+  const buildQuery = (table: string) => {
+    let q = supabase.from(table).select('date', { count: 'exact' });
+    if (companyId) q = q.eq('company_id', companyId);
+    return q.order('date', { ascending: true });
+  };
+
   const [attendance, payments, errorRecords, bonuses] = await Promise.all([
-    supabase.from('attendance').select('date', { count: 'exact' }).order('date', { ascending: true }),
-    supabase.from('payments').select('date', { count: 'exact' }).order('date', { ascending: true }),
-    supabase.from('error_records').select('date', { count: 'exact' }).order('date', { ascending: true }),
-    supabase.from('bonuses').select('date', { count: 'exact' }).order('date', { ascending: true })
+    buildQuery('attendance'),
+    buildQuery('payments'),
+    buildQuery('error_records'),
+    buildQuery('bonuses'),
   ]);
 
   return {
@@ -2296,7 +2584,8 @@ export const previewCleanupData = async (
   dataTypes: string[],
   startDate?: string,
   endDate?: string,
-  employeeId?: string
+  employeeId?: string,
+  companyId?: string
 ): Promise<Record<string, number>> => {
   const counts: Record<string, number> = {};
 
@@ -2306,6 +2595,7 @@ export const previewCleanupData = async (
     if (startDate) query = query.gte('date', startDate);
     if (endDate) query = query.lte('date', endDate);
     if (employeeId && dataType !== 'bonuses') query = query.eq('employee_id', employeeId);
+    if (companyId) query = query.eq('company_id', companyId);
 
     const { count } = await query;
     counts[dataType] = count || 0;
@@ -2319,7 +2609,8 @@ export const deleteOldRecords = async (
   startDate?: string,
   endDate?: string,
   employeeId?: string,
-  userId?: string
+  userId?: string,
+  companyId?: string
 ): Promise<number> => {
   if (userId) {
     const permissionCheck = await validatePermission(userId, 'datamanagement.manualCleanup');
@@ -2333,6 +2624,7 @@ export const deleteOldRecords = async (
   if (startDate) query = query.gte('date', startDate);
   if (endDate) query = query.lte('date', endDate);
   if (employeeId && dataType !== 'bonuses') query = query.eq('employee_id', employeeId);
+  if (companyId) query = query.eq('company_id', companyId);
 
   const { data, error, count } = await query.select('id');
 
@@ -2663,46 +2955,56 @@ function calcHours(entry: Date, exit: Date): { hoursWorked: number; nightHours: 
 /** Busca o histórico de attendance de um funcionário nos últimos N dias. */
 export const getEmployeeAttendanceHistory = async (
   employeeId: string,
-  days: number = 30
+  days: number = 30,
+  companyId?: string
 ): Promise<Attendance[]> => {
   const endDate = getBrazilDateString();
   const startMs = new Date(endDate).getTime() - (days - 1) * 24 * 60 * 60 * 1000;
   const startDate = new Date(startMs).toISOString().split('T')[0];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('attendance')
     .select('*')
     .eq('employee_id', employeeId)
     .gte('date', startDate)
-    .lte('date', endDate)
-    .order('date', { ascending: false });
+    .lte('date', endDate);
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query.order('date', { ascending: false });
 
   if (error) throw error;
   return data || [];
 };
 
 /** Busca funcionário por CPF. Retorna null se não encontrar. */
-export const getEmployeeByCpf = async (cpf: string): Promise<Employee | null> => {
+export const getEmployeeByCpf = async (cpf: string, companyId?: string): Promise<Employee | null> => {
   const cpfNumbers = cpf.replace(/\D/g, '');
-  const { data, error } = await supabase
+  let query = supabase
     .from('employees')
     .select('*')
-    .eq('cpf', cpfNumbers)
-    .maybeSingle();
+    .eq('cpf', cpfNumbers);
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) throw error;
   return data;
 };
 
 /** Busca o registro de attendance de hoje para um funcionário específico. */
-export const getEmployeeTodayAttendance = async (employeeId: string): Promise<Attendance | null> => {
+export const getEmployeeTodayAttendance = async (employeeId: string, companyId?: string): Promise<Attendance | null> => {
   const today = getBrazilDateString();
-  const { data, error } = await supabase
+  let query = supabase
     .from('attendance')
     .select('*')
     .eq('employee_id', employeeId)
-    .eq('date', today)
-    .maybeSingle();
+    .eq('date', today);
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) throw error;
   return data;
@@ -2711,7 +3013,8 @@ export const getEmployeeTodayAttendance = async (employeeId: string): Promise<At
 /** Funcionário registra entrada. */
 export const clockIn = async (
   employeeId: string,
-  geoData?: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number }
+  geoData?: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number },
+  companyId?: string
 ): Promise<Attendance> => {
   const today = getBrazilDateString();
   const now = new Date().toISOString();
@@ -2723,6 +3026,7 @@ export const clockIn = async (
     entry_time: now,
     clock_source: 'employee_self',
     approval_status: 'pending',
+    company_id: companyId || DEFAULT_COMPANY_ID,
   };
 
   if (geoData) {
@@ -2747,12 +3051,13 @@ export const clockIn = async (
 export const clockOut = async (
   employeeId: string,
   dailyRate?: number,
-  geoData?: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number }
+  geoData?: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number },
+  companyId?: string
 ): Promise<Attendance> => {
   const today = getBrazilDateString();
   const now = new Date();
 
-  const existing = await getEmployeeTodayAttendance(employeeId);
+  const existing = await getEmployeeTodayAttendance(employeeId, companyId);
   if (!existing || !existing.entry_time) {
     throw new Error('Nenhuma entrada registrada hoje para calcular a saída');
   }
@@ -2780,13 +3085,15 @@ export const clockOut = async (
     updateRecord.geo_distance_meters = geoData.geo_distance_meters;
   }
 
-  const { data, error } = await supabase
+  let upd = supabase
     .from('attendance')
     .update(updateRecord)
     .eq('employee_id', employeeId)
-    .eq('date', today)
-    .select()
-    .single();
+    .eq('date', today);
+
+  if (companyId) upd = upd.eq('company_id', companyId);
+
+  const { data, error } = await upd.select().single();
 
   if (error) throw error;
   return data;
@@ -2803,6 +3110,7 @@ export const setManualTime = async (
   entryTime: string,
   exitTime: string,
   userId: string,
+  companyId?: string
 ): Promise<Attendance> => {
   const permissionCheck = await validatePermission(userId, 'attendance.manualTime');
   if (!permissionCheck.allowed) {
@@ -2831,6 +3139,7 @@ export const setManualTime = async (
       night_hours: nightHours,
       clock_source: 'manual',
       approval_status: 'manual',
+      company_id: companyId || DEFAULT_COMPANY_ID,
     }], { onConflict: 'employee_id,date' })
     .select()
     .single();
@@ -2840,7 +3149,7 @@ export const setManualTime = async (
 };
 
 /** Busca registros pendentes de aprovação, opcionalmente filtrados por data. */
-export const getPendingApprovals = async (date?: string): Promise<Attendance[]> => {
+export const getPendingApprovals = async (date?: string, companyId?: string): Promise<Attendance[]> => {
   let query = supabase
     .from('attendance')
     .select(`
@@ -2852,14 +3161,17 @@ export const getPendingApprovals = async (date?: string): Promise<Attendance[]> 
         employment_type
       )
     `)
-    .eq('approval_status', 'pending')
-    .order('date', { ascending: false });
+    .eq('approval_status', 'pending');
 
   if (date) {
     query = query.eq('date', date);
   }
 
-  const { data, error } = await query;
+  if (companyId) {
+    query = query.eq('company_id', companyId);
+  }
+
+  const { data, error } = await query.order('date', { ascending: false });
   if (error) throw error;
   return data || [];
 };
@@ -2973,17 +3285,19 @@ export const verifyEmployeePin = async (employeeId: string, pin: string): Promis
 
 // ─── Geolocation & Fraud functions ───────────────────────────────────────────
 
-export const getGeoConfig = async (): Promise<{
+export const getGeoConfig = async (companyId?: string): Promise<{
   latitude: number;
   longitude: number;
   allowed_radius_meters: number;
   block_outside: boolean;
 }> => {
-  const { data, error } = await supabase
+  let query = supabase
     .from('geolocation_config')
-    .select('latitude, longitude, allowed_radius_meters, block_outside')
-    .limit(1)
-    .single();
+    .select('latitude, longitude, allowed_radius_meters, block_outside');
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query.limit(1).single();
 
   if (error) throw error;
   return data;
@@ -3008,7 +3322,8 @@ export const registerFraudAttempt = async (
   lat: number | null,
   lon: number | null,
   distanceMeters: number | null,
-  clockType: 'entry' | 'exit'
+  clockType: 'entry' | 'exit',
+  companyId?: string
 ): Promise<void> => {
   const { error } = await supabase.from('geo_fraud_attempts').insert([{
     employee_id: employeeId,
@@ -3017,6 +3332,7 @@ export const registerFraudAttempt = async (
     longitude: lon,
     distance_meters: distanceMeters,
     clock_type: clockType,
+    company_id: companyId || DEFAULT_COMPANY_ID,
   }]);
   if (error) throw error;
 };
@@ -3037,7 +3353,8 @@ function getWeekBounds(): { weekStart: string; weekEnd: string } {
 
 export const blockEmployeeBonus = async (
   employeeId: string,
-  reason: string
+  reason: string,
+  companyId?: string
 ): Promise<void> => {
   const { weekStart, weekEnd } = getWeekBounds();
   const { error } = await supabase
@@ -3047,33 +3364,42 @@ export const blockEmployeeBonus = async (
       week_start: weekStart,
       week_end: weekEnd,
       reason,
+      company_id: companyId || DEFAULT_COMPANY_ID,
     }], { onConflict: 'employee_id,week_start' });
   if (error) throw error;
 };
 
 export const isEmployeeBonusBlocked = async (
-  employeeId: string
+  employeeId: string,
+  companyId?: string
 ): Promise<{ blocked: boolean; reason?: string }> => {
   const { weekStart } = getWeekBounds();
-  const { data, error } = await supabase
+  let query = supabase
     .from('bonus_blocks')
     .select('reason')
     .eq('employee_id', employeeId)
-    .eq('week_start', weekStart)
-    .maybeSingle();
+    .eq('week_start', weekStart);
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query.maybeSingle();
   if (error) throw error;
   if (!data) return { blocked: false };
   return { blocked: true, reason: data.reason };
 };
 
-export const getBlockedEmployeesThisWeek = async (): Promise<
+export const getBlockedEmployeesThisWeek = async (companyId?: string): Promise<
   { employee_id: string; name: string; reason: string; blocked_since: string }[]
 > => {
   const { weekStart } = getWeekBounds();
-  const { data, error } = await supabase
+  let query = supabase
     .from('bonus_blocks')
     .select('employee_id, reason, created_at, employees (name)')
     .eq('week_start', weekStart);
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query;
   if (error) throw error;
   return (data || []).map((row: Record<string, unknown>) => ({
     employee_id: row.employee_id as string,
@@ -3105,7 +3431,8 @@ export const saveFlaggedGeoAttempt = async (
   latitude: number,
   longitude: number,
   accuracy: number,
-  distanceMeters: number
+  distanceMeters: number,
+  companyId?: string
 ): Promise<void> => {
   const today = getBrazilDateString();
   const now = new Date().toISOString();
@@ -3125,9 +3452,10 @@ export const saveFlaggedGeoAttempt = async (
         geo_distance_meters: distanceMeters,
         approval_status: 'pending',
         clock_source: 'employee_self',
+        company_id: companyId || DEFAULT_COMPANY_ID,
       }], { onConflict: 'employee_id,date' });
   } else {
-    await supabase
+    let upd = supabase
       .from('attendance')
       .update({
         exit_latitude: latitude,
@@ -3137,6 +3465,10 @@ export const saveFlaggedGeoAttempt = async (
       })
       .eq('employee_id', employeeId)
       .eq('date', today);
+
+    if (companyId) upd = upd.eq('company_id', companyId);
+
+    await upd;
   }
 };
 
@@ -3155,18 +3487,21 @@ export interface GeoAlert {
   clock_source: string | null;
 }
 
-export const getGeoAlerts = async (): Promise<GeoAlert[]> => {
+export const getGeoAlerts = async (companyId?: string): Promise<GeoAlert[]> => {
   const endDate = getBrazilDateString();
   const startMs = new Date(endDate).getTime() - 29 * 24 * 60 * 60 * 1000;
   const startDate = new Date(startMs).toISOString().split('T')[0];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('attendance')
     .select('id, employee_id, date, entry_time, exit_time_full, entry_latitude, entry_longitude, exit_latitude, exit_longitude, geo_distance_meters, clock_source, employees (name)')
     .eq('geo_valid', false)
     .gte('date', startDate)
-    .lte('date', endDate)
-    .order('date', { ascending: false });
+    .lte('date', endDate);
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query.order('date', { ascending: false });
 
   if (error) throw error;
 
@@ -3228,7 +3563,7 @@ export const getGeoRecords = async (filters?: {
   startDate?: string;
   endDate?: string;
   employeeId?: string;
-}): Promise<GeoRecord[]> => {
+}, companyId?: string): Promise<GeoRecord[]> => {
   let query = supabase
     .from('attendance')
     .select('id, employee_id, date, entry_time, exit_time_full, entry_latitude, entry_longitude, entry_accuracy, exit_latitude, exit_longitude, exit_accuracy, geo_valid, geo_distance_meters, employees (name)')
@@ -3239,6 +3574,7 @@ export const getGeoRecords = async (filters?: {
   if (filters?.startDate) query = query.gte('date', filters.startDate);
   if (filters?.endDate) query = query.lte('date', filters.endDate);
   if (filters?.employeeId) query = query.eq('employee_id', filters.employeeId);
+  if (companyId) query = query.eq('company_id', companyId);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -3273,12 +3609,16 @@ export interface FraudAttempt {
   clock_type: string;
 }
 
-export const getFraudAttempts = async (): Promise<FraudAttempt[]> => {
-  const { data, error } = await supabase
+export const getFraudAttempts = async (companyId?: string): Promise<FraudAttempt[]> => {
+  let query = supabase
     .from('geo_fraud_attempts')
     .select('id, employee_id, date, attempted_at, latitude, longitude, distance_meters, clock_type, employees (name)')
     .order('attempted_at', { ascending: false })
     .limit(200);
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -3305,12 +3645,16 @@ export interface BonusBlock {
   created_at: string;
 }
 
-export const getBonusBlocks = async (): Promise<BonusBlock[]> => {
-  const { data, error } = await supabase
+export const getBonusBlocks = async (companyId?: string): Promise<BonusBlock[]> => {
+  let query = supabase
     .from('bonus_blocks')
     .select('id, employee_id, week_start, week_end, reason, created_at, employees (name)')
     .order('created_at', { ascending: false })
     .limit(200);
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -3345,7 +3689,7 @@ export interface AdminCleanupConfig {
   updated_at: string;
 }
 
-export const previewAdminCleanup = async (monthsOld: number): Promise<{
+export const previewAdminCleanup = async (monthsOld: number, companyId?: string): Promise<{
   fraud_attempts: number;
   bonus_blocks: number;
   geo_records: number;
@@ -3362,10 +3706,20 @@ export const previewAdminCleanup = async (monthsOld: number): Promise<{
     } catch { return 0; }
   };
 
+  let fraudQ = supabase.from('geo_fraud_attempts').select('id', { count: 'exact', head: true }).lt('date', cutoffDate);
+  let blocksQ = supabase.from('bonus_blocks').select('id', { count: 'exact', head: true }).lt('week_end', cutoffDate);
+  let geoQ = supabase.from('attendance').select('id', { count: 'exact', head: true }).not('entry_latitude', 'is', null).lt('date', cutoffDate);
+
+  if (companyId) {
+    fraudQ = fraudQ.eq('company_id', companyId);
+    blocksQ = blocksQ.eq('company_id', companyId);
+    geoQ = geoQ.eq('company_id', companyId);
+  }
+
   const [fraudCount, blocksCount, geoCount] = await Promise.all([
-    safeCount(supabase.from('geo_fraud_attempts').select('id', { count: 'exact', head: true }).lt('date', cutoffDate)),
-    safeCount(supabase.from('bonus_blocks').select('id', { count: 'exact', head: true }).lt('week_end', cutoffDate)),
-    safeCount(supabase.from('attendance').select('id', { count: 'exact', head: true }).not('entry_latitude', 'is', null).lt('date', cutoffDate)),
+    safeCount(fraudQ),
+    safeCount(blocksQ),
+    safeCount(geoQ),
   ]);
 
   return {
@@ -3378,7 +3732,8 @@ export const previewAdminCleanup = async (monthsOld: number): Promise<{
 export const runAdminCleanup = async (
   monthsOld: number,
   tables: { fraud: boolean; blocks: boolean; geo: boolean },
-  performedBy: string
+  performedBy: string,
+  companyId?: string
 ): Promise<{ deleted: number; log_id: string }> => {
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - monthsOld);
@@ -3389,27 +3744,29 @@ export const runAdminCleanup = async (
   let geoCleaned = 0;
 
   if (tables.fraud) {
-    const { data, error } = await supabase
+    let q = supabase
       .from('geo_fraud_attempts')
       .delete()
-      .lt('date', cutoffDate)
-      .select('id');
+      .lt('date', cutoffDate);
+    if (companyId) q = q.eq('company_id', companyId);
+    const { data, error } = await q.select('id');
     if (error) console.error('Cleanup fraud error:', error);
     fraudDeleted = data?.length || 0;
   }
 
   if (tables.blocks) {
-    const { data, error } = await supabase
+    let q = supabase
       .from('bonus_blocks')
       .delete()
-      .lt('week_end', cutoffDate)
-      .select('id');
+      .lt('week_end', cutoffDate);
+    if (companyId) q = q.eq('company_id', companyId);
+    const { data, error } = await q.select('id');
     if (error) console.error('Cleanup blocks error:', error);
     blocksDeleted = data?.length || 0;
   }
 
   if (tables.geo) {
-    const { data, error } = await supabase
+    let q = supabase
       .from('attendance')
       .update({
         entry_latitude: null,
@@ -3419,8 +3776,9 @@ export const runAdminCleanup = async (
         exit_longitude: null,
       })
       .not('entry_latitude', 'is', null)
-      .lt('date', cutoffDate)
-      .select('id');
+      .lt('date', cutoffDate);
+    if (companyId) q = q.eq('company_id', companyId);
+    const { data, error } = await q.select('id');
     if (error) console.error('Cleanup geo error:', error);
     geoCleaned = data?.length || 0;
   }
@@ -3539,30 +3897,34 @@ export interface FaceAuthAttempt {
   clock_type: 'entry' | 'exit' | null;
 }
 
-export const getFaceRecognitionConfig = async (): Promise<FaceRecognitionConfig> => {
-  const { data, error } = await supabase
+export const getFaceRecognitionConfig = async (companyId?: string): Promise<FaceRecognitionConfig> => {
+  let query = supabase
     .from('face_recognition_config')
-    .select('enabled')
-    .limit(1)
-    .maybeSingle();
+    .select('enabled');
+
+  if (companyId) query = query.eq('company_id', companyId);
+
+  const { data, error } = await query.limit(1).maybeSingle();
   if (error) throw error;
   return { enabled: !!data?.enabled };
 };
 
 export const setFaceRecognitionGlobal = async (
   enabled: boolean,
-  updatedBy: string
+  updatedBy: string,
+  companyId?: string
 ): Promise<void> => {
   const now = new Date().toISOString();
   // updated_by é FK para users.id; só inclui no payload se for um id válido
   // (string não-vazia). Coluna é nullable, então ausência é aceita.
   const auditor = updatedBy && updatedBy.trim() ? updatedBy.trim() : null;
+  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
 
-  const { data: existing } = await supabase
+  let existQ = supabase
     .from('face_recognition_config')
-    .select('id')
-    .limit(1)
-    .maybeSingle();
+    .select('id');
+  if (companyId) existQ = existQ.eq('company_id', companyId);
+  const { data: existing } = await existQ.limit(1).maybeSingle();
 
   if (existing) {
     const { error } = await supabase
@@ -3573,7 +3935,7 @@ export const setFaceRecognitionGlobal = async (
   } else {
     const { error } = await supabase
       .from('face_recognition_config')
-      .insert([{ enabled, updated_by: auditor }]);
+      .insert([{ enabled, updated_by: auditor, company_id: effectiveCompanyId }]);
     if (error) throw error;
   }
 };
@@ -3652,7 +4014,8 @@ export const logFaceAttempt = async (
   employeeId: string,
   success: boolean,
   confidence: number | null,
-  clockType: 'entry' | 'exit' | null
+  clockType: 'entry' | 'exit' | null,
+  companyId?: string
 ): Promise<void> => {
   // `date` é NOT NULL na tabela face_auth_attempts — precisa ser passado
   // explicitamente no fuso BRT. `attempted_at` também é setado para garantir.
@@ -3664,6 +4027,7 @@ export const logFaceAttempt = async (
       success,
       confidence,
       clock_type: clockType,
+      company_id: companyId || DEFAULT_COMPANY_ID,
     };
     const { error } = await supabase
       .from('face_auth_attempts')
@@ -3682,7 +4046,7 @@ export const getFaceAuthAttempts = async (filters?: {
   endDate?: string;
   employeeId?: string;
   success?: boolean;
-}): Promise<FaceAuthAttempt[]> => {
+}, companyId?: string): Promise<FaceAuthAttempt[]> => {
   let query = supabase
     .from('face_auth_attempts')
     .select(`
@@ -3706,6 +4070,9 @@ export const getFaceAuthAttempts = async (filters?: {
   }
   if (typeof filters?.success === 'boolean') {
     query = query.eq('success', filters.success);
+  }
+  if (companyId) {
+    query = query.eq('company_id', companyId);
   }
 
   const { data, error } = await query.order('attempted_at', { ascending: false });
@@ -3733,4 +4100,135 @@ export const getFaceAuthAttempts = async (filters?: {
       clock_type: r.clock_type,
     };
   });
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// Multi-empresa: Companies & Bonus Types (Sub-fase 1.8)
+// ─────────────────────────────────────────────────────────────────────────
+
+export const getCompanies = async (): Promise<Company[]> => {
+  const { data, error } = await supabase
+    .from('companies')
+    .select('*')
+    .order('display_name', { ascending: true });
+  if (error) throw error;
+  return (data || []) as Company[];
+};
+
+export const getCompanyById = async (id: string): Promise<Company | null> => {
+  const { data, error } = await supabase
+    .from('companies')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as Company | null;
+};
+
+/**
+ * Resolve a empresa de um funcionário a partir do CPF.
+ * Útil no login de ponto: o funcionário só sabe o próprio CPF, não a empresa.
+ */
+export const getCompanyByCpfFromEmployee = async (cpf: string): Promise<Company | null> => {
+  const cpfNumbers = cpf.replace(/\D/g, '');
+  const { data, error } = await supabase
+    .from('employees')
+    .select('companies(*)')
+    .eq('cpf', cpfNumbers)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const c = (data as { companies: Company | Company[] | null }).companies;
+  if (!c) return null;
+  return Array.isArray(c) ? (c[0] ?? null) : c;
+};
+
+export const updateCompany = async (id: string, updates: Partial<Company>): Promise<void> => {
+  // Não deixa mudar id/created_at via update.
+  const { id: _omitId, created_at: _omitCreated, ...rest } = updates as Company;
+  const { error } = await supabase
+    .from('companies')
+    .update({ ...rest, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+};
+
+// ─── Bonus Types (entidade dinâmica multi-empresa) ──────────────────────────
+
+export const getBonusTypes = async (companyId: string, onlyActive: boolean = true): Promise<BonusTypeRecord[]> => {
+  let query = supabase
+    .from('bonus_types')
+    .select('*')
+    .eq('company_id', companyId);
+
+  if (onlyActive) query = query.eq('active', true);
+
+  const { data, error } = await query.order('order_index', { ascending: true });
+  if (error) throw error;
+  return (data || []).map((r: Record<string, unknown>) => ({
+    ...r,
+    default_value: Number(r.default_value),
+  })) as BonusTypeRecord[];
+};
+
+export const getBonusTypeById = async (id: string): Promise<BonusTypeRecord | null> => {
+  const { data, error } = await supabase
+    .from('bonus_types')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { ...data, default_value: Number(data.default_value) } as BonusTypeRecord;
+};
+
+export const getBonusTypeByCode = async (companyId: string, code: string): Promise<BonusTypeRecord | null> => {
+  const { data, error } = await supabase
+    .from('bonus_types')
+    .select('*')
+    .eq('company_id', companyId)
+    .eq('code', code)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { ...data, default_value: Number(data.default_value) } as BonusTypeRecord;
+};
+
+export const createBonusType = async (
+  companyId: string,
+  data: Omit<BonusTypeRecord, 'id' | 'company_id' | 'created_at' | 'updated_at'>
+): Promise<BonusTypeRecord> => {
+  const { data: row, error } = await supabase
+    .from('bonus_types')
+    .insert([{
+      company_id: companyId,
+      name: data.name,
+      code: data.code,
+      default_value: data.default_value,
+      order_index: data.order_index,
+      active: data.active,
+    }])
+    .select()
+    .single();
+  if (error) throw error;
+  return { ...row, default_value: Number(row.default_value) } as BonusTypeRecord;
+};
+
+export const updateBonusType = async (id: string, updates: Partial<BonusTypeRecord>): Promise<void> => {
+  // Não permite mudar id/company_id/created_at via update.
+  const { id: _omitId, company_id: _omitCompany, created_at: _omitCreated, ...rest } = updates as BonusTypeRecord;
+  const { error } = await supabase
+    .from('bonus_types')
+    .update({ ...rest, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+};
+
+// Soft delete: mantém a linha (preserva histórico via FK em bonuses/bonus_removals).
+export const deactivateBonusType = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('bonus_types')
+    .update({ active: false, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
 };
