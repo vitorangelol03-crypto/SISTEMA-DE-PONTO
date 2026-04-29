@@ -1,6 +1,7 @@
 import React from 'react';
 import { User, LogOut } from 'lucide-react';
 import { User as UserType } from '../../services/database';
+import { CompanySwitcher } from '../layout/CompanySwitcher';
 
 interface LayoutProps {
   user: UserType;
@@ -39,6 +40,10 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
                   {user.role === 'admin' ? 'Admin' : 'Super'}
                 </span>
               </div>
+
+              {user.role === 'admin' && (
+                <CompanySwitcher onCompanyChange={() => window.location.reload()} />
+              )}
 
               <button
                 onClick={onLogout}
