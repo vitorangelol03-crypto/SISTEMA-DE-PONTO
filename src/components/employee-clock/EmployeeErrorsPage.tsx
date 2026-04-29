@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
-import { AlertTriangle, LogOut, Loader2, Eye, EyeOff, XCircle } from 'lucide-react';
+import { AlertTriangle, LogOut, Loader2, Eye, EyeOff, XCircle, Building2, ChevronLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getEmployeeByCpf, verifyEmployeePin, Employee } from '../../services/database';
+import {
+  getEmployeeByCpf,
+  verifyEmployeePin,
+  getCompaniesByEmployeeCpf,
+  Employee,
+  Company,
+} from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 import { EmployeeErrorsView } from './EmployeeErrorsView';
 
 function formatCPFMask(value: string): string {
@@ -12,41 +19,75 @@ function formatCPFMask(value: string): string {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 }
 
-type Step = 'cpf' | 'pin' | 'dashboard' | 'error';
+type Step = 'cpf' | 'company-select' | 'pin' | 'dashboard' | 'error';
 
 export const EmployeeErrorsPage: React.FC = () => {
+  const { setCompany } = useCompany();
   const [step, setStep] = useState<Step>('cpf');
   const [cpfInput, setCpfInput] = useState('');
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [employee, setEmployee] = useState<Employee | null>(null);
+  const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
   const cpfDigits = cpfInput.replace(/\D/g, '');
   const cpfValid = cpfDigits.length === 11;
 
+  // Após resolver a empresa: carrega o funcionário e decide próximo step.
+  const proceedAfterCompany = async (company: Company) => {
+    const emp = await getEmployeeByCpf(cpfDigits, company.id);
+    if (!emp) {
+      setErrorMsg('Funcionário não encontrado nesta empresa.');
+      setStep('error');
+      return;
+    }
+    if (!emp.pin_configured) {
+      setErrorMsg('PIN não configurado. Acesse "Registrar Ponto" no terminal do trabalho primeiro para configurar seu PIN.');
+      setStep('error');
+      return;
+    }
+    setEmployee(emp);
+    setStep('pin');
+  };
+
   const handleCpfSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cpfValid) return;
     setLoading(true);
     try {
-      const emp = await getEmployeeByCpf(cpfDigits);
-      if (!emp) {
+      const companies = await getCompaniesByEmployeeCpf(cpfDigits);
+      if (companies.length === 0) {
         setErrorMsg('Funcionário não encontrado. Verifique o CPF.');
         setStep('error');
         return;
       }
-      if (!emp.pin_configured) {
-        setErrorMsg('PIN não configurado. Acesse "Registrar Ponto" no terminal do trabalho primeiro para configurar seu PIN.');
-        setStep('error');
+      if (companies.length === 1) {
+        await setCompany(companies[0].id);
+        await proceedAfterCompany(companies[0]);
         return;
       }
-      setEmployee(emp);
-      setStep('pin');
+      // 2+ empresas: usuário escolhe.
+      setAvailableCompanies(companies);
+      setStep('company-select');
     } catch (err) {
       console.error(err);
       setErrorMsg('Erro ao verificar CPF. Tente novamente.');
+      setStep('error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompanyPick = async (company: Company) => {
+    setLoading(true);
+    try {
+      await setCompany(company.id);
+      await proceedAfterCompany(company);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Erro ao processar seleção. Tente novamente.');
       setStep('error');
     } finally {
       setLoading(false);
@@ -77,12 +118,14 @@ export const EmployeeErrorsPage: React.FC = () => {
     setEmployee(null);
     setPin('');
     setCpfInput('');
+    setAvailableCompanies([]);
     setStep('cpf');
   };
 
   const goBackToCpf = () => {
     setEmployee(null);
     setPin('');
+    setAvailableCompanies([]);
     setStep('cpf');
   };
 
@@ -170,6 +213,36 @@ export const EmployeeErrorsPage: React.FC = () => {
               {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Verificando...</> : 'Continuar'}
             </button>
           </form>
+        )}
+
+        {step === 'company-select' && (
+          <div className="p-6 space-y-3">
+            <p className="text-sm text-gray-600 text-center mb-1">
+              Em qual empresa você está hoje?
+            </p>
+            {availableCompanies.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => handleCompanyPick(c)}
+                disabled={loading}
+                className="w-full p-4 border-2 border-gray-200 rounded-xl hover:border-orange-500 hover:bg-orange-50 active:scale-[0.98] transition-all text-left flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Building2 className="w-6 h-6 text-orange-600 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-gray-900 truncate">{c.display_name}</p>
+                  <p className="text-xs text-gray-500 truncate">{c.city}</p>
+                </div>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={goBackToCpf}
+              className="w-full text-sm text-gray-400 hover:text-gray-600 flex items-center justify-center gap-1 py-2"
+            >
+              <ChevronLeft className="w-4 h-4" /> Voltar
+            </button>
+          </div>
         )}
 
         {step === 'pin' && employee && (

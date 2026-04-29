@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle, Building2 } from 'lucide-react';
 import {
   getEmployeeByCpf,
   getEmployeeTodayAttendance,
@@ -7,9 +7,12 @@ import {
   verifyEmployeePin,
   setEmployeePin,
   getFaceRecognitionConfig,
+  getCompaniesByEmployeeCpf,
   Employee,
   Attendance,
+  Company,
 } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 import { FaceRegistration } from './FaceRegistration';
 import { FaceVerification } from './FaceVerification';
 
@@ -39,7 +42,7 @@ const APPROVAL_BADGE: Record<string, { label: string; cls: string }> = {
   manual:   { label: '📝 Manual',               cls: 'bg-gray-100 text-gray-700' },
 };
 
-type Step = 'cpf' | 'pin' | 'setup-pin' | 'face-register' | 'dashboard' | 'error';
+type Step = 'cpf' | 'company-select' | 'pin' | 'setup-pin' | 'face-register' | 'dashboard' | 'error';
 
 /** Solicita geolocalização. Resolve com a position, ou rejeita com o código do erro. */
 function requestGeolocation(): Promise<GeolocationPosition> {
@@ -67,6 +70,7 @@ function formatCPFMask(value: string): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const EmployeeClockIn: React.FC = () => {
+  const { setCompany } = useCompany();
   const [step, setStep] = useState<Step>('cpf');
   const [cpfInput, setCpfInput] = useState('');
   const [pin, setPin] = useState('');
@@ -75,6 +79,7 @@ export const EmployeeClockIn: React.FC = () => {
   const [confirmPin, setConfirmPin] = useState('');
   const [setupError, setSetupError] = useState('');
   const [employee, setEmployee] = useState<Employee | null>(null);
+  const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
   const [todayRecord, setTodayRecord] = useState<Attendance | null>(null);
   const [history, setHistory] = useState<Attendance[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
@@ -159,25 +164,62 @@ export const EmployeeClockIn: React.FC = () => {
 
   // ─── CPF ────────────────────────────────────────────────────────────────────
 
+  // Pós-validação de funcionário: decide próximo step (setup-pin ou pin).
+  const proceedAfterEmployee = (emp: Employee) => {
+    setEmployee(emp);
+    if (!emp.pin_configured) {
+      setSetupField('new');
+      setNewPin('');
+      setConfirmPin('');
+      setSetupError('');
+      setStep('setup-pin');
+    } else {
+      setStep('pin');
+    }
+  };
+
   const handleCpfSubmit = async () => {
     setLoading(true);
     try {
-      const emp = await getEmployeeByCpf(cpfInput);
-      if (!emp) {
+      const companies = await getCompaniesByEmployeeCpf(cpfInput);
+      if (companies.length === 0) {
         setErrorMsg('Funcionário não encontrado. Verifique o CPF digitado.');
         setStep('error');
         return;
       }
-      setEmployee(emp);
-      if (!emp.pin_configured) {
-        setSetupField('new');
-        setNewPin('');
-        setConfirmPin('');
-        setSetupError('');
-        setStep('setup-pin');
-      } else {
-        setStep('pin');
+      if (companies.length === 1) {
+        await setCompany(companies[0].id);
+        const emp = await getEmployeeByCpf(cpfInput, companies[0].id);
+        if (!emp) {
+          setErrorMsg('Funcionário não encontrado. Verifique o CPF digitado.');
+          setStep('error');
+          return;
+        }
+        proceedAfterEmployee(emp);
+        return;
       }
+      // 2+ empresas: usuário escolhe.
+      setAvailableCompanies(companies);
+      setStep('company-select');
+    } catch {
+      setErrorMsg('Erro ao buscar funcionário. Tente novamente.');
+      setStep('error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompanyPick = async (company: Company) => {
+    setLoading(true);
+    try {
+      await setCompany(company.id);
+      const emp = await getEmployeeByCpf(cpfInput, company.id);
+      if (!emp) {
+        setErrorMsg('Funcionário não encontrado nesta empresa.');
+        setStep('error');
+        return;
+      }
+      proceedAfterEmployee(emp);
     } catch {
       setErrorMsg('Erro ao buscar funcionário. Tente novamente.');
       setStep('error');
@@ -400,7 +442,7 @@ export const EmployeeClockIn: React.FC = () => {
     if (!employee) return;
     // Recarrega employee p/ pegar face_registered atualizado e pula pro dashboard
     try {
-      const fresh = await getEmployeeByCpf(employee.cpf);
+      const fresh = await getEmployeeByCpf(employee.cpf, employee.company_id);
       if (fresh) setEmployee(fresh);
     } catch { /* segue com o que tem */ }
     setFaceGateActive(true); // agora cadastrado, próximas batidas precisam verificar
@@ -428,6 +470,7 @@ export const EmployeeClockIn: React.FC = () => {
     setConfirmPin('');
     setSetupError('');
     setEmployee(null);
+    setAvailableCompanies([]);
     setTodayRecord(null);
     setHistory([]);
     setClockMsg(null);
@@ -495,6 +538,40 @@ export const EmployeeClockIn: React.FC = () => {
                 className="w-full py-4 bg-blue-600 text-white text-lg font-bold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Continuar'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── COMPANY SELECT (CPF presente em 2+ empresas) ── */}
+        {step === 'company-select' && (
+          <>
+            <Header
+              title="Em qual empresa você está hoje?"
+              subtitle="Selecione para continuar"
+            />
+            <div className="p-6 space-y-3">
+              {availableCompanies.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => handleCompanyPick(c)}
+                  disabled={loading}
+                  className="w-full p-4 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 active:scale-[0.98] transition-all text-left flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Building2 className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-gray-900 truncate">{c.display_name}</p>
+                    <p className="text-xs text-gray-500 truncate">{c.city}</p>
+                  </div>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => { setStep('cpf'); setAvailableCompanies([]); }}
+                className="w-full text-sm text-gray-400 hover:text-gray-600 flex items-center justify-center gap-1 py-2"
+              >
+                <ChevronLeft className="w-4 h-4" /> Voltar
               </button>
             </div>
           </>

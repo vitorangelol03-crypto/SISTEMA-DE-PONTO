@@ -4126,21 +4126,41 @@ export const getCompanyById = async (id: string): Promise<Company | null> => {
 };
 
 /**
- * Resolve a empresa de um funcionário a partir do CPF.
- * Útil no login de ponto: o funcionário só sabe o próprio CPF, não a empresa.
+ * Resolve TODAS as empresas em que o CPF está cadastrado (uma por linha de employee).
+ * Útil em /clock e /erros: o funcionário só sabe o CPF e pode estar em mais de uma empresa.
+ * Retorna lista deduplicada por id (vazia se CPF não tem cadastro).
  */
-export const getCompanyByCpfFromEmployee = async (cpf: string): Promise<Company | null> => {
+export const getCompaniesByEmployeeCpf = async (cpf: string): Promise<Company[]> => {
   const cpfNumbers = cpf.replace(/\D/g, '');
   const { data, error } = await supabase
     .from('employees')
     .select('companies(*)')
-    .eq('cpf', cpfNumbers)
-    .maybeSingle();
+    .eq('cpf', cpfNumbers);
   if (error) throw error;
-  if (!data) return null;
-  const c = (data as { companies: Company | Company[] | null }).companies;
-  if (!c) return null;
-  return Array.isArray(c) ? (c[0] ?? null) : c;
+  if (!data) return [];
+  const seen = new Set<string>();
+  const result: Company[] = [];
+  for (const row of data as Array<{ companies: Company | Company[] | null }>) {
+    const c = row.companies;
+    if (!c) continue;
+    const arr = Array.isArray(c) ? c : [c];
+    for (const co of arr) {
+      if (co && !seen.has(co.id)) {
+        seen.add(co.id);
+        result.push(co);
+      }
+    }
+  }
+  return result;
+};
+
+/**
+ * Resolve a empresa de um funcionário a partir do CPF (compat).
+ * Wrapper sobre getCompaniesByEmployeeCpf: retorna a primeira (ou null).
+ */
+export const getCompanyByCpfFromEmployee = async (cpf: string): Promise<Company | null> => {
+  const list = await getCompaniesByEmployeeCpf(cpf);
+  return list[0] ?? null;
 };
 
 export const updateCompany = async (id: string, updates: Partial<Company>): Promise<void> => {
