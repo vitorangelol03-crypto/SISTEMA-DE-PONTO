@@ -306,6 +306,7 @@ export const EmployeeClockIn: React.FC = () => {
       body: JSON.stringify({
         employee_id: employee.id,
         cpf: employee.cpf,
+        company_id: employee.company_id,
         clock_type: clockType,
         latitude,
         longitude,

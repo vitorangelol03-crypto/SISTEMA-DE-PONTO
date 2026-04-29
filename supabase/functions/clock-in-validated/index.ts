@@ -7,6 +7,10 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Empresa padrão (Caratinga) — usada apenas como referência semântica.
+// effectiveCompanyId é SEMPRE derivado de emp.company_id (canônico).
+const DEFAULT_COMPANY_ID = "6583bb2a-e334-41a7-b69c-7d98f3b46dfc";
+
 function getBrazilDateString(): string {
   const now = new Date();
   const offset = -3 * 60;
@@ -73,8 +77,15 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { employee_id, cpf, clock_type, latitude, longitude, accuracy } =
-      await req.json();
+    const {
+      employee_id,
+      cpf,
+      clock_type,
+      latitude,
+      longitude,
+      accuracy,
+      company_id: bodyCompanyId,
+    } = await req.json();
 
     if (!employee_id || !cpf || !clock_type) {
       return new Response(
@@ -94,10 +105,10 @@ Deno.serve(async (req: Request) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Verify employee exists and CPF matches
+    // Verify employee exists, CPF matches, capture canonical company_id
     const { data: emp, error: empErr } = await supabase
       .from("employees")
-      .select("id, cpf")
+      .select("id, cpf, company_id")
       .eq("id", employee_id)
       .single();
 
@@ -115,12 +126,58 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Fetch geo config
-    const { data: config } = await supabase
-      .from("geolocation_config")
-      .select("*")
-      .limit(1)
+    // Tampering check: se body.company_id presente, deve bater com emp.company_id.
+    // Cliente antigo (sem company_id) preserva comportamento — usa emp.company_id.
+    if (bodyCompanyId && bodyCompanyId !== emp.company_id) {
+      return new Response(
+        JSON.stringify({ error: "Funcionário não pertence à empresa selecionada" }),
+        { status: 403, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Fonte canônica: SEMPRE emp.company_id. Fallback defensivo se DB inconsistente.
+    const effectiveCompanyId: string = emp.company_id ?? DEFAULT_COMPANY_ID;
+
+    // Resolve geo config: companies.default_geo_* (base) + geolocation_config (override por empresa)
+    const { data: company } = await supabase
+      .from("companies")
+      .select("default_geo_lat, default_geo_lng, default_geo_radius")
+      .eq("id", effectiveCompanyId)
       .maybeSingle();
+
+    if (
+      !company ||
+      company.default_geo_lat == null ||
+      company.default_geo_lng == null
+    ) {
+      // Fail-safe: nunca bater ponto com coords erradas.
+      return new Response(
+        JSON.stringify({ error: "Configuração de geolocalização da empresa não encontrada" }),
+        { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+
+    const geoConfig = {
+      latitude: Number(company.default_geo_lat),
+      longitude: Number(company.default_geo_lng),
+      allowed_radius_meters: Number(company.default_geo_radius ?? 200),
+      block_outside: true as boolean,
+    };
+
+    const { data: override } = await supabase
+      .from("geolocation_config")
+      .select("latitude, longitude, allowed_radius_meters, block_outside")
+      .eq("company_id", effectiveCompanyId)
+      .maybeSingle();
+
+    if (override) {
+      if (override.latitude != null) geoConfig.latitude = Number(override.latitude);
+      if (override.longitude != null) geoConfig.longitude = Number(override.longitude);
+      if (override.allowed_radius_meters != null) {
+        geoConfig.allowed_radius_meters = Number(override.allowed_radius_meters);
+      }
+      if (override.block_outside != null) geoConfig.block_outside = !!override.block_outside;
+    }
 
     const today = getBrazilDateString();
     const now = new Date().toISOString();
@@ -130,17 +187,68 @@ Deno.serve(async (req: Request) => {
     let distance = 0;
     let geoValid = true;
 
-    if (config) {
-      if (!hasCoords) {
+    if (!hasCoords) {
+      geoValid = false;
+
+      await supabase.from("geo_fraud_attempts").insert([
+        {
+          employee_id,
+          company_id: effectiveCompanyId,
+          date: today,
+          latitude: null,
+          longitude: null,
+          distance_meters: null,
+          clock_type,
+        },
+      ]);
+
+      if (clock_type === "entry") {
+        const { weekStart, weekEnd } = getWeekBounds();
+        await supabase.from("bonus_blocks").upsert(
+          [
+            {
+              employee_id,
+              company_id: effectiveCompanyId,
+              week_start: weekStart,
+              week_end: weekEnd,
+              reason: "Localização não fornecida",
+            },
+          ],
+          { onConflict: "employee_id,week_start" },
+        );
+
+        return new Response(
+          JSON.stringify({
+            success: false,
+            fraud: true,
+            distance_meters: null,
+            message: "Localização não fornecida",
+          }),
+          { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      // exit without coords: fall through to normal exit with geoValid=false
+    }
+
+    if (hasCoords) {
+      distance = calcDistance(
+        latitude,
+        longitude,
+        geoConfig.latitude,
+        geoConfig.longitude,
+      );
+
+      if (geoConfig.block_outside && distance > geoConfig.allowed_radius_meters) {
         geoValid = false;
 
         await supabase.from("geo_fraud_attempts").insert([
           {
             employee_id,
+            company_id: effectiveCompanyId,
             date: today,
-            latitude: null,
-            longitude: null,
-            distance_meters: null,
+            latitude,
+            longitude,
+            distance_meters: distance,
             clock_type,
           },
         ]);
@@ -151,94 +259,46 @@ Deno.serve(async (req: Request) => {
             [
               {
                 employee_id,
+                company_id: effectiveCompanyId,
                 week_start: weekStart,
                 week_end: weekEnd,
-                reason: "Localização não fornecida",
+                reason: `Fora da área permitida (${distance}m)`,
               },
             ],
             { onConflict: "employee_id,week_start" },
+          );
+
+          await supabase.from("attendance").upsert(
+            [
+              {
+                employee_id,
+                company_id: effectiveCompanyId,
+                date: today,
+                status: "present",
+                entry_time: now,
+                entry_latitude: latitude,
+                entry_longitude: longitude,
+                entry_accuracy: accuracy,
+                geo_valid: false,
+                geo_distance_meters: distance,
+                approval_status: "pending",
+                clock_source: "employee_self",
+              },
+            ],
+            { onConflict: "employee_id,date" },
           );
 
           return new Response(
             JSON.stringify({
               success: false,
               fraud: true,
-              distance_meters: null,
-              message: "Localização não fornecida",
+              distance_meters: distance,
+              message: `Fora da área permitida (${distance}m)`,
             }),
             { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
           );
         }
-        // exit without coords: fall through to normal exit with geoValid=false
-      }
-
-      if (hasCoords) {
-        distance = calcDistance(
-          latitude,
-          longitude,
-          Number(config.latitude),
-          Number(config.longitude),
-        );
-
-        if (config.block_outside && distance > (config.allowed_radius_meters ?? 200)) {
-          geoValid = false;
-
-          await supabase.from("geo_fraud_attempts").insert([
-            {
-              employee_id,
-              date: today,
-              latitude,
-              longitude,
-              distance_meters: distance,
-              clock_type,
-            },
-          ]);
-
-          if (clock_type === "entry") {
-            const { weekStart, weekEnd } = getWeekBounds();
-            await supabase.from("bonus_blocks").upsert(
-              [
-                {
-                  employee_id,
-                  week_start: weekStart,
-                  week_end: weekEnd,
-                  reason: `Fora da área permitida (${distance}m)`,
-                },
-              ],
-              { onConflict: "employee_id,week_start" },
-            );
-
-            await supabase.from("attendance").upsert(
-              [
-                {
-                  employee_id,
-                  date: today,
-                  status: "present",
-                  entry_time: now,
-                  entry_latitude: latitude,
-                  entry_longitude: longitude,
-                  entry_accuracy: accuracy,
-                  geo_valid: false,
-                  geo_distance_meters: distance,
-                  approval_status: "pending",
-                  clock_source: "employee_self",
-                },
-              ],
-              { onConflict: "employee_id,date" },
-            );
-
-            return new Response(
-              JSON.stringify({
-                success: false,
-                fraud: true,
-                distance_meters: distance,
-                message: `Fora da área permitida (${distance}m)`,
-              }),
-              { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-            );
-          }
-          // exit outside area: fall through to normal exit with geoValid=false
-        }
+        // exit outside area: fall through to normal exit with geoValid=false
       }
     }
 
@@ -246,6 +306,7 @@ Deno.serve(async (req: Request) => {
     if (clock_type === "entry") {
       const record: Record<string, unknown> = {
         employee_id,
+        company_id: effectiveCompanyId,
         date: today,
         status: "present",
         entry_time: now,
@@ -312,6 +373,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const updateRecord: Record<string, unknown> = {
+      company_id: effectiveCompanyId,
       exit_time_full: exitTime.toISOString(),
       hours_worked: hoursWorked,
       night_hours: nightHours,
