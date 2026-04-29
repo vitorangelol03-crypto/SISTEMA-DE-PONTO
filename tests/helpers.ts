@@ -7,13 +7,24 @@ export const TEST_EMPLOYEE_CPF_MASKED = '122.326.256-13';
 
 /**
  * Faz login no painel de supervisor. Assume que estamos em `/`.
+ *
+ * Admin (id === '9999') passa por uma tela de seleção de empresa após o
+ * login (sub-fase 1.10). Os testes default selecionam Caratinga.
  */
 export async function loginAs(page: Page, user: { id: string; password: string }) {
   await page.goto('/');
   await page.locator('#id').fill(user.id);
   await page.locator('#password').fill(user.password);
   await page.getByRole('button', { name: 'Entrar' }).click();
-  // Espera entrar no painel (aparece o título "Sistema de Ponto" no header + TabNavigation)
+
+  // Admin: lidar com CompanySelector — clica em Caratinga (empresa default dos testes).
+  if (user.id === '9999') {
+    const caratingaCard = page.getByText('Caratinga', { exact: false }).first();
+    await expect(caratingaCard).toBeVisible({ timeout: 10_000 });
+    await caratingaCard.click();
+  }
+
+  // Sanity check: chegou ao painel (aparece botão "Ponto" do TabNavigation).
   await expect(page.getByRole('button', { name: /Ponto/ })).toBeVisible({ timeout: 15_000 });
 }
 

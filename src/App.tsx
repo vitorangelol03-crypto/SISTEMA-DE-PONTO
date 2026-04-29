@@ -1,12 +1,14 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { LoginForm } from './components/auth/LoginForm';
+import { CompanySelector } from './components/auth/CompanySelector';
 import { Layout } from './components/common/Layout';
 import { TabNavigation, TabType } from './components/common/TabNavigation';
 import { HelpButton } from './components/tutorial/HelpButton';
 import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
-import { initializeSystem, autoCreateWeeklyPeriod } from './services/database';
+import { useCompany } from './contexts/CompanyContext';
+import { initializeSystem, autoCreateWeeklyPeriod, type User } from './services/database';
 import { EmployeeClockIn } from './components/employee-clock/EmployeeClockIn';
 import { EmployeeErrorsPage } from './components/employee-clock/EmployeeErrorsPage';
 
@@ -25,7 +27,27 @@ const AdminTab = lazy(() => import('./components/admin/AdminTab').then(m => ({ d
 function App() {
   const { user, loading, login, logout } = useAuth();
   const { hasPermission } = usePermissions(user?.id || null);
+  const { setCompany } = useCompany();
   const [activeTab, setActiveTab] = useState<TabType>('attendance');
+  // Admin sempre escolhe empresa após cada login (não em refresh).
+  const [needsCompanySelection, setNeedsCompanySelection] = useState(false);
+
+  const handleLogin = (loggedUser: User) => {
+    login(loggedUser);
+    if (loggedUser.role === 'admin') {
+      setNeedsCompanySelection(true);
+    } else if (loggedUser.role === 'supervisor') {
+      // Supervisor: empresa atrelada ao usuário no banco — auto-seleciona.
+      // No-op silencioso se ausente: mantém localStorage/DEFAULT do CompanyContext.
+      const cid = (loggedUser as User & { company_id?: string }).company_id;
+      if (cid) setCompany(cid);
+    }
+  };
+
+  const handleLogout = () => {
+    setNeedsCompanySelection(false);
+    logout();
+  };
 
   // Verifica se a URL indica modo de registro de ponto do funcionário
   const isClockMode =
@@ -76,7 +98,21 @@ function App() {
   if (!user) {
     return (
       <>
-        <LoginForm onLogin={login} />
+        <LoginForm onLogin={handleLogin} />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
+
+  // Admin precisa escolher empresa antes de ver o dashboard (apenas após login).
+  if (user.role === 'admin' && needsCompanySelection) {
+    return (
+      <>
+        <CompanySelector
+          user={user}
+          onSelected={() => setNeedsCompanySelection(false)}
+          onLogout={handleLogout}
+        />
         <Toaster position="top-right" />
       </>
     );
@@ -126,7 +162,7 @@ function App() {
 
   return (
     <>
-      <Layout user={user} onLogout={logout}>
+      <Layout user={user} onLogout={handleLogout}>
         <TabNavigation
           activeTab={activeTab}
           onTabChange={setActiveTab}
