@@ -24,10 +24,8 @@ import {
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}AttCompl `;
 
 function todayBR(): string {
-  const now = new Date();
-  const offset = -3 * 60;
-  const local = new Date(now.getTime() + (now.getTimezoneOffset() + offset) * 60_000);
-  return local.toISOString().slice(0, 10);
+  // YYYY-MM-DD na timezone do Brasil — independente do TZ do servidor.
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 }
 
 async function cleanup() {

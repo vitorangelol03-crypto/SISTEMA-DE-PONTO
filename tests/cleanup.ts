@@ -55,19 +55,14 @@ export function getClient(): SupabaseClient {
 
 function todayIso(): string {
   // Mesmo formato que a app usa (YYYY-MM-DD no fuso de São Paulo).
-  const now = new Date();
-  const offset = -3 * 60; // BRT
-  const local = new Date(now.getTime() + (now.getTimezoneOffset() + offset) * 60_000);
-  return local.toISOString().slice(0, 10);
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 }
 
 function yesterdayIso(): string {
   // Dia anterior no mesmo fuso — usado para proteger contra suítes que
   // iniciam antes da meia-noite e terminam depois (janela 23:58 → 00:02).
-  const now = new Date();
-  const offset = -3 * 60;
-  const local = new Date(now.getTime() + (now.getTimezoneOffset() + offset) * 60_000 - 86_400_000);
-  return local.toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86_400_000);
+  return yesterday.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 }
 
 /**

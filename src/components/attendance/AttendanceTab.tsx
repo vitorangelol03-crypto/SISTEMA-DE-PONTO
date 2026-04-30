@@ -19,8 +19,10 @@ import {
   BonusType,
   getPayments,
   Payment,
-  getBonusDefaults,
+  getBonusTypes,
+  BonusTypeRecord,
 } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
@@ -32,6 +34,7 @@ interface AttendanceTabProps {
 }
 
 export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermission }) => {
+  const { company } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
@@ -45,8 +48,10 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [searchTerm, setSearchTerm] = useState('');
   const [employmentTypeFilter, setEmploymentTypeFilter] = useState<EmploymentType>('all');
   const [showBonusModal, setShowBonusModal] = useState(false);
-  const [bonusAmounts, setBonusAmounts] = useState<Record<BonusType, string>>({ B: '', C1: '', C2: '' });
-  const [applyingBonus, setApplyingBonus] = useState<Record<BonusType, boolean>>({ B: false, C1: false, C2: false });
+  const [bonusTypes, setBonusTypes] = useState<BonusTypeRecord[]>([]);
+  const [bonusTypesLoading, setBonusTypesLoading] = useState(true);
+  const [bonusAmounts, setBonusAmounts] = useState<Record<string, string>>({});
+  const [applyingBonus, setApplyingBonus] = useState<Record<string, boolean>>({});
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [bulkMarkingLoading, setBulkMarkingLoading] = useState(false);
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
@@ -192,6 +197,31 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     };
   }, [payments]);
 
+  // Carrega tipos de bonificação da empresa atual. Recarrega quando trocar de empresa.
+  useEffect(() => {
+    if (!company?.id) return;
+    let cancelled = false;
+    setBonusTypesLoading(true);
+    getBonusTypes(company.id)
+      .then(types => {
+        if (cancelled) return;
+        setBonusTypes(types);
+        setBonusAmounts(prev => {
+          const next: Record<string, string> = {};
+          for (const bt of types) next[bt.code] = prev[bt.code] ?? '';
+          return next;
+        });
+        setApplyingBonus(prev => {
+          const next: Record<string, boolean> = {};
+          for (const bt of types) next[bt.code] = prev[bt.code] ?? false;
+          return next;
+        });
+      })
+      .catch(err => console.error('Erro ao carregar bonus_types:', err))
+      .finally(() => { if (!cancelled) setBonusTypesLoading(false); });
+    return () => { cancelled = true; };
+  }, [company?.id]);
+
   const handleMarkAttendance = async (employeeId: string, status: 'present' | 'absent') => {
     if (!isViewingToday && !hasPermission('attendance.editHistory')) {
       toast.error('Você não tem permissão para editar registros de dias anteriores');
@@ -274,47 +304,47 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     return { present, absent, notMarked };
   }, [attendances, filteredEmployees]);
 
-  // Abre o modal de Bonificação e pré-preenche com os valores padrão salvos
-  // na tabela `bonus_defaults`. Se já houver algo digitado em um campo, não
-  // sobrescreve (preserva o que o supervisor pode ter começado a editar).
-  const openBonusModal = async () => {
+  // Abre o modal de Bonificação e pré-preenche com os valores padrão de cada
+  // tipo (bonus_types.default_value). Se já houver algo digitado, preserva.
+  const openBonusModal = () => {
     setShowBonusModal(true);
-    try {
-      const defaults = await getBonusDefaults();
-      setBonusAmounts(prev => ({
-        B: prev.B || (defaults.B > 0 ? String(defaults.B) : ''),
-        C1: prev.C1 || (defaults.C1 > 0 ? String(defaults.C1) : ''),
-        C2: prev.C2 || (defaults.C2 > 0 ? String(defaults.C2) : ''),
-      }));
-    } catch (error) {
-      console.error('Erro ao carregar dados do modal de bonificação:', error);
-    }
+    setBonusAmounts(prev => {
+      const next: Record<string, string> = { ...prev };
+      for (const bt of bonusTypes) {
+        if (!next[bt.code] && bt.default_value > 0) {
+          next[bt.code] = String(bt.default_value);
+        }
+      }
+      return next;
+    });
   };
 
-  const handleApplyBonusType = async (type: BonusType) => {
-    const amount = parseFloat(bonusAmounts[type]);
+  const handleApplyBonusType = async (code: string) => {
+    const amount = parseFloat(bonusAmounts[code] ?? '');
     if (isNaN(amount) || amount <= 0) {
-      toast.error(`Valor da bonificação ${type} inválido`);
+      toast.error(`Valor da bonificação ${code} inválido`);
       return;
     }
 
-    setApplyingBonus(prev => ({ ...prev, [type]: true }));
+    setApplyingBonus(prev => ({ ...prev, [code]: true }));
     try {
-      await applyBonusToAllPresent(selectedDate, amount, userId, type);
-      toast.success(`Bonificação ${type} aplicada com sucesso.`);
-      setBonusAmounts(prev => ({ ...prev, [type]: '' }));
+      await applyBonusToAllPresent(selectedDate, amount, userId, code as BonusType);
+      toast.success(`Bonificação ${code} aplicada com sucesso.`);
+      setBonusAmounts(prev => ({ ...prev, [code]: '' }));
       await loadData(selectedDate);
     } catch (error) {
       console.error('Erro ao aplicar bonificação:', error);
       toast.error((error as Error).message || 'Erro ao aplicar bonificação');
     } finally {
-      setApplyingBonus(prev => ({ ...prev, [type]: false }));
+      setApplyingBonus(prev => ({ ...prev, [code]: false }));
     }
   };
 
   const handleRemoveBonus = (employeeId: string) => {
     const byType = getEmployeeBonusByType(employeeId);
-    const availableTypes = (['B', 'C1', 'C2'] as BonusType[]).filter(t => byType[t] > 0);
+    const availableTypes = bonusTypes
+      .map(bt => bt.code as BonusType)
+      .filter(t => byType[t] > 0);
 
     if (availableTypes.length === 0) {
       toast.error('Este funcionário não possui bonificação para remover');
@@ -1228,16 +1258,28 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                 Funcionários presentes: <strong>{present}</strong>
               </p>
 
-              {(['B', 'C1', 'C2'] as BonusType[]).map(type => {
-                const currentInfo = bonusInfo?.[type];
+              {bonusTypesLoading ? (
+                <div className="text-center py-4 text-sm text-gray-500">Carregando tipos de bonificação...</div>
+              ) : bonusTypes.length === 0 ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                  Nenhum tipo de bonificação cadastrado para esta empresa.
+                </div>
+              ) : bonusTypes.map(bt => {
+                const code = bt.code;
+                const currentInfo = bonusInfo?.[code as BonusType];
                 const applied = currentInfo?.hasBonus ? currentInfo.amount : 0;
-                const busy = applyingBonus[type];
+                const busy = applyingBonus[code] ?? false;
                 return (
-                  <div key={type} className="border border-gray-200 rounded-lg p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-gray-800">Tipo {type}</span>
+                  <div key={bt.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="font-bold text-gray-800">Tipo {code}</span>
+                        <p className="text-xs text-gray-500 truncate">
+                          {bt.name} · padrão R$ {bt.default_value.toFixed(2)}
+                        </p>
+                      </div>
                       {applied > 0 && (
-                        <span className="text-xs text-green-700 bg-green-50 px-2 py-1 rounded">
+                        <span className="text-xs text-green-700 bg-green-50 px-2 py-1 rounded whitespace-nowrap">
                           Já aplicada: R$ {applied.toFixed(2)} ({currentInfo?.employeesCount ?? 0} func.)
                         </span>
                       )}
@@ -1247,18 +1289,18 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                         type="number"
                         step="0.01"
                         min="0"
-                        value={bonusAmounts[type]}
-                        onChange={(e) => setBonusAmounts(prev => ({ ...prev, [type]: e.target.value }))}
+                        value={bonusAmounts[code] ?? ''}
+                        onChange={(e) => setBonusAmounts(prev => ({ ...prev, [code]: e.target.value }))}
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 text-base min-h-[44px]"
                         placeholder="R$ 0.00"
                         disabled={busy}
                       />
                       <button
-                        onClick={() => handleApplyBonusType(type)}
-                        disabled={busy || !bonusAmounts[type] || present === 0}
+                        onClick={() => handleApplyBonusType(code)}
+                        disabled={busy || !bonusAmounts[code] || present === 0}
                         className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px] font-medium whitespace-nowrap"
                       >
-                        {busy ? 'Aplicando...' : `Aplicar ${type}`}
+                        {busy ? 'Aplicando...' : `Aplicar ${code}`}
                       </button>
                     </div>
                   </div>
@@ -1380,7 +1422,9 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
 
               {employeeToRemoveBonus && (() => {
                 const byType = getEmployeeBonusByType(employeeToRemoveBonus);
-                const availableTypes = (['B', 'C1', 'C2'] as BonusType[]).filter(t => byType[t] > 0);
+                const availableTypes = bonusTypes
+                  .map(bt => bt.code as BonusType)
+                  .filter(t => byType[t] > 0);
                 return (
                   <>
                     <div className="bg-gray-50 rounded-lg p-4">
