@@ -67,6 +67,16 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [activeView, setActiveView] = useState<'attendance' | 'approvals'>('attendance');
   const isViewingToday = selectedDate === getBrazilDate();
 
+  // Permissão granular por tipo de bônus: tenta nova chave (applyBonus_<id>),
+  // fallback pra legada por código (applyBonusB/C1/C2). Mesma estratégia no backend.
+  const canApplyBonus = (bt: BonusTypeRecord): boolean =>
+    hasPermission(`financial.applyBonus_${bt.id}`) ||
+    hasPermission(`financial.applyBonus${bt.code}`);
+
+  const canRemoveBonusForType = (bt: BonusTypeRecord): boolean =>
+    hasPermission(`financial.removeBonus_${bt.id}`) ||
+    hasPermission('financial.removeBonusByType');
+
   // `silent = true` é usado pelo polling a cada 30s: não liga o spinner
   // de "Carregando..." e só atualiza o state se os dados realmente mudaram.
   // Isso elimina o flash de re-render completo da tela.
@@ -343,11 +353,11 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const handleRemoveBonus = (employeeId: string) => {
     const byType = getEmployeeBonusByType(employeeId);
     const availableTypes = bonusTypes
-      .map(bt => bt.code as BonusType)
-      .filter(t => byType[t] > 0);
+      .filter(bt => byType[bt.code as BonusType] > 0 && canRemoveBonusForType(bt))
+      .map(bt => bt.code as BonusType);
 
     if (availableTypes.length === 0) {
-      toast.error('Este funcionário não possui bonificação para remover');
+      toast.error('Sem bonificação removível neste funcionário (verifique permissões)');
       return;
     }
 
@@ -1269,6 +1279,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                 const currentInfo = bonusInfo?.[code as BonusType];
                 const applied = currentInfo?.hasBonus ? currentInfo.amount : 0;
                 const busy = applyingBonus[code] ?? false;
+                const canApply = canApplyBonus(bt);
+                const noPermTitle = canApply ? '' : 'Você não tem permissão para aplicar este tipo de bônus';
                 return (
                   <div key={bt.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
                     <div className="flex items-start justify-between gap-2">
@@ -1293,11 +1305,13 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                         onChange={(e) => setBonusAmounts(prev => ({ ...prev, [code]: e.target.value }))}
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 text-base min-h-[44px]"
                         placeholder="R$ 0.00"
-                        disabled={busy}
+                        disabled={busy || !canApply}
+                        title={noPermTitle}
                       />
                       <button
                         onClick={() => handleApplyBonusType(code)}
-                        disabled={busy || !bonusAmounts[code] || present === 0}
+                        disabled={busy || !bonusAmounts[code] || present === 0 || !canApply}
+                        title={noPermTitle}
                         className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px] font-medium whitespace-nowrap"
                       >
                         {busy ? 'Aplicando...' : `Aplicar ${code}`}
@@ -1423,8 +1437,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
               {employeeToRemoveBonus && (() => {
                 const byType = getEmployeeBonusByType(employeeToRemoveBonus);
                 const availableTypes = bonusTypes
-                  .map(bt => bt.code as BonusType)
-                  .filter(t => byType[t] > 0);
+                  .filter(bt => byType[bt.code as BonusType] > 0 && canRemoveBonusForType(bt))
+                  .map(bt => bt.code as BonusType);
                 return (
                   <>
                     <div className="bg-gray-50 rounded-lg p-4">

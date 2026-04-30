@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Lock, MapPin, AlertTriangle, ShieldOff, Key, RefreshCw, Unlock, Trash2, Settings, Play, X, ScanFace, RotateCcw, CheckCircle2, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { BonusTypesManager } from './BonusTypesManager';
 import {
   verifyAdminSecret,
   updateAdminSecret,
@@ -1425,6 +1426,11 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
           </button>
         </div>
       </div>
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* SECTION 8: Bonus Types Manager                                     */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <BonusTypesManager />
     </div>
   );
 };

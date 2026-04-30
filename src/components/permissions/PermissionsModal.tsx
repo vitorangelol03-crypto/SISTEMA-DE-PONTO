@@ -2,7 +2,15 @@ import { useState, useEffect } from 'react';
 import { X, Save, RotateCcw, Search, Shield, Eye, CheckSquare, Square } from 'lucide-react';
 import { UserPermissions, PERMISSION_LABELS, DEFAULT_ADMIN_PERMISSIONS, DEFAULT_SUPERVISOR_PERMISSIONS, DEFAULT_READONLY_PERMISSIONS } from '../../types/permissions';
 import { saveUserPermissions } from '../../services/permissions';
+import { getBonusTypes, BonusTypeRecord } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 import toast from 'react-hot-toast';
+
+const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
+  { id: 'fallback-B',  company_id: '', code: 'B',  name: 'Bônus B',  default_value: 0, order_index: 1, active: true, created_at: '', updated_at: '' },
+  { id: 'fallback-C1', company_id: '', code: 'C1', name: 'Bônus C1', default_value: 0, order_index: 2, active: true, created_at: '', updated_at: '' },
+  { id: 'fallback-C2', company_id: '', code: 'C2', name: 'Bônus C2', default_value: 0, order_index: 3, active: true, created_at: '', updated_at: '' },
+];
 
 interface PermissionsModalProps {
   isOpen: boolean;
@@ -23,12 +31,14 @@ export function PermissionsModal({
   currentUserId,
   onSaved
 }: PermissionsModalProps) {
+  const { company } = useCompany();
   const [permissions, setPermissions] = useState<UserPermissions>(
     currentPermissions || DEFAULT_READONLY_PERMISSIONS
   );
   const [searchTerm, setSearchTerm] = useState('');
   const [saving, setSaving] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [bonusTypes, setBonusTypes] = useState<BonusTypeRecord[]>(FALLBACK_BONUS_TYPES);
 
   useEffect(() => {
     if (currentPermissions) {
@@ -37,6 +47,27 @@ export function PermissionsModal({
       setPermissions(DEFAULT_READONLY_PERMISSIONS);
     }
   }, [currentPermissions, userId]);
+
+  // Carrega bonus_types da empresa atual. Mantém fallback B/C1/C2 caso vazio,
+  // pra UI nunca renderizar sem opções (mesma estratégia da 1.15).
+  useEffect(() => {
+    if (!company?.id || !isOpen) return;
+    let cancelled = false;
+    getBonusTypes(company.id, true)
+      .then(types => { if (!cancelled && types.length > 0) setBonusTypes(types); })
+      .catch(err => console.error('Erro ao carregar bonus_types:', err));
+    return () => { cancelled = true; };
+  }, [company?.id, isOpen]);
+
+  const toggleBonusTypePerm = (key: string) => {
+    setPermissions(prev => ({
+      ...prev,
+      financial: {
+        ...prev.financial,
+        [key]: !prev.financial[key],
+      },
+    }));
+  };
 
   if (!isOpen) return null;
 
@@ -261,6 +292,57 @@ export function PermissionsModal({
                 </div>
               );
             })}
+
+            {/* Permissões dinâmicas por tipo de bônus (Aplicar / Remover) */}
+            {bonusTypes.length > 0 && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 p-4">
+                  <span className="font-semibold text-gray-900">Bonificações por tipo</span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Permissões granulares por tipo cadastrado nesta empresa.
+                  </p>
+                </div>
+                <div className="p-4 space-y-2 bg-white">
+                  {bonusTypes.map(bt => {
+                    const applyKey = `applyBonus_${bt.id}`;
+                    const removeKey = `removeBonus_${bt.id}`;
+                    const canApply = permissions.financial[applyKey] === true;
+                    const canRemove = permissions.financial[removeKey] === true;
+                    return (
+                      <div
+                        key={bt.id}
+                        className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-2 rounded-lg hover:bg-gray-50"
+                      >
+                        <span className="text-gray-700 flex-1 min-w-0">
+                          <span className="font-mono font-semibold">{bt.code}</span>
+                          <span className="text-gray-500"> · {bt.name}</span>
+                        </span>
+                        <div className="flex items-center gap-4">
+                          <label className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={canApply}
+                              onChange={() => toggleBonusTypePerm(applyKey)}
+                              className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                            <span className="text-gray-700">Aplicar</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={canRemove}
+                              onChange={() => toggleBonusTypePerm(removeKey)}
+                              className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                            <span className="text-gray-700">Remover</span>
+                          </label>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

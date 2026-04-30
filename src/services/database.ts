@@ -921,14 +921,17 @@ export const applyBonusToAllPresent = async (
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
-  const typeSpecificPermission = `financial.applyBonus${type}`;
-  const typeCheck = await validatePermission(createdBy, typeSpecificPermission);
-  if (!typeCheck.allowed) {
-    throw new Error(typeCheck.error || `Permissão negada para bônus ${type}`);
-  }
-
   const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
   const bonusTypeRecord = await getBonusTypeByCode(effectiveCompanyId, type);
+
+  // Permissão tipo-específica: tenta granular nova (applyBonus_<id>), fallback legado (applyBonus<code>).
+  const newPermKey = bonusTypeRecord ? `financial.applyBonus_${bonusTypeRecord.id}` : null;
+  const legacyPermKey = `financial.applyBonus${type}`;
+  const newCheck = newPermKey ? await validatePermission(createdBy, newPermKey) : { allowed: false };
+  const legacyCheck = !newCheck.allowed ? await validatePermission(createdBy, legacyPermKey) : { allowed: true };
+  if (!newCheck.allowed && !legacyCheck.allowed) {
+    throw new Error(`Permissão negada para bônus ${type}`);
+  }
 
   let attQuery = supabase
     .from('attendance')
@@ -1088,9 +1091,17 @@ export const removeBonusFromEmployee = async (
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
-  const byTypeCheck = await validatePermission(userId, 'financial.removeBonusByType');
-  if (!byTypeCheck.allowed) {
-    throw new Error(byTypeCheck.error || 'Permissão negada para remover bônus por tipo');
+  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
+  const column = BONUS_COLUMNS[type];
+  const bonusTypeRecord = await getBonusTypeByCode(effectiveCompanyId, type);
+
+  // Permissão tipo-específica: tenta granular nova (removeBonus_<id>), fallback legado (removeBonusByType).
+  const newPermKey = bonusTypeRecord ? `financial.removeBonus_${bonusTypeRecord.id}` : null;
+  const legacyPermKey = `financial.removeBonusByType`;
+  const newCheck = newPermKey ? await validatePermission(userId, newPermKey) : { allowed: false };
+  const legacyCheck = !newCheck.allowed ? await validatePermission(userId, legacyPermKey) : { allowed: true };
+  if (!newCheck.allowed && !legacyCheck.allowed) {
+    throw new Error(`Permissão negada para remover bônus ${type}`);
   }
 
   // Validar observação
@@ -1100,10 +1111,6 @@ export const removeBonusFromEmployee = async (
   if (observation.length > 500) {
     throw new Error('Observação deve ter no máximo 500 caracteres');
   }
-
-  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
-  const column = BONUS_COLUMNS[type];
-  const bonusTypeRecord = await getBonusTypeByCode(effectiveCompanyId, type);
 
   // Buscar pagamento do funcionário
   const { data: payment } = await supabase

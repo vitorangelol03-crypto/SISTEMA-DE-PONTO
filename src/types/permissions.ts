@@ -41,6 +41,8 @@ export interface FinancialPermissions extends TabPermissions {
   removeBonus: boolean;
   removeBonusByType: boolean;
   removeBonusBulk: boolean;
+  // Permissões dinâmicas por tipo de bônus: applyBonus_<bonusTypeId>, removeBonus_<bonusTypeId>.
+  [dynamicKey: string]: boolean;
 }
 
 export interface C6PaymentPermissions extends TabPermissions {
