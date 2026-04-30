@@ -1049,7 +1049,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                 <FileSpreadsheet className="w-5 h-5 mr-2 text-green-600 flex-shrink-0" />
                 <span className="truncate">
                   Importar Funcionários em Massa
-                  {company?.name && <span className="text-gray-500 font-normal"> — {company.name}</span>}
+                  {company?.display_name && <span className="text-gray-500 font-normal"> — {company.display_name}</span>}
                 </span>
               </h3>
               <button

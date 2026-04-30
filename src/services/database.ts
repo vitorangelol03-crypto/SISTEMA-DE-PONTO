@@ -1993,7 +1993,7 @@ export const upsertTriageError = async (
       created_by: createdBy,
       updated_at: new Date().toISOString(),
       company_id: companyId || DEFAULT_COMPANY_ID,
-    }], { onConflict: 'date' });
+    }], { onConflict: 'date,company_id' });
 
   if (error) throw error;
 };

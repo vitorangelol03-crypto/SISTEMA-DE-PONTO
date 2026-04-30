@@ -169,7 +169,7 @@ export const BonusTypesManager: React.FC = () => {
       <div className="flex items-center justify-between mb-4 gap-2">
         <h3 className="text-base font-semibold text-gray-800">
           Tipos de Bonificação
-          {company?.name && <span className="text-gray-500 font-normal"> — {company.name}</span>}
+          {company?.display_name && <span className="text-gray-500 font-normal"> — {company.display_name}</span>}
         </h3>
         <button
           onClick={openNew}
