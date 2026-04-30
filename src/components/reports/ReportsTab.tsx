@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart3, Download, Filter, FileText, RefreshCw, Search, Printer } from 'lucide-react';
-import { getAllEmployees, getAttendanceHistory, getPayments, Employee, Attendance, Payment } from '../../services/database';
+import { getAllEmployees, getAttendanceHistory, getPayments, getBonusTypes, Employee, Attendance, Payment, BonusTypeRecord } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
+import { getBonusValueForType } from '../../utils/bonusHelpers';
 import { formatDateBR } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx-js-style';
 import toast from 'react-hot-toast';
@@ -11,7 +13,15 @@ interface ReportsTabProps {
   hasPermission: (permission: string) => boolean;
 }
 
+const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
+  { id: 'fallback-B',  company_id: '', code: 'B',  name: 'Bônus B',  default_value: 0, order_index: 1, active: true, created_at: '', updated_at: '' },
+  { id: 'fallback-C1', company_id: '', code: 'C1', name: 'Bônus C1', default_value: 0, order_index: 2, active: true, created_at: '', updated_at: '' },
+  { id: 'fallback-C2', company_id: '', code: 'C2', name: 'Bônus C2', default_value: 0, order_index: 3, active: true, created_at: '', updated_at: '' },
+];
+
 export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
+  const { company } = useCompany();
+  const [bonusTypes, setBonusTypes] = useState<BonusTypeRecord[]>(FALLBACK_BONUS_TYPES);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -54,6 +64,17 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   useEffect(() => {
     loadData();
   }, [filters.employmentType]);
+
+  // Carrega tipos de bonificação da empresa atual.
+  // Substitui o fallback (B/C1/C2) só se o banco retornar tipos. Se vier vazio, mantém fallback.
+  useEffect(() => {
+    if (!company?.id) return;
+    let cancelled = false;
+    getBonusTypes(company.id)
+      .then(types => { if (!cancelled && types.length > 0) setBonusTypes(types); })
+      .catch(err => console.error('Erro ao carregar bonus_types:', err));
+    return () => { cancelled = true; };
+  }, [company?.id]);
 
   useEffect(() => {
     let filtered = [...attendances];
@@ -121,13 +142,14 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
     return map;
   }, [payments]);
 
-  const getBonusForAttendance = (att: Attendance): { b: number; c1: number; c2: number } => {
+  // Retorna mapa code → valor para cada bonusType conhecido (zero se ausente).
+  const getBonusForAttendance = (att: Attendance): Record<string, number> => {
     const payment = paymentIndex.get(`${att.employee_id}|${att.date}`);
-    return {
-      b: payment?.bonus_b ? parseFloat(payment.bonus_b.toString()) : 0,
-      c1: payment?.bonus_c1 ? parseFloat(payment.bonus_c1.toString()) : 0,
-      c2: payment?.bonus_c2 ? parseFloat(payment.bonus_c2.toString()) : 0,
-    };
+    const out: Record<string, number> = {};
+    for (const bt of bonusTypes) {
+      out[bt.code] = payment ? getBonusValueForType(payment, bt) : 0;
+    }
+    return out;
   };
 
   // Resumo do período agregado por funcionário (considera os attendances filtrados não-rejeitados)
@@ -136,17 +158,19 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
     name: string;
     cpf: string;
     presentDays: number;
-    bCount: number;
-    bTotal: number;
-    c1Count: number;
-    c1Total: number;
-    c2Count: number;
-    c2Total: number;
+    // Por code do tipo: contagem de dias com valor > 0 e total acumulado.
+    byType: Record<string, { count: number; total: number }>;
   }
 
   const periodSummary = React.useMemo((): EmployeeSummary[] => {
     const rows = displayedAttendances.filter(att => att.approval_status !== 'rejected');
     const map = new Map<string, EmployeeSummary>();
+
+    const emptyByType = (): Record<string, { count: number; total: number }> => {
+      const out: Record<string, { count: number; total: number }> = {};
+      for (const bt of bonusTypes) out[bt.code] = { count: 0, total: 0 };
+      return out;
+    };
 
     rows.forEach(att => {
       const key = att.employee_id;
@@ -156,22 +180,24 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
           name: att.employees?.name ?? 'N/A',
           cpf: att.employees?.cpf ?? '',
           presentDays: 0,
-          bCount: 0, bTotal: 0,
-          c1Count: 0, c1Total: 0,
-          c2Count: 0, c2Total: 0,
+          byType: emptyByType(),
         });
       }
       const entry = map.get(key)!;
       if (att.status === 'present') entry.presentDays++;
 
-      const { b, c1, c2 } = getBonusForAttendance(att);
-      if (b > 0) { entry.bCount++; entry.bTotal += b; }
-      if (c1 > 0) { entry.c1Count++; entry.c1Total += c1; }
-      if (c2 > 0) { entry.c2Count++; entry.c2Total += c2; }
+      const valuesByCode = getBonusForAttendance(att);
+      for (const bt of bonusTypes) {
+        const v = valuesByCode[bt.code] ?? 0;
+        if (v > 0) {
+          entry.byType[bt.code].count++;
+          entry.byType[bt.code].total += v;
+        }
+      }
     });
 
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [displayedAttendances, paymentIndex]);
+  }, [displayedAttendances, paymentIndex, bonusTypes]);
 
   const exportToPDF = () => {
     if (!hasPermission('reports.export')) {
@@ -199,8 +225,12 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
 
     const formatMoney = (v: number) => v > 0 ? `R$ ${v.toFixed(2)}` : '-';
 
+    const bonusHeadersHtml = bonusTypes.map(bt => `<th>Bon. ${bt.code}</th>`).join('');
+    const summaryBonusHeadersHtml = bonusTypes.map(bt => `<th>${bt.code} (qtd / total)</th>`).join('');
+
     const tableRows = rows.map(att => {
-      const { b, c1, c2 } = getBonusForAttendance(att);
+      const valuesByCode = getBonusForAttendance(att);
+      const bonusCellsHtml = bonusTypes.map(bt => `<td>${formatMoney(valuesByCode[bt.code] ?? 0)}</td>`).join('');
       return `
       <tr>
         <td>${formatDateBR(att.date)}</td>
@@ -210,21 +240,23 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
         <td>${formatT(att.exit_time_full)}</td>
         <td>${formatH(att.hours_worked)}</td>
         <td>${formatH(att.night_hours)}</td>
-        <td>${formatMoney(b)}</td>
-        <td>${formatMoney(c1)}</td>
-        <td>${formatMoney(c2)}</td>
+        ${bonusCellsHtml}
         <td>${att.approval_status ? (approvalLabel[att.approval_status] ?? att.approval_status) : '-'}</td>
       </tr>`;
     }).join('');
 
-    const summaryRows = periodSummary.map(s => `
+    const summaryRows = periodSummary.map(s => {
+      const cells = bonusTypes.map(bt => {
+        const v = s.byType[bt.code] ?? { count: 0, total: 0 };
+        return `<td>${v.count} / R$ ${v.total.toFixed(2)}</td>`;
+      }).join('');
+      return `
       <tr>
         <td>${s.name}</td>
         <td>${s.presentDays}</td>
-        <td>${s.bCount} / R$ ${s.bTotal.toFixed(2)}</td>
-        <td>${s.c1Count} / R$ ${s.c1Total.toFixed(2)}</td>
-        <td>${s.c2Count} / R$ ${s.c2Total.toFixed(2)}</td>
-      </tr>`).join('');
+        ${cells}
+      </tr>`;
+    }).join('');
 
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -252,7 +284,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       <tr>
         <th>Data</th><th>Funcionário</th><th>Status</th>
         <th>Entrada</th><th>Saída</th><th>Horas</th>
-        <th>Hs Noturnas</th><th>Bon. B</th><th>Bon. C1</th><th>Bon. C2</th><th>Aprovação</th>
+        <th>Hs Noturnas</th>${bonusHeadersHtml}<th>Aprovação</th>
       </tr>
     </thead>
     <tbody>${tableRows}</tbody>
@@ -264,9 +296,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       <tr>
         <th>Funcionário</th>
         <th>Dias Presentes</th>
-        <th>B (qtd / total)</th>
-        <th>C1 (qtd / total)</th>
-        <th>C2 (qtd / total)</th>
+        ${summaryBonusHeadersHtml}
       </tr>
     </thead>
     <tbody>${summaryRows}</tbody>
@@ -308,10 +338,11 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       // Excluir rejected do export
       const exportRows = displayedAttendances.filter(att => att.approval_status !== 'rejected');
 
+      const bonusHeaders = bonusTypes.map(bt => `Bon. ${bt.code}`);
       const headers = [
         'Data', 'Funcionário', 'CPF', 'Status', 'Entrada', 'Saída',
         'Horas Trabalhadas', 'Horas Noturnas', 'Adicional Noturno',
-        'Bon. B', 'Bon. C1', 'Bon. C2',
+        ...bonusHeaders,
         'Aprovação',
         'Horário Saída (legado)', 'Marcado por'
       ];
@@ -343,7 +374,11 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       exportRows.forEach((att, rowIdx) => {
         const r = rowIdx + 1;
         const approvalStatus = att.approval_status ?? '';
-        const { b, c1, c2 } = getBonusForAttendance(att);
+        const valuesByCode = getBonusForAttendance(att);
+        const bonusValues = bonusTypes.map(bt => {
+          const v = valuesByCode[bt.code] ?? 0;
+          return v > 0 ? `R$ ${v.toFixed(2)}` : '-';
+        });
         const values = [
           formatDateBR(att.date),
           att.employees?.name || 'N/A',
@@ -354,9 +389,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
           formatHoursExcel(att.hours_worked ?? null),
           formatHoursExcel(att.night_hours ?? null),
           att.night_additional != null ? `R$ ${Number(att.night_additional).toFixed(2)}` : '-',
-          b > 0 ? `R$ ${b.toFixed(2)}` : '-',
-          c1 > 0 ? `R$ ${c1.toFixed(2)}` : '-',
-          c2 > 0 ? `R$ ${c2.toFixed(2)}` : '-',
+          ...bonusValues,
           approvalLabel[approvalStatus] ?? (approvalStatus || '-'),
           att.exit_time || '-',
           att.marked_by || '-',
@@ -397,18 +430,17 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
         { wch: 12 }, { wch: 28 }, { wch: 15 }, { wch: 10 },
         { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 14 },
         { wch: 16 },
-        { wch: 12 }, { wch: 12 }, { wch: 12 },
+        ...bonusTypes.map(() => ({ wch: 12 })),
         { wch: 12 }, { wch: 16 }, { wch: 12 }
       ];
 
       XLSX.utils.book_append_sheet(wb, ws, 'Relatório de Ponto');
 
       // Segunda aba: Resumo do Período
+      const summaryBonusHeaders = bonusTypes.flatMap(bt => [`Qtd ${bt.code}`, `Total ${bt.code} (R$)`]);
       const summaryHeaders = [
         'Funcionário', 'CPF', 'Dias Presentes',
-        'Qtd B', 'Total B (R$)',
-        'Qtd C1', 'Total C1 (R$)',
-        'Qtd C2', 'Total C2 (R$)'
+        ...summaryBonusHeaders,
       ];
       const wsSummary: XLSX.WorkSheet = {};
       summaryHeaders.forEach((h, c) => {
@@ -429,16 +461,15 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
 
       periodSummary.forEach((s, rowIdx) => {
         const r = rowIdx + 1;
-        const values = [
+        const bonusValues = bonusTypes.flatMap(bt => {
+          const v = s.byType[bt.code] ?? { count: 0, total: 0 };
+          return [v.count, Number(v.total.toFixed(2))];
+        });
+        const values: (string | number)[] = [
           s.name,
           s.cpf,
           s.presentDays,
-          s.bCount,
-          Number(s.bTotal.toFixed(2)),
-          s.c1Count,
-          Number(s.c1Total.toFixed(2)),
-          s.c2Count,
-          Number(s.c2Total.toFixed(2)),
+          ...bonusValues,
         ];
         values.forEach((val, c) => {
           const cell = XLSX.utils.encode_cell({ r, c });
@@ -461,9 +492,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       });
       wsSummary['!cols'] = [
         { wch: 28 }, { wch: 15 }, { wch: 14 },
-        { wch: 8 }, { wch: 14 },
-        { wch: 8 }, { wch: 14 },
-        { wch: 8 }, { wch: 14 }
+        ...bonusTypes.flatMap(() => [{ wch: 8 }, { wch: 14 }]),
       ];
 
       XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumo');
@@ -713,9 +742,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Horas</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hs Noturnas</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adic. Noturno</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bon. B</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bon. C1</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bon. C2</th>
+                {bonusTypes.map(bt => (
+                  <th key={bt.id} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bon. {bt.code}</th>
+                ))}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aprovação</th>
               </tr>
             </thead>
@@ -735,7 +764,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                   manual:   { label: '📝 Manual',    cls: 'bg-gray-100 text-gray-700' },
                 };
                 const ab = attendance.approval_status ? approvalBadge[attendance.approval_status] : null;
-                const { b: bonusB, c1: bonusC1, c2: bonusC2 } = getBonusForAttendance(attendance);
+                const valuesByCode = getBonusForAttendance(attendance);
 
                 return (
                   <tr key={attendance.id} className="hover:bg-gray-50">
@@ -762,15 +791,14 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                         ? `R$ ${Number(attendance.night_additional).toFixed(2)}`
                         : '-'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-700">
-                      {bonusB > 0 ? `R$ ${bonusB.toFixed(2)}` : '-'}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-700">
-                      {bonusC1 > 0 ? `R$ ${bonusC1.toFixed(2)}` : '-'}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-700">
-                      {bonusC2 > 0 ? `R$ ${bonusC2.toFixed(2)}` : '-'}
-                    </td>
+                    {bonusTypes.map(bt => {
+                      const v = valuesByCode[bt.code] ?? 0;
+                      return (
+                        <td key={bt.id} className="px-4 py-3 whitespace-nowrap text-gray-700">
+                          {v > 0 ? `R$ ${v.toFixed(2)}` : '-'}
+                        </td>
+                      );
+                    })}
                     <td className="px-4 py-3 whitespace-nowrap">
                       {ab ? (
                         <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${ab.cls}`}>
@@ -817,9 +845,11 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">Funcionário</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">Dias Presentes</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">B (qtd / total)</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">C1 (qtd / total)</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">C2 (qtd / total)</th>
+                  {bonusTypes.map(bt => (
+                    <th key={bt.id} className="px-4 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">
+                      {bt.code} (qtd / total)
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200 text-sm">
@@ -832,33 +862,20 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                     <td className="px-4 py-3 whitespace-nowrap text-center font-medium text-gray-900">
                       {s.presentDays}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center text-gray-700">
-                      {s.bCount > 0 ? (
-                        <span>
-                          <span className="font-medium text-gray-900">{s.bCount}</span>
-                          <span className="text-gray-500"> / </span>
-                          <span className="font-medium text-green-700">R$ {s.bTotal.toFixed(2)}</span>
-                        </span>
-                      ) : <span className="text-gray-400">-</span>}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center text-gray-700">
-                      {s.c1Count > 0 ? (
-                        <span>
-                          <span className="font-medium text-gray-900">{s.c1Count}</span>
-                          <span className="text-gray-500"> / </span>
-                          <span className="font-medium text-green-700">R$ {s.c1Total.toFixed(2)}</span>
-                        </span>
-                      ) : <span className="text-gray-400">-</span>}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center text-gray-700">
-                      {s.c2Count > 0 ? (
-                        <span>
-                          <span className="font-medium text-gray-900">{s.c2Count}</span>
-                          <span className="text-gray-500"> / </span>
-                          <span className="font-medium text-green-700">R$ {s.c2Total.toFixed(2)}</span>
-                        </span>
-                      ) : <span className="text-gray-400">-</span>}
-                    </td>
+                    {bonusTypes.map(bt => {
+                      const v = s.byType[bt.code] ?? { count: 0, total: 0 };
+                      return (
+                        <td key={bt.id} className="px-4 py-3 whitespace-nowrap text-center text-gray-700">
+                          {v.count > 0 ? (
+                            <span>
+                              <span className="font-medium text-gray-900">{v.count}</span>
+                              <span className="text-gray-500"> / </span>
+                              <span className="font-medium text-green-700">R$ {v.total.toFixed(2)}</span>
+                            </span>
+                          ) : <span className="text-gray-400">-</span>}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -868,21 +885,17 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                   <td className="px-4 py-3 text-center font-semibold text-purple-900">
                     {periodSummary.reduce((sum, s) => sum + s.presentDays, 0)}
                   </td>
-                  <td className="px-4 py-3 text-center font-semibold text-purple-900">
-                    {periodSummary.reduce((sum, s) => sum + s.bCount, 0)}
-                    <span className="text-purple-700"> / </span>
-                    R$ {periodSummary.reduce((sum, s) => sum + s.bTotal, 0).toFixed(2)}
-                  </td>
-                  <td className="px-4 py-3 text-center font-semibold text-purple-900">
-                    {periodSummary.reduce((sum, s) => sum + s.c1Count, 0)}
-                    <span className="text-purple-700"> / </span>
-                    R$ {periodSummary.reduce((sum, s) => sum + s.c1Total, 0).toFixed(2)}
-                  </td>
-                  <td className="px-4 py-3 text-center font-semibold text-purple-900">
-                    {periodSummary.reduce((sum, s) => sum + s.c2Count, 0)}
-                    <span className="text-purple-700"> / </span>
-                    R$ {periodSummary.reduce((sum, s) => sum + s.c2Total, 0).toFixed(2)}
-                  </td>
+                  {bonusTypes.map(bt => {
+                    const totalCount = periodSummary.reduce((sum, s) => sum + (s.byType[bt.code]?.count ?? 0), 0);
+                    const totalSum = periodSummary.reduce((sum, s) => sum + (s.byType[bt.code]?.total ?? 0), 0);
+                    return (
+                      <td key={bt.id} className="px-4 py-3 text-center font-semibold text-purple-900">
+                        {totalCount}
+                        <span className="text-purple-700"> / </span>
+                        R$ {totalSum.toFixed(2)}
+                      </td>
+                    );
+                  })}
                 </tr>
               </tfoot>
             </table>

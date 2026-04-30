@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, FileText, Search } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getBonusRemovalHistory, BonusRemoval, getTriageDistributionsForEmployees } from '../../services/database';
+import { getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getBonusRemovalHistory, BonusRemoval, getTriageDistributionsForEmployees, getBonusTypes, BonusTypeRecord } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
+import { getBonusValueForType } from '../../utils/bonusHelpers';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
@@ -35,7 +37,15 @@ interface EmployeeFinancialData {
   triageDiscounts: TriageDiscount[];
 }
 
+const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
+  { id: 'fallback-B',  company_id: '', code: 'B',  name: 'Bônus B',  default_value: 0, order_index: 1, active: true, created_at: '', updated_at: '' },
+  { id: 'fallback-C1', company_id: '', code: 'C1', name: 'Bônus C1', default_value: 0, order_index: 2, active: true, created_at: '', updated_at: '' },
+  { id: 'fallback-C2', company_id: '', code: 'C2', name: 'Bônus C2', default_value: 0, order_index: 3, active: true, created_at: '', updated_at: '' },
+];
+
 export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermission }) => {
+  const { company } = useCompany();
+  const [bonusTypes, setBonusTypes] = useState<BonusTypeRecord[]>(FALLBACK_BONUS_TYPES);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
@@ -180,6 +190,17 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       loadData();
     }
   }, [filters, isEditingDate, loadData]);
+
+  // Carrega tipos de bonificação da empresa atual.
+  // Substitui o fallback (B/C1/C2) só se o banco retornar tipos. Se vier vazio, mantém fallback.
+  useEffect(() => {
+    if (!company?.id) return;
+    let cancelled = false;
+    getBonusTypes(company.id)
+      .then(types => { if (!cancelled && types.length > 0) setBonusTypes(types); })
+      .catch(err => console.error('Erro ao carregar bonus_types:', err));
+    return () => { cancelled = true; };
+  }, [company?.id]);
 
   const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
@@ -1031,31 +1052,28 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                       Diária: R$ {payment.daily_rate?.toFixed(2) || '0.00'}
                                     </div>
                                     {(() => {
-                                      const bonusB = Number(payment.bonus_b ?? 0);
-                                      const bonusC1 = Number(payment.bonus_c1 ?? 0);
-                                      const bonusC2 = Number(payment.bonus_c2 ?? 0);
+                                      const perType = bonusTypes.map(bt => ({
+                                        bt,
+                                        value: getBonusValueForType(payment, bt),
+                                      }));
                                       const bonusTotal = Number(payment.bonus ?? 0);
-                                      const sumParts = bonusB + bonusC1 + bonusC2;
+                                      const sumParts = perType.reduce((s, p) => s + p.value, 0);
                                       const mismatch = Math.abs(bonusTotal - sumParts) > 0.009;
 
                                       return (
                                         <>
-                                          <div className="text-xs text-gray-600">
-                                            Bônus B: R$ {bonusB.toFixed(2)}
-                                          </div>
-                                          <div className="text-xs text-gray-600">
-                                            Bônus C1: R$ {bonusC1.toFixed(2)}
-                                          </div>
-                                          <div className="text-xs text-gray-600">
-                                            Bônus C2: R$ {bonusC2.toFixed(2)}
-                                          </div>
+                                          {perType.map(({ bt, value }) => (
+                                            <div key={bt.id} className="text-xs text-gray-600">
+                                              Bônus {bt.code}: R$ {value.toFixed(2)}
+                                            </div>
+                                          ))}
                                           <div className="text-xs text-gray-700 font-medium border-t border-gray-200 mt-1 pt-1">
                                             Bônus Total: R$ {bonusTotal.toFixed(2)}
                                           </div>
                                           {mismatch && (
                                             <div
                                               className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 mt-1"
-                                              title={`Soma B+C1+C2 = R$ ${sumParts.toFixed(2)} / Bônus salvo = R$ ${bonusTotal.toFixed(2)}`}
+                                              title={`Soma por tipo = R$ ${sumParts.toFixed(2)} / Bônus salvo = R$ ${bonusTotal.toFixed(2)}`}
                                             >
                                               ⚠️ Valor editado manualmente
                                             </div>
@@ -1264,16 +1282,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               <div id={`payments-m-${data.employee.id}`} style={{ display: 'none' }} className="mt-3 p-3 bg-gray-50 rounded-lg space-y-2">
                 {data.payments.length > 0 ? (
                   data.payments.map((payment) => {
-                    const bonusB = Number(payment.bonus_b ?? 0);
-                    const bonusC1 = Number(payment.bonus_c1 ?? 0);
-                    const bonusC2 = Number(payment.bonus_c2 ?? 0);
                     const bonusTotal = Number(payment.bonus ?? 0);
+                    const perType = bonusTypes.map(bt => ({
+                      bt,
+                      value: getBonusValueForType(payment, bt),
+                    }));
+                    const inlineLabel = perType.length === 0
+                      ? null
+                      : perType
+                          .map((p, i) => `${i === 0 ? `Bônus ${p.bt.code}` : p.bt.code}: R$ ${p.value.toFixed(2)}`)
+                          .join(' · ');
                     return (
                       <div key={payment.id} className="bg-white p-3 rounded border text-sm">
                         <div className="font-medium mb-1">{formatDateBR(payment.date)}</div>
                         <div className="text-xs text-gray-600 space-y-0.5">
                           <div>Diária: R$ {payment.daily_rate?.toFixed(2) || '0.00'}</div>
-                          <div>Bônus B: R$ {bonusB.toFixed(2)} · C1: R$ {bonusC1.toFixed(2)} · C2: R$ {bonusC2.toFixed(2)}</div>
+                          {inlineLabel && <div>{inlineLabel}</div>}
                           <div className="font-medium border-t border-gray-200 mt-1 pt-1">Bônus Total: R$ {bonusTotal.toFixed(2)}</div>
                         </div>
                         <div className="text-sm font-medium text-green-600 mt-1">
