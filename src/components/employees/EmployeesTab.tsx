@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound } from 'lucide-react';
 import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee, bulkCreateEmployees, setEmployeePin, resetEmployeePin } from '../../services/database';
 import { validateCPF, formatCPF } from '../../utils/validation';
-import { generateEmployeeTemplate, parseEmployeeSpreadsheet, generateErrorReport, generateImportReport, ImportValidationResult } from '../../utils/employeeImport';
+import { generateEmployeeTemplate, parseEmployeeSpreadsheet, generateErrorReport, generateImportReport, ImportValidationResult, EmployeeImportData } from '../../utils/employeeImport';
+import { useCompany } from '../../contexts/CompanyContext';
 import toast from 'react-hot-toast';
 
 interface EmployeesTabProps {
@@ -11,6 +12,7 @@ interface EmployeesTabProps {
 }
 
 export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermission }) => {
+  const { company } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -234,13 +236,46 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
         return;
       }
 
-      setImportValidation(result);
+      // Cross-check com o banco multi-empresa:
+      // - CPFs já cadastrados NA empresa atual → vermelho (não importar)
+      // - CPFs cadastrados em OUTRA empresa → amarelo (informativo, importarão mesmo assim)
+      const enriched: ImportValidationResult = { ...result };
+      if (company?.id && result.valid.length > 0) {
+        const [thisCompanyEmployees, allEmployees] = await Promise.all([
+          getAllEmployees(undefined, company.id),
+          getAllEmployees(),
+        ]);
+        const cpfsThis = new Set(thisCompanyEmployees.map(e => e.cpf));
+        const cpfsAll = new Set(allEmployees.map(e => e.cpf));
+
+        const pureValid: EmployeeImportData[] = [];
+        const inThis: EmployeeImportData[] = [];
+        const inOther: EmployeeImportData[] = [];
+
+        for (const emp of result.valid) {
+          if (cpfsThis.has(emp.cpf)) {
+            inThis.push(emp);
+          } else if (cpfsAll.has(emp.cpf)) {
+            inOther.push(emp);
+            pureValid.push(emp); // pode importar — empresa é distinta
+          } else {
+            pureValid.push(emp);
+          }
+        }
+
+        enriched.valid = pureValid;
+        enriched.existingInThisCompany = inThis;
+        enriched.existingInOtherCompany = inOther;
+      }
+
+      setImportValidation(enriched);
       setImportStep('preview');
 
-      if (result.errors.length > 0) {
-        toast.error(`${result.errors.length} erro(s) encontrado(s) na planilha`);
+      const blockedCount = enriched.existingInThisCompany?.length ?? 0;
+      if (enriched.errors.length > 0 || blockedCount > 0) {
+        toast.error(`${enriched.errors.length + blockedCount} linha(s) com problema`);
       } else {
-        toast.success(`${result.valid.length} funcionário(s) válido(s) encontrado(s)`);
+        toast.success(`${enriched.valid.length} funcionário(s) válido(s) encontrado(s)`);
       }
     } catch (error) {
       console.error('Erro ao processar arquivo:', error);
@@ -266,7 +301,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
     try {
       setImporting(true);
-      const result = await bulkCreateEmployees(importValidation.valid, userId);
+      const result = await bulkCreateEmployees(importValidation.valid, userId, company?.id);
 
       setImportResult({
         success: result.success.length,
@@ -1010,9 +1045,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-[95vw] sm:max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 sm:p-6 border-b">
-              <h3 className="text-base sm:text-xl font-semibold flex items-center">
-                <FileSpreadsheet className="w-5 h-5 mr-2 text-green-600" />
-                <span className="truncate">Importar Funcionários em Massa</span>
+              <h3 className="text-base sm:text-xl font-semibold flex items-center min-w-0">
+                <FileSpreadsheet className="w-5 h-5 mr-2 text-green-600 flex-shrink-0" />
+                <span className="truncate">
+                  Importar Funcionários em Massa
+                  {company?.name && <span className="text-gray-500 font-normal"> — {company.name}</span>}
+                </span>
               </h3>
               <button
                 onClick={handleCloseImportModal}
@@ -1116,10 +1154,10 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
               {importStep === 'preview' && importValidation && (
                 <div className="space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-green-700">Funcionários Válidos</span>
+                        <span className="text-sm text-green-700">Válidos</span>
                         <span className="text-2xl font-bold text-green-600">
                           {importValidation.valid.length}
                         </span>
@@ -1127,13 +1165,35 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                     </div>
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-red-700">Erros Encontrados</span>
+                        <span className="text-sm text-red-700">Erros</span>
                         <span className="text-2xl font-bold text-red-600">
                           {importValidation.errors.length}
                         </span>
                       </div>
                     </div>
+                    <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-rose-700">Já nesta empresa</span>
+                        <span className="text-2xl font-bold text-rose-600">
+                          {importValidation.existingInThisCompany?.length ?? 0}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-amber-700">Em outra empresa</span>
+                        <span className="text-2xl font-bold text-amber-600">
+                          {importValidation.existingInOtherCompany?.length ?? 0}
+                        </span>
+                      </div>
+                    </div>
                   </div>
+
+                  {importValidation.valid.length === 0 && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center text-sm text-gray-500">
+                      Nenhum funcionário válido para importar.
+                    </div>
+                  )}
 
                   {importValidation.valid.length > 0 && (
                     <div>
@@ -1158,15 +1218,54 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                               </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                              {importValidation.valid.map((emp, idx) => (
-                                <tr key={idx} className="hover:bg-gray-50">
+                              {importValidation.valid.map((emp, idx) => {
+                                const inOther = importValidation.existingInOtherCompany?.some(o => o.cpf === emp.cpf);
+                                return (
+                                  <tr key={idx} className={inOther ? 'bg-amber-50/40' : 'hover:bg-gray-50'}>
+                                    <td className="px-4 py-2 text-sm text-gray-900">
+                                      {emp.name}
+                                      {inOther && (
+                                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 whitespace-nowrap">
+                                          em outra empresa
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2 text-sm text-gray-600">
+                                      {formatCPF(emp.cpf)}
+                                    </td>
+                                    <td className="px-4 py-2 text-sm text-gray-600">
+                                      {emp.pixKey || '-'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {importValidation.existingInThisCompany && importValidation.existingInThisCompany.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                        <AlertCircle className="w-5 h-5 mr-2 text-rose-600" />
+                        Já cadastrados nesta empresa (não importarão):
+                      </h4>
+                      <div className="border border-rose-200 rounded-lg overflow-hidden">
+                        <div className="max-h-48 overflow-y-auto overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-rose-50">
+                              <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-rose-700 uppercase">Nome</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-rose-700 uppercase">CPF</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {importValidation.existingInThisCompany.map((emp, idx) => (
+                                <tr key={idx}>
                                   <td className="px-4 py-2 text-sm text-gray-900">{emp.name}</td>
-                                  <td className="px-4 py-2 text-sm text-gray-600">
-                                    {formatCPF(emp.cpf)}
-                                  </td>
-                                  <td className="px-4 py-2 text-sm text-gray-600">
-                                    {emp.pixKey || '-'}
-                                  </td>
+                                  <td className="px-4 py-2 text-sm text-gray-600">{formatCPF(emp.cpf)}</td>
                                 </tr>
                               ))}
                             </tbody>

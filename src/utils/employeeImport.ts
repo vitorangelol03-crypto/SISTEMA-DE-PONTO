@@ -24,6 +24,9 @@ export interface ImportValidationResult {
   valid: EmployeeImportData[];
   errors: ValidationError[];
   duplicateCPFs: string[];
+  // Preenchidos no pós-processamento contra o DB (multi-empresa).
+  existingInThisCompany?: EmployeeImportData[];
+  existingInOtherCompany?: EmployeeImportData[];
 }
 
 export const generateEmployeeTemplate = (): void => {
