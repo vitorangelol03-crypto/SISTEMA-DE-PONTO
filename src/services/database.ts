@@ -1,5 +1,15 @@
 import { supabase } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
+import {
+  computeWorkedMinutes,
+  computeIntervalMinutes,
+  computeDaytimeMinutes,
+  computeNighttimeMinutes,
+  getExpectedMinutesForDate,
+  computeBankHours,
+  type AttendanceMarkings,
+  type ExpectedSchedule,
+} from '../utils/attendanceCalc';
 
 export interface User {
   id: string;
@@ -85,6 +95,14 @@ export interface Attendance {
   exit_2_time?: string | null;
   marking_flag?: number | null;
   is_absent_compensated?: boolean | null;
+  // Sub-fase 2.12: campos derivados recalculados via recalcAttendance.
+  worked_minutes?: number | null;
+  interval_minutes?: number | null;
+  daytime_minutes?: number | null;
+  nighttime_minutes?: number | null;
+  expected_minutes?: number | null;
+  bank_credit_minutes?: number | null;
+  bank_debit_minutes?: number | null;
   employees?: Employee;
 }
 
@@ -628,7 +646,7 @@ export const markAttendance = async (
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('attendance')
     .upsert([{
       employee_id: employeeId,
@@ -639,9 +657,12 @@ export const markAttendance = async (
       company_id: companyId || DEFAULT_COMPANY_ID,
     }], {
       onConflict: 'employee_id,date'
-    });
+    })
+    .select()
+    .single();
 
   if (error) throw error;
+  await recalcAttendance(data.id);
 };
 
 export const deleteAttendance = async (
@@ -2992,6 +3013,118 @@ function calcHours(entry: Date, exit: Date): { hoursWorked: number; nightHours: 
   return { hoursWorked: Math.round(hoursWorked * 100) / 100, nightHours: Math.round(nightHours * 100) / 100 };
 }
 
+// Sub-fase 2.12: schedule fallback CLT (44h/semana) — Dom 0, Seg-Sex 480, Sáb 240.
+// Praticamente nunca usado em produção (empresas existentes têm default_schedule populado);
+// existe para garantir comportamento sensato se uma empresa nova for criada sem schedule.
+const FALLBACK_SCHEDULE: ExpectedSchedule = [0, 480, 480, 480, 480, 480, 240];
+
+/**
+ * Recalcula horas trabalhadas, intervalo, diurnas/noturnas e banco (credit/debit)
+ * para um attendance, derivando das marcações posicionais (entry_1/exit_1/entry_2/exit_2)
+ * com fallback para campos legacy (entry_time/exit_time_full) quando marking_count=2.
+ *
+ * Idempotente. Não throw — falhas são logadas via console.error e o attendance
+ * permanece com os valores anteriores intactos (não derrubar aprovação por bug aqui).
+ *
+ * Chamado após markAttendance, setManualTime, approveAttendance, bulkApproveAttendance.
+ * NÃO chamado em fluxos self-clock (clockIn/clockOut/edge function).
+ */
+async function recalcAttendance(attendanceId: string): Promise<void> {
+  try {
+    const { data: att, error: attErr } = await supabase
+      .from('attendance')
+      .select(
+        'id, employee_id, date, status, entry_time, exit_time_full, entry_1_time, exit_1_time, entry_2_time, exit_2_time, is_absent_compensated'
+      )
+      .eq('id', attendanceId)
+      .maybeSingle();
+
+    if (attErr || !att) {
+      console.error('[recalcAttendance] attendance não encontrado', { attendanceId, attErr });
+      return;
+    }
+
+    const { data: emp, error: empErr } = await supabase
+      .from('employees')
+      .select('marking_count, expected_schedule, company_id')
+      .eq('id', att.employee_id)
+      .maybeSingle();
+
+    if (empErr || !emp) {
+      console.error('[recalcAttendance] employee não encontrado', { employeeId: att.employee_id, empErr });
+      return;
+    }
+
+    let companyMarkingCount: 2 | 4 | null = null;
+    let companySchedule: number[] | null = null;
+    if ((emp.marking_count == null || emp.expected_schedule == null) && emp.company_id) {
+      const { data: company } = await supabase
+        .from('companies')
+        .select('default_marking_count, default_schedule')
+        .eq('id', emp.company_id)
+        .maybeSingle();
+      if (company) {
+        companyMarkingCount = (company.default_marking_count === 4 ? 4 : 2);
+        companySchedule = company.default_schedule ?? null;
+      }
+    }
+
+    const resolvedMarkingCount = emp.marking_count ?? companyMarkingCount ?? 2;
+    const markingCount: 2 | 4 = resolvedMarkingCount === 4 ? 4 : 2;
+
+    const rawSchedule = emp.expected_schedule ?? companySchedule;
+    const schedule: ExpectedSchedule =
+      Array.isArray(rawSchedule) &&
+      rawSchedule.length === 7 &&
+      rawSchedule.every((n) => typeof n === 'number' && Number.isFinite(n))
+        ? (rawSchedule as unknown as ExpectedSchedule)
+        : FALLBACK_SCHEDULE;
+
+    const markings: AttendanceMarkings =
+      markingCount === 4
+        ? {
+            entry_1: att.entry_1_time ?? null,
+            exit_1: att.exit_1_time ?? null,
+            entry_2: att.entry_2_time ?? null,
+            exit_2: att.exit_2_time ?? null,
+            marking_count: 4,
+          }
+        : {
+            entry_1: att.entry_1_time ?? att.entry_time ?? null,
+            exit_1: null,
+            entry_2: null,
+            exit_2: att.exit_2_time ?? att.exit_time_full ?? null,
+            marking_count: 2,
+          };
+
+    const workedMin = computeWorkedMinutes(markings);
+    const intervalMin = computeIntervalMinutes(markings);
+    const daytimeMin = computeDaytimeMinutes(markings);
+    const nighttimeMin = computeNighttimeMinutes(markings);
+    const expectedMin = getExpectedMinutesForDate(schedule, att.date);
+    const { credit, debit } = computeBankHours(workedMin, expectedMin, !!att.is_absent_compensated);
+
+    const { error: updErr } = await supabase
+      .from('attendance')
+      .update({
+        worked_minutes: workedMin,
+        interval_minutes: intervalMin,
+        daytime_minutes: daytimeMin,
+        nighttime_minutes: nighttimeMin,
+        expected_minutes: expectedMin,
+        bank_credit_minutes: credit,
+        bank_debit_minutes: debit,
+      })
+      .eq('id', attendanceId);
+
+    if (updErr) {
+      console.error('[recalcAttendance] update falhou', { attendanceId, updErr });
+    }
+  } catch (err) {
+    console.error('[recalcAttendance] erro inesperado', { attendanceId, err });
+  }
+}
+
 /** Busca o histórico de attendance de um funcionário nos últimos N dias. */
 export const getEmployeeAttendanceHistory = async (
   employeeId: string,
@@ -3185,6 +3318,7 @@ export const setManualTime = async (
     .single();
 
   if (error) throw error;
+  await recalcAttendance(data.id);
   return data;
 };
 
@@ -3233,6 +3367,7 @@ export const approveAttendance = async (attendanceId: string, supervisorId: stri
     .eq('id', attendanceId);
 
   if (error) throw error;
+  await recalcAttendance(attendanceId);
 };
 
 /** Rejeita um registro de attendance com motivo. */
@@ -3281,6 +3416,10 @@ export const bulkApproveAttendance = async (ids: string[], supervisorId: string)
       .in('id', chunk);
 
     if (error) throw error;
+
+    for (const id of chunk) {
+      await recalcAttendance(id);
+    }
   }
 };
 
