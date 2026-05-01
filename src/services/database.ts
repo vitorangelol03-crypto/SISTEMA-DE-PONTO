@@ -31,6 +31,26 @@ export interface Employee {
   face_photo_url?: string | null;
   face_descriptor?: string | null;
   face_registered_at?: string | null;
+  // Sub-fase 2.8: dados de jornada e contrato (todos opcionais).
+  function_role?: string | null;
+  badge_number?: string | null;
+  pis?: string | null;
+  schedule_type?: string | null;
+  expected_schedule?: number[] | null;
+  marking_count?: 2 | 4 | null;
+  hire_date?: string | null;
+  contract_type?: string | null;
+}
+
+export interface EmployeeExtras {
+  function_role?: string | null;
+  badge_number?: string | null;
+  pis?: string | null;
+  schedule_type?: string | null;
+  expected_schedule?: number[] | null;
+  marking_count?: 2 | 4 | null;
+  hire_date?: string | null;
+  contract_type?: string | null;
 }
 
 export interface Attendance {
@@ -58,6 +78,13 @@ export interface Attendance {
   exit_longitude?: number | null;
   geo_valid?: boolean | null;
   geo_distance_meters?: number | null;
+  // Sub-fase 2.10: marcações posicionais (1=entrada, 2=saída almoço, 3=volta, 4=saída final).
+  entry_1_time?: string | null;
+  exit_1_time?: string | null;
+  entry_2_time?: string | null;
+  exit_2_time?: string | null;
+  marking_flag?: number | null;
+  is_absent_compensated?: boolean | null;
   employees?: Employee;
 }
 
@@ -140,13 +167,15 @@ export interface Company {
   display_name: string;
   city: string;
   address: string | null;
+  address_full?: string | null;
   default_function_role: string | null;
-  default_schedule: unknown | null;
+  default_schedule: number[] | null;
   default_marking_count: 2 | 4;
   default_geo_lat: number;
   default_geo_lng: number;
   default_geo_radius: number;
   bank_hours_enabled: boolean;
+  bank_hours_apply_in_payment?: boolean | null;
   admin_secret_password: string | null;
   created_at: string;
   updated_at: string;
@@ -359,7 +388,8 @@ export const createEmployee = async (
   city?: string | null,
   state?: string | null,
   zipCode?: string | null,
-  companyId?: string
+  companyId?: string,
+  extras?: EmployeeExtras
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'employees.create');
   if (!permissionCheck.allowed) {
@@ -381,6 +411,7 @@ export const createEmployee = async (
       zip_code: zipCode,
       created_by: createdBy,
       company_id: companyId || DEFAULT_COMPANY_ID,
+      ...(extras ?? {}),
     }]);
 
   if (error) {
@@ -403,7 +434,8 @@ export const updateEmployee = async (
   neighborhood?: string | null,
   city?: string | null,
   state?: string | null,
-  zipCode?: string | null
+  zipCode?: string | null,
+  extras?: EmployeeExtras
 ): Promise<void> => {
   const permissionCheck = await validatePermission(userId, 'employees.edit');
   if (!permissionCheck.allowed) {
@@ -422,7 +454,8 @@ export const updateEmployee = async (
       neighborhood,
       city,
       state,
-      zip_code: zipCode
+      zip_code: zipCode,
+      ...(extras ?? {}),
     })
     .eq('id', id);
 

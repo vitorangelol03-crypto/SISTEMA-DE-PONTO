@@ -1005,7 +1005,29 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {hasPermission('attendance.edit') ? (
+                      {employee.marking_count === 4 ? (
+                        (() => {
+                          const att = attendances.find(a => a.employee_id === employee.id);
+                          const fmt = (iso: string | null | undefined) =>
+                            iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+                          const cells = [
+                            { label: 'Ent.1', value: att?.entry_1_time ?? att?.entry_time ?? null, color: 'text-green-700' },
+                            { label: 'Saí.1', value: att?.exit_1_time ?? null, color: 'text-orange-600' },
+                            { label: 'Ent.2', value: att?.entry_2_time ?? null, color: 'text-green-700' },
+                            { label: 'Saí.2', value: att?.exit_2_time ?? att?.exit_time_full ?? null, color: 'text-orange-600' },
+                          ];
+                          return (
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs font-mono">
+                              {cells.map(c => (
+                                <div key={c.label} className="flex items-center gap-1">
+                                  <span className="text-gray-400 text-[10px] uppercase">{c.label}</span>
+                                  <span className={c.value ? c.color : 'text-gray-400'}>{fmt(c.value)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()
+                      ) : hasPermission('attendance.edit') ? (
                         <div className="flex items-center gap-1">
                           <input
                             type="time"
@@ -1169,7 +1191,31 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                     </button>
                   )}
 
-                  {hasPermission('attendance.edit') ? (
+                  {employee.marking_count === 4 ? (
+                    (() => {
+                      const att = attendances.find(a => a.employee_id === employee.id);
+                      const fmt = (iso: string | null | undefined) =>
+                        iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+                      const cells = [
+                        { label: 'Ent.1', value: att?.entry_1_time ?? att?.entry_time ?? null, color: 'text-green-700' },
+                        { label: 'Saí.1', value: att?.exit_1_time ?? null, color: 'text-orange-600' },
+                        { label: 'Ent.2', value: att?.entry_2_time ?? null, color: 'text-green-700' },
+                        { label: 'Saí.2', value: att?.exit_2_time ?? att?.exit_time_full ?? null, color: 'text-orange-600' },
+                      ];
+                      return (
+                        <div className="bg-gray-50 rounded-lg px-3 py-2">
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm font-mono">
+                            {cells.map(c => (
+                              <div key={c.label} className="flex items-center gap-2">
+                                <span className="text-gray-400 text-xs uppercase">{c.label}</span>
+                                <span className={c.value ? c.color : 'text-gray-400'}>{fmt(c.value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : hasPermission('attendance.edit') ? (
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Entrada / Saída</label>
                       <div className="flex items-center gap-2">

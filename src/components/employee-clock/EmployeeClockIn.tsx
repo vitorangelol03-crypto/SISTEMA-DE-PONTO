@@ -67,6 +67,31 @@ function formatCPFMask(value: string): string {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 }
 
+// Sub-fase 2.10: 4 marcações
+type MarkingPosition = 1 | 2 | 3 | 4;
+
+const MARKING_LABELS: Record<MarkingPosition, string> = {
+  1: 'Entrada manhã',
+  2: 'Saída almoço',
+  3: 'Volta almoço',
+  4: 'Saída final',
+};
+
+function getTimestampForPosition(att: Attendance | null, pos: MarkingPosition): string | null {
+  if (!att) return null;
+  if (pos === 1) return att.entry_1_time ?? att.entry_time ?? null;
+  if (pos === 2) return att.exit_1_time ?? null;
+  if (pos === 3) return att.entry_2_time ?? null;
+  return att.exit_2_time ?? att.exit_time_full ?? null;
+}
+
+function getNextMarkingPosition(att: Attendance | null): MarkingPosition | null {
+  for (const p of [1, 2, 3, 4] as const) {
+    if (!getTimestampForPosition(att, p)) return p;
+  }
+  return null;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const EmployeeClockIn: React.FC = () => {
@@ -94,6 +119,7 @@ export const EmployeeClockIn: React.FC = () => {
   // Guards anti-duplo-clique e watchdog do botão de ponto
   const inFlightClockRef = useRef(false);
   const clockWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingMarkingPositionRef = useRef<MarkingPosition | null>(null);
 
   // ─── Load dashboard data ──────────────────────────────────────────────────
 
@@ -281,6 +307,7 @@ export const EmployeeClockIn: React.FC = () => {
   const callClockValidated = async (
     clockType: 'entry' | 'exit',
     signal?: AbortSignal,
+    markingPosition?: MarkingPosition,
   ): Promise<{ success: boolean; fraud: boolean; geo_warning?: boolean; distance_meters: number | null; attendance?: Attendance; error?: string }> => {
     if (!employee) throw new Error('Funcionário não carregado');
 
@@ -311,6 +338,7 @@ export const EmployeeClockIn: React.FC = () => {
         latitude,
         longitude,
         accuracy,
+        ...(markingPosition ? { marking_position: markingPosition } : {}),
       }),
       signal,
     });
@@ -323,7 +351,7 @@ export const EmployeeClockIn: React.FC = () => {
   // Executa a batida de ponto de fato (chamada à Edge Function + feedback).
   // Em caso de timeout (30s), consulta o banco para ver se o servidor
   // registrou mesmo assim antes de mostrar erro ao usuário.
-  const executeClock = async (type: 'entry' | 'exit') => {
+  const executeClock = async (type: 'entry' | 'exit', markingPosition?: MarkingPosition) => {
     if (!employee) return;
     // Guard síncrono: bloqueia qualquer segundo clique enquanto um registro
     // estiver em voo (ou no debounce de 3s pós-clique). React schedula o
@@ -355,6 +383,9 @@ export const EmployeeClockIn: React.FC = () => {
     const verifyRegisteredInDb = async (): Promise<boolean> => {
       try {
         const today = await getEmployeeTodayAttendance(employee.id);
+        if (markingPosition) {
+          return !!getTimestampForPosition(today, markingPosition);
+        }
         return type === 'entry' ? !!today?.entry_time : !!today?.exit_time_full;
       } catch {
         return false;
@@ -367,7 +398,13 @@ export const EmployeeClockIn: React.FC = () => {
       // 2) Recarrega dados (loadDashboard também reseta clockMsg)
       await loadDashboard(employee, true);
       // 3) Define a mensagem de sucesso como estado final, após o reload
-      if (type === 'entry') {
+      if (markingPosition) {
+        const label = MARKING_LABELS[markingPosition];
+        const extra = markingPosition === 4 && att?.hours_worked != null
+          ? ` — ${formatHours(att.hours_worked)}`
+          : '';
+        setClockMsg(`✅ ${label} registrada às ${now()}${extra}`);
+      } else if (type === 'entry') {
         setClockMsg(`✅ Entrada registrada às ${now()}`);
       } else {
         setClockMsg(`✅ Saída registrada às ${now()}${att ? ` — ${formatHours(att.hours_worked)}` : ''}`);
@@ -375,7 +412,7 @@ export const EmployeeClockIn: React.FC = () => {
     };
 
     try {
-      const result = await callClockValidated(type, controller.signal);
+      const result = await callClockValidated(type, controller.signal, markingPosition);
       if (!result.success) {
         // Mesmo com success=false, o servidor pode ter gravado. Confirma.
         if (await verifyRegisteredInDb()) {
@@ -394,7 +431,9 @@ export const EmployeeClockIn: React.FC = () => {
         setClockMsg('⏳ Conexão lenta. Verificando registro...');
         try {
           const today = await getEmployeeTodayAttendance(employee.id);
-          const registered = type === 'entry' ? !!today?.entry_time : !!today?.exit_time_full;
+          const registered = markingPosition
+            ? !!getTimestampForPosition(today, markingPosition)
+            : (type === 'entry' ? !!today?.entry_time : !!today?.exit_time_full);
           if (registered) {
             await setSuccessMsg(today);
             return;
@@ -424,19 +463,25 @@ export const EmployeeClockIn: React.FC = () => {
   // Entrada principal do botão de ponto:
   // - se facial está ativo → abre overlay de verificação; ao acertar, chama executeClock
   // - se não está ativo → executa direto
-  const performClock = (type: 'entry' | 'exit') => {
+  const performClock = (type: 'entry' | 'exit', markingPosition?: MarkingPosition) => {
     if (!employee) return;
     if (inFlightClockRef.current || pendingClockType) return;
     setClockMsg(null);
     if (faceGateActive) {
       setPendingClockType(type);
+      // Posição é passada via ref para o callback do face gate.
+      pendingMarkingPositionRef.current = markingPosition ?? null;
       return;
     }
-    executeClock(type);
+    executeClock(type, markingPosition);
   };
 
   const handleClockIn = () => performClock('entry');
   const handleClockOut = () => performClock('exit');
+  const handleMarking = (pos: MarkingPosition) => {
+    const type: 'entry' | 'exit' = pos === 1 ? 'entry' : 'exit';
+    performClock(type, pos);
+  };
 
   // ─── Face recognition completion handlers ────────────────────────────────
   const handleFaceRegistrationComplete = async () => {
@@ -454,12 +499,15 @@ export const EmployeeClockIn: React.FC = () => {
 
   const handleFaceClockVerifySuccess = () => {
     const type = pendingClockType;
+    const pos = pendingMarkingPositionRef.current ?? undefined;
     setPendingClockType(null);
-    if (type) executeClock(type);
+    pendingMarkingPositionRef.current = null;
+    if (type) executeClock(type, pos);
   };
 
   const handleFaceClockVerifyFail = () => {
     setPendingClockType(null);
+    pendingMarkingPositionRef.current = null;
     setClockMsg('❌ Reconhecimento facial falhou. Procure o supervisor.');
   };
 
@@ -494,6 +542,10 @@ export const EmployeeClockIn: React.FC = () => {
   const hasEntry = todayRecord?.entry_time != null;
   const hasExit = todayRecord?.exit_time_full != null;
   const summary = step === 'dashboard' ? monthSummary() : null;
+
+  // Sub-fase 2.10: 4 marcações
+  const markingCount: 2 | 4 = (employee?.marking_count === 4 ? 4 : 2);
+  const nextMarkingPos = getNextMarkingPosition(todayRecord);
 
   // ─── UI ───────────────────────────────────────────────────────────────────
 
@@ -720,6 +772,74 @@ export const EmployeeClockIn: React.FC = () => {
                   <div className="flex items-center justify-center py-4">
                     <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
                   </div>
+                ) : markingCount === 4 ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      {([1, 2, 3, 4] as const).map(pos => {
+                        const ts = getTimestampForPosition(todayRecord, pos);
+                        const isNext = nextMarkingPos === pos;
+                        return (
+                          <div
+                            key={pos}
+                            className={`rounded-lg p-3 text-center border-2 ${
+                              ts ? 'bg-white border-green-200' : isNext ? 'bg-yellow-50 border-yellow-300' : 'bg-white border-gray-200'
+                            }`}
+                          >
+                            <p className="text-xs text-gray-500 mb-1 font-semibold">{pos}. {MARKING_LABELS[pos]}</p>
+                            <p className={`font-mono font-bold text-base ${ts ? 'text-green-700' : isNext ? 'text-yellow-700' : 'text-gray-400'}`}>
+                              {ts ? `✓ ${formatTime(ts)}` : isNext ? '⏳ pendente' : '—'}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {nextMarkingPos == null && todayRecord?.hours_worked != null && (
+                      <div className="bg-white rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Total trabalhado</p>
+                        <p className="font-bold text-blue-700 text-lg">{formatHours(todayRecord.hours_worked)}</p>
+                        {todayRecord.night_hours != null && todayRecord.night_hours > 0 && (
+                          <p className="text-xs text-indigo-600 mt-1 flex items-center justify-center gap-1">
+                            <Moon className="w-3 h-3" />
+                            {formatHours(todayRecord.night_hours)} noturnas
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {todayRecord?.approval_status && (
+                      <div className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${APPROVAL_BADGE[todayRecord.approval_status]?.cls ?? ''}`}>
+                        {APPROVAL_BADGE[todayRecord.approval_status]?.label ?? todayRecord.approval_status}
+                        {todayRecord.rejection_reason && (
+                          <p className="font-normal mt-0.5">Motivo: {todayRecord.rejection_reason}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {clockMsg && (
+                      <div className={`rounded-lg px-3 py-2 text-sm font-medium ${clockMsg.startsWith('✅') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        {clockMsg}
+                      </div>
+                    )}
+
+                    {nextMarkingPos != null ? (
+                      <button
+                        onClick={() => handleMarking(nextMarkingPos)}
+                        disabled={clockLoading}
+                        aria-busy={clockLoading}
+                        className="w-full py-4 bg-blue-600 text-white font-bold text-base rounded-xl hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {clockLoading
+                          ? <><Loader2 className="w-5 h-5 animate-spin" /> Registrando...</>
+                          : <><Clock className="w-5 h-5" /> Bater {MARKING_LABELS[nextMarkingPos]}</>}
+                      </button>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2 py-2 text-green-700 font-medium text-sm">
+                        <CheckCircle className="w-5 h-5" />
+                        Ponto completo hoje!
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <>
                     <div className="grid grid-cols-2 gap-3">

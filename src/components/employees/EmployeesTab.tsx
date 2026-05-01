@@ -1,6 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound } from 'lucide-react';
+import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound, Clock, Briefcase, Calendar, Hash, Save } from 'lucide-react';
 import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee, bulkCreateEmployees, setEmployeePin, resetEmployeePin } from '../../services/database';
+import { supabase } from '../../lib/supabase';
+
+const SCHEDULE_DAY_LABELS: ReadonlyArray<{ index: number; short: string; long: string }> = [
+  { index: 0, short: 'Dom', long: 'Domingo' },
+  { index: 1, short: 'Seg', long: 'Segunda' },
+  { index: 2, short: 'Ter', long: 'Terça' },
+  { index: 3, short: 'Qua', long: 'Quarta' },
+  { index: 4, short: 'Qui', long: 'Quinta' },
+  { index: 5, short: 'Sex', long: 'Sexta' },
+  { index: 6, short: 'Sáb', long: 'Sábado' },
+];
+
+function minutesToHHMM(min: number): string {
+  const safe = Number.isFinite(min) && min >= 0 ? min : 0;
+  return `${Math.floor(safe / 60).toString().padStart(2, '0')}:${(safe % 60).toString().padStart(2, '0')}`;
+}
+
+function hhmmToMinutes(s: string): number {
+  if (!s || !/^\d{1,2}:\d{2}$/.test(s)) return 0;
+  const [h, m] = s.split(':').map(Number);
+  return (h * 60) + m;
+}
+
+function scheduleSum(schedule: number[]): number {
+  return schedule.reduce((a, b) => a + (Number(b) || 0), 0);
+}
 import { validateCPF, formatCPF } from '../../utils/validation';
 import { generateEmployeeTemplate, parseEmployeeSpreadsheet, generateErrorReport, generateImportReport, ImportValidationResult, EmployeeImportData } from '../../utils/employeeImport';
 import { useCompany } from '../../contexts/CompanyContext';
@@ -32,8 +58,27 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     neighborhood: '',
     city: '',
     state: '',
-    zipCode: ''
+    zipCode: '',
+    // 2.8 — dados de jornada/contrato
+    functionRole: '',
+    badgeNumber: '',
+    pis: '',
+    scheduleType: '',
+    markingCount: '' as '' | '2' | '4',  // '' = herda do default da empresa
+    hireDate: '',
+    contractType: '',
+    expectedSchedule: null as number[] | null,  // null = herda da empresa
   });
+
+  // Sub-modal de jornada individual do funcionário
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [tempSchedule, setTempSchedule] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+
+  // 2.9 — edição em massa de marking_count
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkMarkingModal, setShowBulkMarkingModal] = useState(false);
+  const [bulkMarkingValue, setBulkMarkingValue] = useState<2 | 4>(2);
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const [pinModal, setPinModal] = useState<{ employee: Employee } | null>(null);
   const [pinInput, setPinInput] = useState('');
@@ -97,7 +142,15 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       neighborhood: '',
       city: '',
       state: '',
-      zipCode: ''
+      zipCode: '',
+      functionRole: '',
+      badgeNumber: '',
+      pis: '',
+      scheduleType: '',
+      markingCount: '',
+      hireDate: '',
+      contractType: '',
+      expectedSchedule: null,
     });
     setEditingEmployee(null);
     setShowForm(false);
@@ -119,6 +172,31 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     try {
       const cpfNumbers = formData.cpf.replace(/\D/g, '');
 
+      // Validações específicas dos campos novos (2.8)
+      const pisDigits = formData.pis.replace(/\D/g, '');
+      if (formData.pis && pisDigits.length === 0) {
+        toast.error('PIS deve conter apenas números');
+        return;
+      }
+      if (formData.hireDate) {
+        const today = new Date().toISOString().slice(0, 10);
+        if (formData.hireDate > today) {
+          toast.error('Data de admissão não pode ser futura');
+          return;
+        }
+      }
+
+      const extras = {
+        function_role: formData.functionRole.trim() || null,
+        badge_number: formData.badgeNumber.trim() || null,
+        pis: pisDigits || null,
+        schedule_type: formData.scheduleType || null,
+        marking_count: formData.markingCount === '' ? null : (Number(formData.markingCount) as 2 | 4),
+        hire_date: formData.hireDate || null,
+        contract_type: formData.contractType || null,
+        expected_schedule: formData.expectedSchedule,
+      };
+
       if (editingEmployee) {
         await updateEmployee(
           editingEmployee.id,
@@ -132,7 +210,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
           formData.neighborhood.trim() || null,
           formData.city.trim() || null,
           formData.state.trim() || null,
-          formData.zipCode.trim() || null
+          formData.zipCode.trim() || null,
+          extras,
         );
         toast.success('Funcionário atualizado com sucesso!');
       } else {
@@ -147,7 +226,9 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
           formData.neighborhood.trim() || null,
           formData.city.trim() || null,
           formData.state.trim() || null,
-          formData.zipCode.trim() || null
+          formData.zipCode.trim() || null,
+          company?.id,
+          extras,
         );
         toast.success('Funcionário cadastrado com sucesso!');
       }
@@ -172,7 +253,15 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       neighborhood: employee.neighborhood || '',
       city: employee.city || '',
       state: employee.state || '',
-      zipCode: employee.zip_code || ''
+      zipCode: employee.zip_code || '',
+      functionRole: employee.function_role || '',
+      badgeNumber: employee.badge_number || '',
+      pis: employee.pis || '',
+      scheduleType: employee.schedule_type || '',
+      markingCount: employee.marking_count ? (String(employee.marking_count) as '2' | '4') : '',
+      hireDate: employee.hire_date || '',
+      contractType: employee.contract_type || '',
+      expectedSchedule: employee.expected_schedule ?? null,
     });
     setShowForm(true);
   };
@@ -371,6 +460,55 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       toast.error('Erro ao resetar PIN');
     } finally {
       setResetLoading(false);
+    }
+  };
+
+  // 2.9 — edição em massa de marking_count
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds(prev => {
+      const allVisibleIds = filteredEmployees.map(e => e.id);
+      const allSelected = allVisibleIds.every(id => prev.has(id));
+      if (allSelected) {
+        const next = new Set(prev);
+        for (const id of allVisibleIds) next.delete(id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const id of allVisibleIds) next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleApplyBulkMarking = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkSaving(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const { error } = await supabase
+        .from('employees')
+        .update({ marking_count: bulkMarkingValue })
+        .in('id', ids);
+      if (error) throw error;
+      toast.success(`${ids.length} funcionário(s) atualizado(s) — ${bulkMarkingValue} marcações`);
+      setShowBulkMarkingModal(false);
+      clearSelection();
+      await loadEmployees();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Erro: ${msg}`);
+    } finally {
+      setBulkSaving(false);
     }
   };
 
@@ -723,6 +861,149 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
               </div>
             </div>
 
+            {/* Sub-fase 2.8: jornada e contrato */}
+            <div className="border-t border-gray-200 pt-4 mt-2">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-gray-500" />
+                Jornada e contrato
+                <span className="text-xs font-normal text-gray-500">(opcional)</span>
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    <Briefcase className="w-3.5 h-3.5 text-gray-400" /> Função
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.functionRole}
+                    onChange={(e) => setFormData(prev => ({ ...prev, functionRole: e.target.value }))}
+                    placeholder={company?.default_function_role ?? 'Função padrão da empresa'}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    <Hash className="w-3.5 h-3.5 text-gray-400" /> Crachá
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.badgeNumber}
+                    onChange={(e) => setFormData(prev => ({ ...prev, badgeNumber: e.target.value }))}
+                    placeholder="Número do crachá"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">PIS</label>
+                  <input
+                    type="text"
+                    value={formData.pis}
+                    onChange={(e) => setFormData(prev => ({ ...prev, pis: e.target.value.replace(/\D/g, '') }))}
+                    placeholder="Apenas números"
+                    inputMode="numeric"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de escala</label>
+                  <select
+                    value={formData.scheduleType}
+                    onChange={(e) => setFormData(prev => ({ ...prev, scheduleType: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                  >
+                    <option value="">Selecione</option>
+                    <option value="Normal">Normal</option>
+                    <option value="12x36">12x36</option>
+                    <option value="6x1">6x1</option>
+                    <option value="Sob demanda">Sob demanda</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de contrato</label>
+                  <select
+                    value={formData.contractType}
+                    onChange={(e) => setFormData(prev => ({ ...prev, contractType: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                  >
+                    <option value="">Selecione</option>
+                    <option value="CLT">CLT</option>
+                    <option value="Diarista">Diarista</option>
+                    <option value="PJ">PJ</option>
+                    <option value="Estagiário">Estagiário</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-gray-400" /> Data de admissão
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.hireDate}
+                    onChange={(e) => setFormData(prev => ({ ...prev, hireDate: e.target.value }))}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Marcações por dia</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['', '2', '4'] as const).map(opt => (
+                      <label
+                        key={opt || 'default'}
+                        className={`flex items-center justify-center gap-2 px-3 py-3 border rounded-lg cursor-pointer min-h-[48px] text-sm ${
+                          formData.markingCount === opt ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="employeeMarkingCount"
+                          checked={formData.markingCount === opt}
+                          onChange={() => setFormData(prev => ({ ...prev, markingCount: opt }))}
+                          className="sr-only"
+                        />
+                        <span>
+                          {opt === '' ? `Padrão (${company?.default_marking_count ?? 2})` : `${opt} marcações`}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-gray-400" /> Jornada individual
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const initialSchedule = formData.expectedSchedule
+                        ?? (Array.isArray(company?.default_schedule)
+                          ? [...(company!.default_schedule as number[])]
+                          : [0, 0, 0, 0, 0, 0, 0]);
+                      setTempSchedule(initialSchedule.length === 7 ? initialSchedule : [0, 0, 0, 0, 0, 0, 0]);
+                      setShowScheduleModal(true);
+                    }}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left text-base min-h-[48px] hover:bg-gray-50 flex items-center justify-between"
+                  >
+                    <span className={formData.expectedSchedule ? 'text-gray-800 font-medium' : 'text-gray-500'}>
+                      {formData.expectedSchedule
+                        ? `Personalizada — ${minutesToHHMM(scheduleSum(formData.expectedSchedule))}/sem`
+                        : 'Usar padrão da empresa'}
+                    </span>
+                    <Clock className="w-4 h-4 text-gray-400" />
+                  </button>
+                  {formData.expectedSchedule && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, expectedSchedule: null }))}
+                      className="mt-1 text-xs text-blue-600 hover:underline"
+                    >
+                      Voltar ao padrão da empresa
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <button
                 type="submit"
@@ -748,6 +1029,20 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                {hasPermission('employees.edit') && (
+                  <th className="px-3 py-3 text-left w-12">
+                    <input
+                      type="checkbox"
+                      checked={
+                        filteredEmployees.length > 0 &&
+                        filteredEmployees.every(e => selectedIds.has(e.id))
+                      }
+                      onChange={toggleSelectAllVisible}
+                      className="w-4 h-4 rounded"
+                      title="Selecionar todos visíveis"
+                    />
+                  </th>
+                )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Nome
                 </th>
@@ -773,7 +1068,17 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredEmployees.map((employee) => (
-                <tr key={employee.id} className="hover:bg-gray-50">
+                <tr key={employee.id} className={selectedIds.has(employee.id) ? 'bg-blue-50/50' : 'hover:bg-gray-50'}>
+                  {hasPermission('employees.edit') && (
+                    <td className="px-3 py-4 w-12">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(employee.id)}
+                        onChange={() => toggleSelect(employee.id)}
+                        className="w-4 h-4 rounded"
+                      />
+                    </td>
+                  )}
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{employee.name}</div>
                   </td>
@@ -1422,6 +1727,158 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: jornada individual do funcionário (sub-fase 2.8) */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-xl w-full">
+            <div className="p-4 sm:p-5 border-b border-gray-200 flex items-center justify-between">
+              <h4 className="text-lg font-semibold flex items-center gap-2 text-gray-800">
+                <Clock className="w-5 h-5 text-gray-500" />
+                Jornada individual
+              </h4>
+              <button
+                onClick={() => setShowScheduleModal(false)}
+                className="text-gray-400 hover:text-gray-600 min-h-[40px] min-w-[40px] flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 sm:p-5 space-y-3">
+              <p className="text-xs text-gray-600">
+                Defina a jornada esperada deste funcionário (HH:MM por dia). Sobrescreve o padrão da empresa.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                {SCHEDULE_DAY_LABELS.map(({ index, short, long }) => (
+                  <div key={index}>
+                    <span className="block text-xs text-gray-600 mb-1">
+                      <span className="hidden sm:inline">{long}</span>
+                      <span className="sm:hidden">{short}</span>
+                    </span>
+                    <input
+                      type="time"
+                      value={minutesToHHMM(tempSchedule[index] ?? 0)}
+                      onChange={e => {
+                        const next = [...tempSchedule];
+                        next[index] = hhmmToMinutes(e.target.value);
+                        setTempSchedule(next);
+                      }}
+                      className="w-full px-2 py-2 border border-gray-300 rounded-md text-sm min-h-[40px]"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500">
+                Total semanal: <strong>{minutesToHHMM(scheduleSum(tempSchedule))}</strong>
+              </p>
+            </div>
+            <div className="p-4 sm:p-5 border-t border-gray-200 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowScheduleModal(false)}
+                className="w-full sm:w-auto px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md text-sm font-medium min-h-[40px]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData(prev => ({ ...prev, expectedSchedule: [...tempSchedule] }));
+                  setShowScheduleModal(false);
+                }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium min-h-[40px]"
+              >
+                <Save className="w-4 h-4" /> Aplicar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Barra flutuante de seleção (sub-fase 2.9) */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-gray-900 text-white rounded-lg shadow-2xl px-4 py-3 flex items-center gap-3 max-w-[95vw]">
+          <span className="text-sm font-medium whitespace-nowrap">
+            {selectedIds.size} selecionado{selectedIds.size > 1 ? 's' : ''}
+          </span>
+          <div className="h-5 w-px bg-gray-700" />
+          <button
+            onClick={() => {
+              setBulkMarkingValue(2);
+              setShowBulkMarkingModal(true);
+            }}
+            className="text-sm font-medium hover:text-blue-300 transition-colors flex items-center gap-1 whitespace-nowrap"
+          >
+            <Edit2 className="w-4 h-4" /> Alterar marcações
+          </button>
+          <div className="h-5 w-px bg-gray-700" />
+          <button
+            onClick={clearSelection}
+            className="text-sm text-gray-400 hover:text-white transition-colors whitespace-nowrap"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {/* Modal: alterar marking_count em massa (sub-fase 2.9) */}
+      {showBulkMarkingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-4 sm:p-5 border-b border-gray-200 flex items-center justify-between">
+              <h4 className="text-lg font-semibold text-gray-800">Alterar marcações</h4>
+              <button
+                onClick={() => !bulkSaving && setShowBulkMarkingModal(false)}
+                className="text-gray-400 hover:text-gray-600 min-h-[40px] min-w-[40px] flex items-center justify-center"
+                disabled={bulkSaving}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 sm:p-5 space-y-3">
+              <p className="text-sm text-gray-700">
+                Definir marcações para <strong>{selectedIds.size}</strong> funcionário{selectedIds.size > 1 ? 's' : ''}:
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {([2, 4] as const).map(n => (
+                  <label
+                    key={n}
+                    className={`flex items-center justify-center gap-2 px-3 py-3 border rounded-lg cursor-pointer min-h-[48px] text-sm ${
+                      bulkMarkingValue === n ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="bulkMarking"
+                      checked={bulkMarkingValue === n}
+                      onChange={() => setBulkMarkingValue(n)}
+                      disabled={bulkSaving}
+                    />
+                    <span>{n} marcações</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="p-4 sm:p-5 border-t border-gray-200 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <button
+                onClick={() => setShowBulkMarkingModal(false)}
+                disabled={bulkSaving}
+                className="w-full sm:w-auto px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md text-sm font-medium disabled:opacity-50 min-h-[40px]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleApplyBulkMarking}
+                disabled={bulkSaving}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium disabled:opacity-50 min-h-[40px]"
+              >
+                <Save className="w-4 h-4" />
+                {bulkSaving ? 'Aplicando...' : 'Aplicar'}
+              </button>
             </div>
           </div>
         </div>

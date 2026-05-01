@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Lock, MapPin, AlertTriangle, ShieldOff, Key, RefreshCw, Unlock, Trash2, Settings, Play, X, ScanFace, RotateCcw, CheckCircle2, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { BonusTypesManager } from './BonusTypesManager';
+import { CompanySettings } from './CompanySettings';
 import {
   verifyAdminSecret,
   updateAdminSecret,
@@ -1431,6 +1432,11 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       {/* SECTION 8: Bonus Types Manager                                     */}
       {/* ════════════════════════════════════════════════════════════════════ */}
       <BonusTypesManager />
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* SECTION 9: Company Settings                                        */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <CompanySettings />
     </div>
   );
 };

@@ -85,6 +85,7 @@ Deno.serve(async (req: Request) => {
       longitude,
       accuracy,
       company_id: bodyCompanyId,
+      marking_position: markingPositionRaw,
     } = await req.json();
 
     if (!employee_id || !cpf || !clock_type) {
@@ -99,6 +100,32 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "clock_type deve ser 'entry' ou 'exit'" }),
         { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
+    }
+
+    // marking_position é opcional. Cliente antigo não envia → comportamento legacy.
+    let markingPosition: 1 | 2 | 3 | 4 | null = null;
+    if (markingPositionRaw != null) {
+      if (![1, 2, 3, 4].includes(markingPositionRaw)) {
+        return new Response(
+          JSON.stringify({ error: "marking_position deve ser 1, 2, 3 ou 4" }),
+          { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+      markingPosition = markingPositionRaw as 1 | 2 | 3 | 4;
+    }
+
+    // Coerência clock_type ↔ marking_position:
+    //   position 1 ⇒ entry; positions 2/3/4 ⇒ exit (semanticamente "saída/volta")
+    if (markingPosition != null) {
+      const expectedType = markingPosition === 1 ? "entry" : "exit";
+      if (clock_type !== expectedType) {
+        return new Response(
+          JSON.stringify({
+            error: `marking_position=${markingPosition} requer clock_type='${expectedType}'`,
+          }),
+          { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -184,6 +211,13 @@ Deno.serve(async (req: Request) => {
     const hasCoords =
       latitude != null && longitude != null && isFinite(latitude) && isFinite(longitude);
 
+    // É a PRIMEIRA marcação do dia? Decide bloqueio de bônus + criação inicial do attendance.
+    // - Cliente legacy: clock_type === 'entry' (sem marking_position)
+    // - Cliente novo: marking_position === 1
+    const isFirstEntry = markingPosition == null
+      ? clock_type === "entry"
+      : markingPosition === 1;
+
     let distance = 0;
     let geoValid = true;
 
@@ -202,7 +236,7 @@ Deno.serve(async (req: Request) => {
         },
       ]);
 
-      if (clock_type === "entry") {
+      if (isFirstEntry) {
         const { weekStart, weekEnd } = getWeekBounds();
         await supabase.from("bonus_blocks").upsert(
           [
@@ -227,7 +261,7 @@ Deno.serve(async (req: Request) => {
           { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
         );
       }
-      // exit without coords: fall through to normal exit with geoValid=false
+      // Marcações 2/3/4 sem coords: registra fraude mas deixa passar (geoValid=false).
     }
 
     if (hasCoords) {
@@ -253,7 +287,7 @@ Deno.serve(async (req: Request) => {
           },
         ]);
 
-        if (clock_type === "entry") {
+        if (isFirstEntry) {
           const { weekStart, weekEnd } = getWeekBounds();
           await supabase.from("bonus_blocks").upsert(
             [
@@ -268,23 +302,26 @@ Deno.serve(async (req: Request) => {
             { onConflict: "employee_id,week_start" },
           );
 
+          // Cria/atualiza attendance mesmo com geo invalid (entrada bloqueada para bônus).
+          const blockedRecord: Record<string, unknown> = {
+            employee_id,
+            company_id: effectiveCompanyId,
+            date: today,
+            status: "present",
+            entry_time: now,
+            entry_latitude: latitude,
+            entry_longitude: longitude,
+            entry_accuracy: accuracy,
+            geo_valid: false,
+            geo_distance_meters: distance,
+            approval_status: "pending",
+            clock_source: "employee_self",
+          };
+          // Cliente novo (marking_position=1) também escreve no campo posicional.
+          if (markingPosition === 1) blockedRecord.entry_1_time = now;
+
           await supabase.from("attendance").upsert(
-            [
-              {
-                employee_id,
-                company_id: effectiveCompanyId,
-                date: today,
-                status: "present",
-                entry_time: now,
-                entry_latitude: latitude,
-                entry_longitude: longitude,
-                entry_accuracy: accuracy,
-                geo_valid: false,
-                geo_distance_meters: distance,
-                approval_status: "pending",
-                clock_source: "employee_self",
-              },
-            ],
+            [blockedRecord],
             { onConflict: "employee_id,date" },
           );
 
@@ -298,11 +335,90 @@ Deno.serve(async (req: Request) => {
             { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
           );
         }
-        // exit outside area: fall through to normal exit with geoValid=false
+        // Marcações 2/3/4 fora da área: deixa passar com geoValid=false.
       }
     }
 
-    // Valid location — proceed with clock in/out
+    // Geo válida (ou marcação ≠ primeira entrada com geo aceito) — grava o ponto.
+
+    // ── Cliente NOVO com marking_position 2/3/4: update incremental ──────────
+    if (markingPosition != null && markingPosition >= 2) {
+      const { data: existing, error: existErr } = await supabase
+        .from("attendance")
+        .select("*")
+        .eq("employee_id", employee_id)
+        .eq("date", today)
+        .maybeSingle();
+
+      if (existErr || !existing || !existing.entry_1_time) {
+        return new Response(
+          JSON.stringify({ error: "Nenhuma entrada (posição 1) registrada hoje" }),
+          { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+
+      const updateRecord: Record<string, unknown> = {
+        company_id: effectiveCompanyId,
+      };
+      if (markingPosition === 2) updateRecord.exit_1_time = now;
+      if (markingPosition === 3) updateRecord.entry_2_time = now;
+      if (markingPosition === 4) updateRecord.exit_2_time = now;
+
+      // Posição 4 = saída final → também grava campos legacy + cálculo agregado.
+      if (markingPosition === 4) {
+        const entry = new Date(existing.entry_1_time);
+        const exitTime = new Date();
+        const { hoursWorked, nightHours } = calcHours(entry, exitTime);
+        const dailyRate = Number(existing.daily_rate) || 0;
+        let nightAdditional = 0;
+        if (nightHours > 0 && hoursWorked > 0 && dailyRate > 0) {
+          const hourlyRate = dailyRate / hoursWorked;
+          nightAdditional = Math.round(nightHours * hourlyRate * 0.2 * 100) / 100;
+        }
+        updateRecord.exit_time_full = exitTime.toISOString();
+        updateRecord.hours_worked = hoursWorked;
+        updateRecord.night_hours = nightHours;
+        updateRecord.night_additional = nightAdditional;
+      }
+
+      if (hasCoords) {
+        // Coords da última marcação ficam no slot exit_*. Em positions 2/3 também sobrescrevem
+        // pra refletir a última localização gravada (consistente com o fluxo legacy).
+        updateRecord.exit_latitude = latitude;
+        updateRecord.exit_longitude = longitude;
+        updateRecord.exit_accuracy = accuracy;
+      }
+      updateRecord.geo_valid = geoValid;
+      updateRecord.geo_distance_meters = distance;
+
+      const { data: att, error: updErr } = await supabase
+        .from("attendance")
+        .update(updateRecord)
+        .eq("employee_id", employee_id)
+        .eq("date", today)
+        .select()
+        .single();
+
+      if (updErr) {
+        return new Response(
+          JSON.stringify({ error: updErr.message }),
+          { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          fraud: false,
+          geo_warning: !geoValid,
+          distance_meters: distance,
+          attendance: att,
+        }),
+        { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+
+    // ── Fluxo legacy / position 1: cria attendance com entry ─────────────────
     if (clock_type === "entry") {
       const record: Record<string, unknown> = {
         employee_id,
@@ -313,6 +429,8 @@ Deno.serve(async (req: Request) => {
         clock_source: "employee_self",
         approval_status: "pending",
       };
+      // Cliente novo na posição 1 também escreve no campo posicional.
+      if (markingPosition === 1) record.entry_1_time = now;
 
       if (hasCoords) {
         record.entry_latitude = latitude;
@@ -346,7 +464,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // clock_type === 'exit'
+    // ── Fluxo legacy: clock_type === 'exit' sem marking_position ────────────
     const { data: existing, error: existErr } = await supabase
       .from("attendance")
       .select("*")
