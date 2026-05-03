@@ -93,7 +93,7 @@ export interface Attendance {
   exit_1_time?: string | null;
   entry_2_time?: string | null;
   exit_2_time?: string | null;
-  marking_flag?: number | null;
+  marking_flag?: 'normal' | 'included' | 'requested' | 'pre_assigned' | null;
   is_absent_compensated?: boolean | null;
   // Sub-fase 2.12: campos derivados recalculados via recalcAttendance.
   worked_minutes?: number | null;
@@ -189,6 +189,7 @@ export interface Company {
   default_function_role: string | null;
   default_schedule: number[] | null;
   default_marking_count: 2 | 4;
+  logo_url?: string | null;
   default_geo_lat: number;
   default_geo_lng: number;
   default_geo_radius: number;

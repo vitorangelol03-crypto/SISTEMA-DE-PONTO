@@ -10,7 +10,11 @@ import { usePermissions } from './hooks/usePermissions';
 import { useCompany } from './contexts/CompanyContext';
 import { initializeSystem, autoCreateWeeklyPeriod, type User } from './services/database';
 import { EmployeeClockIn } from './components/employee-clock/EmployeeClockIn';
-import { EmployeeErrorsPage } from './components/employee-clock/EmployeeErrorsPage';
+
+// Lazy: carrega jspdf/autotable transitivamente — só baixa no acesso a /erros.
+const EmployeeErrorsPage = lazy(() =>
+  import('./components/employee-clock/EmployeeErrorsPage').then(m => ({ default: m.EmployeeErrorsPage })),
+);
 
 const AttendanceTab = lazy(() => import('./components/attendance/AttendanceTab').then(m => ({ default: m.AttendanceTab })));
 const EmployeesTab = lazy(() => import('./components/employees/EmployeesTab').then(m => ({ default: m.EmployeesTab })));
@@ -78,7 +82,13 @@ function App() {
   if (isErrorsMode) {
     return (
       <>
-        <EmployeeErrorsPage />
+        <Suspense fallback={
+          <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+          </div>
+        }>
+          <EmployeeErrorsPage />
+        </Suspense>
         <Toaster position="top-right" />
       </>
     );

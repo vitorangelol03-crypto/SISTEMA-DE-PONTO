@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift, RotateCcw, ChevronLeft, ChevronRight, Home, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { Clock, CheckCircle, XCircle, AlertCircle, Calendar, RefreshCw, Search, Gift, RotateCcw, ChevronLeft, ChevronRight, Home, Trash2, FileText } from 'lucide-react';
 import { format, parseISO, addDays, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -27,6 +27,12 @@ import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/date
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 import { AttendanceApprovalPanel } from './AttendanceApprovalPanel';
+
+// Lazy-load: MirrorMassDialog importa jspdf (~100KB). Evita engordar o chunk
+// do AttendanceTab e mantém o timing de lazy-load alinhado com o resto da app.
+const MirrorMassDialog = lazy(() =>
+  import('./MirrorMassDialog').then(m => ({ default: m.MirrorMassDialog })),
+);
 
 interface AttendanceTabProps {
   userId: string;
@@ -65,6 +71,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [removeAllBonusObservation, setRemoveAllBonusObservation] = useState('');
   const [removingBonus, setRemovingBonus] = useState(false);
   const [activeView, setActiveView] = useState<'attendance' | 'approvals'>('attendance');
+  const [showMirrorMassDialog, setShowMirrorMassDialog] = useState(false);
   const isViewingToday = selectedDate === getBrazilDate();
 
   // Permissão granular por tipo de bônus: tenta nova chave (applyBonus_<id>),
@@ -603,6 +610,16 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                 <RefreshCw className="w-4 h-4" />
                 <span>Atualizar</span>
               </button>
+
+              {hasPermission('attendance.generateMassMirror') && company && (
+                <button
+                  onClick={() => setShowMirrorMassDialog(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors min-h-[44px] w-full sm:w-auto"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Gerar espelhos</span>
+                </button>
+              )}
 
               {hasPermission('financial.applyBonus') && isViewingToday && (
                 <button
@@ -1708,6 +1725,16 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
             </div>
           </div>
         </div>
+      )}
+
+      {company && showMirrorMassDialog && (
+        <Suspense fallback={null}>
+          <MirrorMassDialog
+            open={showMirrorMassDialog}
+            onClose={() => setShowMirrorMassDialog(false)}
+            company={company}
+          />
+        </Suspense>
       )}
     </div>
   );

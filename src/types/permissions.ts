@@ -13,6 +13,7 @@ export interface AttendancePermissions extends TabPermissions {
   reject: boolean;
   bulkApprove: boolean;
   manualTime: boolean;
+  generateMassMirror: boolean;
 }
 
 export interface EmployeesPermissions extends TabPermissions {
@@ -92,7 +93,7 @@ export interface UserPermissions {
 }
 
 export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: true, edit: true, search: true, reset: true, viewHistory: true, editHistory: true, approve: true, reject: true, bulkApprove: true, manualTime: true },
+  attendance: { view: true, mark: true, edit: true, search: true, reset: true, viewHistory: true, editHistory: true, approve: true, reject: true, bulkApprove: true, manualTime: true, generateMassMirror: true },
   employees: { view: true, create: true, edit: true, delete: true, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: true, editBonus: true, delete: true, clear: true, applyBonus: true, applyBonusB: true, applyBonusC1: true, applyBonusC2: true, removeBonus: true, removeBonusByType: true, removeBonusBulk: true },
@@ -104,7 +105,7 @@ export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
 };
 
 export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: true, edit: false, search: true, reset: false, viewHistory: true, editHistory: true, approve: true, reject: true, bulkApprove: false, manualTime: false },
+  attendance: { view: true, mark: true, edit: false, search: true, reset: false, viewHistory: true, editHistory: true, approve: true, reject: true, bulkApprove: false, manualTime: false, generateMassMirror: true },
   employees: { view: true, create: true, edit: true, delete: false, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: false, editBonus: true, delete: false, clear: false, applyBonus: true, applyBonusB: false, applyBonusC1: false, applyBonusC2: false, removeBonus: true, removeBonusByType: false, removeBonusBulk: false },
@@ -116,7 +117,7 @@ export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
 };
 
 export const DEFAULT_READONLY_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false, approve: false, reject: false, bulkApprove: false, manualTime: false },
+  attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false, approve: false, reject: false, bulkApprove: false, manualTime: false, generateMassMirror: false },
   employees: { view: true, create: false, edit: false, delete: false, import: false },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: false, editBonus: false, delete: false, clear: false, applyBonus: false, applyBonusB: false, applyBonusC1: false, applyBonusC2: false, removeBonus: false, removeBonusByType: false, removeBonusBulk: false },
@@ -159,7 +160,8 @@ export const PERMISSION_LABELS = {
     approve: 'Aprovar ponto pendente',
     reject: 'Rejeitar ponto pendente',
     bulkApprove: 'Aprovar ponto em lote',
-    manualTime: 'Inserir horário manual (entrada/saída)'
+    manualTime: 'Inserir horário manual (entrada/saída)',
+    generateMassMirror: 'Gerar espelhos de ponto em massa'
   },
   employees: {
     title: 'Funcionários',
