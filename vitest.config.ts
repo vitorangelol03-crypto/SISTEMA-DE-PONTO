@@ -7,6 +7,9 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/tests/setup.ts',
+    // tests/unit/ é vitest; tests/ raiz é Playwright (E2E). Sem esse `include`,
+    // vitest tentaria rodar os specs Playwright e quebraria nos imports deles.
+    include: ['tests/unit/**/*.spec.ts', 'src/**/*.{test,spec}.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

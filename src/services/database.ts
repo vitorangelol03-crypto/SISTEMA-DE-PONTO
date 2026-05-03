@@ -118,6 +118,12 @@ export interface Payment {
   bonus_c1: number;
   bonus_c2: number;
   total: number;
+  // Aplicação do banco de horas no pagamento (combo G — sub-fase 2.17).
+  // Setados quando applyBankHoursToPayment() roda. applied_at vira a chave de
+  // idempotência: se já tem timestamp, não pode reaplicar sem reverter primeiro.
+  bank_hours_amount?: number | null;
+  bank_hours_minutes?: number | null;
+  bank_hours_applied_at?: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -178,6 +184,26 @@ export interface BonusInfo {
 }
 
 // ─── Multi-empresa (Sub-fase 1.8) ──────────────────────────────────────────
+// ─── Banco de horas no pagamento (combo G — sub-fase 2.16) ─────────────────
+// Enums espelham as constraints CHECK no Postgres (companies.bank_hours_*).
+// Mudanças aqui devem ser sincronizadas com a migration que define os CHECKs.
+
+export type BankHoursFormula =
+  | 'daily_div_8'
+  | 'daily_div_jornada'
+  | 'hour_extra_multiplier'
+  | 'custom_hour_value';
+
+export type BankHoursCreditAction = 'add_to_net' | 'no_apply';
+
+export type BankHoursDebitAction = 'subtract_from_net' | 'no_apply' | 'warn_only';
+
+export type BankHoursPeriod = 'month' | 'payment_period' | 'accumulated';
+
+export type BankHoursDisplay = 'separate_line' | 'embedded_total' | 'as_bonus';
+
+export type BankHoursAfterApply = 'zero_balance' | 'keep_history';
+
 export interface Company {
   id: string;
   legal_name: string;
@@ -195,9 +221,84 @@ export interface Company {
   default_geo_radius: number;
   bank_hours_enabled: boolean;
   bank_hours_apply_in_payment?: boolean | null;
+  // Configuração do banco de horas no pagamento (combo G — sub-fase 2.16).
+  // Defaults aplicados pela migration; tipos `| null` defensivos pra rows
+  // criadas antes da migration ou casos de falha de SELECT.
+  bank_hours_formula?: BankHoursFormula | null;
+  bank_hours_extra_multiplier?: number | null;
+  bank_hours_custom_value?: number | null;
+  bank_hours_credit_action?: BankHoursCreditAction | null;
+  bank_hours_debit_action?: BankHoursDebitAction | null;
+  bank_hours_period?: BankHoursPeriod | null;
+  bank_hours_display?: BankHoursDisplay | null;
+  bank_hours_after_apply?: BankHoursAfterApply | null;
+  bank_hours_night_separate?: boolean | null;
+  bank_hours_night_multiplier?: number | null;
   admin_secret_password: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// Override por funcionário+período: prevalece sobre o toggle global da empresa.
+// reason é NOT NULL no banco — todo override exige justificativa.
+export interface BankHoursOverride {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  payment_period_id: string | null;
+  apply_bank_hours: boolean;
+  reason: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+// Razões de não-aplicação ou skip retornadas por applyBankHoursToPayment.
+export type BankHoursApplyReason =
+  | 'toggle_off'
+  | 'override_skip'
+  | 'already_applied'
+  | 'no_payment_in_period'
+  | 'employee_not_found'
+  | 'company_not_found';
+
+// Resultado estruturado da aplicação de banco de horas em um pagamento.
+// Combina sucesso operacional, status de aplicação e detalhes do cálculo
+// (via `result`) — caller pode renderizar feedback granular.
+export interface BankHoursApplyResult {
+  success: boolean;
+  applied: boolean;
+  skipped: boolean;
+  reason?: BankHoursApplyReason;
+  // Snapshot do cálculo (quando o calculator chegou a rodar — pode existir mesmo
+  // com applied=false em casos de toggle_off, pra UI mostrar o que TERIA dado).
+  result?: import('../utils/bankHoursCalculator').BankHoursResult;
+  paymentBefore?: number;
+  paymentAfter?: number;
+  logId?: string;
+  errorMessage?: string;
+}
+
+// Auditoria: snapshot completo a cada aplicação de banco de horas no pagamento.
+// Inclui tanto os minutos consumidos quanto os parâmetros financeiros usados,
+// pra permitir reconstruir o cálculo exato meses depois.
+export interface BankHoursApplicationLog {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  payment_period_id: string | null;
+  applied_at: string | null;
+  applied_by: string;
+  bank_credit_minutes: number;
+  bank_debit_minutes: number;
+  net_balance_minutes: number;
+  formula_used: BankHoursFormula;
+  hour_value_used: number;
+  extra_multiplier_used: number | null;
+  amount_credit: number | null;
+  amount_debit: number | null;
+  amount_net: number;
+  payment_total_before: number | null;
+  payment_total_after: number | null;
 }
 
 export interface BonusTypeRecord {
@@ -4432,3 +4533,476 @@ export const deactivateBonusType = async (id: string): Promise<void> => {
     .eq('id', id);
   if (error) throw error;
 };
+
+// ─── Banco de horas: preview + aplicação no pagamento (combo G — 2.17) ────
+//
+// Estratégia "último payment do período": cada row de `payments` é 1 dia
+// trabalhado, então o mais recente do período é o "row-âncora" pra encaixar
+// o ajuste e marcar idempotência (`bank_hours_applied_at`).
+//
+// Fluxo de leitura compartilhado entre preview e apply via helper interno
+// `_previewBankHoursForEmployee` — ambos seguem os mesmos passos 1-9 e diferem
+// só nos efeitos colaterais (apply faz UPDATE/INSERT, preview retorna calc).
+//
+// Passos (helper):
+//   1. Carrega employee + company (FK)
+//   2. Carrega payment_period (start/end)
+//   3. Normaliza settings (defaults pra null)
+//   4. Checa override por employee+period
+//   5. Calcula janela de tempo conforme settings.bank_hours_period
+//   6. Busca último payment do período (estratégia âncora)
+//   7. Soma saldo de attendance no range
+//   8. Calcula jornadaMinutes (média dos dias úteis)
+//   9. Chama applyBankHours() puro
+//
+// Apply adicional:
+//  10. UPDATE payment + INSERT log + (opcional) zera saldo de attendance
+//
+// TODO sub-fase futura: separar saldo noturno via coluna específica em
+// attendance (hoje passa 0 — caller que define multiplier noturno na config
+// não terá efeito até essa refatoração).
+
+// Item retornado por previewBankHoursForPeriod, formato amigável pra UI.
+export type BankHoursPreviewStatus =
+  | 'pending'           // calculou e marcaria como aplicado (pode aplicar)
+  | 'already_applied'   // payment já tem applied_at != null
+  | 'no_payment'        // sem payment no período
+  | 'zero_balance'      // saldo zero no período (no_op se aplicar)
+  | 'override_skip'     // override OFF
+  | 'toggle_off';       // empresa OFF e sem override ON
+
+export interface BankHoursPreviewItem {
+  employeeId: string;
+  employeeName: string;
+  saldoMinutes: number;        // creditMinutes - debitMinutes
+  saldoLabel: string;          // "+02:30" ou "-01:15"
+  valorAplicar: number;
+  liquidoAntes: number;
+  liquidoDepois: number;
+  status: BankHoursPreviewStatus;
+  reason?: string;
+  appliedAt?: string;
+}
+
+// Estado interno do helper — distingue erro precoce de cálculo concluído.
+type _PreviewInternalStatus =
+  | 'employee_not_found'
+  | 'company_not_found'
+  | 'no_payment_in_period'
+  | 'override_skip'
+  | 'already_applied'
+  | 'toggle_off'
+  | 'pending';
+
+interface _PreviewInternalResult {
+  status: _PreviewInternalStatus;
+  result?: import('../utils/bankHoursCalculator').BankHoursResult;
+  paymentRow?: { id: string; daily_rate: number | null; total: number | null; bank_hours_applied_at: string | null };
+  paymentBefore?: number;
+  paymentAfter?: number;
+  creditMinutes: number;
+  debitMinutes: number;
+  netMinutes: number;
+  rangeStart: string;
+  rangeEnd: string;
+  appliedAt?: string;
+  settings?: import('../utils/bankHoursCalculator').BankHoursSettings;
+  company?: Company;
+  employeeName: string;
+}
+
+// Helper interno: carrega dados + calcula. Não toca UPDATE/INSERT.
+// Compartilhado entre applyBankHoursToPayment e previewBankHoursForPeriod.
+async function _previewBankHoursForEmployee(args: {
+  employeeId: string;
+  paymentPeriodId: string;
+  forceOverride?: boolean;
+}): Promise<_PreviewInternalResult> {
+  const { employeeId, paymentPeriodId, forceOverride = false } = args;
+
+  const { applyBankHours } = await import('../utils/bankHoursCalculator');
+  type CalcSettings = import('../utils/bankHoursCalculator').BankHoursSettings;
+
+  const empty = (status: _PreviewInternalStatus, name = ''): _PreviewInternalResult => ({
+    status, creditMinutes: 0, debitMinutes: 0, netMinutes: 0,
+    rangeStart: '', rangeEnd: '', employeeName: name,
+  });
+
+  // 1. Funcionário + empresa via FK.
+  const { data: employee, error: empErr } = await supabase
+    .from('employees')
+    .select('id, name, company_id, expected_schedule, companies:company_id(*)')
+    .eq('id', employeeId)
+    .maybeSingle();
+  if (empErr) throw empErr;
+  if (!employee) return empty('employee_not_found');
+
+  const company = (employee as unknown as { companies: Company | null }).companies;
+  const employeeName = (employee as unknown as { name?: string }).name ?? '';
+  if (!company) return empty('company_not_found', employeeName);
+
+  // 2. Período.
+  const { data: period, error: periodErr } = await supabase
+    .from('payment_periods')
+    .select('id, start_date, end_date')
+    .eq('id', paymentPeriodId)
+    .maybeSingle();
+  if (periodErr) throw periodErr;
+  if (!period) return { ...empty('no_payment_in_period', employeeName), company };
+
+  // 3. Settings normalizadas.
+  const settings: CalcSettings = {
+    bank_hours_apply_in_payment: company.bank_hours_apply_in_payment ?? false,
+    bank_hours_formula: company.bank_hours_formula ?? 'daily_div_8',
+    bank_hours_extra_multiplier: Number(company.bank_hours_extra_multiplier) || 1.5,
+    bank_hours_custom_value: Number(company.bank_hours_custom_value) || 0,
+    bank_hours_credit_action: company.bank_hours_credit_action ?? 'add_to_net',
+    bank_hours_debit_action: company.bank_hours_debit_action ?? 'subtract_from_net',
+    bank_hours_period: company.bank_hours_period ?? 'payment_period',
+    bank_hours_display: company.bank_hours_display ?? 'separate_line',
+    bank_hours_after_apply: company.bank_hours_after_apply ?? 'zero_balance',
+    bank_hours_night_separate: company.bank_hours_night_separate ?? false,
+    bank_hours_night_multiplier: Number(company.bank_hours_night_multiplier) || 1.20,
+  };
+
+  // 4. Override individual. Mais recente vence.
+  const { data: overrideRows, error: overrideErr } = await supabase
+    .from('bank_hours_overrides')
+    .select('apply_bank_hours, reason')
+    .eq('company_id', company.id)
+    .eq('employee_id', employeeId)
+    .eq('payment_period_id', paymentPeriodId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (overrideErr) throw overrideErr;
+  const override = overrideRows?.[0] as { apply_bank_hours: boolean } | undefined;
+
+  if (override) {
+    if (!override.apply_bank_hours && !forceOverride) {
+      return { ...empty('override_skip', employeeName), company, settings };
+    }
+    if (override.apply_bank_hours) settings.bank_hours_apply_in_payment = true;
+  }
+
+  // 5. Janela conforme settings.bank_hours_period.
+  let rangeStart = period.start_date as string;
+  let rangeEnd = period.end_date as string;
+  if (settings.bank_hours_period === 'month') {
+    const [y, m] = (period.start_date as string).split('-').map(Number);
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    rangeStart = `${y}-${String(m).padStart(2, '0')}-01`;
+    rangeEnd = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  } else if (settings.bank_hours_period === 'accumulated') {
+    rangeStart = '1970-01-01';
+  }
+
+  // 6. Payment âncora (último do período).
+  const { data: paymentRow, error: paymentErr } = await supabase
+    .from('payments')
+    .select('id, daily_rate, total, bank_hours_applied_at')
+    .eq('employee_id', employeeId)
+    .eq('company_id', company.id)
+    .gte('date', period.start_date)
+    .lte('date', period.end_date)
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (paymentErr) throw paymentErr;
+  if (!paymentRow) {
+    return {
+      status: 'no_payment_in_period', creditMinutes: 0, debitMinutes: 0, netMinutes: 0,
+      rangeStart, rangeEnd, employeeName, company, settings,
+    };
+  }
+  if (paymentRow.bank_hours_applied_at) {
+    return {
+      status: 'already_applied', creditMinutes: 0, debitMinutes: 0, netMinutes: 0,
+      rangeStart, rangeEnd, employeeName, company, settings,
+      paymentRow: paymentRow as _PreviewInternalResult['paymentRow'],
+      appliedAt: paymentRow.bank_hours_applied_at as string,
+    };
+  }
+
+  // 7. Saldo na janela.
+  const { data: attendances, error: attErr } = await supabase
+    .from('attendance')
+    .select('bank_credit_minutes, bank_debit_minutes')
+    .eq('employee_id', employeeId)
+    .gte('date', rangeStart)
+    .lte('date', rangeEnd);
+  if (attErr) throw attErr;
+
+  let creditMinutes = 0;
+  let debitMinutes = 0;
+  for (const a of (attendances ?? []) as Array<{ bank_credit_minutes: number | null; bank_debit_minutes: number | null }>) {
+    creditMinutes += a.bank_credit_minutes ?? 0;
+    debitMinutes += a.bank_debit_minutes ?? 0;
+  }
+
+  // 8. Jornada média.
+  let jornadaMinutes = 480;
+  const sched = (employee as unknown as { expected_schedule: number[] | null }).expected_schedule;
+  if (Array.isArray(sched) && sched.length === 7) {
+    const workdays = sched.filter((m) => Number(m) > 0);
+    if (workdays.length > 0) {
+      jornadaMinutes = Math.round(workdays.reduce((a, b) => a + Number(b), 0) / workdays.length);
+    }
+  }
+
+  // 9. Cálculo puro.
+  const result = applyBankHours({
+    dailyRate: Number(paymentRow.daily_rate) || 0,
+    jornadaMinutes,
+    creditMinutes,
+    debitMinutes,
+    nightCreditMinutes: 0,
+    nightDebitMinutes: 0,
+    settings,
+  });
+
+  const netMinutes = creditMinutes - debitMinutes;
+
+  if (!result.applied) {
+    return {
+      status: 'toggle_off', result,
+      creditMinutes, debitMinutes, netMinutes,
+      rangeStart, rangeEnd, employeeName, company, settings,
+      paymentRow: paymentRow as _PreviewInternalResult['paymentRow'],
+    };
+  }
+
+  const paymentBefore = Number(paymentRow.total) || 0;
+  const paymentAfter = paymentBefore + result.amountNet;
+
+  return {
+    status: 'pending', result,
+    paymentRow: paymentRow as _PreviewInternalResult['paymentRow'],
+    paymentBefore, paymentAfter,
+    creditMinutes, debitMinutes, netMinutes,
+    rangeStart, rangeEnd, employeeName, company, settings,
+  };
+}
+export async function applyBankHoursToPayment(args: {
+  employeeId: string;
+  paymentPeriodId: string;
+  supervisorId: string;
+  forceOverride?: boolean;
+}): Promise<BankHoursApplyResult> {
+  const { employeeId, paymentPeriodId, supervisorId, forceOverride = false } = args;
+
+  if (!employeeId || !paymentPeriodId || !supervisorId) {
+    throw new Error('employeeId, paymentPeriodId e supervisorId são obrigatórios');
+  }
+
+  try {
+    const preview = await _previewBankHoursForEmployee({
+      employeeId, paymentPeriodId, forceOverride,
+    });
+
+    switch (preview.status) {
+      case 'employee_not_found':
+        return { success: false, applied: false, skipped: false, reason: 'employee_not_found' };
+      case 'company_not_found':
+        return { success: false, applied: false, skipped: false, reason: 'company_not_found' };
+      case 'no_payment_in_period':
+        return { success: false, applied: false, skipped: false, reason: 'no_payment_in_period' };
+      case 'override_skip':
+        return { success: true, applied: false, skipped: true, reason: 'override_skip' };
+      case 'already_applied':
+        return { success: false, applied: false, skipped: false, reason: 'already_applied' };
+      case 'toggle_off':
+        return { success: true, applied: false, skipped: false, reason: 'toggle_off', result: preview.result };
+      case 'pending':
+        break;
+    }
+
+    // status === 'pending' — efeito colateral aqui (UPDATE payment + INSERT log + zera attendance).
+    const {
+      paymentRow, paymentBefore, paymentAfter,
+      creditMinutes, debitMinutes, netMinutes,
+      rangeStart, rangeEnd, result, settings, company,
+    } = preview;
+    if (!paymentRow || !result || !settings || !company || paymentBefore === undefined || paymentAfter === undefined) {
+      throw new Error('Estado inconsistente em preview pending');
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const { error: updateErr } = await supabase
+      .from('payments')
+      .update({
+        bank_hours_amount: result.amountNet,
+        bank_hours_minutes: netMinutes,
+        bank_hours_applied_at: nowIso,
+        total: paymentAfter,
+        updated_at: nowIso,
+      })
+      .eq('id', paymentRow.id);
+    if (updateErr) throw updateErr;
+
+    // Log de auditoria — falha aqui não rollbacka (best-effort).
+    let logId: string | undefined;
+    const { data: logRow, error: logErr } = await supabase
+      .from('bank_hours_application_log')
+      .insert({
+        company_id: company.id,
+        employee_id: employeeId,
+        payment_period_id: paymentPeriodId,
+        applied_by: supervisorId,
+        bank_credit_minutes: creditMinutes,
+        bank_debit_minutes: debitMinutes,
+        net_balance_minutes: netMinutes,
+        formula_used: result.formulaUsed,
+        hour_value_used: result.hourValueUsed,
+        extra_multiplier_used:
+          settings.bank_hours_formula === 'hour_extra_multiplier'
+            ? settings.bank_hours_extra_multiplier
+            : null,
+        amount_credit: result.amountCredit,
+        amount_debit: result.amountDebit,
+        amount_net: result.amountNet,
+        payment_total_before: paymentBefore,
+        payment_total_after: paymentAfter,
+      })
+      .select('id')
+      .single();
+    if (logErr) {
+      console.error('[applyBankHoursToPayment] log insert falhou:', logErr);
+    } else {
+      logId = (logRow as { id: string } | null)?.id;
+    }
+
+    if (settings.bank_hours_after_apply === 'zero_balance') {
+      const { error: zeroErr } = await supabase
+        .from('attendance')
+        .update({ bank_credit_minutes: 0, bank_debit_minutes: 0 })
+        .eq('employee_id', employeeId)
+        .gte('date', rangeStart)
+        .lte('date', rangeEnd);
+      if (zeroErr) {
+        console.error('[applyBankHoursToPayment] zero balance update falhou:', zeroErr);
+      }
+    }
+
+    return {
+      success: true,
+      applied: true,
+      skipped: false,
+      result,
+      paymentBefore,
+      paymentAfter,
+      logId,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      applied: false,
+      skipped: false,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// Preview em batch — calcula sem aplicar; retorna 1 item por funcionário ativo.
+// N+1 consciente (cada employee dispara 5 queries via helper); pode otimizar
+// pra batch no futuro se a empresa tiver muitos funcionários.
+export async function previewBankHoursForPeriod(args: {
+  companyId: string;
+  paymentPeriodId: string;
+}): Promise<BankHoursPreviewItem[]> {
+  if (!args.companyId || !args.paymentPeriodId) {
+    throw new Error('companyId e paymentPeriodId são obrigatórios');
+  }
+
+  const { data: employees, error: empErr } = await supabase
+    .from('employees')
+    .select('id, name')
+    .eq('company_id', args.companyId);
+  if (empErr) throw empErr;
+
+  const items: BankHoursPreviewItem[] = [];
+  for (const emp of (employees ?? []) as Array<{ id: string; name: string }>) {
+    const preview = await _previewBankHoursForEmployee({
+      employeeId: emp.id,
+      paymentPeriodId: args.paymentPeriodId,
+    });
+    items.push(_toPreviewItem(emp.id, emp.name, preview));
+  }
+
+  return items;
+}
+
+// INSERT em bank_hours_overrides. `reason` é NOT NULL no DB — exigência inviolável.
+// O caller (UI) deve coletar motivo do supervisor; sem motivo a função throwsa
+// antes de tocar no DB.
+export async function createBankHoursOverride(args: {
+  companyId: string;
+  employeeId: string;
+  paymentPeriodId: string;
+  applyBankHours: boolean;
+  reason: string;
+  createdBy: string;
+}): Promise<string> {
+  if (!args.reason || !args.reason.trim()) {
+    throw new Error('reason é obrigatório (motivo do override)');
+  }
+  const { data, error } = await supabase
+    .from('bank_hours_overrides')
+    .insert({
+      company_id: args.companyId,
+      employee_id: args.employeeId,
+      payment_period_id: args.paymentPeriodId,
+      apply_bank_hours: args.applyBankHours,
+      reason: args.reason.trim(),
+      created_by: args.createdBy,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
+// Mapeia o resultado interno do helper pra um BankHoursPreviewItem amigável à UI.
+function _toPreviewItem(
+  employeeId: string,
+  employeeName: string,
+  preview: _PreviewInternalResult,
+): BankHoursPreviewItem {
+  const sm = preview.netMinutes;
+  const sign = sm > 0 ? '+' : sm < 0 ? '-' : '';
+  const abs = Math.abs(Math.round(sm));
+  const hh = Math.floor(abs / 60).toString().padStart(2, '0');
+  const mm = (abs % 60).toString().padStart(2, '0');
+  const saldoLabel = sm === 0 ? '00:00' : `${sign}${hh}:${mm}`;
+
+  let status: BankHoursPreviewStatus;
+  if (
+    preview.status === 'employee_not_found' ||
+    preview.status === 'company_not_found' ||
+    preview.status === 'no_payment_in_period'
+  ) {
+    status = 'no_payment';
+  } else if (preview.status === 'override_skip') {
+    status = 'override_skip';
+  } else if (preview.status === 'already_applied') {
+    status = 'already_applied';
+  } else if (preview.status === 'toggle_off') {
+    status = 'toggle_off';
+  } else {
+    // pending: distingue zero_balance pra UI mostrar diferente.
+    status = preview.result?.amountNet === 0 ? 'zero_balance' : 'pending';
+  }
+
+  return {
+    employeeId,
+    employeeName,
+    saldoMinutes: sm,
+    saldoLabel,
+    valorAplicar: preview.result?.amountNet ?? 0,
+    liquidoAntes: preview.paymentBefore ?? 0,
+    liquidoDepois: preview.paymentAfter ?? preview.paymentBefore ?? 0,
+    status,
+    reason: preview.result?.reason,
+    appliedAt: preview.appliedAt,
+  };
+}

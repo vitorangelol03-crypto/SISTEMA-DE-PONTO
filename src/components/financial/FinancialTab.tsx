@@ -1,7 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, FileText, Search } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, FileText, Search, Wallet } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getBonusRemovalHistory, BonusRemoval, getTriageDistributionsForEmployees, getBonusTypes, BonusTypeRecord } from '../../services/database';
+import {
+  getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance,
+  clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getBonusRemovalHistory, BonusRemoval,
+  getTriageDistributionsForEmployees, getBonusTypes, BonusTypeRecord,
+  getPaymentPeriods, PaymentPeriod,
+  applyBankHoursToPayment, previewBankHoursForPeriod, createBankHoursOverride,
+  type BankHoursPreviewItem,
+} from '../../services/database';
 import { useCompany } from '../../contexts/CompanyContext';
 import { getBonusValueForType } from '../../utils/bonusHelpers';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
@@ -64,6 +71,15 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     startDate: false,
     endDate: false
   });
+
+  // ─── Banco de horas (combo G — sub-fase 2.17) ──────────────────────────
+  // Dropdown de payment_periods da empresa atual + modal de preview/apply.
+  // Quando um period é selecionado, filters.startDate/endDate são derivados
+  // dele e os inputs date ficam read-only. Botão "Aplicar banco de horas"
+  // só fica visível quando company.bank_hours_apply_in_payment=true.
+  const [periods, setPeriods] = useState<PaymentPeriod[]>([]);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
+  const [showApplyModal, setShowApplyModal] = useState(false);
 
   const [bulkDailyRate, setBulkDailyRate] = useState<string>('');
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
@@ -201,6 +217,31 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       .catch(err => console.error('Erro ao carregar bonus_types:', err));
     return () => { cancelled = true; };
   }, [company?.id]);
+
+  // Carrega payment_periods da empresa atual (combo G).
+  // Ordenados por end_date DESC pra "mais recente primeiro" no dropdown.
+  useEffect(() => {
+    if (!company?.id) return;
+    let cancelled = false;
+    getPaymentPeriods(company.id)
+      .then(pp => {
+        if (!cancelled) {
+          const sorted = [...pp].sort((a, b) => b.end_date.localeCompare(a.end_date));
+          setPeriods(sorted);
+        }
+      })
+      .catch(err => console.error('Erro ao carregar payment_periods:', err));
+    return () => { cancelled = true; };
+  }, [company?.id]);
+
+  // Auto-fill startDate/endDate quando period é selecionado.
+  // Inputs de data ficam read-only enquanto period selecionado (ver UI).
+  useEffect(() => {
+    if (!selectedPeriodId) return;
+    const p = periods.find(x => x.id === selectedPeriodId);
+    if (!p) return;
+    setFilters(prev => ({ ...prev, startDate: p.start_date, endDate: p.end_date }));
+  }, [selectedPeriodId, periods]);
 
   const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
@@ -534,7 +575,20 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             Gestão Financeira
           </h2>
 
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
+            {company?.bank_hours_apply_in_payment && (
+              <button
+                onClick={() => setShowApplyModal(true)}
+                disabled={!selectedPeriodId}
+                title={selectedPeriodId
+                  ? 'Aplica saldo do banco de horas no líquido conforme configuração'
+                  : 'Selecione um período primeiro'}
+                className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] w-full sm:w-auto"
+              >
+                <Wallet className="w-4 h-4" />
+                <span>Aplicar banco de horas</span>
+              </button>
+            )}
             <button
               onClick={loadData}
               className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors min-h-[44px] w-full sm:w-auto"
@@ -575,6 +629,42 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
         {/* Filtros - Pagamentos */}
         {activeView === 'financial' && (
+          <>
+            {/* Dropdown de período (combo G — pré-requisito do botão de banco horas).
+                Quando period selecionado, datas são derivadas e inputs ficam read-only. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-3">
+              <div className="lg:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Período de pagamento
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedPeriodId}
+                    onChange={(e) => setSelectedPeriodId(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
+                  >
+                    <option value="">— Sem período (datas livres) —</option>
+                    {periods.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {formatDateBR(p.start_date)} a {formatDateBR(p.end_date)}
+                        {p.label ? ` · ${p.label}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedPeriodId && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPeriodId('')}
+                      className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 min-h-[44px]"
+                      title="Limpar período (libera edição livre das datas)"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -586,7 +676,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 onChange={(e) => handleDateChange('startDate', e.target.value)}
                 onFocus={() => handleDateFocus('startDate')}
                 onBlur={() => handleDateBlur('startDate')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
+                readOnly={!!selectedPeriodId}
+                title={selectedPeriodId ? 'Datas vêm do período selecionado' : ''}
+                className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm ${selectedPeriodId ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
               />
             </div>
 
@@ -600,7 +692,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 onChange={(e) => handleDateChange('endDate', e.target.value)}
                 onFocus={() => handleDateFocus('endDate')}
                 onBlur={() => handleDateBlur('endDate')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
+                readOnly={!!selectedPeriodId}
+                title={selectedPeriodId ? 'Datas vêm do período selecionado' : ''}
+                className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm ${selectedPeriodId ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
               />
             </div>
 
@@ -636,6 +730,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               showLabel={true}
             />
           </div>
+          </>
         )}
 
         {/* Filtros - Histórico */}
@@ -1636,6 +1731,336 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           </div>
         </div>
       )}
+
+      {/* Modal: aplicar banco de horas (combo G — sub-fase 2.17) */}
+      {showApplyModal && selectedPeriodId && company && (
+        <BankHoursApplyModal
+          companyId={company.id}
+          companyLabel={company.legal_name}
+          paymentPeriodId={selectedPeriodId}
+          period={periods.find(p => p.id === selectedPeriodId) ?? null}
+          supervisorId={userId}
+          onClose={() => setShowApplyModal(false)}
+          onApplied={() => { setShowApplyModal(false); loadData(); }}
+        />
+      )}
+    </div>
+  );
+};
+
+// ─── Modal de aplicação de banco de horas ──────────────────────────────────
+//
+// Pré-popula preview ao abrir (chama previewBankHoursForPeriod no useEffect).
+// Cada linha tem checkbox apply (default ON pra status='pending', OFF pra os
+// outros). Override "Pular" exige motivo (textarea), e gera INSERT em
+// bank_hours_overrides ANTES de aplicar.
+//
+// Submit em LOOP SEQUENCIAL (não paralelo) — evita race conditions sobre o
+// mesmo payment row e mantém ordem dos logs de auditoria.
+
+interface BankHoursApplyModalProps {
+  companyId: string;
+  companyLabel: string;
+  paymentPeriodId: string;
+  period: PaymentPeriod | null;
+  supervisorId: string;
+  onClose: () => void;
+  onApplied: () => void;
+}
+
+const STATUS_LABELS: Record<BankHoursPreviewItem['status'], { label: string; cls: string }> = {
+  pending:           { label: 'Pendente',          cls: 'text-blue-700 bg-blue-50' },
+  already_applied:   { label: 'Já aplicado',       cls: 'text-gray-500 bg-gray-100' },
+  no_payment:        { label: 'Sem pagamento',     cls: 'text-red-700 bg-red-50' },
+  zero_balance:      { label: 'Saldo zero',        cls: 'text-amber-700 bg-amber-50' },
+  override_skip:     { label: 'Override OFF',      cls: 'text-purple-700 bg-purple-50' },
+  toggle_off:        { label: 'Desligado',         cls: 'text-gray-500 bg-gray-100' },
+};
+
+function formatBRL(value: number): string {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const BankHoursApplyModal: React.FC<BankHoursApplyModalProps> = ({
+  companyId, companyLabel, paymentPeriodId, period, supervisorId, onClose, onApplied,
+}) => {
+  const [items, setItems] = useState<BankHoursPreviewItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Por-employee: aplicar (default ON pra pending), motivo do skip
+  const [applyFlags, setApplyFlags] = useState<Record<string, boolean>>({});
+  const [skipReasons, setSkipReasons] = useState<Record<string, string>>({});
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    previewBankHoursForPeriod({ companyId, paymentPeriodId })
+      .then((res) => {
+        if (cancelled) return;
+        setItems(res);
+        // Default: aplicar só os 'pending' (status que muda valor de fato).
+        const flags: Record<string, boolean> = {};
+        for (const item of res) {
+          flags[item.employeeId] = item.status === 'pending';
+        }
+        setApplyFlags(flags);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setErrorMessage(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [companyId, paymentPeriodId]);
+
+  const aggregated = useMemo(() => {
+    let selected = 0, totalCredit = 0, totalDebit = 0;
+    for (const item of items) {
+      if (!applyFlags[item.employeeId]) continue;
+      selected++;
+      if (item.valorAplicar > 0) totalCredit += item.valorAplicar;
+      if (item.valorAplicar < 0) totalDebit += Math.abs(item.valorAplicar);
+    }
+    return { selected, totalCredit, totalDebit, net: totalCredit - totalDebit };
+  }, [items, applyFlags]);
+
+  const handleApply = async () => {
+    const toApply = items.filter(i => applyFlags[i.employeeId] && i.status === 'pending');
+    const toSkip = items.filter(i => !applyFlags[i.employeeId] && i.status === 'pending');
+
+    // Validação: itens com skip precisam ter motivo
+    for (const item of toSkip) {
+      const reason = (skipReasons[item.employeeId] ?? '').trim();
+      if (!reason) {
+        toast.error(`Funcionário "${item.employeeName}": motivo do skip é obrigatório`);
+        return;
+      }
+    }
+
+    setProgress({ current: 0, total: toApply.length + toSkip.length });
+    let success = 0, errors = 0, skipped = 0;
+
+    // Skips primeiro: cria override OFF com motivo, NÃO aplica.
+    for (const item of toSkip) {
+      try {
+        await createBankHoursOverride({
+          companyId,
+          employeeId: item.employeeId,
+          paymentPeriodId,
+          applyBankHours: false,
+          reason: skipReasons[item.employeeId] ?? '',
+          createdBy: supervisorId,
+        });
+        skipped++;
+      } catch (err) {
+        errors++;
+        console.error(`Erro ao criar override pra ${item.employeeName}:`, err);
+      }
+      setProgress({ current: success + errors + skipped, total: toApply.length + toSkip.length });
+    }
+
+    // Apply em loop sequencial (evita race no mesmo payment).
+    for (const item of toApply) {
+      try {
+        const res = await applyBankHoursToPayment({
+          employeeId: item.employeeId,
+          paymentPeriodId,
+          supervisorId,
+        });
+        if (res.success && res.applied) success++;
+        else errors++;
+      } catch (err) {
+        errors++;
+        console.error(`Erro ao aplicar pra ${item.employeeName}:`, err);
+      }
+      setProgress({ current: success + errors + skipped, total: toApply.length + toSkip.length });
+    }
+
+    setProgress(null);
+    if (errors === 0) {
+      toast.success(`✅ ${success} aplicados${skipped > 0 ? ` · ${skipped} pulados` : ''}`);
+    } else {
+      toast.error(`⚠ ${success} aplicados · ${skipped} pulados · ${errors} erros`);
+    }
+    onApplied();
+  };
+
+  const periodLabel = period
+    ? `${formatDateBR(period.start_date)} a ${formatDateBR(period.end_date)}`
+    : '—';
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow-xl max-w-[95vw] sm:max-w-5xl w-full max-h-[95vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4 gap-3">
+          <div>
+            <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-amber-600" />
+              Aplicar Banco de Horas — Período {periodLabel}
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">Empresa: {companyLabel}</p>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={!!progress}
+            className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+            aria-label="Fechar"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        {/* Body */}
+        {loading && (
+          <div className="flex items-center justify-center py-8">
+            <RefreshCw className="w-6 h-6 animate-spin text-blue-600 mr-2" />
+            <span>Calculando preview…</span>
+          </div>
+        )}
+
+        {!loading && errorMessage && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
+            Erro ao calcular preview: {errorMessage}
+          </div>
+        )}
+
+        {!loading && !errorMessage && items.length === 0 && (
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-700">
+            Nenhum funcionário ativo encontrado nesta empresa.
+          </div>
+        )}
+
+        {!loading && !errorMessage && items.length > 0 && (
+          <>
+            {/* Tabela */}
+            <div className="overflow-x-auto border border-gray-200 rounded-md">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">Aplicar</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">Funcionário</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-700">Saldo</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-700">Valor</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-700">Líq. antes</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-700">Líq. depois</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {items.map((item) => {
+                    const isPending = item.status === 'pending';
+                    const isSelected = !!applyFlags[item.employeeId];
+                    const statusInfo = STATUS_LABELS[item.status];
+                    return (
+                      <React.Fragment key={item.employeeId}>
+                        <tr className={item.status === 'already_applied' ? 'bg-gray-50' : ''}>
+                          <td className="px-3 py-2">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => setApplyFlags(prev => ({ ...prev, [item.employeeId]: e.target.checked }))}
+                              disabled={!!progress || !isPending}
+                              className="w-4 h-4 rounded"
+                            />
+                          </td>
+                          <td className="px-3 py-2 font-medium text-gray-800">{item.employeeName}</td>
+                          <td className={`px-3 py-2 text-right tabular-nums ${item.saldoMinutes > 0 ? 'text-green-700' : item.saldoMinutes < 0 ? 'text-red-700' : 'text-gray-500'}`}>
+                            {item.saldoLabel}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {item.valorAplicar !== 0 ? formatBRL(item.valorAplicar) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-600">
+                            {item.liquidoAntes ? formatBRL(item.liquidoAntes) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums font-medium">
+                            {item.liquidoDepois ? formatBRL(item.liquidoDepois) : '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className={`inline-block px-2 py-0.5 rounded text-xs ${statusInfo.cls}`}>
+                              {statusInfo.label}
+                            </span>
+                          </td>
+                        </tr>
+                        {/* Linha de motivo do skip — aparece quando pending sem checkbox */}
+                        {isPending && !isSelected && (
+                          <tr className="bg-amber-50 border-t-0">
+                            <td colSpan={7} className="px-3 py-2">
+                              <label className="block text-xs text-amber-800 mb-1">
+                                Motivo do skip <span className="text-red-600">*obrigatório</span>
+                              </label>
+                              <textarea
+                                value={skipReasons[item.employeeId] ?? ''}
+                                onChange={(e) => setSkipReasons(prev => ({ ...prev, [item.employeeId]: e.target.value }))}
+                                placeholder="Ex: férias antecipadas, banco será aplicado em outro período, etc."
+                                rows={2}
+                                disabled={!!progress}
+                                className="w-full px-2 py-1 text-sm border border-amber-300 rounded-md bg-white"
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Resumo agregado */}
+            <div className="mt-4 bg-blue-50 border border-blue-200 rounded-md p-3 text-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div>
+                  <div className="text-xs text-gray-600">Selecionados</div>
+                  <div className="font-semibold">{aggregated.selected} / {items.length}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-600">Total a creditar</div>
+                  <div className="font-semibold text-green-700">{formatBRL(aggregated.totalCredit)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-600">Total a debitar</div>
+                  <div className="font-semibold text-red-700">-{formatBRL(aggregated.totalDebit)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-600">Líquido geral</div>
+                  <div className={`font-semibold ${aggregated.net >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    {aggregated.net >= 0 ? '+' : ''}{formatBRL(aggregated.net)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Progresso durante apply */}
+            {progress && (
+              <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-3 text-sm flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
+                <span>Aplicando {progress.current}/{progress.total}…</span>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Botões */}
+        <div className="flex flex-col sm:flex-row gap-2 mt-4">
+          <button
+            onClick={handleApply}
+            disabled={loading || !!progress || aggregated.selected === 0}
+            className="flex-1 px-4 py-3 bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+          >
+            {progress ? 'Aplicando…' : `Aplicar selecionados (${aggregated.selected})`}
+          </button>
+          <button
+            onClick={onClose}
+            disabled={!!progress}
+            className="flex-1 sm:flex-none px-4 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors min-h-[44px]"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

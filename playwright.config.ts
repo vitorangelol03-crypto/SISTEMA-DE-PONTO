@@ -14,8 +14,9 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests',
-  testMatch: /.*\.spec\.ts$/,    // ignora cleanup.ts, global-setup.ts etc.
-  fullyParallel: false,          // testes mexem no mesmo DB — serializar
+  testMatch: /.*\.spec\.ts$/,        // ignora cleanup.ts, global-setup.ts etc.
+  testIgnore: ['**/tests/unit/**'],  // tests/unit/ rodam no vitest, não Playwright
+  fullyParallel: false,              // testes mexem no mesmo DB — serializar
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

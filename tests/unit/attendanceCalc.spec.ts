@@ -1,12 +1,12 @@
 /**
  * Testes unit para src/utils/attendanceCalc.ts
  *
- * Roda como Playwright spec mas SEM browser (não usa fixture `page`).
+ * Framework: vitest. Roda com: npx vitest run attendanceCalc
  * Convenções:
  *   - 08:00 BRT em 2026-04-15 = 11:00 UTC (UTC-3)
  *   - Datas escolhidas: 2026-04-15 (quarta), 2026-04-12 (domingo)
  */
-import { test, expect } from '@playwright/test';
+import { describe, it, expect } from 'vitest';
 import {
   computeWorkedMinutes,
   computeIntervalMinutes,
@@ -20,8 +20,8 @@ import {
 
 const SCHEDULE: ExpectedSchedule = [0, 480, 480, 480, 480, 480, 240];
 
-test.describe('attendanceCalc', () => {
-  test('1. 2 marcações 08:00–17:00 = 540 worked, 0 interval, todo diurno', () => {
+describe('attendanceCalc', () => {
+  it('1. 2 marcações 08:00–17:00 = 540 worked, 0 interval, todo diurno', () => {
     const m: AttendanceMarkings = {
       entry_1: '2026-04-15T11:00:00Z', // 08:00 BRT
       exit_1: null,
@@ -35,7 +35,7 @@ test.describe('attendanceCalc', () => {
     expect(computeNighttimeMinutes(m)).toBe(0);
   });
 
-  test('2. 4 marcações 08–12, 13–17 = 480 worked, 60 interval, todo diurno', () => {
+  it('2. 4 marcações 08–12, 13–17 = 480 worked, 60 interval, todo diurno', () => {
     const m: AttendanceMarkings = {
       entry_1: '2026-04-15T11:00:00Z', // 08:00
       exit_1: '2026-04-15T15:00:00Z',  // 12:00
@@ -49,7 +49,7 @@ test.describe('attendanceCalc', () => {
     expect(computeNighttimeMinutes(m)).toBe(0);
   });
 
-  test('3. Turno noturno 22:00–06:00 = 480 worked, 420 noturno + 60 diurno', () => {
+  it('3. Turno noturno 22:00–06:00 = 480 worked, 420 noturno + 60 diurno', () => {
     const m: AttendanceMarkings = {
       entry_1: '2026-04-16T01:00:00Z', // 22:00 BRT 15/04
       exit_1: null,
@@ -63,7 +63,7 @@ test.describe('attendanceCalc', () => {
     expect(computeDaytimeMinutes(m)).toBe(60);
   });
 
-  test('4. Cruzando meia-noite 23:00–07:00 = 480 worked, 360 noturno + 120 diurno', () => {
+  it('4. Cruzando meia-noite 23:00–07:00 = 480 worked, 360 noturno + 120 diurno', () => {
     const m: AttendanceMarkings = {
       entry_1: '2026-04-16T02:00:00Z', // 23:00 BRT 15/04
       exit_1: null,
@@ -77,20 +77,20 @@ test.describe('attendanceCalc', () => {
     expect(computeDaytimeMinutes(m)).toBe(120);
   });
 
-  test('5. Crédito: worked=540, expected=480 → credit=60', () => {
+  it('5. Crédito: worked=540, expected=480 → credit=60', () => {
     expect(computeBankHours(540, 480, false)).toEqual({ credit: 60, debit: 0 });
   });
 
-  test('6. Débito: worked=420, expected=480 → debit=60', () => {
+  it('6. Débito: worked=420, expected=480 → debit=60', () => {
     expect(computeBankHours(420, 480, false)).toEqual({ credit: 0, debit: 60 });
   });
 
-  test('7. Ausência compensada: isAbsent=true → ambos 0', () => {
+  it('7. Ausência compensada: isAbsent=true → ambos 0', () => {
     expect(computeBankHours(0, 480, true)).toEqual({ credit: 0, debit: 0 });
     expect(computeBankHours(120, 480, true)).toEqual({ credit: 0, debit: 0 });
   });
 
-  test('8. Domingo (expected=0): worked=300 → credit=300', () => {
+  it('8. Domingo (expected=0): worked=300 → credit=300', () => {
     // 2026-04-12 é domingo
     expect(getExpectedMinutesForDate(SCHEDULE, '2026-04-12')).toBe(0);
     // Quarta 2026-04-15 = 480
@@ -101,7 +101,7 @@ test.describe('attendanceCalc', () => {
     expect(computeBankHours(300, 0, false)).toEqual({ credit: 300, debit: 0 });
   });
 
-  test('9. 2 marcações com exit_2 null → worked=0', () => {
+  it('9. 2 marcações com exit_2 null → worked=0', () => {
     const m: AttendanceMarkings = {
       entry_1: '2026-04-15T11:00:00Z',
       exit_1: null,
@@ -115,7 +115,7 @@ test.describe('attendanceCalc', () => {
     expect(computeNighttimeMinutes(m)).toBe(0);
   });
 
-  test('10. 4 marcações com entry_2 null → só primeiro turno conta', () => {
+  it('10. 4 marcações com entry_2 null → só primeiro turno conta', () => {
     const m: AttendanceMarkings = {
       entry_1: '2026-04-15T11:00:00Z', // 08:00
       exit_1: '2026-04-15T15:00:00Z',  // 12:00
