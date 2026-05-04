@@ -622,6 +622,18 @@ export const bulkCreateEmployees = async (
     city?: string | null;
     state?: string | null;
     zipCode?: string | null;
+    // Etapa 2 (combo H — sub-fase 2.18). Todos opcionais pra retro-compat
+    // com callers existentes que só passam os 9 campos básicos.
+    pin?: string | null;
+    employmentType?: string | null;
+    functionRole?: string | null;
+    badgeNumber?: string | null;
+    pis?: string | null;
+    scheduleType?: string | null;
+    expectedSchedule?: number[] | null;
+    markingCount?: 2 | 4 | null;
+    hireDate?: string | null;
+    contractType?: string | null;
   }>,
   createdBy: string,
   companyId?: string
@@ -656,21 +668,39 @@ export const bulkCreateEmployees = async (
     }
 
     try {
+      const insertRow: Record<string, unknown> = {
+        name: employee.name,
+        cpf: employee.cpf,
+        pix_key: employee.pixKey,
+        pix_type: employee.pixType,
+        address: employee.address,
+        neighborhood: employee.neighborhood,
+        city: employee.city,
+        state: employee.state,
+        zip_code: employee.zipCode,
+        created_by: createdBy,
+        company_id: effectiveCompanyId,
+      };
+      // Campos novos (Etapa 2) — só inclui no payload se foram passados pelo
+      // caller. Manter undefined em vez de null deixa o default da migration
+      // do Postgres entrar em ação (ex: schedule_type='Normal', contract_type='CLT').
+      if (employee.pin !== undefined) {
+        insertRow.pin = employee.pin;
+        insertRow.pin_configured = !!employee.pin;
+      }
+      if (employee.employmentType !== undefined) insertRow.employment_type = employee.employmentType;
+      if (employee.functionRole !== undefined) insertRow.function_role = employee.functionRole;
+      if (employee.badgeNumber !== undefined) insertRow.badge_number = employee.badgeNumber;
+      if (employee.pis !== undefined) insertRow.pis = employee.pis;
+      if (employee.scheduleType !== undefined) insertRow.schedule_type = employee.scheduleType;
+      if (employee.expectedSchedule !== undefined) insertRow.expected_schedule = employee.expectedSchedule;
+      if (employee.markingCount !== undefined) insertRow.marking_count = employee.markingCount;
+      if (employee.hireDate !== undefined) insertRow.hire_date = employee.hireDate;
+      if (employee.contractType !== undefined) insertRow.contract_type = employee.contractType;
+
       const { data, error } = await supabase
         .from('employees')
-        .insert([{
-          name: employee.name,
-          cpf: employee.cpf,
-          pix_key: employee.pixKey,
-          pix_type: employee.pixType,
-          address: employee.address,
-          neighborhood: employee.neighborhood,
-          city: employee.city,
-          state: employee.state,
-          zip_code: employee.zipCode,
-          created_by: createdBy,
-          company_id: effectiveCompanyId,
-        }])
+        .insert([insertRow])
         .select()
         .single();
 

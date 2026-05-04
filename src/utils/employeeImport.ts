@@ -1,5 +1,11 @@
 import * as XLSX from 'xlsx';
 import { validateCPF, formatCPF } from './validation';
+import {
+  validateImportRow,
+  type ImportRow,
+  type ParsedEmployee,
+  type ValidationContext,
+} from './employeeImportValidation';
 
 export interface EmployeeImportData {
   name: string;
@@ -11,6 +17,17 @@ export interface EmployeeImportData {
   city?: string | null;
   state?: string | null;
   zipCode?: string | null;
+  // Etapa 2 (combo H — sub-fase 2.18)
+  pin?: string | null;
+  employmentType?: string | null;
+  functionRole?: string | null;
+  badgeNumber?: string | null;
+  pis?: string | null;
+  scheduleType?: string | null;
+  expectedSchedule?: number[] | null;
+  markingCount?: 2 | 4 | null;
+  hireDate?: string | null;     // YYYY-MM-DD
+  contractType?: string | null;
 }
 
 export interface ValidationError {
@@ -27,81 +44,191 @@ export interface ImportValidationResult {
   // Preenchidos no pós-processamento contra o DB (multi-empresa).
   existingInThisCompany?: EmployeeImportData[];
   existingInOtherCompany?: EmployeeImportData[];
+  // Combo H: detalhes por linha (errors + warnings estruturados) quando o caller
+  // passa ValidationContext pro parseEmployeeSpreadsheet. Subset rowsWithWarnings
+  // são linhas válidas (zero errors) que ainda têm avisos pra revisão humana.
+  rowDetails?: ImportRow[];
+  rowsWithWarnings?: ImportRow[];
 }
 
-export const generateEmployeeTemplate = (): void => {
+// 25 colunas fixas do template (combo H — sub-fase 2.18). Asterisco no nome
+// dos obrigatórios pra sinalizar visualmente no Excel.
+const TEMPLATE_HEADERS = [
+  'nome*',
+  'cpf*',
+  'pix_chave',
+  'pix_tipo',
+  'employment_type',
+  'endereco',
+  'bairro',
+  'cidade',
+  'estado',
+  'cep',
+  'pin',
+  'funcao',
+  'cracha',
+  'pis',
+  'tipo_escala',
+  'jornada_dom',
+  'jornada_seg',
+  'jornada_ter',
+  'jornada_qua',
+  'jornada_qui',
+  'jornada_sex',
+  'jornada_sab',
+  'marcacoes_por_dia',
+  'data_admissao',
+  'tipo_contrato',
+] as const;
+
+// Larguras de coluna otimizadas pra jornada_*=12 (cabe número), nome maior, etc.
+const TEMPLATE_COL_WIDTHS = [
+  30, 15, 25, 12, 18, 30, 18, 18, 8, 12,    // 1-10: básicos
+  8, 25, 10, 15, 15,                         // 11-15: pin, função, crachá, pis, escala
+  12, 12, 12, 12, 12, 12, 12,                // 16-22: jornadas
+  18, 14, 16,                                // 23-25: marcações, admissão, contrato
+] as const;
+
+export const generateEmployeeTemplate = (opts: {
+  defaultMarkingCount?: 2 | 4;
+  defaultSchedule?: number[];
+  defaultContractType?: string;
+} = {}): void => {
   const wb = XLSX.utils.book_new();
 
-  const headers = [
-    'Nome Completo',
+  const sched = opts.defaultSchedule ?? [0, 480, 480, 480, 480, 480, 240];
+  const markingCount = opts.defaultMarkingCount ?? 2;
+  const contractType = opts.defaultContractType ?? 'CLT';
+
+  // Exemplo 1 — CLT comum, schedule da empresa.
+  // CPF e PIS abaixo são REAIS (válidos por algoritmo) — usuário pode usar o
+  // template como teste end-to-end sem precisar gerar números válidos.
+  const example1 = [
+    'MARIA DA SILVA EXEMPLO',
+    '11144477735',
+    '11144477735',
     'CPF',
-    'Chave PIX (Opcional)',
-    'Tipo PIX (Opcional)',
-    'Endereço (Opcional)',
-    'Bairro (Opcional)',
-    'Cidade (Opcional)',
-    'Estado (Opcional)',
-    'CEP (Opcional)',
-    'INSTRUÇÕES'
-  ];
-  const example = [
-    'João da Silva',
-    '123.456.789-00',
-    'joao@email.com',
-    'Email',
-    'Rua das Flores, 123',
-    'Centro',
-    'São Paulo',
-    'SP',
-    '01234-567',
-    ''
-  ];
-  const instructions = [
-    ['', '', '', '', '', '', '', '', '', ''],
-    ['', '', '', '', '', '', '', '', '', '1. Preencha uma linha para cada funcionário'],
-    ['', '', '', '', '', '', '', '', '', '2. Nome e CPF são obrigatórios'],
-    ['', '', '', '', '', '', '', '', '', '3. Nome deve ter pelo menos 3 caracteres'],
-    ['', '', '', '', '', '', '', '', '', '4. CPF deve ser válido (apenas números ou formatado)'],
-    ['', '', '', '', '', '', '', '', '', '5. Chave PIX é opcional'],
-    ['', '', '', '', '', '', '', '', '', '6. Tipo PIX: CPF, Email, Telefone ou Aleatória'],
-    ['', '', '', '', '', '', '', '', '', '7. Dados de endereço são opcionais'],
-    ['', '', '', '', '', '', '', '', '', '8. Não altere ou remova a linha de cabeçalho'],
-    ['', '', '', '', '', '', '', '', '', '9. Salve o arquivo e faça o upload no sistema']
+    'CLT',
+    'RUA EXEMPLO, 123',
+    'CENTRO',
+    'Caratinga',
+    'MG',
+    '35300000',
+    '1234',
+    'AUXILIAR DE LOGÍSTICA',
+    '001',
+    '12056789010',
+    'Normal',
+    sched[0] ?? 0,
+    sched[1] ?? 480,
+    sched[2] ?? 480,
+    sched[3] ?? 480,
+    sched[4] ?? 480,
+    sched[5] ?? 480,
+    sched[6] ?? 240,
+    markingCount,
+    '01/01/2024',
+    contractType,
   ];
 
-  const data = [
-    headers,
-    example,
-    ...instructions
+  // Exemplo 2 — escala 12x36 com 4 marcações; trabalha seg/qua/sex 12h.
+  const example2 = [
+    'JOÃO PEREIRA EXEMPLO',
+    '52998224725',
+    'joao@example.com',
+    'Email',
+    'CLT',
+    '',
+    '',
+    'Caratinga',
+    'MG',
+    '',
+    '5678',
+    'VIGIA',
+    '002',
+    '11135568701',
+    '12x36',
+    0, 720, 0, 720, 0, 720, 0, // dom, seg, ter, qua, qui, sex, sab
+    4,
+    '15/03/2023',
+    'CLT',
+  ];
+
+  // Linha 4 vazia — pronta pra digitação
+  const emptyRow = new Array(TEMPLATE_HEADERS.length).fill('');
+
+  const data: (string | number)[][] = [
+    [...TEMPLATE_HEADERS],
+    example1,
+    example2,
+    emptyRow,
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = TEMPLATE_COL_WIDTHS.map((wch) => ({ wch }));
 
-  ws['!cols'] = [
-    { wch: 25 },
-    { wch: 15 },
-    { wch: 25 },
-    { wch: 15 },
-    { wch: 30 },
-    { wch: 20 },
-    { wch: 20 },
-    { wch: 10 },
-    { wch: 12 },
-    { wch: 50 }
-  ];
-
+  // Cabeçalho em bold com fundo azul; obrigatórios (com '*' no nome) ganham
+  // cor de texto vermelha pra reforço visual.
   const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
   for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
     const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
     if (!ws[cellAddress]) continue;
+    const isRequired = String(ws[cellAddress].v).endsWith('*');
     ws[cellAddress].s = {
-      font: { bold: true, sz: 12 },
-      fill: { fgColor: { rgb: '4472C4' } },
-      alignment: { horizontal: 'center', vertical: 'center' }
+      font: {
+        bold: true,
+        sz: 11,
+        color: isRequired ? { rgb: 'FFFFFF' } : { rgb: 'FFFFFF' },
+      },
+      fill: { fgColor: { rgb: isRequired ? 'C00000' : '4472C4' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
     };
   }
 
   XLSX.utils.book_append_sheet(wb, ws, 'Funcionários');
+
+  // ─── Sheet "Instruções" ────────────────────────────────────────────────
+  const instructionsRows: string[][] = [
+    ['INSTRUÇÕES DE IMPORTAÇÃO'],
+    [''],
+    ['CAMPOS OBRIGATÓRIOS (marcados com *):'],
+    ['- nome: nome completo (mínimo 3 caracteres)'],
+    ['- cpf: 11 dígitos (com ou sem pontuação)'],
+    [''],
+    ['CAMPOS DE JORNADA (em minutos):'],
+    ['- jornada_dom até jornada_sab: minutos trabalhados naquele dia'],
+    ['- 0 = folga, 480 = 8 horas, 240 = 4 horas (sábado típico)'],
+    ['- Se vazio, usa jornada padrão da empresa'],
+    [''],
+    ['MARCAÇÕES POR DIA:'],
+    ['- 2 = entrada + saída (1 turno)'],
+    ['- 4 = entrada1, saída1 (almoço), entrada2, saída2 (2 turnos com almoço)'],
+    ['- Se vazio, usa padrão da empresa'],
+    [''],
+    ['PIS:'],
+    ['- 11 dígitos com dígito verificador correto'],
+    ['- Necessário para gerar espelho de ponto CLT'],
+    [''],
+    ['DATA DE ADMISSÃO:'],
+    ['- Formato DD/MM/AAAA ou AAAA-MM-DD'],
+    ['- Não pode ser data futura'],
+    [''],
+    ['TIPO DE CONTRATO:'],
+    ['- CLT, PJ, Estagiário, Temporário (qualquer outro vai como warning)'],
+    [''],
+    ['PIX:'],
+    ['- tipo: CPF, Email, Telefone, Aleatória (com acento)'],
+    [''],
+    ['ESTADOS (UF):'],
+    ['- 2 letras maiúsculas: MG, SP, RJ, etc'],
+  ];
+  const wsInstructions = XLSX.utils.aoa_to_sheet(instructionsRows);
+  wsInstructions['!cols'] = [{ wch: 80 }];
+  // Título em bold
+  if (wsInstructions['A1']) {
+    wsInstructions['A1'].s = { font: { bold: true, sz: 14 }, alignment: { horizontal: 'center' } };
+  }
+  XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instruções');
 
   const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const filename = `template-funcionarios-${timestamp}.xlsx`;
@@ -146,16 +273,50 @@ export const validateEmployeeData = (
   return errors;
 };
 
-export const parseEmployeeSpreadsheet = (file: File): Promise<ImportValidationResult> => {
+/**
+ * Parse + valida planilha Excel.
+ *
+ * Modos:
+ * - SEM context (legacy): usa validateEmployeeData (validação básica nome+CPF
+ *   das 9 colunas iniciais). Mantido pra retro-compat com callers antigos.
+ * - COM context (combo H): usa validateImportRow do validator novo, lendo
+ *   todas as 25 colunas do template. Retorna `rowDetails` e `rowsWithWarnings`
+ *   no result pra UI mostrar avisos detalhados.
+ *
+ * Em ambos os modos a função LÊ o arquivo via FileReader e parseia via SheetJS.
+ * Não toca no Supabase — caller monta `ValidationContext` antes de chamar
+ * (com cross-check de CPFs feito por ele).
+ */
+export const parseEmployeeSpreadsheet = (
+  file: File,
+  context?: ValidationContext,
+): Promise<ImportValidationResult> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        // cellDates:true faz o SheetJS materializar dates como Date (em vez de
+        // number serial), o que ajuda o parseDate do validator a funcionar
+        // sem precisar saber de offset Excel.
+        const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
 
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        if (context) {
+          // Modo novo: lê como objects (header → key) e usa validateImportRow.
+          const rowsAsObjects = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, {
+            defval: '',
+          });
+          if (rowsAsObjects.length === 0) {
+            reject(new Error('Planilha vazia ou sem dados'));
+            return;
+          }
+          resolve(parseWithValidator(rowsAsObjects, context));
+          return;
+        }
+
+        // Modo legacy (pré-combo H) — compat com callers antigos.
         const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as string[][];
 
         if (jsonData.length < 2) {
@@ -243,6 +404,109 @@ export const parseEmployeeSpreadsheet = (file: File): Promise<ImportValidationRe
     reader.readAsBinaryString(file);
   });
 };
+
+/**
+ * Modo novo (combo H) do parser — usa validateImportRow do validator novo.
+ * `context.cpfsInThisFile` é mutado durante o loop (acumula CPFs já vistos
+ * pra detectar duplicação no próprio arquivo).
+ */
+function parseWithValidator(
+  rows: Array<Record<string, unknown>>,
+  contextInput: ValidationContext,
+): ImportValidationResult {
+  // Clona o set pra não mutar o input do caller (encapsulamento).
+  const context: ValidationContext = {
+    ...contextInput,
+    cpfsInThisFile: new Set(contextInput.cpfsInThisFile),
+  };
+
+  const rowDetails: ImportRow[] = [];
+  const valid: EmployeeImportData[] = [];
+  const rowsWithWarnings: ImportRow[] = [];
+  const existingInThisCompany: EmployeeImportData[] = [];
+  const existingInOtherCompany: EmployeeImportData[] = [];
+  const errors: ValidationError[] = [];
+  const duplicateCPFs: string[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const raw = rows[i];
+    if (!raw) continue;
+    // Linha "completamente vazia" (só strings vazias / nulls) — pula sem warning.
+    const hasAnyValue = Object.values(raw).some((v) => v !== '' && v != null);
+    if (!hasAnyValue) continue;
+
+    // rowNumber humano: 1 = header, 2 = primeira linha de dados → i + 2
+    const rowNumber = i + 2;
+    const result = validateImportRow(raw, rowNumber, context);
+    rowDetails.push(result);
+
+    // Espelha errors estruturados em ValidationError[] pra retro-compat.
+    for (const err of result.errors) {
+      errors.push({ row: rowNumber, field: err.field, message: err.message, value: '' });
+      if (err.code === 'cpf_duplicate_in_file' && result.parsed.cpf) {
+        duplicateCPFs.push(formatCPF(result.parsed.cpf));
+      }
+    }
+
+    // Se há erro, pula classificação como "valid".
+    if (result.errors.length > 0) continue;
+
+    const importData = parsedToImportData(result.parsed);
+
+    // CPF existente na empresa atual já vira ERROR no validator (não chega aqui).
+    // Se existe em OUTRA empresa, é só warning — vai pra valid + lista informativa.
+    const inOther = result.warnings.some((w) => w.code === 'cpf_exists_other_company');
+    if (inOther) existingInOtherCompany.push(importData);
+
+    valid.push(importData);
+    if (result.warnings.length > 0) rowsWithWarnings.push(result);
+
+    // Adiciona ao set local de CPFs (permite detectar duplicatas em linhas seguintes).
+    context.cpfsInThisFile.add(result.parsed.cpf);
+  }
+
+  // existingInThisCompany: linhas que tiveram error 'cpf_exists_in_company'
+  // (já foram pra `errors` acima; aqui montamos lista pra UI mostrar separado).
+  for (const r of rowDetails) {
+    if (r.errors.some((e) => e.code === 'cpf_exists_in_company')) {
+      existingInThisCompany.push(parsedToImportData(r.parsed));
+    }
+  }
+
+  return {
+    valid,
+    errors,
+    duplicateCPFs: Array.from(new Set(duplicateCPFs)),
+    existingInThisCompany,
+    existingInOtherCompany,
+    rowDetails,
+    rowsWithWarnings,
+  };
+}
+
+export function parsedToImportData(p: ParsedEmployee): EmployeeImportData {
+  return {
+    name: p.name,
+    cpf: p.cpf,
+    pixKey: p.pix_key ?? null,
+    pixType: p.pix_type ?? null,
+    address: p.address ?? null,
+    neighborhood: p.neighborhood ?? null,
+    city: p.city ?? null,
+    state: p.state ?? null,
+    zipCode: p.zip_code ?? null,
+    pin: p.pin ?? null,
+    employmentType: p.employment_type ?? null,
+    functionRole: p.function_role ?? null,
+    badgeNumber: p.badge_number ?? null,
+    pis: p.pis ?? null,
+    scheduleType: p.schedule_type ?? null,
+    expectedSchedule: p.expected_schedule ?? null,
+    markingCount: p.marking_count ?? null,
+    hireDate: p.hire_date ?? null,
+    contractType: p.contract_type ?? null,
+  };
+}
 
 export const generateErrorReport = (
   errors: ValidationError[],

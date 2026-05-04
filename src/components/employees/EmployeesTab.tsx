@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound, Clock, Briefcase, Calendar, Hash, Save } from 'lucide-react';
-import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee, bulkCreateEmployees, setEmployeePin, resetEmployeePin } from '../../services/database';
+import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee, bulkCreateEmployees, setEmployeePin, resetEmployeePin, getCompanies } from '../../services/database';
 import { supabase } from '../../lib/supabase';
 
 const SCHEDULE_DAY_LABELS: ReadonlyArray<{ index: number; short: string; long: string }> = [
@@ -28,7 +28,8 @@ function scheduleSum(schedule: number[]): number {
   return schedule.reduce((a, b) => a + (Number(b) || 0), 0);
 }
 import { validateCPF, formatCPF } from '../../utils/validation';
-import { generateEmployeeTemplate, parseEmployeeSpreadsheet, generateErrorReport, generateImportReport, ImportValidationResult, EmployeeImportData } from '../../utils/employeeImport';
+import { generateEmployeeTemplate, parseEmployeeSpreadsheet, generateErrorReport, generateImportReport, parsedToImportData, ImportValidationResult, EmployeeImportData } from '../../utils/employeeImport';
+import { validateImportRow, normalizeCPF, type ValidationContext, type ImportRow } from '../../utils/employeeImportValidation';
 import { useCompany } from '../../contexts/CompanyContext';
 import toast from 'react-hot-toast';
 
@@ -94,6 +95,10 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   const [importStep, setImportStep] = useState<'upload' | 'preview' | 'result'>('upload');
   const [importResult, setImportResult] = useState<{ success: number; errors: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Combo H — sub-fase 2.19: contexto salvo pra revalidação após edição inline
+  // (4 campos editáveis no preview: nome, cpf, pis, data_admissao).
+  const [validationContext, setValidationContext] = useState<ValidationContext | null>(null);
+  const [editingCell, setEditingCell] = useState<{ rowNumber: number; field: string } | null>(null);
 
   const loadEmployees = async () => {
     try {
@@ -288,7 +293,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
   const handleDownloadTemplate = () => {
     try {
-      generateEmployeeTemplate();
+      // Combo H: passa defaults da empresa pra preencher exemplos no template.
+      generateEmployeeTemplate({
+        defaultMarkingCount: (company?.default_marking_count as 2 | 4 | undefined) ?? 2,
+        defaultSchedule: company?.default_schedule ?? undefined,
+        defaultContractType: 'CLT',
+      });
       toast.success('Template baixado com sucesso!');
     } catch (error) {
       console.error('Erro ao gerar template:', error);
@@ -315,56 +325,70 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
   const handleProcessFile = async () => {
     if (!importFile) return;
+    if (!company?.id) {
+      toast.error('Empresa não selecionada');
+      return;
+    }
 
     try {
       setImporting(true);
-      const result = await parseEmployeeSpreadsheet(importFile);
 
-      if (result.valid.length === 0 && result.errors.length === 0) {
+      // Combo H: monta ValidationContext ANTES de chamar o parser. Cross-check
+      // de CPFs e nomes de empresas via getAllEmployees() + getCompanies()
+      // em paralelo. Validator novo (validateImportRow) usa esse contexto
+      // pra classificar errors/warnings corretamente.
+      const [thisCompanyEmployees, allEmployees, companies] = await Promise.all([
+        getAllEmployees(undefined, company.id),
+        getAllEmployees(),
+        getCompanies(),
+      ]);
+
+      const companyIdToName = new Map<string, string>();
+      for (const c of companies) {
+        companyIdToName.set(c.id, c.display_name || c.legal_name || 'Empresa');
+      }
+
+      const existingCpfsInCompany = new Set(
+        thisCompanyEmployees.map((e) => normalizeCPF(e.cpf)),
+      );
+      const existingCpfsOtherCompanies = new Map<string, string>();
+      for (const emp of allEmployees) {
+        const cpfNorm = normalizeCPF(emp.cpf);
+        const empCompanyId = (emp as Employee & { company_id?: string }).company_id;
+        if (empCompanyId && empCompanyId !== company.id && !existingCpfsInCompany.has(cpfNorm)) {
+          existingCpfsOtherCompanies.set(
+            cpfNorm,
+            companyIdToName.get(empCompanyId) ?? 'Outra empresa',
+          );
+        }
+      }
+
+      const context: ValidationContext = {
+        existingCpfsInCompany,
+        existingCpfsOtherCompanies,
+        companyDefaults: {
+          default_marking_count: company.default_marking_count ?? 2,
+          default_schedule: company.default_schedule ?? null,
+        },
+        cpfsInThisFile: new Set(),
+      };
+
+      const result = await parseEmployeeSpreadsheet(importFile, context);
+
+      if (result.valid.length === 0 && result.errors.length === 0 && (result.rowDetails?.length ?? 0) === 0) {
         toast.error('Planilha vazia ou sem dados válidos');
         return;
       }
 
-      // Cross-check com o banco multi-empresa:
-      // - CPFs já cadastrados NA empresa atual → vermelho (não importar)
-      // - CPFs cadastrados em OUTRA empresa → amarelo (informativo, importarão mesmo assim)
-      const enriched: ImportValidationResult = { ...result };
-      if (company?.id && result.valid.length > 0) {
-        const [thisCompanyEmployees, allEmployees] = await Promise.all([
-          getAllEmployees(undefined, company.id),
-          getAllEmployees(),
-        ]);
-        const cpfsThis = new Set(thisCompanyEmployees.map(e => e.cpf));
-        const cpfsAll = new Set(allEmployees.map(e => e.cpf));
-
-        const pureValid: EmployeeImportData[] = [];
-        const inThis: EmployeeImportData[] = [];
-        const inOther: EmployeeImportData[] = [];
-
-        for (const emp of result.valid) {
-          if (cpfsThis.has(emp.cpf)) {
-            inThis.push(emp);
-          } else if (cpfsAll.has(emp.cpf)) {
-            inOther.push(emp);
-            pureValid.push(emp); // pode importar — empresa é distinta
-          } else {
-            pureValid.push(emp);
-          }
-        }
-
-        enriched.valid = pureValid;
-        enriched.existingInThisCompany = inThis;
-        enriched.existingInOtherCompany = inOther;
-      }
-
-      setImportValidation(enriched);
+      setValidationContext(context);
+      setImportValidation(result);
       setImportStep('preview');
 
-      const blockedCount = enriched.existingInThisCompany?.length ?? 0;
-      if (enriched.errors.length > 0 || blockedCount > 0) {
-        toast.error(`${enriched.errors.length + blockedCount} linha(s) com problema`);
+      const blockedCount = result.existingInThisCompany?.length ?? 0;
+      if (result.errors.length > 0 || blockedCount > 0) {
+        toast.error(`${result.errors.length + blockedCount} linha(s) com problema`);
       } else {
-        toast.success(`${enriched.valid.length} funcionário(s) válido(s) encontrado(s)`);
+        toast.success(`${result.valid.length} funcionário(s) válido(s) encontrado(s)`);
       }
     } catch (error) {
       console.error('Erro ao processar arquivo:', error);
@@ -372,6 +396,79 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     } finally {
       setImporting(false);
     }
+  };
+
+  /**
+   * Reclassifica importValidation a partir de uma lista atualizada de rowDetails.
+   * Usado após edição inline pra recompor valid/errors/existingInX sem
+   * reler o Excel.
+   */
+  const rebuildValidationFromRowDetails = (details: ImportRow[]): ImportValidationResult => {
+    const valid: EmployeeImportData[] = [];
+    const rowsWithWarnings: ImportRow[] = [];
+    const existingInThisCompany: EmployeeImportData[] = [];
+    const existingInOtherCompany: EmployeeImportData[] = [];
+    const errors: ImportValidationResult['errors'] = [];
+    const duplicateCPFs: string[] = [];
+
+    for (const r of details) {
+      for (const err of r.errors) {
+        errors.push({ row: r.rowNumber, field: err.field, message: err.message, value: '' });
+        if (err.code === 'cpf_duplicate_in_file' && r.parsed.cpf) {
+          duplicateCPFs.push(formatCPF(r.parsed.cpf));
+        }
+      }
+      if (r.errors.some((e) => e.code === 'cpf_exists_in_company')) {
+        existingInThisCompany.push(parsedToImportData(r.parsed));
+        continue;
+      }
+      if (r.errors.length > 0) continue;
+
+      const data = parsedToImportData(r.parsed);
+      if (r.warnings.some((w) => w.code === 'cpf_exists_other_company')) {
+        existingInOtherCompany.push(data);
+      }
+      valid.push(data);
+      if (r.warnings.length > 0) rowsWithWarnings.push(r);
+    }
+
+    return {
+      valid,
+      errors,
+      duplicateCPFs: Array.from(new Set(duplicateCPFs)),
+      existingInThisCompany,
+      existingInOtherCompany,
+      rowDetails: details,
+      rowsWithWarnings,
+    };
+  };
+
+  /**
+   * Edita inline um campo de uma linha e re-valida. Limitado a 4 campos
+   * (nome, cpf, pis, data_admissao) pra escopo controlado.
+   */
+  const handleInlineEdit = (rowNumber: number, field: string, newValue: string) => {
+    if (!importValidation?.rowDetails || !validationContext) return;
+
+    const updatedDetails = importValidation.rowDetails.map((d) => {
+      if (d.rowNumber !== rowNumber) return d;
+      const newRaw = { ...d.rawData, [field]: newValue };
+      // Reconstrói cpfsInThisFile EXCLUINDO esta linha — evita que ela acuse
+      // "cpf_duplicate_in_file" de si mesma quando o CPF é editado.
+      const ctxForThisRow: ValidationContext = {
+        ...validationContext,
+        cpfsInThisFile: new Set(
+          importValidation.rowDetails!
+            .filter((x) => x.rowNumber !== rowNumber)
+            .map((x) => x.parsed.cpf)
+            .filter((cpf): cpf is string => !!cpf),
+        ),
+      };
+      return validateImportRow(newRaw, rowNumber, ctxForThisRow);
+    });
+
+    setImportValidation(rebuildValidationFromRowDetails(updatedDetails));
+    setEditingCell(null);
   };
 
   const handleDownloadErrors = () => {
@@ -423,6 +520,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     setImportValidation(null);
     setImportStep('upload');
     setImportResult(null);
+    setValidationContext(null);
+    setEditingCell(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -1459,12 +1558,20 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
               {importStep === 'preview' && importValidation && (
                 <div className="space-y-6">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-green-700">Válidos</span>
+                        <span className="text-sm text-green-700">Prontos</span>
                         <span className="text-2xl font-bold text-green-600">
                           {importValidation.valid.length}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-amber-700">Com avisos</span>
+                        <span className="text-2xl font-bold text-amber-600">
+                          {importValidation.rowsWithWarnings?.length ?? 0}
                         </span>
                       </div>
                     </div>
@@ -1472,7 +1579,9 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-red-700">Erros</span>
                         <span className="text-2xl font-bold text-red-600">
-                          {importValidation.errors.length}
+                          {importValidation.rowDetails
+                            ? importValidation.rowDetails.filter((r) => r.errors.length > 0).length
+                            : importValidation.errors.length}
                         </span>
                       </div>
                     </div>
@@ -1484,23 +1593,158 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                         </span>
                       </div>
                     </div>
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-amber-700">Em outra empresa</span>
-                        <span className="text-2xl font-bold text-amber-600">
+                        <span className="text-sm text-orange-700">Em outra empresa</span>
+                        <span className="text-2xl font-bold text-orange-600">
                           {importValidation.existingInOtherCompany?.length ?? 0}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {importValidation.valid.length === 0 && (
+                  {importValidation.valid.length === 0 && (importValidation.rowDetails?.length ?? 0) === 0 && (
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center text-sm text-gray-500">
                       Nenhum funcionário válido para importar.
                     </div>
                   )}
 
-                  {importValidation.valid.length > 0 && (
+                  {/* Modo combo H — tabela detalhada com cores semânticas + edição inline */}
+                  {importValidation.rowDetails && importValidation.rowDetails.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                        <CheckCircle className="w-5 h-5 mr-2 text-green-600" />
+                        Pré-visualização ({importValidation.rowDetails.length} linhas)
+                      </h4>
+                      <div className="border rounded-lg overflow-hidden">
+                        <div className="max-h-96 overflow-y-auto overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead className="bg-gray-50 sticky top-0">
+                              <tr>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">CPF</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Função</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Crachá</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">PIS</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Marc.</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Admissão</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {importValidation.rowDetails.map((r) => {
+                                const hasError = r.errors.length > 0;
+                                const hasWarning = r.warnings.length > 0;
+                                const rowCls = hasError
+                                  ? 'bg-red-50 border-l-4 border-red-500'
+                                  : hasWarning
+                                  ? 'bg-amber-50 border-l-4 border-amber-500'
+                                  : '';
+                                const errFor = (field: string) => r.errors.find((e) => e.field === field);
+
+                                // Helper pra célula editável (escopo: nome, cpf, pis, data_admissao).
+                                const renderEditable = (field: string, displayValue: string, currentRaw: string) => {
+                                  const isEditing = editingCell?.rowNumber === r.rowNumber && editingCell.field === field;
+                                  const err = errFor(field);
+                                  if (isEditing) {
+                                    return (
+                                      <input
+                                        type="text"
+                                        defaultValue={currentRaw}
+                                        autoFocus
+                                        onBlur={(e) => handleInlineEdit(r.rowNumber, field, e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                          if (e.key === 'Escape') setEditingCell(null);
+                                        }}
+                                        className="w-full px-2 py-1 border border-blue-400 rounded text-sm"
+                                      />
+                                    );
+                                  }
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingCell({ rowNumber: r.rowNumber, field })}
+                                      title={err ? `${err.message} — clique para editar` : 'Clique para editar'}
+                                      className={`text-left ${err ? 'text-red-700 underline decoration-red-400 decoration-dotted' : 'text-gray-700'}`}
+                                    >
+                                      {displayValue || <span className="text-gray-400 italic">vazio</span>}
+                                    </button>
+                                  );
+                                };
+
+                                const cpfDisplay = r.parsed.cpf ? formatCPF(r.parsed.cpf) : String(r.rawData['cpf'] ?? '');
+                                const dateDisplay = r.parsed.hire_date ?? String(r.rawData['data_admissao'] ?? '');
+
+                                return (
+                                  <React.Fragment key={r.rowNumber}>
+                                    <tr className={rowCls}>
+                                      <td className="px-3 py-2 text-gray-500">{r.rowNumber}</td>
+                                      <td className="px-3 py-2">
+                                        {hasError ? (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-red-100 text-red-800">
+                                            ❌ Erro
+                                          </span>
+                                        ) : hasWarning ? (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800">
+                                            ⚠️ Aviso
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
+                                            ✅ Pronto
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {renderEditable('nome', r.parsed.name, String(r.rawData['nome'] ?? r.parsed.name ?? ''))}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {renderEditable('cpf', cpfDisplay, String(r.rawData['cpf'] ?? r.parsed.cpf ?? ''))}
+                                      </td>
+                                      <td className="px-3 py-2 text-gray-700">{r.parsed.function_role ?? '-'}</td>
+                                      <td className="px-3 py-2 text-gray-700">{r.parsed.badge_number ?? '-'}</td>
+                                      <td className="px-3 py-2">
+                                        {renderEditable('pis', r.parsed.pis ?? '', String(r.rawData['pis'] ?? r.parsed.pis ?? ''))}
+                                      </td>
+                                      <td className="px-3 py-2 text-gray-700">{r.parsed.marking_count ?? '-'}</td>
+                                      <td className="px-3 py-2">
+                                        {renderEditable('data_admissao', dateDisplay, String(r.rawData['data_admissao'] ?? r.parsed.hire_date ?? ''))}
+                                      </td>
+                                    </tr>
+                                    {(hasError || hasWarning) && (
+                                      <tr className={rowCls}>
+                                        <td colSpan={9} className="px-3 pb-2 pt-0">
+                                          <div className="text-xs space-y-0.5">
+                                            {r.errors.map((e, i) => (
+                                              <div key={`e${i}`} className="text-red-700">
+                                                ❌ <strong>{e.field}:</strong> {e.message}
+                                              </div>
+                                            ))}
+                                            {r.warnings.map((w, i) => (
+                                              <div key={`w${i}`} className="text-amber-700">
+                                                ⚠️ <strong>{w.field}:</strong> {w.message}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Clique em campos sublinhados (nome, CPF, PIS, data) para corrigir inline. Tab/Enter aplica, Esc cancela.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Modo legacy — fallback quando rowDetails não foi populado (sem context) */}
+                  {!importValidation.rowDetails && importValidation.valid.length > 0 && (
                     <div>
                       <h4 className="font-medium text-gray-900 mb-3 flex items-center">
                         <CheckCircle className="w-5 h-5 mr-2 text-green-600" />
