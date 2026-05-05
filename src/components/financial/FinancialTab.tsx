@@ -10,6 +10,7 @@ import {
   type BankHoursPreviewItem,
 } from '../../services/database';
 import { useCompany } from '../../contexts/CompanyContext';
+import { shouldShowAllAppliedBanner } from '../../utils/bankHoursUiHelpers';
 import { getBonusValueForType } from '../../utils/bonusHelpers';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
@@ -1944,6 +1945,17 @@ const BankHoursApplyModal: React.FC<BankHoursApplyModalProps> = ({
 
         {!loading && !errorMessage && items.length > 0 && (
           <>
+            {/* COMBO I FIX #3: banner quando 100% dos items já foram aplicados */}
+            {shouldShowAllAppliedBanner(items) && (
+              <div className="bg-amber-50 border border-amber-200 rounded p-3 mb-3 text-sm text-amber-800 flex items-start gap-2">
+                <span className="text-base leading-none">✓</span>
+                <span>
+                  Todos os {items.length} funcionário(s) deste período já tiveram banco de horas aplicado.
+                  Não há nada a fazer aqui.
+                </span>
+              </div>
+            )}
+
             {/* Tabela */}
             <div className="overflow-x-auto border border-gray-200 rounded-md">
               <table className="min-w-full text-sm">
