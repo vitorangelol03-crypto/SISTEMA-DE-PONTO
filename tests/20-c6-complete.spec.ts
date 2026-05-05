@@ -187,9 +187,7 @@ test.describe('C6 — completo', () => {
     // Adiciona linha manual inválida
     await importC6(page, SAFE_DATE);
     const addBtn = page.getByRole('button', { name: /Adicionar/ }).first();
-    if (!(await addBtn.isVisible().catch(() => false))) {
-      test.skip(true, 'Add row não disponível');
-    }
+    await expect(addBtn).toBeVisible({ timeout: 5_000 });
     await addBtn.click();
     // Linha em edição é a última. Salva sem dados (gera linha inválida)
     const cancelBtn = page.getByRole('button', { name: /Cancelar/i }).first();
@@ -198,15 +196,12 @@ test.describe('C6 — completo', () => {
     }
 
     await page.getByRole('button', { name: /Baixar Planilha C6/ }).click();
-    // Pode abrir modal de validação (Atenção)
+    // Modal de validação (Atenção) sempre aparece — teste cria linha inválida acima.
     const generateAnyway = page.getByRole('button', { name: /Gerar mesmo assim/ });
-    if (await generateAnyway.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      const downloadPromise = page.waitForEvent('download', { timeout: 15_000 });
-      await generateAnyway.click();
-      const dl = await downloadPromise;
-      expect(dl.suggestedFilename()).toMatch(/\.xlsx$/);
-    } else {
-      test.skip(true, 'Modal de validação não apareceu (sem inválidos no lote)');
-    }
+    await expect(generateAnyway).toBeVisible({ timeout: 3_000 });
+    const downloadPromise = page.waitForEvent('download', { timeout: 15_000 });
+    await generateAnyway.click();
+    const dl = await downloadPromise;
+    expect(dl.suggestedFilename()).toMatch(/\.xlsx$/);
   });
 });

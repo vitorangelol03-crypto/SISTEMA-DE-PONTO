@@ -150,3 +150,63 @@ Alternativa mais simples: tornar o INSERT a 1ª operação (se falhar, não
 fazer UPDATE). Mas perde idempotência via bank_hours_applied_at.
 
 **Status:** Pendente, decisão arquitetural pendente.
+
+## 7 testes pulados por seletor desatualizado (Grupo B?-stale)
+
+**Descoberta:** Investigação dos 27 skips pré-push final (Combo I+).
+
+**Contexto:**
+Após combos F/G/H/I melhorarem várias UIs, 7 testes E2E ficaram pulados
+porque seus seletores não acham mais os elementos atuais (mas elementos
+ainda existem com outros seletores/roles).
+
+**Lista:**
+| # | Arquivo:linha | Teste | Causa do skip |
+|---|---|---|---|
+| 1 | tests/16-financial-complete.spec.ts:126 | "busca por nome" | Sem getByPlaceholder(/Buscar.*nome/i) |
+| 2 | tests/16-financial-complete.spec.ts:142 | "filtro employment_type" | Existe, mas como botões, não <select> |
+| 3 | tests/16-financial-complete.spec.ts:177 | "aba Histórico" | Não como <button> (provável tab role) |
+| 4 | tests/15-attendance-complete.spec.ts:166 | "bulk-approve" | Botão não exposto onde esperado |
+| 5 | tests/20-c6-complete.spec.ts:139 | "edição inline" | Sem 3 inputs esperados |
+| 6 | tests/24-admin-complete.spec.ts:62 | "toggle facial global" | Toggle existe, seletor mudou |
+| 7 | tests/24-admin-complete.spec.ts:89 | "reset facial individual" | Listagem não exposta nesse seletor |
+
+**Severidade:** Baixa
+- Funcionalidade existe e funciona em produção (validação manual)
+- Cobertura E2E reduzida temporariamente
+- Vitest cobre lógica subjacente em vários casos
+
+**Solução proposta:**
+Reescrita pontual de cada teste pra usar seletores atuais. Sub-fase futura
+"Refresh de testes E2E pós-Combo I" — ~2-3h trabalho.
+
+**Status:** Pendente, não bloqueia release.
+
+## Bug UI ativo: toggle "auto-weekly" não muda valor
+
+**Local:** tests/19-payment-periods-complete.spec.ts:95 (test reproduz o bug)
+
+**Sintoma:**
+No componente de Payment Periods, há um toggle "auto-weekly" visível na UI
+e clicável. O click registra interação visual (toggle alterna), mas o valor
+no banco (`auto_weekly` em payment_periods config) NÃO muda.
+
+**Reprodução:**
+- Antes: cfgBefore.auto_weekly = X (true ou false)
+- Click no toggle
+- Depois: cfgAfter.auto_weekly = MESMO valor X (deveria ser !X)
+- Test fail: expect(!!cfgAfter?.auto_weekly).not.toBe(before)
+
+**Severidade:** Média
+- Toggle anunciado mas não funciona
+- Em produção, supervisores acham que estão ligando/desligando feature,
+  mas valor real fica inalterado
+
+**Solução proposta:**
+Investigar onChange do toggle em PaymentPeriodsTab — provavelmente:
+- onChange não chama updatePaymentPeriodConfig
+- OU updatePaymentPeriodConfig falha silenciosamente
+- OU re-render não usa o valor novo
+
+**Status:** Pendente, sub-fase de fix futura. Bug REAL de produção,
+diferente dos 7 stale acima (que são só seletor de teste).
