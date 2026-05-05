@@ -10,7 +10,11 @@ import {
   type BankHoursPreviewItem,
 } from '../../services/database';
 import { useCompany } from '../../contexts/CompanyContext';
-import { shouldShowAllAppliedBanner } from '../../utils/bankHoursUiHelpers';
+import {
+  shouldShowAllAppliedBanner,
+  selectAllPendingState,
+  toggleAllPending,
+} from '../../utils/bankHoursUiHelpers';
 import { getBonusValueForType } from '../../utils/bonusHelpers';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
@@ -1901,6 +1905,9 @@ const BankHoursApplyModal: React.FC<BankHoursApplyModalProps> = ({
     ? `${formatDateBR(period.start_date)} a ${formatDateBR(period.end_date)}`
     : '—';
 
+  // COMBO I FIX #2: estado tri-state do checkbox "marcar todos pendentes" no header.
+  const headerSelectAll = selectAllPendingState(items, applyFlags);
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
       <div className="bg-white p-4 sm:p-6 rounded-lg shadow-xl max-w-[95vw] sm:max-w-5xl w-full max-h-[95vh] overflow-y-auto">
@@ -1961,7 +1968,26 @@ const BankHoursApplyModal: React.FC<BankHoursApplyModalProps> = ({
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-3 py-2 text-left font-medium text-gray-700">Aplicar</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700" aria-label="Aplicar">
+                      {/* COMBO I FIX #2: checkbox tri-state pra marcar/desmarcar todos pendentes */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={(el) => {
+                            if (el) el.indeterminate = headerSelectAll.indeterminate;
+                          }}
+                          type="checkbox"
+                          checked={headerSelectAll.checked}
+                          disabled={!headerSelectAll.hasPending || !!progress}
+                          onChange={(e) => {
+                            setApplyFlags(prev => toggleAllPending(items, prev, e.target.checked));
+                          }}
+                          title="Marcar/desmarcar todos pendentes"
+                          aria-label="Marcar todos pendentes"
+                          className="w-4 h-4 rounded"
+                        />
+                        <span>Aplicar</span>
+                      </div>
+                    </th>
                     <th className="px-3 py-2 text-left font-medium text-gray-700">Funcionário</th>
                     <th className="px-3 py-2 text-right font-medium text-gray-700">Saldo</th>
                     <th className="px-3 py-2 text-right font-medium text-gray-700">Valor</th>
