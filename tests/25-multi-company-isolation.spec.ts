@@ -154,8 +154,8 @@ test.describe('Isolamento multi-empresa', () => {
     expect(count2).toBe(0);
   });
 
-  // TODO: re-enable após push final do projeto (constraints compostos vão voltar)
-  test.fixme('3. CPF idêntico em Caratinga e Ponte Nova: cada empresa vê o seu', async () => {
+  // COMBO I 1.21: reabilitado após migration UNIQUE multi-empresa (commit 0db258b)
+  test('3. CPF idêntico em Caratinga e Ponte Nova: cada empresa vê o seu', async () => {
     const s = getClient();
     const sharedCpf = `99${Date.now().toString().slice(-9)}`.slice(0, 11);
     const c = await createEmployeeForCompany(s, CARATINGA_ID, 'shared_C', sharedCpf);
@@ -326,8 +326,8 @@ test.describe('Isolamento multi-empresa', () => {
     expect((errsP ?? []).length).toBe(1);
   });
 
-  // TODO: re-enable após push final do projeto (constraints compostos vão voltar)
-  test.fixme('9. triage_errors: isolados por company_id direto', async () => {
+  // COMBO I 1.21: reabilitado após migration UNIQUE multi-empresa (commit 0db258b)
+  test('9. triage_errors: isolados por company_id direto', async () => {
     const s = getClient();
     await s.from('triage_errors').insert([
       { date: SAFE_DATE, triage_type: 'quantity', error_count: 5, direct_value: 0, observations: `${PREFIX}triag_C`, created_by: '9999', company_id: CARATINGA_ID },
