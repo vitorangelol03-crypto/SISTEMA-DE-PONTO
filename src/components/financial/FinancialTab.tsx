@@ -1814,16 +1814,26 @@ const BankHoursApplyModal: React.FC<BankHoursApplyModalProps> = ({
     return () => { cancelled = true; };
   }, [companyId, paymentPeriodId]);
 
+  // COMBO I FIX #1: contar skips com/sem motivo separadamente. Isso permite
+  // habilitar o botão quando o usuário quer só salvar overrides (sem aplicar
+  // nada), e bloquear submit enquanto há motivo pendente.
   const aggregated = useMemo(() => {
     let selected = 0, totalCredit = 0, totalDebit = 0;
+    let skipsWithReason = 0, skipsWithoutReason = 0;
     for (const item of items) {
-      if (!applyFlags[item.employeeId]) continue;
-      selected++;
-      if (item.valorAplicar > 0) totalCredit += item.valorAplicar;
-      if (item.valorAplicar < 0) totalDebit += Math.abs(item.valorAplicar);
+      if (item.status !== 'pending') continue;
+      if (applyFlags[item.employeeId]) {
+        selected++;
+        if (item.valorAplicar > 0) totalCredit += item.valorAplicar;
+        if (item.valorAplicar < 0) totalDebit += Math.abs(item.valorAplicar);
+      } else {
+        const reason = (skipReasons[item.employeeId] || '').trim();
+        if (reason) skipsWithReason++;
+        else skipsWithoutReason++;
+      }
     }
-    return { selected, totalCredit, totalDebit, net: totalCredit - totalDebit };
-  }, [items, applyFlags]);
+    return { selected, totalCredit, totalDebit, net: totalCredit - totalDebit, skipsWithReason, skipsWithoutReason };
+  }, [items, applyFlags, skipReasons]);
 
   const handleApply = async () => {
     const toApply = items.filter(i => applyFlags[i.employeeId] && i.status === 'pending');
@@ -2045,12 +2055,32 @@ const BankHoursApplyModal: React.FC<BankHoursApplyModalProps> = ({
 
         {/* Botões */}
         <div className="flex flex-col sm:flex-row gap-2 mt-4">
+          {/* COMBO I FIX #1: habilita quando há ações válidas (selected ou
+              skips_com_motivo); bloqueia enquanto há skip sem motivo
+              preenchido pra forçar fluxo correto na UI. */}
           <button
             onClick={handleApply}
-            disabled={loading || !!progress || aggregated.selected === 0}
+            disabled={
+              loading ||
+              !!progress ||
+              (aggregated.selected === 0 && aggregated.skipsWithReason === 0) ||
+              aggregated.skipsWithoutReason > 0
+            }
             className="flex-1 px-4 py-3 bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
           >
-            {progress ? 'Aplicando…' : `Aplicar selecionados (${aggregated.selected})`}
+            {progress
+              ? 'Aplicando…'
+              : (() => {
+                  const sel = aggregated.selected;
+                  const skip = aggregated.skipsWithReason;
+                  const pending = aggregated.skipsWithoutReason;
+                  let main: string;
+                  if (sel === 0 && skip === 0) main = 'Aplicar selecionados (0)';
+                  else if (sel > 0 && skip === 0) main = `Aplicar selecionados (${sel})`;
+                  else if (sel === 0 && skip > 0) main = `Salvar overrides (${skip})`;
+                  else main = `Aplicar (${sel}) + Salvar overrides (${skip})`;
+                  return pending > 0 ? `${main} — preencha ${pending} motivo(s)` : main;
+                })()}
           </button>
           <button
             onClick={onClose}
