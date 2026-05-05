@@ -485,6 +485,10 @@ function parseWithValidator(
 }
 
 export function parsedToImportData(p: ParsedEmployee): EmployeeImportData {
+  // Campos novos da Etapa 2 (combo H): manter undefined quando ausente, NÃO
+  // forçar null. A guarda `if (employee.X !== undefined)` em bulkCreateEmployees
+  // depende disso pra preservar os defaults Postgres das colunas (ex:
+  // schedule_type='Normal', contract_type='CLT'). Forçar null sobrescrevia.
   return {
     name: p.name,
     cpf: p.cpf,
@@ -495,16 +499,16 @@ export function parsedToImportData(p: ParsedEmployee): EmployeeImportData {
     city: p.city ?? null,
     state: p.state ?? null,
     zipCode: p.zip_code ?? null,
-    pin: p.pin ?? null,
-    employmentType: p.employment_type ?? null,
-    functionRole: p.function_role ?? null,
-    badgeNumber: p.badge_number ?? null,
-    pis: p.pis ?? null,
-    scheduleType: p.schedule_type ?? null,
-    expectedSchedule: p.expected_schedule ?? null,
-    markingCount: p.marking_count ?? null,
-    hireDate: p.hire_date ?? null,
-    contractType: p.contract_type ?? null,
+    pin: p.pin,
+    employmentType: p.employment_type,
+    functionRole: p.function_role,
+    badgeNumber: p.badge_number,
+    pis: p.pis,
+    scheduleType: p.schedule_type,
+    expectedSchedule: p.expected_schedule,
+    markingCount: p.marking_count,
+    hireDate: p.hire_date,
+    contractType: p.contract_type,
   };
 }
 

@@ -652,3 +652,309 @@ describe('previewBankHoursForPeriod', () => {
     expect(items[2].status).toBe('no_payment');
   });
 });
+
+// ─── Edge cases extremos — Combo I (sub-fase 2.21+2.22) ───────────────────
+//
+// 11 testes que cobrem cenários patológicos / extremos / robustez:
+// - Saldos extremos (1min, 50h, débito gigante)
+// - Idempotência (10x consecutivos)
+// - forceOverride / override ON
+// - after_apply variantes side-by-side
+// - Caso sem payment no período
+
+describe('Edge cases extremos - Combo I', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // === GRUPO A: Saldos extremos ===
+
+  it('1. Débito de 10h dailyRate=100 → amountNet=-125 (movido do E2E)', async () => {
+    const company = fixtureCompany();
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null }, // UPDATE
+      ],
+      attendance: [
+        { data: [{ bank_credit_minutes: 0, bank_debit_minutes: 600 }], error: null }, // 10h débito
+        { data: null, error: null }, // UPDATE (zero_balance)
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-edge-1' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.applied).toBe(true);
+    expect(r.result?.amountCredit).toBe(0);
+    expect(r.result?.amountDebit).toBe(125); // (600/60) × 12.50 = 125 (positivo absoluto)
+    expect(r.result?.amountNet).toBe(-125);
+    expect(r.paymentBefore).toBe(1000);
+    expect(r.paymentAfter).toBe(875); // 1000 - 125
+  });
+
+  it('2. Saldo de 1 hora exata (60min) dailyRate=100 → amountNet=12.50', async () => {
+    const company = fixtureCompany();
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{ bank_credit_minutes: 60, bank_debit_minutes: 0 }], error: null },
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-edge-2' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.result?.amountCredit).toBe(12.5); // (60/60) × 12.50
+    expect(r.result?.amountNet).toBe(12.5);
+  });
+
+  it('3. Saldo de 1 minuto (1/60h) dailyRate=100 → arredondamento 0.21', async () => {
+    const company = fixtureCompany();
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{ bank_credit_minutes: 1, bank_debit_minutes: 0 }], error: null }, // 1 minuto
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-edge-3' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    // 1min × 12.50/60 = 0.20833... → round2 = 0.21
+    expect(r.result?.amountCredit).toBe(0.21);
+    expect(r.applied).toBe(true);
+  });
+
+  it('4. Crédito gigante (50h = 3000min) dailyRate=100 → amountNet=625.00', async () => {
+    const company = fixtureCompany();
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{ bank_credit_minutes: 3000, bank_debit_minutes: 0 }], error: null }, // 50h
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-edge-4' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.result?.amountCredit).toBe(625); // 50h × 12.50
+    expect(r.result?.amountNet).toBe(625);
+    expect(r.paymentAfter).toBe(1625); // 1000 + 625
+  });
+
+  // === GRUPO B: Idempotência / overrides ===
+
+  it('5. forceOverride=true sobrepõe override OFF (admin força aplicação)', async () => {
+    const company = fixtureCompany();
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      // Override OFF presente
+      bank_hours_overrides: [{ data: [{ apply_bank_hours: false, reason: 'antigo' }], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null },
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-edge-5' }, error: null }],
+    });
+    // forceOverride=true: ignora o override OFF
+    const r = await applyBankHoursToPayment({ ...ARGS, forceOverride: true });
+    expect(r.applied).toBe(true);
+    expect(r.skipped).toBe(false);
+    expect(r.result?.amountNet).toBe(25);
+  });
+
+  it('6. Override ON com forceOverride=false default: aplica mesmo com toggle empresa OFF', async () => {
+    // Empresa toggle OFF — mas override.apply_bank_hours=true força ON
+    const company = fixtureCompany({ bank_hours_apply_in_payment: false });
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [{ apply_bank_hours: true, reason: 'política excepcional' }], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null },
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-edge-6' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS); // forceOverride não passado (default false)
+    expect(r.applied).toBe(true);
+    expect(r.result?.amountNet).toBe(25);
+  });
+
+  // === GRUPO C: after_apply variantes ===
+
+  it('7. after_apply=keep_history: log e payment ok, attendance NÃO é zerada', async () => {
+    const company = fixtureCompany({ bank_hours_after_apply: 'keep_history' });
+    const fromMock = setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      // SÓ 1 entry pra attendance — keep_history NÃO chama UPDATE
+      attendance: [{ data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
+      bank_hours_application_log: [{ data: { id: 'log-edge-7' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.applied).toBe(true);
+    expect(r.result?.amountNet).toBe(25);
+    // Attendance só foi chamado 1x (SELECT) — não houve UPDATE
+    const attendanceCalls = fromMock.mock.calls.filter((c) => c[0] === 'attendance');
+    expect(attendanceCalls.length).toBe(1);
+  });
+
+  it('8. Side-by-side: zero_balance vs keep_history → MESMO cálculo, DIFERENTE side-effect', async () => {
+    // Run 1: zero_balance
+    const companyZB = fixtureCompany({ bank_hours_after_apply: 'zero_balance' });
+    const fromMockZB = setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(companyZB), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null },
+        { data: null, error: null }, // UPDATE pra zerar
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-zb' }, error: null }],
+    });
+    const rZB = await applyBankHoursToPayment(ARGS);
+
+    // Run 2: keep_history
+    const companyKH = fixtureCompany({ bank_hours_after_apply: 'keep_history' });
+    const fromMockKH = setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(companyKH), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [{ data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
+      bank_hours_application_log: [{ data: { id: 'log-kh' }, error: null }],
+    });
+    const rKH = await applyBankHoursToPayment(ARGS);
+
+    // Mesmo cálculo: ambos resultados financeiros idênticos
+    expect(rZB.result?.amountNet).toBe(rKH.result?.amountNet);
+    expect(rZB.paymentBefore).toBe(rKH.paymentBefore);
+    expect(rZB.paymentAfter).toBe(rKH.paymentAfter);
+    expect(rZB.applied).toBe(true);
+    expect(rKH.applied).toBe(true);
+
+    // Diferença ÚNICA: zero_balance chama attendance.update (2 calls); keep_history não (1 call)
+    const zbAttCalls = fromMockZB.mock.calls.filter((c) => c[0] === 'attendance').length;
+    const khAttCalls = fromMockKH.mock.calls.filter((c) => c[0] === 'attendance').length;
+    expect(zbAttCalls).toBe(2); // SELECT + UPDATE
+    expect(khAttCalls).toBe(1); // só SELECT
+  });
+
+  // === GRUPO D: Robustez ===
+
+  it('9. 10x consecutivos no mesmo período: 1ª aplica, 9 retornam already_applied', async () => {
+    let appliedCount = 0;
+    let alreadyAppliedCount = 0;
+
+    for (let i = 0; i < 10; i++) {
+      const company = fixtureCompany();
+      // 1ª iteração: payment limpo. 2ª-10ª: payment já com applied_at.
+      const paymentData = i === 0
+        ? paymentRow()
+        : paymentRow({ bank_hours_applied_at: '2026-04-15T12:00:00Z' });
+      setupSupabaseQueue({
+        employees: [{ data: fixtureEmployee(company), error: null }],
+        payment_periods: [{ data: PERIOD, error: null }],
+        bank_hours_overrides: [{ data: [], error: null }],
+        payments: i === 0
+          ? [{ data: paymentData, error: null }, { data: null, error: null }]
+          : [{ data: paymentData, error: null }], // só SELECT, não chega no UPDATE
+        attendance: i === 0
+          ? [
+              { data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null },
+              { data: null, error: null },
+            ]
+          : [],
+        bank_hours_application_log: i === 0 ? [{ data: { id: `log-9-${i}` }, error: null }] : [],
+      });
+      const r = await applyBankHoursToPayment(ARGS);
+      if (r.applied) appliedCount++;
+      if (r.reason === 'already_applied') alreadyAppliedCount++;
+    }
+    expect(appliedCount).toBe(1);
+    expect(alreadyAppliedCount).toBe(9);
+  });
+
+  it('10. Saldo positivo de 0.01h (1 minuto): cálculo arredonda + payment correto', async () => {
+    // Mesmo input do teste 3 — aqui validamos o EFEITO no payment, não só amountCredit
+    const company = fixtureCompany();
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{ bank_credit_minutes: 1, bank_debit_minutes: 0 }], error: null },
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-edge-10' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.applied).toBe(true);
+    expect(r.result?.amountNet).toBe(0.21);
+    // payment vai de 1000 → 1000.21
+    expect(r.paymentAfter).toBe(1000.21);
+  });
+
+  it('11. Mês sem nenhum payment: reason=no_payment_in_period (sem UPDATE/INSERT)', async () => {
+    const company = fixtureCompany();
+    const fromMock = setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [{ data: null, error: null }], // SELECT vazio
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.success).toBe(false);
+    expect(r.applied).toBe(false);
+    expect(r.reason).toBe('no_payment_in_period');
+    // Nenhum INSERT no log e nenhum UPDATE em payment
+    const logCalls = fromMock.mock.calls.filter((c) => c[0] === 'bank_hours_application_log').length;
+    expect(logCalls).toBe(0);
+    // payments só foi chamado 1x (SELECT que retornou vazio)
+    const paymentsCalls = fromMock.mock.calls.filter((c) => c[0] === 'payments').length;
+    expect(paymentsCalls).toBe(1);
+  });
+});
