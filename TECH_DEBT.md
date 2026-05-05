@@ -25,3 +25,38 @@ Validação após deploy v5:
 - Variação observada: 154 passed/26 skipped/1 failed ↔ 153 passed/27 skipped/1 failed
 - Hipótese: test.skip() com condição dependente de data (virada 30/04→01/05)
 - Falha persistente: tests/10-errors.spec.ts:98 (Triagem flake conhecido)
+
+## Bug de data futura: tests/10-errors.spec.ts:98 — "Triagem: sub-aba abre" (2026-05-05)
+
+Descoberto durante validação V5 do Combo I (passo 6.5.D — Fix #5). Refina a entrada
+"Skip-condicional flutuante" acima: NÃO é flake, é falha determinística por data futura.
+
+**Causa raiz:**
+Linha ~107 do teste calcula `new Date(today.getFullYear(), today.getMonth(), 28)` para
+simular registro de erro de triagem. Quando hoje é antes do dia 28 do mês, a data fica
+no FUTURO, e a regra de negócio "Nenhum funcionário presente nesta data — distribuição
+impossível" bloqueia o submit.
+
+**Reprodução:**
+- Hoje: 2026-05-05
+- Cálculo: `new Date(2026, 4, 28)` → 2026-05-28 (futuro, sem attendance)
+- Toast "Erro de triagem registrado" não aparece
+- expect timeout 10s falha
+
+**Severidade:** Baixa
+- Não afeta produção (regra de negócio nova é correta)
+- Bug é pré-existente, não introduzido pelo Combo I/H/G
+- Comprovado via stash test: rodando sem Fix #5 (3 arquivos stashed), falha igual
+
+**Solução proposta:**
+Trocar a data por uma do PASSADO ou criar attendance no setup do teste pra data
+específica. Exemplo:
+```ts
+// ANTES (frágil - falha quando hoje < dia 28):
+const d = new Date(today.getFullYear(), today.getMonth(), 28);
+
+// DEPOIS (robusto - sempre data passada):
+const d = new Date(today.getFullYear(), today.getMonth() - 1, 15);
+```
+
+**Status:** Pendente — não bloqueador pra Combo I nem push final.

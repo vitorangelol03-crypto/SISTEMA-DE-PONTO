@@ -14,6 +14,7 @@ import {
   type BankHoursPeriod,
   type BankHoursSettings,
 } from '../../utils/bankHoursCalculator';
+import { parseNumericInput, isInRange } from '../../utils/numericInputHelpers';
 
 const DAY_LABELS: ReadonlyArray<{ index: number; label: string; short: string }> = [
   { index: 0, label: 'Domingo',  short: 'Dom' },
@@ -70,17 +71,23 @@ export const CompanySettings: React.FC = () => {
   const [bankHoursEnabled, setBankHoursEnabled] = useState(false);
   const [bankHoursApplyInPayment, setBankHoursApplyInPayment] = useState(false);
   const [bankHoursFormula, setBankHoursFormula] = useState<BankHoursFormula>(BANK_HOURS_DEFAULTS.formula);
-  const [bankHoursExtraMultiplier, setBankHoursExtraMultiplier] = useState(BANK_HOURS_DEFAULTS.extraMultiplier);
-  const [bankHoursCustomValue, setBankHoursCustomValue] = useState(BANK_HOURS_DEFAULTS.customValue);
+  // COMBO I FIX #5: state raw (string) preserva digitação intermediária ("2.", "1,5" etc.)
+  const [extraMultRaw, setExtraMultRaw] = useState<string>(String(BANK_HOURS_DEFAULTS.extraMultiplier));
+  const [customValueRaw, setCustomValueRaw] = useState<string>(String(BANK_HOURS_DEFAULTS.customValue));
   const [bankHoursCreditAction, setBankHoursCreditAction] = useState<BankHoursCreditAction>(BANK_HOURS_DEFAULTS.creditAction);
   const [bankHoursDebitAction, setBankHoursDebitAction] = useState<BankHoursDebitAction>(BANK_HOURS_DEFAULTS.debitAction);
   const [bankHoursPeriod, setBankHoursPeriod] = useState<BankHoursPeriod>(BANK_HOURS_DEFAULTS.period);
   const [bankHoursDisplay, setBankHoursDisplay] = useState<BankHoursDisplay>(BANK_HOURS_DEFAULTS.display);
   const [bankHoursAfterApply, setBankHoursAfterApply] = useState<BankHoursAfterApply>(BANK_HOURS_DEFAULTS.afterApply);
   const [bankHoursNightSeparate, setBankHoursNightSeparate] = useState(BANK_HOURS_DEFAULTS.nightSeparate);
-  const [bankHoursNightMultiplier, setBankHoursNightMultiplier] = useState(BANK_HOURS_DEFAULTS.nightMultiplier);
+  const [nightMultRaw, setNightMultRaw] = useState<string>(String(BANK_HOURS_DEFAULTS.nightMultiplier));
   const [scheduleMin, setScheduleMin] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [saving, setSaving] = useState(false);
+
+  // COMBO I FIX #5: números derivados dos states raw — consumidos por validação, submit e useMemo.
+  const bankHoursExtraMultiplier = parseNumericInput(extraMultRaw) ?? 0;
+  const bankHoursCustomValue = parseNumericInput(customValueRaw) ?? 0;
+  const bankHoursNightMultiplier = parseNumericInput(nightMultRaw) ?? 0;
 
   useEffect(() => {
     if (!company) return;
@@ -92,15 +99,15 @@ export const CompanySettings: React.FC = () => {
     setBankHoursEnabled(!!company.bank_hours_enabled);
     setBankHoursApplyInPayment(!!company.bank_hours_apply_in_payment);
     setBankHoursFormula(company.bank_hours_formula ?? BANK_HOURS_DEFAULTS.formula);
-    setBankHoursExtraMultiplier(company.bank_hours_extra_multiplier ?? BANK_HOURS_DEFAULTS.extraMultiplier);
-    setBankHoursCustomValue(company.bank_hours_custom_value ?? BANK_HOURS_DEFAULTS.customValue);
+    setExtraMultRaw(String(company.bank_hours_extra_multiplier ?? BANK_HOURS_DEFAULTS.extraMultiplier));
+    setCustomValueRaw(String(company.bank_hours_custom_value ?? BANK_HOURS_DEFAULTS.customValue));
     setBankHoursCreditAction(company.bank_hours_credit_action ?? BANK_HOURS_DEFAULTS.creditAction);
     setBankHoursDebitAction(company.bank_hours_debit_action ?? BANK_HOURS_DEFAULTS.debitAction);
     setBankHoursPeriod(company.bank_hours_period ?? BANK_HOURS_DEFAULTS.period);
     setBankHoursDisplay(company.bank_hours_display ?? BANK_HOURS_DEFAULTS.display);
     setBankHoursAfterApply(company.bank_hours_after_apply ?? BANK_HOURS_DEFAULTS.afterApply);
     setBankHoursNightSeparate(!!company.bank_hours_night_separate);
-    setBankHoursNightMultiplier(company.bank_hours_night_multiplier ?? BANK_HOURS_DEFAULTS.nightMultiplier);
+    setNightMultRaw(String(company.bank_hours_night_multiplier ?? BANK_HOURS_DEFAULTS.nightMultiplier));
     const raw = company.default_schedule;
     if (Array.isArray(raw) && raw.length === 7) {
       setScheduleMin(raw.map(n => Number(n) || 0));
@@ -409,16 +416,22 @@ export const CompanySettings: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls}>Multiplicador hora extra</label>
+                    {/* COMBO I FIX #5: type=text + inputMode=decimal aceita vírgula brasileira; raw preserva digitação. */}
                     <input
-                      type="number"
-                      step="0.1"
-                      min="1.0"
-                      max="3.0"
-                      value={bankHoursExtraMultiplier}
-                      onChange={e => setBankHoursExtraMultiplier(Number(e.target.value) || 0)}
+                      type="text"
+                      inputMode="decimal"
+                      value={extraMultRaw}
+                      onChange={e => setExtraMultRaw(e.target.value)}
                       disabled={saving || !isAdminMaster}
-                      className={inputCls}
+                      className={`${inputCls} ${
+                        !isInRange(bankHoursExtraMultiplier, 1.0, 3.0)
+                          ? 'border-red-500 ring-1 ring-red-200'
+                          : ''
+                      }`}
                     />
+                    {!isInRange(bankHoursExtraMultiplier, 1.0, 3.0) && (
+                      <p className="text-xs text-red-600 mt-1">Valor deve estar entre 1.0 e 3.0</p>
+                    )}
                     <p className="text-xs text-gray-500 mt-1">CLT mínimo: 1.5x. Domingo/feriado típico: 2.0x.</p>
                   </div>
                 </div>
@@ -429,15 +442,22 @@ export const CompanySettings: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls}>Valor por hora (R$)</label>
+                    {/* COMBO I FIX #5: type=text + inputMode=decimal aceita vírgula brasileira; raw preserva digitação. */}
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={bankHoursCustomValue}
-                      onChange={e => setBankHoursCustomValue(Number(e.target.value) || 0)}
+                      type="text"
+                      inputMode="decimal"
+                      value={customValueRaw}
+                      onChange={e => setCustomValueRaw(e.target.value)}
                       disabled={saving || !isAdminMaster}
-                      className={inputCls}
+                      className={`${inputCls} ${
+                        bankHoursCustomValue < 0
+                          ? 'border-red-500 ring-1 ring-red-200'
+                          : ''
+                      }`}
                     />
+                    {bankHoursCustomValue < 0 && (
+                      <p className="text-xs text-red-600 mt-1">Valor não pode ser negativo</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -464,16 +484,22 @@ export const CompanySettings: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls}>Multiplicador horas noturnas</label>
+                    {/* COMBO I FIX #5: type=text + inputMode=decimal aceita vírgula brasileira; raw preserva digitação. */}
                     <input
-                      type="number"
-                      step="0.1"
-                      min="1.0"
-                      max="3.0"
-                      value={bankHoursNightMultiplier}
-                      onChange={e => setBankHoursNightMultiplier(Number(e.target.value) || 0)}
+                      type="text"
+                      inputMode="decimal"
+                      value={nightMultRaw}
+                      onChange={e => setNightMultRaw(e.target.value)}
                       disabled={saving || !isAdminMaster}
-                      className={inputCls}
+                      className={`${inputCls} ${
+                        !isInRange(bankHoursNightMultiplier, 1.0, 3.0)
+                          ? 'border-red-500 ring-1 ring-red-200'
+                          : ''
+                      }`}
                     />
+                    {!isInRange(bankHoursNightMultiplier, 1.0, 3.0) && (
+                      <p className="text-xs text-red-600 mt-1">Valor deve estar entre 1.0 e 3.0</p>
+                    )}
                     <p className="text-xs text-gray-500 mt-1">CLT mínimo: 1.20x (adicional noturno). Combinado com extra: até 2.0x.</p>
                   </div>
                 </div>
