@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 .env
 test-results/
+playwright-report/
 teste-espelho.pdf
 teste-espelho-v2.pdf
 teste-espelho-v3.pdf
