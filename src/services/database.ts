@@ -434,7 +434,7 @@ export const getAllUsers = async (companyId: string): Promise<User[]> => {
   return data || [];
 };
 
-export const createUser = async (id: string, password: string, role: 'supervisor', createdBy: string, companyId?: string): Promise<void> => {
+export const createUser = async (id: string, password: string, role: 'supervisor', createdBy: string, companyId: string): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'users.create');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
@@ -447,7 +447,7 @@ export const createUser = async (id: string, password: string, role: 'supervisor
       password,
       role,
       created_by: createdBy,
-      company_id: companyId || DEFAULT_COMPANY_ID,
+      company_id: companyId,
     }]);
 
   if (error) {
@@ -498,14 +498,14 @@ export const createEmployee = async (
   cpf: string,
   pixKey: string | null,
   createdBy: string,
-  pixType?: string | null,
-  employmentType?: string | null,
-  address?: string | null,
-  neighborhood?: string | null,
-  city?: string | null,
-  state?: string | null,
-  zipCode?: string | null,
-  companyId?: string,
+  pixType: string | null | undefined,
+  employmentType: string | null | undefined,
+  address: string | null | undefined,
+  neighborhood: string | null | undefined,
+  city: string | null | undefined,
+  state: string | null | undefined,
+  zipCode: string | null | undefined,
+  companyId: string,
   extras?: EmployeeExtras
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'employees.create');
@@ -527,7 +527,7 @@ export const createEmployee = async (
       state,
       zip_code: zipCode,
       created_by: createdBy,
-      company_id: companyId || DEFAULT_COMPANY_ID,
+      company_id: companyId,
       ...(extras ?? {}),
     }]);
 
@@ -633,21 +633,19 @@ export const bulkCreateEmployees = async (
     contractType?: string | null;
   }>,
   createdBy: string,
-  companyId?: string
+  companyId: string
 ): Promise<BulkEmployeeResult> => {
   const permissionCheck = await validatePermission(createdBy, 'employees.import');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
-  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
-
   const result: BulkEmployeeResult = {
     success: [],
     errors: []
   };
 
-  const existingEmployees = await getAllEmployees(undefined, effectiveCompanyId);
+  const existingEmployees = await getAllEmployees(undefined, companyId);
   const existingCPFs = new Set(existingEmployees.map(emp => emp.cpf));
 
   for (let i = 0; i < employees.length; i++) {
@@ -676,7 +674,7 @@ export const bulkCreateEmployees = async (
         state: employee.state,
         zip_code: employee.zipCode,
         created_by: createdBy,
-        company_id: effectiveCompanyId,
+        company_id: companyId,
       };
       // Campos novos (Etapa 2) — só inclui no payload se foram passados pelo
       // caller. Manter undefined em vez de null deixa o default da migration
@@ -766,7 +764,7 @@ export const markAttendance = async (
   status: 'present' | 'absent',
   exitTime: string | null,
   markedBy: string,
-  companyId?: string
+  companyId: string
 ): Promise<void> => {
   const permissionCheck = await validatePermission(markedBy, 'attendance.mark');
   if (!permissionCheck.allowed) {
@@ -781,7 +779,7 @@ export const markAttendance = async (
       status,
       exit_time: exitTime,
       marked_by: markedBy,
-      company_id: companyId || DEFAULT_COMPANY_ID,
+      company_id: companyId,
     }], {
       onConflict: 'employee_id,date'
     })
@@ -910,7 +908,7 @@ export const upsertPayment = async (
   dailyRate: number,
   bonus: number,
   createdBy: string,
-  companyId?: string
+  companyId: string
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'financial.editRate');
   if (!permissionCheck.allowed) {
@@ -929,7 +927,7 @@ export const upsertPayment = async (
       total,
       created_by: createdBy,
       updated_at: new Date().toISOString(),
-      company_id: companyId || DEFAULT_COMPANY_ID,
+      company_id: companyId,
     }], {
       onConflict: 'employee_id,date'
     });
@@ -1026,10 +1024,9 @@ export const createBonus = async (
   amount: number,
   createdBy: string,
   type: BonusType,
-  companyId?: string
+  companyId: string
 ): Promise<void> => {
-  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
-  const bonusTypeRecord = await getBonusTypeByCode(effectiveCompanyId, type);
+  const bonusTypeRecord = await getBonusTypeByCode(companyId, type);
 
   const { error } = await supabase
     .from('bonuses')
@@ -1039,7 +1036,7 @@ export const createBonus = async (
       bonus_type: type,
       bonus_type_id: bonusTypeRecord?.id ?? null,
       created_by: createdBy,
-      company_id: effectiveCompanyId,
+      company_id: companyId,
     }], {
       onConflict: 'date,bonus_type'
     });
@@ -1089,8 +1086,7 @@ export const applyBonusToAllPresent = async (
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
-  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
-  const bonusTypeRecord = await getBonusTypeByCode(effectiveCompanyId, type);
+  const bonusTypeRecord = await getBonusTypeByCode(companyId, type);
 
   // Permissão tipo-específica: tenta granular nova (applyBonus_<id>), fallback legado (applyBonus<code>).
   const newPermKey = bonusTypeRecord ? `financial.applyBonus_${bonusTypeRecord.id}` : null;
@@ -1162,7 +1158,7 @@ export const applyBonusToAllPresent = async (
         bonus_breakdown: newBreakdown,
         created_by: createdBy,
         updated_at: new Date().toISOString(),
-        company_id: effectiveCompanyId,
+        company_id: companyId,
       }], {
         onConflict: 'employee_id,date'
       });
@@ -1178,7 +1174,7 @@ export const applyBonusToAllPresent = async (
       bonus_type: type,
       bonus_type_id: bonusTypeRecord?.id ?? null,
       created_by: createdBy,
-      company_id: effectiveCompanyId,
+      company_id: companyId,
     }], {
       onConflict: 'date,bonus_type'
     });
@@ -1245,16 +1241,15 @@ export const removeBonusFromEmployee = async (
   observation: string,
   userId: string,
   type: BonusType,
-  companyId?: string
+  companyId: string
 ): Promise<void> => {
   const permissionCheck = await validatePermission(userId, 'financial.removeBonus');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
-  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
   const column = BONUS_COLUMNS[type];
-  const bonusTypeRecord = await getBonusTypeByCode(effectiveCompanyId, type);
+  const bonusTypeRecord = await getBonusTypeByCode(companyId, type);
 
   // Permissão tipo-específica: tenta granular nova (removeBonus_<id>), fallback legado (removeBonusByType).
   const newPermKey = bonusTypeRecord ? `financial.removeBonus_${bonusTypeRecord.id}` : null;
@@ -1297,7 +1292,7 @@ export const removeBonusFromEmployee = async (
       bonus_type_id: bonusTypeRecord?.id ?? null,
       observation: observation.trim(),
       removed_by: userId,
-      company_id: effectiveCompanyId,
+      company_id: companyId,
     }]);
 
   if (removalError) throw removalError;
@@ -1368,13 +1363,11 @@ export const removeAllBonusesForDate = async (
     throw new Error('Observação deve ter no máximo 500 caracteres');
   }
 
-  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
-
   // Pré-resolve UUIDs de tipos para preencher bonus_type_id ao registrar remoções
   const types: BonusType[] = ['B', 'C1', 'C2'];
   const typeIdMap: Record<BonusType, string | null> = { B: null, C1: null, C2: null };
   for (const t of types) {
-    const rec = await getBonusTypeByCode(effectiveCompanyId, t);
+    const rec = await getBonusTypeByCode(companyId, t);
     typeIdMap[t] = rec?.id ?? null;
   }
 
@@ -1413,7 +1406,7 @@ export const removeAllBonusesForDate = async (
         bonus_type_id: typeIdMap[t],
         observation: observation.trim(),
         removed_by: userId,
-        company_id: effectiveCompanyId,
+        company_id: companyId,
       }));
 
     if (removalsToInsert.length > 0) {
@@ -1486,14 +1479,13 @@ export const clearBonusRegistryForDate = async (date: string, companyId: string)
 // fallback para `bonus_defaults` (legacy) caso bonus_types não esteja populado
 // para a empresa.
 export const getBonusDefaults = async (companyId: string): Promise<{ B: number; C1: number; C2: number }> => {
-  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
   const defaults: { B: number; C1: number; C2: number } = { B: 0, C1: 0, C2: 0 };
 
   // 1) Preferencial: bonus_types
   const { data: btData, error: btErr } = await supabase
     .from('bonus_types')
     .select('code, default_value, active')
-    .eq('company_id', effectiveCompanyId)
+    .eq('company_id', companyId)
     .eq('active', true);
 
   if (btErr) throw btErr;
@@ -1542,8 +1534,6 @@ export const updateBonusDefault = async (
     throw new Error('Valor inválido');
   }
 
-  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
-
   // Atualiza bonus_types (preferencial — multi-empresa)
   await supabase
     .from('bonus_types')
@@ -1551,7 +1541,7 @@ export const updateBonusDefault = async (
       default_value: amount,
       updated_at: new Date().toISOString(),
     })
-    .eq('company_id', effectiveCompanyId)
+    .eq('company_id', companyId)
     .eq('code', type);
 
   // Atualiza bonus_defaults legacy (compat)
@@ -1656,9 +1646,9 @@ export const upsertErrorRecord = async (
   errorCount: number,
   observations: string | null,
   createdBy: string,
-  errorType: ErrorType = 'quantity',
-  errorValue: number = 0,
-  companyId?: string
+  errorType: ErrorType,
+  errorValue: number,
+  companyId: string
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'errors.create');
   if (!permissionCheck.allowed) {
@@ -1684,7 +1674,7 @@ export const upsertErrorRecord = async (
       observations,
       created_by: createdBy,
       updated_at: new Date().toISOString(),
-      company_id: companyId || DEFAULT_COMPANY_ID,
+      company_id: companyId,
     }], {
       onConflict: 'employee_id,date'
     });
@@ -1815,7 +1805,7 @@ export const createPaymentPeriod = async (
   paymentDate: string,
   label: string | null,
   createdBy: string,
-  companyId?: string
+  companyId: string
 ): Promise<PaymentPeriod> => {
   if (startDate > endDate) throw new Error('Data inicial deve ser anterior à final');
 
@@ -1828,7 +1818,7 @@ export const createPaymentPeriod = async (
       label,
       status: 'open',
       created_by: createdBy,
-      company_id: companyId || DEFAULT_COMPANY_ID,
+      company_id: companyId,
     }])
     .select()
     .single();
@@ -1854,7 +1844,7 @@ export const getPaymentPeriodConfig = async (companyId: string): Promise<{ auto_
   return { auto_weekly: data?.auto_weekly ?? true };
 };
 
-export const setPaymentPeriodAutoWeekly = async (enabled: boolean, updatedBy: string, companyId?: string): Promise<void> => {
+export const setPaymentPeriodAutoWeekly = async (enabled: boolean, updatedBy: string, companyId: string): Promise<void> => {
   const { error } = await supabase
     .from('payment_period_config')
     .upsert([{
@@ -1862,7 +1852,7 @@ export const setPaymentPeriodAutoWeekly = async (enabled: boolean, updatedBy: st
       auto_weekly: enabled,
       updated_by: updatedBy,
       updated_at: new Date().toISOString(),
-      company_id: companyId || DEFAULT_COMPANY_ID,
+      company_id: companyId,
     }], {
       onConflict: 'id',
     });
@@ -1876,7 +1866,6 @@ export const setPaymentPeriodAutoWeekly = async (enabled: boolean, updatedBy: st
  * períodos vencidos.
  */
 export const autoCreateWeeklyPeriod = async (companyId: string): Promise<void> => {
-  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
   const config = await getPaymentPeriodConfig(companyId);
 
   const today = new Date();
@@ -1924,7 +1913,7 @@ export const autoCreateWeeklyPeriod = async (companyId: string): Promise<void> =
       label,
       status: 'open',
       created_by: 'auto',
-      company_id: effectiveCompanyId,
+      company_id: companyId,
     }]);
 };
 
@@ -2098,9 +2087,9 @@ export const upsertTriageError = async (
   errorCount: number,
   observations: string | null,
   createdBy: string,
-  triageType: TriageType = 'quantity',
-  directValue: number = 0,
-  companyId?: string
+  triageType: TriageType,
+  directValue: number,
+  companyId: string
 ): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'errors.createTriage');
   if (!permissionCheck.allowed) {
@@ -2125,7 +2114,7 @@ export const upsertTriageError = async (
       observations,
       created_by: createdBy,
       updated_at: new Date().toISOString(),
-      company_id: companyId || DEFAULT_COMPANY_ID,
+      company_id: companyId,
     }], { onConflict: 'date,company_id' });
 
   if (error) throw error;
@@ -2387,7 +2376,7 @@ export const distributeTriageErrors = async (
   endDate: string,
   valuePerError: number,
   distributedBy: string,
-  companyId?: string
+  companyId: string
 ): Promise<{
   distributionId: string;
   totalErrors: number;
@@ -2398,8 +2387,6 @@ export const distributeTriageErrors = async (
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
-
-  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
 
   const triageDays = await getTriageErrors(startDate, endDate, companyId);
   const hasQuantityDays = triageDays.some(d =>
@@ -2427,7 +2414,7 @@ export const distributeTriageErrors = async (
       total_employees: preview.totalEmployees,
       total_deducted: preview.totalDeducted,
       distributed_by: distributedBy,
-      company_id: effectiveCompanyId,
+      company_id: companyId,
     }])
     .select()
     .single();
@@ -2441,7 +2428,7 @@ export const distributeTriageErrors = async (
     employee_id: emp.employee_id,
     errors_share: emp.total_errors,
     value_deducted: emp.value_deducted,
-    company_id: effectiveCompanyId,
+    company_id: companyId,
   }));
   if (detailRows.length > 0) {
     const { error: detailError } = await supabase
@@ -3255,8 +3242,8 @@ export const getEmployeeTodayAttendance = async (employeeId: string, companyId: 
 /** Funcionário registra entrada. */
 export const clockIn = async (
   employeeId: string,
-  geoData?: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number },
-  companyId?: string
+  geoData: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number } | undefined,
+  companyId: string
 ): Promise<Attendance> => {
   const today = getBrazilDateString();
   const now = new Date().toISOString();
@@ -3268,7 +3255,7 @@ export const clockIn = async (
     entry_time: now,
     clock_source: 'employee_self',
     approval_status: 'pending',
-    company_id: companyId || DEFAULT_COMPANY_ID,
+    company_id: companyId,
   };
 
   if (geoData) {
@@ -3292,9 +3279,9 @@ export const clockIn = async (
 /** Funcionário registra saída. Calcula horas trabalhadas e horas noturnas. */
 export const clockOut = async (
   employeeId: string,
-  dailyRate?: number,
-  geoData?: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number },
-  companyId?: string
+  dailyRate: number | undefined,
+  geoData: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number } | undefined,
+  companyId: string
 ): Promise<Attendance> => {
   const today = getBrazilDateString();
   const now = new Date();
@@ -3327,15 +3314,14 @@ export const clockOut = async (
     updateRecord.geo_distance_meters = geoData.geo_distance_meters;
   }
 
-  let upd = supabase
+  const { data, error } = await supabase
     .from('attendance')
     .update(updateRecord)
     .eq('employee_id', employeeId)
-    .eq('date', today);
-
-  if (companyId) upd = upd.eq('company_id', companyId);
-
-  const { data, error } = await upd.select().single();
+    .eq('date', today)
+    .eq('company_id', companyId)
+    .select()
+    .single();
 
   if (error) throw error;
   return data;
@@ -3352,7 +3338,7 @@ export const setManualTime = async (
   entryTime: string,
   exitTime: string,
   userId: string,
-  companyId?: string
+  companyId: string
 ): Promise<Attendance> => {
   const permissionCheck = await validatePermission(userId, 'attendance.manualTime');
   if (!permissionCheck.allowed) {
@@ -3381,7 +3367,7 @@ export const setManualTime = async (
       night_hours: nightHours,
       clock_source: 'manual',
       approval_status: 'manual',
-      company_id: companyId || DEFAULT_COMPANY_ID,
+      company_id: companyId,
     }], { onConflict: 'employee_id,date' })
     .select()
     .single();
@@ -3567,7 +3553,7 @@ export const registerFraudAttempt = async (
   lon: number | null,
   distanceMeters: number | null,
   clockType: 'entry' | 'exit',
-  companyId?: string
+  companyId: string
 ): Promise<void> => {
   const { error } = await supabase.from('geo_fraud_attempts').insert([{
     employee_id: employeeId,
@@ -3576,7 +3562,7 @@ export const registerFraudAttempt = async (
     longitude: lon,
     distance_meters: distanceMeters,
     clock_type: clockType,
-    company_id: companyId || DEFAULT_COMPANY_ID,
+    company_id: companyId,
   }]);
   if (error) throw error;
 };
@@ -3598,7 +3584,7 @@ function getWeekBounds(): { weekStart: string; weekEnd: string } {
 export const blockEmployeeBonus = async (
   employeeId: string,
   reason: string,
-  companyId?: string
+  companyId: string
 ): Promise<void> => {
   const { weekStart, weekEnd } = getWeekBounds();
   const { error } = await supabase
@@ -3608,7 +3594,7 @@ export const blockEmployeeBonus = async (
       week_start: weekStart,
       week_end: weekEnd,
       reason,
-      company_id: companyId || DEFAULT_COMPANY_ID,
+      company_id: companyId,
     }], { onConflict: 'employee_id,week_start' });
   if (error) throw error;
 };
@@ -3691,7 +3677,7 @@ export const saveFlaggedGeoAttempt = async (
         geo_distance_meters: distanceMeters,
         approval_status: 'pending',
         clock_source: 'employee_self',
-        company_id: companyId || DEFAULT_COMPANY_ID,
+        company_id: companyId,
       }], { onConflict: 'employee_id,date' });
   } else {
     await supabase
@@ -4143,7 +4129,6 @@ export const setFaceRecognitionGlobal = async (
   // updated_by é FK para users.id; só inclui no payload se for um id válido
   // (string não-vazia). Coluna é nullable, então ausência é aceita.
   const auditor = updatedBy && updatedBy.trim() ? updatedBy.trim() : null;
-  const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
 
   const { data: existing } = await supabase
     .from('face_recognition_config')
@@ -4161,7 +4146,7 @@ export const setFaceRecognitionGlobal = async (
   } else {
     const { error } = await supabase
       .from('face_recognition_config')
-      .insert([{ enabled, updated_by: auditor, company_id: effectiveCompanyId }]);
+      .insert([{ enabled, updated_by: auditor, company_id: companyId }]);
     if (error) throw error;
   }
 };
@@ -4241,7 +4226,7 @@ export const logFaceAttempt = async (
   success: boolean,
   confidence: number | null,
   clockType: 'entry' | 'exit' | null,
-  companyId?: string
+  companyId: string
 ): Promise<void> => {
   // `date` é NOT NULL na tabela face_auth_attempts — precisa ser passado
   // explicitamente no fuso BRT. `attempted_at` também é setado para garantir.
@@ -4253,7 +4238,7 @@ export const logFaceAttempt = async (
       success,
       confidence,
       clock_type: clockType,
-      company_id: companyId || DEFAULT_COMPANY_ID,
+      company_id: companyId,
     };
     const { error } = await supabase
       .from('face_auth_attempts')
