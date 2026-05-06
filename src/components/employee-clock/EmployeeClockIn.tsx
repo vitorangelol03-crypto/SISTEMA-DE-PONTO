@@ -95,7 +95,7 @@ function getNextMarkingPosition(att: Attendance | null): MarkingPosition | null 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const EmployeeClockIn: React.FC = () => {
-  const { setCompany } = useCompany();
+  const { company, setCompany } = useCompany();
   const [step, setStep] = useState<Step>('cpf');
   const [cpfInput, setCpfInput] = useState('');
   const [pin, setPin] = useState('');
@@ -124,14 +124,15 @@ export const EmployeeClockIn: React.FC = () => {
   // ─── Load dashboard data ──────────────────────────────────────────────────
 
   const loadDashboard = useCallback(async (emp: Employee, silent = false) => {
+    if (!company?.id) return;
     if (!silent) setLoading(true);
     // Reset mensagem residual: evita que um erro antigo persista
     // quando o polling (30s) ou um reload posterior confirma o registro.
     setClockMsg(null);
     try {
       const [today, hist] = await Promise.all([
-        getEmployeeTodayAttendance(emp.id),
-        getEmployeeAttendanceHistory(emp.id, 30),
+        getEmployeeTodayAttendance(emp.id, company.id),
+        getEmployeeAttendanceHistory(emp.id, 30, company.id),
       ]);
       // Merge inteligente: só atualiza o state se houve mudança real
       setTodayRecord(prev => JSON.stringify(prev) === JSON.stringify(today) ? prev : today);
@@ -144,7 +145,7 @@ export const EmployeeClockIn: React.FC = () => {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [company?.id]);
 
   // Atualiza dashboard a cada 30s enquanto está na tela (silencioso — sem flash)
   useEffect(() => {
@@ -164,8 +165,9 @@ export const EmployeeClockIn: React.FC = () => {
   // - Caso contrário → dashboard direto; a verificação facial acontece no
   //   momento de bater o ponto (gate controlado por faceGateActive).
   const continueAfterPin = useCallback(async (emp: Employee) => {
+    if (!company?.id) return;
     try {
-      const cfg = await getFaceRecognitionConfig();
+      const cfg = await getFaceRecognitionConfig(company.id);
       const empEnabled = emp.face_recognition_enabled !== false; // null/undefined = habilitado por padrão
       const activeGlobally = cfg.enabled && empEnabled;
 
@@ -186,7 +188,7 @@ export const EmployeeClockIn: React.FC = () => {
       setClockMsg(null);
       setStep('dashboard');
     }
-  }, [loadDashboard]);
+  }, [loadDashboard, company?.id]);
 
   // ─── CPF ────────────────────────────────────────────────────────────────────
 
@@ -381,8 +383,9 @@ export const EmployeeClockIn: React.FC = () => {
     // success=false e AbortError — o servidor pode ter gravado mesmo quando
     // respondeu com erro / timeout.
     const verifyRegisteredInDb = async (): Promise<boolean> => {
+      if (!company?.id) return false;
       try {
-        const today = await getEmployeeTodayAttendance(employee.id);
+        const today = await getEmployeeTodayAttendance(employee.id, company.id);
         if (markingPosition) {
           return !!getTimestampForPosition(today, markingPosition);
         }
@@ -430,7 +433,8 @@ export const EmployeeClockIn: React.FC = () => {
       if (isAbort) {
         setClockMsg('⏳ Conexão lenta. Verificando registro...');
         try {
-          const today = await getEmployeeTodayAttendance(employee.id);
+          if (!company?.id) throw new Error('Empresa não selecionada');
+          const today = await getEmployeeTodayAttendance(employee.id, company.id);
           const registered = markingPosition
             ? !!getTimestampForPosition(today, markingPosition)
             : (type === 'entry' ? !!today?.entry_time : !!today?.exit_time_full);
