@@ -210,3 +210,73 @@ Investigar onChange do toggle em PaymentPeriodsTab — provavelmente:
 
 **Status:** Pendente, sub-fase de fix futura. Bug REAL de produção,
 diferente dos 7 stale acima (que são só seletor de teste).
+
+## Bug latente: geolocation_config sem UNIQUE(company_id)
+
+**Descoberto em:** Bloco 7 do push final — review pré-deploy edge fn v5.
+
+**Contexto:**
+A tabela geolocation_config NÃO tem UNIQUE constraint em company_id. 
+A edge function v5 usa .maybeSingle() pra ler override por empresa, 
+assumindo no máximo 1 row por company_id. Hoje a invariante é mantida 
+de fato (Caratinga: 1 row, Ponte Nova: 0 rows), mas se alguém criar 
+2ª row pra mesma empresa, o .maybeSingle() pode pegar uma linha aleatória 
+ou retornar erro silencioso, dependendo do driver.
+
+**Severidade:** Baixa (latente, não ativo)
+- Hoje: invariante mantida em prod
+- Risco: futuro humano que faça INSERT sem checar duplicata
+
+**Solução proposta:**
+Migration adicionando UNIQUE(company_id) em geolocation_config:
+
+```sql
+-- Verificar duplicatas primeiro:
+SELECT company_id, count(*) FROM geolocation_config 
+GROUP BY company_id HAVING count(*) > 1;
+
+-- Se 0 conflitos:
+ALTER TABLE public.geolocation_config 
+  ADD CONSTRAINT geolocation_config_company_id_key UNIQUE (company_id);
+```
+
+**Status:** Pendente — sub-fase futura.
+
+## Edge fn: writes em geo_fraud_attempts e bonus_blocks sem retry
+
+**Local:** supabase/functions/clock-in-validated/index.ts (v5)
+
+**Contexto:**
+Os INSERT em geo_fraud_attempts e UPSERT em bonus_blocks ignoram retorno 
+de erro. Se falharem, não bloqueiam o fluxo nem retornam erro pro cliente. 
+Comportamento herdado da v4 (não regressão).
+
+**Severidade:** Baixa
+- Em prod, falha é raríssima (tabelas simples sem constraints complexas)
+- Mas em caso de incidente, fraude pode ficar sem registro
+
+**Solução proposta:**
+Capturar erros e logar em error_logs ou retornar warning ao cliente.
+Considerar transação atômica se geo_fraud + bonus_block precisarem 
+ser consistentes.
+
+**Status:** Pendente — hardening futuro.
+
+## Cold start latency edge fn ~1.1s pós-deploy
+
+**Local:** Edge function clock-in-validated (Deno runtime)
+
+**Contexto:**
+Após cada deploy, primeira invocação leva ~1.1-1.2s (JIT + bundle compile).
+Warm latency volta a ~0.2-0.3s rapidamente. Comportamento padrão Deno Deploy 
++ Supabase Edge Runtime.
+
+**Severidade:** Baixa
+- Funcionários sentem isso só após deploys (raros)
+- 1.1s é aceitável pro caso de uso (clock-in não é tempo-crítico)
+
+**Solução possível:**
+Warming automatic pós-deploy via cron ou primeira requisição mock.
+Não é prioritário no momento.
+
+**Status:** Aceito como overhead conhecido.
