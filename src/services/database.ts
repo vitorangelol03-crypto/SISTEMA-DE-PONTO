@@ -423,14 +423,12 @@ export const loginUser = async (id: string, password: string): Promise<User | nu
 };
 
 // User functions
-export const getAllUsers = async (companyId?: string): Promise<User[]> => {
-  let query = supabase
+export const getAllUsers = async (companyId: string): Promise<User[]> => {
+  const { data, error } = await supabase
     .from('users')
-    .select('*');
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query.order('created_at', { ascending: false });
+    .select('*')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false });
 
   if (error) throw error;
   return data || [];
@@ -479,16 +477,15 @@ export const deleteUser = async (id: string, userId: string): Promise<void> => {
 };
 
 // Employee functions
-export const getAllEmployees = async (employmentType?: string, companyId?: string): Promise<Employee[]> => {
+export const getAllEmployees = async (employmentType: string | undefined, companyId: string): Promise<Employee[]> => {
   let query = supabase
     .from('employees')
-    .select('*');
+    .select('*')
+    .eq('company_id', companyId);
 
   if (employmentType && employmentType !== 'all') {
     query = query.eq('employment_type', employmentType);
   }
-
-  if (companyId) query = query.eq('company_id', companyId);
 
   const { data, error } = await query.order('name');
 
@@ -738,14 +735,14 @@ export const bulkCreateEmployees = async (
 };
 
 // Attendance functions
-export const getTodayAttendance = async (companyId?: string): Promise<Attendance[]> => {
+export const getTodayAttendance = async (companyId: string): Promise<Attendance[]> => {
   // Usar data local do Brasil (UTC-3)
   const today = new Date();
   const brazilOffset = -3 * 60; // UTC-3 em minutos
   const localTime = new Date(today.getTime() + (brazilOffset * 60 * 1000));
   const todayString = localTime.toISOString().split('T')[0];
 
-  let query = supabase
+  const { data, error } = await supabase
     .from('attendance')
     .select(`
       *,
@@ -755,11 +752,9 @@ export const getTodayAttendance = async (companyId?: string): Promise<Attendance
         cpf
       )
     `)
-    .eq('date', todayString);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query.order('created_at', { ascending: false });
+    .eq('date', todayString)
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false });
 
   if (error) throw error;
   return data || [];
@@ -811,12 +806,12 @@ export const deleteAttendance = async (
 };
 
 export const getAttendanceHistory = async (
-  startDate?: string,
-  endDate?: string,
-  employeeId?: string,
-  userId?: string,
-  employmentType?: string,
-  companyId?: string
+  startDate: string | undefined,
+  endDate: string | undefined,
+  employeeId: string | undefined,
+  userId: string | undefined,
+  employmentType: string | undefined,
+  companyId: string
 ): Promise<Attendance[]> => {
   if (userId) {
     const permissionCheck = await validatePermission(userId, 'attendance.search');
@@ -835,7 +830,8 @@ export const getAttendanceHistory = async (
         cpf,
         employment_type
       )
-    `);
+    `)
+    .eq('company_id', companyId);
 
   if (startDate) {
     query = query.gte('date', startDate);
@@ -847,10 +843,6 @@ export const getAttendanceHistory = async (
 
   if (employeeId) {
     query = query.eq('employee_id', employeeId);
-  }
-
-  if (companyId) {
-    query = query.eq('company_id', companyId);
   }
 
   const { data, error } = await query.order('date', { ascending: false });
@@ -868,11 +860,11 @@ export const getAttendanceHistory = async (
 
 // Payment functions
 export const getPayments = async (
-  startDate?: string,
-  endDate?: string,
-  employeeId?: string,
-  employmentType?: string,
-  companyId?: string
+  startDate: string | undefined,
+  endDate: string | undefined,
+  employeeId: string | undefined,
+  employmentType: string | undefined,
+  companyId: string
 ): Promise<Payment[]> => {
   let query = supabase
     .from('payments')
@@ -884,7 +876,8 @@ export const getPayments = async (
         cpf,
         employment_type
       )
-    `);
+    `)
+    .eq('company_id', companyId);
 
   if (startDate) {
     query = query.gte('date', startDate);
@@ -896,10 +889,6 @@ export const getPayments = async (
 
   if (employeeId) {
     query = query.eq('employee_id', employeeId);
-  }
-
-  if (companyId) {
-    query = query.eq('company_id', companyId);
   }
 
   const { data, error } = await query.order('date', { ascending: false });
@@ -964,14 +953,15 @@ export const deletePayment = async (id: string, userId: string): Promise<void> =
 
 export const clearEmployeePayments = async (
   employeeId: string,
-  startDate?: string,
-  endDate?: string,
-  companyId?: string
+  startDate: string | undefined,
+  endDate: string | undefined,
+  companyId: string
 ): Promise<void> => {
   let query = supabase
     .from('payments')
     .delete()
-    .eq('employee_id', employeeId);
+    .eq('employee_id', employeeId)
+    .eq('company_id', companyId);
 
   if (startDate) {
     query = query.gte('date', startDate);
@@ -981,19 +971,22 @@ export const clearEmployeePayments = async (
     query = query.lte('date', endDate);
   }
 
-  if (companyId) {
-    query = query.eq('company_id', companyId);
-  }
-
   const { error } = await query;
   if (error) throw error;
 };
 
+/**
+ * Limpa pagamentos de UMA empresa, opcionalmente filtrados por intervalo de datas.
+ *
+ * SECURITY: companyId é OBRIGATÓRIO. Não é possível limpar pagamentos
+ * cross-empresa por esta função. Para limpeza administrativa global, criar
+ * função explícita clearAllPaymentsAcrossAllCompanies() (não existe hoje).
+ */
 export const clearAllPayments = async (
-  startDate?: string,
-  endDate?: string,
-  userId?: string,
-  companyId?: string
+  startDate: string | undefined,
+  endDate: string | undefined,
+  userId: string | undefined,
+  companyId: string
 ): Promise<void> => {
   if (userId) {
     const permissionCheck = await validatePermission(userId, 'financial.clear');
@@ -1002,7 +995,7 @@ export const clearAllPayments = async (
     }
   }
 
-  let query = supabase.from('payments').delete();
+  let query = supabase.from('payments').delete().eq('company_id', companyId);
 
   if (startDate) {
     query = query.gte('date', startDate);
@@ -1012,28 +1005,17 @@ export const clearAllPayments = async (
     query = query.lte('date', endDate);
   }
 
-  if (companyId) {
-    query = query.eq('company_id', companyId);
-  }
-
-  // Se não há filtros de data nem company, limpa tudo
-  if (!startDate && !endDate && !companyId) {
-    query = query.neq('id', '00000000-0000-0000-0000-000000000000'); // Condição sempre verdadeira
-  }
-
   const { error } = await query;
   if (error) throw error;
 };
 
 // Bonus functions
-export const getBonuses = async (companyId?: string): Promise<Bonus[]> => {
-  let query = supabase
+export const getBonuses = async (companyId: string): Promise<Bonus[]> => {
+  const { data, error } = await supabase
     .from('bonuses')
-    .select('*');
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query.order('date', { ascending: false });
+    .select('*')
+    .eq('company_id', companyId)
+    .order('date', { ascending: false });
 
   if (error) throw error;
   return data || [];
@@ -1099,8 +1081,8 @@ export const applyBonusToAllPresent = async (
   bonusAmount: number,
   createdBy: string,
   type: BonusType,
-  excludeEmployeeIds?: string[],
-  companyId?: string
+  excludeEmployeeIds: string[] | undefined,
+  companyId: string
 ): Promise<{ applied: number; skipped: number }> => {
   const permissionCheck = await validatePermission(createdBy, 'financial.applyBonus');
   if (!permissionCheck.allowed) {
@@ -1119,17 +1101,12 @@ export const applyBonusToAllPresent = async (
     throw new Error(`Permissão negada para bônus ${type}`);
   }
 
-  let attQuery = supabase
+  const { data: attendances, error: attendanceError } = await supabase
     .from('attendance')
     .select('employee_id')
     .eq('date', date)
-    .eq('status', 'present');
-
-  if (companyId) {
-    attQuery = attQuery.eq('company_id', companyId);
-  }
-
-  const { data: attendances, error: attendanceError } = await attQuery;
+    .eq('status', 'present')
+    .eq('company_id', companyId);
 
   if (attendanceError) throw attendanceError;
 
@@ -1210,7 +1187,7 @@ export const applyBonusToAllPresent = async (
 };
 
 // Bonus info and removal functions
-export const getBonusInfoForDate = async (date: string, companyId?: string): Promise<BonusInfo> => {
+export const getBonusInfoForDate = async (date: string, companyId: string): Promise<BonusInfo> => {
   const empty = (): BonusTypeInfo => ({
     hasBonus: false,
     amount: 0,
@@ -1227,12 +1204,11 @@ export const getBonusInfoForDate = async (date: string, companyId?: string): Pro
   };
 
   // Buscar bonuses do dia (pode ter até 3: B, C1, C2)
-  let bonusQ = supabase
+  const { data: bonuses } = await supabase
     .from('bonuses')
     .select('*')
-    .eq('date', date);
-  if (companyId) bonusQ = bonusQ.eq('company_id', companyId);
-  const { data: bonuses } = await bonusQ;
+    .eq('date', date)
+    .eq('company_id', companyId);
 
   if (!bonuses || bonuses.length === 0) {
     return info;
@@ -1243,13 +1219,12 @@ export const getBonusInfoForDate = async (date: string, companyId?: string): Pro
     if (!type || !(type in BONUS_COLUMNS)) continue;
 
     const column = BONUS_COLUMNS[type];
-    let paymentsQ = supabase
+    const { data: payments } = await supabase
       .from('payments')
       .select('employee_id')
       .eq('date', date)
-      .gt(column, 0);
-    if (companyId) paymentsQ = paymentsQ.eq('company_id', companyId);
-    const { data: payments } = await paymentsQ;
+      .gt(column, 0)
+      .eq('company_id', companyId);
 
     info[type] = {
       hasBonus: true,
@@ -1378,7 +1353,7 @@ export const removeAllBonusesForDate = async (
   date: string,
   observation: string,
   userId: string,
-  companyId?: string
+  companyId: string
 ): Promise<number> => {
   const permissionCheck = await validatePermission(userId, 'financial.removeBonusBulk');
   if (!permissionCheck.allowed) {
@@ -1404,13 +1379,12 @@ export const removeAllBonusesForDate = async (
   }
 
   // Buscar todos os pagamentos com bonificação no dia
-  let paymentsQ = supabase
+  const { data: payments, error: paymentsError } = await supabase
     .from('payments')
     .select('*')
     .eq('date', date)
-    .gt('bonus', 0);
-  if (companyId) paymentsQ = paymentsQ.eq('company_id', companyId);
-  const { data: payments, error: paymentsError } = await paymentsQ;
+    .gt('bonus', 0)
+    .eq('company_id', companyId);
 
   if (paymentsError) throw paymentsError;
 
@@ -1468,12 +1442,11 @@ export const removeAllBonusesForDate = async (
   // Remover as linhas da tabela `bonuses` (registry do dia) — sem isso,
   // getBonusInfoForDate continua enxergando as bonificações e os cards
   // B/C1/C2 permanecem visíveis na UI mesmo após zerar os payments.
-  let bonusDel = supabase
+  const { error: bonusRegistryError } = await supabase
     .from('bonuses')
     .delete()
-    .eq('date', date);
-  if (companyId) bonusDel = bonusDel.eq('company_id', companyId);
-  const { error: bonusRegistryError } = await bonusDel;
+    .eq('date', date)
+    .eq('company_id', companyId);
 
   if (bonusRegistryError) {
     console.error('Erro ao limpar registry de bonuses:', bonusRegistryError);
@@ -1497,15 +1470,12 @@ export const removeAllBonusesForDate = async (
 
 // Helper: limpa os registros da tabela `bonuses` para um dia específico.
 // Usado no Reset Geral do ponto para garantir que os cards B/C1/C2 sumam.
-export const clearBonusRegistryForDate = async (date: string, companyId?: string): Promise<void> => {
-  let query = supabase
+export const clearBonusRegistryForDate = async (date: string, companyId: string): Promise<void> => {
+  const { error } = await supabase
     .from('bonuses')
     .delete()
-    .eq('date', date);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { error } = await query;
+    .eq('date', date)
+    .eq('company_id', companyId);
 
   if (error) throw error;
 };
@@ -1515,7 +1485,7 @@ export const clearBonusRegistryForDate = async (date: string, companyId?: string
 // Estratégia (compat dupla): preferencial em `bonus_types` (multi-empresa);
 // fallback para `bonus_defaults` (legacy) caso bonus_types não esteja populado
 // para a empresa.
-export const getBonusDefaults = async (companyId?: string): Promise<{ B: number; C1: number; C2: number }> => {
+export const getBonusDefaults = async (companyId: string): Promise<{ B: number; C1: number; C2: number }> => {
   const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
   const defaults: { B: number; C1: number; C2: number } = { B: 0, C1: 0, C2: 0 };
 
@@ -1540,11 +1510,10 @@ export const getBonusDefaults = async (companyId?: string): Promise<{ B: number;
   if (foundAny) return defaults;
 
   // 2) Fallback: bonus_defaults (legacy)
-  let bdQuery = supabase
+  const { data, error } = await supabase
     .from('bonus_defaults')
-    .select('bonus_type, default_amount');
-  if (companyId) bdQuery = bdQuery.eq('company_id', companyId);
-  const { data, error } = await bdQuery;
+    .select('bonus_type, default_amount')
+    .eq('company_id', companyId);
 
   if (error) throw error;
 
@@ -1563,7 +1532,7 @@ export const updateBonusDefault = async (
   type: BonusType,
   amount: number,
   updatedBy: string,
-  companyId?: string
+  companyId: string
 ): Promise<void> => {
   if (updatedBy !== '9999') {
     throw new Error('Apenas o administrador pode alterar os valores padrão de bonificação');
@@ -1586,25 +1555,24 @@ export const updateBonusDefault = async (
     .eq('code', type);
 
   // Atualiza bonus_defaults legacy (compat)
-  let bdQuery = supabase
+  const { error } = await supabase
     .from('bonus_defaults')
     .update({
       default_amount: amount,
       updated_by: updatedBy,
       updated_at: new Date().toISOString(),
     })
-    .eq('bonus_type', type);
-  if (companyId) bdQuery = bdQuery.eq('company_id', companyId);
-  const { error } = await bdQuery;
+    .eq('bonus_type', type)
+    .eq('company_id', companyId);
 
   if (error) throw error;
 };
 
 export const getBonusRemovalHistory = async (
-  employeeId?: string,
-  startDate?: string,
-  endDate?: string,
-  companyId?: string
+  employeeId: string | undefined,
+  startDate: string | undefined,
+  endDate: string | undefined,
+  companyId: string
 ): Promise<BonusRemoval[]> => {
   let query = supabase
     .from('bonus_removals')
@@ -1615,7 +1583,8 @@ export const getBonusRemovalHistory = async (
         name,
         cpf
       )
-    `);
+    `)
+    .eq('company_id', companyId);
 
   if (employeeId) {
     query = query.eq('employee_id', employeeId);
@@ -1629,10 +1598,6 @@ export const getBonusRemovalHistory = async (
     query = query.lte('date', endDate);
   }
 
-  if (companyId) {
-    query = query.eq('company_id', companyId);
-  }
-
   const { data, error } = await query.order('removed_at', { ascending: false });
 
   if (error) throw error;
@@ -1641,11 +1606,11 @@ export const getBonusRemovalHistory = async (
 
 // Error functions
 export const getErrorRecords = async (
-  startDate?: string,
-  endDate?: string,
-  employeeId?: string,
-  employmentType?: string,
-  companyId?: string
+  startDate: string | undefined,
+  endDate: string | undefined,
+  employeeId: string | undefined,
+  employmentType: string | undefined,
+  companyId: string
 ): Promise<ErrorRecord[]> => {
   let query = supabase
     .from('error_records')
@@ -1657,7 +1622,8 @@ export const getErrorRecords = async (
         cpf,
         employment_type
       )
-    `);
+    `)
+    .eq('company_id', companyId);
 
   if (startDate) {
     query = query.gte('date', startDate);
@@ -1669,10 +1635,6 @@ export const getErrorRecords = async (
 
   if (employeeId) {
     query = query.eq('employee_id', employeeId);
-  }
-
-  if (companyId) {
-    query = query.eq('company_id', companyId);
   }
 
   const { data, error } = await query.order('date', { ascending: false });
@@ -1745,9 +1707,9 @@ export const deleteErrorRecord = async (id: string, userId: string): Promise<voi
 };
 
 export const getErrorStatistics = async (
-  startDate?: string,
-  endDate?: string,
-  companyId?: string
+  startDate: string | undefined,
+  endDate: string | undefined,
+  companyId: string
 ): Promise<{
   totalErrors: number;
   totalQuantityErrors: number;
@@ -1837,14 +1799,12 @@ export interface PaymentPeriod {
   created_at: string;
 }
 
-export const getPaymentPeriods = async (companyId?: string): Promise<PaymentPeriod[]> => {
-  let query = supabase
+export const getPaymentPeriods = async (companyId: string): Promise<PaymentPeriod[]> => {
+  const { data, error } = await supabase
     .from('payment_periods')
-    .select('*');
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query.order('start_date', { ascending: false });
+    .select('*')
+    .eq('company_id', companyId)
+    .order('start_date', { ascending: false });
   if (error) throw error;
   return data || [];
 };
@@ -1884,20 +1844,12 @@ export const closePaymentPeriod = async (periodId: string): Promise<void> => {
   if (error) throw error;
 };
 
-export const getPaymentPeriodConfig = async (companyId?: string): Promise<{ auto_weekly: boolean }> => {
-  let query = supabase
+export const getPaymentPeriodConfig = async (companyId: string): Promise<{ auto_weekly: boolean }> => {
+  const { data, error } = await supabase
     .from('payment_period_config')
-    .select('auto_weekly');
-
-  // Quando companyId é passado, filtra por empresa.
-  // Quando não é passado, mantém comportamento legacy (id=1, Caratinga).
-  if (companyId) {
-    query = query.eq('company_id', companyId);
-  } else {
-    query = query.eq('id', 1);
-  }
-
-  const { data, error } = await query.maybeSingle();
+    .select('auto_weekly')
+    .eq('company_id', companyId)
+    .maybeSingle();
   if (error) throw error;
   return { auto_weekly: data?.auto_weekly ?? true };
 };
@@ -1923,7 +1875,7 @@ export const setPaymentPeriodAutoWeekly = async (enabled: boolean, updatedBy: st
  * Se a config `auto_weekly` estiver desativada, não cria, apenas fecha
  * períodos vencidos.
  */
-export const autoCreateWeeklyPeriod = async (companyId?: string): Promise<void> => {
+export const autoCreateWeeklyPeriod = async (companyId: string): Promise<void> => {
   const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
   const config = await getPaymentPeriodConfig(companyId);
 
@@ -1931,13 +1883,12 @@ export const autoCreateWeeklyPeriod = async (companyId?: string): Promise<void> 
   const todayStr = today.toISOString().slice(0, 10);
 
   // Fecha períodos vencidos (end_date < hoje, status 'open')
-  let closeQ = supabase
+  await supabase
     .from('payment_periods')
     .update({ status: 'paid' })
     .eq('status', 'open')
-    .lt('end_date', todayStr);
-  if (companyId) closeQ = closeQ.eq('company_id', companyId);
-  await closeQ;
+    .lt('end_date', todayStr)
+    .eq('company_id', companyId);
 
   if (!config.auto_weekly) return;
 
@@ -1952,13 +1903,13 @@ export const autoCreateWeeklyPeriod = async (companyId?: string): Promise<void> 
   const mondayStr = monday.toISOString().slice(0, 10);
   const sundayStr = sunday.toISOString().slice(0, 10);
 
-  let existQ = supabase
+  const { data: existing } = await supabase
     .from('payment_periods')
     .select('id')
     .eq('start_date', mondayStr)
-    .eq('end_date', sundayStr);
-  if (companyId) existQ = existQ.eq('company_id', companyId);
-  const { data: existing } = await existQ.maybeSingle();
+    .eq('end_date', sundayStr)
+    .eq('company_id', companyId)
+    .maybeSingle();
 
   if (existing) return;
 
@@ -1979,30 +1930,28 @@ export const autoCreateWeeklyPeriod = async (companyId?: string): Promise<void> 
 
 export const getEmployeeErrorPeriods = async (
   employeeId: string,
-  companyId?: string
+  companyId: string
 ): Promise<Array<{ period: PaymentPeriod; has_errors: boolean; total_errors: number }>> => {
   const periods = await getPaymentPeriods(companyId);
   if (periods.length === 0) return [];
 
   const results: Array<{ period: PaymentPeriod; has_errors: boolean; total_errors: number }> = [];
   for (const period of periods) {
-    let indQ = supabase
+    const { data: indErrors } = await supabase
       .from('error_records')
       .select('error_count, error_type')
       .eq('employee_id', employeeId)
       .gte('date', period.start_date)
-      .lte('date', period.end_date);
-    if (companyId) indQ = indQ.eq('company_id', companyId);
-    const { data: indErrors } = await indQ;
+      .lte('date', period.end_date)
+      .eq('company_id', companyId);
 
-    let triQ = supabase
+    const { data: triageDist } = await supabase
       .from('triage_distribution_employees')
       .select('errors_share, triage_error_distributions!inner(period_start, period_end)')
       .eq('employee_id', employeeId)
       .gte('triage_error_distributions.period_start', period.start_date)
-      .lte('triage_error_distributions.period_end', period.end_date);
-    if (companyId) triQ = triQ.eq('company_id', companyId);
-    const { data: triageDist } = await triQ;
+      .lte('triage_error_distributions.period_end', period.end_date)
+      .eq('company_id', companyId);
 
     const indCount = (indErrors || [])
       .filter((e: { error_type: string | null }) => (e.error_type ?? 'quantity') === 'quantity')
@@ -2019,7 +1968,7 @@ export const getEmployeeErrorPeriods = async (
 export const getEmployeeErrorsByPeriod = async (
   employeeId: string,
   periodId: string,
-  companyId?: string
+  companyId: string
 ): Promise<{
   period: PaymentPeriod;
   individual_errors: Array<{ date: string; error_type: ErrorType; error_count: number; observations: string | null }>;
@@ -2034,24 +1983,23 @@ export const getEmployeeErrorsByPeriod = async (
     .single();
   if (periodErr) throw periodErr;
 
-  let indQ = supabase
+  const { data: indErrors, error: indErr } = await supabase
     .from('error_records')
     .select('date, error_type, error_count, observations')
     .eq('employee_id', employeeId)
     .gte('date', period.start_date)
-    .lte('date', period.end_date);
-  if (companyId) indQ = indQ.eq('company_id', companyId);
-  const { data: indErrors, error: indErr } = await indQ.order('date', { ascending: true });
+    .lte('date', period.end_date)
+    .eq('company_id', companyId)
+    .order('date', { ascending: true });
   if (indErr) throw indErr;
 
-  let triQ = supabase
+  const { data: triageDetails, error: triErr } = await supabase
     .from('triage_distribution_employees')
     .select('errors_share, value_deducted, triage_error_distributions!inner(period_start, period_end, observations)')
     .eq('employee_id', employeeId)
     .gte('triage_error_distributions.period_start', period.start_date)
-    .lte('triage_error_distributions.period_end', period.end_date);
-  if (companyId) triQ = triQ.eq('company_id', companyId);
-  const { data: triageDetails, error: triErr } = await triQ;
+    .lte('triage_error_distributions.period_end', period.end_date)
+    .eq('company_id', companyId);
   if (triErr) throw triErr;
 
   const individual_errors = (indErrors || []).map(e => ({
@@ -2133,14 +2081,13 @@ export interface TriageDistributionEmployee {
 }
 
 export const getTriageErrors = async (
-  startDate?: string,
-  endDate?: string,
-  companyId?: string
+  startDate: string | undefined,
+  endDate: string | undefined,
+  companyId: string
 ): Promise<TriageError[]> => {
-  let query = supabase.from('triage_errors').select('*');
+  let query = supabase.from('triage_errors').select('*').eq('company_id', companyId);
   if (startDate) query = query.gte('date', startDate);
   if (endDate) query = query.lte('date', endDate);
-  if (companyId) query = query.eq('company_id', companyId);
   const { data, error } = await query.order('date', { ascending: false });
   if (error) throw error;
   return data || [];
@@ -2197,7 +2144,7 @@ export const deleteTriageError = async (id: string, userId: string): Promise<voi
 export const getTriageSummary = async (
   startDate: string,
   endDate: string,
-  companyId?: string
+  companyId: string
 ): Promise<{
   totalErrors: number;
   days: number;
@@ -2214,18 +2161,15 @@ export const getTriageSummary = async (
 export const getEmployeesPresentInPeriod = async (
   startDate: string,
   endDate: string,
-  companyId?: string
+  companyId: string
 ): Promise<{ employee_id: string; name: string; days_present: number }[]> => {
-  let query = supabase
+  const { data, error } = await supabase
     .from('attendance')
     .select('employee_id, employees(name)')
     .eq('status', 'present')
     .gte('date', startDate)
-    .lte('date', endDate);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query;
+    .lte('date', endDate)
+    .eq('company_id', companyId);
 
   if (error) throw error;
 
@@ -2282,7 +2226,7 @@ export const computeTriageDistribution = async (
   startDate: string,
   endDate: string,
   valuePerError: number,
-  companyId?: string
+  companyId: string
 ): Promise<TriageDistributionPreview> => {
   const triageErrors = await getTriageErrors(startDate, endDate, companyId);
   const daysWithErrors = triageErrors.filter(e => {
@@ -2301,14 +2245,13 @@ export const computeTriageDistribution = async (
     return type === 'value' ? s + Number(e.direct_value ?? 0) : s;
   }, 0) * 100) / 100;
 
-  let attQ = supabase
+  const { data: allAttendance, error: attErr } = await supabase
     .from('attendance')
     .select('employee_id, date, employees(name)')
     .eq('status', 'present')
     .gte('date', startDate)
-    .lte('date', endDate);
-  if (companyId) attQ = attQ.eq('company_id', companyId);
-  const { data: allAttendance, error: attErr } = await attQ;
+    .lte('date', endDate)
+    .eq('company_id', companyId);
   if (attErr) throw attErr;
 
   type Att = { employee_id: string; date: string; employees: { name: string } | { name: string }[] | null };
@@ -2519,7 +2462,7 @@ export const getTriageDistributionsForEmployees = async (
   employeeIds: string[],
   startDate: string,
   endDate: string,
-  companyId?: string
+  companyId: string
 ): Promise<Array<{
   employee_id: string;
   period_start: string;
@@ -2529,16 +2472,13 @@ export const getTriageDistributionsForEmployees = async (
 }>> => {
   if (employeeIds.length === 0) return [];
 
-  let query = supabase
+  const { data, error } = await supabase
     .from('triage_distribution_employees')
     .select('employee_id, errors_share, value_deducted, triage_error_distributions!inner(period_start, period_end)')
     .in('employee_id', employeeIds)
     .gte('triage_error_distributions.period_start', startDate)
-    .lte('triage_error_distributions.period_end', endDate);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query;
+    .lte('triage_error_distributions.period_end', endDate)
+    .eq('company_id', companyId);
 
   if (error) throw error;
 
@@ -2580,8 +2520,8 @@ export interface EmployeeNetPayment {
 export const getEmployeeNetPayments = async (
   startDate: string,
   endDate: string,
-  employmentType?: string,
-  companyId?: string
+  employmentType: string | undefined,
+  companyId: string
 ): Promise<Map<string, EmployeeNetPayment>> => {
   const [payments, errorRecords] = await Promise.all([
     getPayments(startDate, endDate, undefined, employmentType, companyId),
@@ -2734,11 +2674,13 @@ export const updateAutoCleanupConfig = async (
   if (error) throw error;
 };
 
-export const getDataStatistics = async (companyId?: string): Promise<DataStatistics> => {
+export const getDataStatistics = async (companyId: string): Promise<DataStatistics> => {
   const buildQuery = (table: string) => {
-    let q = supabase.from(table).select('date', { count: 'exact' });
-    if (companyId) q = q.eq('company_id', companyId);
-    return q.order('date', { ascending: true });
+    return supabase
+      .from(table)
+      .select('date', { count: 'exact' })
+      .eq('company_id', companyId)
+      .order('date', { ascending: true });
   };
 
   const [attendance, payments, errorRecords, bonuses] = await Promise.all([
@@ -2775,20 +2717,22 @@ export const getDataStatistics = async (companyId?: string): Promise<DataStatist
 
 export const previewCleanupData = async (
   dataTypes: string[],
-  startDate?: string,
-  endDate?: string,
-  employeeId?: string,
-  companyId?: string
+  startDate: string | undefined,
+  endDate: string | undefined,
+  employeeId: string | undefined,
+  companyId: string
 ): Promise<Record<string, number>> => {
   const counts: Record<string, number> = {};
 
   for (const dataType of dataTypes) {
-    let query = supabase.from(dataType).select('id', { count: 'exact', head: true });
+    let query = supabase
+      .from(dataType)
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId);
 
     if (startDate) query = query.gte('date', startDate);
     if (endDate) query = query.lte('date', endDate);
     if (employeeId && dataType !== 'bonuses') query = query.eq('employee_id', employeeId);
-    if (companyId) query = query.eq('company_id', companyId);
 
     const { count } = await query;
     counts[dataType] = count || 0;
@@ -2799,11 +2743,11 @@ export const previewCleanupData = async (
 
 export const deleteOldRecords = async (
   dataType: string,
-  startDate?: string,
-  endDate?: string,
-  employeeId?: string,
-  userId?: string,
-  companyId?: string
+  startDate: string | undefined,
+  endDate: string | undefined,
+  employeeId: string | undefined,
+  userId: string | undefined,
+  companyId: string
 ): Promise<number> => {
   if (userId) {
     const permissionCheck = await validatePermission(userId, 'datamanagement.manualCleanup');
@@ -2812,12 +2756,11 @@ export const deleteOldRecords = async (
     }
   }
 
-  let query = supabase.from(dataType).delete();
+  let query = supabase.from(dataType).delete().eq('company_id', companyId);
 
   if (startDate) query = query.gte('date', startDate);
   if (endDate) query = query.lte('date', endDate);
   if (employeeId && dataType !== 'bonuses') query = query.eq('employee_id', employeeId);
-  if (companyId) query = query.eq('company_id', companyId);
 
   const { data, error, count } = await query.select('id');
 
@@ -3260,56 +3203,50 @@ async function recalcAttendance(attendanceId: string): Promise<void> {
 /** Busca o histórico de attendance de um funcionário nos últimos N dias. */
 export const getEmployeeAttendanceHistory = async (
   employeeId: string,
-  days: number = 30,
-  companyId?: string
+  days: number,
+  companyId: string
 ): Promise<Attendance[]> => {
   const endDate = getBrazilDateString();
   const startMs = new Date(endDate).getTime() - (days - 1) * 24 * 60 * 60 * 1000;
   const startDate = new Date(startMs).toISOString().split('T')[0];
 
-  let query = supabase
+  const { data, error } = await supabase
     .from('attendance')
     .select('*')
     .eq('employee_id', employeeId)
     .gte('date', startDate)
-    .lte('date', endDate);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query.order('date', { ascending: false });
+    .lte('date', endDate)
+    .eq('company_id', companyId)
+    .order('date', { ascending: false });
 
   if (error) throw error;
   return data || [];
 };
 
 /** Busca funcionário por CPF. Retorna null se não encontrar. */
-export const getEmployeeByCpf = async (cpf: string, companyId?: string): Promise<Employee | null> => {
+export const getEmployeeByCpf = async (cpf: string, companyId: string): Promise<Employee | null> => {
   const cpfNumbers = cpf.replace(/\D/g, '');
-  let query = supabase
+  const { data, error } = await supabase
     .from('employees')
     .select('*')
-    .eq('cpf', cpfNumbers);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query.maybeSingle();
+    .eq('cpf', cpfNumbers)
+    .eq('company_id', companyId)
+    .maybeSingle();
 
   if (error) throw error;
   return data;
 };
 
 /** Busca o registro de attendance de hoje para um funcionário específico. */
-export const getEmployeeTodayAttendance = async (employeeId: string, companyId?: string): Promise<Attendance | null> => {
+export const getEmployeeTodayAttendance = async (employeeId: string, companyId: string): Promise<Attendance | null> => {
   const today = getBrazilDateString();
-  let query = supabase
+  const { data, error } = await supabase
     .from('attendance')
     .select('*')
     .eq('employee_id', employeeId)
-    .eq('date', today);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query.maybeSingle();
+    .eq('date', today)
+    .eq('company_id', companyId)
+    .maybeSingle();
 
   if (error) throw error;
   return data;
@@ -3455,7 +3392,7 @@ export const setManualTime = async (
 };
 
 /** Busca registros pendentes de aprovação, opcionalmente filtrados por data. */
-export const getPendingApprovals = async (date?: string, companyId?: string): Promise<Attendance[]> => {
+export const getPendingApprovals = async (date: string | undefined, companyId: string): Promise<Attendance[]> => {
   let query = supabase
     .from('attendance')
     .select(`
@@ -3467,14 +3404,11 @@ export const getPendingApprovals = async (date?: string, companyId?: string): Pr
         employment_type
       )
     `)
-    .eq('approval_status', 'pending');
+    .eq('approval_status', 'pending')
+    .eq('company_id', companyId);
 
   if (date) {
     query = query.eq('date', date);
-  }
-
-  if (companyId) {
-    query = query.eq('company_id', companyId);
   }
 
   const { data, error } = await query.order('date', { ascending: false });
@@ -3596,19 +3530,18 @@ export const verifyEmployeePin = async (employeeId: string, pin: string): Promis
 
 // ─── Geolocation & Fraud functions ───────────────────────────────────────────
 
-export const getGeoConfig = async (companyId?: string): Promise<{
+export const getGeoConfig = async (companyId: string): Promise<{
   latitude: number;
   longitude: number;
   allowed_radius_meters: number;
   block_outside: boolean;
 }> => {
-  let query = supabase
+  const { data, error } = await supabase
     .from('geolocation_config')
-    .select('latitude, longitude, allowed_radius_meters, block_outside');
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query.limit(1).single();
+    .select('latitude, longitude, allowed_radius_meters, block_outside')
+    .eq('company_id', companyId)
+    .limit(1)
+    .single();
 
   if (error) throw error;
   return data;
@@ -3682,35 +3615,30 @@ export const blockEmployeeBonus = async (
 
 export const isEmployeeBonusBlocked = async (
   employeeId: string,
-  companyId?: string
+  companyId: string
 ): Promise<{ blocked: boolean; reason?: string }> => {
   const { weekStart } = getWeekBounds();
-  let query = supabase
+  const { data, error } = await supabase
     .from('bonus_blocks')
     .select('reason')
     .eq('employee_id', employeeId)
-    .eq('week_start', weekStart);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query.maybeSingle();
+    .eq('week_start', weekStart)
+    .eq('company_id', companyId)
+    .maybeSingle();
   if (error) throw error;
   if (!data) return { blocked: false };
   return { blocked: true, reason: data.reason };
 };
 
-export const getBlockedEmployeesThisWeek = async (companyId?: string): Promise<
+export const getBlockedEmployeesThisWeek = async (companyId: string): Promise<
   { employee_id: string; name: string; reason: string; blocked_since: string }[]
 > => {
   const { weekStart } = getWeekBounds();
-  let query = supabase
+  const { data, error } = await supabase
     .from('bonus_blocks')
     .select('employee_id, reason, created_at, employees (name)')
-    .eq('week_start', weekStart);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query;
+    .eq('week_start', weekStart)
+    .eq('company_id', companyId);
   if (error) throw error;
   return (data || []).map((row: Record<string, unknown>) => ({
     employee_id: row.employee_id as string,
@@ -3743,7 +3671,7 @@ export const saveFlaggedGeoAttempt = async (
   longitude: number,
   accuracy: number,
   distanceMeters: number,
-  companyId?: string
+  companyId: string
 ): Promise<void> => {
   const today = getBrazilDateString();
   const now = new Date().toISOString();
@@ -3766,7 +3694,7 @@ export const saveFlaggedGeoAttempt = async (
         company_id: companyId || DEFAULT_COMPANY_ID,
       }], { onConflict: 'employee_id,date' });
   } else {
-    let upd = supabase
+    await supabase
       .from('attendance')
       .update({
         exit_latitude: latitude,
@@ -3775,11 +3703,8 @@ export const saveFlaggedGeoAttempt = async (
         geo_distance_meters: distanceMeters,
       })
       .eq('employee_id', employeeId)
-      .eq('date', today);
-
-    if (companyId) upd = upd.eq('company_id', companyId);
-
-    await upd;
+      .eq('date', today)
+      .eq('company_id', companyId);
   }
 };
 
@@ -3798,21 +3723,19 @@ export interface GeoAlert {
   clock_source: string | null;
 }
 
-export const getGeoAlerts = async (companyId?: string): Promise<GeoAlert[]> => {
+export const getGeoAlerts = async (companyId: string): Promise<GeoAlert[]> => {
   const endDate = getBrazilDateString();
   const startMs = new Date(endDate).getTime() - 29 * 24 * 60 * 60 * 1000;
   const startDate = new Date(startMs).toISOString().split('T')[0];
 
-  let query = supabase
+  const { data, error } = await supabase
     .from('attendance')
     .select('id, employee_id, date, entry_time, exit_time_full, entry_latitude, entry_longitude, exit_latitude, exit_longitude, geo_distance_meters, clock_source, employees (name)')
     .eq('geo_valid', false)
     .gte('date', startDate)
-    .lte('date', endDate);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query.order('date', { ascending: false });
+    .lte('date', endDate)
+    .eq('company_id', companyId)
+    .order('date', { ascending: false });
 
   if (error) throw error;
 
@@ -3870,22 +3793,22 @@ export interface GeoRecord {
   geo_distance_meters: number | null;
 }
 
-export const getGeoRecords = async (filters?: {
+export const getGeoRecords = async (filters: {
   startDate?: string;
   endDate?: string;
   employeeId?: string;
-}, companyId?: string): Promise<GeoRecord[]> => {
+} | undefined, companyId: string): Promise<GeoRecord[]> => {
   let query = supabase
     .from('attendance')
     .select('id, employee_id, date, entry_time, exit_time_full, entry_latitude, entry_longitude, entry_accuracy, exit_latitude, exit_longitude, exit_accuracy, geo_valid, geo_distance_meters, employees (name)')
     .not('entry_latitude', 'is', null)
+    .eq('company_id', companyId)
     .order('date', { ascending: false })
     .limit(200);
 
   if (filters?.startDate) query = query.gte('date', filters.startDate);
   if (filters?.endDate) query = query.lte('date', filters.endDate);
   if (filters?.employeeId) query = query.eq('employee_id', filters.employeeId);
-  if (companyId) query = query.eq('company_id', companyId);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -3920,16 +3843,13 @@ export interface FraudAttempt {
   clock_type: string;
 }
 
-export const getFraudAttempts = async (companyId?: string): Promise<FraudAttempt[]> => {
-  let query = supabase
+export const getFraudAttempts = async (companyId: string): Promise<FraudAttempt[]> => {
+  const { data, error } = await supabase
     .from('geo_fraud_attempts')
     .select('id, employee_id, date, attempted_at, latitude, longitude, distance_meters, clock_type, employees (name)')
+    .eq('company_id', companyId)
     .order('attempted_at', { ascending: false })
     .limit(200);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -3956,16 +3876,13 @@ export interface BonusBlock {
   created_at: string;
 }
 
-export const getBonusBlocks = async (companyId?: string): Promise<BonusBlock[]> => {
-  let query = supabase
+export const getBonusBlocks = async (companyId: string): Promise<BonusBlock[]> => {
+  const { data, error } = await supabase
     .from('bonus_blocks')
     .select('id, employee_id, week_start, week_end, reason, created_at, employees (name)')
+    .eq('company_id', companyId)
     .order('created_at', { ascending: false })
     .limit(200);
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -4000,7 +3917,7 @@ export interface AdminCleanupConfig {
   updated_at: string;
 }
 
-export const previewAdminCleanup = async (monthsOld: number, companyId?: string): Promise<{
+export const previewAdminCleanup = async (monthsOld: number, companyId: string): Promise<{
   fraud_attempts: number;
   bonus_blocks: number;
   geo_records: number;
@@ -4009,7 +3926,7 @@ export const previewAdminCleanup = async (monthsOld: number, companyId?: string)
   cutoff.setMonth(cutoff.getMonth() - monthsOld);
   const cutoffDate = cutoff.toISOString().split('T')[0];
 
-  const safeCount = async (query: Promise<{ count: number | null; error: unknown }>): Promise<number> => {
+  const safeCount = async (query: PromiseLike<{ count: number | null; error: unknown }>): Promise<number> => {
     try {
       const result = await query;
       if (result.error) { console.error('Preview count error:', result.error); return 0; }
@@ -4021,11 +3938,9 @@ export const previewAdminCleanup = async (monthsOld: number, companyId?: string)
   let blocksQ = supabase.from('bonus_blocks').select('id', { count: 'exact', head: true }).lt('week_end', cutoffDate);
   let geoQ = supabase.from('attendance').select('id', { count: 'exact', head: true }).not('entry_latitude', 'is', null).lt('date', cutoffDate);
 
-  if (companyId) {
-    fraudQ = fraudQ.eq('company_id', companyId);
-    blocksQ = blocksQ.eq('company_id', companyId);
-    geoQ = geoQ.eq('company_id', companyId);
-  }
+  fraudQ = fraudQ.eq('company_id', companyId);
+  blocksQ = blocksQ.eq('company_id', companyId);
+  geoQ = geoQ.eq('company_id', companyId);
 
   const [fraudCount, blocksCount, geoCount] = await Promise.all([
     safeCount(fraudQ),
@@ -4044,7 +3959,7 @@ export const runAdminCleanup = async (
   monthsOld: number,
   tables: { fraud: boolean; blocks: boolean; geo: boolean },
   performedBy: string,
-  companyId?: string
+  companyId: string
 ): Promise<{ deleted: number; log_id: string }> => {
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - monthsOld);
@@ -4055,29 +3970,29 @@ export const runAdminCleanup = async (
   let geoCleaned = 0;
 
   if (tables.fraud) {
-    let q = supabase
+    const { data, error } = await supabase
       .from('geo_fraud_attempts')
       .delete()
-      .lt('date', cutoffDate);
-    if (companyId) q = q.eq('company_id', companyId);
-    const { data, error } = await q.select('id');
+      .lt('date', cutoffDate)
+      .eq('company_id', companyId)
+      .select('id');
     if (error) console.error('Cleanup fraud error:', error);
     fraudDeleted = data?.length || 0;
   }
 
   if (tables.blocks) {
-    let q = supabase
+    const { data, error } = await supabase
       .from('bonus_blocks')
       .delete()
-      .lt('week_end', cutoffDate);
-    if (companyId) q = q.eq('company_id', companyId);
-    const { data, error } = await q.select('id');
+      .lt('week_end', cutoffDate)
+      .eq('company_id', companyId)
+      .select('id');
     if (error) console.error('Cleanup blocks error:', error);
     blocksDeleted = data?.length || 0;
   }
 
   if (tables.geo) {
-    let q = supabase
+    const { data, error } = await supabase
       .from('attendance')
       .update({
         entry_latitude: null,
@@ -4087,9 +4002,9 @@ export const runAdminCleanup = async (
         exit_longitude: null,
       })
       .not('entry_latitude', 'is', null)
-      .lt('date', cutoffDate);
-    if (companyId) q = q.eq('company_id', companyId);
-    const { data, error } = await q.select('id');
+      .lt('date', cutoffDate)
+      .eq('company_id', companyId)
+      .select('id');
     if (error) console.error('Cleanup geo error:', error);
     geoCleaned = data?.length || 0;
   }
@@ -4208,14 +4123,13 @@ export interface FaceAuthAttempt {
   clock_type: 'entry' | 'exit' | null;
 }
 
-export const getFaceRecognitionConfig = async (companyId?: string): Promise<FaceRecognitionConfig> => {
-  let query = supabase
+export const getFaceRecognitionConfig = async (companyId: string): Promise<FaceRecognitionConfig> => {
+  const { data, error } = await supabase
     .from('face_recognition_config')
-    .select('enabled');
-
-  if (companyId) query = query.eq('company_id', companyId);
-
-  const { data, error } = await query.limit(1).maybeSingle();
+    .select('enabled')
+    .eq('company_id', companyId)
+    .limit(1)
+    .maybeSingle();
   if (error) throw error;
   return { enabled: !!data?.enabled };
 };
@@ -4223,7 +4137,7 @@ export const getFaceRecognitionConfig = async (companyId?: string): Promise<Face
 export const setFaceRecognitionGlobal = async (
   enabled: boolean,
   updatedBy: string,
-  companyId?: string
+  companyId: string
 ): Promise<void> => {
   const now = new Date().toISOString();
   // updated_by é FK para users.id; só inclui no payload se for um id válido
@@ -4231,11 +4145,12 @@ export const setFaceRecognitionGlobal = async (
   const auditor = updatedBy && updatedBy.trim() ? updatedBy.trim() : null;
   const effectiveCompanyId = companyId || DEFAULT_COMPANY_ID;
 
-  let existQ = supabase
+  const { data: existing } = await supabase
     .from('face_recognition_config')
-    .select('id');
-  if (companyId) existQ = existQ.eq('company_id', companyId);
-  const { data: existing } = await existQ.limit(1).maybeSingle();
+    .select('id')
+    .eq('company_id', companyId)
+    .limit(1)
+    .maybeSingle();
 
   if (existing) {
     const { error } = await supabase
@@ -4352,12 +4267,12 @@ export const logFaceAttempt = async (
   }
 };
 
-export const getFaceAuthAttempts = async (filters?: {
+export const getFaceAuthAttempts = async (filters: {
   startDate?: string;
   endDate?: string;
   employeeId?: string;
   success?: boolean;
-}, companyId?: string): Promise<FaceAuthAttempt[]> => {
+} | undefined, companyId: string): Promise<FaceAuthAttempt[]> => {
   let query = supabase
     .from('face_auth_attempts')
     .select(`
@@ -4368,7 +4283,8 @@ export const getFaceAuthAttempts = async (filters?: {
       confidence,
       clock_type,
       employees ( name )
-    `);
+    `)
+    .eq('company_id', companyId);
 
   if (filters?.startDate) {
     query = query.gte('attempted_at', `${filters.startDate}T00:00:00`);
@@ -4381,9 +4297,6 @@ export const getFaceAuthAttempts = async (filters?: {
   }
   if (typeof filters?.success === 'boolean') {
     query = query.eq('success', filters.success);
-  }
-  if (companyId) {
-    query = query.eq('company_id', companyId);
   }
 
   const { data, error } = await query.order('attempted_at', { ascending: false });
