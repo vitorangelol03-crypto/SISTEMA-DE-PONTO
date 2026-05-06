@@ -120,21 +120,23 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   }, [bonusRemovals, historyEmployeeSearch]);
 
   const loadData = React.useCallback(async () => {
+    if (!company?.id) return;
     try {
       setLoading(true);
       const employmentTypeFilter = filters.employmentType === 'all' ? undefined : filters.employmentType;
       const [employeesData, paymentsData, attendancesData, errorRecordsData] = await Promise.all([
-        getAllEmployees(employmentTypeFilter),
-        getPayments(filters.startDate, filters.endDate, filters.employeeId, employmentTypeFilter),
-        getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId, undefined, employmentTypeFilter),
-        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId, employmentTypeFilter)
+        getAllEmployees(employmentTypeFilter, company.id),
+        getPayments(filters.startDate, filters.endDate, filters.employeeId, employmentTypeFilter, company.id),
+        getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId, undefined, employmentTypeFilter, company.id),
+        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId, employmentTypeFilter, company.id)
       ]);
 
       const triageData = employeesData.length > 0
         ? await getTriageDistributionsForEmployees(
             employeesData.map(e => e.id),
             filters.startDate,
-            filters.endDate
+            filters.endDate,
+            company.id
           )
         : [];
 
@@ -149,7 +151,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     } finally {
       setLoading(false);
     }
-  }, [filters.startDate, filters.endDate, filters.employeeId, filters.employmentType]);
+  }, [filters.startDate, filters.endDate, filters.employeeId, filters.employmentType, company?.id]);
 
   const processFinancialData = (
     employeesData: Employee[],
@@ -277,20 +279,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       return;
     }
 
+    if (!company?.id) return;
+    const companyId = company.id;
     try {
-      
+
       for (const employeeId of selectedEmployees) {
-        const employeeAttendances = attendances.filter(att => 
+        const employeeAttendances = attendances.filter(att =>
           att.employee_id === employeeId && att.status === 'present'
         );
-        
+
         for (const attendance of employeeAttendances) {
-          const existingPayment = payments.find(pay => 
+          const existingPayment = payments.find(pay =>
             pay.employee_id === employeeId && pay.date === attendance.date
           );
-          
+
           const currentBonus = existingPayment?.bonus || 0;
-          await upsertPayment(employeeId, attendance.date, dailyRate, currentBonus, userId);
+          await upsertPayment(employeeId, attendance.date, dailyRate, currentBonus, userId, companyId);
         }
       }
       
@@ -320,12 +324,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     }
 
     if (!editingPayment) return;
+    if (!company?.id) return;
 
     const dailyRate = parseFloat(editValues.dailyRate) || 0;
     const bonus = parseFloat(editValues.bonus) || 0;
 
     try {
-      await upsertPayment(editingPayment.employeeId, editingPayment.date, dailyRate, bonus, userId);
+      await upsertPayment(editingPayment.employeeId, editingPayment.date, dailyRate, bonus, userId, company.id);
       toast.success('Pagamento atualizado com sucesso!');
       setEditingPayment(null);
       loadData();
@@ -392,13 +397,14 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       }
     }
 
+    if (!company?.id) return;
     try {
       if (clearType === 'all') {
-        await clearAllPayments(filters.startDate, filters.endDate, userId);
+        await clearAllPayments(filters.startDate, filters.endDate, userId, company.id);
         toast.success('Todos os pagamentos foram limpos com sucesso!');
       } else {
         for (const employeeId of selectedEmployees) {
-          await clearEmployeePayments(employeeId, filters.startDate, filters.endDate);
+          await clearEmployeePayments(employeeId, filters.startDate, filters.endDate, company.id);
         }
         toast.success(`Pagamentos de ${selectedEmployees.size} funcionário(s) foram limpos com sucesso!`);
         setSelectedEmployees(new Set());
@@ -431,6 +437,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       return;
     }
 
+    if (!company?.id) return;
+    const companyId = company.id;
     try {
       for (const employeeId of selectedEmployees) {
         const employeeData = financialData.find(data => data.employee.id === employeeId);
@@ -463,7 +471,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               errorRecord.date,
               originalDailyRate,
               originalBonus,
-              userId
+              userId,
+              companyId
             );
 
             // Atualizar o total manualmente no banco
@@ -479,7 +488,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           } else {
             // Se não existe pagamento, criar um com desconto
             const discountedTotal = Math.max(0, -discountAmount);
-            await upsertPayment(employeeId, errorRecord.date, 0, 0, userId);
+            await upsertPayment(employeeId, errorRecord.date, 0, 0, userId, companyId);
 
             // Atualizar o total para refletir o desconto
             const { error: updateError } = await supabase
@@ -512,12 +521,14 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       return;
     }
 
+    if (!company?.id) return;
     try {
       setLoadingHistory(true);
       const history = await getBonusRemovalHistory(
         historyFilters.employeeId || undefined,
         historyFilters.startDate,
-        historyFilters.endDate
+        historyFilters.endDate,
+        company.id
       );
       setBonusRemovals(history);
     } catch (error) {
