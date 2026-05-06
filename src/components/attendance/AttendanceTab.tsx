@@ -88,14 +88,15 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   // de "Carregando..." e só atualiza o state se os dados realmente mudaram.
   // Isso elimina o flash de re-render completo da tela.
   const loadData = useCallback(async (date: string = selectedDate, silent = false) => {
+    if (!company?.id) return;
     try {
       if (!silent) setLoading(true);
       const employmentType = employmentTypeFilter === 'all' ? undefined : employmentTypeFilter;
       const [employeesData, attendancesData, bonusData, paymentsData] = await Promise.all([
-        getAllEmployees(employmentType),
-        getAttendanceHistory(date, date, undefined, undefined, employmentType),
-        getBonusInfoForDate(date),
-        getPayments(date, date, undefined, employmentType)
+        getAllEmployees(employmentType, company.id),
+        getAttendanceHistory(date, date, undefined, undefined, employmentType, company.id),
+        getBonusInfoForDate(date, company.id),
+        getPayments(date, date, undefined, employmentType, company.id)
       ]);
 
       // Merge inteligente: compara via JSON.stringify e só atualiza o state
@@ -134,15 +135,15 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [selectedDate, employmentTypeFilter]);
+  }, [selectedDate, employmentTypeFilter, company?.id]);
 
   useEffect(() => {
     if (hasPermission('attendance.viewHistory') || isViewingToday) {
       loadData(selectedDate);
     }
-    // loadData é estável via useCallback; depende de selectedDate/employmentTypeFilter
+    // loadData é estável via useCallback; depende de selectedDate/employmentTypeFilter/company
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, employmentTypeFilter]);
+  }, [selectedDate, employmentTypeFilter, company?.id]);
 
   // Polling automático a cada 30s quando está visualizando hoje — silencioso,
   // sem spinner e sem re-render se nada mudou (merge inteligente no loadData).
@@ -153,7 +154,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     }, 30000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isViewingToday, selectedDate, employmentTypeFilter]);
+  }, [isViewingToday, selectedDate, employmentTypeFilter, company?.id]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -245,9 +246,11 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       return;
     }
 
+    if (!company?.id) return;
+
     try {
       const exitTime = exitTimes[employeeId] || null;
-      await markAttendance(employeeId, selectedDate, status, exitTime, userId);
+      await markAttendance(employeeId, selectedDate, status, exitTime, userId, company.id);
       await loadData(selectedDate);
       toast.success(`Presença marcada como ${status === 'present' ? 'presente' : 'falta'}`);
     } catch (error) {
@@ -277,9 +280,10 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       toast.error('Preencha entrada e saída antes de salvar');
       return;
     }
+    if (!company?.id) return;
     setSavingManualTime(prev => ({ ...prev, [employeeId]: true }));
     try {
-      await setManualTime(employeeId, selectedDate, times.entry, times.exit, userId);
+      await setManualTime(employeeId, selectedDate, times.entry, times.exit, userId, company.id);
       toast.success('Horário salvo');
       await loadData(selectedDate);
     } catch (err) {
@@ -296,11 +300,13 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       return;
     }
 
+    if (!company?.id) return;
+
     try {
       const currentStatus = getAttendanceStatus(employeeId);
       if (currentStatus) {
         const exitTime = exitTimes[employeeId] || null;
-        await markAttendance(employeeId, selectedDate, currentStatus, exitTime, userId);
+        await markAttendance(employeeId, selectedDate, currentStatus, exitTime, userId, company.id);
         toast.success('Horário de saída atualizado');
       }
     } catch (error) {
@@ -343,9 +349,10 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       return;
     }
 
+    if (!company?.id) return;
     setApplyingBonus(prev => ({ ...prev, [code]: true }));
     try {
-      await applyBonusToAllPresent(selectedDate, amount, userId, code as BonusType);
+      await applyBonusToAllPresent(selectedDate, amount, userId, code as BonusType, undefined, company.id);
       toast.success(`Bonificação ${code} aplicada com sucesso.`);
       setBonusAmounts(prev => ({ ...prev, [code]: '' }));
       await loadData(selectedDate);
@@ -382,6 +389,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       return;
     }
 
+    if (!company?.id) return;
     setRemovingBonus(true);
     try {
       await removeBonusFromEmployee(
@@ -389,7 +397,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
         selectedDate,
         bonusRemovalObservation,
         userId,
-        bonusTypeToRemove
+        bonusTypeToRemove,
+        company.id
       );
       toast.success(`Bonificação ${bonusTypeToRemove} removida com sucesso`);
       setShowRemoveBonusModal(false);
@@ -416,12 +425,14 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       return;
     }
 
+    if (!company?.id) return;
     setRemovingBonus(true);
     try {
       const count = await removeAllBonusesForDate(
         selectedDate,
         removeAllBonusObservation,
-        userId
+        userId,
+        company.id
       );
       toast.success(`${count} bonificação(ões) removida(s) com sucesso`);
       setShowRemoveAllBonusModal(false);
@@ -465,6 +476,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       return;
     }
 
+    if (!company?.id) return;
     setBulkMarkingLoading(true);
     let successCount = 0;
     let errorCount = 0;
@@ -473,7 +485,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       for (const employeeId of selectedEmployees) {
         try {
           const exitTime = exitTimes[employeeId] || null;
-          await markAttendance(employeeId, selectedDate, status, exitTime, userId);
+          await markAttendance(employeeId, selectedDate, status, exitTime, userId, company.id);
           successCount++;
         } catch (error) {
           console.error(`Erro ao marcar presença para funcionário ${employeeId}:`, error);
@@ -533,7 +545,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
         // Reset geral também apaga as bonificações do dia — sem isso, os cards
         // B/C1/C2 continuam visíveis porque getBonusInfoForDate lê da tabela `bonuses`.
         try {
-          await clearBonusRegistryForDate(selectedDate);
+          if (company?.id) await clearBonusRegistryForDate(selectedDate, company.id);
         } catch (bonusError) {
           console.error('Erro ao limpar bonuses do dia no reset geral:', bonusError);
         }
