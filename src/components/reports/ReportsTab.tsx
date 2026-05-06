@@ -40,13 +40,14 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   });
 
   const loadData = async () => {
+    if (!company?.id) return;
     try {
       setLoading(true);
       const employmentType = filters.employmentType === 'all' ? undefined : filters.employmentType;
       const [employeesData, attendancesData, paymentsData] = await Promise.all([
-        getAllEmployees(employmentType),
-        getAttendanceHistory(undefined, undefined, undefined, undefined, employmentType),
-        getPayments(undefined, undefined, undefined, employmentType)
+        getAllEmployees(employmentType, company.id),
+        getAttendanceHistory(undefined, undefined, undefined, undefined, employmentType, company.id),
+        getPayments(undefined, undefined, undefined, employmentType, company.id)
       ]);
 
       setEmployees(employeesData);
@@ -63,7 +64,8 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
 
   useEffect(() => {
     loadData();
-  }, [filters.employmentType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.employmentType, company?.id]);
 
   // Carrega tipos de bonificação da empresa atual.
   // Substitui o fallback (B/C1/C2) só se o banco retornar tipos. Se vier vazio, mantém fallback.
