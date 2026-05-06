@@ -493,6 +493,32 @@ export const getAllEmployees = async (employmentType: string | undefined, compan
   return data || [];
 };
 
+/**
+ * Lista TODOS os funcionários de TODAS as empresas (cross-empresa intencional).
+ *
+ * USO LEGÍTIMO ÚNICO: deduplicação de CPF na importação em massa
+ * (employee.cpf é UNIQUE globalmente).
+ *
+ * NÃO USAR em listagens de UI — use getAllEmployees(employmentType, companyId)
+ * que filtra por empresa.
+ */
+export const getAllEmployeesAcrossAllCompanies = async (
+  employmentType?: string,
+): Promise<Employee[]> => {
+  let query = supabase
+    .from('employees')
+    .select('*');
+
+  if (employmentType && employmentType !== 'all') {
+    query = query.eq('employment_type', employmentType);
+  }
+
+  const { data, error } = await query.order('name');
+
+  if (error) throw error;
+  return data || [];
+};
+
 export const createEmployee = async (
   name: string,
   cpf: string,
