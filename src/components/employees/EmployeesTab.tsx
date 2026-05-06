@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound, Clock, Briefcase, Calendar, Hash, Save } from 'lucide-react';
-import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee, Employee, bulkCreateEmployees, setEmployeePin, resetEmployeePin, getCompanies } from '../../services/database';
+import { getAllEmployees, getAllEmployeesAcrossAllCompanies, createEmployee, updateEmployee, deleteEmployee, Employee, bulkCreateEmployees, setEmployeePin, resetEmployeePin, getCompanies } from '../../services/database';
 import { supabase } from '../../lib/supabase';
 
 const SCHEDULE_DAY_LABELS: ReadonlyArray<{ index: number; short: string; long: string }> = [
@@ -101,9 +101,10 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   const [editingCell, setEditingCell] = useState<{ rowNumber: number; field: string } | null>(null);
 
   const loadEmployees = async () => {
+    if (!company?.id) return;
     try {
       setLoading(true);
-      const data = await getAllEmployees();
+      const data = await getAllEmployees(undefined, company.id);
       setEmployees(data);
       setFilteredEmployees(data);
     } catch (error) {
@@ -116,7 +117,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
   useEffect(() => {
     loadEmployees();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company?.id]);
 
   useEffect(() => {
     const filtered = employees.filter(employee => {
@@ -171,6 +173,11 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
     if (!validateCPF(formData.cpf)) {
       toast.error('CPF inválido');
+      return;
+    }
+
+    if (!company?.id) {
+      toast.error('Empresa não selecionada');
       return;
     }
 
@@ -232,7 +239,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
           formData.city.trim() || null,
           formData.state.trim() || null,
           formData.zipCode.trim() || null,
-          company?.id,
+          company.id,
           extras,
         );
         toast.success('Funcionário cadastrado com sucesso!');
@@ -337,9 +344,11 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       // de CPFs e nomes de empresas via getAllEmployees() + getCompanies()
       // em paralelo. Validator novo (validateImportRow) usa esse contexto
       // pra classificar errors/warnings corretamente.
+      // getAllEmployeesAcrossAllCompanies: cross-empresa intencional para detectar
+      // duplicatas globais de CPF (employee.cpf é UNIQUE globalmente).
       const [thisCompanyEmployees, allEmployees, companies] = await Promise.all([
         getAllEmployees(undefined, company.id),
-        getAllEmployees(),
+        getAllEmployeesAcrossAllCompanies(),
         getCompanies(),
       ]);
 
@@ -484,10 +493,14 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
   const handleConfirmImport = async () => {
     if (!importValidation || importValidation.valid.length === 0) return;
+    if (!company?.id) {
+      toast.error('Empresa não selecionada');
+      return;
+    }
 
     try {
       setImporting(true);
-      const result = await bulkCreateEmployees(importValidation.valid, userId, company?.id);
+      const result = await bulkCreateEmployees(importValidation.valid, userId, company.id);
 
       setImportResult({
         success: result.success.length,
