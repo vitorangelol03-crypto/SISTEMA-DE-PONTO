@@ -11,6 +11,7 @@ import {
   TriageDistributionPreview,
   TriageType,
 } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 
@@ -24,6 +25,7 @@ interface Preview extends TriageDistributionPreview {
 }
 
 export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) => {
+  const { company } = useCompany();
   const [records, setRecords] = useState<TriageError[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -47,6 +49,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
   const [confirming, setConfirming] = useState(false);
 
   const loadRecords = React.useCallback(async () => {
+    if (!company?.id) return;
     try {
       setLoading(true);
       const today = getBrazilDate();
@@ -54,7 +57,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
       const first = `${today.slice(0, 7)}-01`;
       const lastDay = new Date(y, m, 0).getDate();
       const last = `${today.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`;
-      const data = await getTriageErrors(first, last);
+      const data = await getTriageErrors(first, last, company.id);
       setRecords(data);
     } catch (err) {
       console.error(err);
@@ -62,24 +65,28 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [company?.id]);
 
   useEffect(() => {
     loadRecords();
   }, [loadRecords]);
 
   useEffect(() => {
+    if (!company?.id) {
+      setPresentCount(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        const list = await getEmployeesPresentInPeriod(formData.date, formData.date);
+        const list = await getEmployeesPresentInPeriod(formData.date, formData.date, company.id);
         if (!cancelled) setPresentCount(list.length);
       } catch {
         if (!cancelled) setPresentCount(null);
       }
     })();
     return () => { cancelled = true; };
-  }, [formData.date]);
+  }, [formData.date, company?.id]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,6 +109,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
       return;
     }
 
+    if (!company?.id) return;
     setSaving(true);
     try {
       await upsertTriageError(
@@ -110,7 +118,8 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
         formData.observations.trim() || null,
         userId,
         formData.triageType,
-        value
+        value,
+        company.id
       );
       toast.success('Erro de triagem registrado');
       setFormData({
@@ -162,9 +171,10 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
       return;
     }
 
+    if (!company?.id) return;
     setCalculating(true);
     try {
-      const result = await computeTriageDistribution(distRange.startDate, distRange.endDate, value);
+      const result = await computeTriageDistribution(distRange.startDate, distRange.endDate, value, company.id);
 
       if (result.totalErrors <= 0 && result.totalDirectValue <= 0) {
         toast.error('Nenhum erro de triagem no período');
@@ -195,13 +205,15 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
     if (!confirm(`Confirmar distribuição? R$ ${preview.totalDeducted.toFixed(2).replace('.', ',')} serão descontados de ${preview.perEmployee.length} funcionários.`)) {
       return;
     }
+    if (!company?.id) return;
     setConfirming(true);
     try {
       const result = await distributeTriageErrors(
         distRange.startDate,
         distRange.endDate,
         preview.valuePerError,
-        userId
+        userId,
+        company.id
       );
       toast.success(
         `Distribuição realizada! R$ ${result.totalDeducted.toFixed(2).replace('.', ',')} descontados de ${result.totalEmployees} funcionários`
