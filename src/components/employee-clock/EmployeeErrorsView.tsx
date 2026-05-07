@@ -6,6 +6,7 @@ import {
   PaymentPeriod,
   ErrorType,
 } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 
 interface EmployeeErrorsViewProps {
   employeeId: string;
@@ -25,19 +26,22 @@ interface PeriodDetail {
 }
 
 export const EmployeeErrorsView: React.FC<EmployeeErrorsViewProps> = ({ employeeId }) => {
+  const { company } = useCompany();
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState<PeriodDetail[]>([]);
 
   useEffect(() => {
+    if (!company?.id) return;
+    const companyId = company.id;
     let cancelled = false;
     (async () => {
       try {
         setLoading(true);
-        const periods = await getEmployeeErrorPeriods(employeeId);
+        const periods = await getEmployeeErrorPeriods(employeeId, companyId);
         const withErrors = periods.filter(p => p.has_errors);
         const loaded: PeriodDetail[] = [];
         for (const entry of withErrors) {
-          const detail = await getEmployeeErrorsByPeriod(employeeId, entry.period.id);
+          const detail = await getEmployeeErrorsByPeriod(employeeId, entry.period.id, companyId);
           loaded.push(detail);
         }
         if (!cancelled) setDetails(loaded);
@@ -48,7 +52,7 @@ export const EmployeeErrorsView: React.FC<EmployeeErrorsViewProps> = ({ employee
       }
     })();
     return () => { cancelled = true; };
-  }, [employeeId]);
+  }, [employeeId, company?.id]);
 
   if (loading) {
     return (
