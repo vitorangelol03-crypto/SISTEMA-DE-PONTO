@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserCog, Plus, Trash2, Eye, EyeOff, RefreshCw, Shield } from 'lucide-react';
 import { getAllUsers, createUser, deleteUser, User } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 import { isValidPassword, isNumericString } from '../../utils/validation';
 import { getUserPermissions } from '../../services/permissions';
 import { UserPermissions } from '../../types/permissions';
@@ -13,6 +14,7 @@ interface UsersTabProps {
 }
 
 export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => {
+  const { company } = useCompany();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -27,10 +29,11 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
     confirmPassword: ''
   });
 
-  const loadUsers = async () => {
+  const loadUsers = React.useCallback(async () => {
+    if (!company?.id) return;
     try {
       setLoading(true);
-      const data = await getAllUsers();
+      const data = await getAllUsers(company.id);
       setUsers(data);
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
@@ -38,11 +41,11 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
     } finally {
       setLoading(false);
     }
-  };
+  }, [company?.id]);
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [loadUsers]);
 
   const resetForm = () => {
     setFormData({ id: '', password: '', confirmPassword: '' });
@@ -74,8 +77,13 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
       return;
     }
 
+    if (!company?.id) {
+      toast.error('Empresa não selecionada');
+      return;
+    }
+
     try {
-      await createUser(formData.id.trim(), formData.password, 'supervisor', userId);
+      await createUser(formData.id.trim(), formData.password, 'supervisor', userId, company.id);
       toast.success('Supervisor criado com sucesso!');
       resetForm();
       loadUsers();
