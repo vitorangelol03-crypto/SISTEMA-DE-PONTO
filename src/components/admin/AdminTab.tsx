@@ -3,6 +3,7 @@ import { Lock, MapPin, AlertTriangle, ShieldOff, Key, RefreshCw, Unlock, Trash2,
 import toast from 'react-hot-toast';
 import { BonusTypesManager } from './BonusTypesManager';
 import { CompanySettings } from './CompanySettings';
+import { useCompany } from '../../contexts/CompanyContext';
 import {
   verifyAdminSecret,
   updateAdminSecret,
@@ -71,6 +72,7 @@ const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm foc
 const selectCls = `${inputCls} lg:min-w-[140px]`;
 
 export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
+  const { company } = useCompany();
   // ─── Auth ─────────────────────────────────────────────────────────────────
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
@@ -156,13 +158,14 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
 
   // ─── Data loader ──────────────────────────────────────────────────────────
   const loadData = async () => {
+    if (!company?.id) return;
     setLoading(true);
     try {
       const [geo, fraud, blocks, emps] = await Promise.all([
-        getGeoRecords(),
-        getFraudAttempts(),
-        getBonusBlocks(),
-        getAllEmployees(),
+        getGeoRecords(undefined, company.id),
+        getFraudAttempts(company.id),
+        getBonusBlocks(company.id),
+        getAllEmployees(undefined, company.id),
       ]);
       setGeoRecords(geo);
       setFraudAttempts(fraud);
@@ -189,9 +192,10 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
   };
 
   const loadFaceConfig = async () => {
+    if (!company?.id) return;
     setFaceGlobalLoading(true);
     try {
-      const cfg = await getFaceRecognitionConfig();
+      const cfg = await getFaceRecognitionConfig(company.id);
       setFaceGlobalEnabled(cfg.enabled);
     } catch (err) {
       console.error('Erro ao carregar config facial:', err);
@@ -201,6 +205,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
   };
 
   const loadFaceAttempts = async () => {
+    if (!company?.id) return;
     setFaceAttemptsLoading(true);
     try {
       const attempts = await getFaceAuthAttempts({
@@ -208,7 +213,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
         endDate: faceDateEnd || undefined,
         employeeId: faceEmployeeFilter || undefined,
         success: faceResultFilter === 'success' ? true : faceResultFilter === 'fail' ? false : undefined,
-      });
+      }, company.id);
       setFaceAttempts(attempts);
     } catch (err) {
       console.error('Erro ao carregar tentativas faciais:', err);
@@ -232,13 +237,13 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       }
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated]);
+  }, [authenticated, company?.id]);
 
   useEffect(() => {
     if (!authenticated) return;
     loadFaceAttempts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [faceDateStart, faceDateEnd, faceEmployeeFilter, faceResultFilter]);
+  }, [faceDateStart, faceDateEnd, faceEmployeeFilter, faceResultFilter, company?.id]);
 
   // ─── Filtered data (client-side) ─────────────────────────────────────────
   const filteredGeo = useMemo(() => geoRecords.filter(r => {
@@ -270,11 +275,12 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleUnblock = async (employeeId: string, weekStart: string) => {
+    if (!company?.id) return;
     setUnblockingId(employeeId);
     try {
       await unblockBonus(employeeId, weekStart);
       toast.success('Bonificação desbloqueada');
-      const blocks = await getBonusBlocks();
+      const blocks = await getBonusBlocks(company.id);
       setBonusBlocks(blocks);
     } catch {
       toast.error('Erro ao desbloquear');
@@ -306,9 +312,10 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
   };
 
   const handlePreview = async () => {
+    if (!company?.id) return;
     setPreviewLoading(true);
     try {
-      const preview = await previewAdminCleanup(cleanupMonths);
+      const preview = await previewAdminCleanup(cleanupMonths, company.id);
       setCleanupPreview(preview);
     } catch {
       toast.error('Erro ao pré-visualizar');
@@ -322,9 +329,10 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       toast.error('Digite CONFIRMAR para prosseguir');
       return;
     }
+    if (!company?.id) return;
     setCleanupLoading(true);
     try {
-      const result = await runAdminCleanup(cleanupMonths, cleanupTables, 'admin');
+      const result = await runAdminCleanup(cleanupMonths, cleanupTables, 'admin', company.id);
       toast.success(`Limpeza concluída: ${result.deleted} registros processados`);
       setCleanupPreview(null);
       setCleanupConfirmText('');
@@ -365,10 +373,11 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
   };
 
   const handleRunAutoNow = async () => {
+    if (!company?.id) return;
     setAutoRunning(true);
     try {
       const months = autoConfig?.interval_months ?? 6;
-      const result = await runAdminCleanup(months, { fraud: true, blocks: true, geo: true }, 'admin-manual');
+      const result = await runAdminCleanup(months, { fraud: true, blocks: true, geo: true }, 'admin-manual', company.id);
       const now = new Date();
       const newNext = new Date(now);
       newNext.setMonth(newNext.getMonth() + months);
@@ -389,10 +398,11 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
   };
 
   const handleToggleFaceGlobal = async () => {
+    if (!company?.id) return;
     const next = !faceGlobalEnabled;
     setFaceGlobalSaving(true);
     try {
-      await setFaceRecognitionGlobal(next, userId);
+      await setFaceRecognitionGlobal(next, userId, company.id);
       setFaceGlobalEnabled(next);
       toast.success(next ? 'Reconhecimento facial ativado globalmente' : 'Reconhecimento facial desativado');
     } catch (err) {
