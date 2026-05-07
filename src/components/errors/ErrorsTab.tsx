@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target, Package, FileSearch } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Area, ComposedChart, LabelList, Cell } from 'recharts';
 import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorRecord, deleteErrorRecord, getErrorStatistics, Employee, Attendance, ErrorRecord, ErrorType } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
@@ -23,6 +24,7 @@ interface EmployeeWithErrors {
 }
 
 export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) => {
+  const { company } = useCompany();
   const [activeSubTab, setActiveSubTab] = useState<'individual' | 'triage' | 'periods'>('individual');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [errorRecords, setErrorRecords] = useState<ErrorRecord[]>([]);
@@ -67,14 +69,15 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
   });
 
   const loadData = React.useCallback(async () => {
+    if (!company?.id) return;
     try {
       setLoading(true);
       const employmentType = filters.employmentType === 'all' ? undefined : filters.employmentType;
       const [employeesData, attendancesData, errorRecordsData, statsData] = await Promise.all([
-        getAllEmployees(employmentType),
-        getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId, undefined, employmentType),
-        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId, employmentType),
-        getErrorStatistics(filters.startDate, filters.endDate)
+        getAllEmployees(employmentType, company.id),
+        getAttendanceHistory(filters.startDate, filters.endDate, filters.employeeId, undefined, employmentType, company.id),
+        getErrorRecords(filters.startDate, filters.endDate, filters.employeeId, employmentType, company.id),
+        getErrorStatistics(filters.startDate, filters.endDate, company.id)
       ]);
 
       setEmployees(employeesData);
@@ -88,7 +91,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
     } finally {
       setLoading(false);
     }
-  }, [filters.startDate, filters.endDate, filters.employeeId, filters.employmentType]);
+  }, [filters.startDate, filters.endDate, filters.employeeId, filters.employmentType, company?.id]);
 
   const processEmployeeErrorData = (
     employeesData: Employee[], 
@@ -252,6 +255,11 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
       return;
     }
 
+    if (!company?.id) {
+      toast.error('Empresa não selecionada');
+      return;
+    }
+
     try {
       await upsertErrorRecord(
         errorFormData.employeeId,
@@ -260,7 +268,8 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
         errorFormData.observations.trim(),
         userId,
         errorFormData.errorType,
-        errorValue
+        errorValue,
+        company.id
       );
 
       toast.success(editingError ? 'Erro atualizado com sucesso!' : 'Erro registrado com sucesso!');
