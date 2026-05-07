@@ -23,6 +23,7 @@ import {
   CleanupLog,
   Employee
 } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 import { format, subMonths } from 'date-fns';
 
 interface DataManagementTabProps {
@@ -31,6 +32,7 @@ interface DataManagementTabProps {
 }
 
 export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, hasPermission }) => {
+  const { company } = useCompany();
   const [statistics, setStatistics] = useState<DataStatistics | null>(null);
   const [retentionSettings, setRetentionSettings] = useState<DataRetentionSettings[]>([]);
   const [autoCleanupConfig, setAutoCleanupConfig] = useState<AutoCleanupConfig | null>(null);
@@ -61,17 +63,19 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
 
   useEffect(() => {
     loadData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company?.id]);
 
   const loadData = async () => {
+    if (!company?.id) return;
     try {
       setLoading(true);
       const [stats, retention, cleanup, logs, emps] = await Promise.all([
-        getDataStatistics(),
+        getDataStatistics(company.id),
         getDataRetentionSettings(),
         getAutoCleanupConfig(),
         getCleanupLogs(20),
-        getAllEmployees()
+        getAllEmployees(undefined, company.id)
       ]);
 
       setStatistics(stats);
@@ -133,12 +137,14 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
       return;
     }
 
+    if (!company?.id) return;
     try {
       const counts = await previewCleanupData(
         selectedDataTypes,
         startDate,
         endDate,
-        selectedEmployee
+        selectedEmployee,
+        company.id
       );
       setPreviewCounts(counts);
       setShowPreview(true);
@@ -149,6 +155,8 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
   };
 
   const handleGenerateBackup = async () => {
+    if (!company?.id) return;
+    const companyId = company.id;
     try {
       const workbook = XLSX.utils.book_new();
 
@@ -157,7 +165,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
         let formattedData: any[] = [];
 
         if (dataType === 'attendance') {
-          rawData = await getAttendanceHistory(startDate, endDate, selectedEmployee);
+          rawData = await getAttendanceHistory(startDate, endDate, selectedEmployee, undefined, undefined, companyId);
           formattedData = rawData.map(item => ({
             'Nome do Funcionário': item.employees?.name || 'N/A',
             'CPF': item.employees?.cpf || 'N/A',
@@ -168,7 +176,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
             'Data de Criação': format(new Date(item.created_at), 'dd/MM/yyyy HH:mm:ss')
           }));
         } else if (dataType === 'payments') {
-          rawData = await getPayments(startDate, endDate, selectedEmployee);
+          rawData = await getPayments(startDate, endDate, selectedEmployee, undefined, companyId);
           formattedData = rawData.map(item => ({
             'Nome do Funcionário': item.employees?.name || 'N/A',
             'CPF': item.employees?.cpf || 'N/A',
@@ -181,7 +189,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
             'Última Atualização': format(new Date(item.updated_at), 'dd/MM/yyyy HH:mm:ss')
           }));
         } else if (dataType === 'error_records') {
-          rawData = await getErrorRecords(startDate, endDate, selectedEmployee);
+          rawData = await getErrorRecords(startDate, endDate, selectedEmployee, undefined, companyId);
           formattedData = rawData.map(item => ({
             'Nome do Funcionário': item.employees?.name || 'N/A',
             'CPF': item.employees?.cpf || 'N/A',
@@ -195,7 +203,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
             'Última Atualização': format(new Date(item.updated_at), 'dd/MM/yyyy HH:mm:ss')
           }));
         } else if (dataType === 'bonuses') {
-          rawData = await getBonuses();
+          rawData = await getBonuses(companyId);
           if (startDate) {
             rawData = rawData.filter(b => b.date >= startDate);
           }
@@ -263,13 +271,15 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
         return;
       }
 
+      if (!company?.id) return;
+      const companyId = company.id;
       try {
         setIsProcessing(true);
         const startTime = Date.now();
         const recordsDeleted: Record<string, number> = {};
 
         for (const dataType of selectedDataTypes) {
-          const count = await deleteOldRecords(dataType, startDate, endDate, selectedEmployee, userId);
+          const count = await deleteOldRecords(dataType, startDate, endDate, selectedEmployee, userId, companyId);
           recordsDeleted[dataType] = count;
         }
 
