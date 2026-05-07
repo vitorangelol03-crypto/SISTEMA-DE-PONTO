@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileSpreadsheet, RefreshCw, Download, Calendar, Edit2, Save, X, Trash2, Plus, Check, AlertTriangle, DollarSign, KeyRound, CheckCircle2 } from 'lucide-react';
 import { getAllEmployees, getEmployeeNetPayments, Employee } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { exportC6PaymentSheet } from '../../utils/c6Export';
 import toast from 'react-hot-toast';
@@ -24,6 +25,7 @@ interface PaymentRow {
 }
 
 export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermission }) => {
+  const { company } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,11 +56,12 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
 
   useEffect(() => {
     loadEmployees();
-  }, []);
+  }, [company?.id]);
 
   const loadEmployees = async () => {
+    if (!company?.id) return;
     try {
-      const employeesData = await getAllEmployees();
+      const employeesData = await getAllEmployees(undefined, company.id);
       setEmployees(employeesData);
     } catch (error) {
       console.error('Erro ao carregar funcionários:', error);
@@ -95,10 +98,15 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
       return;
     }
 
+    if (!company?.id) {
+      toast.error('Empresa não selecionada');
+      return;
+    }
+
     try {
       setLoading(true);
       const employmentType = filters.employmentType === 'all' ? undefined : filters.employmentType;
-      const netByEmployee = await getEmployeeNetPayments(filters.startDate, filters.endDate, employmentType);
+      const netByEmployee = await getEmployeeNetPayments(filters.startDate, filters.endDate, employmentType, company.id);
 
       if (netByEmployee.size === 0) {
         toast.error('Nenhum pagamento encontrado no período selecionado');
