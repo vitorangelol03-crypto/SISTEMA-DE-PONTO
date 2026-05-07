@@ -9,6 +9,7 @@ import {
   autoCreateWeeklyPeriod,
   PaymentPeriod,
 } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 
@@ -18,6 +19,7 @@ interface PaymentPeriodsTabProps {
 }
 
 export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) => {
+  const { company } = useCompany();
   const [periods, setPeriods] = useState<PaymentPeriod[]>([]);
   const [loading, setLoading] = useState(true);
   const [autoWeekly, setAutoWeekly] = useState(true);
@@ -30,10 +32,11 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
   });
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
+  const load = React.useCallback(async () => {
+    if (!company?.id) return;
     try {
       setLoading(true);
-      const [list, cfg] = await Promise.all([getPaymentPeriods(), getPaymentPeriodConfig()]);
+      const [list, cfg] = await Promise.all([getPaymentPeriods(company.id), getPaymentPeriodConfig(company.id)]);
       setPeriods(list);
       setAutoWeekly(cfg.auto_weekly);
     } catch (err) {
@@ -42,9 +45,9 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
     } finally {
       setLoading(false);
     }
-  };
+  }, [company?.id]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +55,7 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
       toast.error('Data inicial deve ser anterior à final');
       return;
     }
+    if (!company?.id) return;
     setSaving(true);
     try {
       await createPaymentPeriod(
@@ -59,7 +63,8 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
         formData.endDate,
         formData.paymentDate,
         formData.label.trim() || null,
-        userId
+        userId,
+        company.id
       );
       toast.success('Período criado');
       setShowForm(false);
@@ -104,13 +109,14 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
   };
 
   const handleToggleAuto = async () => {
+    if (!company?.id) return;
     try {
       const next = !autoWeekly;
-      await setPaymentPeriodAutoWeekly(next, userId);
+      await setPaymentPeriodAutoWeekly(next, userId, company.id);
       setAutoWeekly(next);
       toast.success(next ? 'Criação automática ativada' : 'Criação automática desativada');
       if (next) {
-        await autoCreateWeeklyPeriod();
+        await autoCreateWeeklyPeriod(company.id);
         load();
       }
     } catch (err) {
