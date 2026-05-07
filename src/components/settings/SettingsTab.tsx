@@ -6,6 +6,7 @@ import {
   updateBonusDefault,
   BonusType,
 } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 
 interface SettingsTabProps {
   userId: string;
@@ -14,6 +15,7 @@ interface SettingsTabProps {
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
+  const { company } = useCompany();
   const isAdmin = userId === '9999';
 
   const [bonusDefaults, setBonusDefaults] = useState<Record<BonusType, string>>({
@@ -29,10 +31,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
       setLoadingDefaults(false);
       return;
     }
+    if (!company?.id) return;
     let cancelled = false;
     (async () => {
       try {
-        const defaults = await getBonusDefaults();
+        const defaults = await getBonusDefaults(company.id);
         if (cancelled) return;
         setBonusDefaults({
           B: defaults.B.toFixed(2),
@@ -47,7 +50,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
       }
     })();
     return () => { cancelled = true; };
-  }, [isAdmin]);
+  }, [isAdmin, company?.id]);
 
   const handleSaveBonusDefault = async (type: BonusType) => {
     const parsed = parseFloat(bonusDefaults[type]);
@@ -55,9 +58,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
       toast.error('Valor inválido');
       return;
     }
+    if (!company?.id) {
+      toast.error('Empresa não selecionada');
+      return;
+    }
     setSavingType(type);
     try {
-      await updateBonusDefault(type, parsed, userId);
+      await updateBonusDefault(type, parsed, userId, company.id);
       toast.success(`Valor padrão de ${type} atualizado para R$ ${parsed.toFixed(2)}`);
       setBonusDefaults(prev => ({ ...prev, [type]: parsed.toFixed(2) }));
     } catch (error) {
