@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScanFace, X, Loader2 } from 'lucide-react';
 import { getFaceDescriptor, logFaceAttempt, Employee } from '../../services/database';
 import { useFaceApi } from '../../hooks/useFaceApi';
+import { useCompany } from '../../contexts/CompanyContext';
 import { FaceScanFrame, FaceScanVisual } from './FaceScanFrame';
 
 interface FaceVerificationProps {
@@ -31,6 +32,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
   maxAttempts = 3,
   clockType = null,
 }) => {
+  const { company } = useCompany();
   const { loading: modelsLoading, ready: modelsReady, error: modelsError, detectFace, compareFaces } = useFaceApi();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -158,19 +160,21 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
 
   const handleSuccess = useCallback(async (distance: number) => {
     if (resultHandledRef.current) return;
+    if (!company?.id) return;
     resultHandledRef.current = true;
     setConfidence(Math.max(0, 1 - distance));
     setPhase('success');
     stopStream();
-    await logFaceAttempt(employee.id, true, Math.max(0, 1 - distance), clockType);
+    await logFaceAttempt(employee.id, true, Math.max(0, 1 - distance), clockType, company.id);
     setTimeout(() => onSuccess(), 1000);
-  }, [employee.id, clockType, onSuccess]);
+  }, [employee.id, clockType, onSuccess, company?.id]);
 
   const handleFail = useCallback(async (distance: number) => {
     if (resultHandledRef.current) return;
+    if (!company?.id) return;
     resultHandledRef.current = true;
     setConfidence(Math.max(0, 1 - distance));
-    await logFaceAttempt(employee.id, false, Math.max(0, 1 - distance), clockType);
+    await logFaceAttempt(employee.id, false, Math.max(0, 1 - distance), clockType, company.id);
 
     if (attempt >= maxAttempts) {
       setPhase('fail-final');
@@ -186,7 +190,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
         setPhase('no-face');
       }, 1500);
     }
-  }, [attempt, maxAttempts, employee.id, clockType, onFail]);
+  }, [attempt, maxAttempts, employee.id, clockType, onFail, company?.id]);
 
   // Loop de detecção + match
   useEffect(() => {
