@@ -1,7 +1,7 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import * as XLSX from 'xlsx';
 import * as path from 'node:path';
-import { ADMIN, loginAs, goToTab } from './helpers';
+import { ADMIN, loginAs, goToTab, switchCompany } from './helpers';
 import { getClient } from './cleanup';
 
 /**
@@ -64,22 +64,6 @@ function generateValidCPF(base9: string): string {
   if (dv2 === 10) dv2 = 0;
   arr.push(dv2);
   return arr.join('');
-}
-
-/**
- * Troca empresa via dropdown CompanySwitcher (admin vê todas).
- * Aguarda o display_name no header refletir a nova empresa.
- */
-async function switchCompany(page: Page, targetName: 'Caratinga' | 'Ponte Nova'): Promise<void> {
-  const trigger = page.locator('button[aria-haspopup="listbox"]').first();
-  await trigger.click();
-  // Aguarda listbox aparecer
-  const listbox = page.locator('[role="listbox"]');
-  await expect(listbox).toBeVisible({ timeout: 5_000 });
-  // Pega o botão dentro do listbox que contém o nome da empresa
-  await listbox.locator('button').filter({ hasText: targetName }).first().click();
-  // Confirma: trigger reflete nova empresa
-  await expect(trigger).toContainText(new RegExp(targetName, 'i'), { timeout: 10_000 });
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────

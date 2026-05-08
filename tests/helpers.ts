@@ -36,3 +36,19 @@ export async function logout(page: Page) {
 export async function goToTab(page: Page, tabName: string) {
   await page.getByRole('button', { name: new RegExp(`^${tabName}$`) }).first().click();
 }
+
+/**
+ * Troca empresa via dropdown CompanySwitcher (admin vê todas).
+ * Aguarda o display_name no header refletir a nova empresa.
+ *
+ * Pré-requisito: admin logado E availableCompanies.length > 1
+ * (caso contrário CompanySwitcher não renderiza no header).
+ */
+export async function switchCompany(page: Page, targetName: 'Caratinga' | 'Ponte Nova'): Promise<void> {
+  const trigger = page.locator('button[aria-haspopup="listbox"]').first();
+  await trigger.click();
+  const listbox = page.locator('[role="listbox"]');
+  await expect(listbox).toBeVisible({ timeout: 5_000 });
+  await listbox.locator('button').filter({ hasText: targetName }).first().click();
+  await expect(trigger).toContainText(new RegExp(targetName, 'i'), { timeout: 10_000 });
+}
