@@ -67,12 +67,10 @@ export const MirrorMassDialog: React.FC<MirrorMassDialogProps> = ({ open, onClos
     if (!open) return;
     let cancelled = false;
     setLoadingEmployees(true);
-    getAllEmployees()
+    getAllEmployees(undefined, company.id)
       .then(emps => {
         if (cancelled) return;
-        // Apenas funcionários da empresa atual.
-        const filtered = emps.filter(e => e.company_id === company.id);
-        setEmployees(filtered);
+        setEmployees(emps);
       })
       .catch(err => {
         console.error('Erro ao carregar funcionários:', err);
@@ -136,7 +134,7 @@ export const MirrorMassDialog: React.FC<MirrorMassDialogProps> = ({ open, onClos
       const dataList = [];
       for (let i = 0; i < targetEmployees.length; i++) {
         const emp = targetEmployees[i];
-        const attendances = await getAttendanceHistory(start, end, emp.id);
+        const attendances = await getAttendanceHistory(start, end, emp.id, undefined, undefined, company.id);
         const data = buildMirrorData({
           employee: emp,
           company,
