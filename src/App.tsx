@@ -31,7 +31,7 @@ const AdminTab = lazy(() => import('./components/admin/AdminTab').then(m => ({ d
 function App() {
   const { user, loading, login, logout } = useAuth();
   const { hasPermission } = usePermissions(user?.id || null);
-  const { setCompany } = useCompany();
+  const { company, setCompany } = useCompany();
   const [activeTab, setActiveTab] = useState<TabType>('attendance');
   // Admin sempre escolhe empresa após cada login (não em refresh).
   const [needsCompanySelection, setNeedsCompanySelection] = useState(false);
@@ -65,8 +65,12 @@ function App() {
 
   useEffect(() => {
     initializeSystem();
-    autoCreateWeeklyPeriod().catch(err => console.error('autoCreateWeeklyPeriod falhou:', err));
   }, []);
+
+  useEffect(() => {
+    if (!company?.id) return;
+    autoCreateWeeklyPeriod(company.id).catch(err => console.error('autoCreateWeeklyPeriod falhou:', err));
+  }, [company?.id]);
 
   // Tela de registro de ponto — não exige login de supervisor
   if (isClockMode) {

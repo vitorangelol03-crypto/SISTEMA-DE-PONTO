@@ -4093,14 +4093,14 @@ export const updateAdminCleanupConfig = async (
   }
 };
 
-export const runAutoCleanup = async (): Promise<boolean> => {
+export const runAutoCleanup = async (companyId: string): Promise<boolean> => {
   const config = await getAdminCleanupConfig();
   if (!config || !config.enabled || !config.next_cleanup_at) return false;
 
   const now = new Date();
   if (now < new Date(config.next_cleanup_at)) return false;
 
-  await runAdminCleanup(config.interval_months, { fraud: true, blocks: true, geo: true }, 'system');
+  await runAdminCleanup(config.interval_months, { fraud: true, blocks: true, geo: true }, 'system', companyId);
 
   const newNext = new Date(now);
   newNext.setMonth(newNext.getMonth() + config.interval_months);

@@ -229,13 +229,15 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
     loadCleanupConfig();
     loadFaceConfig();
     loadFaceAttempts();
-    runAutoCleanup().then(ran => {
-      if (ran) {
-        toast.success('Limpeza automática executada');
-        loadData();
-        loadCleanupConfig();
-      }
-    }).catch(() => {});
+    if (company?.id) {
+      runAutoCleanup(company.id).then(ran => {
+        if (ran) {
+          toast.success('Limpeza automática executada');
+          loadData();
+          loadCleanupConfig();
+        }
+      }).catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authenticated, company?.id]);
 
