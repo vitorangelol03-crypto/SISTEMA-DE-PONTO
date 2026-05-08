@@ -364,3 +364,51 @@ validação 3.5 prep da Etapa 3.
 - OU isolar test em retry block
 
 **Status:** Pendente — não bloqueante, hardening futuro.
+
+---
+
+## E2E test: C6PaymentTab isolamento UI multi-empresa
+
+**Local:** Sub-fase 3.4 da refatoração multi-empresa (planejado, NÃO escrito)
+
+**Contexto:**
+C6PaymentTab tem fluxo ativo (clicar "Importar" + esperar toast/tabela)
+que torna teste E2E susceptível a flake (toast desaparece em 4-5s, 
+timing dependente de quando a importação termina).
+
+**Severidade:** Baixa
+- Spec 25 já valida isolamento banco
+- Backend refactor (3.1a/3.1b) garante company.id obrigatório
+- C6PaymentTab componente refatorado em commit b077a0d (Wave 3)
+
+**Solução proposta:**
+Implementar via setup deterministico:
+- Mock de getEmployeeNetPayments pra retornar lista vazia
+- Verificar UI sem timing de toast
+- OU teste manual de release + checkpoint visual
+
+**Status:** Pendente — sub-fase futura.
+
+---
+
+## E2E test: SettingsTab isolamento UI multi-empresa
+
+**Local:** Sub-fase 3.4 da refatoração multi-empresa (planejado, NÃO escrito)
+
+**Contexto:**
+SettingsTab não tem padrão "estado vazio" — sempre mostra inputs com 
+valores (defaults sistema OU valores específicos da empresa). Pra testar 
+isolamento, precisaria valores DIFERENTES em Caratinga e Ponte Nova 
+pré-condicionados (não temos em Ponte Nova hoje).
+
+**Severidade:** Baixa
+- Spec 25 já valida isolamento banco (bonus_defaults)
+- Backend refactor garante company.id obrigatório
+- SettingsTab componente refatorado em commit 8a3282f (Wave 2)
+
+**Solução proposta:**
+- Adicionar fixture de teste que cria bonus_defaults distintos em 
+  ambas empresas
+- Teste valida que ao trocar empresa, valores dos inputs mudam
+
+**Status:** Pendente — sub-fase futura.
