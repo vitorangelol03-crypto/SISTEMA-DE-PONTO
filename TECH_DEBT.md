@@ -280,3 +280,87 @@ Warming automatic pós-deploy via cron ou primeira requisição mock.
 Não é prioritário no momento.
 
 **Status:** Aceito como overhead conhecido.
+
+## eslint-disable em useEffect deps após Wave 2 multi-empresa
+
+**Local:** DataManagementTab.tsx (3.3 commit 7), AdminTab.tsx (3.3 commit 6)
+
+**Contexto:**
+Adicionados `// eslint-disable-next-line react-hooks/exhaustive-deps` ao 
+useEffect que dispara loadData com deps [company?.id]. Pragmático pra Wave 2 
+(foco: adicionar useCompany sem refatorar tudo), mas mascarava warnings 
+úteis a longo prazo.
+
+**Severidade:** Baixa — funciona corretamente, mas eslint-disable suprime 
+warnings reais.
+
+**Solução:**
+- Envolver loadData em useCallback com deps [company?.id]
+- Adicionar loadData no deps array do useEffect (sem eslint-disable)
+- Padrão idiomático React (já usado em TriageTab, PaymentPeriodsTab)
+
+**Status:** Pendente — sub-fase futura.
+
+---
+
+## UI: estados antigos persistem ao trocar empresa em alguns componentes
+
+**Local conhecido:** C6PaymentTab.tsx (paymentRows mantém última importação)
+
+**Contexto:**
+Quando admin troca de empresa via header, alguns componentes mantêm estado 
+antigo da empresa anterior até nova ação do usuário. Não vaza dados (IDs 
+únicos, lookup falha silenciosamente), mas é UX confusa.
+
+**Severidade:** Baixa — UX confusa, sem vazamento de dados.
+
+**Solução proposta:**
+useEffect adicional escutando company?.id que limpa estados de UI 
+(setPaymentRows([]), etc) ao trocar empresa. Auditar Wave 3 inteira por 
+estados similares antes de aplicar.
+
+**Status:** Pendente — auditar Wave 3 + sub-fase futura.
+
+---
+
+## Inconsistência: admin_cleanup_config é GLOBAL, mas cleanup roda POR EMPRESA
+
+**Local:** database.ts:4096-4117 (runAutoCleanup), tabela admin_cleanup_config 
+(1 linha sistema-wide)
+
+**Contexto:**
+Após Wave 4 (commit 18), runAutoCleanup recebe companyId obrigatório e 
+runAdminCleanup interno filtra por empresa. PORÉM admin_cleanup_config é 
+tabela GLOBAL (1 linha sem company_id) controlando intervalo, enabled, 
+next_cleanup_at do sistema todo.
+
+**Inconsistência arquitetural:** cleanup roda POR EMPRESA, mas config é GLOBAL.
+
+**Severidade:** Baixa — funciona, mas conceitualmente inconsistente.
+
+**Solução proposta:**
+Migration adicionando company_id em admin_cleanup_config + UNIQUE(company_id) 
++ atualizar getAdminCleanupConfig/setAdminCleanupConfig pra receber companyId.
+
+**Status:** Pendente — sub-fase futura.
+
+---
+
+## Flake: 24-admin-complete.spec.ts:49 (senha errada → "Senha incorreta") 
+   sob carga de full suite Playwright
+
+**Local:** tests/24-admin-complete.spec.ts:49
+
+**Contexto:**
+Teste passa em isolamento (6.2s), falha sob carga de full suite Playwright 
+(timeout do `getByText(/Senha incorreta/i)` em 10s). Reproduzido na 
+validação 3.5 prep da Etapa 3.
+
+**Severidade:** Baixa — flake conhecido, sem regressão de funcionalidade.
+
+**Solução proposta:**
+- Aumentar timeout do assertion para 15-20s
+- OU usar locator mais específico (data-testid em vez de getByText)
+- OU isolar test em retry block
+
+**Status:** Pendente — não bloqueante, hardening futuro.
