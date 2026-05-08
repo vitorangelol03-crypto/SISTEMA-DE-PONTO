@@ -7,6 +7,7 @@ import {
   bulkApproveAttendance,
   Attendance,
 } from '../../services/database';
+import { useCompany } from '../../contexts/CompanyContext';
 import toast from 'react-hot-toast';
 
 interface AttendanceApprovalPanelProps {
@@ -55,6 +56,7 @@ function fraudAlerts(att: Attendance): string[] {
 }
 
 export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = ({ userId }) => {
+  const { company } = useCompany();
   const [records, setRecords] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState('');
@@ -64,9 +66,10 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
   const [actionLoading, setActionLoading] = useState(false);
 
   const load = async () => {
+    if (!company?.id) return;
     setLoading(true);
     try {
-      const data = await getPendingApprovals(dateFilter || undefined);
+      const data = await getPendingApprovals(dateFilter || undefined, company.id);
       setRecords(data);
       setSelected(new Set());
     } catch {
@@ -76,7 +79,7 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
     }
   };
 
-  useEffect(() => { load(); }, [dateFilter]);
+  useEffect(() => { load(); }, [dateFilter, company?.id]);
 
   const handleApprove = async (id: string) => {
     setActionLoading(true);
