@@ -12,6 +12,7 @@ import { getClient } from './cleanup';
  */
 
 const TEST_LABEL_PREFIX = 'PW Test Period ';
+const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
 async function cleanupPeriods() {
   const s = getClient();
@@ -92,10 +93,15 @@ test.describe('Payment Periods — completo', () => {
     expect(data?.status).toBe('paid');
   });
 
-  test('toggle auto-weekly altera config', async ({ page }) => {
+  test('toggle auto-weekly altera config (Caratinga)', async ({ page }) => {
     const s = getClient();
-    // Estado inicial
-    const { data: cfgBefore } = await s.from('payment_period_config').select('auto_weekly').single();
+
+    // Estado inicial — filtrar por company_id (multi-empresa após sub-fase 4.1)
+    const { data: cfgBefore } = await s
+      .from('payment_period_config')
+      .select('auto_weekly')
+      .eq('company_id', CARATINGA_ID)
+      .maybeSingle();
     const before = !!cfgBefore?.auto_weekly;
 
     const toggle = page.getByText(/Criar per[íi]odos semanais automaticamente/i);
@@ -106,11 +112,19 @@ test.describe('Payment Periods — completo', () => {
     await page.locator('button[role="switch"], input[type="checkbox"]').first().click({ trial: false }).catch(() => {});
     await page.waitForTimeout(1000);
 
-    const { data: cfgAfter } = await s.from('payment_period_config').select('auto_weekly').single();
+    const { data: cfgAfter } = await s
+      .from('payment_period_config')
+      .select('auto_weekly')
+      .eq('company_id', CARATINGA_ID)
+      .single();
     expect(!!cfgAfter?.auto_weekly).not.toBe(before);
 
-    // Restaura
-    await s.from('payment_period_config').update({ auto_weekly: before }).neq('id', '00000000-0000-0000-0000-000000000000');
+    // Restaura — filtrar por company_id em vez de neq('id', UUID-zero)
+    // (coluna id não existe mais após migration 20260509150608)
+    await s
+      .from('payment_period_config')
+      .update({ auto_weekly: before })
+      .eq('company_id', CARATINGA_ID);
   });
 
   test('listagem mostra todos os períodos criados', async ({ page }) => {

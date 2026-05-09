@@ -407,4 +407,91 @@ test.describe('Isolamento multi-empresa', () => {
       .eq('company_id', CARATINGA_ID);
     expect((inC ?? []).length).toBe(0);
   });
+
+  // Sub-fase 4.1: validar fix do bug 6.10 (corrupção multi-empresa em
+  // setPaymentPeriodAutoWeekly). Pós-migration 20260509150608, tabela
+  // payment_period_config tem PK em company_id (não mais surrogate id=1).
+  test('13. payment_period_config: setter respeita company_id (multi-empresa)', async () => {
+    const s = getClient();
+
+    // Pegar estado inicial pra restore garantido
+    const { data: caratingaBefore } = await s
+      .from('payment_period_config')
+      .select('auto_weekly')
+      .eq('company_id', CARATINGA_ID)
+      .maybeSingle();
+    const caratingaInitial = caratingaBefore?.auto_weekly ?? true;
+
+    const { data: ponteNovaBefore } = await s
+      .from('payment_period_config')
+      .select('auto_weekly')
+      .eq('company_id', PONTE_NOVA_ID)
+      .maybeSingle();
+    const ponteNovaExisted = !!ponteNovaBefore;
+    const ponteNovaInitial = ponteNovaBefore?.auto_weekly ?? true;
+
+    try {
+      // 1. Caratinga: setar auto_weekly = false
+      const { error: errC } = await s.from('payment_period_config').upsert([{
+        auto_weekly: false,
+        updated_by: 'test_4_1',
+        updated_at: new Date().toISOString(),
+        company_id: CARATINGA_ID,
+      }], { onConflict: 'company_id' });
+      expect(errC).toBeNull();
+
+      // 2. Ponte Nova: setar auto_weekly = true (cria row se não existir)
+      const { error: errP } = await s.from('payment_period_config').upsert([{
+        auto_weekly: true,
+        updated_by: 'test_4_1',
+        updated_at: new Date().toISOString(),
+        company_id: PONTE_NOVA_ID,
+      }], { onConflict: 'company_id' });
+      expect(errP).toBeNull();
+
+      // 3. Validar isolamento: cada empresa lê SEU próprio valor
+      const { data: cAfter } = await s
+        .from('payment_period_config')
+        .select('auto_weekly')
+        .eq('company_id', CARATINGA_ID)
+        .single();
+      expect(cAfter?.auto_weekly).toBe(false);
+
+      const { data: pAfter } = await s
+        .from('payment_period_config')
+        .select('auto_weekly')
+        .eq('company_id', PONTE_NOVA_ID)
+        .single();
+      expect(pAfter?.auto_weekly).toBe(true);
+
+      // 4. Validar: total de rows é 2 (uma por empresa, sem singleton)
+      const { count: totalRows } = await s
+        .from('payment_period_config')
+        .select('*', { count: 'exact', head: true });
+      expect(totalRows).toBe(2);
+    } finally {
+      // Cleanup garantido: Caratinga volta pro valor inicial
+      await s.from('payment_period_config').upsert([{
+        auto_weekly: caratingaInitial,
+        updated_by: 'test_4_1_cleanup',
+        updated_at: new Date().toISOString(),
+        company_id: CARATINGA_ID,
+      }], { onConflict: 'company_id' });
+
+      // Cleanup Ponte Nova: se já existia row, restaurar; senão deletar
+      if (ponteNovaExisted) {
+        await s.from('payment_period_config').upsert([{
+          auto_weekly: ponteNovaInitial,
+          updated_by: 'test_4_1_cleanup',
+          updated_at: new Date().toISOString(),
+          company_id: PONTE_NOVA_ID,
+        }], { onConflict: 'company_id' });
+      } else {
+        await s
+          .from('payment_period_config')
+          .delete()
+          .eq('company_id', PONTE_NOVA_ID);
+      }
+    }
+  });
 });

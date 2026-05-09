@@ -1874,13 +1874,12 @@ export const setPaymentPeriodAutoWeekly = async (enabled: boolean, updatedBy: st
   const { error } = await supabase
     .from('payment_period_config')
     .upsert([{
-      id: 1,
       auto_weekly: enabled,
       updated_by: updatedBy,
       updated_at: new Date().toISOString(),
       company_id: companyId,
     }], {
-      onConflict: 'id',
+      onConflict: 'company_id',
     });
   if (error) throw error;
 };
