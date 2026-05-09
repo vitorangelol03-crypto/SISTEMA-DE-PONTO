@@ -412,3 +412,62 @@ pré-condicionados (não temos em Ponte Nova hoje).
 - Teste valida que ao trocar empresa, valores dos inputs mudam
 
 **Status:** Pendente — sub-fase futura.
+
+---
+
+## E2E test: TriageTab isolamento UI multi-empresa (sub-aba Triagem da aba Erros)
+
+**Local:** Sub-fase 3.4 da refatoração multi-empresa (planejado, NÃO escrito)
+
+**Contexto:**
+TriageTab carrega registros via getTriageErrors(first, last, company.id) onde
+first/last são derivados internamente de getBrazilDate() (L51-68 do componente),
+formando range do primeiro ao último dia do mês corrente. Não há controle de
+UI pra alterar o range temporal (sem inputs, sem dropdown, sem botão "mês
+anterior"). No estado atual do banco, todos os 8 triage_errors de Caratinga
+estão em abril/2026, ZERO em maio/2026 (mês corrente em 09/05/2026). Resultado:
+em maio, tanto Caratinga quanto Ponte Nova mostram "Nenhum registro neste mês"
+— não distingue isolamento via UI.
+
+**Severidade:** Baixa
+- Spec 25 (RLS/banco) valida isolamento de getTriageErrors por company_id
+- Refactor 3.1a/3.1b garante company.id obrigatório no service layer
+- TriageTab componente refatorado em commit e165fd3 (Wave 3)
+
+**Solução proposta:**
+- Adicionar fixture de triage_error em mês corrente pra Caratinga com
+  cleanup automático, OU
+- Adicionar controle de UI pra navegar entre meses (mudança de produto,
+  fora do escopo da sub-fase 3.4)
+
+**Status:** Pendente — sub-fase futura.
+
+---
+
+## E2E test: AdminTab Bloqueios de Bonificação isolamento UI
+
+**Local:** Sub-fase 3.4 da refatoração multi-empresa (planejado, NÃO escrito)
+
+**Contexto:**
+A section "Bloqueios de Bonificação" (L1137-1240 do AdminTab.tsx) usa filtro
+client-side blockActiveOnly default true (L105 do componente), que oculta
+blocks com week_end < hoje. O único bonus_block de Caratinga (id a2c1424f)
+tem week_end=2026-04-26 (expirado em 09/05/2026), então é filtrado pelo
+blockActiveOnly e não aparece na UI. Resultado: tanto Caratinga quanto
+Ponte Nova mostram "Nenhum bloqueio encontrado" — não distingue isolamento
+via UI no estado atual do banco.
+
+**Nota:** as outras 3 sections testáveis do AdminTab (Geo, Histórico Facial,
+Suspeitas) ESTÃO cobertas no Teste 9 da spec 26.
+
+**Severidade:** Baixa
+- Spec 25 (RLS/banco) valida isolamento de getBonusBlocks por company_id
+- Refactor 3.1a/3.1b + commit f506f3c garantiram isolamento correto
+
+**Solução proposta:**
+- Adicionar fixture de bonus_block ATIVO em Caratinga com cleanup
+  automático, OU
+- Adicionar toggle UI pra blockActiveOnly false e clicar antes do
+  assert (mais teste, mais frágil)
+
+**Status:** Pendente — sub-fase futura.
