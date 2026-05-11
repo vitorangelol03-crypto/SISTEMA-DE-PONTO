@@ -488,9 +488,21 @@ describe('previewBankHoursForPeriod', () => {
 
   const PREVIEW_ARGS = { companyId: 'comp-1', paymentPeriodId: 'period-1' };
 
+  // Sub-fase 8.1 (TECH_DEBT 6.7): previewBankHoursForPeriod refatorado de
+  // N+1 (5×N queries em loop) pra batch (6 queries fixas). Os mocks abaixo
+  // refletem o novo flow:
+  //   Batch 1: companies + payment_periods (Promise.all)
+  //   Batch 2: employees + bank_hours_overrides (Promise.all)
+  //   Batch 3: payments + attendance (Promise.all, WHERE employee_id IN(...))
+  // Cada tabela mockada uma vez só (1 entry na fila), independente de N.
+
   it('1. Lista vazia se empresa sem funcionários', async () => {
+    const company = fixtureCompany();
     setupSupabaseQueue({
+      companies: [{ data: company, error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
       employees: [{ data: [], error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
     expect(items).toEqual([]);
@@ -499,14 +511,12 @@ describe('previewBankHoursForPeriod', () => {
   it('2. Funcionário com saldo positivo: status=pending, valorAplicar=25', async () => {
     const company = fixtureCompany();
     setupSupabaseQueue({
-      employees: [
-        { data: [{ id: 'emp-1', name: 'Renata' }], error: null }, // batch list
-        { data: fixtureEmployee(company), error: null },           // detail por employee
-      ],
+      companies: [{ data: company, error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
+      employees: [{ data: [{ id: 'emp-1', name: 'Renata', expected_schedule: [0, 480, 480, 480, 480, 480, 240] }], error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: paymentRow(), error: null }],
-      attendance: [{ data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
+      payments: [{ data: [{ ...paymentRow(), employee_id: 'emp-1' }], error: null }],
+      attendance: [{ data: [{ employee_id: 'emp-1', bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
     expect(items).toHaveLength(1);
@@ -521,13 +531,12 @@ describe('previewBankHoursForPeriod', () => {
   it('3. Funcionário já aplicado: status=already_applied, appliedAt definido', async () => {
     const company = fixtureCompany();
     setupSupabaseQueue({
-      employees: [
-        { data: [{ id: 'emp-1', name: 'Renata' }], error: null },
-        { data: fixtureEmployee(company), error: null },
-      ],
+      companies: [{ data: company, error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
+      employees: [{ data: [{ id: 'emp-1', name: 'Renata', expected_schedule: [0, 480, 480, 480, 480, 480, 240] }], error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: paymentRow({ bank_hours_applied_at: '2026-04-15T12:00:00Z' }), error: null }],
+      payments: [{ data: [{ ...paymentRow({ bank_hours_applied_at: '2026-04-15T12:00:00Z' }), employee_id: 'emp-1' }], error: null }],
+      attendance: [{ data: [], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
     expect(items[0].status).toBe('already_applied');
@@ -537,13 +546,12 @@ describe('previewBankHoursForPeriod', () => {
   it('4. Funcionário sem payment no período: status=no_payment', async () => {
     const company = fixtureCompany();
     setupSupabaseQueue({
-      employees: [
-        { data: [{ id: 'emp-1', name: 'Renata' }], error: null },
-        { data: fixtureEmployee(company), error: null },
-      ],
+      companies: [{ data: company, error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
+      employees: [{ data: [{ id: 'emp-1', name: 'Renata', expected_schedule: [0, 480, 480, 480, 480, 480, 240] }], error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: null, error: null }],
+      payments: [{ data: [], error: null }],
+      attendance: [{ data: [], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
     expect(items[0].status).toBe('no_payment');
@@ -552,14 +560,12 @@ describe('previewBankHoursForPeriod', () => {
   it('5. Funcionário com saldo zero: status=zero_balance, valorAplicar=0', async () => {
     const company = fixtureCompany();
     setupSupabaseQueue({
-      employees: [
-        { data: [{ id: 'emp-1', name: 'Renata' }], error: null },
-        { data: fixtureEmployee(company), error: null },
-      ],
+      companies: [{ data: company, error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
+      employees: [{ data: [{ id: 'emp-1', name: 'Renata', expected_schedule: [0, 480, 480, 480, 480, 480, 240] }], error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: paymentRow(), error: null }],
-      attendance: [{ data: [{ bank_credit_minutes: 0, bank_debit_minutes: 0 }], error: null }],
+      payments: [{ data: [{ ...paymentRow(), employee_id: 'emp-1' }], error: null }],
+      attendance: [{ data: [{ employee_id: 'emp-1', bank_credit_minutes: 0, bank_debit_minutes: 0 }], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
     expect(items[0].status).toBe('zero_balance');
@@ -570,12 +576,12 @@ describe('previewBankHoursForPeriod', () => {
   it('6. Override OFF: status=override_skip', async () => {
     const company = fixtureCompany();
     setupSupabaseQueue({
-      employees: [
-        { data: [{ id: 'emp-1', name: 'Renata' }], error: null },
-        { data: fixtureEmployee(company), error: null },
-      ],
+      companies: [{ data: company, error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
-      bank_hours_overrides: [{ data: [{ apply_bank_hours: false, reason: 'férias' }], error: null }],
+      employees: [{ data: [{ id: 'emp-1', name: 'Renata', expected_schedule: [0, 480, 480, 480, 480, 480, 240] }], error: null }],
+      bank_hours_overrides: [{ data: [{ employee_id: 'emp-1', apply_bank_hours: false, created_at: '2026-04-10T00:00:00Z' }], error: null }],
+      payments: [{ data: [{ ...paymentRow(), employee_id: 'emp-1' }], error: null }],
+      attendance: [{ data: [], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
     expect(items[0].status).toBe('override_skip');
@@ -584,27 +590,21 @@ describe('previewBankHoursForPeriod', () => {
   it('7. Empresa toggle OFF: TODOS funcionários com status=toggle_off', async () => {
     const company = fixtureCompany({ bank_hours_apply_in_payment: false });
     setupSupabaseQueue({
-      employees: [
-        { data: [{ id: 'emp-1', name: 'Renata' }, { id: 'emp-2', name: 'João' }], error: null },
-        { data: fixtureEmployee(company, { id: 'emp-1', name: 'Renata' }), error: null },
-        { data: fixtureEmployee(company, { id: 'emp-2', name: 'João' }), error: null },
-      ],
-      payment_periods: [
-        { data: PERIOD, error: null },
-        { data: PERIOD, error: null },
-      ],
-      bank_hours_overrides: [
-        { data: [], error: null },
-        { data: [], error: null },
-      ],
-      payments: [
-        { data: paymentRow(), error: null },
-        { data: paymentRow(), error: null },
-      ],
-      attendance: [
-        { data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null },
-        { data: [{ bank_credit_minutes: 60, bank_debit_minutes: 0 }], error: null },
-      ],
+      companies: [{ data: company, error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      employees: [{ data: [
+        { id: 'emp-1', name: 'Renata', expected_schedule: [0, 480, 480, 480, 480, 480, 240] },
+        { id: 'emp-2', name: 'João', expected_schedule: [0, 480, 480, 480, 480, 480, 240] },
+      ], error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [{ data: [
+        { ...paymentRow(), employee_id: 'emp-1' },
+        { ...paymentRow(), employee_id: 'emp-2' },
+      ], error: null }],
+      attendance: [{ data: [
+        { employee_id: 'emp-1', bank_credit_minutes: 120, bank_debit_minutes: 0 },
+        { employee_id: 'emp-2', bank_credit_minutes: 60, bank_debit_minutes: 0 },
+      ], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
     expect(items).toHaveLength(2);
@@ -615,35 +615,23 @@ describe('previewBankHoursForPeriod', () => {
   it('8. Mix de status na mesma chamada (pending + already_applied + no_payment)', async () => {
     const company = fixtureCompany();
     setupSupabaseQueue({
-      employees: [
-        { data: [
-          { id: 'emp-1', name: 'A' },
-          { id: 'emp-2', name: 'B' },
-          { id: 'emp-3', name: 'C' },
-        ], error: null },
-        { data: fixtureEmployee(company, { id: 'emp-1', name: 'A' }), error: null },
-        { data: fixtureEmployee(company, { id: 'emp-2', name: 'B' }), error: null },
-        { data: fixtureEmployee(company, { id: 'emp-3', name: 'C' }), error: null },
-      ],
-      payment_periods: [
-        { data: PERIOD, error: null },
-        { data: PERIOD, error: null },
-        { data: PERIOD, error: null },
-      ],
-      bank_hours_overrides: [
-        { data: [], error: null },
-        { data: [], error: null },
-        { data: [], error: null },
-      ],
-      payments: [
-        { data: paymentRow(), error: null },                                                  // A
-        { data: paymentRow({ bank_hours_applied_at: '2026-04-15T12:00:00Z' }), error: null }, // B
-        { data: null, error: null },                                                          // C → no_payment
-      ],
-      attendance: [
-        // só A consome attendance — B e C retornam earlier
-        { data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null },
-      ],
+      companies: [{ data: company, error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      employees: [{ data: [
+        { id: 'emp-1', name: 'A', expected_schedule: [0, 480, 480, 480, 480, 480, 240] },
+        { id: 'emp-2', name: 'B', expected_schedule: [0, 480, 480, 480, 480, 480, 240] },
+        { id: 'emp-3', name: 'C', expected_schedule: [0, 480, 480, 480, 480, 480, 240] },
+      ], error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [{ data: [
+        { ...paymentRow(), employee_id: 'emp-1' },                                                  // A → pending
+        { ...paymentRow({ bank_hours_applied_at: '2026-04-15T12:00:00Z' }), employee_id: 'emp-2' }, // B → already_applied
+        // emp-3 sem payment → no_payment (não vem na resposta)
+      ], error: null }],
+      attendance: [{ data: [
+        { employee_id: 'emp-1', bank_credit_minutes: 120, bank_debit_minutes: 0 },
+        // emp-2 e emp-3 sem attendance — irrelevante porque retornam earlier (already_applied / no_payment)
+      ], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
     expect(items).toHaveLength(3);

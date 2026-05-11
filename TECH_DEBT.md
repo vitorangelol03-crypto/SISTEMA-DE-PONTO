@@ -193,30 +193,7 @@ E adicionar test cases pra CPF/CNPJ com pontuação retornar OK.
 
 ## 🟢 Performance / qualidade
 
-### 6.7 — [Baixa-Média] N+1 queries em `previewBankHoursForPeriod`
-
-**Local:** `src/services/database.ts:4860-4887`
-
-**Comentário inline em L4861:** `// N+1 consciente (cada employee dispara 5 queries via helper); pode otimizar pra batch no futuro se a empresa tiver muitos funcionários.`
-
-**Snippet (auditoria 2026-05-09):**
-```typescript
-for (const emp of (employees ?? [])) {
-  const preview = await _previewBankHoursForEmployee({...});
-  items.push(...);
-}
-```
-
-Loop sequencial puro — sem `Promise.all`, sem batch SQL.
-
-**Impacto:** modal "Aplicar banco de horas" com 30+ funcionários da Caratinga dispara ~150 queries sequenciais (5 × 30). Tempo de carregamento ~30-60s.
-
-**Severidade:** Baixa-Média — funciona, mas demora. Aceitável até ~50 employees, ruim a partir de 100+.
-
-**Solução estrutural:**
-Refatorar pra batch SQL com `WHERE employee_id IN (...)`. Possível redução: 150 → 5 queries.
-
-**Status:** Pendente — otimização futura.
+(Sem itens pendentes — 6.7 movido pra histórico em 2026-05-11, sub-fase 8.1.)
 
 ---
 
@@ -422,6 +399,37 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.7: N+1 queries em previewBankHoursForPeriod (sub-fase 8.1)
+
+**Refator aplicado em `src/services/database.ts`** — função `previewBankHoursForPeriod` (linhas ~4815-4860 antes do refator) reescrita pra batch.
+
+**Antes** (N+1 sequencial): loop `for (const emp of employees)` chamando `_previewBankHoursForEmployee` que dispara 5 queries por employee. Para 30 employees Caratinga: **150 queries sequenciais**.
+
+**Depois** (batch fixo): 6 queries totais em 3 `Promise.all`:
+- **Batch 1** (paralelo): `companies` (1 row) + `payment_periods` (1 row)
+- **Batch 2** (paralelo): `employees` (rows do company_id) + `bank_hours_overrides` (rows IN employees)
+- **Batch 3** (paralelo): `payments` (rows IN employees + range) + `attendance` (rows IN employees + range)
+
+Após o batch, cálculo é 100% in-memory via Map<employeeId, ...> indexing. Loop pos-fetch é zero-query, chama helper puro `_calcPreviewFromBatch` (extraído).
+
+**Função `_previewBankHoursForEmployee` (single-shot) mantida intacta** — caminho usado por `applyBankHoursToPayment` é diferente (1 employee só, faz sentido ser single).
+
+**Validações REAIS via MCP (padrão "validar tudo real"):**
+
+| # | Validação | Resultado |
+|---|---|---|
+| 1 | Pre-check volume Caratinga | 30 employees, 3130 attendances, 1722 payments, 28 payment_periods |
+| 2 | EXPLAIN ANALYZE query antiga (single payment, 1 employee) | Planning 0.964ms + Execution 0.119ms = ~1.08ms por query × 30 = ~32ms (apenas SQL, sem round-trip) |
+| 3 | EXPLAIN ANALYZE query nova (batch IN, 30 employees) | Planning 1.307ms + Execution 0.438ms = ~1.75ms total, retorna 191 rows |
+| 4 | Estimativa de round-trips de rede | Antigo: 150 round-trips sequenciais (≈ 5-30s em rede prod). Novo: 3 round-trips paralelos (≈ 100-500ms). |
+| 5 | Suite unit `applyBankHoursToPayment.spec.ts` | 38/38 passed (7 testes de previewBankHoursForPeriod reescritos pra refletir batch flow) |
+| 6 | Spec E2E 27 (bank-hours-payment) | 5/5 passed sem regressão |
+| 7 | `tsc --noEmit` | 0 erros |
+
+**Limitação reconhecida:** medição de tempo end-to-end (round-trip real Caratinga via app) requer rodar UI em browser real. Não medido nesta sub-fase porque exigiria fixtures pesadas; EXPLAIN ANALYZE + redução de 150→6 queries dá confiança suficiente do ganho.
+
+---
 
 ### 2026-05-11 — 6.12: Edge fn v6 — error handling em 4 writes silenciosos (sub-fase 8.4)
 

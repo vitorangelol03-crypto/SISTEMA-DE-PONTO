@@ -4813,8 +4813,15 @@ export async function applyBankHoursToPayment(args: {
 }
 
 // Preview em batch — calcula sem aplicar; retorna 1 item por funcionário ativo.
-// N+1 consciente (cada employee dispara 5 queries via helper); pode otimizar
-// pra batch no futuro se a empresa tiver muitos funcionários.
+// Sub-fase 8.1 (TECH_DEBT 6.7): refatorado de N+1 (5×N queries) pra batch.
+// Total de queries: 6 fixas (independente de N), via 3 Promise.all em paralelo:
+//   Batch 1: companies + payment_periods (1 row cada)
+//   Batch 2: employees + bank_hours_overrides (rows IN employees)
+//   Batch 3: payments + attendance (rows IN employees, range temporal)
+// Após o batch, cálculo é 100% in-memory via Map<employeeId, ...> indexing.
+//
+// `_previewBankHoursForEmployee` (single-shot, usada pelo apply) mantida intacta
+// porque é caminho diferente — apply roda pra 1 employee só.
 export async function previewBankHoursForPeriod(args: {
   companyId: string;
   paymentPeriodId: string;
@@ -4823,22 +4830,226 @@ export async function previewBankHoursForPeriod(args: {
     throw new Error('companyId e paymentPeriodId são obrigatórios');
   }
 
-  const { data: employees, error: empErr } = await supabase
-    .from('employees')
-    .select('id, name')
-    .eq('company_id', args.companyId);
-  if (empErr) throw empErr;
+  const { applyBankHours } = await import('../utils/bankHoursCalculator');
+  type CalcSettings = import('../utils/bankHoursCalculator').BankHoursSettings;
 
+  // ─── BATCH 1: company + período em paralelo ───────────────────────────
+  const [companyRes, periodRes] = await Promise.all([
+    supabase.from('companies').select('*').eq('id', args.companyId).maybeSingle(),
+    supabase.from('payment_periods').select('id, start_date, end_date').eq('id', args.paymentPeriodId).maybeSingle(),
+  ]);
+  if (companyRes.error) throw companyRes.error;
+  if (periodRes.error) throw periodRes.error;
+
+  const company = companyRes.data as Company | null;
+  const period = periodRes.data as { id: string; start_date: string; end_date: string } | null;
+
+  if (!company || !period) return [];
+
+  // Settings normalizadas (uma vez só pro batch inteiro).
+  const settings: CalcSettings = {
+    bank_hours_apply_in_payment: company.bank_hours_apply_in_payment ?? false,
+    bank_hours_formula: company.bank_hours_formula ?? 'daily_div_8',
+    bank_hours_extra_multiplier: Number(company.bank_hours_extra_multiplier) || 1.5,
+    bank_hours_custom_value: Number(company.bank_hours_custom_value) || 0,
+    bank_hours_credit_action: company.bank_hours_credit_action ?? 'add_to_net',
+    bank_hours_debit_action: company.bank_hours_debit_action ?? 'subtract_from_net',
+    bank_hours_period: company.bank_hours_period ?? 'payment_period',
+    bank_hours_display: company.bank_hours_display ?? 'separate_line',
+    bank_hours_after_apply: company.bank_hours_after_apply ?? 'zero_balance',
+    bank_hours_night_separate: company.bank_hours_night_separate ?? false,
+    bank_hours_night_multiplier: Number(company.bank_hours_night_multiplier) || 1.20,
+  };
+
+  // Janela conforme settings.bank_hours_period (mesma lógica do single).
+  let rangeStart = period.start_date;
+  let rangeEnd = period.end_date;
+  if (settings.bank_hours_period === 'month') {
+    const [y, m] = period.start_date.split('-').map(Number);
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    rangeStart = `${y}-${String(m).padStart(2, '0')}-01`;
+    rangeEnd = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  } else if (settings.bank_hours_period === 'accumulated') {
+    rangeStart = '1970-01-01';
+  }
+
+  // ─── BATCH 2: employees + overrides em paralelo ───────────────────────
+  const [employeesRes, overridesRes] = await Promise.all([
+    supabase
+      .from('employees')
+      .select('id, name, expected_schedule')
+      .eq('company_id', args.companyId),
+    supabase
+      .from('bank_hours_overrides')
+      .select('employee_id, apply_bank_hours, created_at')
+      .eq('company_id', args.companyId)
+      .eq('payment_period_id', args.paymentPeriodId)
+      .order('created_at', { ascending: false }),
+  ]);
+  if (employeesRes.error) throw employeesRes.error;
+  if (overridesRes.error) throw overridesRes.error;
+
+  const employees = (employeesRes.data ?? []) as Array<{ id: string; name: string; expected_schedule: number[] | null }>;
+  if (employees.length === 0) return [];
+
+  // Index overrides por employee_id (mais recente vence — ordenado DESC acima).
+  const overrideByEmp = new Map<string, { apply_bank_hours: boolean }>();
+  for (const row of (overridesRes.data ?? []) as Array<{ employee_id: string; apply_bank_hours: boolean }>) {
+    if (!overrideByEmp.has(row.employee_id)) {
+      overrideByEmp.set(row.employee_id, { apply_bank_hours: row.apply_bank_hours });
+    }
+  }
+
+  const employeeIds = employees.map(e => e.id);
+
+  // ─── BATCH 3: payments + attendance em paralelo ───────────────────────
+  const [paymentsRes, attendancesRes] = await Promise.all([
+    supabase
+      .from('payments')
+      .select('id, employee_id, daily_rate, total, bank_hours_applied_at, date')
+      .in('employee_id', employeeIds)
+      .eq('company_id', args.companyId)
+      .gte('date', period.start_date)
+      .lte('date', period.end_date)
+      .order('date', { ascending: false }),
+    supabase
+      .from('attendance')
+      .select('employee_id, bank_credit_minutes, bank_debit_minutes')
+      .in('employee_id', employeeIds)
+      .gte('date', rangeStart)
+      .lte('date', rangeEnd),
+  ]);
+  if (paymentsRes.error) throw paymentsRes.error;
+  if (attendancesRes.error) throw attendancesRes.error;
+
+  // Index payments por employee_id (mais recente primeiro, já ordenado DESC).
+  type PaymentRow = { id: string; employee_id: string; daily_rate: number | null; total: number | null; bank_hours_applied_at: string | null };
+  const paymentByEmp = new Map<string, PaymentRow>();
+  for (const p of (paymentsRes.data ?? []) as PaymentRow[]) {
+    if (!paymentByEmp.has(p.employee_id)) {
+      paymentByEmp.set(p.employee_id, p);
+    }
+  }
+
+  // Soma credit/debit por employee em 1 passada (atravessa array só uma vez).
+  const balancesByEmp = new Map<string, { creditMinutes: number; debitMinutes: number }>();
+  for (const a of (attendancesRes.data ?? []) as Array<{ employee_id: string; bank_credit_minutes: number | null; bank_debit_minutes: number | null }>) {
+    const cur = balancesByEmp.get(a.employee_id) ?? { creditMinutes: 0, debitMinutes: 0 };
+    cur.creditMinutes += a.bank_credit_minutes ?? 0;
+    cur.debitMinutes += a.bank_debit_minutes ?? 0;
+    balancesByEmp.set(a.employee_id, cur);
+  }
+
+  // ─── Cálculo in-memory por employee (zero queries no loop) ────────────
   const items: BankHoursPreviewItem[] = [];
-  for (const emp of (employees ?? []) as Array<{ id: string; name: string }>) {
-    const preview = await _previewBankHoursForEmployee({
-      employeeId: emp.id,
-      paymentPeriodId: args.paymentPeriodId,
-    });
-    items.push(_toPreviewItem(emp.id, emp.name, preview));
+  for (const emp of employees) {
+    items.push(_toPreviewItem(emp.id, emp.name, _calcPreviewFromBatch({
+      employee: emp,
+      company,
+      settings: { ...settings }, // shallow copy — override pode mexer em apply_in_payment
+      rangeStart,
+      rangeEnd,
+      override: overrideByEmp.get(emp.id),
+      paymentRow: paymentByEmp.get(emp.id),
+      balance: balancesByEmp.get(emp.id),
+      applyBankHours,
+    })));
   }
 
   return items;
+}
+
+// Helper puro: replica passos 4-9 do `_previewBankHoursForEmployee` SEM queries.
+// Usa dados já fetchados em batch. Mesma semântica do single-shot.
+interface _BatchPreviewInputs {
+  employee: { id: string; name: string; expected_schedule: number[] | null };
+  company: Company;
+  settings: import('../utils/bankHoursCalculator').BankHoursSettings;
+  rangeStart: string;
+  rangeEnd: string;
+  override: { apply_bank_hours: boolean } | undefined;
+  paymentRow: { id: string; daily_rate: number | null; total: number | null; bank_hours_applied_at: string | null } | undefined;
+  balance: { creditMinutes: number; debitMinutes: number } | undefined;
+  applyBankHours: typeof import('../utils/bankHoursCalculator').applyBankHours;
+}
+
+function _calcPreviewFromBatch(inputs: _BatchPreviewInputs): _PreviewInternalResult {
+  const { employee, company, settings, rangeStart, rangeEnd, override, paymentRow, balance, applyBankHours } = inputs;
+  const employeeName = employee.name;
+
+  // 4. Override individual.
+  if (override) {
+    if (!override.apply_bank_hours) {
+      return {
+        status: 'override_skip', creditMinutes: 0, debitMinutes: 0, netMinutes: 0,
+        rangeStart: '', rangeEnd: '', employeeName, company, settings,
+      };
+    }
+    settings.bank_hours_apply_in_payment = true;
+  }
+
+  // 6. Payment âncora (mais recente do período).
+  if (!paymentRow) {
+    return {
+      status: 'no_payment_in_period', creditMinutes: 0, debitMinutes: 0, netMinutes: 0,
+      rangeStart, rangeEnd, employeeName, company, settings,
+    };
+  }
+  if (paymentRow.bank_hours_applied_at) {
+    return {
+      status: 'already_applied', creditMinutes: 0, debitMinutes: 0, netMinutes: 0,
+      rangeStart, rangeEnd, employeeName, company, settings,
+      paymentRow,
+      appliedAt: paymentRow.bank_hours_applied_at,
+    };
+  }
+
+  // 7. Saldo na janela (vem pré-somado do batch).
+  const creditMinutes = balance?.creditMinutes ?? 0;
+  const debitMinutes = balance?.debitMinutes ?? 0;
+
+  // 8. Jornada média.
+  let jornadaMinutes = 480;
+  const sched = employee.expected_schedule;
+  if (Array.isArray(sched) && sched.length === 7) {
+    const workdays = sched.filter((m) => Number(m) > 0);
+    if (workdays.length > 0) {
+      jornadaMinutes = Math.round(workdays.reduce((a, b) => a + Number(b), 0) / workdays.length);
+    }
+  }
+
+  // 9. Cálculo puro.
+  const result = applyBankHours({
+    dailyRate: Number(paymentRow.daily_rate) || 0,
+    jornadaMinutes,
+    creditMinutes,
+    debitMinutes,
+    nightCreditMinutes: 0,
+    nightDebitMinutes: 0,
+    settings,
+  });
+
+  const netMinutes = creditMinutes - debitMinutes;
+
+  if (!result.applied) {
+    return {
+      status: 'toggle_off', result,
+      creditMinutes, debitMinutes, netMinutes,
+      rangeStart, rangeEnd, employeeName, company, settings,
+      paymentRow,
+    };
+  }
+
+  const paymentBefore = Number(paymentRow.total) || 0;
+  const paymentAfter = paymentBefore + result.amountNet;
+
+  return {
+    status: 'pending', result,
+    paymentRow,
+    paymentBefore, paymentAfter,
+    creditMinutes, debitMinutes, netMinutes,
+    rangeStart, rangeEnd, employeeName, company, settings,
+  };
 }
 
 // INSERT em bank_hours_overrides. `reason` é NOT NULL no DB — exigência inviolável.
