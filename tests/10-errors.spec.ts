@@ -101,10 +101,14 @@ test.describe('Erros — individuais e triagem', () => {
 
     await expect(page.getByRole('heading', { name: /Registrar Erros de Triagem/ })).toBeVisible();
 
-    // Usa data atual (mês corrente) para aparecer na tabela do mês
+    // Data segura: dia anterior ao corrente, mas no mês corrente.
+    // Garante: (a) ≤ hoje (evita "Nenhum funcionário presente nesta data"
+    // que disparava com data futura quando hoje < dia 28) e (b) mês corrente
+    // (TriageTab filtra primeiro/último dia do mês em loadRecords L55-59 —
+    // mês anterior não aparece na tabela). Math.max evita day=0 quando hoje=1.
     const today = new Date();
-    // Garante data no mês atual mas futura, pra não colidir
-    const d = new Date(today.getFullYear(), today.getMonth(), 28);
+    const safeDay = Math.max(1, today.getDate() - 1);
+    const d = new Date(today.getFullYear(), today.getMonth(), safeDay);
     const iso = d.toISOString().slice(0, 10);
 
     await page.locator('input[type="date"]').first().fill(iso);

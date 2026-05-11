@@ -332,33 +332,6 @@ if (!(await elem.isVisible().catch(() => false))) {
 
 ---
 
-### 6.4 — [Baixa] Bug data futura `tests/10-errors.spec.ts:107`
-
-**Local exato:** `tests/10-errors.spec.ts:107` (no teste "Triagem: sub-aba abre e permite registrar erro do dia", L98)
-
-**Snippet do bug (auditoria 2026-05-09):**
-```typescript
-const today = new Date();
-// Garante data no mês atual mas futura, pra não colidir
-const d = new Date(today.getFullYear(), today.getMonth(), 28);
-```
-
-**Causa raiz:** quando hoje < dia 28, a data fica no FUTURO, e a regra de negócio "Nenhum funcionário presente nesta data — distribuição impossível" bloqueia o submit.
-
-**Reprodução:** hoje 2026-05-09 → cálculo `new Date(2026, 4, 28)` → 2026-05-28 (futuro) → toast não aparece → expect timeout 10s falha.
-
-**Severidade:** Baixa — bug é de teste, não de produção. Regra de negócio é correta.
-
-**Solução proposta:**
-```typescript
-// Trocar pra data passada:
-const d = new Date(today.getFullYear(), today.getMonth() - 1, 15);
-```
-
-**Status:** Pendente — fix trivial, sub-fase de cleanup de testes.
-
----
-
 ### 6.9 — [Baixa] 7 testes reescritos com skip condicional UI
 
 **Δ vs versão anterior:** versão anterior listava 7 testes "permanentemente skipped por seletor desatualizado". Auditoria 2026-05-09 confirmou: **todos foram reescritos com skip CONDICIONAL UI-dependente** (subset dos 9 listados em 6.3).
@@ -512,6 +485,18 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.4: Bug data futura em `tests/10-errors.spec.ts:107` (sub-fase 5.1)
+
+**Local:** `tests/10-errors.spec.ts:105-110` (teste "Triagem: sub-aba abre e permite registrar erro do dia")
+
+**Fix aplicado:** substituído `new Date(today.getFullYear(), today.getMonth(), 28)` (que virava data futura quando hoje < dia 28) por `new Date(today.getFullYear(), today.getMonth(), Math.max(1, today.getDate() - 1))` (dia anterior ao corrente, mesmo mês).
+
+**Decisão técnica:** o agente Plan sugeriu mês anterior, mas auditoria do `TriageTab.tsx:55-59` mostrou que a tabela filtra por primeiro/último dia do mês corrente via `getBrazilDate()` — data em mês anterior NÃO apareceria no assert visual da linha 116. Solução final mantém mês corrente com dia ≤ hoje.
+
+**Validação:** spec 10 rodada 3x consecutivamente (`npx playwright test tests/10-errors.spec.ts --workers=1`) — 5 passed em todas as runs (22.8s, 21.7s, 22.1s).
+
+---
 
 ### 2026-05-05 — 6.5: Migrations multi-empresa em produção
 
