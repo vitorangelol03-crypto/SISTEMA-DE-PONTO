@@ -100,7 +100,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   const [validationContext, setValidationContext] = useState<ValidationContext | null>(null);
   const [editingCell, setEditingCell] = useState<{ rowNumber: number; field: string } | null>(null);
 
-  const loadEmployees = async () => {
+  const loadEmployees = React.useCallback(async () => {
     if (!company?.id) return;
     try {
       setLoading(true);
@@ -113,11 +113,32 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     } finally {
       setLoading(false);
     }
-  };
+  }, [company?.id]);
 
   useEffect(() => {
     loadEmployees();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadEmployees]);
+
+  // Zera estados ID-based ao trocar empresa — evita vazamento de IDs/referências
+  // de funcionários da empresa anterior (modais, bulk selection, wizard de import).
+  // Resolve TECH_DEBT 6.22 (severidade alta) pra esta tab.
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setEditingEmployee(null);
+    setShowForm(false);
+    setPinModal(null);
+    setPinInput('');
+    setResetModal(null);
+    setShowImportModal(false);
+    setImportFile(null);
+    setImportValidation(null);
+    setImportStep('upload');
+    setImportResult(null);
+    setValidationContext(null);
+    setEditingCell(null);
+    setShowBulkMarkingModal(false);
+    setShowScheduleModal(false);
+    setTempSchedule([0, 0, 0, 0, 0, 0, 0]);
   }, [company?.id]);
 
   useEffect(() => {

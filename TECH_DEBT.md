@@ -119,12 +119,12 @@ Envolver as 3 operações em RPC transacional Supabase. Idempotência via `bank_
 
 **Severidade Alta (vazamento UX concreto com IDs de funcionário):**
 
-| Tab | Estados que persistem cross-empresa | Linha |
-|---|---|---|
-| `EmployeesTab.tsx` | `selectedIds: Set<string>` (bulk), `editingEmployee: Employee`, `pinModal: { employee }`, `resetModal: { employee }`, `importValidation`, `importFile`, `importStep`, `validationContext`, `editingCell` | 79, 47, 84, 88, 91-101 |
-| `AttendanceTab.tsx` | `selectedEmployees: Set<string>`, `exitTimes: Record<empId, ...>`, `manualTimes: Record<empId, ...>`, `bonusAmounts: Record<code, ...>`, `applyingBonus: Record<code, ...>`, `employeeToReset: string`, `bonusTypeToRemove` | 51-53, 59-61, 65-69 |
-| `FinancialTab.tsx` | `selectedEmployees: Set<string>`, `editingPayment: {employeeId, date}`, `editValues`, `selectedPeriodId` | 90-92, 86 |
-| `DataManagementTab.tsx` | `selectedEmployee: string` (id), wizard state (`confirmStep`, `confirmPassword`, `selectedDataTypes`, `previewCounts`, `showPreview`, `isProcessing`) | 46-53 |
+| Tab | Estados que persistem cross-empresa | Linha | Status |
+|---|---|---|---|
+| `EmployeesTab.tsx` | `selectedIds: Set<string>` (bulk), `editingEmployee: Employee`, `pinModal: { employee }`, `resetModal: { employee }`, `importValidation`, `importFile`, `importStep`, `validationContext`, `editingCell` | 79, 47, 84, 88, 91-101 | ✅ **Resolvido sub-fase 5.6** |
+| `AttendanceTab.tsx` | `selectedEmployees: Set<string>`, `exitTimes: Record<empId, ...>`, `manualTimes: Record<empId, ...>`, `bonusAmounts: Record<code, ...>`, `applyingBonus: Record<code, ...>`, `employeeToReset: string`, `bonusTypeToRemove` | 51-53, 59-61, 65-69 | Pendente |
+| `FinancialTab.tsx` | `selectedEmployees: Set<string>`, `editingPayment: {employeeId, date}`, `editValues`, `selectedPeriodId` | 90-92, 86 | Pendente |
+| `DataManagementTab.tsx` | `selectedEmployee: string` (id), wizard state (`confirmStep`, `confirmPassword`, `selectedDataTypes`, `previewCounts`, `showPreview`, `isProcessing`) | 46-53 | Pendente |
 
 **Severidade Média (modais com state, mas sem ID direto):**
 
@@ -442,6 +442,25 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.14 (4ª ocorrência) + 6.22.A: EmployeesTab cleanup + useCallback (sub-fase 5.6)
+
+**Locais (resolvidos):**
+- `src/components/employees/EmployeesTab.tsx:120` — 4ª ocorrência de `// eslint-disable-next-line react-hooks/exhaustive-deps` descoberta na auditoria 5.5 (não estava listada no 6.14 original que mencionava 3).
+- Severidade Alta da entrada 6.22 (EmployeesTab) — estados ID-based que vazavam cross-empresa.
+
+**Fix aplicado:**
+1. `loadEmployees` envolvido em `React.useCallback([company?.id])` — remove eslint-disable.
+2. Adicionado 2º useEffect com `[company?.id]` que zera 15 estados ID-based: `selectedIds`, `editingEmployee`, `showForm`, `pinModal`, `pinInput`, `resetModal`, `showImportModal`, `importFile`, `importValidation`, `importStep`, `importResult`, `validationContext`, `editingCell`, `showBulkMarkingModal`, `showScheduleModal`, `tempSchedule`.
+
+**Decisão:** filtros (`searchTerm`, `cityFilter`, `stateFilter`, `employmentTypeFilter`) NÃO foram zerados — comportamento UX de persistir filtros entre empresas é intencional (mesmo critério de busca aplicado em PN é válido). `formData` também preservado (latente quando `showForm=false`).
+
+**Validação:**
+- `npx tsc --noEmit`: 0 erros.
+- `npx eslint`: 0 warnings de `react-hooks/exhaustive-deps`.
+- `npx playwright test tests/05-employees.spec.ts tests/21-employees-complete.spec.ts --workers=1`: 11 passed, 1 skipped (esperado pelo 6.3/6.9).
+
+---
 
 ### 2026-05-11 — 6.15: Estados UI persistem cross-empresa em C6PaymentTab (sub-fase 5.4)
 
