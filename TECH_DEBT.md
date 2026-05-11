@@ -113,6 +113,45 @@ Envolver as 3 operações em RPC transacional Supabase. Idempotência via `bank_
 
 ## 🟡 Inconsistências arquiteturais
 
+### 6.22 — [Média] Estados UI persistem cross-empresa em múltiplas tabs (audit Wave 3)
+
+**Origem:** auditoria executada na sub-fase 5.5 após resolver 6.15 (C6PaymentTab). Confirmou que o padrão é comum: o `useEffect([company?.id])` em cada tab recarrega listas (employees/payments/attendance) mas NÃO zera estados locais com referências a IDs da empresa anterior.
+
+**Severidade Alta (vazamento UX concreto com IDs de funcionário):**
+
+| Tab | Estados que persistem cross-empresa | Linha |
+|---|---|---|
+| `EmployeesTab.tsx` | `selectedIds: Set<string>` (bulk), `editingEmployee: Employee`, `pinModal: { employee }`, `resetModal: { employee }`, `importValidation`, `importFile`, `importStep`, `validationContext`, `editingCell` | 79, 47, 84, 88, 91-101 |
+| `AttendanceTab.tsx` | `selectedEmployees: Set<string>`, `exitTimes: Record<empId, ...>`, `manualTimes: Record<empId, ...>`, `bonusAmounts: Record<code, ...>`, `applyingBonus: Record<code, ...>`, `employeeToReset: string`, `bonusTypeToRemove` | 51-53, 59-61, 65-69 |
+| `FinancialTab.tsx` | `selectedEmployees: Set<string>`, `editingPayment: {employeeId, date}`, `editValues`, `selectedPeriodId` | 90-92, 86 |
+| `DataManagementTab.tsx` | `selectedEmployee: string` (id), wizard state (`confirmStep`, `confirmPassword`, `selectedDataTypes`, `previewCounts`, `showPreview`, `isProcessing`) | 46-53 |
+
+**Severidade Média (modais com state, mas sem ID direto):**
+
+| Tab | Estados |
+|---|---|
+| `UsersTab.tsx` | `selectedUser`, `userPermissions`, `showPermissionsModal` (linha 23-25) |
+| `ErrorsTab.tsx` | `editingError: {employeeId, date}`, `employeesWithErrors`, `statistics` |
+| `FinancialTab.tsx` | `bulkDailyRate`, `errorDiscountValue`, `historyFilters`, `bonusRemovals` |
+| `PaymentPeriodsTab.tsx` | `showForm`, `formData` (formulário aberto com dados da empresa anterior) |
+
+**Severidade Baixa (filtros UX — decisão de produto se reset ou persistir):**
+
+| Tab | Filtros |
+|---|---|
+| Várias | `searchTerm`, `cityFilter`, `stateFilter`, `employmentTypeFilter`, `selectedDate`, `filters.startDate/endDate` |
+
+**Solução estrutural recomendada:**
+1. Para cada tab listada em Severidade Alta: adicionar 2º useEffect com `[company?.id]` que zera explicitamente os estados ID-based (similar ao fix aplicado em C6PaymentTab — sub-fase 5.4).
+2. Para Severidade Média: avaliar caso a caso (modal aberto ao trocar empresa pode ser confuso mas raro).
+3. Para Severidade Baixa: decisão de UX — atualmente filtros persistem, pode ser intencional.
+
+**Achado adicional:** auditoria também detectou 4ª ocorrência de `// eslint-disable-next-line react-hooks/exhaustive-deps` em `src/components/employees/EmployeesTab.tsx:120` — não estava listada no TECH_DEBT 6.14 original (que listava 3). Será resolvida na sub-fase 5.6 junto com cleanup de estados de EmployeesTab.
+
+**Status:** Pendente — fixes individuais ficam pra Victor priorizar. Recomendação: atacar Severidade Alta agora (3-4 sub-fases de ~30 min cada), Severidade Média junto com refactor futuro.
+
+---
+
 ### 6.12 — [Baixa] Edge fn writes sem error handling
 
 **Local:** `supabase/functions/clock-in-validated/index.ts` (versão 5 ACTIVE em prod, hash `a841de37...`)
