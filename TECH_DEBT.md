@@ -282,6 +282,43 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — Cobertura E2E nova: CompanySettings (sub-fase 10.4)
+
+**Arquivo novo:** `tests/34-company-settings.spec.ts` — 8 testes core cobrindo `src/components/admin/CompanySettings.tsx` (856 lin), renderizado dentro de AdminTab linha 1457 (visível apenas pra `isAdminMaster='9999'`).
+
+**Escopo reduzido:** o plano sugeria 18 testes (cenários a-h cobrindo todos os toggles + simulador). Cobrimos os 8 essenciais. Os 10 restantes (simulador bank_hours, 5+ selects condicionais como `formula`, `credit_action`, `debit_action`, `period`, `display`, `after_apply`) ficam pra cobertura unitária em sub-fase futura — o componente já tem 414 unit tests em `bankHoursCalculator.spec.ts`, cobrindo a lógica de cálculo isoladamente. UI E2E core suficiente.
+
+**Testes:**
+
+| # | Cenário | Asserção |
+|---|---|---|
+| 1 | Section visível em CT | heading "Configurações da Empresa — Caratinga" (display_name, não legal_name) |
+| 2 | Razão social + CNPJ read-only | inputs disabled com legal_name + CNPJ não vazio |
+| 3 | Switch CT→PN | heading muda pra "— Ponte Nova" |
+| 4 | Input Cidade aceita digitação | state local atualiza com "PW Test Cidade" |
+| 5 | Checkbox "Banco de horas habilitado" | visível e não-disabled |
+| 6 | Toggle "Banco de horas afeta pagamento?" DISABLED se enabled=false | `#bh-toggle-master` desabilitado |
+| 7 | Toggle ENABLED após marcar checkbox via UI | habilita imediatamente (state local) — UPDATE direto no DB NÃO funciona (contexto React tem snapshot) |
+| 8 | Salvar Cidade modificada | toast "salvas" + persistência via SELECT no DB; restaurado pelo try/finally |
+
+**Patterns:**
+- `locSettingsSection`: `page.locator('div.bg-white').filter({ has: heading })` — sem `div.bg-white`, pegava wrapper externo da AdminTab (que contém botão "Salvar nova senha" disabled — colidia com `getByRole('button', { name: /^Salvar/ })`).
+- `unlockAdmin` local (mesma pattern das specs 24/26-extras/32).
+- Teste 7 lição: UPDATE direto no DB de campos consumidos pelo `CompanyContext` NÃO invalida o context — o React state continua com snapshot velho até reload/switch. Tests que dependem de state UI devem modificar via UI ou usar `switchCompany` ida-e-volta. Reagir a `company?.id` no `useEffect` resolve dentro de uma única mudança de empresa, mas não a campos arbitrários da mesma empresa.
+
+**Validação real pós-test via MCP:**
+```sql
+SELECT id, display_name, city, bank_hours_enabled FROM companies WHERE id IN (CT, PN);
+-- CT: city='Caratinga, MG', bank_hours_enabled=false (originais preservados)
+-- PN: city='Ponte Nova, MG', bank_hours_enabled=false (inalterada)
+```
+
+**Validações:**
+- `npx tsc --noEmit`: 0 erros
+- `npx playwright test tests/34-company-settings.spec.ts --workers=1`: **8 passed em ~37s**, 0 failed
+
+---
+
 ### 2026-05-11 — Sub-fase 10.3 (AuditLogsTab) cancelada: componente órfão
 
 **Descoberta durante exploração:** `src/components/monitoring/AuditLogsTab.tsx` (319 lin) existe mas **NÃO é renderizado em lugar nenhum da app**. Grep em todo `src/` confirma: nenhum import de `AuditLogsTab` exceto o próprio arquivo. Não há tab no App.tsx, não há rota, não há section em outras tabs que o use.
