@@ -113,6 +113,42 @@ Envolver as 3 operações em RPC transacional Supabase. Idempotência via `bank_
 
 ## 🟡 Inconsistências arquiteturais
 
+### 6.23 — [Baixa-Média] `validatePixKey` em c6Export não normaliza CPF/CNPJ formatado
+
+**Local:** `src/utils/c6Export.ts:32-48` (função interna não-exportada).
+
+**Comportamento descoberto na sub-fase 6.3 (auditoria de testes):**
+```typescript
+const cleanKey = pixKey.replace(/[^\w@.-]/g, ''); // mantém . e -
+return cpfRegex.test(cleanKey) || ...
+// onde cpfRegex = /^\d{11}$/
+```
+
+O regex `cleanKey` remove apenas caracteres FORA de `[\w@.-]`. Pontos e hífens são MANTIDOS. CPF `'123.456.789-01'` (formato padrão de exibição) NÃO bate `/^\d{11}$/` e é marcado como `VERIFICAR` na planilha C6.
+
+**Impacto operacional:**
+- Funcionários cadastrados com PIX em formato `XXX.XXX.XXX-XX` (CPF formatado) viram VERIFICAR no relatório.
+- Status incorreto pode atrasar pagamento se admin confiar cegamente na coluna Status.
+- Mitigação atual: admin precisa cadastrar `pix_key` sem pontuação.
+
+**Severidade:** Baixa-Média — não bloqueia pagamento (sheet ainda exporta), mas confunde admin. Risco maior em empresas com importação automática de PIX (não controlam formato).
+
+**Solução estrutural sugerida:**
+```typescript
+// Trocar regex de limpeza pra remover TUDO que não é número (pra CPF/CNPJ/phone)
+const cleanDigits = pixKey.replace(/\D/g, '');
+const cleanKey = pixKey.replace(/[^\w@.-]/g, ''); // mantém pra email/UUID
+return cpfRegex.test(cleanDigits) || cnpjRegex.test(cleanDigits) ||
+       emailRegex.test(pixKey) || phoneRegex.test(cleanDigits) ||
+       randomKeyRegex.test(cleanKey);
+```
+
+E adicionar test cases pra CPF/CNPJ com pontuação retornar OK.
+
+**Status:** Pendente — sub-fase futura (fix trivial, mas precisa coordenação com cadastros existentes pra não invalidar PIX que hoje passa como `VERIFICAR` mas era válido apesar do formato).
+
+---
+
 ### 6.22 — [Média] Estados UI persistem cross-empresa em múltiplas tabs (audit Wave 3)
 
 **Origem:** auditoria executada na sub-fase 5.5 após resolver 6.15 (C6PaymentTab). Confirmou que o padrão é comum: o `useEffect([company?.id])` em cada tab recarrega listas (employees/payments/attendance) mas NÃO zera estados locais com referências a IDs da empresa anterior.
