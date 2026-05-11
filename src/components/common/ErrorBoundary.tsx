@@ -1,6 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { errorTracking } from '../../services/errorTracking';
+import { getCurrentCompanyId } from '../../contexts/CompanyContext';
 
 interface Props {
   children: ReactNode;
@@ -38,8 +39,11 @@ export class ErrorBoundary extends Component<Props, State> {
       errorInfo,
     });
 
+    // ErrorBoundary é Class Component (sem hooks). Lemos company_id direto
+    // do localStorage via getCurrentCompanyId() — pré-login retorna DEFAULT.
     errorTracking.captureError({
       userId: this.props.userId,
+      companyId: getCurrentCompanyId(),
       errorType: 'js_error',
       severity: 'critical',
       message: error.message,

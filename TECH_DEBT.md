@@ -450,6 +450,52 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — 6.24: `error_logs` sem `company_id` (sub-fase 7.4)
+
+**Descoberta nova:** detectada na varredura de produção em 2026-05-11. Tabela `error_logs` (criada na migration `20251104193550_create_monitoring_and_audit_system`) funcionava como singleton-de-fato — sem coluna `company_id`. Em sistema multi-tenant, erros de empresas distintas se misturariam no mesmo log global, impossibilitando auditoria isolada por empresa.
+
+**Migration aplicada em prod:** `20260511171757_error_logs_add_company_id.sql`
+
+**SQL:**
+```sql
+ALTER TABLE public.error_logs
+  ADD COLUMN company_id uuid REFERENCES public.companies(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_error_logs_company_id ON public.error_logs(company_id);
+```
+
+Coluna NULLABLE (não NOT NULL): cobre erros pré-login e fluxos globais sem contexto de empresa. FK `ON DELETE SET NULL` preserva logs históricos se uma empresa for removida (auditoria sobrevive).
+
+**Validações REAIS via MCP (padrão "validar tudo real"):**
+
+| # | Validação | Resultado |
+|---|---|---|
+| 1 | Pre-check schema atual | Confirmado SEM company_id (17 colunas) |
+| 2 | Pre-check rows existentes | 0 rows (tabela nunca foi escrita) — sem backfill necessário |
+| 3 | Grep callers no projeto | `errorTracking.ts` (service interno, 16+ refs) + `ErrorBoundary.tsx` (1 caller) — únicos |
+| 4 | Schema pós-migration | `company_id` uuid nullable=YES, FK `error_logs_company_id_fkey` (contype='f') confirmada |
+| 5 | Index criado | `idx_error_logs_company_id` BTREE em prod via `pg_indexes` |
+| 6 | INSERT real simulando captureError pra 3 cenários | Caratinga (company_id=Caratinga), PN (company_id=PN), pré-login (NULL) — todos OK |
+| 7 | SELECT filtrado por company_id confirma isolamento | Filtro Caratinga retorna 1, filtro PN retorna 1, admin global retorna 3, NULL retorna 1 |
+| 8 | Cleanup das 3 rows de teste | Estado prod restaurado: 0 rows |
+
+**Código alterado:**
+- `src/services/errorTracking.ts`:
+  - `ErrorLogData` interface ganha `companyId?: string` (com JSDoc explicando NULL).
+  - `captureError` INSERT e UPDATE incluem `company_id: data.companyId ?? null`.
+  - 6 helpers (`captureJSError`, `captureAPIError`, `captureDatabaseError`, `captureNetworkError`, `captureAuthError`, `captureValidationError`) ganham param optional `companyId?: string` no final da assinatura (retrocompat preservada).
+- `src/components/common/ErrorBoundary.tsx`:
+  - Import `getCurrentCompanyId` de `CompanyContext` (helper não-hook).
+  - Passa `companyId: getCurrentCompanyId()` em `captureError`. Pre-login → DEFAULT_COMPANY_ID (Caratinga) — aceitável; melhor que NULL.
+
+**Decisão técnica:** handlers globais (`window.addEventListener('error')` em `errorTracking.ts:49,63`) NÃO recebem companyId — passam `undefined`, persistido como NULL. Isso porque esses handlers rodam em escopo global onde não há garantia de contexto de empresa.
+
+**Validação E2E:**
+- `npx tsc --noEmit`: 0 erros
+- `npx vitest run` (suite full): 408 passed em 16 files
+- Validação real via MCP (steps 6-8 acima)
+
+---
+
 ### 2026-05-11 — D6: cleanup `bonus_defaults` legacy (sub-fase 7.3)
 
 **Decisão D6 = C** (drop após validar callers — investigação prévia confirmou que `bonus_types` é fonte primária; `bonus_defaults` era fallback nunca disparado em prod).

@@ -5,6 +5,9 @@ export type ErrorSeverity = 'critical' | 'high' | 'medium' | 'low';
 
 export interface ErrorLogData {
   userId?: string;
+  /** company_id pra isolamento multi-empresa (sub-fase 7.4). NULL/undefined =
+   *  erro pré-login ou fluxo global sem contexto de empresa. */
+  companyId?: string;
   errorType: ErrorType;
   severity: ErrorSeverity;
   message: string;
@@ -128,11 +131,13 @@ class ErrorTrackingService {
             occurrence_count: existingError.occurrence_count + (cached?.count || 1),
             last_occurred_at: new Date().toISOString(),
             user_id: data.userId,
+            company_id: data.companyId ?? null,
           })
           .eq('id', existingError.id);
       } else {
         await supabase.from('error_logs').insert({
           user_id: data.userId,
+          company_id: data.companyId ?? null,
           error_type: data.errorType,
           severity: data.severity,
           message: data.message,
@@ -160,10 +165,12 @@ class ErrorTrackingService {
     component?: string,
     module?: string,
     severity: ErrorSeverity = 'medium',
-    userId?: string
+    userId?: string,
+    companyId?: string
   ): Promise<void> {
     await this.captureError({
       userId,
+      companyId,
       errorType: 'js_error',
       severity,
       message: error.message,
@@ -178,12 +185,14 @@ class ErrorTrackingService {
     statusCode: number,
     endpoint: string,
     module?: string,
-    userId?: string
+    userId?: string,
+    companyId?: string
   ): Promise<void> {
     const severity: ErrorSeverity = statusCode >= 500 ? 'high' : 'medium';
 
     await this.captureError({
       userId,
+      companyId,
       errorType: 'api_error',
       severity,
       message,
@@ -200,10 +209,12 @@ class ErrorTrackingService {
     message: string,
     operation: string,
     module?: string,
-    userId?: string
+    userId?: string,
+    companyId?: string
   ): Promise<void> {
     await this.captureError({
       userId,
+      companyId,
       errorType: 'database_error',
       severity: 'high',
       message,
@@ -216,10 +227,12 @@ class ErrorTrackingService {
     message: string,
     url: string,
     module?: string,
-    userId?: string
+    userId?: string,
+    companyId?: string
   ): Promise<void> {
     await this.captureError({
       userId,
+      companyId,
       errorType: 'network_error',
       severity: 'medium',
       message,
@@ -234,10 +247,12 @@ class ErrorTrackingService {
   async captureAuthError(
     message: string,
     module?: string,
-    userId?: string
+    userId?: string,
+    companyId?: string
   ): Promise<void> {
     await this.captureError({
       userId,
+      companyId,
       errorType: 'auth_error',
       severity: 'high',
       message,
@@ -250,10 +265,12 @@ class ErrorTrackingService {
     field: string,
     component?: string,
     module?: string,
-    userId?: string
+    userId?: string,
+    companyId?: string
   ): Promise<void> {
     await this.captureError({
       userId,
+      companyId,
       errorType: 'validation_error',
       severity: 'low',
       message,
