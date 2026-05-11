@@ -104,12 +104,9 @@ test.describe('Payment Periods — completo', () => {
       .maybeSingle();
     const before = !!cfgBefore?.auto_weekly;
 
-    const toggle = page.getByText(/Criar per[íi]odos semanais automaticamente/i);
-    if (!(await toggle.isVisible().catch(() => false))) {
-      test.skip(true, 'Toggle auto-weekly não disponível nesta UI');
-    }
-    // Toggle button próximo
-    await page.locator('button[role="switch"], input[type="checkbox"]').first().click({ trial: false }).catch(() => {});
+    const toggle = page.getByTestId('auto-weekly-toggle');
+    await expect(toggle).toBeVisible({ timeout: 10_000 });
+    await toggle.click();
     await page.waitForTimeout(1000);
 
     const { data: cfgAfter } = await s

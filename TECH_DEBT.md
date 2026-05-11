@@ -182,7 +182,9 @@ if (!(await elem.isVisible().catch(() => false))) {
 
 **Severidade:** Baixa — cobertura E2E reduzida quando skip dispara.
 
-**Status:** Pendente — entry 6.9 detalha subset desses 9.
+**Status:** **Parcialmente resolvido — sub-fase 9.1 removeu 7/9 skips via `data-testid`**. Restantes pendentes:
+- `tests/16-financial-complete.spec.ts:149` (filtro employment_type — seletor `hasText` em `<option>`) → sub-fase 9.2
+- `tests/07-financial.spec.ts:43` (Ver Detalhes — depende de pagamento existir) → sub-fase 9.3
 
 ---
 
@@ -210,7 +212,7 @@ if (!(await elem.isVisible().catch(() => false))) {
 3. Identificar quais às vezes passam (= flake intermitente, investigar timing)
 4. Tratar cada caso individualmente (~2-3h trabalho total)
 
-**Status:** Pendente — sub-fase futura "Audit dos 7 testes condicionais".
+**Status:** **Maioria resolvida — sub-fase 9.1 (commit pendente) substituiu 6 dos 7 testes condicionais por `data-testid` (search, histórico, bulk-approve, edit inline c6, facial toggle, facial list)**. Resta 1: `tests/16-financial-complete.spec.ts:149` (employment_type filter) → sub-fase 9.2.
 
 ---
 
@@ -339,6 +341,42 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.3/6.9 (parcial): 7 skips condicionais UI removidos via `data-testid` (sub-fase 9.1)
+
+**Locais resolvidos** (7 dos 9 listados em 6.3; 6 dos 7 de 6.9):
+
+| Spec | Linha antiga | Elemento | `data-testid` introduzido | Componente |
+|---|---|---|---|---|
+| `tests/15-attendance-complete.spec.ts` | 184 | botão bulk-approve | `bulk-approve-button` | `AttendanceApprovalPanel.tsx:194` |
+| `tests/16-financial-complete.spec.ts` | 133 | search input | `financial-search-input` | `FinancialTab.tsx:728` |
+| `tests/16-financial-complete.spec.ts` | 197 | botão Histórico | `financial-history-btn` | `FinancialTab.tsx:635` |
+| `tests/19-payment-periods-complete.spec.ts` | 107 | toggle auto-weekly | `auto-weekly-toggle` | `PaymentPeriodsTab.tsx:171` |
+| `tests/20-c6-complete.spec.ts` | 151 | edit button + tr da row | `c6-edit-row-${id}` + `c6-row-${id}` | `C6PaymentTab.tsx:616, 723` |
+| `tests/24-admin-complete.spec.ts` | 72 | toggle facial global | `facial-global-toggle` | `AdminTab.tsx:678` |
+| `tests/24-admin-complete.spec.ts` | 102 | linha da listagem facial | `facial-list-row-${id}` | `AdminTab.tsx:733, 794` (desktop + mobile) |
+
+**Patterns aplicados:**
+- Substituído `getByRole('button', { name: /regex/ })` e `locator('button[role=switch]').filter(...)` por `getByTestId(...)` — robusto, idempotente.
+- Substituído `if (!await elem.isVisible(...)) test.skip(...)` por `await expect(elem).toBeVisible({ timeout: 10_000 })` — falha real se o elemento sumir, sem mascarar regressão.
+- Spec 20-c6: ao clicar Edit, célula vira input (texto some). Capturei `row.id` via `data-testid` do botão **antes** do click e re-localizei a `<tr>` via novo `data-testid={\`c6-row-${row.id}\`}` para acessar os inputs.
+- Spec 24-admin toggle: filtro `face_recognition_config` por `company_id` (multi-empresa pós-sub-fase 5.3) — adicionado `CARATINGA_ID` constante na spec; queries usam `.eq('company_id', CARATINGA_ID).maybeSingle()` em vez de `.single()` ambíguo.
+- **Bug latente descoberto e corrigido** em `unlockAdmin` helper: `passwordInput.isVisible({ timeout: 3_000 })` retornava `false` imediatamente (a option `timeout` não funciona como `waitFor` em `isVisible`). Substituído por `await expect(passwordInput).toBeVisible({ timeout: 10_000 })`. Pré-fix, isso fazia o helper pular silenciosamente o fill+click quando o input ainda não tinha sido renderizado — daí 2 testes do AdminTab falhavam com "toggle não visível" mesmo após removed-skip.
+
+**Validações executadas:**
+
+| # | Validação | Resultado |
+|---|---|---|
+| 1 | `npx tsc --noEmit` | 0 erros |
+| 2 | `npx vitest run` (414 unit tests) | 16 files passed |
+| 3 | `npx playwright test tests/15 tests/16 tests/19 tests/20 tests/24 --workers=1` (5 specs alteradas) | **33 passed, 13 skipped (justificados), 0 failed** |
+| 4 | Confirmação real de cada `data-testid` no DOM via debug spec ad-hoc (visualizando snapshot + count) | Toggles e rows aparecem `count=1` consistentemente |
+
+**Pendências relacionadas:**
+- 1 skip condicional ainda em `tests/16-financial-complete.spec.ts:149` (filtro employment_type — bug do `hasText` em `<option>`) → resolverá na sub-fase 9.2.
+- 1 skip condicional ainda em `tests/07-financial.spec.ts:43` ("Ver Detalhes" depende de pagamento existir) → sub-fase 9.3 (split em "com dados" / "sem dados").
+
+---
 
 ### 2026-05-11 — 6.8: RPC transacional apply_bank_hours_to_payment (sub-fase 8.5)
 

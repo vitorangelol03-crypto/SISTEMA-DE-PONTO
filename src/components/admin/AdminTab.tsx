@@ -675,6 +675,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
               <button
                 onClick={handleToggleFaceGlobal}
                 disabled={faceGlobalSaving}
+                data-testid="facial-global-toggle"
                 className={`relative inline-flex items-center h-8 rounded-full w-14 transition-colors disabled:opacity-50 flex-shrink-0 ${
                   faceGlobalEnabled ? 'bg-green-600' : 'bg-gray-300'
                 }`}
@@ -729,7 +730,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
                   const enabled = !!e.face_recognition_enabled;
                   const registered = !!e.face_registered;
                   return (
-                    <tr key={e.id} className="hover:bg-gray-50">
+                    <tr key={e.id} data-testid={`facial-list-row-${e.id}`} className="hover:bg-gray-50">
                       <td className="px-3 py-2 font-medium text-gray-800">{e.name}</td>
                       <td className="px-3 py-2">
                         {registered ? (
@@ -790,7 +791,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
               const enabled = !!e.face_recognition_enabled;
               const registered = !!e.face_registered;
               return (
-                <div key={e.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                <div key={e.id} data-testid={`facial-list-row-${e.id}`} className="border border-gray-200 rounded-lg p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold text-gray-900 break-words">{e.name}</div>

@@ -179,10 +179,8 @@ test.describe('Attendance — fluxos completos', () => {
     await rowA.locator('input[type="checkbox"]').first().check();
     await rowB.locator('input[type="checkbox"]').first().check();
 
-    const bulkBtn = page.getByRole('button', { name: /Aprovar.*\(2\)|Aprovar Selecionad/i }).first();
-    if (!(await bulkBtn.isVisible().catch(() => false))) {
-      test.skip(true, 'Botão de bulk-approve não exposto nesta UI');
-    }
+    const bulkBtn = page.getByTestId('bulk-approve-button');
+    await expect(bulkBtn).toBeVisible({ timeout: 10_000 });
     await bulkBtn.click();
 
     await expect(page.getByText(/aprovad/i).first()).toBeVisible({ timeout: 10_000 });

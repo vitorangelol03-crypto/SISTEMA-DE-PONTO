@@ -168,6 +168,7 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
           </div>
           <button
             onClick={handleToggleAuto}
+            data-testid="auto-weekly-toggle"
             className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${
               autoWeekly ? 'bg-blue-600' : 'bg-gray-300'
             }`}

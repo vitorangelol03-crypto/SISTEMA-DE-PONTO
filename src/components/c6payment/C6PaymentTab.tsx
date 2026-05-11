@@ -613,7 +613,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {paymentRows.map((row) => (
-                      <tr key={row.id} className="hover:bg-gray-50">
+                      <tr key={row.id} data-testid={`c6-row-${row.id}`} className="hover:bg-gray-50">
                         {hasPermission('c6payment.bulkEdit') && (
                           <td className="px-4 py-4 whitespace-nowrap">
                             <input
@@ -718,6 +718,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                                 {hasPermission('c6payment.edit') && (
                                   <button
                                     onClick={() => handleEditRow(row)}
+                                    data-testid={`c6-edit-row-${row.id}`}
                                     className="text-blue-600 hover:text-blue-900"
                                     title="Editar linha"
                                   >

@@ -128,10 +128,8 @@ test.describe('Financial — completo', () => {
     await createTestEmployee({ name: `${PREFIX}BuscaB` });
 
     await goToTab(page, 'Financeiro');
-    const search = page.getByPlaceholder(/Buscar.*nome/i).first();
-    if (!(await search.isVisible().catch(() => false))) {
-      test.skip(true, 'Busca não disponível na FinancialTab nesta UI');
-    }
+    const search = page.getByTestId('financial-search-input');
+    await expect(search).toBeVisible({ timeout: 10_000 });
     await search.fill(`${PREFIX}BuscaA`);
     await page.waitForTimeout(500);
 
@@ -192,10 +190,8 @@ test.describe('Financial — completo', () => {
 
     await goToTab(page, 'Financeiro');
     // Subtab "Histórico"
-    const histBtn = page.getByRole('button', { name: /Hist[oó]rico/i }).first();
-    if (!(await histBtn.isVisible().catch(() => false))) {
-      test.skip(true, 'Aba Histórico não disponível');
-    }
+    const histBtn = page.getByTestId('financial-history-btn');
+    await expect(histBtn).toBeVisible({ timeout: 10_000 });
     await histBtn.click();
     await page.waitForLoadState('networkidle');
     // Filtro de data — usa SAFE_DATE

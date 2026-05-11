@@ -141,15 +141,20 @@ test.describe('C6 — completo', () => {
     await insertPaymentRow(empId, SAFE_DATE, { daily_rate: 100 });
 
     await importC6(page, SAFE_DATE);
-    const row = page.locator('table tr', { hasText: `${PREFIX}EditInline` }).first();
-    await expect(row).toBeVisible();
-    await row.getByRole('button', { name: /Editar/i }).first().click();
+    // Localiza pelo nome (antes do click — texto visível na célula)
+    const initialRow = page.locator('table tr', { hasText: `${PREFIX}EditInline` }).first();
+    await expect(initialRow).toBeVisible();
+    const editBtn = initialRow.locator('[data-testid^="c6-edit-row-"]').first();
+    await expect(editBtn).toBeVisible({ timeout: 10_000 });
+    const editTestId = await editBtn.getAttribute('data-testid');
+    const rowId = editTestId!.replace('c6-edit-row-', '');
+    await editBtn.click();
 
-    // Inputs aparecem nas células — pega 2º (pix) e 3º (amount)
+    // Após click, célula vira input → texto some. Re-localiza via testid estável da <tr>.
+    const row = page.getByTestId(`c6-row-${rowId}`);
     const editInputs = row.locator('input');
-    if (await editInputs.count() < 3) {
-      test.skip(true, 'Edição inline não tem inputs esperados');
-    }
+    await expect(editInputs.first()).toBeVisible({ timeout: 5_000 });
+    expect(await editInputs.count()).toBeGreaterThanOrEqual(3);
     // Atualiza PIX (2nd)
     await editInputs.nth(1).fill('teste-novo@pix.com');
     // Atualiza valor (3rd is number)

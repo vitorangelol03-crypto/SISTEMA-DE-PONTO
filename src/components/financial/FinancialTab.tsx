@@ -632,6 +632,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             onClick={() => setActiveView('history')}
             disabled={!hasPermission('financial.viewHistory')}
             title={!hasPermission('financial.viewHistory') ? 'Você não tem permissão para visualizar o histórico' : ''}
+            data-testid="financial-history-btn"
             className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] whitespace-nowrap ${
               activeView === 'history'
                 ? 'bg-purple-600 text-white'
@@ -725,6 +726,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                   value={employeeSearch}
                   onChange={(e) => setEmployeeSearch(e.target.value)}
                   placeholder="Buscar funcionário..."
+                  data-testid="financial-search-input"
                   className="w-full pl-9 pr-9 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
                 />
                 {employeeSearch && (

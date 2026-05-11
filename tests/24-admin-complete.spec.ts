@@ -20,6 +20,7 @@ import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from '
  */
 
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}Admin `;
+const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
 async function cleanup() {
   await cleanupByPrefix(PREFIX);
@@ -28,13 +29,11 @@ async function cleanup() {
 async function unlockAdmin(page: any) {
   await goToTab(page, 'Admin');
   const passwordInput = page.getByPlaceholder('Senha');
-  if (await passwordInput.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    await passwordInput.fill('Clayton2024');
-    await page.getByRole('button', { name: /^Entrar$/ }).click();
-    // Aguarda o painel abrir — heading "Acesso restrito" some
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1500);
-  }
+  await expect(passwordInput).toBeVisible({ timeout: 10_000 });
+  await passwordInput.fill('Clayton2024');
+  await page.getByRole('button', { name: /^Entrar$/ }).click();
+  // Espera painel autenticado abrir e estabilizar (loadFaceConfig completa).
+  await expect(page.getByTestId('facial-global-toggle')).toBeVisible({ timeout: 20_000 });
 }
 
 test.describe('Admin — completo', () => {
@@ -62,28 +61,28 @@ test.describe('Admin — completo', () => {
   test('toggle facial global on/off', async ({ page }) => {
     await unlockAdmin(page);
     const s = getClient();
-    // Estado inicial
-    const { data: cfgBefore } = await s.from('face_recognition_config').select('enabled').single();
+    // Estado inicial — Caratinga (empresa default do login ADMIN)
+    const { data: cfgBefore } = await s
+      .from('face_recognition_config')
+      .select('enabled')
+      .eq('company_id', CARATINGA_ID)
+      .maybeSingle();
     const before = !!cfgBefore?.enabled;
 
-    // Procura toggle "Reconhecimento facial"
-    const toggle = page.locator('button[role="switch"], input[type="checkbox"]').filter({ has: page.locator('//*') }).first();
-    if (!(await toggle.isVisible().catch(() => false))) {
-      test.skip(true, 'Toggle facial global não localizado');
-    }
-    // Clique pode falhar — abordagem alternativa: encontre texto e clique no irmão
-    const label = page.getByText(/Reconhecimento facial/i).first();
-    if (await label.isVisible().catch(() => false)) {
-      await label.click();
-    }
+    const toggle = page.getByTestId('facial-global-toggle');
+    await expect(toggle).toBeVisible({ timeout: 10_000 });
+    await toggle.click();
     await page.waitForTimeout(1000);
 
-    const { data: cfgAfter } = await s.from('face_recognition_config').select('enabled').single();
-    if (!!cfgAfter?.enabled !== before) {
-      // Toggle funcionou — restaura
-      await s.from('face_recognition_config').update({ enabled: before }).neq('id', '00000000-0000-0000-0000-000000000000');
-    }
-    // Não falha se o toggle não estiver disponível na UI atual
+    const { data: cfgAfter } = await s
+      .from('face_recognition_config')
+      .select('enabled')
+      .eq('company_id', CARATINGA_ID)
+      .maybeSingle();
+    expect(!!cfgAfter?.enabled).not.toBe(before);
+
+    // Restaura
+    await s.from('face_recognition_config').update({ enabled: before }).eq('company_id', CARATINGA_ID);
   });
 
   test('reset facial individual de um funcionário (PW Test)', async ({ page }) => {
@@ -97,10 +96,8 @@ test.describe('Admin — completo', () => {
 
     await unlockAdmin(page);
     // Procura linha do funcionário PW Test
-    const row = page.locator('tr', { hasText: `${PREFIX}FaceReset` }).first();
-    if (!(await row.isVisible({ timeout: 5_000 }).catch(() => false))) {
-      test.skip(true, 'Listagem facial individual não exposta nesta UI');
-    }
+    const row = page.getByTestId(`facial-list-row-${empId}`).first();
+    await expect(row).toBeVisible({ timeout: 10_000 });
     page.once('dialog', d => d.accept());
     await row.getByRole('button', { name: /Reset Facial/i }).first().click();
     await page.waitForTimeout(1500);

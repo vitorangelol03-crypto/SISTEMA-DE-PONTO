@@ -191,6 +191,7 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
             <button
               onClick={handleBulkApprove}
               disabled={actionLoading}
+              data-testid="bulk-approve-button"
               className="flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:w-auto"
             >
               <CheckCheck className="w-4 h-4" />
