@@ -4044,11 +4044,11 @@ export const runAdminCleanup = async (
   return { deleted: totalDeleted, log_id: logId };
 };
 
-export const getAdminCleanupConfig = async (): Promise<AdminCleanupConfig | null> => {
+export const getAdminCleanupConfig = async (companyId: string): Promise<AdminCleanupConfig | null> => {
   const { data, error } = await supabase
     .from('admin_cleanup_config')
     .select('*')
-    .limit(1)
+    .eq('company_id', companyId)
     .maybeSingle();
   if (error) throw error;
   return data;
@@ -4056,44 +4056,33 @@ export const getAdminCleanupConfig = async (): Promise<AdminCleanupConfig | null
 
 export const updateAdminCleanupConfig = async (
   enabled: boolean,
-  intervalMonths: number
+  intervalMonths: number,
+  companyId: string
 ): Promise<void> => {
   const now = new Date();
   const next = new Date(now);
   next.setMonth(next.getMonth() + intervalMonths);
 
-  const { data: existing } = await supabase
+  // Upsert por company_id — depende da UNIQUE(company_id) aplicada na
+  // migration 20260511142612 (TECH_DEBT 6.16). Lazy-create funciona pra
+  // qualquer empresa nova sem precisar INSERT manual prévio.
+  const { error } = await supabase
     .from('admin_cleanup_config')
-    .select('id')
-    .limit(1)
-    .maybeSingle();
-
-  if (existing) {
-    const { error } = await supabase
-      .from('admin_cleanup_config')
-      .update({
+    .upsert(
+      [{
+        company_id: companyId,
         enabled,
         interval_months: intervalMonths,
         next_cleanup_at: enabled ? next.toISOString() : null,
         updated_at: now.toISOString(),
-      })
-      .eq('id', existing.id);
-    if (error) throw error;
-  } else {
-    const { error } = await supabase
-      .from('admin_cleanup_config')
-      .insert([{
-        enabled,
-        interval_months: intervalMonths,
-        last_cleanup_at: null,
-        next_cleanup_at: enabled ? next.toISOString() : null,
-      }]);
-    if (error) throw error;
-  }
+      }],
+      { onConflict: 'company_id' },
+    );
+  if (error) throw error;
 };
 
 export const runAutoCleanup = async (companyId: string): Promise<boolean> => {
-  const config = await getAdminCleanupConfig();
+  const config = await getAdminCleanupConfig(companyId);
   if (!config || !config.enabled || !config.next_cleanup_at) return false;
 
   const now = new Date();

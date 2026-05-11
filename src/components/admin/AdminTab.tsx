@@ -179,17 +179,18 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
   }, [company?.id]);
 
   const loadCleanupConfig = React.useCallback(async () => {
+    if (!company?.id) return;
     setAutoConfigLoading(true);
     try {
-      const cfg = await getAdminCleanupConfig();
+      const cfg = await getAdminCleanupConfig(company.id);
       setAutoConfig(cfg);
       if (cfg) setAutoInterval(cfg.interval_months);
     } catch {
-      // config table may be empty
+      // config table may be empty (lazy-create acontece no primeiro update)
     } finally {
       setAutoConfigLoading(false);
     }
-  }, []);
+  }, [company?.id]);
 
   const loadFaceConfig = React.useCallback(async () => {
     if (!company?.id) return;
@@ -350,10 +351,11 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
   };
 
   const handleToggleAuto = async () => {
+    if (!company?.id) return;
     setAutoSaving(true);
     try {
       const newEnabled = !autoConfig?.enabled;
-      await updateAdminCleanupConfig(newEnabled, autoInterval);
+      await updateAdminCleanupConfig(newEnabled, autoInterval, company.id);
       await loadCleanupConfig();
       toast.success(newEnabled ? 'Limpeza automática ativada' : 'Limpeza automática desativada');
     } catch {
@@ -364,9 +366,10 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
   };
 
   const handleSaveAutoInterval = async () => {
+    if (!company?.id) return;
     setAutoSaving(true);
     try {
-      await updateAdminCleanupConfig(autoConfig?.enabled ?? false, autoInterval);
+      await updateAdminCleanupConfig(autoConfig?.enabled ?? false, autoInterval, company.id);
       await loadCleanupConfig();
       toast.success('Intervalo atualizado');
     } catch {
@@ -385,7 +388,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       const now = new Date();
       const newNext = new Date(now);
       newNext.setMonth(newNext.getMonth() + months);
-      await updateAdminCleanupConfig(autoConfig?.enabled ?? true, months);
+      await updateAdminCleanupConfig(autoConfig?.enabled ?? true, months, company.id);
       await loadCleanupConfig();
       toast.success(`Executado: ${result.deleted} registros processados`);
       loadData();

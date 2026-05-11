@@ -217,35 +217,6 @@ Capturar `{ error }` em cada chamada e logar em `error_logs`. Atomicidade desej�
 
 
 
-### 6.16 — [Baixa] `admin_cleanup_config` funciona como singleton de fato
-
-**Local:** tabela `public.admin_cleanup_config`
-
-**Δ vs versão anterior:** anteriormente listada como "tabela GLOBAL". Real (validado via Supabase MCP 2026-05-09): tabela TEM `company_id` (FK pra companies + coluna nullable=NO), mas sem UNIQUE constraint nessa coluna; PK em `id` (string).
-
-**Estado atual (1 row):**
-```json
-{
-  "id": "default",
-  "enabled": true,
-  "interval_months": 3,
-  "company_id": "6583bb2a-...",  // Caratinga
-  "next_cleanup_at": "2026-07-17 19:46:36",
-  "updated_at": "2026-04-17 19:46:36"
-}
-```
-
-Funciona como singleton de fato. Ponte Nova ainda não tem config própria.
-
-**Severidade:** Baixa — cenário não bloqueia uso enquanto Ponte Nova não tiver auto-cleanup configurado.
-
-**Solução (escolher uma):**
-1. **Operacional:** cadastrar manualmente row de admin_cleanup_config pra Ponte Nova (`INSERT ... company_id=pontenova_id`).
-2. **Estrutural:** alterar `runAutoCleanup` (`database.ts:4096-4117`) pra criar row lazy quando não existe. Migration adicional: `UNIQUE(company_id)` na tabela.
-
-**Status:** Pendente — escolher abordagem em sub-fase futura.
-
----
 
 ## 🟢 Performance / qualidade
 
@@ -478,6 +449,36 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.16: `admin_cleanup_config` UNIQUE + lazy-create (sub-fase 7.2)
+
+**Migration aplicada em prod:** `20260511142612_admin_cleanup_unique_per_company`
+
+**SQL:**
+```sql
+ALTER TABLE public.admin_cleanup_config
+  ADD CONSTRAINT admin_cleanup_config_company_id_key UNIQUE (company_id);
+```
+
+**Pre-check via MCP (2026-05-11):** 0 duplicatas em prod. Caratinga 1 row, PN 0 rows.
+
+**Mudanças em `src/services/database.ts`:**
+- `getAdminCleanupConfig(companyId: string)` — agora exige companyId, filtra por `company_id = ?` em vez de `.limit(1)`.
+- `updateAdminCleanupConfig(enabled, intervalMonths, companyId: string)` — agora exige companyId, faz `upsert({ ... }, { onConflict: 'company_id' })` — substituiu o branch existing/insert separado por upsert atômico (lazy-create).
+- `runAutoCleanup(companyId)` — passa companyId pro getter.
+
+**Mudanças em `src/components/admin/AdminTab.tsx`:**
+- `loadCleanupConfig` agora depende de `[company?.id]` e passa company.id.
+- `handleToggleAuto`, `handleSaveAutoInterval`, `handleRunAutoNow` passam company.id (com early-return se ausente).
+
+**Decisão técnica:** opção ES (estrutural) escolhida sobre OP (operacional). Lazy-create automático funciona pra qualquer nova empresa sem precisar INSERT manual prévio. Resolve o caso da Ponte Nova sem mudança operacional.
+
+**Validação:**
+- `npx tsc --noEmit`: 0 erros.
+- `npx playwright test tests/12-admin-tab.spec.ts tests/24-admin-complete.spec.ts --workers=1`: 5 passed, 9 skipped (esperado pelo 6.3/6.9).
+- Constraint UNIQUE confirmada via `pg_constraint` em prod.
+
+---
 
 ### 2026-05-11 — 6.14 (4ª ocorrência) + 6.22.A: EmployeesTab cleanup + useCallback (sub-fase 5.6)
 
