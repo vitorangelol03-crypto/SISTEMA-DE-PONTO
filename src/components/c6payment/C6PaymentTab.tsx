@@ -54,11 +54,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
   const [inlineEdit, setInlineEdit] = useState<{ rowId: string; field: 'amount' | 'pixKey' } | null>(null);
   const [inlineValue, setInlineValue] = useState('');
 
-  useEffect(() => {
-    loadEmployees();
-  }, [company?.id]);
-
-  const loadEmployees = async () => {
+  const loadEmployees = React.useCallback(async () => {
     if (!company?.id) return;
     try {
       const employeesData = await getAllEmployees(undefined, company.id);
@@ -67,7 +63,23 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
       console.error('Erro ao carregar funcionários:', error);
       toast.error('Erro ao carregar funcionários');
     }
-  };
+  }, [company?.id]);
+
+  useEffect(() => {
+    loadEmployees();
+  }, [loadEmployees]);
+
+  // Ao trocar empresa, zera estados específicos de C6 que persistem cross-empresa
+  // se não limpados (paymentRows, dataImported, selectedRows, inlineEdit,
+  // editingRowId, editValues). Resolve TECH_DEBT 6.15.
+  useEffect(() => {
+    setPaymentRows([]);
+    setDataImported(false);
+    setSelectedRows(new Set());
+    setInlineEdit(null);
+    setEditingRowId(null);
+    setEditValues(null);
+  }, [company?.id]);
 
   const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
