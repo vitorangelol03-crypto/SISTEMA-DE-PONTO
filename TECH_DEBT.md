@@ -282,6 +282,21 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — Sub-fase 10.3 (AuditLogsTab) cancelada: componente órfão
+
+**Descoberta durante exploração:** `src/components/monitoring/AuditLogsTab.tsx` (319 lin) existe mas **NÃO é renderizado em lugar nenhum da app**. Grep em todo `src/` confirma: nenhum import de `AuditLogsTab` exceto o próprio arquivo. Não há tab no App.tsx, não há rota, não há section em outras tabs que o use.
+
+**Implicações:**
+- Não é possível testar E2E (não há fluxo na UI que leve ao componente).
+- O serviço por trás (`src/services/auditService.ts`) é usado para `logAction()` em outras partes, mas o componente UI de visualização nunca é exibido ao usuário.
+- Provavelmente um componente em desenvolvimento que foi commitado mas não ligado.
+
+**Sub-fase 10.3 cancelada.** Decisão: não criar `tests/33-audit-logs-tab.spec.ts` com testes skipados (poluição inútil). Em vez disso, documentar a descoberta aqui.
+
+**Pendência derivada (fora do escopo da Fase 10):** se este componente deve ser exposto na UI ou removido. Recomendação: avaliar no contexto do PRE-LAUNCH-CHECKLIST (Fase 12) — manter dead code em prod aumenta superfície sem benefício.
+
+---
+
 ### 2026-05-11 — Cobertura E2E nova: BonusTypesManager (sub-fase 10.2)
 
 **Arquivo novo:** `tests/32-bonus-types-manager.spec.ts` — 10 testes cobrindo `src/components/admin/BonusTypesManager.tsx` (393 lin), renderizado dentro de AdminTab na section "Tipos de Bonificação — <empresa>".
