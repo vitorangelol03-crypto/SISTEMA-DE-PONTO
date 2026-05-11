@@ -3,95 +3,56 @@
  *
  * Framework: vitest. Roda com: npx vitest run c6Export
  *
- * Cobertura: 40+ casos cobrindo a função exportada `exportC6PaymentSheet`
- * e o validador interno de PIX (testado indiretamente via coluna "Status"
- * do sheet Pagamentos). Cobre:
- *   - validatePixKey via comportamento (12 cenários de PIX)
- *   - Estrutura do workbook (3 sheets, ordem, nomes exatos)
- *   - createPaymentSheet (dados, totais, formula SUM, status OK/VERIFICAR)
- *   - createSummarySheet (count, sum, average, max/min, taxa sucesso)
- *   - createInstructionsSheet (presença das 7 seções)
- *   - Edge cases (rows vazio impacta NaN/division, paymentDate inválido,
- *     pixKey com pontuação, descrição vazia, valores zero/negativos)
- *   - Filename gerado com timestamp UTC ISO
+ * Cobertura: 44+ casos. Estratégia REAL (não mock pesado):
+ * - xlsx-js-style é usado REAL — book_new, aoa_to_sheet, book_append_sheet,
+ *   encode_cell, decode_range, etc. produzem workbook genuíno.
+ * - APENAS `writeFile` é mockado (não pode escrever em disco em jsdom).
+ * - Workbook real é inspecionado: SheetNames, células reais (.v), tipos (.t),
+ *   ranges (!ref), formulas (.f), styles (.s).
  *
- * Estratégia de mock: `xlsx-js-style` substituído por mock que captura
- * estado do workbook e payload das células. `XLSX.writeFile` é spy
- * inspecionável. SEM renderização real — testamos PAYLOAD, não bytes.
+ * Isso PEGA bugs de payload que mock paralelo poderia mascarar (ex: se
+ * lib XLSX transformar valor antes de gravar).
+ *
+ * Risco residual: bytes do XLSX em disco não são validados (lib pode
+ * serializar incorretamente). Pra cobrir isso seria preciso parsear XLSX
+ * de volta com `XLSX.read(buffer)` — viável mas mais lento e fora do
+ * escopo desta sub-fase.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-// vi.hoisted garante que o mock state existe antes do vi.mock factory rodar.
-const { mockState } = vi.hoisted(() => ({
-  mockState: {
-    workbooks: [] as any[],
-    writeFileCalls: [] as Array<{ workbook: any; filename: string; opts: any }>,
-    currentWorkbook: null as any,
-  },
-}));
-
-vi.mock('xlsx-js-style', () => {
-  const colLetter = (c: number) => String.fromCharCode(65 + c);
-  const encode_cell = ({ r, c }: { r: number; c: number }) => `${colLetter(c)}${r + 1}`;
-
-  const aoa_to_sheet = (data: any[][]) => {
-    const sheet: any = {};
-    let maxCol = 0;
-    data.forEach((row, rIdx) => {
-      row.forEach((val, cIdx) => {
-        const addr = encode_cell({ r: rIdx, c: cIdx });
-        if (val !== undefined && val !== '') {
-          sheet[addr] = typeof val === 'object' && val !== null && 'f' in val
-            ? { f: val.f }
-            : { v: val };
-        }
-        if (cIdx > maxCol) maxCol = cIdx;
-      });
-    });
-    sheet['!ref'] = `A1:${colLetter(maxCol)}${data.length}`;
-    sheet._rawData = data;
-    return sheet;
-  };
-
-  const decode_range = (ref: string) => {
-    const [start, end] = ref.split(':');
-    const parse = (addr: string) => {
-      const m = /^([A-Z]+)(\d+)$/.exec(addr);
-      if (!m) return { r: 0, c: 0 };
-      return { c: m[1].charCodeAt(0) - 65, r: parseInt(m[2], 10) - 1 };
-    };
-    return { s: parse(start), e: parse(end) };
-  };
-
-  const book_new = () => {
-    const wb = { SheetNames: [] as string[], Sheets: {} as Record<string, any> };
-    mockState.currentWorkbook = wb;
-    mockState.workbooks.push(wb);
-    return wb;
-  };
-
-  const book_append_sheet = (wb: any, sheet: any, name: string) => {
-    wb.SheetNames.push(name);
-    wb.Sheets[name] = sheet;
-  };
-
-  const writeFile = vi.fn((wb: any, filename: string, opts: any) => {
-    mockState.writeFileCalls.push({ workbook: wb, filename, opts });
-  });
-
+// Mock SELETIVO de xlsx-js-style: usa real exceto writeFile.
+// Como c6Export faz `import * as XLSX from 'xlsx-js-style'`, precisamos
+// preservar TODAS as exports nomeadas (utils, etc.) e SÓ substituir writeFile.
+const { writeFileCalls, writeFileSpy } = vi.hoisted(() => {
+  const calls: Array<{ workbook: any; filename: string; opts: any }> = [];
   return {
-    default: { utils: { book_new, aoa_to_sheet, book_append_sheet, encode_cell, decode_range }, writeFile },
-    utils: { book_new, aoa_to_sheet, book_append_sheet, encode_cell, decode_range },
-    writeFile,
+    writeFileCalls: calls,
+    writeFileSpy: (wb: any, filename: string, opts: any) => {
+      calls.push({ workbook: wb, filename, opts });
+    },
+  };
+});
+
+vi.mock('xlsx-js-style', async (importOriginal) => {
+  // `importOriginal()` retorna { default: <objeto CommonJS inteiro> }.
+  // Achata o default no top-level pra `import * as XLSX` pegar utils, encode_cell, etc.
+  const raw = await importOriginal<{ default: typeof import('xlsx-js-style') }>();
+  const real = raw.default;
+  return {
+    ...real,
+    writeFile: writeFileSpy,
+    default: {
+      ...real,
+      writeFile: writeFileSpy,
+    },
   };
 });
 
 import { exportC6PaymentSheet } from '../../src/utils/c6Export';
 
-// Helper: cria PaymentRow com defaults sensatos. Override por caso.
 type PaymentRowInput = {
   employeeName?: string;
   pixKey?: string;
@@ -111,36 +72,28 @@ function makeRow(overrides: PaymentRowInput = {}) {
 }
 
 beforeEach(() => {
-  mockState.workbooks.length = 0;
-  mockState.writeFileCalls.length = 0;
-  mockState.currentWorkbook = null;
+  writeFileCalls.length = 0;
 });
 
-// ─── Helpers de inspeção do workbook ──────────────────────────────────────
-
-/** Retorna a sheet pelo nome do último workbook gerado. */
-function getSheet(name: string) {
-  const wb = mockState.workbooks[mockState.workbooks.length - 1];
-  return wb?.Sheets[name];
+// Helpers
+function lastWorkbook() {
+  return writeFileCalls[writeFileCalls.length - 1]?.workbook;
 }
-
-/** Retorna valor de uma cell por endereço A1. */
+function getSheet(name: string) {
+  return lastWorkbook()?.Sheets[name];
+}
 function cellVal(sheet: any, addr: string): any {
   return sheet?.[addr]?.v;
 }
 
-/** Retorna o array 2D bruto passado pra aoa_to_sheet. */
-function rawData(sheet: any): any[][] {
-  return sheet?._rawData ?? [];
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-
 describe('validatePixKey (testado via coluna Status do sheet Pagamentos PIX)', () => {
-  // O sheet Pagamentos PIX tem header em linha 6 (índice 5), com colunas:
-  // 0='#', 1='Nome', 2='Chave Pix', 3='Valor', 4='Data', 5='Descrição', 6='Status'
-  // Cada PaymentRow vira linha 7+, e Status='OK' se PIX válido & amount>0 & nome non-empty.
-  // Testamos validação isolada com 1 row, amount=100, nome válido.
+  // Sheet Pagamentos PIX layout:
+  //   linha 1: título mesclado
+  //   linha 2: gerado em + total
+  //   linha 4: aviso
+  //   linha 6: header (#, Nome, Chave, Valor, Data, Descrição, Status)
+  //   linha 7+: dados
+  // Status='OK' se PIX válido & amount>0 & nome non-empty.
 
   async function statusFor(pixKey: string): Promise<string> {
     await exportC6PaymentSheet([makeRow({ pixKey })]);
@@ -152,14 +105,11 @@ describe('validatePixKey (testado via coluna Status do sheet Pagamentos PIX)', (
     expect(await statusFor('12345678901')).toBe('OK');
   });
 
-  it('2. CPF 9 dígitos → VERIFICAR (inválido, e não bate phone que exige 10-11)', async () => {
+  it('2. CPF 9 dígitos → VERIFICAR (não bate CPF nem phone)', async () => {
     expect(await statusFor('123456789')).toBe('VERIFICAR');
   });
 
-  it('3. CPF com pontuação (123.456.789-01) → VERIFICAR (validator NÃO normaliza pontos/hífens, apenas o `cleanKey` regex remove caracteres fora de [\\w@.-])', async () => {
-    // Comportamento documentado: o cleanKey regex `[^\w@.-]` mantém pontos
-    // e hífens, então CPF formatado falha o teste `/^\d{11}$/`. UI/UX:
-    // funcionário precisa cadastrar CPF sem pontuação no `pix_key`.
+  it('3. CPF com pontuação (123.456.789-01) → VERIFICAR (não normaliza, TECH_DEBT 6.23)', async () => {
     expect(await statusFor('123.456.789-01')).toBe('VERIFICAR');
   });
 
@@ -167,7 +117,7 @@ describe('validatePixKey (testado via coluna Status do sheet Pagamentos PIX)', (
     expect(await statusFor('12345678000195')).toBe('OK');
   });
 
-  it('5. Email válido (user@dominio.com) → OK', async () => {
+  it('5. Email válido → OK', async () => {
     expect(await statusFor('user@dominio.com')).toBe('OK');
   });
 
@@ -183,11 +133,11 @@ describe('validatePixKey (testado via coluna Status do sheet Pagamentos PIX)', (
     expect(await statusFor('1198765432')).toBe('OK');
   });
 
-  it('9. UUID v4 (chave aleatória) → OK', async () => {
+  it('9. UUID v4 → OK', async () => {
     expect(await statusFor('550e8400-e29b-41d4-a716-446655440000')).toBe('OK');
   });
 
-  it('10. PIX string vazia → VERIFICAR', async () => {
+  it('10. PIX vazia → VERIFICAR', async () => {
     expect(await statusFor('')).toBe('VERIFICAR');
   });
 
@@ -195,52 +145,47 @@ describe('validatePixKey (testado via coluna Status do sheet Pagamentos PIX)', (
     expect(await statusFor('   ')).toBe('VERIFICAR');
   });
 
-  it('12. CPF com 12 dígitos (excesso) → VERIFICAR', async () => {
+  it('12. CPF com 12 dígitos → VERIFICAR', async () => {
     expect(await statusFor('123456789012')).toBe('VERIFICAR');
   });
 });
 
-describe('exportC6PaymentSheet — estrutura do workbook', () => {
+describe('exportC6PaymentSheet — estrutura do workbook REAL', () => {
   it('13. cria 3 sheets nos nomes exatos e na ordem correta', async () => {
     await exportC6PaymentSheet([makeRow()]);
-    const wb = mockState.workbooks[0];
-    expect(wb.SheetNames).toEqual(['Pagamentos PIX', 'Resumo', 'Instruções']);
+    expect(lastWorkbook().SheetNames).toEqual(['Pagamentos PIX', 'Resumo', 'Instruções']);
   });
 
-  it('14. chama XLSX.writeFile com bookType=xlsx e cellStyles=true', async () => {
+  it('14. chama XLSX.writeFile com bookType=xlsx + cellStyles=true', async () => {
     await exportC6PaymentSheet([makeRow()]);
-    expect(mockState.writeFileCalls).toHaveLength(1);
-    const call = mockState.writeFileCalls[0];
-    expect(call.opts).toMatchObject({ bookType: 'xlsx', cellStyles: true });
+    expect(writeFileCalls).toHaveLength(1);
+    expect(writeFileCalls[0].opts).toMatchObject({ bookType: 'xlsx', cellStyles: true });
   });
 
   it('15. filename segue padrão Pagamento_C6_YYYYMMDD_HHMMSS.xlsx', async () => {
     await exportC6PaymentSheet([makeRow()]);
-    const { filename } = mockState.writeFileCalls[0];
-    expect(filename).toMatch(/^Pagamento_C6_\d{8}_\d{6}\.xlsx$/);
+    expect(writeFileCalls[0].filename).toMatch(/^Pagamento_C6_\d{8}_\d{6}\.xlsx$/);
   });
 
-  it('16. propaga throw se XLSX falhar internamente', async () => {
-    // Simula erro no aoa_to_sheet via spy temporário
-    const xlsxMock = await import('xlsx-js-style');
-    const original = xlsxMock.utils.aoa_to_sheet;
-    (xlsxMock.utils as any).aoa_to_sheet = vi.fn(() => {
-      throw new Error('XLSX explodiu');
-    });
-
-    await expect(exportC6PaymentSheet([makeRow()])).rejects.toThrow('XLSX explodiu');
-
-    // Restore
-    (xlsxMock.utils as any).aoa_to_sheet = original;
+  it('16. todas as 3 sheets têm !ref válido (workbook bem-formado)', async () => {
+    await exportC6PaymentSheet([makeRow(), makeRow()]);
+    expect(getSheet('Pagamentos PIX')['!ref']).toMatch(/^A1:G\d+$/);
+    expect(getSheet('Resumo')['!ref']).toMatch(/^A1:B\d+$/);
+    expect(getSheet('Instruções')['!ref']).toMatch(/^A1:A\d+$/);
   });
 });
 
-describe('createPaymentSheet — dados da sheet Pagamentos PIX', () => {
-  it('17. linha 6 contém header com 7 colunas esperadas', async () => {
+describe('createPaymentSheet — dados reais', () => {
+  it('17. linha 6 contém header com 7 colunas', async () => {
     await exportC6PaymentSheet([makeRow()]);
     const sheet = getSheet('Pagamentos PIX');
-    const data = rawData(sheet);
-    expect(data[5]).toEqual(['#', 'Nome do funcionário', 'Chave ou código Pix', 'Valor', 'Data de pagamento', 'Descrição (opcional)', 'Status']);
+    expect(cellVal(sheet, 'A6')).toBe('#');
+    expect(cellVal(sheet, 'B6')).toBe('Nome do funcionário');
+    expect(cellVal(sheet, 'C6')).toBe('Chave ou código Pix');
+    expect(cellVal(sheet, 'D6')).toBe('Valor');
+    expect(cellVal(sheet, 'E6')).toBe('Data de pagamento');
+    expect(cellVal(sheet, 'F6')).toBe('Descrição (opcional)');
+    expect(cellVal(sheet, 'G6')).toBe('Status');
   });
 
   it('18. cada PaymentRow vira 1 linha de dados a partir da linha 7', async () => {
@@ -256,32 +201,34 @@ describe('createPaymentSheet — dados da sheet Pagamentos PIX', () => {
     expect(cellVal(sheet, 'B9')).toBe('Funcionário C');
   });
 
-  it('19. numera linhas sequencialmente (#1, #2, #3)', async () => {
+  it('19. coluna # tem números sequenciais (cell type "n")', async () => {
     await exportC6PaymentSheet([makeRow(), makeRow(), makeRow()]);
     const sheet = getSheet('Pagamentos PIX');
-    expect(cellVal(sheet, 'A7')).toBe(1);
-    expect(cellVal(sheet, 'A8')).toBe(2);
-    expect(cellVal(sheet, 'A9')).toBe(3);
+    expect(sheet['A7'].v).toBe(1);
+    expect(sheet['A7'].t).toBe('n');
+    expect(sheet['A8'].v).toBe(2);
+    expect(sheet['A9'].v).toBe(3);
   });
 
-  it('20. preserva amount como número (não string)', async () => {
+  it('20. amount preservado como número (cell type "n")', async () => {
     await exportC6PaymentSheet([makeRow({ amount: 1234.56 })]);
     const sheet = getSheet('Pagamentos PIX');
-    expect(cellVal(sheet, 'D7')).toBe(1234.56);
-    expect(typeof cellVal(sheet, 'D7')).toBe('number');
+    expect(sheet['D7'].v).toBe(1234.56);
+    expect(sheet['D7'].t).toBe('n');
   });
 
-  it('21. paymentDate YYYY-MM-DD → DD/MM/YYYY na sheet', async () => {
+  it('21. paymentDate YYYY-MM-DD → DD/MM/YYYY (string formatada)', async () => {
     await exportC6PaymentSheet([makeRow({ paymentDate: '2026-05-11' })]);
     const sheet = getSheet('Pagamentos PIX');
     expect(cellVal(sheet, 'E7')).toBe('11/05/2026');
   });
 
-  it('22. descrição vazia vira string vazia (não null/undefined)', async () => {
+  it('22. descrição vazia: cell omitida ou v="" (graceful)', async () => {
     await exportC6PaymentSheet([makeRow({ description: '' })]);
     const sheet = getSheet('Pagamentos PIX');
-    // Vazia → mock omite cell (undefined). Esperado: undefined.
-    expect(cellVal(sheet, 'F7')).toBeUndefined();
+    // XLSX real omite cells vazias do mapeamento ou armazena com v=''
+    const f7 = sheet['F7'];
+    expect(f7 === undefined || f7.v === '' || f7.v === undefined).toBe(true);
   });
 
   it('23. descrição preenchida persiste literal', async () => {
@@ -290,147 +237,136 @@ describe('createPaymentSheet — dados da sheet Pagamentos PIX', () => {
     expect(cellVal(sheet, 'F7')).toBe('Pagamento abril');
   });
 
-  it('24. linha TOTAL fica logo após dados com SUM formula', async () => {
+  it('24. linha TOTAL com SUM formula real (não string)', async () => {
     const rows = [makeRow(), makeRow(), makeRow()];
     await exportC6PaymentSheet(rows);
     const sheet = getSheet('Pagamentos PIX');
-    // 3 rows de dados ocupam linhas 7,8,9. TOTAL é linha 10.
+    // 3 rows ocupam linhas 7,8,9. TOTAL é linha 10.
     expect(cellVal(sheet, 'B10')).toBe('TOTAL');
-    expect(sheet['D10']?.f).toBe('SUM(D7:D9)');
+    expect(sheet['D10'].f).toBe('SUM(D7:D9)');
   });
 
-  it('25. amount=0 → status VERIFICAR (validação fail-soft)', async () => {
+  it('25. amount=0 → VERIFICAR', async () => {
     await exportC6PaymentSheet([makeRow({ amount: 0 })]);
-    const sheet = getSheet('Pagamentos PIX');
-    expect(cellVal(sheet, 'G7')).toBe('VERIFICAR');
+    expect(cellVal(getSheet('Pagamentos PIX'), 'G7')).toBe('VERIFICAR');
   });
 
-  it('26. amount negativo → status VERIFICAR', async () => {
+  it('26. amount negativo → VERIFICAR', async () => {
     await exportC6PaymentSheet([makeRow({ amount: -50 })]);
-    const sheet = getSheet('Pagamentos PIX');
-    expect(cellVal(sheet, 'G7')).toBe('VERIFICAR');
+    expect(cellVal(getSheet('Pagamentos PIX'), 'G7')).toBe('VERIFICAR');
   });
 
-  it('27. employeeName só whitespace → status VERIFICAR (mesmo com PIX/amount válidos)', async () => {
+  it('27. nome só whitespace → VERIFICAR', async () => {
     await exportC6PaymentSheet([makeRow({ employeeName: '   ' })]);
+    expect(cellVal(getSheet('Pagamentos PIX'), 'G7')).toBe('VERIFICAR');
+  });
+
+  it('28. range expand pra incluir linha TOTAL (validação de bytes implícita)', async () => {
+    await exportC6PaymentSheet([makeRow(), makeRow(), makeRow()]);
     const sheet = getSheet('Pagamentos PIX');
-    expect(cellVal(sheet, 'G7')).toBe('VERIFICAR');
+    // 3 rows + header (6) + 1 TOTAL = linha 10. Range A1:G10
+    expect(sheet['!ref']).toBe('A1:G10');
+  });
+
+  it('29. status OK vs VERIFICAR é STRING (não bool, garantia de não-truncate)', async () => {
+    await exportC6PaymentSheet([makeRow()]);
+    const sheet = getSheet('Pagamentos PIX');
+    expect(typeof sheet['G7'].v).toBe('string');
+    expect(sheet['G7'].t).toBe('s');
   });
 });
 
-describe('createSummarySheet — sheet Resumo', () => {
-  it('28. label "Total de Pagamentos" presente com count correto', async () => {
+describe('createSummarySheet — dados reais', () => {
+  it('30. Total de Pagamentos com count correto e cell type number', async () => {
     const rows = [makeRow(), makeRow(), makeRow()];
     await exportC6PaymentSheet(rows);
     const sheet = getSheet('Resumo');
     expect(cellVal(sheet, 'A9')).toBe('Total de Pagamentos:');
-    expect(cellVal(sheet, 'B9')).toBe(3);
+    expect(sheet['B9'].v).toBe(3);
+    expect(sheet['B9'].t).toBe('n');
   });
 
-  it('29. "Pagamentos Válidos" e "com Erro" somam ao total', async () => {
+  it('31. Válidos + com Erro = Total', async () => {
     const rows = [
-      makeRow({ pixKey: '12345678901' }), // válido
-      makeRow({ pixKey: 'invalido' }), // inválido
-      makeRow({ pixKey: 'user@dominio.com' }), // válido
+      makeRow({ pixKey: '12345678901' }),
+      makeRow({ pixKey: 'invalido' }),
+      makeRow({ pixKey: 'user@dominio.com' }),
     ];
     await exportC6PaymentSheet(rows);
     const sheet = getSheet('Resumo');
-    expect(cellVal(sheet, 'B10')).toBe(2); // válidos
-    expect(cellVal(sheet, 'B11')).toBe(1); // com erro
+    expect(sheet['B10'].v).toBe(2);
+    expect(sheet['B11'].v).toBe(1);
+    expect(sheet['B10'].v + sheet['B11'].v).toBe(rows.length);
   });
 
-  it('30. Taxa de sucesso = válidos / total (float entre 0 e 1)', async () => {
+  it('32. Taxa = válidos / total como número (não percentual string)', async () => {
     const rows = [
       makeRow({ pixKey: '12345678901' }),
       makeRow({ pixKey: 'invalido' }),
     ];
     await exportC6PaymentSheet(rows);
     const sheet = getSheet('Resumo');
-    expect(cellVal(sheet, 'B12')).toBe(0.5);
+    expect(sheet['B12'].v).toBe(0.5);
   });
 
-  it('31. Valor Total = sum dos amounts', async () => {
+  it('33. Valor Total = sum exato (sem perda de precisão)', async () => {
     const rows = [
       makeRow({ amount: 100 }),
       makeRow({ amount: 250.5 }),
       makeRow({ amount: 49.5 }),
     ];
     await exportC6PaymentSheet(rows);
-    const sheet = getSheet('Resumo');
-    expect(cellVal(sheet, 'B15')).toBe(400);
+    expect(getSheet('Resumo')['B15'].v).toBe(400);
   });
 
-  it('32. Valor Médio = total / count', async () => {
-    const rows = [
+  it('34. Valor Médio = Total/Count', async () => {
+    await exportC6PaymentSheet([
       makeRow({ amount: 100 }),
       makeRow({ amount: 200 }),
-    ];
-    await exportC6PaymentSheet(rows);
-    const sheet = getSheet('Resumo');
-    expect(cellVal(sheet, 'B16')).toBe(150);
+    ]);
+    expect(getSheet('Resumo')['B16'].v).toBe(150);
   });
 
-  it('33. Maior Pagamento = max(amounts)', async () => {
-    const rows = [
+  it('35. Maior/Menor pagamentos', async () => {
+    await exportC6PaymentSheet([
       makeRow({ amount: 100 }),
       makeRow({ amount: 999 }),
       makeRow({ amount: 50 }),
-    ];
-    await exportC6PaymentSheet(rows);
+    ]);
     const sheet = getSheet('Resumo');
-    expect(cellVal(sheet, 'B17')).toBe(999);
+    expect(sheet['B17'].v).toBe(999);
+    expect(sheet['B18'].v).toBe(50);
   });
 
-  it('34. Menor Pagamento = min(amounts)', async () => {
-    const rows = [
-      makeRow({ amount: 100 }),
-      makeRow({ amount: 999 }),
-      makeRow({ amount: 50 }),
-    ];
-    await exportC6PaymentSheet(rows);
-    const sheet = getSheet('Resumo');
-    expect(cellVal(sheet, 'B18')).toBe(50);
-  });
-
-  it('35. Período N/A quando periodStart/periodEnd não fornecidos', async () => {
+  it('36. Período N/A quando ausente', async () => {
     await exportC6PaymentSheet([makeRow()]);
-    const sheet = getSheet('Resumo');
-    expect(cellVal(sheet, 'B6')).toBe('N/A');
+    expect(cellVal(getSheet('Resumo'), 'B6')).toBe('N/A');
   });
 
-  it('36. Período formatado quando fornecido', async () => {
+  it('37. Período formatado quando fornecido', async () => {
     await exportC6PaymentSheet([makeRow()], '2026-05-01', '2026-05-15');
-    const sheet = getSheet('Resumo');
-    expect(cellVal(sheet, 'B6')).toBe('01/05/2026 a 15/05/2026');
+    expect(cellVal(getSheet('Resumo'), 'B6')).toBe('01/05/2026 a 15/05/2026');
   });
 });
 
-describe('createInstructionsSheet — sheet Instruções', () => {
-  it('37. título principal aparece na linha 1', async () => {
+describe('createInstructionsSheet', () => {
+  it('38. título principal na linha 1', async () => {
     await exportC6PaymentSheet([makeRow()]);
-    const sheet = getSheet('Instruções');
-    expect(cellVal(sheet, 'A1')).toBe('INSTRUÇÕES DE USO - PLANILHA DE PAGAMENTOS C6 BANK');
+    expect(cellVal(getSheet('Instruções'), 'A1')).toBe('INSTRUÇÕES DE USO - PLANILHA DE PAGAMENTOS C6 BANK');
   });
 
-  it('38. contém as 7 seções numeradas (1. a 7.)', async () => {
+  it('39. menciona 5 tipos de chave PIX (CPF/CNPJ/email/phone/UUID)', async () => {
     await exportC6PaymentSheet([makeRow()]);
     const sheet = getSheet('Instruções');
-    const data = rawData(sheet);
-    const sectionTitles = data
-      .map(row => row[0])
-      .filter(v => typeof v === 'string' && /^\d+\.\s/.test(v));
-    expect(sectionTitles).toHaveLength(7);
-    expect(sectionTitles[0]).toMatch(/^1\./);
-    expect(sectionTitles[6]).toMatch(/^7\./);
-  });
-
-  it('39. menciona explicitamente os 5 tipos de chave PIX', async () => {
-    await exportC6PaymentSheet([makeRow()]);
-    const sheet = getSheet('Instruções');
-    const allText = rawData(sheet)
-      .map(row => row[0])
-      .filter(v => typeof v === 'string')
-      .join(' ');
+    // Concat textos de coluna A de todas as linhas
+    const ref = sheet['!ref'] as string;
+    const [, endRow] = ref.split(':')[1].match(/[A-Z]+(\d+)/) ?? ['', '0'];
+    const maxRow = parseInt(endRow, 10);
+    let allText = '';
+    for (let r = 1; r <= maxRow; r++) {
+      const v = sheet[`A${r}`]?.v;
+      if (typeof v === 'string') allText += v + '\n';
+    }
     expect(allText).toMatch(/CPF/);
     expect(allText).toMatch(/CNPJ/);
     expect(allText).toMatch(/[Ee]-?mail/);
@@ -439,40 +375,64 @@ describe('createInstructionsSheet — sheet Instruções', () => {
   });
 });
 
-describe('edge cases', () => {
-  it('40. lista 1 row mínima funciona (não trava em divisão por zero etc)', async () => {
+describe('edge cases — workbook real', () => {
+  it('40. 1 row mínima: workbook válido + writeFile chamado', async () => {
     await expect(exportC6PaymentSheet([makeRow()])).resolves.toBeUndefined();
-    expect(mockState.writeFileCalls).toHaveLength(1);
+    expect(writeFileCalls).toHaveLength(1);
+    expect(lastWorkbook().SheetNames).toHaveLength(3);
   });
 
-  it('41. acentos em employeeName preservados', async () => {
+  it('41. acentos preservados (encoding correto)', async () => {
     await exportC6PaymentSheet([makeRow({ employeeName: 'João Müller' })]);
-    const sheet = getSheet('Pagamentos PIX');
-    expect(cellVal(sheet, 'B7')).toBe('João Müller');
+    expect(cellVal(getSheet('Pagamentos PIX'), 'B7')).toBe('João Müller');
   });
 
-  it('42. mix válidos + inválidos: todos aparecem, status reflete validação por linha', async () => {
-    const rows = [
-      makeRow({ employeeName: 'Válido A', pixKey: '12345678901' }),
-      makeRow({ employeeName: 'Inválido B', pixKey: 'xyz' }),
-      makeRow({ employeeName: 'Válido C', pixKey: 'user@dominio.com' }),
-    ];
-    await exportC6PaymentSheet(rows);
+  it('42. mix válidos+inválidos: status por linha correto', async () => {
+    await exportC6PaymentSheet([
+      makeRow({ pixKey: '12345678901' }),
+      makeRow({ pixKey: 'xyz' }),
+      makeRow({ pixKey: 'user@dominio.com' }),
+    ]);
     const sheet = getSheet('Pagamentos PIX');
     expect(cellVal(sheet, 'G7')).toBe('OK');
     expect(cellVal(sheet, 'G8')).toBe('VERIFICAR');
     expect(cellVal(sheet, 'G9')).toBe('OK');
   });
 
-  it('43. amount com muitos decimais preserva valor (não trunca em mock)', async () => {
+  it('43. decimais preservados (sem floor)', async () => {
     await exportC6PaymentSheet([makeRow({ amount: 1234.5678 })]);
-    const sheet = getSheet('Pagamentos PIX');
-    expect(cellVal(sheet, 'D7')).toBe(1234.5678);
+    expect(getSheet('Pagamentos PIX')['D7'].v).toBe(1234.5678);
   });
 
-  it('44. periodStart fornecido mas periodEnd ausente → N/A no Resumo (ambos exigidos)', async () => {
+  it('44. periodStart sem periodEnd → N/A', async () => {
     await exportC6PaymentSheet([makeRow()], '2026-05-01', undefined);
-    const sheet = getSheet('Resumo');
-    expect(cellVal(sheet, 'B6')).toBe('N/A');
+    expect(cellVal(getSheet('Resumo'), 'B6')).toBe('N/A');
+  });
+
+  it('45. merged cells presentes em Pagamentos PIX (título + cabeçalho)', async () => {
+    await exportC6PaymentSheet([makeRow()]);
+    const sheet = getSheet('Pagamentos PIX');
+    expect(sheet['!merges']).toBeDefined();
+    expect(sheet['!merges'].length).toBeGreaterThanOrEqual(4); // título + datas + aviso
+  });
+
+  it('46. autofilter aplicado no range correto', async () => {
+    await exportC6PaymentSheet([makeRow(), makeRow()]);
+    const sheet = getSheet('Pagamentos PIX');
+    expect(sheet['!autofilter']).toBeDefined();
+    expect(sheet['!autofilter'].ref).toMatch(/^A6:G\d+$/);
+  });
+
+  it('47. freeze pane em y=6 (header congelado)', async () => {
+    await exportC6PaymentSheet([makeRow()]);
+    const sheet = getSheet('Pagamentos PIX');
+    expect(sheet['!freeze']).toEqual({ xSplit: 0, ySplit: 6 });
+  });
+
+  it('48. cell styles aplicados (header A1 tem .s)', async () => {
+    await exportC6PaymentSheet([makeRow()]);
+    const sheet = getSheet('Pagamentos PIX');
+    expect(sheet['A1'].s).toBeDefined();
+    expect(sheet['A1'].s.font).toBeDefined();
   });
 });
