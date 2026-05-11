@@ -242,83 +242,25 @@ await expect(
 
 ### 6.18 — [Baixa] C6PaymentTab isolamento UI multi-empresa
 
-**Status:** NÃO ESCRITO.
-
-**Contexto:** C6PaymentTab tem fluxo ativo (clicar "Importar" + esperar toast/tabela) que torna teste E2E susceptível a flake (toast desaparece em 4-5s, timing dependente de quando a importação termina).
-
-**Cobertura preservada:**
-- Spec 25 valida isolamento banco
-- Backend refactor (3.1a/3.1b) garante company.id obrigatório
-- Componente refatorado em commit `b077a0d` (Wave 3)
-
-**Solução proposta:**
-- Mock de `getEmployeeNetPayments` retornando lista vazia
-- Verificar UI sem timing de toast
-- OU teste manual de release + checkpoint visual
-
-**Status:** Pendente — sub-fase futura.
+**Status:** ✅ RESOLVIDO sub-fase 9.4. Ver entrada no Histórico.
 
 ---
 
 ### 6.19 — [Baixa] SettingsTab isolamento UI multi-empresa
 
-**Status:** NÃO ESCRITO.
-
-**Contexto:** SettingsTab não tem padrão "estado vazio" — sempre mostra inputs com valores (defaults sistema OU valores específicos da empresa). Pra testar isolamento, precisaria valores DIFERENTES em Caratinga e Ponte Nova pré-condicionados (não temos em Ponte Nova hoje).
-
-**Cobertura preservada:**
-- Spec 25 valida isolamento banco (`bonus_defaults`)
-- Backend refactor garante company.id obrigatório
-- Componente refatorado em commit `8a3282f` (Wave 2)
-
-**Solução proposta:**
-- Fixture criando `bonus_defaults` distintos em ambas empresas
-- Teste valida que ao trocar empresa, valores dos inputs mudam
-
-**Status:** Pendente — sub-fase futura.
+**Status:** ✅ RESOLVIDO sub-fase 9.4. Ver entrada no Histórico.
 
 ---
 
 ### 6.20 — [Baixa] TriageTab isolamento UI multi-empresa
 
-**Status:** NÃO ESCRITO.
-
-**Contexto:** `TriageTab.tsx:51-68` carrega registros via `getTriageErrors(first, last, company.id)` onde `first/last` são derivados internamente de `getBrazilDate()`, formando range do primeiro ao último dia do mês corrente. **Não há controle de UI** pra alterar o range temporal (sem inputs, sem dropdown, sem botão "mês anterior").
-
-No estado atual do banco (validado 2026-05-09): todos os 8 triage_errors de Caratinga estão em abril/2026, ZERO em maio/2026. Em maio, tanto Caratinga quanto Ponte Nova mostram "Nenhum registro neste mês" — não distingue isolamento via UI.
-
-**Cobertura preservada:**
-- Spec 25 (RLS/banco) valida isolamento de `getTriageErrors` por company_id
-- Refactor 3.1a/3.1b garante company.id obrigatório no service layer
-- Componente refatorado em commit `e165fd3` (Wave 3)
-
-**Solução proposta:**
-- Fixture de `triage_error` em mês corrente pra Caratinga com cleanup automático; OU
-- Controle de UI pra navegar entre meses (mudança de produto, fora do escopo da sub-fase 3.4)
-
-**Status:** Pendente — sub-fase futura.
+**Status:** ✅ RESOLVIDO sub-fase 9.4. Ver entrada no Histórico.
 
 ---
 
 ### 6.21 — [Baixa] AdminTab Bloqueios de Bonificação isolamento UI
 
-**Status:** NÃO ESCRITO.
-
-**Contexto:** A section "Bloqueios de Bonificação" (`AdminTab.tsx:1137-1240`) usa filtro client-side `blockActiveOnly` default true (L105 do componente), que oculta blocks com `week_end < hoje`.
-
-O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (expirado em 2026-05-09), então é filtrado pelo blockActiveOnly e não aparece na UI. Tanto Caratinga quanto Ponte Nova mostram "Nenhum bloqueio encontrado" — não distingue isolamento via UI no estado atual do banco.
-
-**Nota:** as outras 3 sections testáveis do AdminTab (Geo, Histórico Facial, Suspeitas) ESTÃO cobertas no Teste 9 da spec 26.
-
-**Cobertura preservada:**
-- Spec 25 (RLS/banco) valida isolamento de `getBonusBlocks` por company_id
-- Refactor 3.1a/3.1b + commit `f506f3c` garantiram isolamento correto
-
-**Solução proposta:**
-- Fixture de `bonus_block` ATIVO em Caratinga com cleanup automático; OU
-- Toggle UI pra `blockActiveOnly` false e clicar antes do assert (mais teste, mais frágil)
-
-**Status:** Pendente — sub-fase futura.
+**Status:** ✅ RESOLVIDO sub-fase 9.4. Ver entrada no Histórico.
 
 ---
 
@@ -339,6 +281,54 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.18/6.19/6.20/6.21: 4 specs E2E novas — isolamento UI multi-empresa (sub-fase 9.4)
+
+**Arquivo novo:** `tests/26-multi-company-ui-isolation-extras.spec.ts` — 4 testes adicionais à spec 26 base (que já cobria 9 tabs sem fixture). Esses 4 exigiam fixture pré-condicionada em Caratinga porque o estado de prod não distingue isolamento via UI sozinho.
+
+**Testes:**
+
+| # | TECH_DEBT | Fixture (CT) | Asserção CT | Asserção PN |
+|---|---|---|---|---|
+| 10 | 6.18 | `createTestEmployee` + `insertPaymentRow(SAFE_DATE, daily_rate=100, bonus_b=5)` | `goToTab('Pagamento C6')` → set range SAFE_DATE → click "Importar Dados" → h3 "Revisar e Editar Pagamentos" visível + row com `PW Test 26Extra C6` visível | mesmo flow → toast "Nenhum pagamento encontrado no período" |
+| 11 | 6.19 | `UPDATE bonus_types SET default_value=77 WHERE company_id=PN AND code='B'` (CT permanece 15.00) | `goToTab('Configurações')` → `getByLabel('Tipo B')` `toHaveValue('15.00')` | mesmo flow → `toHaveValue('77.00')`. **try/finally** restaura PN ao valor original |
+| 12 | 6.20 | `INSERT triage_errors (date=hoje, observations='PW Test 26Extra TriageRow', company_id=CT)` | `goToTab('Erros')` → clicar "Triagem" → tbody tr com observação visível | mesmo flow → "Nenhum registro neste mês" |
+| 13 | 6.21 | `createTestEmployee` + `INSERT bonus_blocks (week_end=hoje+7, reason='PW Test 26Extra BlockReason', company_id=CT)` | `unlockAdmin(page)` → section "Bloqueios de Bonificação" mostra o reason | mesmo flow → "Nenhum bloqueio encontrado" |
+
+**Patterns reutilizados da spec 26 base:**
+- `switchCompany(page, 'Ponte Nova')` (helpers.ts:47) dispara reload → activeTab reseta → `goToTab` re-navega após.
+- `unlockAdmin` re-autentica após switchCompany porque `authenticated` é useState local sem persistência.
+
+**Mudança cirúrgica em componente:** `SettingsTab.tsx:159, 165` ganhou `htmlFor`/`id` na label/input do "Tipo B/C1/C2". Permite `page.getByLabel('Tipo B')` (a11y semântica). Antes não havia link label-input — ruim pra a11y e pra Playwright getByLabel.
+
+**Bug latente descoberto durante validação:** botão "Importar Dados" do C6PaymentTab fica `disabled` enquanto `isEditingDate.startDate=true` (foco no input de data). Quando o teste chamava `fill(startDate)` + `fill(endDate)` sem blur explícito, o botão permanecia disabled → click timeout. Fix: helper `setDateRange` adiciona `await page.locator('body').click({ position: { x: 5, y: 5 } })` pós-fills para forçar blur. Pattern já usado em `tests/16-financial-complete.spec.ts:205` (sub-fase pré).
+
+**Restauração de prod (cleanup obrigatório):**
+- `beforeEach` + `afterAll` + `beforeAll`: `cleanupByPrefix("PW Test 26Extra ")` deleta employees + payments + bonus_blocks + triage_distribution_employees relacionados.
+- Test 11 (bonus_types): try/finally restaura PN B ao valor original (capturado pré-fixture).
+- Test 12 (triage_errors): try/finally faz DELETE explícito por observations + company_id.
+
+**Validação real via MCP pós-test:**
+
+```sql
+SELECT
+  (SELECT count(*) FROM employees WHERE name LIKE 'PW Test 26Extra%') AS emp_residue,
+  (SELECT count(*) FROM triage_errors WHERE observations LIKE 'PW Test 26Extra%') AS triage_residue,
+  (SELECT count(*) FROM bonus_blocks WHERE reason LIKE 'PW Test 26Extra%') AS block_residue,
+  (SELECT count(*) FROM payments p JOIN employees e ON p.employee_id=e.id WHERE e.name LIKE 'PW Test 26Extra%') AS pay_residue;
+-- Resultado: 0, 0, 0, 0 (estado prod preservado)
+
+SELECT company_id, code, default_value FROM bonus_types WHERE code='B';
+-- Resultado: ambas empresas com 15.00 (restore PN funcionou)
+```
+
+**Validações:**
+- `npx tsc --noEmit`: 0 erros
+- `npx vitest run`: 414/414 passed em 16 files
+- `npx playwright test tests/26-multi-company-ui-isolation-extras.spec.ts --workers=1`: **4 passed em ~32s**, sem flake (2 runs consecutivos idênticos)
+- `npx playwright test tests/26-multi-company-ui-isolation.spec.ts tests/26-multi-company-ui-isolation-extras.spec.ts --workers=1`: **13 passed** — extras não interferem na spec base
+
+---
 
 ### 2026-05-11 — 6.3 (final): split `tests/07-financial.spec.ts:43` em "com" / "sem" pagamento (sub-fase 9.3)
 

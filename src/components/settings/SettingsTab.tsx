@@ -156,13 +156,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
                 const saving = savingType === type;
                 return (
                   <div key={type} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                    <label className="w-full sm:w-20 text-sm font-medium text-gray-700">
+                    <label htmlFor={`bonus-default-${type}`} className="w-full sm:w-20 text-sm font-medium text-gray-700">
                       Tipo {type}
                     </label>
                     <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-2">
                       <div className="flex items-center gap-2 flex-1 w-full">
                         <span className="text-sm text-gray-500">R$</span>
                         <input
+                          id={`bonus-default-${type}`}
                           type="number"
                           step="0.01"
                           min="0"
