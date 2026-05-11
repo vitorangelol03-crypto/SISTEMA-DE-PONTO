@@ -71,6 +71,50 @@ function calcHours(
   };
 }
 
+// v6 (sub-fase 8.4 / TECH_DEBT 6.12): logger best-effort para writes silenciosos.
+// Cada um dos 4 writes auxiliares (geo_fraud_attempts + bonus_blocks) capturava
+// erros silenciosamente. Agora persistimos em error_logs (que ganhou company_id
+// na sub-fase 7.4), permitindo auditoria multi-empresa de falhas. O log é
+// best-effort: não interrompe o fluxo (o write original era auxiliar pra
+// diagnóstico/auditoria, não pra operação de marcação de ponto).
+async function logEdgeError(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  params: {
+    message: string;
+    company_id: string | null;
+    employee_id: string | null;
+    db_error_message: string;
+    db_error_code?: string;
+    context: Record<string, unknown>;
+  },
+): Promise<void> {
+  try {
+    await supabase.from("error_logs").insert([
+      {
+        user_id: params.employee_id,
+        company_id: params.company_id,
+        error_type: "database_error",
+        severity: "high",
+        message: params.message,
+        component: "edge:clock-in-validated",
+        module: "edge-function",
+        error_context: {
+          db_error_message: params.db_error_message,
+          db_error_code: params.db_error_code,
+          edge_function_version: 6,
+          ...params.context,
+        },
+        user_agent: "supabase-edge-runtime/deno",
+        occurrence_count: 1,
+      },
+    ]);
+  } catch {
+    // Logger é best-effort. Se INSERT em error_logs falhar (ex: tabela
+    // indisponível ou RLS futura), não propaga — mantém o fluxo original.
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
@@ -224,7 +268,9 @@ Deno.serve(async (req: Request) => {
     if (!hasCoords) {
       geoValid = false;
 
-      await supabase.from("geo_fraud_attempts").insert([
+      // v6 (sub-fase 8.4): captura erro do INSERT em geo_fraud_attempts.
+      // Caso "localização não fornecida". Antes era silencioso (TECH_DEBT 6.12).
+      const { error: gfErr1 } = await supabase.from("geo_fraud_attempts").insert([
         {
           employee_id,
           company_id: effectiveCompanyId,
@@ -235,10 +281,21 @@ Deno.serve(async (req: Request) => {
           clock_type,
         },
       ]);
+      if (gfErr1) {
+        await logEdgeError(supabase, {
+          message: "geo_fraud_attempts INSERT failed (no coords case)",
+          company_id: effectiveCompanyId,
+          employee_id,
+          db_error_message: gfErr1.message,
+          db_error_code: gfErr1.code,
+          context: { case: "no_coords", clock_type, today },
+        });
+      }
 
       if (isFirstEntry) {
         const { weekStart, weekEnd } = getWeekBounds();
-        await supabase.from("bonus_blocks").upsert(
+        // v6 (sub-fase 8.4): captura erro do UPSERT em bonus_blocks.
+        const { error: bbErr1 } = await supabase.from("bonus_blocks").upsert(
           [
             {
               employee_id,
@@ -250,6 +307,16 @@ Deno.serve(async (req: Request) => {
           ],
           { onConflict: "employee_id,week_start" },
         );
+        if (bbErr1) {
+          await logEdgeError(supabase, {
+            message: "bonus_blocks UPSERT failed (no coords case)",
+            company_id: effectiveCompanyId,
+            employee_id,
+            db_error_message: bbErr1.message,
+            db_error_code: bbErr1.code,
+            context: { case: "no_coords", clock_type, week_start: weekStart, week_end: weekEnd },
+          });
+        }
 
         return new Response(
           JSON.stringify({
@@ -275,7 +342,9 @@ Deno.serve(async (req: Request) => {
       if (geoConfig.block_outside && distance > geoConfig.allowed_radius_meters) {
         geoValid = false;
 
-        await supabase.from("geo_fraud_attempts").insert([
+        // v6 (sub-fase 8.4): captura erro do INSERT em geo_fraud_attempts.
+        // Caso "fora da área permitida". Antes era silencioso (TECH_DEBT 6.12).
+        const { error: gfErr2 } = await supabase.from("geo_fraud_attempts").insert([
           {
             employee_id,
             company_id: effectiveCompanyId,
@@ -286,10 +355,21 @@ Deno.serve(async (req: Request) => {
             clock_type,
           },
         ]);
+        if (gfErr2) {
+          await logEdgeError(supabase, {
+            message: "geo_fraud_attempts INSERT failed (outside radius case)",
+            company_id: effectiveCompanyId,
+            employee_id,
+            db_error_message: gfErr2.message,
+            db_error_code: gfErr2.code,
+            context: { case: "outside_radius", clock_type, today, distance, latitude, longitude },
+          });
+        }
 
         if (isFirstEntry) {
           const { weekStart, weekEnd } = getWeekBounds();
-          await supabase.from("bonus_blocks").upsert(
+          // v6 (sub-fase 8.4): captura erro do UPSERT em bonus_blocks.
+          const { error: bbErr2 } = await supabase.from("bonus_blocks").upsert(
             [
               {
                 employee_id,
@@ -301,6 +381,16 @@ Deno.serve(async (req: Request) => {
             ],
             { onConflict: "employee_id,week_start" },
           );
+          if (bbErr2) {
+            await logEdgeError(supabase, {
+              message: "bonus_blocks UPSERT failed (outside radius case)",
+              company_id: effectiveCompanyId,
+              employee_id,
+              db_error_message: bbErr2.message,
+              db_error_code: bbErr2.code,
+              context: { case: "outside_radius", distance, week_start: weekStart, week_end: weekEnd },
+            });
+          }
 
           // Cria/atualiza attendance mesmo com geo invalid (entrada bloqueada para bônus).
           const blockedRecord: Record<string, unknown> = {

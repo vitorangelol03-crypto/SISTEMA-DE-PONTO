@@ -188,33 +188,6 @@ E adicionar test cases pra CPF/CNPJ com pontuação retornar OK.
 
 ---
 
-### 6.12 — [Baixa] Edge fn writes sem error handling
-
-**Local:** `supabase/functions/clock-in-validated/index.ts` (versão 5 ACTIVE em prod, hash `a841de37...`)
-
-**Localizações exatas (auditoria 2026-05-09):**
-- L227 — `INSERT geo_fraud_attempts` (caso "localização não fornecida")
-- L241 — `UPSERT bonus_blocks` (caso "localização não fornecida")
-- L278 — `INSERT geo_fraud_attempts` (caso "fora da área permitida")
-- L292 — `UPSERT bonus_blocks` (caso "fora da área permitida")
-
-**Padrão problemático nas 4 ocorrências:**
-```typescript
-await supabase.from("geo_fraud_attempts").insert([{...}]);
-// ↑ sem destructuring { error }, sem try/catch, sem log
-```
-
-**Risco:** se RLS rejeitar, constraint falhar ou conexão cair → fluxo continua como se tivesse gravado. Fraude pode ficar sem registro.
-
-**Severidade:** Baixa.
-
-**Solução estrutural:**
-Capturar `{ error }` em cada chamada e logar em `error_logs`. Atomicidade desejável só se geo_fraud + bonus_block precisarem ser consistentes — caso contrário, log independente é suficiente.
-
-**Status:** Pendente — sub-fase futura.
-
----
-
 
 
 
@@ -449,6 +422,45 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.12: Edge fn v6 — error handling em 4 writes silenciosos (sub-fase 8.4)
+
+**Deploy em prod:** `clock-in-validated` v6 ACTIVE — hash `ff0b9dd72005...` (substitui v5 hash `a841de37...`).
+
+**Localizações dos 4 writes corrigidos** (linhas referentes à versão v5):
+- L227 — `INSERT geo_fraud_attempts` (caso "localização não fornecida")
+- L241 — `UPSERT bonus_blocks` (idem)
+- L278 — `INSERT geo_fraud_attempts` (caso "fora da área permitida")
+- L292 — `UPSERT bonus_blocks` (idem)
+
+**Solução aplicada na v6:** cada um dos 4 writes capturado via destructuring `{ error }`. Se erro, chama helper interno `logEdgeError(supabase, {...})` que persiste em `error_logs` com:
+- `company_id` (FK pra companies — sub-fase 7.4)
+- `user_id = employee_id`
+- `error_type = 'database_error'`, `severity = 'high'`
+- `component = 'edge:clock-in-validated'`, `module = 'edge-function'`
+- `error_context = { db_error_message, db_error_code, edge_function_version: 6, ...contexto específico }`
+
+Logger é **best-effort**: rodeado por try/catch silencioso, não interrompe fluxo principal (writes eram auxiliares — geo_fraud_attempts é diagnóstico, bonus_blocks é bloqueio que pode reaplicar). Mantém semântica original.
+
+**Validações REAIS via MCP (padrão "validar tudo real"):**
+
+| # | Validação | Resultado |
+|---|---|---|
+| 1 | Conteúdo remoto v5 obtido via `get_edge_function` | Hash bate com TECH_DEBT (`a841de37...`) |
+| 2 | Logs últimas 24h via `get_logs(edge-function)` | Sem erros recorrentes pré-deploy |
+| 3 | Deploy v6 via `deploy_edge_function` | success: true, version: 6 |
+| 4 | `list_edge_functions` pós-deploy | v6 ACTIVE, hash `ff0b9dd72005...` |
+| 5 | Spec 02 (employee-clock) — 9 testes | 9/9 passed |
+| 6 | Spec 08 (geolocation) — 4 testes que ATIVAM os 4 writes (caminhos no_coords + outside_radius) | 4/4 passed |
+| 7 | `error_logs` pós-spec | total=0, edge_v6_logs=0 (writes funcionaram, logEdgeError não disparou false-positive) |
+
+**Limitação reconhecida:** validação de fail-path (write FALHANDO e logEdgeError EFETIVAMENTE logando) requer cenário de constraint violation ou RLS reject. Em prod atual (sem RLS, FKs validadas pré-write) não há como simular falha sem mexer em dados. Pra cobertura completa, seria preciso teste E2E com mock de supabase no Deno — fora do escopo desta sub-fase.
+
+**Commits relacionados:**
+- Migration `20260511171757_error_logs_add_company_id` (7.4) habilitou o destino do log.
+- Deploy v6 + arquivo local sincronizado em `supabase/functions/clock-in-validated/index.ts` (630 linhas).
+
+---
 
 ### 2026-05-11 — 6.24: `error_logs` sem `company_id` (sub-fase 7.4)
 
