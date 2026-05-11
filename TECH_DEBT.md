@@ -282,6 +282,34 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — Cobertura E2E nova: MirrorMassDialog (sub-fase 10.5)
+
+**Arquivo novo:** `tests/35-mirror-mass-dialog.spec.ts` — 8 testes cobrindo `src/components/attendance/MirrorMassDialog.tsx` (307 lin), modal lazy-loaded acessível via botão "Gerar espelhos" em AttendanceTab (visível pra quem tem `attendance.generateMassMirror`).
+
+**Testes:**
+
+| # | Cenário | Asserção |
+|---|---|---|
+| 1 | Botão "Gerar espelhos" abre o dialog | heading "Gerar espelhos em massa" visível |
+| 2 | Dialog mostra inputs período + busca + botões | 2 inputs date, search box, "Mês atual"/"Mês anterior" |
+| 3 | "Mês anterior" muda range | start date < initial |
+| 4 | "Mês atual" reseta range | start matches `^\d{4}-\d{2}-01$` |
+| 5 | Busca filtra lista | "ZZZZZZZ" → "Nenhum funcionário encontrado" |
+| 6 | "Selecionar visíveis" marca todos + atualiza counter | "Funcionários (N de M)" + botão muda pra "Desmarcar" |
+| 7 | "Gerar PDF" disabled em 0 selected; enabled após 1 | label inclui "(1)" |
+| 8 | Switch CT→PN: PN sem funcionários | "Nenhum funcionário encontrado" no dialog |
+
+**Pattern crítico:** locators escopados ao modal (`modal(page)` helper) — sem escopo, `input[type="date"]` no dialog pega 3 inputs (2 do modal + 1 do AttendanceTab atrás).
+
+**Decisão de escopo:** download real do PDF NÃO testado (waitForEvent('download') é caro/frágil com jsPDF rodando client-side). Cobertura via unit tests de `mirrorPdf` (414 vitest já passando) é suficiente.
+
+**Validações:**
+- `npx tsc --noEmit`: 0 erros
+- `npx playwright test tests/35-mirror-mass-dialog.spec.ts --workers=1`: **8 passed em ~34s**, 0 failed
+- Estado prod inalterado (specs não fazem fixtures persistentes — apenas read-only UI checks + interactions ephemeral)
+
+---
+
 ### 2026-05-11 — Cobertura E2E nova: CompanySettings (sub-fase 10.4)
 
 **Arquivo novo:** `tests/34-company-settings.spec.ts` — 8 testes core cobrindo `src/components/admin/CompanySettings.tsx` (856 lin), renderizado dentro de AdminTab linha 1457 (visível apenas pra `isAdminMaster='9999'`).
