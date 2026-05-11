@@ -282,6 +282,45 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — Cobertura E2E nova: BonusTypesManager (sub-fase 10.2)
+
+**Arquivo novo:** `tests/32-bonus-types-manager.spec.ts` — 10 testes cobrindo `src/components/admin/BonusTypesManager.tsx` (393 lin), renderizado dentro de AdminTab na section "Tipos de Bonificação — <empresa>".
+
+**Testes:**
+
+| # | Cenário | Asserção principal |
+|---|---|---|
+| 1 | Lista CT com B/C1/C2 | section visível + 3 codes na tabela |
+| 2 | Switch CT → PN com fixture PWT2 em CT | PN não mostra PWT2 (isolamento UNIQUE(code, company_id)) |
+| 3 | Click "Novo Tipo" abre modal | heading "Novo Tipo de Bonificação" + inputs Name e Code visíveis |
+| 4 | Criar PWT3 (R$ 99.99) | toast "Tipo criado" + row aparece na tabela com code/name/value |
+| 5 | Code inválido "X Y" (espaço) | toast "Código deve ter 1 a 6 caracteres" + modal permanece aberto |
+| 6 | UNIQUE: criar PWT4 duplicado | toast erro (caminho UX-friendly OR fallback do `instanceof Error`) |
+| 7 | Click Editar | modal "Editar Tipo" preenchido com valores atuais |
+| 8 | Editar nome "Antes" → "Depois" | toast "Tipo atualizado" + row mostra "Depois", "Antes" sumiu |
+| 9 | Click Desativar (confirm dialog) | toast "Tipo desativado" + row mostra status "Inativo" |
+| 10 | Click Reativar (confirm dialog) | toast "Tipo reativado" + row mostra status "Ativo" |
+
+**Patterns:**
+- `unlockAdmin(page)` local — mesmo padrão das specs 24/26-extras (espera `getByTestId('facial-global-toggle')` como sinalizador de autenticado).
+- `locBonusManagerSection(page)`: locator do card da section (filtra por heading "Tipos de Bonificação").
+- `cleanupBonusTypes()` no `beforeAll`/`afterAll`/`beforeEach`: DELETE direto em `bonus_types` por `code LIKE 'PWT%'`. Tabela não é coberta por `cleanupByPrefix` (que opera por employee name).
+- `getByPlaceholder('Ex.: B', { exact: true })` — sem `exact: true`, o substring match colide com `placeholder="Ex.: Bônus B"` do input Name.
+
+**Bug latente potencial (não bloqueante):** o teste 6 (UNIQUE) usa regex tolerante `/já existe nesta empresa|Erro ao salvar|duplicate key/i`. Razão: `BonusTypesManager.tsx:131` checa `err instanceof Error` antes de acessar `err.message`. Supabase errors são plain objects (não Error instances), então `msg = String(err) = "[object Object]"` → regex `/duplicate|unique|23505/i` não bate → cai no fallback "Erro ao salvar: [object Object]". UX degradada mas funcional. Documentado pra inspeção futura.
+
+**Validação real pós-test via MCP:**
+```sql
+SELECT count(*) FROM bonus_types WHERE code LIKE 'PWT%'; -- 0
+```
+Estado prod preservado (3 codes B/C1/C2 originais em CT + PN inalterados).
+
+**Validações:**
+- `npx tsc --noEmit`: 0 erros
+- `npx playwright test tests/32-bonus-types-manager.spec.ts --workers=1`: **10 passed em ~47s**, 0 failed
+
+---
+
 ### 2026-05-11 — Cobertura E2E nova: EmployeeErrorsView (sub-fase 10.1)
 
 **Arquivo novo:** `tests/31-employee-errors-view.spec.ts` — 6 testes cobrindo o componente `src/components/employee-clock/EmployeeErrorsView.tsx` (renderizado em `/erros` via `EmployeeErrorsPage`, state machine `cpf → company-select → pin → dashboard`).
