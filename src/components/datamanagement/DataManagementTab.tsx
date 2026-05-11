@@ -61,12 +61,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
     bonuses: 'Bonificações'
   };
 
-  useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [company?.id]);
-
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     if (!company?.id) return;
     try {
       setLoading(true);
@@ -89,7 +84,11 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
     } finally {
       setLoading(false);
     }
-  };
+  }, [company?.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleUpdateRetention = async (dataType: string, months: number) => {
     try {

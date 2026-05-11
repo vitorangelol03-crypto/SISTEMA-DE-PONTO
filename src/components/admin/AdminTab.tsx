@@ -157,7 +157,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
   };
 
   // ─── Data loader ──────────────────────────────────────────────────────────
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     if (!company?.id) return;
     setLoading(true);
     try {
@@ -176,9 +176,9 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [company?.id]);
 
-  const loadCleanupConfig = async () => {
+  const loadCleanupConfig = React.useCallback(async () => {
     setAutoConfigLoading(true);
     try {
       const cfg = await getAdminCleanupConfig();
@@ -189,9 +189,9 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
     } finally {
       setAutoConfigLoading(false);
     }
-  };
+  }, []);
 
-  const loadFaceConfig = async () => {
+  const loadFaceConfig = React.useCallback(async () => {
     if (!company?.id) return;
     setFaceGlobalLoading(true);
     try {
@@ -202,9 +202,9 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
     } finally {
       setFaceGlobalLoading(false);
     }
-  };
+  }, [company?.id]);
 
-  const loadFaceAttempts = async () => {
+  const loadFaceAttempts = React.useCallback(async () => {
     if (!company?.id) return;
     setFaceAttemptsLoading(true);
     try {
@@ -221,14 +221,16 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
     } finally {
       setFaceAttemptsLoading(false);
     }
-  };
+  }, [company?.id, faceDateStart, faceDateEnd, faceEmployeeFilter, faceResultFilter]);
 
+  // Cargas iniciais quando auth/empresa mudam. loadFaceAttempts foi separado
+  // pro useEffect abaixo, pra evitar re-execução de loadData/loadCleanupConfig/
+  // loadFaceConfig/runAutoCleanup quando o usuário muda apenas filtros faciais.
   useEffect(() => {
     if (!authenticated) return;
     loadData();
     loadCleanupConfig();
     loadFaceConfig();
-    loadFaceAttempts();
     if (company?.id) {
       runAutoCleanup(company.id).then(ran => {
         if (ran) {
@@ -238,14 +240,14 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
         }
       }).catch(() => {});
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated, company?.id]);
+  }, [authenticated, company?.id, loadData, loadCleanupConfig, loadFaceConfig]);
 
+  // Carrega faceAttempts na primeira render e a cada mudança de filtros
+  // (loadFaceAttempts depende dos filtros via useCallback acima).
   useEffect(() => {
     if (!authenticated) return;
     loadFaceAttempts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [faceDateStart, faceDateEnd, faceEmployeeFilter, faceResultFilter, company?.id]);
+  }, [authenticated, loadFaceAttempts]);
 
   // ─── Filtered data (client-side) ─────────────────────────────────────────
   const filteredGeo = useMemo(() => geoRecords.filter(r => {
