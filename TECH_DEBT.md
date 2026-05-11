@@ -450,9 +450,31 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 
 ## ✅ Histórico — Resolvidas
 
-### 2026-05-11 — 6.16: `admin_cleanup_config` UNIQUE + lazy-create (sub-fase 7.2)
+### 2026-05-11 — 6.16: `admin_cleanup_config` UNIQUE + lazy-create (sub-fase 7.2 + 7.2.1)
 
-**Migration aplicada em prod:** `20260511142612_admin_cleanup_unique_per_company`
+**Migrations aplicadas em prod:**
+- `20260511142612_admin_cleanup_unique_per_company` (sub-fase 7.2)
+- `20260511143010_admin_cleanup_id_default_uuid` (sub-fase 7.2.1 — fix latente)
+
+**Bug latente descoberto durante validação E2E (7.2.1):**
+A coluna `id` (PK text) tinha `DEFAULT 'default'`. Caratinga ocupa `id='default'`. O upsert pra qualquer empresa NOVA tentaria INSERT com id='default' (não passado pelo app) e violaria PK. A sub-fase 7.2 inicial commitou o feature mas com esse bug latente — `tsc` e specs E2E NÃO pegaram porque nenhum teste exercitava o lazy-create real (admin sempre operava em Caratinga, que já tinha row).
+
+Fix (7.2.1): `ALTER TABLE admin_cleanup_config ALTER COLUMN id SET DEFAULT gen_random_uuid()::text;`. Caratinga preserva `id='default'` legado (UPDATE não toca id). Novas empresas ganham UUID auto.
+
+**Validação E2E real executada via MCP em 2026-05-11:**
+1. `SELECT * FROM admin_cleanup_config WHERE company_id = PN_ID` → 0 rows (estado inicial)
+2. Simulado upsert do app: `INSERT ... ON CONFLICT (company_id) DO UPDATE` → row criada pra PN com UUID auto
+3. Re-upsert pra PN com interval diferente → UPDATE da mesma row (idempotência)
+4. Final: 2 rows totais (Caratinga + PN, IDs distintos)
+5. Row de teste deletada após validação — estado prod restaurado
+
+**SQL da 7.2 (UNIQUE constraint):**
+```sql
+ALTER TABLE public.admin_cleanup_config
+  ADD CONSTRAINT admin_cleanup_config_company_id_key UNIQUE (company_id);
+```
+
+**Pre-check via MCP (2026-05-11):** 0 duplicatas em prod. Caratinga 1 row, PN 0 rows.
 
 **SQL:**
 ```sql
