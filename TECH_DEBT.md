@@ -282,6 +282,43 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — Cobertura E2E nova: EmployeeErrorsView (sub-fase 10.1)
+
+**Arquivo novo:** `tests/31-employee-errors-view.spec.ts` — 6 testes cobrindo o componente `src/components/employee-clock/EmployeeErrorsView.tsx` (renderizado em `/erros` via `EmployeeErrorsPage`, state machine `cpf → company-select → pin → dashboard`).
+
+**Testes:**
+
+| # | Cenário | Asserção |
+|---|---|---|
+| 1 | CPF inexistente | step `error` com "Funcionário não encontrado" + botão "Tentar novamente" |
+| 2 | PIN errado | toast "PIN incorreto" + permanece em step `pin` |
+| 3 | Funcionário sem erros | "Nenhum erro registrado" + "Continue assim!" |
+| 4 | 1 erro individual `quantity` (count=3) no period 2026-04-16/22 | card com label do period + badge "Pago" + "Erros Individuais: 3 erros" + observation visível + "Total:" |
+| 5 | 1 erro triage (errors_share=1) no mesmo period | subseção "Triagem" + "Lote de triagem" + "1 pacote atribuído" |
+| 6 | Plural vs singular | "Erros Individuais: 1 erro" (singular) — regex com âncoras `^...$` garante NÃO casar "1 erros" (plural) |
+
+**Patterns:**
+- `gotoErrosAndFillCpf(page, cpf)`: helper que navega `/erros`, fill CPF, click "Continuar".
+- `loginEmployee(page, cpf, pin)`: completa o fluxo até dashboard (CPF → PIN → header "Meus Erros" visível). Funcionários criados via `createTestEmployee` ficam apenas em CT (default `employees.company_id`) → pulam `company-select`.
+- Period base reutilizado: `2026-04-22` (último dia de period existente em CT com `status='paid'`). Não cria period novo — evita complexidade de cleanup.
+- Teste 5 (triage) usa INSERT direto em `triage_error_distributions` + `triage_distribution_employees`. Cleanup explícito da distribution em try/finally (cleanupByPrefix cobre apenas a row em distribution_employees via empIds; distribution órfã ficaria sem o finally).
+
+**Validação real pós-test via MCP:**
+```sql
+SELECT
+  (SELECT count(*) FROM employees WHERE name LIKE 'PW Test EmpErrV%') AS emp_residue,
+  (SELECT count(*) FROM error_records WHERE observations='PW Test integrity' AND date='2026-04-22') AS err_residue,
+  (SELECT count(*) FROM triage_error_distributions WHERE observations='PW Test triage spec31') AS triage_dist_residue;
+-- Resultado: 0, 0, 0 (estado prod preservado)
+```
+
+**Validações:**
+- `npx tsc --noEmit`: 0 erros
+- `npx vitest run`: 414/414 passed em 16 files
+- `npx playwright test tests/31-employee-errors-view.spec.ts --workers=1`: **6 passed em ~42s**, 0 failed
+
+---
+
 ### 2026-05-11 — 6.18/6.19/6.20/6.21: 4 specs E2E novas — isolamento UI multi-empresa (sub-fase 9.4)
 
 **Arquivo novo:** `tests/26-multi-company-ui-isolation-extras.spec.ts` — 4 testes adicionais à spec 26 base (que já cobria 9 tabs sem fixture). Esses 4 exigiam fixture pré-condicionada em Caratinga porque o estado de prod não distingue isolamento via UI sozinho.
