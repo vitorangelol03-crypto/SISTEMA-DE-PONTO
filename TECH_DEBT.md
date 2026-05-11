@@ -182,8 +182,7 @@ if (!(await elem.isVisible().catch(() => false))) {
 
 **Severidade:** Baixa — cobertura E2E reduzida quando skip dispara.
 
-**Status:** **Parcialmente resolvido — sub-fases 9.1 + 9.2 removeram 8/9 skips via `data-testid`**. Restante:
-- `tests/07-financial.spec.ts:43` (Ver Detalhes — depende de pagamento existir) → sub-fase 9.3
+**Status:** **✅ Totalmente resolvido — sub-fases 9.1 + 9.2 + 9.3 removeram os 9/9 skips condicionais.** Ver entradas individuais no Histórico.
 
 ---
 
@@ -340,6 +339,27 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.3 (final): split `tests/07-financial.spec.ts:43` em "com" / "sem" pagamento (sub-fase 9.3)
+
+**Bug original:** teste único `Ver Detalhes` dependia de dados pré-existentes na empresa. Se range não tinha pagamentos, `verDetalhes.count() === 0` → `test.skip(true, 'Sem pagamentos no período')`. Cobertura incerta — em runs felizes passava silenciosamente; em runs sem dados pulava.
+
+**Fix:** teste único substituído por 2 testes determinísticos com fixtures:
+
+| Teste | Fixture | Asserção |
+|---|---|---|
+| `Ver Detalhes — com pagamento expande card com Bônus B, C1, C2` | `createTestEmployee` + `insertPaymentRow(SAFE_DATE, daily_rate=100, bonus_b=5, bonus_c1=10, bonus_c2=15)` | `tr#payments-${empId}` contém `Bônus B:.*5\.00.*C1:.*10\.00.*C2:.*15\.00` |
+| `Ver Detalhes — sem pagamento mostra "Nenhum pagamento registrado"` | `createTestEmployee` (sem payment) | `tr#payments-${empId}` contém `Nenhum pagamento registrado` |
+
+**Mudança operacional na spec:** `goToTab(page, 'Financeiro')` foi movido do `beforeEach` pra dentro de cada teste. Razão: o `FinancialTab` carrega `employees` no mount; criar fixtures via SQL DEPOIS do mount não refresca a lista. Pré-fix essa ordem fazia o teste ver "PW Test ComPag" como ausente. Pós-fix: cria fixture → depois `goToTab` (mount disparado AGORA) → componente vê o emp no `loadEmployees`.
+
+**Cleanup:** `beforeAll` + `afterAll` + `beforeEach` chamam `cleanupByPrefix("PW Test 07Fin ")` — prefix isolado pra evitar interferência com outras specs.
+
+**Validações:**
+- `npx tsc --noEmit`: 0 erros
+- `npx playwright test tests/07-financial.spec.ts --workers=1`: **5 passed, 0 skipped, 0 failed** (era 3 passed + 1 skip condicional + 1 conditional flow)
+
+---
 
 ### 2026-05-11 — 6.3 (parcial): filtro employment_type — seletor `hasText` em `<option>` (sub-fase 9.2)
 

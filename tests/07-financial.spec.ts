@@ -1,18 +1,42 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { ADMIN, loginAs, goToTab } from './helpers';
+import {
+  createTestEmployee,
+  insertPaymentRow,
+  cleanupByPrefix,
+  SAFE_DATE,
+  TEST_EMPLOYEE_NAME_PREFIX,
+} from './integrity-helpers';
+
+const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}07Fin `;
+
+async function setRangeToSafeDate(page: Page) {
+  const dateInputs = page.locator('input[type="date"]');
+  await expect(dateInputs.first()).toBeVisible({ timeout: 10_000 });
+  await dateInputs.nth(0).fill(SAFE_DATE);
+  await dateInputs.nth(1).fill(SAFE_DATE);
+  await page.waitForLoadState('networkidle');
+}
 
 test.describe('Financeiro', () => {
+  test.beforeAll(() => cleanupByPrefix(PREFIX));
+  test.afterAll(() => cleanupByPrefix(PREFIX));
+
   test.beforeEach(async ({ page }) => {
+    await cleanupByPrefix(PREFIX);
     await loginAs(page, ADMIN);
-    await goToTab(page, 'Financeiro');
-    await expect(page.getByRole('heading', { name: /Gestão Financeira/ }).first()).toBeVisible();
   });
 
   test('lista de Funcionários e Pagamentos carrega', async ({ page }) => {
+    await goToTab(page, 'Financeiro');
+    await expect(page.getByRole('heading', { name: /Gestão Financeira/ }).first()).toBeVisible();
     await expect(page.getByText(/Funcionários e Pagamentos/)).toBeVisible();
   });
 
   test('filtro por período atualiza a UI sem erro', async ({ page }) => {
+    await goToTab(page, 'Financeiro');
+    await expect(page.getByRole('heading', { name: /Gestão Financeira/ }).first()).toBeVisible();
+
     const dateInputs = page.locator('input[type="date"]');
     await expect(dateInputs.first()).toBeVisible();
 
@@ -24,37 +48,51 @@ test.describe('Financeiro', () => {
   });
 
   test('filtro por funcionário (dropdown) atualiza', async ({ page }) => {
+    await goToTab(page, 'Financeiro');
+    await expect(page.getByRole('heading', { name: /Gestão Financeira/ }).first()).toBeVisible();
+
     const select = page.locator('select').first();
     await expect(select).toBeVisible();
     const options = await select.locator('option').allTextContents();
     expect(options.length).toBeGreaterThan(1); // "Todos" + funcionários
   });
 
-  test('clicar "Ver Detalhes" expande card com Bônus B, C1, C2 separados (se houver pagamento)', async ({ page }) => {
-    // Espera carregamento completo da lista antes de clicar (o Ver Detalhes usa
-    // toggle via document.getElementById em um <tr> com style display:none
-    // — se houver re-render após o clique, a linha fecha novamente).
-    await page.waitForLoadState('networkidle');
+  test('Ver Detalhes — com pagamento expande card com Bônus B, C1, C2', async ({ page }) => {
+    // Cria fixture ANTES de navegar — FinancialTab.loadEmployees roda no mount.
+    const empId = await createTestEmployee({ name: `${PREFIX}ComPag` });
+    await insertPaymentRow(empId, SAFE_DATE, {
+      daily_rate: 100, bonus_b: 5, bonus_c1: 10, bonus_c2: 15,
+    });
 
-    const verDetalhes = page.getByRole('button', { name: 'Ver Detalhes' });
-    const count = await verDetalhes.count();
+    await goToTab(page, 'Financeiro');
+    await expect(page.getByRole('heading', { name: /Gestão Financeira/ }).first()).toBeVisible();
+    await setRangeToSafeDate(page);
 
-    if (count === 0) {
-      test.skip(true, 'Sem pagamentos no período; pulando teste de expansão');
-    }
+    const row = page.locator('table tr', { hasText: `${PREFIX}ComPag` }).first();
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.getByRole('button', { name: 'Ver Detalhes' }).first().click();
 
-    await verDetalhes.first().click();
-
-    // O conteúdo está sempre no DOM — basta checar que há "Bônus B:" ou
-    // "Nenhum pagamento registrado" dentro da tr payments-X correspondente.
-    // Usamos textContent (não isVisible) porque o toggle display:none pode ser
-    // resetado pelo React re-render, mas o texto continua no DOM.
-    const detailsRow = page.locator('tr[id^="payments-"]').first();
+    // Conteúdo está sempre no DOM (toggle apenas troca display:none).
+    // Lemos via textContent pra evitar reset por re-render do React.
+    const detailsRow = page.locator(`tr#payments-${empId}`);
     const rowText = await detailsRow.textContent({ timeout: 5_000 });
+    expect(rowText ?? '').toMatch(/Bônus B:.*5\.00.*C1:.*10\.00.*C2:.*15\.00/s);
+  });
 
-    const hasBonusB = /Bônus B:/.test(rowText ?? '');
-    const hasNenhum = /Nenhum pagamento registrado/.test(rowText ?? '');
+  test('Ver Detalhes — sem pagamento mostra "Nenhum pagamento registrado"', async ({ page }) => {
+    const empId = await createTestEmployee({ name: `${PREFIX}SemPag` });
+    // NÃO insere payment.
 
-    expect(hasBonusB || hasNenhum).toBe(true);
+    await goToTab(page, 'Financeiro');
+    await expect(page.getByRole('heading', { name: /Gestão Financeira/ }).first()).toBeVisible();
+    await setRangeToSafeDate(page);
+
+    const row = page.locator('table tr', { hasText: `${PREFIX}SemPag` }).first();
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.getByRole('button', { name: 'Ver Detalhes' }).first().click();
+
+    const detailsRow = page.locator(`tr#payments-${empId}`);
+    const rowText = await detailsRow.textContent({ timeout: 5_000 });
+    expect(rowText ?? '').toMatch(/Nenhum pagamento registrado/);
   });
 });
