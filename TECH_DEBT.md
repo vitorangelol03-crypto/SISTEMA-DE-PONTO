@@ -282,6 +282,37 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — Cobertura unit nova: FaceScanFrame (sub-fase 10.8)
+
+**Arquivo novo:** `tests/unit/faceScanFrame.spec.tsx` — 8 unit tests cobrindo `src/components/employee-clock/FaceScanFrame.tsx` (294 lin), componente puro de display (sem hooks de webcam/face-api).
+
+**Decisão arquitetural:** **unit test** via `@testing-library/react` (NÃO E2E + screenshot):
+1. Componente é puro — perfeito pra unit isolado, evita mocks pesados de FaceVerification/FaceRegistration (vide 10.7 postponed).
+2. Snapshot visual via `toHaveScreenshot` é frágil em headless Chromium com animações CSS keyframes.
+3. Aproveita stack vitest existente (414 tests pré → 422 pós).
+
+**Ajuste cirúrgico em vitest.config.ts:** `include` pattern alterado de `tests/unit/**/*.spec.ts` para `tests/unit/**/*.spec.{ts,tsx}` para suportar JSX. Mudança backwards-compatible (`.ts` continua matching).
+
+**Testes:**
+
+| # | Cenário | Asserção |
+|---|---|---|
+| 1 | Render default (color=blue) | 4 cantos com borderColor `rgb(59, 130, 246)` (filtro inline style) |
+| 2 | Label aparece no DOM | `screen.getByText('Posicione o rosto')` |
+| 3 | `countdown=0` | número NÃO renderiza (`querySelector('[style*="font-size: 80px"]')` null) |
+| 4 | `countdown=3` | número "3" visível com style font-size 80px |
+| 5 | `confidence=0.85` | "85%" + "Confiança" no DOM |
+| 6 | `confidence=undefined` | "Confiança" NÃO renderiza |
+| 7 | `flash='success'` | overlay com `rgba(34, 197, 94, ...)` renderiza |
+| 8 | `flash=null` | overlay NÃO renderiza |
+
+**Validações:**
+- `npx tsc --noEmit`: 0 erros
+- `npx vitest run tests/unit/faceScanFrame.spec.tsx`: **8 passed em ~270ms**
+- `npx vitest run` (suite completa): **422 passed em 17 files** (era 414 em 16 → +8 tests, +1 file)
+
+---
+
 ### 2026-05-11 — Sub-fase 10.7 (FaceRegistration) postponed: mock pesado fora do escopo desta fase
 
 **Componente:** `src/components/employee-clock/FaceRegistration.tsx` (~364 lin) — fluxo de cadastro facial usando `useFaceApi` hook (face-api.js) + `navigator.mediaDevices.getUserMedia`.
