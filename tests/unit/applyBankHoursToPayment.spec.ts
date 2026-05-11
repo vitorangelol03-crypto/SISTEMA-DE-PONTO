@@ -946,3 +946,209 @@ describe('Edge cases extremos - Combo I', () => {
     expect(paymentsCalls).toBe(1);
   });
 });
+
+// Sub-fase 8.3 (TECH_DEBT 6.6, D1=C "diurno primeiro"): valida algoritmo de
+// derivação de nightCreditMinutes a partir de attendances reais. 4 cenários
+// cobrindo todas as ramificações da fórmula:
+//   daytime_extra = max(0, daytime - expected)
+//   nightCreditDay = max(0, credit - daytime_extra)
+//
+// Testa via comportamento end-to-end: company.bank_hours_night_separate=true
+// + multiplier=1.5 → amountCredit varia conforme split day/night.
+describe('Sub-fase 8.3 — nightCreditMinutes derivação (D1=C diurno primeiro)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // dailyRate=100, formula=daily_div_8 → hora=12.50.
+  // night_separate=true, multiplier=1.5 → night vale 12.50 × 1.5 = 18.75 R$/h.
+  const NIGHT_COMPANY = () => fixtureCompany({
+    bank_hours_night_separate: true,
+    bank_hours_night_multiplier: 1.5,
+  });
+
+  it('1. Caso turno noturno típico CD Logística: night=179, day=307, exp=240, credit=246 → night_credit=179 (preenche 67 do daytime_extra primeiro)', async () => {
+    // Sample REAL de Caratinga (validado via SQL em 2026-05-11).
+    // daytime_extra = max(0, 307-240) = 67
+    // night_credit = max(0, 246-67) = 179
+    // day_credit = 246 - 179 = 67
+    // amountCredit = (67/60 × 12.50) + (179/60 × 12.50 × 1.5)
+    //             = 13.96 + 55.94 = 69.90 (aproximado)
+    const company = NIGHT_COMPANY();
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{
+          bank_credit_minutes: 246,
+          bank_debit_minutes: 0,
+          daytime_minutes: 307,
+          nighttime_minutes: 179,
+          expected_minutes: 240,
+        }], error: null },
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-night-1' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.applied).toBe(true);
+    // Day: 67min × 12.50/60 = 13.95833 → 13.96
+    // Night: 179min × 12.50 × 1.5 / 60 = 55.9375 → 55.94
+    // Total: 69.90
+    expect(r.result?.amountCredit).toBeCloseTo(69.90, 1);
+  });
+
+  it('2. Caso 100% diurno (todo daytime, zero nighttime): toda credit fica day, night_credit=0', async () => {
+    // daytime=600 (10h), nighttime=0, expected=480 (8h), credit=120 (2h extras)
+    // daytime_extra = 600-480 = 120
+    // night_credit = max(0, 120-120) = 0
+    // amountCredit = 120/60 × 12.50 = 25.00 (sem multiplier noturno)
+    const company = NIGHT_COMPANY();
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{
+          bank_credit_minutes: 120,
+          bank_debit_minutes: 0,
+          daytime_minutes: 600,
+          nighttime_minutes: 0,
+          expected_minutes: 480,
+        }], error: null },
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-night-2' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.applied).toBe(true);
+    expect(r.result?.amountCredit).toBe(25);
+  });
+
+  it('3. Caso 100% noturno (todo nighttime, zero daytime): toda credit fica night → multiplier aplicado', async () => {
+    // daytime=0, nighttime=540 (9h), expected=480 (8h), credit=60 (1h extra)
+    // daytime_extra = max(0, 0-480) = 0
+    // night_credit = max(0, 60-0) = 60
+    // amountCredit = 60/60 × 12.50 × 1.5 = 18.75 (multiplier 1.5)
+    const company = NIGHT_COMPANY();
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{
+          bank_credit_minutes: 60,
+          bank_debit_minutes: 0,
+          daytime_minutes: 0,
+          nighttime_minutes: 540,
+          expected_minutes: 480,
+        }], error: null },
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-night-3' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.applied).toBe(true);
+    expect(r.result?.amountCredit).toBe(18.75);
+  });
+
+  it('4. Caso daytime < expected (turno cumprido com mistura): credit total vira night_credit', async () => {
+    // daytime=240, nighttime=300, expected=480, credit=60
+    // daytime_extra = max(0, 240-480) = 0 (daytime nem cobriu expected!)
+    // night_credit = max(0, 60-0) = 60 (todo credit veio do noturno)
+    // amountCredit = 60/60 × 12.50 × 1.5 = 18.75
+    const company = NIGHT_COMPANY();
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{
+          bank_credit_minutes: 60,
+          bank_debit_minutes: 0,
+          daytime_minutes: 240,
+          nighttime_minutes: 300,
+          expected_minutes: 480,
+        }], error: null },
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-night-4' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.applied).toBe(true);
+    expect(r.result?.amountCredit).toBe(18.75);
+  });
+
+  it('5. Multiplas attendances mistas: night_credit somado por dia (não agregado)', async () => {
+    // Dia 1: daytime=600, night=0, expected=480, credit=120 → day_extra=120, night_credit=0
+    // Dia 2: daytime=0, night=540, expected=480, credit=60 → day_extra=0, night_credit=60
+    // Total credit = 180 (120 day + 60 night).
+    // day_credit = 120, night_credit = 60.
+    // amountCredit = (120/60 × 12.50) + (60/60 × 12.50 × 1.5) = 25 + 18.75 = 43.75
+    const company = NIGHT_COMPANY();
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [
+          { bank_credit_minutes: 120, bank_debit_minutes: 0, daytime_minutes: 600, nighttime_minutes: 0, expected_minutes: 480 },
+          { bank_credit_minutes: 60, bank_debit_minutes: 0, daytime_minutes: 0, nighttime_minutes: 540, expected_minutes: 480 },
+        ], error: null },
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-night-5' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.applied).toBe(true);
+    expect(r.result?.amountCredit).toBe(43.75);
+  });
+
+  it('6. night_separate=false: nightCreditMinutes calculado mas IGNORADO pelo calculator', async () => {
+    // mesmo cenário do #3 mas night_separate=false.
+    // applyBankHours ignora night → multiplier=1 sempre.
+    // amountCredit = 60/60 × 12.50 = 12.50 (sem multiplier)
+    const company = fixtureCompany({ bank_hours_night_separate: false });
+    setupSupabaseQueue({
+      employees: [{ data: fixtureEmployee(company), error: null }],
+      payment_periods: [{ data: PERIOD, error: null }],
+      bank_hours_overrides: [{ data: [], error: null }],
+      payments: [
+        { data: paymentRow(), error: null },
+        { data: null, error: null },
+      ],
+      attendance: [
+        { data: [{
+          bank_credit_minutes: 60, bank_debit_minutes: 0,
+          daytime_minutes: 0, nighttime_minutes: 540, expected_minutes: 480,
+        }], error: null },
+        { data: null, error: null },
+      ],
+      bank_hours_application_log: [{ data: { id: 'log-night-6' }, error: null }],
+    });
+    const r = await applyBankHoursToPayment(ARGS);
+    expect(r.applied).toBe(true);
+    expect(r.result?.amountCredit).toBe(12.5);
+  });
+});

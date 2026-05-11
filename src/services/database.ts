@@ -4520,6 +4520,51 @@ interface _PreviewInternalResult {
   employeeName: string;
 }
 
+// Sub-fase 8.3 (TECH_DEBT 6.6, D1=C "diurno primeiro"): soma bank_credit/debit
+// e DERIVA nightCreditMinutes via algoritmo "diurno primeiro" por dia.
+//
+// Fórmula por attendance:
+//   daytime_extra = max(0, daytime_minutes - expected_minutes)
+//   nightCreditDay = max(0, bank_credit_minutes - daytime_extra)
+//
+// Semântica: expected é "consumido" primeiro pelas horas diurnas. Se daytime
+// cobre todo expected E sobra (daytime_extra > 0), esse excedente diurno
+// absorve o credit primeiro. O resto do credit veio do trabalho noturno.
+// Se daytime < expected, todo daytime_extra=0 e o credit veio inteiramente
+// das horas noturnas → nightCreditDay = credit.
+//
+// Validado com dados reais (2026-05-11): sample 2026-04-18 daytime=307,
+// night=179, expected=240, credit=246 → daytime_extra=67, nightCredit=179.
+//
+// nightDebitMinutes = 0 sempre (conservador — todo débito tratado como
+// diurno, sem multiplier noturno aplicado em falta de horas).
+function _sumBankBalanceWithNight(
+  attendances: Array<{
+    bank_credit_minutes: number | null;
+    bank_debit_minutes: number | null;
+    daytime_minutes?: number | null;
+    expected_minutes?: number | null;
+  }>,
+): { creditMinutes: number; debitMinutes: number; nightCreditMinutes: number; nightDebitMinutes: number } {
+  let creditMinutes = 0;
+  let debitMinutes = 0;
+  let nightCreditMinutes = 0;
+  for (const a of attendances) {
+    const credit = a.bank_credit_minutes ?? 0;
+    const debit = a.bank_debit_minutes ?? 0;
+    const daytime = a.daytime_minutes ?? 0;
+    const expected = a.expected_minutes ?? 0;
+    creditMinutes += credit;
+    debitMinutes += debit;
+    if (credit > 0) {
+      const daytimeExtra = Math.max(0, daytime - expected);
+      const nightCreditDay = Math.max(0, credit - daytimeExtra);
+      nightCreditMinutes += nightCreditDay;
+    }
+  }
+  return { creditMinutes, debitMinutes, nightCreditMinutes, nightDebitMinutes: 0 };
+}
+
 // Helper interno: carrega dados + calcula. Não toca UPDATE/INSERT.
 // Compartilhado entre applyBankHoursToPayment e previewBankHoursForPeriod.
 async function _previewBankHoursForEmployee(args: {
@@ -4632,21 +4677,18 @@ async function _previewBankHoursForEmployee(args: {
     };
   }
 
-  // 7. Saldo na janela.
+  // 7. Saldo na janela. Sub-fase 8.3 (TECH_DEBT 6.6, D1=C):
+  //    Inclui daytime/nighttime/expected pra calcular nightCreditMinutes real.
   const { data: attendances, error: attErr } = await supabase
     .from('attendance')
-    .select('bank_credit_minutes, bank_debit_minutes')
+    .select('bank_credit_minutes, bank_debit_minutes, daytime_minutes, nighttime_minutes, expected_minutes')
     .eq('employee_id', employeeId)
     .gte('date', rangeStart)
     .lte('date', rangeEnd);
   if (attErr) throw attErr;
 
-  let creditMinutes = 0;
-  let debitMinutes = 0;
-  for (const a of (attendances ?? []) as Array<{ bank_credit_minutes: number | null; bank_debit_minutes: number | null }>) {
-    creditMinutes += a.bank_credit_minutes ?? 0;
-    debitMinutes += a.bank_debit_minutes ?? 0;
-  }
+  const { creditMinutes, debitMinutes, nightCreditMinutes, nightDebitMinutes } =
+    _sumBankBalanceWithNight(attendances ?? []);
 
   // 8. Jornada média.
   let jornadaMinutes = 480;
@@ -4664,8 +4706,8 @@ async function _previewBankHoursForEmployee(args: {
     jornadaMinutes,
     creditMinutes,
     debitMinutes,
-    nightCreditMinutes: 0,
-    nightDebitMinutes: 0,
+    nightCreditMinutes,
+    nightDebitMinutes,
     settings,
   });
 
@@ -4914,7 +4956,8 @@ export async function previewBankHoursForPeriod(args: {
       .order('date', { ascending: false }),
     supabase
       .from('attendance')
-      .select('employee_id, bank_credit_minutes, bank_debit_minutes')
+      // Sub-fase 8.3: inclui daytime/nighttime/expected pra calcular nightCredit.
+      .select('employee_id, bank_credit_minutes, bank_debit_minutes, daytime_minutes, nighttime_minutes, expected_minutes')
       .in('employee_id', employeeIds)
       .gte('date', rangeStart)
       .lte('date', rangeEnd),
@@ -4931,13 +4974,18 @@ export async function previewBankHoursForPeriod(args: {
     }
   }
 
-  // Soma credit/debit por employee em 1 passada (atravessa array só uma vez).
-  const balancesByEmp = new Map<string, { creditMinutes: number; debitMinutes: number }>();
-  for (const a of (attendancesRes.data ?? []) as Array<{ employee_id: string; bank_credit_minutes: number | null; bank_debit_minutes: number | null }>) {
-    const cur = balancesByEmp.get(a.employee_id) ?? { creditMinutes: 0, debitMinutes: 0 };
-    cur.creditMinutes += a.bank_credit_minutes ?? 0;
-    cur.debitMinutes += a.bank_debit_minutes ?? 0;
-    balancesByEmp.set(a.employee_id, cur);
+  // Agrupa attendances por employee, depois calcula balance + night via helper
+  // _sumBankBalanceWithNight pra preservar lógica "diurno primeiro" por dia.
+  type AttRow = { employee_id: string; bank_credit_minutes: number | null; bank_debit_minutes: number | null; daytime_minutes: number | null; nighttime_minutes: number | null; expected_minutes: number | null };
+  const attsByEmp = new Map<string, AttRow[]>();
+  for (const a of (attendancesRes.data ?? []) as AttRow[]) {
+    const arr = attsByEmp.get(a.employee_id) ?? [];
+    arr.push(a);
+    attsByEmp.set(a.employee_id, arr);
+  }
+  const balancesByEmp = new Map<string, { creditMinutes: number; debitMinutes: number; nightCreditMinutes: number; nightDebitMinutes: number }>();
+  for (const [empId, atts] of attsByEmp) {
+    balancesByEmp.set(empId, _sumBankBalanceWithNight(atts));
   }
 
   // ─── Cálculo in-memory por employee (zero queries no loop) ────────────
@@ -4969,7 +5017,8 @@ interface _BatchPreviewInputs {
   rangeEnd: string;
   override: { apply_bank_hours: boolean } | undefined;
   paymentRow: { id: string; daily_rate: number | null; total: number | null; bank_hours_applied_at: string | null } | undefined;
-  balance: { creditMinutes: number; debitMinutes: number } | undefined;
+  // Sub-fase 8.3: inclui night minutes derivados via _sumBankBalanceWithNight.
+  balance: { creditMinutes: number; debitMinutes: number; nightCreditMinutes: number; nightDebitMinutes: number } | undefined;
   applyBankHours: typeof import('../utils/bankHoursCalculator').applyBankHours;
 }
 
@@ -5004,9 +5053,11 @@ function _calcPreviewFromBatch(inputs: _BatchPreviewInputs): _PreviewInternalRes
     };
   }
 
-  // 7. Saldo na janela (vem pré-somado do batch).
+  // 7. Saldo na janela (vem pré-somado do batch, com night derivado via D1=C).
   const creditMinutes = balance?.creditMinutes ?? 0;
   const debitMinutes = balance?.debitMinutes ?? 0;
+  const nightCreditMinutes = balance?.nightCreditMinutes ?? 0;
+  const nightDebitMinutes = balance?.nightDebitMinutes ?? 0;
 
   // 8. Jornada média.
   let jornadaMinutes = 480;
@@ -5024,8 +5075,8 @@ function _calcPreviewFromBatch(inputs: _BatchPreviewInputs): _PreviewInternalRes
     jornadaMinutes,
     creditMinutes,
     debitMinutes,
-    nightCreditMinutes: 0,
-    nightDebitMinutes: 0,
+    nightCreditMinutes,
+    nightDebitMinutes,
     settings,
   });
 

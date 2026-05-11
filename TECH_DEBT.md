@@ -50,42 +50,6 @@ export const setPaymentPeriodAutoWeekly = async (
 
 ---
 
-### 6.6 — [Média] `nightCreditMinutes` hardcoded em 0
-
-**Local exato:** `src/services/database.ts:4712` (em `_previewBankHoursForEmployee`, helper compartilhado por preview + apply)
-
-**Snippet do bug (auditoria 2026-05-09):**
-```typescript
-// L4706-4715
-const result = applyBankHours({
-  dailyRate: Number(paymentRow.daily_rate) || 0,
-  jornadaMinutes,
-  creditMinutes,
-  debitMinutes,
-  nightCreditMinutes: 0,    // ← HARDCODED
-  nightDebitMinutes: 0,     // ← HARDCODED
-  settings,
-});
-```
-
-**Por que escalada:**
-- `bankHoursCalculator.ts` aceita `nightCreditMinutes` parametricamente (L94, L201) — calculator puro tem suporte completo
-- Schema banco tem `bank_hours_night_separate` BOOLEAN + `bank_hours_night_multiplier` NUMERIC (migration `combo_g_bank_hours_payment_settings` em 2026-05-03)
-- UI exibe configurações funcionais
-- Apenas o caller único (compartilhado preview+apply, comentário L4498-4510) hardcoda 0
-- Multiplier aplica em base 0 → contribuição sempre 0 mesmo com toggle ativo
-
-**Impacto:** delivery workers da CD Logística com turnos noturnos (22h-05h) estão sendo subpagos (banco horas noturno não acumula). Empresa em risco trabalhista.
-
-**Severidade:** Média.
-
-**Solução estrutural:**
-Implementar `calcNightHours(attendances, dateRange)` que conta minutos entre `entry_time` e `exit_time` que caem na faixa 22h-05h. Lógica similar já mencionada em outros pontos do sistema. Portar pra `_previewBankHoursForEmployee` e passar valor real em vez de 0.
-
-**Status:** Pendente — sub-fase futura.
-
----
-
 ### 6.8 — [Média] `applyBankHoursToPayment` sem rollback transacional (3 operações)
 
 **Local exato:** `src/services/database.ts:4783-4839`
@@ -399,6 +363,52 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.6: nightCreditMinutes real (D1=C diurno primeiro) (sub-fase 8.3)
+
+**Decisão D1 = C** confirmada pelo Victor em 2026-05-11. Algoritmo "diurno primeiro": expected é consumido pelas horas diurnas primeiro; sobra noturna vira `nightCreditMinutes`. Favorável ao funcionário, comum em folha CLT brasileira.
+
+**Fórmula validada com dados reais** (sample Caratinga 2026-04-18: `daytime=307, night=179, expected=240, credit=246` → `daytime_extra=67, night_credit=179` ✓):
+```typescript
+// Por attendance:
+daytime_extra  = max(0, daytime_minutes - expected_minutes)
+nightCreditDay = max(0, bank_credit_minutes - daytime_extra)
+// Total: sum nightCreditDay sobre todas attendances do range
+// nightDebitMinutes = 0 sempre (conservador — todo débito tratado como diurno)
+```
+
+**Código alterado em `src/services/database.ts`:**
+
+1. **Novo helper puro `_sumBankBalanceWithNight(attendances)`**: aplica fórmula D1=C por dia, retorna `{ creditMinutes, debitMinutes, nightCreditMinutes, nightDebitMinutes }`.
+
+2. **`_previewBankHoursForEmployee`** (single, apply): SELECT inclui `daytime_minutes, nighttime_minutes, expected_minutes`; usa helper; passa `nightCreditMinutes`/`nightDebitMinutes` reais ao invés de `0` hardcoded.
+
+3. **`previewBankHoursForPeriod`** (batch, sub-fase 8.1): SELECT batch inclui as 3 colunas extras; agrupa por employee + helper por grupo; balance Map ganha night fields.
+
+4. **`_calcPreviewFromBatch`** (helper batch): interface `_BatchPreviewInputs` expandida com night fields; passa pra `applyBankHours`.
+
+**Validações REAIS via MCP (padrão "validar tudo real"):**
+
+| # | Validação | Resultado |
+|---|---|---|
+| 1 | Pre-check Caratinga: distribuição attendance | 3130 total, 316 com nighttime>0 (~10%), 5 com credit>0, 29 com debit>0 |
+| 2 | Sample real testando a fórmula via SQL `SELECT daytime, night, expected, credit, max(0,daytime-expected) AS daytime_extra, credit - max(0,daytime-expected) AS night_credit_day FROM attendance` | 5 samples conferiram cálculo |
+| 3 | Suite unit completa (414 testes) | 414/414 passed (+6 testes novos cobrindo todos os 6 cenários da fórmula com night_separate=true) |
+| 4 | Spec E2E 27 (bank-hours-payment): 5 testes | 5/5 passed |
+| 5 | Spec E2E 29 (bank-hours-integrity): 5 testes E2E reais (apply, idempotência, override) | 5/5 passed |
+| 6 | tsc --noEmit | 0 erros |
+
+**Cenários cobertos pelos 6 testes novos:**
+1. Sample REAL Caratinga (night=179, day=307, exp=240, credit=246): amountCredit=69.90 ✓
+2. 100% diurno (day=600, night=0, exp=480, credit=120): toda day, amountCredit=25.00
+3. 100% noturno (day=0, night=540, exp=480, credit=60): toda night, amountCredit=18.75 (com multiplier 1.5)
+4. daytime < expected (day=240, night=300, exp=480, credit=60): todo night_credit, amountCredit=18.75
+5. Multiplas attendances mistas (1 dia diurno + 1 dia noturno): cálculo POR DIA correto, amountCredit=43.75
+6. `night_separate=false`: nightCreditMinutes calculado mas IGNORADO pelo calculator, amountCredit=12.50
+
+**Impacto pra produção:** CD Logística (Ponte Nova) com turnos 22h-05h agora pode ATIVAR `bank_hours_night_separate=true` + `bank_hours_night_multiplier` e o banco horas noturno acumula corretamente. Pré-fix, multiplier era aplicado em base 0 (sempre zero contribuição). Risco trabalhista mitigado.
+
+---
 
 ### 2026-05-11 — 6.7: N+1 queries em previewBankHoursForPeriod (sub-fase 8.1)
 
