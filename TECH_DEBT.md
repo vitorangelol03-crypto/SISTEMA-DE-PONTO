@@ -113,38 +113,6 @@ Envolver as 3 operações em RPC transacional Supabase. Idempotência via `bank_
 
 ## 🟡 Inconsistências arquiteturais
 
-### 6.11 — [Baixa] `geolocation_config` sem `UNIQUE(company_id)`
-
-**Local:** tabela `public.geolocation_config`
-
-**Validação Supabase MCP (2026-05-09):**
-```sql
-SELECT conname FROM pg_constraint
-WHERE conrelid = 'public.geolocation_config'::regclass
-  AND contype = 'u';
--- → 0 rows (nenhum UNIQUE constraint)
-```
-
-Estado atual: Caratinga 1 row, Ponte Nova 0 rows.
-
-**Risco:** edge fn `clock-in-validated` v5 usa `.maybeSingle()` assumindo no máximo 1 row por company_id. Se alguém INSERIR 2ª row pra mesma empresa, comportamento indefinido (pega linha aleatória).
-
-**Severidade:** Baixa (latente, não ativo).
-
-**Solução estrutural:**
-```sql
--- Pre-check obrigatório:
-SELECT company_id, count(*) FROM geolocation_config
-GROUP BY company_id HAVING count(*) > 1;
--- Se 0 conflitos:
-ALTER TABLE public.geolocation_config
-  ADD CONSTRAINT geolocation_config_company_id_key UNIQUE (company_id);
-```
-
-**Status:** Pendente — sub-fase futura.
-
----
-
 ### 6.12 — [Baixa] Edge fn writes sem error handling
 
 **Local:** `supabase/functions/clock-in-validated/index.ts` (versão 5 ACTIVE em prod, hash `a841de37...`)
@@ -460,6 +428,24 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.11: `geolocation_config` UNIQUE(company_id) (sub-fase 5.3)
+
+**Migration aplicada em prod:** `20260511140957_unique_geolocation_per_company`
+
+**SQL:**
+```sql
+ALTER TABLE public.geolocation_config
+  ADD CONSTRAINT geolocation_config_company_id_key UNIQUE (company_id);
+```
+
+**Pre-check via MCP (2026-05-11):** `SELECT company_id, count(*) FROM geolocation_config GROUP BY company_id HAVING count(*) > 1;` → 0 rows. Sem duplicatas a tratar.
+
+**Validação pós-deploy via MCP:** `pg_constraint` confirma `geolocation_config_company_id_key` (contype='u') ativa em prod.
+
+**Consequência:** elimina risco latente de comportamento indefinido em `.maybeSingle()` da edge fn `clock-in-validated` v5 caso alguém insira 2ª row pra mesma empresa.
+
+---
 
 ### 2026-05-11 — 6.14: `eslint-disable react-hooks/exhaustive-deps` em 3 useEffect (sub-fase 5.2)
 
