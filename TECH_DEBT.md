@@ -282,6 +282,33 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — Sub-fase 10.7 (FaceRegistration) postponed: mock pesado fora do escopo desta fase
+
+**Componente:** `src/components/employee-clock/FaceRegistration.tsx` (~364 lin) — fluxo de cadastro facial usando `useFaceApi` hook (face-api.js) + `navigator.mediaDevices.getUserMedia`.
+
+**Motivo do postpone:** o plano sugeria 12 testes com mocks pesados de:
+1. `face-api.js` (modelos ML, detecção, descritores Float32Array)
+2. `navigator.mediaDevices.getUserMedia` (MediaStream fake com video tracks)
+3. `<video>` element interno (videoWidth/height, play/pause, srcObject)
+4. Watchdog/retry pra "vídeo preto"
+
+**Precedente do projeto:** `tests/23-employee-clock-complete.spec.ts:173` skipa explicitamente:
+```typescript
+test.skip('face recognition: captura via webcam — não testável sem mock', async () => {});
+```
+Comentário do arquivo (linha 12-13): "Face recognition GATE: NÃO testamos captura facial real (precisa câmera); apenas validamos os steps onde face_recognition_enabled controla fluxo."
+
+**Decisão:** seguir a precedência da spec 23. Mock library compartilhado (face-api + MediaStream fake) é um esforço de ~6-8h que não cabe nesta fase. Cobertura realista do componente exige mock library que deve ser tarefa dedicada (sub-fase futura: "Mock library de face recognition" + sub-fases derivadas pra spec 10.7).
+
+**Cobertura preservada:**
+- Fluxo gate (face_recognition_enabled toggle) já coberto em specs 02, 23, 24
+- `saveFaceData` exercitado via spec 24 reset facial (sub-fase 9.1)
+- Lógica de hash de descritores é client-side simples (sem fórmula matemática complexa exposta)
+
+**Pendência derivada:** investigar viabilidade de mock library de face-api.js + getUserMedia. Avaliar custo/benefício vs cobertura. Pode ser revisitado pós-Fase 11 (hardening), quando o componente puder estar bloqueado por JWT auth de qualquer forma.
+
+---
+
 ### 2026-05-11 — Cobertura E2E nova: EmployeeErrorsPage state machine (sub-fase 10.6)
 
 **Arquivo novo:** `tests/36-employee-errors-page.spec.ts` — 8 testes cobrindo as transições do state machine `cpf → company-select | pin | error → dashboard` em `src/components/employee-clock/EmployeeErrorsPage.tsx` (295 lin).
