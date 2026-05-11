@@ -1,0 +1,45 @@
+{
+  "dumped_at": "2026-05-11T14:40:00Z",
+  "purpose": "Audit trail pré-DROP TABLE bonus_defaults (sub-fase 7.3, TECH_DEBT D6=C)",
+  "context": "Tabela legacy substituída por bonus_types (multi-empresa). Caratinga em bonus_types tem MESMOS valores deste dump. Ponte Nova nunca teve rows em bonus_defaults — sempre usou bonus_types desde criação.",
+  "validation_pre_drop": {
+    "caratinga_bonus_types_active": [
+      { "code": "B", "default_value": "15.00" },
+      { "code": "C1", "default_value": "20.00" },
+      { "code": "C2", "default_value": "15.00" }
+    ],
+    "ponte_nova_bonus_types_active": [
+      { "code": "B", "default_value": "15.00" },
+      { "code": "C1", "default_value": "20.00" },
+      { "code": "C2", "default_value": "15.00" }
+    ],
+    "match": "Caratinga em bonus_defaults == Caratinga em bonus_types (mesmos valores B=15, C1=20, C2=15). DROP não perde dados."
+  },
+  "rows": [
+    {
+      "bonus_type": "B",
+      "default_amount": "15.00",
+      "updated_by": "9999",
+      "updated_at": "2026-05-09T15:36:17.968+00:00",
+      "company_id": "6583bb2a-e334-41a7-b69c-7d98f3b46dfc"
+    },
+    {
+      "bonus_type": "C1",
+      "default_amount": "20.00",
+      "updated_by": null,
+      "updated_at": "2026-04-16T17:06:46.912121+00:00",
+      "company_id": "6583bb2a-e334-41a7-b69c-7d98f3b46dfc"
+    },
+    {
+      "bonus_type": "C2",
+      "default_amount": "15.00",
+      "updated_by": null,
+      "updated_at": "2026-04-16T17:06:46.912121+00:00",
+      "company_id": "6583bb2a-e334-41a7-b69c-7d98f3b46dfc"
+    }
+  ],
+  "company_id_mapping": {
+    "6583bb2a-e334-41a7-b69c-7d98f3b46dfc": "Caratinga (CLAYTON B DOS SANTOS)",
+    "2b2abc4b-084c-4cf0-b5f1-02792513241d": "Ponte Nova (CD LOGISTICA LTDA — sem rows em bonus_defaults)"
+  }
+}

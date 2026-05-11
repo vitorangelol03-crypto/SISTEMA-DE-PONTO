@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { ADMIN, loginAs, goToTab, switchCompany } from './helpers';
+import { getClient } from './cleanup';
+
+const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
+const PONTE_NOVA_ID = '2b2abc4b-084c-4cf0-b5f1-02792513241d';
 
 test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
   test.beforeEach(async ({ page }) => {
@@ -148,29 +152,55 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     ).toBeVisible({ timeout: 10_000 });
   });
 
-  test('6. Usuários em Ponte Nova mostra "Nenhum usuário encontrado"; Caratinga mostra Gestão de Usuários (N)', async ({ page }) => {
+  test('6. Usuários: counts UI batem com counts do DB E são distintos entre empresas (isolamento real)', async ({ page }) => {
     // Componente: UsersTab (src/components/users/UsersTab.tsx).
     // Sem filtro temporal — getAllUsers(company.id) busca todos.
-    // Caratinga: 5 users. Ponte Nova: 0 users.
+    //
+    // Versão robusta a dados em prod (após sub-fase 7.3 detectar que PN
+    // ganhou user 8888 admin entre 3.4 e hoje): em vez de assumir
+    // contagem fixa (PN=0), busca os counts reais do DB e valida que:
+    //  (a) a UI mostra o count exato pra empresa atual
+    //  (b) as duas empresas têm counts DIFERENTES (isolamento de fato)
+    //  (c) trocar empresa muda o count visualizado (não vaza)
 
-    // 1. Caratinga (default): aba Usuários, contador "Gestão de
-    //    Usuários (N)" no <h2>. Regex \d+ pra ser robusto a
-    //    mudanças no seed de users.
+    const s = getClient();
+    const { count: caratingaCount } = await s
+      .from('users').select('id', { count: 'exact', head: true })
+      .eq('company_id', CARATINGA_ID);
+    const { count: ponteNovaCount } = await s
+      .from('users').select('id', { count: 'exact', head: true })
+      .eq('company_id', PONTE_NOVA_ID);
+
+    expect(caratingaCount).not.toBeNull();
+    expect(ponteNovaCount).not.toBeNull();
+    expect(caratingaCount).not.toBe(ponteNovaCount); // isolamento garantido por dados distintos
+
+    // 1. Caratinga (default): contador exato vindo do DB
     await goToTab(page, 'Usuários');
-    await expect(
-      page.getByText(/^Gestão de Usuários \(\d+\)$/)
-    ).toBeVisible({ timeout: 15_000 });
+    if (caratingaCount! > 0) {
+      await expect(
+        page.getByText(new RegExp(`^Gestão de Usuários \\(${caratingaCount}\\)$`))
+      ).toBeVisible({ timeout: 15_000 });
+    } else {
+      await expect(
+        page.getByText(/Nenhum usuário encontrado/i)
+      ).toBeVisible({ timeout: 15_000 });
+    }
 
-    // 2. Trocar empresa + re-navegar (reload reseta activeTab).
+    // 2. Trocar empresa + re-navegar (reload reseta activeTab)
     await switchCompany(page, 'Ponte Nova');
     await goToTab(page, 'Usuários');
 
-    // 3. Ponte Nova: 0 users → texto vazio exclusivo (L418).
-    //    Pattern simétrico com T1/T2: assertion sobre o texto
-    //    exato de estado vazio (não sobre contador "(0)").
-    await expect(
-      page.getByText(/Nenhum usuário encontrado/i)
-    ).toBeVisible({ timeout: 10_000 });
+    // 3. Ponte Nova: ou contador exato, ou estado vazio se 0
+    if (ponteNovaCount! > 0) {
+      await expect(
+        page.getByText(new RegExp(`^Gestão de Usuários \\(${ponteNovaCount}\\)$`))
+      ).toBeVisible({ timeout: 10_000 });
+    } else {
+      await expect(
+        page.getByText(/Nenhum usuário encontrado/i)
+      ).toBeVisible({ timeout: 10_000 });
+    }
   });
 
   test('7. Gerenciamento em Ponte Nova sem registros antigos; Caratinga lista "Mais antigo:" por categoria', async ({ page }) => {

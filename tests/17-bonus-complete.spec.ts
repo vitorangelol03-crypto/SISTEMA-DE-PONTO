@@ -64,12 +64,10 @@ test.describe('Bonificação — completo', () => {
     expect(Number(data?.total)).toBe(130);
   });
 
-  test('valores padrão (bonus_defaults) podem ser lidos e usados', async () => {
-    const s = getClient();
-    const { data } = await s.from('bonus_defaults').select('*');
-    // Tabela existe e retorna ≥0 linhas (admin pode editar)
-    expect(Array.isArray(data)).toBe(true);
-  });
+  // Smoke test pra bonus_defaults removido na sub-fase 7.3 (TECH_DEBT D6=C):
+  // tabela foi DROP-ada via migration 20260511_drop_bonus_defaults_legacy.
+  // Cobertura migrou pra bonus_types (multi-empresa), validada via specs
+  // 25 e 26 (isolamento por company_id).
 
   test.skip('remover Bônus via UI: modal/seletor de tipo varia — coberto em 17-bonus histórico de remoções', async () => {});
 

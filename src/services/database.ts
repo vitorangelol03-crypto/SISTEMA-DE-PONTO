@@ -1500,52 +1500,31 @@ export const clearBonusRegistryForDate = async (date: string, companyId: string)
 };
 
 // ─── Valores padrão de Bonificação ──────────────────────────────────────────
-// Retorna um mapa { B, C1, C2 } com os valores padrão persistidos.
-// Estratégia (compat dupla): preferencial em `bonus_types` (multi-empresa);
-// fallback para `bonus_defaults` (legacy) caso bonus_types não esteja populado
-// para a empresa.
+// Retorna um mapa { B, C1, C2 } com os valores padrão de `bonus_types`.
+// Filtra `active=true` — tipos desativados não contam como default.
+// Tabela legacy `bonus_defaults` foi descontinuada na sub-fase 7.3
+// (DROP migration 20260511_drop_bonus_defaults_legacy).
 export const getBonusDefaults = async (companyId: string): Promise<{ B: number; C1: number; C2: number }> => {
   const defaults: { B: number; C1: number; C2: number } = { B: 0, C1: 0, C2: 0 };
 
-  // 1) Preferencial: bonus_types
-  const { data: btData, error: btErr } = await supabase
+  const { data, error } = await supabase
     .from('bonus_types')
     .select('code, default_value, active')
     .eq('company_id', companyId)
     .eq('active', true);
 
-  if (btErr) throw btErr;
-
-  let foundAny = false;
-  for (const row of btData || []) {
-    const code = row.code as BonusType;
-    if (code === 'B' || code === 'C1' || code === 'C2') {
-      defaults[code] = Number(row.default_value) || 0;
-      foundAny = true;
-    }
-  }
-
-  if (foundAny) return defaults;
-
-  // 2) Fallback: bonus_defaults (legacy)
-  const { data, error } = await supabase
-    .from('bonus_defaults')
-    .select('bonus_type, default_amount')
-    .eq('company_id', companyId);
-
   if (error) throw error;
 
   for (const row of data || []) {
-    const type = row.bonus_type as BonusType;
-    if (type === 'B' || type === 'C1' || type === 'C2') {
-      defaults[type] = Number(row.default_amount) || 0;
+    const code = row.code as BonusType;
+    if (code === 'B' || code === 'C1' || code === 'C2') {
+      defaults[code] = Number(row.default_value) || 0;
     }
   }
   return defaults;
 };
 
-// Atualiza o valor padrão de um tipo. Restrito ao admin (ID 9999).
-// Atualiza ambas as tabelas: bonus_types (preferencial) e bonus_defaults (legacy).
+// Atualiza o valor padrão de um tipo em `bonus_types`. Restrito ao admin (ID 9999).
 export const updateBonusDefault = async (
   type: BonusType,
   amount: number,
@@ -1560,8 +1539,7 @@ export const updateBonusDefault = async (
     throw new Error('Valor inválido');
   }
 
-  // Atualiza bonus_types (preferencial — multi-empresa)
-  await supabase
+  const { error } = await supabase
     .from('bonus_types')
     .update({
       default_value: amount,
@@ -1569,17 +1547,6 @@ export const updateBonusDefault = async (
     })
     .eq('company_id', companyId)
     .eq('code', type);
-
-  // Atualiza bonus_defaults legacy (compat)
-  const { error } = await supabase
-    .from('bonus_defaults')
-    .update({
-      default_amount: amount,
-      updated_by: updatedBy,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('bonus_type', type)
-    .eq('company_id', companyId);
 
   if (error) throw error;
 };

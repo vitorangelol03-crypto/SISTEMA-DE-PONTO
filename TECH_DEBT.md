@@ -450,6 +450,41 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — D6: cleanup `bonus_defaults` legacy (sub-fase 7.3)
+
+**Decisão D6 = C** (drop após validar callers — investigação prévia confirmou que `bonus_types` é fonte primária; `bonus_defaults` era fallback nunca disparado em prod).
+
+**Migration aplicada em prod:** `20260511170054_drop_bonus_defaults_legacy.sql` — `DROP TABLE IF EXISTS public.bonus_defaults`.
+
+**Validações reais executadas via MCP (padrão "validar tudo real"):**
+
+| # | Validação | Resultado |
+|---|---|---|
+| 1 | Dump completo de bonus_defaults pré-DROP | 3 rows Caratinga (B=15, C1=20, C2=15), 0 PN — salvo em `docs/bonus_defaults_legacy_dump_2026-05-11.json` |
+| 2 | bonus_types cobre AMBAS empresas com B/C1/C2 active | 6 rows totais, ambas empresas com B=15/C1=20/C2=15 — paridade com bonus_defaults confirmada |
+| 3 | Grep no projeto pra encontrar TODOS os callers de `bonus_defaults` (não só os 2 documentados) | Confirmados 2 callers únicos em `database.ts` + 1 smoke test |
+| 4 | Baseline pré-mudança: SELECT bonus_types pra Caratinga e PN | B=15/C1=20/C2=15 pra ambas (caminho primário do `getBonusDefaults`) |
+| 5 | Estado de bonus_defaults imediatamente antes do DROP | Inalterado desde dump (3 rows) |
+| 6 | Tabela realmente sumiu pós-DROP | `information_schema.tables` retornou vazio |
+| 7 | Comportamento idêntico pós-DROP via mesma query SQL | B=15/C1=20/C2=15 mantido pra ambas empresas |
+
+**Código alterado (`src/services/database.ts`):**
+- `getBonusDefaults` (L1502-1525) — removido bloco fallback bonus_defaults (15 linhas). Agora SÓ lê bonus_types.
+- `updateBonusDefault` (L1527-1551) — removido UPDATE legacy em bonus_defaults (12 linhas). Agora SÓ atualiza bonus_types.
+- Comentários atualizados explicitando descontinuação.
+
+**Smoke test removido:** `tests/17-bonus-complete.spec.ts:67-72` (`'valores padrão (bonus_defaults) podem ser lidos e usados'`) — substituído por comentário linkando à cobertura nova em specs 25/26 (isolamento por company_id).
+
+**Achado adicional NÃO relacionado:** spec 26 test 6 estava DESATUALIZADO (assumia PN com 0 users; dados em prod evoluíram — PN ganhou user '8888' admin em 2026-05-11 13:13 UTC). Refatorado pra ser robusto: busca counts reais do DB e valida (a) UI bate com count exato, (b) empresas têm counts distintos (isolamento de fato), (c) trocar empresa muda visualização. Spec 26 agora 9/9 estável.
+
+**Validação E2E final:**
+- `npx playwright test tests/04-bonus.spec.ts tests/17-bonus-complete.spec.ts --workers=1`: 10 passed, 2 skipped (esperado pelo 6.3/6.9)
+- `npx playwright test tests/25-multi-company-isolation.spec.ts --workers=1`: 13/13 passed
+- `npx playwright test tests/26-multi-company-ui-isolation.spec.ts --workers=1`: 9/9 passed
+- `npx vitest run` (suite full): 408 passed em 16 files
+
+---
+
 ### 2026-05-11 — 6.16: `admin_cleanup_config` UNIQUE + lazy-create (sub-fase 7.2 + 7.2.1)
 
 **Migrations aplicadas em prod:**
