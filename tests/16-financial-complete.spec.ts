@@ -142,10 +142,8 @@ test.describe('Financial — completo', () => {
     await createTestEmployee({ name: `${PREFIX}Cart`, employmentType: 'Carteira Assinada' });
 
     await goToTab(page, 'Financeiro');
-    const select = page.locator('select').filter({ hasText: /Diarista|Carteira/i }).first();
-    if (!(await select.isVisible().catch(() => false))) {
-      test.skip(true, 'Filtro employment_type não disponível');
-    }
+    const select = page.getByTestId('employment-type-filter');
+    await expect(select).toBeVisible({ timeout: 10_000 });
     await select.selectOption('Diarista');
     await page.waitForTimeout(500);
 

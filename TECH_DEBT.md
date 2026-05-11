@@ -182,8 +182,7 @@ if (!(await elem.isVisible().catch(() => false))) {
 
 **Severidade:** Baixa — cobertura E2E reduzida quando skip dispara.
 
-**Status:** **Parcialmente resolvido — sub-fase 9.1 removeu 7/9 skips via `data-testid`**. Restantes pendentes:
-- `tests/16-financial-complete.spec.ts:149` (filtro employment_type — seletor `hasText` em `<option>`) → sub-fase 9.2
+**Status:** **Parcialmente resolvido — sub-fases 9.1 + 9.2 removeram 8/9 skips via `data-testid`**. Restante:
 - `tests/07-financial.spec.ts:43` (Ver Detalhes — depende de pagamento existir) → sub-fase 9.3
 
 ---
@@ -341,6 +340,22 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.3 (parcial): filtro employment_type — seletor `hasText` em `<option>` (sub-fase 9.2)
+
+**Bug:** `tests/16-financial-complete.spec.ts:147` usava `page.locator('select').filter({ hasText: /Diarista|Carteira/i }).first()` — `hasText` filtra elementos cujo texto direto bate o regex, mas `<select>` não tem texto direto (texto fica em `<option>`-s aninhados, fora do contexto do filtro). Locator sempre falhava → `test.skip(true, 'Filtro employment_type não disponível')` disparava.
+
+**Fix:**
+- `src/components/common/EmploymentTypeFilter.tsx:30` ganhou `data-testid="employment-type-filter"` no `<select>`.
+- Spec: locator trocado por `page.getByTestId('employment-type-filter')` + `await expect(select).toBeVisible({ timeout: 10_000 })` substituindo o skip condicional.
+
+**Componente é compartilhado** (AttendanceTab, ErrorsTab, FinancialTab), mas em runtime só 1 tab é renderizada por vez → `getByTestId` retorna 1 elemento, sem ambiguidade.
+
+**Validações:**
+- `npx tsc --noEmit`: 0 erros
+- `npx playwright test tests/16-financial-complete.spec.ts --workers=1`: **8 passed, 2 skipped (Excel/PDF permanentes), 0 failed** (incluindo o teste alterado em 4.2s)
+
+---
 
 ### 2026-05-11 — 6.3/6.9 (parcial): 7 skips condicionais UI removidos via `data-testid` (sub-fase 9.1)
 
