@@ -254,6 +254,226 @@ npx playwright test --workers=1 --reporter=list
 
 ---
 
+## 📐 RACIONAL DAS DECISÕES (D1–D6) — INVIOLÁVEL
+
+> Estas decisões foram tomadas com base em investigação real + dados de prod + conversa com Victor. **Reabrir uma decisão exige confirmação explícita.** Se o próximo Claude precisar tomar decisão SIMILAR em código novo (ex: tratamento de débito noturno), seguir a coerência destas decisões.
+
+### ✅ D1 — Mapeamento `nighttime_minutes → nightCreditMinutes` = **C (diurno primeiro)** (resolvida sub-fase 8.3, commit `e70da28`)
+
+**Fórmula validada com 5 samples reais de Caratinga via SQL antes de implementar:**
+
+```
+Por attendance:
+  daytime_extra  = max(0, daytime_minutes - expected_minutes)
+  nightCreditDay = max(0, bank_credit_minutes - daytime_extra)
+Total: sum nightCreditDay sobre todas attendances do range
+nightDebitMinutes = 0 sempre (conservador)
+```
+
+**Por que C e não A (proporcional) ou B (noturno primeiro):**
+- C é interpretação CLT mais comum: expected é "consumido" primeiro pelas horas diurnas; sobra noturna é a hora extra.
+- Favorável ao funcionário (sobra noturna ganha multiplier mais agressivamente).
+- Simples de auditar dia-a-dia (cálculo por linha, não por agregado).
+- A (proporcional) é matematicamente mais "justo" mas estranho de explicar ao funcionário ("você recebeu 87.3% do extra noturno proporcional").
+- B (noturno primeiro) é conservador pra empresa, complica com `is_absent_compensated`.
+
+**Caveat conhecido:** `nightDebitMinutes = 0` sempre (decisão pragmática). Se débito noturno virar caso real (ex: empresa cobra do funcionário por horas faltantes diferenciando dia/noite), revisitar. Hoje todo débito é tratado como diurno.
+
+### ✅ D2 — `admin_cleanup_config` strategy = **ES (estrutural)** (resolvida sub-fase 7.2 + 7.2.1, commits `19a72f3` + `0840f9c`)
+
+**Por que ES e não OP (operacional cadastro manual):**
+- Sistema é multi-tenant. OP exigiria INSERT manual a cada nova empresa.
+- ES (UNIQUE constraint + lazy-create via upsert) escala automaticamente.
+- Plus: descoberto bug latente em 7.2 — `id` PK com default `'default'` impedia INSERT pra novas empresas (PK collision). Fix em 7.2.1: `ALTER COLUMN id SET DEFAULT gen_random_uuid()::text`. Caratinga preserva `id='default'` legado, PN ganha UUID auto.
+
+### ✅ D5 — `error_logs` ADD `company_id` = **A (sim, adicionar)** (resolvida sub-fase 7.4, commit `b2a1bbb`)
+
+**Por que A:**
+- Auditoria por empresa é requisito de produção multi-tenant.
+- Coluna NULLABLE pra cobrir erros pré-login (sem contexto de empresa).
+- FK `ON DELETE SET NULL` preserva logs históricos se empresa for removida.
+- Index criado pra queries filtradas (`idx_error_logs_company_id`).
+
+### ✅ D6 — `bonus_defaults` legacy = **C (drop após validar callers)** (resolvida sub-fase 7.3, commit `73d7649`)
+
+**Por que C e não B (manter convivendo):**
+- Investigação anterior confirmou que `bonus_types` é fonte primária. Fallback `bonus_defaults` nunca disparado em prod (Caratinga em bonus_types tem mesmos valores).
+- C foi escolhida em vez de A (drop direto) pra preservar audit trail: dump completo salvo em `docs/bonus_defaults_legacy_dump_2026-05-11.json` antes do DROP TABLE.
+
+### ⚠️ D3 — RLS strategy = **PENDENTE** (bloqueia toda Fase 11)
+
+**3 opções abertas:**
+- **A (status quo):** Continuar sem RLS, usar tabela `users` plain + validações app-level. **Não traz benefício real** — anon key continua acessível.
+- **B (Supabase Auth nativo):** Migrar pra `auth.users`, JWT com custom claim `company_id`, policies usam `auth.jwt() ->> 'company_id'`. **Refactor pesado** mas canônico.
+- **C (Sessão custom + SECURITY DEFINER):** Função `current_company_id()` que lê `current_setting('app.current_company_id')`. Edge fn `set_company_context` seta na sessão pós-login. **Meio-termo viável** mantendo schema atual.
+
+**Recomendação do plano:** **C** (mais leve que B, mantém schema). Mas é decisão estrutural — Victor confirma antes da Fase 11.
+
+### ⚠️ D4 — Hash de senhas = **PENDENTE** (bloqueia sub-fase 11.3)
+
+**3 opções:**
+- **A (bcryptjs cliente):** Lento, expõe lógica. Não recomendado.
+- **B (edge fn `auth-login`):** Edge fn nova `auth-login` recebe `{id, password}`, faz `bcrypt.compare(password, password_hash)` no Deno, retorna JWT custom. **Recomendado.**
+- **C (ambos):** Excessivo.
+
+**Recomendação:** **B**. Migração de schema: `ALTER TABLE users ADD COLUMN password_hash` → script bcrypt hashing das senhas plain em prod → `DROP COLUMN password`. Destrutivo, exige backup obrigatório antes.
+
+---
+
+## 🧪 PATTERN CANÔNICO DE "VALIDAÇÃO REAL" (exemplo completo)
+
+> Replicar este pattern em CADA sub-fase. Não é opcional. Foi o que pegou o bug latente em 7.2.1 que `tsc + lint + vitest + 38 unit tests` deixaram passar.
+
+**Caso de referência: sub-fase 7.4 (`error_logs` ADD `company_id`)**
+
+### Step 1 — Pre-check via MCP (ANTES de codar nada)
+
+```sql
+-- 1.1 Schema atual da tabela alvo
+SELECT column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'error_logs'
+ORDER BY ordinal_position;
+-- → Confirmou SEM company_id (17 colunas existentes)
+
+-- 1.2 Estado dos dados (pra saber se precisa backfill)
+SELECT count(*) FROM error_logs;
+-- → 0 rows. Sem backfill. Migration simples.
+```
+
+### Step 2 — Grep callers no código
+
+```bash
+grep -rn "error_logs\|errorLogs\|captureError\|logError" /home/victor/SISTEMA-DE-PONTO/src --include="*.ts" --include="*.tsx"
+# → Confirmou: errorTracking.ts (service, 16+ refs internos) + ErrorBoundary.tsx (1 caller).
+# → NENHUM outro caller. Surface area do refactor mapeado.
+```
+
+### Step 3 — Apply migration via MCP
+
+```sql
+ALTER TABLE public.error_logs
+  ADD COLUMN company_id uuid REFERENCES public.companies(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_error_logs_company_id ON public.error_logs(company_id);
+```
+
+### Step 4 — Post-check via MCP (CONFIRMAR efeito real)
+
+```sql
+-- 4.1 Schema novo
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema='public' AND table_name='error_logs' AND column_name='company_id';
+-- → company_id, uuid, YES (nullable correto)
+
+-- 4.2 FK criada
+SELECT conname, contype FROM pg_constraint
+WHERE conrelid = 'public.error_logs'::regclass AND contype = 'f';
+-- → error_logs_company_id_fkey (contype='f') ✓
+
+-- 4.3 Index ativo
+SELECT indexname, indexdef FROM pg_indexes WHERE tablename='error_logs';
+-- → idx_error_logs_company_id BTREE confirmado
+```
+
+### Step 5 — Code change (TS)
+
+Alterar `src/services/errorTracking.ts` + `src/components/common/ErrorBoundary.tsx` pra propagar `companyId`.
+
+### Step 6 — Validation E2E REAL via MCP (não só vitest)
+
+```sql
+-- 6.1 INSERT real simulando o que captureError do app faria — 3 cenários distintos
+INSERT INTO error_logs (user_id, company_id, error_type, severity, message, component, module, ...)
+VALUES
+  ('9999', '<caratinga_id>', 'js_error', 'high', 'PW Test Caratinga', ...),
+  ('8888', '<pn_id>', 'api_error', 'medium', 'PW Test PN', ...),
+  (NULL, NULL, 'js_error', 'low', 'PW Test pré-login', ...);
+
+-- 6.2 SELECT filtrado confirma isolamento por company_id
+SELECT
+  CASE WHEN company_id = '<caratinga_id>' THEN 'Caratinga'
+       WHEN company_id = '<pn_id>' THEN 'PN'
+       ELSE 'NULL' END AS empresa,
+  count(*) FROM error_logs GROUP BY 1;
+-- → Caratinga: 1, PN: 1, NULL: 1 ✓ ISOLAMENTO REAL
+```
+
+### Step 7 — Cleanup (RESTAURAR estado prod)
+
+```sql
+DELETE FROM error_logs WHERE message LIKE 'PW Test %';
+SELECT count(*) FROM error_logs;
+-- → 0 (estado prod restaurado)
+```
+
+### Step 8 — Rodar tsc + vitest + spec E2E relacionada
+
+(Apenas como CONFIRMAÇÃO adicional. Não substitui validação real acima.)
+
+### Step 9 — Atualizar TECH_DEBT.md + Commit local + Reportar pro Victor
+
+---
+
+## 🕳️ GAPS CONHECIDOS NÃO RESOLVIDOS (não fingir que está perfeito)
+
+> O próximo Claude DEVE saber dessas pendências. Se Victor perguntar "bug X tá resolvido?", a resposta honesta vem daqui.
+
+### 6.23 — `validatePixKey` em c6Export não normaliza CPF/CNPJ formatado
+
+- **Status:** Documentado no TECH_DEBT, FIX PENDENTE.
+- **Localização:** `src/utils/c6Export.ts:32-48`
+- **Problema:** `cleanKey = pixKey.replace(/[^\w@.-]/g, '')` mantém pontos/hífens. CPF `'123.456.789-01'` (formato comum de exibição) não bate `/^\d{11}$/` → marcado como `VERIFICAR` na planilha C6.
+- **Impacto:** Admin pode confundir status. Funcionário com PIX formatado fica "marcado errado" mas planilha ainda exporta.
+- **Fix sugerido inline no TECH_DEBT (trivial, ~3 linhas).**
+- **Por que não foi feito agora:** Exige coordenação com cadastros existentes — alguns funcionários hoje têm PIX formatado e contam como VERIFICAR; o fix vai converter status pra OK retroativamente.
+
+### 6.22 (parcial) — 3 tabs com cleanup cross-empresa PENDENTE
+
+- **Status:** Audit completo (sub-fase 5.5). EmployeesTab resolvido (5.6).
+- **Pendente Severidade Alta:**
+  - `AttendanceTab.tsx`: `selectedEmployees: Set<string>`, `exitTimes`, `manualTimes`, `bonusAmounts`, `applyingBonus`, `employeeToReset`, `bonusTypeToRemove`
+  - `FinancialTab.tsx`: `selectedEmployees: Set<string>`, `editingPayment: {employeeId, date}`, `editValues`, `selectedPeriodId`
+  - `DataManagementTab.tsx`: `selectedEmployee: string` (id), wizard state
+- **Padrão de fix:** Idêntico ao 5.4/5.6 — 2º `useEffect([company?.id])` que zera estados ID-based.
+- **Por que não foi feito:** Escopo da Fase 5 fechado em 5.6 (1 tab por sub-fase). Cada tab vira sub-fase futura (5.7, 5.8, 5.9).
+
+### `nightDebitMinutes = 0` (decisão técnica conservadora, NÃO bug)
+
+- **Onde:** `src/services/database.ts` helper `_sumBankBalanceWithNight` (sub-fase 8.3).
+- **Decisão:** Todo débito tratado como diurno, sem multiplier noturno aplicado.
+- **Implicação:** Funcionário com débito noturno é cobrado SEM o multiplier negativo. Favorece funcionário (conservador).
+- **Quando virar problema:** Se Caratinga/PN começar a configurar `bank_hours_night_separate=true` + diferenciação de débito noturno. Hoje não.
+- **Fix se necessário:** Implementar lógica simétrica ao credit ("diurno primeiro consome expected pelo débito"). Cuidado com `is_absent_compensated`.
+
+### Edge fn fail-path real NÃO testado (sub-fase 8.4 limitação reconhecida)
+
+- **O que falta:** Validar que `logEdgeError` EFETIVAMENTE persiste em `error_logs` quando um write FALHA de verdade.
+- **Por que difícil:** Em prod atual (sem RLS, FKs validadas pré-write), não há como forçar falha sem mexer em dados.
+- **Mitigação:** Cobertura via mock supabase no Deno seria 100% mas exige refactor de testes Deno (atualmente E2E só cobre Node).
+- **Risco real:** Baixo. logEdgeError é simples (insert + try/catch). Probabilidade de bug não-detectado é mínima.
+
+### `_calcPreviewFromBatch` não é unit-testado isoladamente
+
+- **O que existe:** 8 testes em `applyBankHoursToPayment.spec.ts` exercitam o flow batch via `previewBankHoursForPeriod`.
+- **O que falta:** Testes UNIT da função pura `_calcPreviewFromBatch` (que recebe inputs e retorna `_PreviewInternalResult`).
+- **Por que adequado:** A função é interna (`_` prefix), não exportada. Cobertura via flow externo é suficiente.
+- **Quando virar problema:** Se a função for extraída pra módulo separado e usada em mais lugares. Aí vira candidata a unit isolado.
+
+### mirrorPdf — layout visual real NÃO validado
+
+- **O que existe:** `mirrorPdf.spec.ts` (48 mocks) + `mirrorPdf.real.spec.ts` (15 testes binários reais — PDF header, EOF, contagem de páginas via regex em bytes).
+- **O que falta:** Validar layout VISUAL real (posições x/y de elementos, sobreposições, quebras de página).
+- **Por que difícil:** jspdf comprime streams via zlib — texto literal não aparece como ASCII nos bytes. Validar precisa pdf-parse ou pdfjs-dist como dev dep.
+- **Mitigação:** Validação manual via `_generateTestSampleData` salvando PDF em disco e abrindo. Spec real garante estrutura básica (válido + N páginas + tamanho aceitável).
+
+### Spec 26 test 6 — REFATORADO (não é o original 3.4)
+
+- **Cuidado:** Se rodar full E2E suite e Spec 26 falhar inesperado, NÃO assumir regressão. O teste 6 foi refatorado na sub-fase 7.3 pra ser ROBUSTO a counts variáveis. Lê counts de Caratinga e PN do DB e adapta a assertion.
+- **Implicação:** Se PN ganhar/perder users entre runs, spec continua passando. Mas se a SEMÂNTICA de isolamento mudar (ex: PN começar a ver users de Caratinga), spec falha — aí é regressão real.
+
+---
+
 ## ⚠️ AVISOS IMPORTANTES PRA PRÓXIMA SESSÃO
 
 1. **Spec 26 test 6** foi refatorado na sub-fase 7.3 pra ser robusto a counts de users distintos (PN agora tem user 8888 admin). Se novos users forem criados em qualquer empresa, o spec se adapta sozinho.
