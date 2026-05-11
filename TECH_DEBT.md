@@ -282,6 +282,41 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — Cobertura E2E nova: EmployeeErrorsPage state machine (sub-fase 10.6)
+
+**Arquivo novo:** `tests/36-employee-errors-page.spec.ts` — 8 testes cobrindo as transições do state machine `cpf → company-select | pin | error → dashboard` em `src/components/employee-clock/EmployeeErrorsPage.tsx` (295 lin).
+
+**Cobertura complementar:** sub-fase 10.1 (`tests/31`) cobriu o caminho feliz (cpf→pin→dashboard) + CPF inexistente + PIN errado. Esta sub-fase foca nas TRANSIÇÕES de estado:
+
+| # | Cenário | Asserção |
+|---|---|---|
+| 1 | CPF < 11 dígitos | botão "Continuar" disabled, habilita em 11 |
+| 2 | Mask de CPF | "12345678901" → "123.456.789-01" (auto) |
+| 3 | CPF compartilhado entre CT+PN | step "company-select" mostra ambas |
+| 4 | Click empresa → step "pin" | placeholder "••••" visível + saudação "Olá," |
+| 5 | "Voltar" do company-select | step "cpf"; cpfInput PRESERVADO (descoberta: `goBackToCpf` não reseta input, só `handleLogout` do dashboard reseta) |
+| 6 | "Voltar" do PIN | step "cpf"; cpfInput preservado |
+| 7 | PIN < 4 dígitos | botão "Entrar" disabled |
+| 8 | Funcionário sem pin_configured | step "error" com "PIN não configurado" |
+
+**Lição comportamental documentada:** `goBackToCpf` (linha 125-130 do EmployeeErrorsPage.tsx) NÃO reseta `cpfInput` — só `setEmployee/setPin/setAvailableCompanies/setStep`. Comportamento intencional pra permitir edição rápida do CPF errado sem digitar de novo. Apenas `handleLogout` (do dashboard) faz `setCpfInput('')`.
+
+**Fixture cross-empresa:** SHARED_CPF `99988877766` inserido em CT + PN via INSERT direto (não via `createTestEmployee` que gera CPF random). Cleanup `cleanupSharedCpf()` por `delete where cpf=...`. UNIQUE(cpf, company_id) permite mesmo CPF em empresas distintas (sub-fase 6.5).
+
+**Validação real pós-test via MCP:**
+```sql
+SELECT
+  (SELECT count(*) FROM employees WHERE name LIKE 'PW Test EmpErrPage%') AS prefix_residue,
+  (SELECT count(*) FROM employees WHERE cpf='99988877766') AS shared_cpf_residue;
+-- Resultado: 0, 0 (estado prod preservado)
+```
+
+**Validações:**
+- `npx tsc --noEmit`: 0 erros
+- `npx playwright test tests/36-employee-errors-page.spec.ts --workers=1`: **8 passed em ~25s**, 0 failed
+
+---
+
 ### 2026-05-11 — Cobertura E2E nova: MirrorMassDialog (sub-fase 10.5)
 
 **Arquivo novo:** `tests/35-mirror-mass-dialog.spec.ts` — 8 testes cobrindo `src/components/attendance/MirrorMassDialog.tsx` (307 lin), modal lazy-loaded acessível via botão "Gerar espelhos" em AttendanceTab (visível pra quem tem `attendance.generateMassMirror`).
