@@ -4777,63 +4777,37 @@ export async function applyBankHoursToPayment(args: {
       throw new Error('Estado inconsistente em preview pending');
     }
 
-    const nowIso = new Date().toISOString();
-
-    const { error: updateErr } = await supabase
-      .from('payments')
-      .update({
-        bank_hours_amount: result.amountNet,
-        bank_hours_minutes: netMinutes,
-        bank_hours_applied_at: nowIso,
-        total: paymentAfter,
-        updated_at: nowIso,
-      })
-      .eq('id', paymentRow.id);
-    if (updateErr) throw updateErr;
-
-    // Log de auditoria — falha aqui não rollbacka (best-effort).
-    let logId: string | undefined;
-    const { data: logRow, error: logErr } = await supabase
-      .from('bank_hours_application_log')
-      .insert({
-        company_id: company.id,
-        employee_id: employeeId,
-        payment_period_id: paymentPeriodId,
-        applied_by: supervisorId,
-        bank_credit_minutes: creditMinutes,
-        bank_debit_minutes: debitMinutes,
-        net_balance_minutes: netMinutes,
-        formula_used: result.formulaUsed,
-        hour_value_used: result.hourValueUsed,
-        extra_multiplier_used:
-          settings.bank_hours_formula === 'hour_extra_multiplier'
-            ? settings.bank_hours_extra_multiplier
-            : null,
-        amount_credit: result.amountCredit,
-        amount_debit: result.amountDebit,
-        amount_net: result.amountNet,
-        payment_total_before: paymentBefore,
-        payment_total_after: paymentAfter,
-      })
-      .select('id')
-      .single();
-    if (logErr) {
-      console.error('[applyBankHoursToPayment] log insert falhou:', logErr);
-    } else {
-      logId = (logRow as { id: string } | null)?.id;
-    }
-
-    if (settings.bank_hours_after_apply === 'zero_balance') {
-      const { error: zeroErr } = await supabase
-        .from('attendance')
-        .update({ bank_credit_minutes: 0, bank_debit_minutes: 0 })
-        .eq('employee_id', employeeId)
-        .gte('date', rangeStart)
-        .lte('date', rangeEnd);
-      if (zeroErr) {
-        console.error('[applyBankHoursToPayment] zero balance update falhou:', zeroErr);
-      }
-    }
+    // Sub-fase 8.5 (TECH_DEBT 6.8): as 3 ops anteriores (UPDATE payment +
+    // INSERT log + UPDATE attendance zero_balance) viraram uma única RPC
+    // transacional `apply_bank_hours_to_payment` no Postgres. Falha em
+    // qualquer step faz ROLLBACK completo (atômico).
+    const { data: logIdRet, error: rpcErr } = await supabase.rpc('apply_bank_hours_to_payment', {
+      p_payment_id: paymentRow.id,
+      p_employee_id: employeeId,
+      p_company_id: company.id,
+      p_payment_period_id: paymentPeriodId,
+      p_supervisor_id: supervisorId,
+      p_bank_hours_amount: result.amountNet,
+      p_bank_hours_minutes: netMinutes,
+      p_total_after: paymentAfter,
+      p_credit_minutes: creditMinutes,
+      p_debit_minutes: debitMinutes,
+      p_net_minutes: netMinutes,
+      p_formula_used: result.formulaUsed,
+      p_hour_value: result.hourValueUsed,
+      p_extra_multiplier: settings.bank_hours_formula === 'hour_extra_multiplier'
+        ? settings.bank_hours_extra_multiplier
+        : null,
+      p_amount_credit: result.amountCredit,
+      p_amount_debit: result.amountDebit,
+      p_amount_net: result.amountNet,
+      p_total_before: paymentBefore,
+      p_zero_balance: settings.bank_hours_after_apply === 'zero_balance',
+      p_range_start: rangeStart,
+      p_range_end: rangeEnd,
+    });
+    if (rpcErr) throw rpcErr;
+    const logId = (logIdRet as string | null) ?? undefined;
 
     return {
       success: true,
@@ -4845,11 +4819,18 @@ export async function applyBankHoursToPayment(args: {
       logId,
     };
   } catch (err) {
+    // Supabase errors são plain objects com `.message` — não instanceof Error.
+    // Sub-fase 8.5: refinado pra capturar Supabase RPC error messages.
+    const errorMessage = err instanceof Error
+      ? err.message
+      : (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message: unknown }).message === 'string')
+        ? (err as { message: string }).message
+        : String(err);
     return {
       success: false,
       applied: false,
       skipped: false,
-      errorMessage: err instanceof Error ? err.message : String(err),
+      errorMessage,
     };
   }
 }

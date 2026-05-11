@@ -19,8 +19,12 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // vi.hoisted garante que `mockSupabase` exista antes do `vi.mock` factory
 // rodar (mocks são içados pro topo do módulo pelo vitest).
+// Sub-fase 8.5: `rpc` mockado pra cobrir apply_bank_hours_to_payment.
 const { mockSupabase } = vi.hoisted(() => ({
-  mockSupabase: { from: vi.fn() as unknown as ReturnType<typeof vi.fn> },
+  mockSupabase: {
+    from: vi.fn() as unknown as ReturnType<typeof vi.fn>,
+    rpc: vi.fn() as unknown as ReturnType<typeof vi.fn>,
+  },
 }));
 
 vi.mock('../../src/lib/supabase', () => ({ supabase: mockSupabase }));
@@ -63,6 +67,10 @@ function chainable(response: SupabaseResponse) {
  * Configura `mockSupabase.from(table)` pra retornar a próxima resposta da
  * fila daquela tabela (FIFO). Útil pra distinguir SELECT vs UPDATE quando
  * a mesma tabela é tocada múltiplas vezes na mesma execução.
+ *
+ * Sub-fase 8.5: adicionado `rpc` opcional pra cobrir `supabase.rpc(...)`.
+ * Default: rpc retorna `{ data: 'log-id-mock', error: null }`. Override via
+ * chave especial `__rpc__` no queueByTable.
  */
 function setupSupabaseQueue(queueByTable: Record<string, SupabaseResponse[]>) {
   const indices: Record<string, number> = {};
@@ -74,6 +82,17 @@ function setupSupabaseQueue(queueByTable: Record<string, SupabaseResponse[]>) {
     return chainable(response);
   });
   mockSupabase.from = fromMock as any;
+
+  // Mock da RPC apply_bank_hours_to_payment (sub-fase 8.5).
+  // Override via __rpc__ no queueByTable; default: sucesso com log_id mock.
+  const rpcQueue = queueByTable.__rpc__ ?? [{ data: 'log-rpc-mock', error: null }];
+  let rpcIdx = 0;
+  mockSupabase.rpc = vi.fn(() => {
+    const res = rpcQueue[rpcIdx] ?? { data: 'log-rpc-mock', error: null };
+    rpcIdx++;
+    return Promise.resolve(res);
+  }) as any;
+
   return fromMock;
 }
 
@@ -198,21 +217,15 @@ describe('applyBankHoursToPayment', () => {
     expect(r.paymentAfter).toBe(1000);
   });
 
-  it('6. crédito 2h dailyRate 100 (daily_div_8) → amountNet=25, payment +25, log criado', async () => {
+  it('6. crédito 2h dailyRate 100 (daily_div_8) → amountNet=25, payment +25, log criado via RPC', async () => {
     const company = fixtureCompany();
     setupSupabaseQueue({
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
-        { data: paymentRow(), error: null },
-        { data: null, error: null },
-      ],
-      attendance: [
-        { data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null },
-        { data: null, error: null },
-      ],
-      bank_hours_application_log: [{ data: { id: 'log-1' }, error: null }],
+      payments: [{ data: paymentRow(), error: null }],
+      attendance: [{ data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
+      __rpc__: [{ data: 'log-1', error: null }], // RPC retorna o log_id
     });
     const r = await applyBankHoursToPayment(ARGS);
     expect(r.success).toBe(true);
@@ -222,6 +235,9 @@ describe('applyBankHoursToPayment', () => {
     expect(r.paymentBefore).toBe(1000);
     expect(r.paymentAfter).toBe(1025);
     expect(r.logId).toBe('log-1');
+    // Sub-fase 8.5: RPC chamada 1× (substitui 3 ops anteriores)
+    expect(mockSupabase.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('apply_bank_hours_to_payment', expect.any(Object));
   });
 
   it('7. débito 1h dailyRate 100 → amountNet=-12.50, payment subtraído', async () => {
@@ -319,25 +335,23 @@ describe('applyBankHoursToPayment', () => {
     expect(r.result?.amountNet).toBe(25);
   });
 
-  it('12. after_apply=zero_balance → attendance UPDATE chamado (2 calls: SELECT + UPDATE)', async () => {
+  it('12. after_apply=zero_balance → RPC chamada com p_zero_balance=true', async () => {
+    // Sub-fase 8.5: o UPDATE attendance virou parte da RPC transacional.
+    // Validamos via parâmetro p_zero_balance passado à RPC.
     const company = fixtureCompany({ bank_hours_after_apply: 'zero_balance' });
-    const fromMock = setupSupabaseQueue({
+    setupSupabaseQueue({
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
-        { data: paymentRow(), error: null },
-        { data: null, error: null },
-      ],
-      attendance: [
-        { data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null },
-        { data: null, error: null },
-      ],
-      bank_hours_application_log: [{ data: { id: 'log-1' }, error: null }],
+      payments: [{ data: paymentRow(), error: null }],
+      attendance: [{ data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
     });
     await applyBankHoursToPayment(ARGS);
-    const attCalls = fromMock.mock.calls.filter((c) => c[0] === 'attendance');
-    expect(attCalls.length).toBe(2);
+    expect(mockSupabase.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSupabase.rpc).toHaveBeenCalledWith(
+      'apply_bank_hours_to_payment',
+      expect.objectContaining({ p_zero_balance: true }),
+    );
   });
 
   it('13. after_apply=keep_history → attendance só SELECT (sem UPDATE)', async () => {
@@ -457,27 +471,28 @@ describe('applyBankHoursToPayment', () => {
     expect(r.reason).toBe('no_payment_in_period');
   });
 
-  it('19. log insert falha NÃO rollbacka payment update (estado: aplicado, log ausente)', async () => {
+  it('19. RPC falha → rollback ATÔMICO (success=false, applied=false). Sub-fase 8.5 inverte comportamento de pré-fix (que deixava payment "aplicado" + log faltando).', async () => {
+    // Sub-fase 8.5: as 3 ops anteriores (UPDATE payment, INSERT log,
+    // UPDATE attendance) viraram uma RPC atômica. Falha em qualquer
+    // step faz ROLLBACK completo no Postgres. O caller recebe error
+    // do supabase.rpc(), o try/catch externo captura e retorna
+    // success=false + errorMessage. NADA é persistido — payment
+    // permanece sem bank_hours_applied_at.
     const company = fixtureCompany();
     setupSupabaseQueue({
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
-        { data: paymentRow(), error: null },
-        { data: null, error: null },
-      ],
-      attendance: [
-        { data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null },
-        { data: null, error: null },
-      ],
-      bank_hours_application_log: [{ data: null, error: { message: 'log insert failed' } }],
+      payments: [{ data: paymentRow(), error: null }],
+      attendance: [{ data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
+      __rpc__: [{ data: null, error: { message: 'simulated INSERT log failure inside RPC' } }],
     });
     const r = await applyBankHoursToPayment(ARGS);
-    expect(r.success).toBe(true);
-    expect(r.applied).toBe(true);
+    expect(r.success).toBe(false);
+    expect(r.applied).toBe(false);
+    expect(r.errorMessage).toMatch(/simulated INSERT log failure/);
+    // logId não definido (RPC abortou)
     expect(r.logId).toBeUndefined();
-    expect(r.paymentAfter).toBe(1025);
   });
 });
 
@@ -860,11 +875,20 @@ describe('Edge cases extremos - Combo I', () => {
     expect(rZB.applied).toBe(true);
     expect(rKH.applied).toBe(true);
 
-    // Diferença ÚNICA: zero_balance chama attendance.update (2 calls); keep_history não (1 call)
+    // Sub-fase 8.5: o UPDATE attendance virou parte da RPC. setupSupabaseQueue
+    // SUBSTITUI o mock de rpc a cada chamada, então o histórico do 1º run é
+    // perdido após setup do 2º. Validamos o estado atual do mock após o 2º:
+    // 1 chamada total no mock atual, com p_zero_balance=false (run KH).
+    expect(mockSupabase.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSupabase.rpc).toHaveBeenCalledWith(
+      'apply_bank_hours_to_payment',
+      expect.objectContaining({ p_zero_balance: false }),
+    );
+    // attendance ainda é tocada 1× em ambos (SELECT no fetch pre-RPC)
     const zbAttCalls = fromMockZB.mock.calls.filter((c) => c[0] === 'attendance').length;
     const khAttCalls = fromMockKH.mock.calls.filter((c) => c[0] === 'attendance').length;
-    expect(zbAttCalls).toBe(2); // SELECT + UPDATE
-    expect(khAttCalls).toBe(1); // só SELECT
+    expect(zbAttCalls).toBe(1);
+    expect(khAttCalls).toBe(1);
   });
 
   // === GRUPO D: Robustez ===

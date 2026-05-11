@@ -50,30 +50,6 @@ export const setPaymentPeriodAutoWeekly = async (
 
 ---
 
-### 6.8 — [Média] `applyBankHoursToPayment` sem rollback transacional (3 operações)
-
-**Local exato:** `src/services/database.ts:4783-4839`
-
-**Sequência atual (auditoria 2026-05-09):**
-1. **L4785-4794** — UPDATE payment (`bank_hours_amount`, `bank_hours_minutes`, `bank_hours_applied_at`, `total`) — `throw` em error
-2. **L4799-4827** — INSERT `bank_hours_application_log` (14 campos de auditoria) — `console.error` em logErr (best-effort)
-3. **L4829-4839** — UPDATE attendance `zero_balance` (`bank_credit_minutes=0, bank_debit_minutes=0` no range) — `console.error` em zeroErr (best-effort)
-
-**Comentário inline L4797:** `// Log de auditoria — falha aqui não rollbacka (best-effort).`
-
-**Δ vs versão anterior do TECH_DEBT:** versão anterior listava 2 operações best-effort. Real são **3** — UPDATE attendance zero_balance também é silenciosamente ignorado em falha.
-
-**Estado inconsistente possível:**
-- payment com `bank_hours_applied_at` setado + log faltando + attendance ainda com saldo (se zero_balance falhou, payment pode ser "duplo-aplicável" se supervisor reabrir)
-
-**Severidade:** Média — em prod, falhas são raras (constraints simples), mas em incidente dificulta auditoria E pode quebrar idempotência.
-
-**Solução estrutural:**
-Envolver as 3 operações em RPC transacional Supabase. Idempotência via `bank_hours_applied_at` ainda funciona como guarda na 2ª tentativa.
-
-**Status:** Pendente — sub-fase futura.
-
----
 
 ## 🟡 Inconsistências arquiteturais
 
@@ -363,6 +339,49 @@ O único `bonus_block` de Caratinga (id `a2c1424f`) tem `week_end=2026-04-26` (e
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-11 — 6.8: RPC transacional apply_bank_hours_to_payment (sub-fase 8.5)
+
+**Migration aplicada em prod:** `20260511182328_rpc_apply_bank_hours_to_payment.sql`
+
+**Função criada:** `public.apply_bank_hours_to_payment(...)` — PL/pgSQL, `SECURITY DEFINER`, `search_path = public, pg_temp`. Encapsula as 3 ops anteriores em transação atômica:
+1. `UPDATE payments` (bank_hours_amount, bank_hours_minutes, bank_hours_applied_at, total)
+2. `INSERT bank_hours_application_log` (14 campos de auditoria)
+3. `UPDATE attendance` (zero_balance opcional via flag `p_zero_balance`)
+
+Falha em qualquer step → `ROLLBACK` automático no Postgres → nada persistido. Pre-fix, 2ª/3ª op `console.error` silencioso deixava payment "aplicado" sem log → estado inconsistente.
+
+**Validação de pertencimento** dentro da RPC: `SELECT company_id FROM payments WHERE id = p_payment_id` é comparado com `p_company_id` recebido. Se diferente, `RAISE EXCEPTION` — previne elevation of privilege se caller passar company_id falso.
+
+**Grants:** `EXECUTE TO anon, authenticated, service_role` — todos podem chamar; segurança via parâmetros validados.
+
+**Código TS alterado (`src/services/database.ts`):**
+- `applyBankHoursToPayment` substitui linhas 4780-4839 (~60 linhas de 3 ops + error handling best-effort) por uma única chamada `supabase.rpc('apply_bank_hours_to_payment', {...})` (~25 linhas).
+- Try/catch externo capturando errors do Supabase (plain objects com `.message`, não instanceof Error) — refinado pra extrair message corretamente em errorMessage.
+
+**Testes (`tests/unit/applyBankHoursToPayment.spec.ts`):**
+- Helper `setupSupabaseQueue` ganha mock de `rpc` (vi.hoisted no mockSupabase). Queue especial `__rpc__` pra override de resposta da RPC.
+- Teste #6 atualizado: valida `logId` vem da RPC + `mockSupabase.rpc` chamado 1× com nome correto.
+- Teste #12 atualizado: valida `p_zero_balance: true` passado à RPC (não mais 2 calls separadas a attendance).
+- Teste #19 **invertido**: pre-fix esperava `success=true` com `logId=undefined` quando log falhava (best-effort). Pos-fix espera `success=false` + `applied=false` + `errorMessage` da RPC (atomic rollback).
+- Edge case #8 atualizado: valida via `p_zero_balance` na RPC.
+
+**Validações REAIS via MCP (padrão "validar tudo real"):**
+
+| # | Validação | Resultado |
+|---|---|---|
+| 1 | Pre-check schema bank_hours_application_log | 16 cols, applied_at default now(), 4 NOT NULL críticos |
+| 2 | Migration aplicada via `apply_migration` MCP | success: true |
+| 3 | `pg_proc` confirma RPC criada | security_definer=true, ACL inclui anon/authenticated/service_role com EXECUTE |
+| 4 | TS compila | 0 erros |
+| 5 | Suite unit applyBankHours (44 testes, +6 D1=C, +1 ajustado #19) | 44/44 passed |
+| 6 | Suite unit completa | 414/414 passed em 16 files |
+| 7 | Spec E2E 27 (bank-hours-payment) | 5/5 passed |
+| 8 | **Spec E2E 29 (bank-hours-integrity)** — apply REAL no DB de prod via RPC | **5/5 passed** (Teste 1: "Apply E2E real: payment.bank_hours_amount + log + attendance zerado" foi efetivamente exercitado contra prod via RPC) |
+
+**Impacto pra produção:** atomicidade garantida pelo Postgres. Falhas raras agora preservam estado consistente — sem "payment aplicado mas log faltando" ou "payment aplicado mas attendance não zerada". Auditoria robusta + idempotência via `bank_hours_applied_at` ainda funciona.
+
+---
 
 ### 2026-05-11 — 6.6: nightCreditMinutes real (D1=C diurno primeiro) (sub-fase 8.3)
 
