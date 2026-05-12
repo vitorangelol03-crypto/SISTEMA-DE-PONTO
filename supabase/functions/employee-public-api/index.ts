@@ -20,6 +20,7 @@
 //   save-face                { employeeId, photoUrl, descriptor } → { ok: true }
 //   log-face-attempt         { employeeId, success, confidence, clockType, companyId } → { ok: true }
 //   employee-errors-by-period { employeeId, periodId, companyId } → { period, individual_errors, triage_errors, total_individual, total_triage }
+//   employee-error-periods    { employeeId, companyId } → { periods: Array<{ period, has_errors, total_errors }> }
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -336,6 +337,53 @@ async function employeeErrorsByPeriod(body: Body): Promise<Response> {
   });
 }
 
+async function employeeErrorPeriods(body: Body): Promise<Response> {
+  const employeeId = String(body.employeeId ?? '').trim();
+  const companyId = String(body.companyId ?? '').trim();
+  if (!employeeId || !companyId) return json({ error: 'Invalid employeeId or companyId' }, 400);
+
+  const { data: periods, error: pErr } = await supabase
+    .from('payment_periods')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('start_date', { ascending: false });
+  if (pErr) return json({ error: 'Database error (periods)', details: pErr.message }, 500);
+  if (!periods || periods.length === 0) return json({ periods: [] });
+
+  const results: Array<{ period: unknown; has_errors: boolean; total_errors: number }> = [];
+  for (const period of periods as Array<{ id: string; start_date: string; end_date: string }>) {
+    const { data: indErrors } = await supabase
+      .from('error_records')
+      .select('error_count, error_type')
+      .eq('employee_id', employeeId)
+      .gte('date', period.start_date)
+      .lte('date', period.end_date)
+      .eq('company_id', companyId);
+
+    const { data: triageDist } = await supabase
+      .from('triage_distribution_employees')
+      .select('errors_share, triage_error_distributions!inner(period_start, period_end)')
+      .eq('employee_id', employeeId)
+      .gte('triage_error_distributions.period_start', period.start_date)
+      .lte('triage_error_distributions.period_end', period.end_date)
+      .eq('company_id', companyId);
+
+    type IndErr = { error_count: number; error_type: string | null };
+    type Triage = { errors_share: number };
+    const indCount = ((indErrors ?? []) as IndErr[])
+      .filter((e) => (e.error_type ?? 'quantity') === 'quantity')
+      .reduce((s, e) => s + (Number(e.error_count) || 0), 0);
+    const indValueCount = ((indErrors ?? []) as IndErr[])
+      .filter((e) => e.error_type === 'value').length;
+    const triageCount = ((triageDist ?? []) as Triage[])
+      .reduce((s, t) => s + (Number(t.errors_share) || 0), 0);
+
+    const total = indCount + indValueCount + triageCount;
+    results.push({ period, has_errors: total > 0, total_errors: total });
+  }
+  return json({ periods: results });
+}
+
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -360,6 +408,7 @@ Deno.serve(async (req) => {
       case 'save-face': return await saveFace(body);
       case 'log-face-attempt': return await logFaceAttempt(body);
       case 'employee-errors-by-period': return await employeeErrorsByPeriod(body);
+      case 'employee-error-periods': return await employeeErrorPeriods(body);
       default: return json({ error: `Unknown action: ${body.action}` }, 400);
     }
   } catch (err) {

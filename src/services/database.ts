@@ -1920,41 +1920,16 @@ export const autoCreateWeeklyPeriod = async (companyId: string): Promise<void> =
     }]);
 };
 
+// Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
+// Agrega payment_periods + error_records + triage_* server-side.
 export const getEmployeeErrorPeriods = async (
   employeeId: string,
   companyId: string
 ): Promise<Array<{ period: PaymentPeriod; has_errors: boolean; total_errors: number }>> => {
-  const periods = await getPaymentPeriods(companyId);
-  if (periods.length === 0) return [];
-
-  const results: Array<{ period: PaymentPeriod; has_errors: boolean; total_errors: number }> = [];
-  for (const period of periods) {
-    const { data: indErrors } = await supabase
-      .from('error_records')
-      .select('error_count, error_type')
-      .eq('employee_id', employeeId)
-      .gte('date', period.start_date)
-      .lte('date', period.end_date)
-      .eq('company_id', companyId);
-
-    const { data: triageDist } = await supabase
-      .from('triage_distribution_employees')
-      .select('errors_share, triage_error_distributions!inner(period_start, period_end)')
-      .eq('employee_id', employeeId)
-      .gte('triage_error_distributions.period_start', period.start_date)
-      .lte('triage_error_distributions.period_end', period.end_date)
-      .eq('company_id', companyId);
-
-    const indCount = (indErrors || [])
-      .filter((e: { error_type: string | null }) => (e.error_type ?? 'quantity') === 'quantity')
-      .reduce((s: number, e: { error_count: number }) => s + (e.error_count ?? 0), 0);
-    const indValueCount = (indErrors || []).filter((e: { error_type: string | null }) => e.error_type === 'value').length;
-    const triageCount = (triageDist || []).reduce((s: number, t: { errors_share: number }) => s + (t.errors_share ?? 0), 0);
-
-    const total = indCount + indValueCount + triageCount;
-    results.push({ period, has_errors: total > 0, total_errors: total });
-  }
-  return results;
+  const data = await callEmployeePublicApi<{
+    periods: Array<{ period: PaymentPeriod; has_errors: boolean; total_errors: number }>;
+  }>('employee-error-periods', { employeeId, companyId });
+  return data.periods ?? [];
 };
 
 // Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
