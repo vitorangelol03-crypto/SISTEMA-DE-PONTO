@@ -3,6 +3,7 @@ import { Lock, MapPin, AlertTriangle, ShieldOff, Key, RefreshCw, Unlock, Trash2,
 import toast from 'react-hot-toast';
 import { BonusTypesManager } from './BonusTypesManager';
 import { CompanySettings } from './CompanySettings';
+import { AuditLogsTab } from '../monitoring/AuditLogsTab';
 import { useCompany } from '../../contexts/CompanyContext';
 import {
   verifyAdminSecret,
@@ -1455,6 +1456,11 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       {/* SECTION 9: Company Settings                                        */}
       {/* ════════════════════════════════════════════════════════════════════ */}
       <CompanySettings />
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* SECTION 10: Audit Logs (sub-fase 10.3 resolvida — admin master)    */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <AuditLogsTab />
     </div>
   );
 };

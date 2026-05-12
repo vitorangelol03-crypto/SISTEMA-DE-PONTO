@@ -1,14 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Calendar, User, Filter, Download, Search } from 'lucide-react';
 import { auditService, ActionType } from '../../services/auditService';
-import { getUsers } from '../../services/database';
+import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
-interface AuditLogsTabProps {
-  userId: string;
+// Sub-fase 10.3 (resolvida 2026-05-12): exposto sob AdminTab (master only).
+// audit_logs é global (sem company_id) — admin master vê tudo via RLS bypass.
+
+interface AuditLogRow {
+  id: string;
+  user_id: string | null;
+  action_type: ActionType | string;
+  module: string;
+  description: string | null;
+  created_at: string;
+}
+
+interface AuditUserRow {
+  id: string;
+  role: 'admin' | 'supervisor';
+}
+
+interface AuditStats {
+  totalActions: number;
+  actionsByType: Record<string, number>;
+  actionsByModule: Record<string, number>;
 }
 
 const ACTION_TYPE_LABELS: Record<ActionType, string> = {
@@ -36,11 +55,11 @@ const MODULE_LABELS: Record<string, string> = {
   datamanagement: 'Gerenciamento de Dados',
 };
 
-export function AuditLogsTab({ userId }: AuditLogsTabProps) {
-  const [logs, setLogs] = useState<any[]>([]);
+export function AuditLogsTab() {
+  const [logs, setLogs] = useState<AuditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [users, setUsers] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
+  const [users, setUsers] = useState<AuditUserRow[]>([]);
+  const [stats, setStats] = useState<AuditStats | null>(null);
 
   const [filters, setFilters] = useState({
     startDate: '',
@@ -57,10 +76,16 @@ export function AuditLogsTab({ userId }: AuditLogsTabProps) {
     loadData();
   }, [filters]);
 
+  // audit_logs é global (sem company_id). Query direto em users via RLS —
+  // admin master vê todos os ids; supervisor (que não acessa AdminTab) veria só os seus.
   const loadUsers = async () => {
     try {
-      const data = await getUsers();
-      setUsers(data);
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, role')
+        .order('id', { ascending: true });
+      if (error) throw error;
+      setUsers((data ?? []) as AuditUserRow[]);
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
     }
@@ -76,13 +101,13 @@ export function AuditLogsTab({ userId }: AuditLogsTabProps) {
           userId: filters.userId || undefined,
           module: filters.module || undefined,
           actionType: (filters.actionType as ActionType) || undefined,
-          limit: 100,
+          limit: 500,
         }),
         auditService.getAuditStats(filters.startDate, filters.endDate),
       ]);
-      setLogs(logsData);
+      setLogs((logsData ?? []) as AuditLogRow[]);
       setStats(statsData);
-    } catch (error: any) {
+    } catch (error) {
       toast.error('Erro ao carregar logs de auditoria');
       console.error(error);
     } finally {

@@ -622,18 +622,34 @@ SELECT id, display_name, city, bank_hours_enabled FROM companies WHERE id IN (CT
 
 ---
 
-### 2026-05-11 — Sub-fase 10.3 (AuditLogsTab) cancelada: componente órfão
+### 2026-05-12 — Sub-fase 10.3 (AuditLogsTab) RESOLVIDA: exposto sob AdminTab (master only)
 
-**Descoberta durante exploração:** `src/components/monitoring/AuditLogsTab.tsx` (319 lin) existe mas **NÃO é renderizado em lugar nenhum da app**. Grep em todo `src/` confirma: nenhum import de `AuditLogsTab` exceto o próprio arquivo. Não há tab no App.tsx, não há rota, não há section em outras tabs que o use.
+**Original (2026-05-11):** Componente `src/components/monitoring/AuditLogsTab.tsx` (319 lin) existia mas não era renderizado em lugar nenhum. Sub-fase 10.3 originalmente CANCELADA esperando decisão Victor (expor vs remover).
 
-**Implicações:**
-- Não é possível testar E2E (não há fluxo na UI que leve ao componente).
-- O serviço por trás (`src/services/auditService.ts`) é usado para `logAction()` em outras partes, mas o componente UI de visualização nunca é exibido ao usuário.
-- Provavelmente um componente em desenvolvimento que foi commitado mas não ligado.
+**Decisão Victor (2026-05-12):** Opção A — Expor sob AdminTab (master only).
 
-**Sub-fase 10.3 cancelada.** Decisão: não criar `tests/33-audit-logs-tab.spec.ts` com testes skipados (poluição inútil). Em vez disso, documentar a descoberta aqui.
+**Justificativa:** `audit_logs` é tabela GLOBAL ativa em prod com **309 rows** (período 2026-03-26 a 2026-05-11, ~6 semanas). Sistema escreve audit logs continuamente via `auditService.ts:53`, `database.ts:1342`, `database.ts:1460`. Negar a UI = info perdida em compliance/troubleshooting. Componente já completo (filtros, stats, export Excel) — só faltava expor.
 
-**Pendência derivada (fora do escopo da Fase 10):** se este componente deve ser exposto na UI ou removido. Recomendação: avaliar no contexto do PRE-LAUNCH-CHECKLIST (Fase 12) — manter dead code em prod aumenta superfície sem benefício.
+**Implementação:**
+
+1. **`src/components/monitoring/AuditLogsTab.tsx`:**
+   - Removida `interface AuditLogsTabProps` + prop `userId` (não usado — `audit_logs` é global, sem company_id; admin master vê tudo via RLS bypass). Componente vira `function AuditLogsTab()` sem args, sem `eslint-disable`.
+   - Tipos explícitos novos: `AuditLogRow`, `AuditUserRow`, `AuditStats` (substituem `any[]` / `any` — alinhamento com Regra 7).
+   - `loadUsers` refatorado: troca `getUsers()` (função inexistente, era bug) por query direta `supabase.from('users').select('id, role').order('id')`. RLS filtra naturalmente — admin master vê todos.
+   - `limit: 100 → 500` na query principal (admin master quer ver mais histórico).
+
+2. **`src/components/admin/AdminTab.tsx`:**
+   - Import `AuditLogsTab` de `../monitoring/AuditLogsTab`.
+   - Renderiza `<AuditLogsTab />` como **SECTION 10**, após Company Settings (section 9). Dentro do gate `verifyAdminSecret` — só admin master autenticado vê.
+
+**Validação real:**
+- `npx tsc --noEmit`: limpo (0 erros)
+- `npx vitest run`: 422/422 unit tests passing (baseline mantido)
+- `grep AuditLogsTabProps|getUsers`: 0 referências residuais
+
+**Schema relevante (`audit_logs`):** id uuid, user_id text, action_type text, module text, entity_type text, entity_id uuid, old_data/new_data jsonb, description text, ip_address text, user_agent text, created_at timestamptz. **Sem `company_id`** — pattern intencional (audit é cross-empresa pra admin master).
+
+**E2E coverage:** intencionalmente não criado spec novo nessa sub-fase. Componente é admin-only (acessado via gate de senha) — UX validável manualmente pelo Victor pré-go-live. Eventual spec pode ser adicionado em Fase 14+ se necessidade aparecer.
 
 ---
 
