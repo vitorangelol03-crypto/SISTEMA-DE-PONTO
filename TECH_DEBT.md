@@ -294,6 +294,66 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-12 — Sub-fase 11.8: Edge fn `employee-public-api` (fix lacuna estrutural app funcionário pós-RLS)
+
+**Descoberta crítica (Regra 1 + 4):** Playwright run #1 da Fase 13.1 mostrou **24 falhas concentradas em /clock e /erros**. Investigação via MCP confirmou: RLS pós-Fase 11 bloqueia anon em `employees`, `attendance`, `face_*`, `error_records`, `triage_*`. Específicamente:
+
+```sql
+-- SET LOCAL ROLE anon; SELECT count(*) FROM employees → 0
+-- Policies são TO authenticated apenas. Sem policy pra anon = DENY ALL.
+```
+
+App funcionário (`/clock` + `/erros`) rotas públicas (sem login) — fluxos quebrados em prod, não só nos testes. Funcionário não conseguia bater ponto nem ver erros.
+
+**Decisão Victor 2026-05-12: Opção A** (edge fn unificada com action switch, padrão idiomático do projeto).
+
+**Implementação:**
+
+1. **`supabase/functions/employee-public-api/index.ts` (NOVO, v1 ACTIVE):**
+   - `verify_jwt: false` (rota pública sem JWT custom)
+   - Action switch interno com 11 ações:
+     - `lookup-companies-by-cpf` — array de companies do CPF (JOIN employees+companies)
+     - `lookup-employee` — employee shape por (cpf, companyId)
+     - `verify-pin` — bool comparação plain (PIN ainda é plain — tech debt futuro pra bcrypt similar a password)
+     - `set-pin` — UPDATE employees.pin + pin_configured (com validação 4-6 dígitos)
+     - `today-attendance` — attendance row de hoje
+     - `attendance-history` — array de attendance últimos N dias
+     - `face-config` — boolean enabled
+     - `face-descriptor` — number[] | null
+     - `save-face` — UPDATE employees face_*
+     - `log-face-attempt` — INSERT face_auth_attempts (best-effort)
+     - `employee-errors-by-period` — period + individual_errors + triage_errors + totais (semântica do legacy preservada: total_individual = sum(error_count if quantity, else 1))
+   - Validação de input em cada handler (400 com mensagem clara)
+   - service_role internamente bypassa RLS
+   - Segurança: filtro estrito por (cpf, companyId) ou (employeeId, companyId) — não expõe enumeração broad
+
+2. **`src/services/database.ts`:**
+   - Helper `callEmployeePublicApi<T>(action, params): Promise<T>` perto do topo (após imports) — envolve `fetch POST + ANON_KEY auth + JSON parse + error handling`.
+   - 11 funções reescritas pra usar helper em vez de query direta:
+     `getEmployeeByCpf`, `getCompaniesByEmployeeCpf`, `getEmployeeTodayAttendance`, `getEmployeeAttendanceHistory`, `verifyEmployeePin`, `setEmployeePin`, `getFaceRecognitionConfig`, `getFaceDescriptor`, `saveFaceData`, `logFaceAttempt`, `getEmployeeErrorsByPeriod`.
+   - Validações client-side mantidas onde fazem sentido (PIN regex em `setEmployeePin` pra UX early-feedback).
+
+**Validação E2E real (curl direto contra prod):**
+
+| Cenário | Esperado | Real |
+|---|---|---|
+| `lookup-companies-by-cpf` CPF Pablo | array com Caratinga | ✅ shape completa retornada |
+| `lookup-employee` CPF Pablo + Caratinga | employee uuid + dados | ✅ id=`b175d4f3-...`, 36 chars |
+| `verify-pin` pin errado `0000` | `{valid: false}` HTTP 200 | ✅ |
+| `today-attendance` Pablo | `{attendance: null}` HTTP 200 | ✅ |
+| `action: 'nonsense'` | 400 "Unknown action" | ✅ |
+| body sem `action` | 400 "Body must include action string" | ✅ |
+
+**Deploy:** v1 ACTIVE em prod (sha256 `777c099f3520be3f9569a4c0157a264fd75795da4a098198d8fcd424f7d2fc7e`).
+
+**Validação local:**
+- `npx tsc --noEmit`: limpo (0 erros)
+- `npx vitest run`: 422/422 unit tests passing
+
+**Próximo:** re-rodar Playwright (Fase 13.1) — espera-se 24 falhas → 0 (ou perto disso).
+
+---
+
 ### 2026-05-12 — Sub-fase 11.7: Edge fn `create-user` com bcrypt (fix bug latente `createUser`)
 
 **Trabalho completado:**

@@ -11,6 +11,33 @@ import {
   type ExpectedSchedule,
 } from '../utils/attendanceCalc';
 
+// Sub-fase 11.8 — helper pra chamar edge fn employee-public-api (verify_jwt:false).
+// Substitui queries diretas em tabelas core (employees, attendance, face_*,
+// error_records, triage_*) que após Fase 11 ficaram bloqueadas pra anon (rotas
+// públicas /clock e /erros). Mantém ANON_KEY como apikey/Authorization — edge
+// fn faz o trabalho com service_role internamente.
+async function callEmployeePublicApi<T = unknown>(
+  action: string,
+  params: Record<string, unknown>,
+): Promise<T> {
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+  const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+  const resp = await fetch(`${SUPABASE_URL}/functions/v1/employee-public-api`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`,
+    },
+    body: JSON.stringify({ action, ...params }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    throw new Error(data?.error || `employee-public-api: falha em ${action}`);
+  }
+  return data as T;
+}
+
 export interface User {
   id: string;
   role: 'admin' | 'supervisor';
@@ -1930,6 +1957,9 @@ export const getEmployeeErrorPeriods = async (
   return results;
 };
 
+// Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
+// Edge fn faz os 3 SELECTs (payment_periods + error_records + triage_*) e
+// retorna shape pronto. Frontend só agrega.
 export const getEmployeeErrorsByPeriod = async (
   employeeId: string,
   periodId: string,
@@ -1941,70 +1971,11 @@ export const getEmployeeErrorsByPeriod = async (
   total_individual: number;
   total_triage: number;
 }> => {
-  const { data: period, error: periodErr } = await supabase
-    .from('payment_periods')
-    .select('*')
-    .eq('id', periodId)
-    .single();
-  if (periodErr) throw periodErr;
-
-  const { data: indErrors, error: indErr } = await supabase
-    .from('error_records')
-    .select('date, error_type, error_count, observations')
-    .eq('employee_id', employeeId)
-    .gte('date', period.start_date)
-    .lte('date', period.end_date)
-    .eq('company_id', companyId)
-    .order('date', { ascending: true });
-  if (indErr) throw indErr;
-
-  const { data: triageDetails, error: triErr } = await supabase
-    .from('triage_distribution_employees')
-    .select('errors_share, value_deducted, triage_error_distributions!inner(period_start, period_end, observations)')
-    .eq('employee_id', employeeId)
-    .gte('triage_error_distributions.period_start', period.start_date)
-    .lte('triage_error_distributions.period_end', period.end_date)
-    .eq('company_id', companyId);
-  if (triErr) throw triErr;
-
-  const individual_errors = (indErrors || []).map(e => ({
-    date: e.date,
-    error_type: (e.error_type ?? 'quantity') as ErrorType,
-    error_count: e.error_count ?? 0,
-    observations: e.observations,
-  }));
-
-  type TriageRow = {
-    errors_share: number;
-    value_deducted: number;
-    triage_error_distributions:
-      | { period_start: string; period_end: string; observations: string | null }
-      | { period_start: string; period_end: string; observations: string | null }[];
-  };
-  const triage_errors = (triageDetails as TriageRow[] | null ?? []).map(row => {
-    const dist = Array.isArray(row.triage_error_distributions)
-      ? row.triage_error_distributions[0]
-      : row.triage_error_distributions;
-    return {
-      date: dist.period_start,
-      errors_share: row.errors_share,
-      value_deducted: Number(row.value_deducted),
-      observations: dist.observations,
-    };
+  return await callEmployeePublicApi('employee-errors-by-period', {
+    employeeId,
+    periodId,
+    companyId,
   });
-
-  const total_individual = individual_errors.reduce((s, e) => {
-    return s + (e.error_type === 'quantity' ? e.error_count : 1);
-  }, 0);
-  const total_triage = triage_errors.reduce((s, t) => s + t.errors_share, 0);
-
-  return {
-    period: period as PaymentPeriod,
-    individual_errors,
-    triage_errors,
-    total_individual,
-    total_triage,
-  };
 };
 
 // ─── Triagem (erros coletivos distribuídos) ───────────────────────────────────
@@ -3163,56 +3134,40 @@ async function recalcAttendance(attendanceId: string): Promise<void> {
   }
 }
 
-/** Busca o histórico de attendance de um funcionário nos últimos N dias. */
+/** Busca o histórico de attendance de um funcionário nos últimos N dias.
+ *  Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS). */
 export const getEmployeeAttendanceHistory = async (
   employeeId: string,
   days: number,
   companyId: string
 ): Promise<Attendance[]> => {
-  const endDate = getBrazilDateString();
-  const startMs = new Date(endDate).getTime() - (days - 1) * 24 * 60 * 60 * 1000;
-  const startDate = new Date(startMs).toISOString().split('T')[0];
-
-  const { data, error } = await supabase
-    .from('attendance')
-    .select('*')
-    .eq('employee_id', employeeId)
-    .gte('date', startDate)
-    .lte('date', endDate)
-    .eq('company_id', companyId)
-    .order('date', { ascending: false });
-
-  if (error) throw error;
-  return data || [];
+  const data = await callEmployeePublicApi<{ history: Attendance[] }>('attendance-history', {
+    employeeId,
+    companyId,
+    days,
+  });
+  return data.history ?? [];
 };
 
-/** Busca funcionário por CPF. Retorna null se não encontrar. */
+/** Busca funcionário por CPF. Retorna null se não encontrar.
+ *  Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS). */
 export const getEmployeeByCpf = async (cpf: string, companyId: string): Promise<Employee | null> => {
   const cpfNumbers = cpf.replace(/\D/g, '');
-  const { data, error } = await supabase
-    .from('employees')
-    .select('*')
-    .eq('cpf', cpfNumbers)
-    .eq('company_id', companyId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  const data = await callEmployeePublicApi<{ employee: Employee | null }>('lookup-employee', {
+    cpf: cpfNumbers,
+    companyId,
+  });
+  return data.employee ?? null;
 };
 
-/** Busca o registro de attendance de hoje para um funcionário específico. */
+/** Busca o registro de attendance de hoje para um funcionário específico.
+ *  Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS). */
 export const getEmployeeTodayAttendance = async (employeeId: string, companyId: string): Promise<Attendance | null> => {
-  const today = getBrazilDateString();
-  const { data, error } = await supabase
-    .from('attendance')
-    .select('*')
-    .eq('employee_id', employeeId)
-    .eq('date', today)
-    .eq('company_id', companyId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  const data = await callEmployeePublicApi<{ attendance: Attendance | null }>('today-attendance', {
+    employeeId,
+    companyId,
+  });
+  return data.attendance ?? null;
 };
 
 /** Funcionário registra entrada. */
@@ -3453,18 +3408,14 @@ export const bulkApproveAttendance = async (ids: string[], supervisorId: string)
 
 // ─── PIN functions ─────────────────────────────────────────────────────────────
 
-/** Define ou altera o PIN de um funcionário e marca como configurado. */
+/** Define ou altera o PIN de um funcionário e marca como configurado.
+ *  Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
+ *  Validação de PIN duplicada client-side por UX (early feedback). */
 export const setEmployeePin = async (employeeId: string, pin: string): Promise<void> => {
   if (!/^\d{4,6}$/.test(pin)) {
     throw new Error('PIN deve ser numérico com 4 a 6 dígitos');
   }
-
-  const { error } = await supabase
-    .from('employees')
-    .update({ pin, pin_configured: true })
-    .eq('id', employeeId);
-
-  if (error) throw error;
+  await callEmployeePublicApi('set-pin', { employeeId, newPin: pin });
 };
 
 /** Reseta o PIN do funcionário — exige nova criação no próximo acesso. */
@@ -3477,17 +3428,11 @@ export const resetEmployeePin = async (employeeId: string): Promise<void> => {
   if (error) throw error;
 };
 
-/** Verifica se o PIN fornecido corresponde ao PIN do funcionário. */
+/** Verifica se o PIN fornecido corresponde ao PIN do funcionário.
+ *  Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS). */
 export const verifyEmployeePin = async (employeeId: string, pin: string): Promise<boolean> => {
-  const { data, error } = await supabase
-    .from('employees')
-    .select('pin')
-    .eq('id', employeeId)
-    .single();
-
-  if (error) throw error;
-  if (!data?.pin) return false;
-  return data.pin === pin;
+  const data = await callEmployeePublicApi<{ valid: boolean }>('verify-pin', { employeeId, pin });
+  return data.valid === true;
 };
 
 // ─── Geolocation & Fraud functions ───────────────────────────────────────────
@@ -4070,15 +4015,11 @@ export interface FaceAuthAttempt {
   clock_type: 'entry' | 'exit' | null;
 }
 
+// Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
+// Admin autenticado também passa por aqui pra simplificar o caller path.
 export const getFaceRecognitionConfig = async (companyId: string): Promise<FaceRecognitionConfig> => {
-  const { data, error } = await supabase
-    .from('face_recognition_config')
-    .select('enabled')
-    .eq('company_id', companyId)
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return { enabled: !!data?.enabled };
+  const data = await callEmployeePublicApi<{ enabled: boolean }>('face-config', { companyId });
+  return { enabled: Boolean(data.enabled) };
 };
 
 export const setFaceRecognitionGlobal = async (
@@ -4143,45 +4084,23 @@ export const resetFaceForEmployee = async (
   if (error) throw error;
 };
 
+// Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
 export const saveFaceData = async (
   employeeId: string,
   photoUrl: string | null,
   descriptor: number[]
 ): Promise<void> => {
-  const { error } = await supabase
-    .from('employees')
-    .update({
-      face_photo_url: photoUrl,
-      face_descriptor: descriptor,
-      face_registered: true,
-      face_reset_requested: false,
-      face_registered_at: new Date().toISOString(),
-    })
-    .eq('id', employeeId);
-  if (error) throw error;
+  await callEmployeePublicApi('save-face', { employeeId, photoUrl, descriptor });
 };
 
+// Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
 export const getFaceDescriptor = async (employeeId: string): Promise<number[] | null> => {
-  const { data, error } = await supabase
-    .from('employees')
-    .select('face_descriptor')
-    .eq('id', employeeId)
-    .maybeSingle();
-  if (error) throw error;
-  const raw = data?.face_descriptor;
-  if (!raw) return null;
-  if (Array.isArray(raw)) return raw as number[];
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as number[]) : null;
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  const data = await callEmployeePublicApi<{ descriptor: number[] | null }>('face-descriptor', { employeeId });
+  return data.descriptor ?? null;
 };
 
+// Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
+// Best-effort: errors são logados mas não interrompem o fluxo de auth.
 export const logFaceAttempt = async (
   employeeId: string,
   success: boolean,
@@ -4189,27 +4108,16 @@ export const logFaceAttempt = async (
   clockType: 'entry' | 'exit' | null,
   companyId: string
 ): Promise<void> => {
-  // `date` é NOT NULL na tabela face_auth_attempts — precisa ser passado
-  // explicitamente no fuso BRT. `attempted_at` também é setado para garantir.
   try {
-    const payload = {
-      employee_id: employeeId,
-      date: getBrazilDateString(),
-      attempted_at: new Date().toISOString(),
+    await callEmployeePublicApi('log-face-attempt', {
+      employeeId,
       success,
       confidence,
-      clock_type: clockType,
-      company_id: companyId,
-    };
-    const { error } = await supabase
-      .from('face_auth_attempts')
-      .insert([payload]);
-    if (error) {
-      // Não queremos quebrar o fluxo de autenticação por falha de log
-      console.error('logFaceAttempt falhou:', error, 'payload:', payload);
-    }
+      clockType,
+      companyId,
+    });
   } catch (err) {
-    console.error('logFaceAttempt exceção:', err);
+    console.error('logFaceAttempt falhou:', err);
   }
 };
 
@@ -4299,29 +4207,14 @@ export const getCompanyById = async (id: string): Promise<Company | null> => {
  * Resolve TODAS as empresas em que o CPF está cadastrado (uma por linha de employee).
  * Útil em /clock e /erros: o funcionário só sabe o CPF e pode estar em mais de uma empresa.
  * Retorna lista deduplicada por id (vazia se CPF não tem cadastro).
+ * Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
  */
 export const getCompaniesByEmployeeCpf = async (cpf: string): Promise<Company[]> => {
   const cpfNumbers = cpf.replace(/\D/g, '');
-  const { data, error } = await supabase
-    .from('employees')
-    .select('companies(*)')
-    .eq('cpf', cpfNumbers);
-  if (error) throw error;
-  if (!data) return [];
-  const seen = new Set<string>();
-  const result: Company[] = [];
-  for (const row of data as Array<{ companies: Company | Company[] | null }>) {
-    const c = row.companies;
-    if (!c) continue;
-    const arr = Array.isArray(c) ? c : [c];
-    for (const co of arr) {
-      if (co && !seen.has(co.id)) {
-        seen.add(co.id);
-        result.push(co);
-      }
-    }
-  }
-  return result;
+  const data = await callEmployeePublicApi<{ companies: Company[] }>('lookup-companies-by-cpf', {
+    cpf: cpfNumbers,
+  });
+  return data.companies ?? [];
 };
 
 /**
