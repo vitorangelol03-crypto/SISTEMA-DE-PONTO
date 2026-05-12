@@ -47,6 +47,16 @@ export function setAuthToken(token: string | null): void {
   _client = buildClient(token);
 }
 
+/** Retorna o JWT custom atual (ou null se não logado). Usado por chamadas
+ *  diretas a edge functions que precisam autorizar com o token do admin. */
+export function getAuthToken(): string | null {
+  try {
+    return typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('sb-custom-token') : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Limpa o token (logout). */
 export function clearAuthToken(): void {
   setAuthToken(null);

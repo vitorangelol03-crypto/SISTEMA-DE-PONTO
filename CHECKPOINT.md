@@ -306,6 +306,7 @@ npx playwright test --workers=1 --reporter=list
 |---|---|---|---|
 | `auth-login` | v9 | `false` (emite tokens) | POST `{id, password}` → JWT custom HS256 com `{sub, role:'authenticated', aud, company_id, exp:24h}` |
 | `clock-in-validated` | v8 | **`true`** | Validação real de geolocalização + criação/update de attendance + logging em error_logs |
+| `create-user` | v1 | **`true`** | POST `{id, password, role, companyId}` → bcrypt server-side + INSERT users.password_hash. Admin '9999' OK; supervisor precisa `permissions.users.create` em user_permissions. Sub-fase 11.7. |
 
 ### RPCs SECURITY DEFINER ativos
 

@@ -1,4 +1,4 @@
-import { supabase, setAuthToken } from '../lib/supabase';
+import { supabase, setAuthToken, getAuthToken } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
 import {
   computeWorkedMinutes,
@@ -410,27 +410,35 @@ export const getAllUsers = async (companyId: string): Promise<User[]> => {
   return data || [];
 };
 
+// Sub-fase 11.7 — createUser via edge fn create-user.
+// Edge fn faz bcrypt(password) server-side + INSERT password_hash (a coluna
+// users.password plain foi dropada na sub-fase 11.1). validatePermission no
+// frontend continua como gate de UX; o edge fn faz a checagem real.
 export const createUser = async (id: string, password: string, role: 'supervisor', createdBy: string, companyId: string): Promise<void> => {
   const permissionCheck = await validatePermission(createdBy, 'users.create');
   if (!permissionCheck.allowed) {
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
-  const { error } = await supabase
-    .from('users')
-    .insert([{
-      id,
-      password,
-      role,
-      created_by: createdBy,
-      company_id: companyId,
-    }]);
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+  const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+  const token = getAuthToken();
+  if (!token) throw new Error('Sessão inválida — faça login novamente');
 
-  if (error) {
-    if (error.code === '23505') {
-      throw new Error('ID já existe');
-    }
-    throw error;
+  const resp = await fetch(`${SUPABASE_URL}/functions/v1/create-user`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ id, password, role, companyId }),
+  });
+
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    if (resp.status === 409) throw new Error('ID já existe');
+    throw new Error(data?.error || 'Falha ao criar usuário');
   }
 };
 
