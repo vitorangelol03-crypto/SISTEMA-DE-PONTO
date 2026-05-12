@@ -13,7 +13,6 @@ import {
 
 export interface User {
   id: string;
-  password: string;
   role: 'admin' | 'supervisor';
   created_by: string | null;
   created_at: string;
@@ -320,54 +319,6 @@ const BONUS_COLUMNS: Record<BonusType, 'bonus_b' | 'bonus_c1' | 'bonus_c2'> = {
   B: 'bonus_b',
   C1: 'bonus_c1',
   C2: 'bonus_c2',
-};
-
-export const createTables = async () => {
-  try {
-    // Verificar se as tabelas existem, se não existir o Supabase já as criou automaticamente
-    console.log('Verificando estrutura do banco de dados...');
-  } catch (error) {
-    console.log('Estrutura do banco verificada:', error);
-  }
-};
-
-export const createDefaultAdmin = async () => {
-  try {
-    const { data } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', '9999')
-      .single();
-
-    if (!data) {
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert([{
-          id: '9999',
-          password: '684171',
-          role: 'admin',
-          created_by: null
-        }]);
-
-      if (insertError) {
-        console.error('Erro ao criar admin padrão:', insertError);
-      } else {
-        console.log('Admin padrão criado com sucesso!');
-      }
-    }
-  } catch (error) {
-    console.error('Erro ao verificar admin padrão:', error);
-  }
-};
-
-export const initializeSystem = async () => {
-  try {
-    await createTables();
-    await createDefaultAdmin();
-    console.log('Sistema inicializado com sucesso!');
-  } catch (error) {
-    console.error('Erro na inicialização:', error);
-  }
 };
 
 // Permission validation helper

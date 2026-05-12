@@ -8,7 +8,7 @@ import { HelpButton } from './components/tutorial/HelpButton';
 import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
 import { useCompany } from './contexts/CompanyContext';
-import { initializeSystem, autoCreateWeeklyPeriod, type User } from './services/database';
+import { autoCreateWeeklyPeriod, type User } from './services/database';
 import { EmployeeClockIn } from './components/employee-clock/EmployeeClockIn';
 
 // Lazy: carrega jspdf/autotable transitivamente — só baixa no acesso a /erros.
@@ -62,10 +62,6 @@ function App() {
   const isErrorsMode =
     window.location.pathname === '/erros' ||
     new URLSearchParams(window.location.search).get('mode') === 'erros';
-
-  useEffect(() => {
-    initializeSystem();
-  }, []);
 
   useEffect(() => {
     if (!company?.id) return;

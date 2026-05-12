@@ -9,6 +9,45 @@
 
 ## 🔴 Bugs funcionais ativos
 
+### 11.7 — [Alta] `createUser` faz INSERT em coluna `password` dropada (Sub-fase 11.7 prevista)
+
+**Descoberto em:** 2026-05-12 durante pre-check da Sub-fase 11.6 (limpeza pós-RLS). Regra 1 do CHECKPOINT pegou o bug — sem o pre-check teria virado fail silencioso em prod.
+
+**Local exato:** `src/services/database.ts:462-484` (função `createUser`) — chamada em `src/components/users/UsersTab.tsx:86` (UI Admin → criar supervisor).
+
+**Snippet do bug:**
+```typescript
+export const createUser = async (id: string, password: string, role: 'supervisor', createdBy: string, companyId: string): Promise<void> => {
+  // ...permission check...
+  const { error } = await supabase
+    .from('users')
+    .insert([{
+      id,
+      password,          // ← coluna DROPADA na sub-fase 11.1
+      role,
+      created_by: createdBy,
+      company_id: companyId,
+    }]);
+};
+```
+
+**Impacto:** Admin '9999' tenta criar supervisor via UsersTab UI → INSERT falha em prod com `column "password" does not exist`. Fluxo "criar conta de supervisor" bloqueado.
+
+**Por que não foi pego antes:** specs E2E `01-auth.spec.ts` e `12-admin-tab.spec.ts` testam login + admin tab, mas não exercitam o fluxo "criar novo supervisor". Cobertura E2E gap herdado.
+
+**Solução planejada (Sub-fase 11.7 — decisão Victor 2026-05-12: Opção A):**
+
+Edge fn nova `supabase/functions/create-user/index.ts`:
+- `verify_jwt: true` (só admin autenticado chama)
+- Recebe POST `{id, password, role, companyId}` do frontend com Authorization Bearer JWT custom
+- `bcryptjs.hash(password, 10)` server-side
+- INSERT users com `password_hash` (não password plain)
+- Retorna user row
+
+Frontend (`createUser` em `database.ts:462`) reescrita pra `fetch /functions/v1/create-user`, padrão idêntico ao `loginUser` (linha 419).
+
+Validação E2E real: criar supervisor via UI deve funcionar pós-fix + login com novo supervisor + queries RLS por `company_id`.
+
 ### 6.10 — [Alta] `setPaymentPeriodAutoWeekly` corrompe config multi-empresa
 
 **Local exato:** `src/services/database.ts:1873-1886` (setter) + `src/services/database.ts:1863-1871` (getter)
@@ -281,6 +320,31 @@ await expect(
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-12 — Sub-fase 11.6: Limpeza pós-RLS (createDefaultAdmin + User.password obsoletos)
+
+**Trabalho completado:**
+
+1. **`src/services/database.ts`:**
+   - Removido campo `password: string;` da interface `User` (era linha 16 — coluna dropada na sub-fase 11.1).
+   - Removidas funções `createTables`, `createDefaultAdmin`, `initializeSystem` (eram linhas 325-371) — dead code que tentava INSERT com password plain numa coluna inexistente.
+
+2. **`src/App.tsx`:**
+   - Removido import `initializeSystem` (linha 11).
+   - Removido `useEffect(() => { initializeSystem(); }, [])` (era linhas 66-68).
+
+**Validação real (Regra 1):**
+- `npx tsc --noEmit`: limpo (0 erros)
+- `npx vitest run`: 422/422 unit tests passing (baseline mantido)
+- `grep -rn "createDefaultAdmin\|initializeSystem\|createTables\b"` em src/ + tests/: 0 ocorrências residuais
+
+**Descoberta lateral durante pre-check (justifica Regra 1 do CHECKPOINT):**
+
+`createUser` (database.ts:462) ainda faz `INSERT { password }` plain em coluna dropada. Bug latente — admin → criar supervisor via UI quebra. Adicionado em bugs funcionais ativos como entry **11.7**. Decisão Victor: Opção A (edge fn create-user com bcrypt server-side). Vai ser resolvido na próxima sub-fase, mesma sessão.
+
+**Diff:** 1 insertion, 54 deletions across 2 files (`src/App.tsx`, `src/services/database.ts`).
+
+---
 
 ### 2026-05-11 — Sub-fase 11.3 (parcial): ADD password_hash + edge fn auth-login v6 (BLOQUEADO em JWT_SECRET)
 
