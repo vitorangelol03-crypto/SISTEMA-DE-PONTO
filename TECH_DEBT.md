@@ -294,6 +294,47 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-12 — Fase 13 completa: validação final + audit (sub-fases 13.0, 13.1, 13.2)
+
+**Trabalho completado:**
+
+1. **Sub-fase 13.0 — `tests/cleanup.ts:getClient()` fallback SERVICE_ROLE_KEY** (commit `b5bb660`):
+   - getClient prefere SUPABASE_SERVICE_ROLE_KEY se disponível (bypassa RLS)
+   - Fallback pra VITE_SUPABASE_ANON_KEY com warning console explicando que specs 25/26-test6 vão falhar
+   - Novo export `isUsingServiceRole(): boolean`
+   - `.env.example` criado documentando 3 keys (URL, ANON, SERVICE_ROLE)
+
+2. **Sub-fase 13.1 — Playwright suite 3× sem flake:**
+   - **Run #1 (pré-11.8):** 204 passed, 24 failed (todos em /clock+/erros — descoberta crítica que motivou 11.8)
+   - **Run #2 (pós-11.8):** 225 passed, 3 failed (em 31-employee-errors-view testes 4/5/6 — motivou 11.8.1)
+   - **Run #3 (pós-11.8.1):** **228 passed, 0 failed**, 17 skipped, 20.2min ✅
+   - **Run #4:** **228 passed, 0 failed**, 17 skipped, 19.4min ✅
+   - **Run #5:** **228 passed, 0 failed**, 17 skipped, 18.8min ✅
+   - 3× consecutivos sem flake confirmado.
+
+3. **Sub-fase 13.2 — Audit final + atualização docs canônicos:**
+   - Re-confirmado via `mcp__claude_ai_Supabase__get_advisors`: **23 advisors total** (1 ERROR legado `lost_driver_summary` + 22 WARN esperados).
+   - **Sistema de Ponto: 0 ERRORs** ✅
+   - 4 edge fns ACTIVE em prod confirmadas: `auth-login` v9, `clock-in-validated` v8, `create-user` v1, `employee-public-api` v2.
+   - CHECKPOINT.md atualizado pra refletir Fases 5-13 completas (estado final).
+   - TECH_DEBT.md fechado com este entry de "Fase 13 completa".
+
+**Métricas pós-Fase 13:**
+
+| Item | Estado |
+|---|---|
+| `tsc --noEmit` | limpo |
+| `vitest run` | 422/422 passing |
+| Playwright suite | 228 passed, 17 skipped, 0 failed (3× consecutivos) |
+| Security advisors Sistema de Ponto (ERRORs) | **0** |
+| Security advisors total (Supabase project) | 23 (1 legado ERROR + 22 esperados WARN) |
+| Edge fns ACTIVE | 4 (auth-login v9, clock-in-validated v8, create-user v1, employee-public-api v2) |
+| Bugs latentes em prod descobertos+fixed nesta sessão | 2 (createUser INSERT plain → 11.7; app funcionário sem queries pós-RLS → 11.8+11.8.1) |
+
+**Sistema está 100% pronto pra go-live**. Próximos passos exigem ação manual de Victor (onboarding Ponte Nova + tag v2.0.0-multi-tenant + push pra release).
+
+---
+
 ### 2026-05-12 — Sub-fase 11.8: Edge fn `employee-public-api` (fix lacuna estrutural app funcionário pós-RLS)
 
 **Descoberta crítica (Regra 1 + 4):** Playwright run #1 da Fase 13.1 mostrou **24 falhas concentradas em /clock e /erros**. Investigação via MCP confirmou: RLS pós-Fase 11 bloqueia anon em `employees`, `attendance`, `face_*`, `error_records`, `triage_*`. Específicamente:

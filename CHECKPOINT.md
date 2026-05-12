@@ -2,7 +2,7 @@
 
 > **Arquivo de retomada de sessão.** Quando reabrir o Claude Code, mande este arquivo (`cat CHECKPOINT.md`) ou peça pra Claude lê-lo. Ele deve restaurar contexto completo + REGRAS antes de fazer qualquer coisa.
 
-**Última atualização:** 2026-05-12 (após Fase 11 completa + adição Regra 8 "Qualidade > Velocidade")
+**Última atualização:** 2026-05-12 (após Fases 5-13 completas — sistema 100% pronto pra go-live)
 **Plano canônico:** `/home/victor/SISTEMA-DE-PONTO/PLANO_PRODUCAO.md`
 **TECH_DEBT canônico:** `/home/victor/SISTEMA-DE-PONTO/TECH_DEBT.md`
 **Memory:** `/home/victor/.claude/projects/-home-victor-SISTEMA-DE-PONTO/memory/`
@@ -80,12 +80,13 @@ Estas **8 regras** valem **pra cada sub-fase**, **toda execução**. Foram negoc
 
 ---
 
-## 📊 ESTADO ATUAL — Fases 5 a 11 ✅ COMPLETAS
+## 📊 ESTADO ATUAL — Fases 5 a 13 ✅ COMPLETAS — Sistema 100% pronto pra go-live
 
 **Branch:** `main`
-**Último commit:** `0300e8a` (sub-fase 11.5 — baseline pós-Fase 11)
+**Último commit:** `f612499` (sub-fase 11.8.1) → próximo será o de fechamento da 13.2
 **Working tree:** limpo (só `.claude/` untracked)
-**Sincronizado com `origin/main`:** sim
+**Playwright suite:** 3× consecutivos sem flake (228 passed, 17 skipped, 0 failed, ~20min cada)
+**Security advisors Sistema de Ponto:** **0 ERRORs** ✅
 
 ### Resumo das fases concluídas
 
@@ -96,12 +97,14 @@ Estas **8 regras** valem **pra cada sub-fase**, **toda execução**. Foram negoc
 | **7** | Migrations small + cleanups | 7.2-7.4 | ✅ |
 | **8** | Fixes médios | 8.1, 8.3, 8.4, 8.5 | ✅ |
 | **9** | E2E gaps fixáveis | 9.1-9.4 | ✅ (9 skips condicionais → 0; 4 specs E2E novas) |
-| **10** | E2E componentes | 10.1, 10.2, 10.4, 10.5, 10.6, 10.8 (6 ativas) + 10.3 cancelado + 10.7 postponed | ✅ (48 tests novos: 40 E2E + 8 unit) |
-| **11** | Hardening produção pública | 11.0-11.5 | ✅ **(67 ERRORs → 0 do Sistema de Ponto)** |
+| **10** | E2E componentes | 10.1, 10.2, 10.3✅, 10.4, 10.5, 10.6, 10.8 + 10.7 postponed | ✅ (48 tests + AuditLogsTab exposto) |
+| **11** | Hardening produção pública | 11.0-11.5 + **11.6 + 11.7 + 11.8 + 11.8.1** | ✅ **(67 ERRORs → 0; bug createUser fixed; lacuna anon-RLS fixed)** |
+| **12** | Documentação | 12.1-12.4 | ✅ (README, PRE-LAUNCH, edge-fns, ARCHITECTURE) |
+| **13** | Validação final | 13.0, **13.1, 13.2** | ✅ (SERVICE_ROLE fallback + Playwright 3× clean + audit final) |
 
 ### Métricas finais
 
-| Métrica | Inicial | Atual |
+| Métrica | Inicial (pré-Fase 5) | Atual (pós-Fase 13) |
 |---|---|---|
 | **Security advisors total** | 85 | **23** (-73%) |
 | **Security ERRORs (Sistema de Ponto)** | 67 | **0** ✅ |
@@ -109,35 +112,29 @@ Estas **8 regras** valem **pra cada sub-fase**, **toda execução**. Foram negoc
 | `sensitive_columns_exposed` (password plain) | 2 | 0 |
 | Tabelas com RLS ON | 0 | 47 (32 core + 15 legado) |
 | Senha plain text | sim (`users.password`) | **não** (bcrypt em `password_hash`) |
-| Edge fn `clock-in-validated` | v6 (`verify_jwt:false`) | **v8 (`verify_jwt:true`)** |
-| Edge fns ativos | 1 (`clock-in-validated`) | 2 (`+auth-login`) |
-| Unit tests | 414 | **422** (+8 FaceScanFrame) |
-| Specs E2E Playwright | 30 | **35** (+31 EmployeeErrorsView, +32 BonusTypesManager, +34 CompanySettings, +35 MirrorMassDialog, +36 EmployeeErrorsPage state machine, +26-extras 4 testes) |
-| Migrations | 50 | **57** (+7 na Fase 11) |
+| Edge fns ativos em prod | 1 (`clock-in-validated` v6 verify_jwt:false) | **4** (auth-login v9, clock-in-validated v8, create-user v1, employee-public-api v2) |
+| Unit tests | 414 | **422** |
+| Specs E2E Playwright | 30 | **35** (+ runs 3× sem flake = 228 passing) |
+| Migrations | 50 | **57** |
 | `users.password` plain em prod | sim | **dropada** |
+| Docs canônicas | README desatualizado + PRE-LAUNCH desatualizado | README v2.0.0-rc.1 + PRE-LAUNCH 10/10 + ARCHITECTURE com Mermaid + docs/edge-functions.md |
+| Bugs latentes em prod | 1 (createUser INSERT plain) + 1 (app funcionário /clock+/erros sem queries pós-RLS) | **0** |
 
-### Commits desta sessão (19, mais antigos primeiro)
+### Commits desta sessão (18, mais antigos primeiro)
 
 ```
-a4c3da3  test(e2e): data-testid pra remover 7 skips condicionais (sub-fase 9.1)
-5e77eb8  test(e2e): corrigir locator do filtro employment_type (sub-fase 9.2)
-de36d20  test(e2e): split 07-financial 'com/sem pagamentos' (sub-fase 9.3)
-a2b29b0  test(e2e): 4 specs isolamento UI multi-empresa (6.18-6.21) (sub-fase 9.4)
-138cec7  test(e2e): spec 31 EmployeeErrorsView (sub-fase 10.1)
-03687aa  test(e2e): spec 32 BonusTypesManager (sub-fase 10.2)
-f21062f  docs(tech-debt): sub-fase 10.3 cancelada — AuditLogsTab órfão
-ee0dbae  test(e2e): spec 34 CompanySettings (sub-fase 10.4)
-1c60430  test(e2e): spec 35 MirrorMassDialog (sub-fase 10.5)
-19ca891  test(e2e): spec 36 EmployeeErrorsPage state machine (sub-fase 10.6)
-b70b049  docs(tech-debt): sub-fase 10.7 (FaceRegistration) postponed
-4274876  test(unit): spec FaceScanFrame via @testing-library/react (sub-fase 10.8)
-6112ac1  chore(db): drop 32 tabelas backup_* legado (sub-fase 11.0)
-aab8389  feat(auth): add password_hash + edge fn auth-login v6 (sub-fase 11.3 parcial)
-41bd25c  feat(auth): completa 11.3 — bcrypt + JWT custom + auth-login v8 (sub-fase 11.3)
-27b7796  feat(db): criar 74 policies RLS dormentes em 32 tabelas core (sub-fase 11.2)
-ccc5a4c  feat(edge-fn): clock-in-validated v8 com verify_jwt:true (sub-fase 11.4)
-23dc365  feat(rls): cutover atômico — ENABLE RLS + DROP password (sub-fase 11.1)
-0300e8a  docs(security): baseline pós-Fase 11 + revoke anon apply_bank_hours (sub-fase 11.5)
+a6655e8  docs(checkpoint): adicionar Regra 8 — Qualidade > Velocidade
+a9607ce  refactor(auth): remover createDefaultAdmin + User.password obsoletos (sub-fase 11.6)
+79cf44b  feat(auth): edge fn create-user com bcrypt + frontend reescrita (sub-fase 11.7)
+156bc0e  docs(readme): atualizar pra refletir multi-tenant + Fase 11 (sub-fase 12.1)
+523d10c  docs(checklist): atualizar PRE-LAUNCH pós Fase 11 (sub-fase 12.2)
+f277aaa  docs(edge-fns): referência canônica das 3 edge fns ACTIVE (sub-fase 12.3)
+93c0706  docs(architecture): criar ARCHITECTURE.md com Mermaid diagrams (sub-fase 12.4)
+85546f4  feat(admin): expor AuditLogsTab sob AdminTab Section 10 (sub-fase 10.3)
+b5bb660  feat(tests): cleanup.ts:getClient prefere SERVICE_ROLE_KEY + .env.example (sub-fase 13.0)
+ca61c90  feat(edge-fn): employee-public-api unificada (sub-fase 11.8 — fix lacuna pós-RLS)
+f612499  fix(edge-fn): adicionar action employee-error-periods (sub-fase 11.8.1)
+[+commit fechamento 13.2 — TBD]
 ```
 
 ---
@@ -175,86 +172,75 @@ A var NÃO pode ter prefixo `SUPABASE_` (Supabase rejeita prefixos reservados). 
 
 ---
 
-## 🚧 PENDÊNCIAS CONHECIDAS — PRECISAM AÇÃO NA PRÓXIMA SESSÃO
+## 🚧 PENDÊNCIAS / AVISOS CONHECIDOS (não bloqueiam go-live)
 
-### 1. SERVICE_ROLE_KEY ausente no `.env`
+### 1. Sub-fase 10.7 (FaceRegistration) POSTPONED — mock pesado fora do escopo
 
-Specs E2E `25-multi-company-isolation` e `26-multi-company-ui-isolation test 6` fazem queries direto via `tests/cleanup.ts:getClient()` (que usa `VITE_SUPABASE_ANON_KEY`). Após RLS ativo, anon retorna vazio.
+`face-api.js` + `navigator.mediaDevices.getUserMedia` + `<video>` element exigem mock library compartilhada (~6-8h). Precedente: `tests/23-employee-clock-complete.spec.ts:173` skipa explicitamente. Componente funciona em prod — apenas não é exercitado por specs E2E.
 
-**Como resolver (próxima sessão):**
+### 2. 6 WARNs persistentes em advisors (intencionais)
 
-1. Victor copia o `service_role` key do Supabase Dashboard → Settings → API.
-2. Adicionar ao `.env` local:
-   ```
-   SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
-   ```
-3. Atualizar `tests/cleanup.ts:getClient()`:
-   ```typescript
-   const key = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY;
-   ```
-4. Rodar specs `25` e `26` pra confirmar volta ao verde.
+- 3 funções SECURITY DEFINER nossas: `apply_bank_hours_to_payment`, `verify_admin_secret`, `update_admin_secret`. Já revogamos anon em `apply_bank_hours_to_payment` (11.5). Outras 2 precisam de anon pra fluxo pré-login (verify admin password).
+- 16 WARNs no sistema legado (Q2 decisão Victor: não mexer — outro produto).
 
-**Impacto atual:** o APP em prod NÃO é afetado — só specs E2E de isolation. Outras specs (01-auth, 02-clock, 12-admin, 26 testes 1-5/7-9) passam.
+### 3. `nightDebitMinutes = 0` (decisão técnica conservadora, NÃO bug)
 
-### 2. Sub-fase 10.3 (AuditLogsTab) CANCELADA — componente órfão
+Todo débito tratado como diurno, sem multiplier noturno aplicado. Documentado.
 
-`src/components/monitoring/AuditLogsTab.tsx` (319 lin) existe mas não é renderizado em nenhuma view. Decisão pendente: expor na UI ou remover dead code. Fase 12 (docs) é o momento certo pra avaliar.
+### 4. Cold start `create-user` ~150s primeira chamada pós-deploy
 
-### 3. Sub-fase 10.7 (FaceRegistration) POSTPONED — mock pesado fora do escopo
+Característica conhecida (TECH_DEBT 6.13) — esm.sh bcryptjs download. Warm 0.57s. Solução UI: spinner com "pode levar até 2 minutos no primeiro uso". Não bloqueia.
 
-`face-api.js` + `navigator.mediaDevices.getUserMedia` + `<video>` element exigem mock library compartilhada (~6-8h). Precedente: `tests/23-employee-clock-complete.spec.ts:173` skipa explicitamente.
+### 5. PIN funcionário ainda plain text (`employees.pin`)
 
-### 4. 6 WARNs persistentes em advisors (intencionais)
-
-- 3 funções SECURITY DEFINER nossas: `apply_bank_hours_to_payment`, `verify_admin_secret`, `update_admin_secret`. Já revogamos anon em `apply_bank_hours_to_payment` (11.5). Outras 2 precisam de anon pra fluxo pré-login.
-- 16 WARNs no sistema legado (Q2 decisão Victor: não mexer).
-
-### 5. `nightDebitMinutes = 0` (decisão técnica conservadora, NÃO bug)
-
-Vide CHECKPOINT anterior. Todo débito tratado como diurno, sem multiplier noturno aplicado.
+Validado server-side via edge fn `employee-public-api` action `verify-pin`. Não exposto na rota REST (RLS bloqueia anon SELECT em employees). Migrar pra bcrypt seria coerente com password — mas exige migração de fluxo (similar à 11.3+11.7). Anotado como sub-fase 11.9 futura se necessidade aparecer pós-go-live.
 
 ---
 
-## 📋 PRÓXIMAS FASES
+## 📋 AÇÕES MANUAIS PARA GO-LIVE (Victor)
 
-### Fase 12 — Documentação (~6h, SEM bloqueio)
+Trabalho do Claude está **completo**. Próximos passos exigem ação manual do Victor:
 
-- **12.1** — Atualizar `README.md` (RLS real, multi-empresa, bcrypt, JWT custom, versão atual)
-- **12.2** — Atualizar `PRE-LAUNCH-CHECKLIST.md`
-- **12.3** — Documentar edge functions (`auth-login`, `clock-in-validated` v7/v8)
-- **12.4** — `ARCHITECTURE.md` novo (Mermaid diagrams, multi-tenancy, auth flow, RLS approach)
+### 13.3 — Onboarding Ponte Nova com dados reais
 
-### Fase 13 — Validação final + go-live (~3h Claude + variable manual)
+- [ ] Importar ~30 employees em Ponte Nova via UI Admin → Funcionários → Importar Excel
+- [ ] Configurar `payment_period_config` (auto_weekly?, semana de pagamento)
+- [ ] Configurar `geolocation_config` (lat/lng + radius do escritório de Ponte Nova)
+- [ ] Configurar `bonus_types` (B, C1, C2 ou customizados)
+- [ ] Validar login do admin local de Ponte Nova (id 8888)
+- [ ] Smoke test: 1 funcionário marca ponto via `/clock`
 
-- **13.0** *(pendência adicional)* — Adicionar `SUPABASE_SERVICE_ROLE_KEY` ao `.env` + atualizar `tests/cleanup.ts:getClient()` (vide pendência 1)
-- **13.1** — Full Playwright suite 3× consecutivos sem flake
-- **13.2** — Audit final advisors via MCP (re-confirmar 0 ERRORs Sistema de Ponto)
-- **13.3** — [MANUAL — Victor] Onboarding Ponte Nova com dados reais
-- **13.4** — [MANUAL — Victor] Tag `v2.0.0-multi-tenant` + push pra release
+### 13.4 — Release
+
+- [ ] Tag `v2.0.0-multi-tenant` no commit final da Fase 13.2
+- [ ] CHANGELOG (ou GitHub Release notes) referenciando: multi-empresa, RLS hardening, bcrypt, 4 edge fns, 0 ERRORs Sistema de Ponto, 228 specs E2E passing 3× sem flake
+- [ ] Push da tag pra remote (`git push origin v2.0.0-multi-tenant`)
+- [ ] Deploy frontend pro hosting de produção (Vercel/Netlify/etc.)
+- [ ] Configurar VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY no hosting (NUNCA SERVICE_ROLE_KEY no frontend prod)
+- [ ] Smoke test pós-deploy: login admin `9999` + login supervisor Caratinga + login supervisor Ponte Nova + clock-in real
 
 ---
 
 ## 🤖 ABORDAGEM PARA RETOMAR
 
-Quando o Victor reabrir o Claude Code, o assistente deve:
+Sistema está 100% pronto. Quando reabrir o Claude Code:
 
-1. **Ler este checkpoint** integralmente
-2. **Confirmar as 8 regras obrigatórias** acima — não pular nem 1 (Regra 8 é "Qualidade > Velocidade", reforça as outras 7)
-3. **Verificar estado atual** via git:
+1. **Ler este checkpoint** integralmente.
+2. **Confirmar as 8 regras obrigatórias** acima — Regra 8 ("Qualidade > Velocidade") reforça as outras 7.
+3. **Verificar estado:**
    ```bash
-   git log --oneline -5
-   git status --short
+   git log --oneline -5     # último commit deve ser do fechamento Fase 13.2
+   git status --short       # working tree limpo (só .claude/ untracked)
    ```
-4. **Verificar baseline** (deve ser tsc limpo + 422 unit tests + advisors 23):
+4. **Validar baseline:**
    ```bash
-   npx tsc --noEmit
-   npx vitest run 2>&1 | tail -5
+   npx tsc --noEmit         # limpo
+   npx vitest run | tail -5 # 422/422 passing
    ```
-5. **Perguntar ao Victor** qual fase atacar:
-   - Fase 12 (Documentação) — sem bloqueio
-   - Fase 13 — exige SERVICE_ROLE_KEY no .env primeiro
-   - Pendência 1 (SERVICE_ROLE_KEY) — preparar getClient()
-6. **Não começar a executar nada antes do Victor confirmar prioridade.**
+5. **Avaliar com Victor** os próximos passos:
+   - Ações manuais Go-Live (13.3 onboarding Ponte Nova + 13.4 release/tag)
+   - Tech debt residual aceito (PIN bcrypt? 6.10 setPaymentPeriodAutoWeekly? etc.)
+   - Pós-go-live: monitoring/observability/feedback de usuários reais
 
 ---
 
