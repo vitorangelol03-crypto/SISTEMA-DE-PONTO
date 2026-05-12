@@ -78,9 +78,11 @@ Deno.serve(async (req) => {
     const { id, password } = await req.json();
     if (!id || !password) return json({ error: 'Missing id or password' }, 400);
 
+    // Post sub-fase 11.1 cutover — coluna `password` plain foi dropada.
+    // Validação 100% via bcrypt password_hash.
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, company_id, password, password_hash')
+      .select('id, company_id, password_hash')
       .eq('id', String(id).trim())
       .maybeSingle();
 
@@ -88,21 +90,13 @@ Deno.serve(async (req) => {
       console.error('[auth-login] db error:', error);
       return json({ error: 'Database error', details: error.message }, 500);
     }
-    if (!user) return json({ error: 'Invalid credentials' }, 401);
+    if (!user || !user.password_hash) return json({ error: 'Invalid credentials' }, 401);
 
     let valid = false;
-    let authMethod: 'bcrypt' | 'plain' | 'none' = 'none';
-    if (user.password_hash) {
-      try {
-        valid = await bcryptjs.compare(String(password), user.password_hash);
-        if (valid) authMethod = 'bcrypt';
-      } catch (err) {
-        console.error('[auth-login] bcrypt error:', err);
-      }
-    }
-    if (!valid && user.password) {
-      valid = String(password) === user.password;
-      if (valid) authMethod = 'plain';
+    try {
+      valid = await bcryptjs.compare(String(password), user.password_hash);
+    } catch (err) {
+      console.error('[auth-login] bcrypt error:', err);
     }
     if (!valid) return json({ error: 'Invalid credentials' }, 401);
 
@@ -119,7 +113,6 @@ Deno.serve(async (req) => {
     return json({
       token: jwt,
       user: { id: user.id, company_id: user.company_id },
-      auth_method: authMethod, // 'bcrypt' ou 'plain' (debug — remover em prod final)
     });
   } catch (err) {
     console.error('[auth-login] unhandled:', err);

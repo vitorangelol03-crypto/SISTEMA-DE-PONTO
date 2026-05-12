@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase, setAuthToken } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
 import {
   computeWorkedMinutes,
@@ -407,33 +407,36 @@ async function validatePermission(
 }
 
 // Auth functions
-// Sub-fase 11.3 — loginUser usa edge fn auth-login (bcrypt + JWT custom).
-// Auth-login internamente faz fallback pra plain durante transição.
-// JWT retornado é setado como sessão Supabase via setSession.
+// Sub-fase 11.3/11.1 — loginUser via edge fn auth-login (bcrypt + JWT custom).
+// JWT custom é injetado no supabase client via headers globais, atendendo
+// RLS policies que checam auth.jwt() ->> 'company_id'.
 export const loginUser = async (id: string, password: string): Promise<User | null> => {
-  type AuthLoginResponse = {
-    token?: string;
-    user?: { id: string; company_id: string };
-    error?: string;
-  };
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+  const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-  const { data, error } = await supabase.functions.invoke<AuthLoginResponse>('auth-login', {
-    body: { id, password },
+  // Chama edge fn auth-login via fetch direto (functions.invoke pode ter quirks
+  // com tokens custom). Endpoint público — verify_jwt=false na edge fn.
+  const resp = await fetch(`${SUPABASE_URL}/functions/v1/auth-login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`,
+    },
+    body: JSON.stringify({ id, password }),
   });
 
-  if (error || !data?.token) {
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data?.token) {
     throw new Error('Credenciais inválidas');
   }
 
-  // Seta sessão Supabase com JWT custom. refresh_token vazio (sem renovação automática
-  // — exige novo login após exp 24h). Token é aceito pelo Supabase porque é assinado
-  // com JWT_SECRET (= JWT Secret oficial do projeto).
-  await supabase.auth.setSession({
-    access_token: data.token,
-    refresh_token: '',
-  });
+  // Persiste o token e recria o client supabase com header global Authorization.
+  // Próximas queries usam esse token automaticamente (RLS policies aceitam por
+  // ser JWT HS256 assinado com JWT_SECRET oficial).
+  setAuthToken(data.token);
 
-  // Fetch full User row (usa session ativa pra atender futuras policies RLS).
+  // Fetch full User row (usa header recém-injetado).
   const { data: user, error: fetchErr } = await supabase
     .from('users')
     .select('*')
