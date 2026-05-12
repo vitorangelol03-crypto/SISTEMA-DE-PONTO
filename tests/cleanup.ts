@@ -41,16 +41,46 @@ function readDotEnv(): Record<string, string> {
 }
 
 let _client: SupabaseClient | null = null;
+let _usingServiceRole = false;
+
+/**
+ * Sub-fase 13.0: preferimos SUPABASE_SERVICE_ROLE_KEY pra bypassar RLS
+ * (post-Fase 11 todas as tabelas core têm RLS ativo). Fallback pra
+ * VITE_SUPABASE_ANON_KEY mantém compat com setups antigos — mas specs
+ * que validam isolamento direto (25-multi-company-isolation,
+ * 26-multi-company-ui-isolation teste 6) vão retornar resultados vazios
+ * sem service_role, porque anon não passa nas policies.
+ */
 export function getClient(): SupabaseClient {
   if (_client) return _client;
   const env = { ...readDotEnv(), ...process.env };
   const url = env.VITE_SUPABASE_URL;
-  const key = env.VITE_SUPABASE_ANON_KEY;
+  const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = env.VITE_SUPABASE_ANON_KEY;
+  const key = serviceKey || anonKey;
+  _usingServiceRole = Boolean(serviceKey);
+
   if (!url || !key) {
-    throw new Error('Cleanup: VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY ausentes no .env');
+    throw new Error(
+      'Cleanup: VITE_SUPABASE_URL ausente ou nenhuma key disponível ' +
+      '(esperado SUPABASE_SERVICE_ROLE_KEY ou VITE_SUPABASE_ANON_KEY no .env).',
+    );
+  }
+  if (!serviceKey) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[cleanup.ts] SUPABASE_SERVICE_ROLE_KEY ausente — usando ANON_KEY como fallback. ' +
+      'Specs que validam isolamento RLS direto (25/26-test6) podem falhar com resultados vazios. ' +
+      'Adicione SUPABASE_SERVICE_ROLE_KEY ao .env (Supabase Dashboard → Settings → API).',
+    );
   }
   _client = createClient(url, key, { auth: { persistSession: false } });
   return _client;
+}
+
+/** Indica se o cliente atual usa service_role (true) ou anon key (false). */
+export function isUsingServiceRole(): boolean {
+  return _usingServiceRole;
 }
 
 function todayIso(): string {
