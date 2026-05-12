@@ -15,7 +15,7 @@ import { ADMIN, loginAs, goToTab, switchCompany } from './helpers';
  * (414 já passing em vitest).
  */
 
-const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
+const _CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
 async function openMassDialog(page: Page) {
   await goToTab(page, 'Ponto');

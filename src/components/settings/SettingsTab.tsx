@@ -10,7 +10,7 @@ import { useCompany } from '../../contexts/CompanyContext';
 
 interface SettingsTabProps {
   userId: string;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   hasPermission: (permission: string) => boolean;
 }
 

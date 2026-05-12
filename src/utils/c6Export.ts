@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- xlsx-js-style typings são incompletos pra cell styling/workbook; manter any com escopo limitado a util de export */
 import * as XLSX from 'xlsx-js-style';
 
 interface PaymentRow {

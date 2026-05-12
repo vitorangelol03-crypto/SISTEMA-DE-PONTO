@@ -2700,7 +2700,7 @@ export const getCleanupLogs = async (limit: number = 50): Promise<CleanupLog[]> 
 export interface MonitoringSetting {
   id: string;
   setting_key: string;
-  setting_value: any;
+  setting_value: unknown;
   description: string;
   updated_by: string | null;
   updated_at: string;
@@ -2713,7 +2713,7 @@ export interface UsageMetric {
   module: string | null;
   metric_value: number;
   metric_unit: string;
-  metadata: Record<string, any> | null;
+  metadata: Record<string, unknown> | null;
   recorded_at: string;
   created_at: string;
 }
@@ -2724,7 +2724,7 @@ export interface PerformanceMetric {
   metric_value: number;
   module: string | null;
   operation: string | null;
-  metadata: Record<string, any> | null;
+  metadata: Record<string, unknown> | null;
   recorded_at: string;
   created_at: string;
 }
@@ -2741,7 +2741,7 @@ export const getMonitoringSettings = async (): Promise<MonitoringSetting[]> => {
 
 export const updateMonitoringSetting = async (
   settingKey: string,
-  settingValue: any,
+  settingValue: unknown,
   updatedBy: string
 ): Promise<void> => {
   const { error } = await supabase
@@ -2762,7 +2762,7 @@ export const recordUsageMetric = async (
   module: string | null,
   metricValue: number,
   metricUnit: string,
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 ): Promise<void> => {
   const { error } = await supabase.from('usage_metrics').insert({
     user_id: userId,
@@ -2781,7 +2781,7 @@ export const recordPerformanceMetric = async (
   metricValue: number,
   module?: string,
   operation?: string,
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 ): Promise<void> => {
   const { error } = await supabase.from('performance_metrics').insert({
     metric_name: metricName,

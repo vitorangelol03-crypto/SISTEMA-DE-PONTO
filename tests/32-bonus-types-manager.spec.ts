@@ -19,7 +19,7 @@ import { getClient } from './cleanup';
  */
 
 const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
-const PONTE_NOVA_ID = '2b2abc4b-084c-4cf0-b5f1-02792513241d';
+const _PONTE_NOVA_ID = '2b2abc4b-084c-4cf0-b5f1-02792513241d';
 const CODE_PREFIX = 'PWT';
 
 async function unlockAdmin(page: Page) {
@@ -37,7 +37,7 @@ async function cleanupBonusTypes() {
 }
 
 /** Locator do tipo (linha da tabela desktop ou card mobile) pelo `code`. */
-function locTypeRowByCode(page: Page, code: string) {
+function _locTypeRowByCode(page: Page, code: string) {
   // Em desktop, code aparece em <td class="font-mono font-semibold">{code}</td>
   // Em mobile, em <div class="font-mono font-semibold">{code}</div>
   // Ambos são únicos pelo code (constraint UNIQUE(code, company_id)).

@@ -5,7 +5,7 @@ import { useCompany } from '../../contexts/CompanyContext';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { exportC6PaymentSheet } from '../../utils/c6Export';
 import toast from 'react-hot-toast';
-import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
+import EmploymentTypeFilter, { EmploymentType } from '../common/EmploymentTypeFilter';
 
 interface C6PaymentTabProps {
   userId: string;
@@ -24,7 +24,7 @@ interface PaymentRow {
   description: string;
 }
 
-export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermission }) => {
+export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId: _userId, hasPermission }) => {
   const { company } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([]);

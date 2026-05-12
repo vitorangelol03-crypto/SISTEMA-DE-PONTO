@@ -23,7 +23,7 @@ import {
   BonusTypeRecord,
 } from '../../services/database';
 import { useCompany } from '../../contexts/CompanyContext';
-import { getBrazilDate, getBrazilDateTime, formatDateBR } from '../../utils/dateUtils';
+import { getBrazilDate, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 import { AttendanceApprovalPanel } from './AttendanceApprovalPanel';
@@ -259,7 +259,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     }
   };
 
-  const handleExitTimeChange = (employeeId: string, time: string) => {
+  const _handleExitTimeChange = (employeeId: string, time: string) => {
     setExitTimes(prev => ({ ...prev, [employeeId]: time }));
   };
 
@@ -294,7 +294,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     }
   };
 
-  const updateExitTime = async (employeeId: string) => {
+  const _updateExitTime = async (employeeId: string) => {
     if (!isViewingToday && !hasPermission('attendance.editHistory')) {
       toast.error('Você não tem permissão para editar registros de dias anteriores');
       return;

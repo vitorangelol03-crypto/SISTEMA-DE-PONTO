@@ -116,7 +116,7 @@ test.describe('Isolamento multi-empresa', () => {
       .select('*', { count: 'exact', head: true })
       .like('name', `${PREFIX}%`);
     if ((count ?? 0) > 0) {
-      // eslint-disable-next-line no-console
+       
       console.error(`\n!!!!!!!!!! ATENÇÃO: ${count} funcionário(s) PWTest_isol_ sobraram após cleanup. Limpar manualmente. !!!!!!!!!!\n`);
     }
   });

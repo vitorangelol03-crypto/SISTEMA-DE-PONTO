@@ -79,6 +79,7 @@ function calcHours(
 // diagnóstico/auditoria, não pra operação de marcação de ponto).
 async function logEdgeError(
   // deno-lint-ignore no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   params: {
     message: string;

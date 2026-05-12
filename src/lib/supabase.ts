@@ -32,7 +32,7 @@ try {
 export const supabase = new Proxy({} as SupabaseClient, {
   get(_target, prop) {
     // deno-lint-ignore no-explicit-any
-    const value = (_client as any)[prop];
+    const value = (_client as unknown as Record<PropertyKey, unknown>)[prop];
     if (typeof value === 'function') return value.bind(_client);
     return value;
   },

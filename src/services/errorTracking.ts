@@ -14,7 +14,7 @@ export interface ErrorLogData {
   stackTrace?: string;
   component?: string;
   module?: string;
-  errorContext?: Record<string, any>;
+  errorContext?: Record<string, unknown>;
   userAgent?: string;
 }
 

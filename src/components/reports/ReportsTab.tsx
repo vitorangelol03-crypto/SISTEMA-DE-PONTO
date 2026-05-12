@@ -6,7 +6,7 @@ import { getBonusValueForType } from '../../utils/bonusHelpers';
 import { formatDateBR } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx-js-style';
 import toast from 'react-hot-toast';
-import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
+import EmploymentTypeFilter, { EmploymentType } from '../common/EmploymentTypeFilter';
 
 interface ReportsTabProps {
   userId: string;
@@ -303,7 +303,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
     </thead>
     <tbody>${summaryRows}</tbody>
   </table>
-  <script>window.addEventListener('load', () => { window.print(); });<\/script>
+  <script>window.addEventListener('load', () => { window.print(); });</script>
 </body>
 </html>`;
 

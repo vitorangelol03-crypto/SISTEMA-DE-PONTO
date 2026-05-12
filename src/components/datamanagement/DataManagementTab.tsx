@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Database, TrendingUp, Settings, Trash2, Download, AlertTriangle, CheckCircle, Clock, Calendar, Filter, Eye } from 'lucide-react';
+import { Database, TrendingUp, Settings, Trash2, Download, AlertTriangle, CheckCircle, Clock, Calendar, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import {
@@ -24,14 +24,14 @@ import {
   Employee
 } from '../../services/database';
 import { useCompany } from '../../contexts/CompanyContext';
-import { format, subMonths } from 'date-fns';
+import { format } from 'date-fns';
 
 interface DataManagementTabProps {
   userId: string;
   hasPermission: (permission: string) => boolean;
 }
 
-export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, hasPermission }) => {
+export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, hasPermission: _hasPermission }) => {
   const { company } = useCompany();
   const [statistics, setStatistics] = useState<DataStatistics | null>(null);
   const [retentionSettings, setRetentionSettings] = useState<DataRetentionSettings[]>([]);
@@ -119,7 +119,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
 
     try {
       await updateAutoCleanupConfig(
-        { ...autoCleanupConfig, frequency: frequency as any, preferred_time: time },
+        { ...autoCleanupConfig, frequency: frequency as "daily" | "weekly" | "monthly", preferred_time: time },
         userId
       );
       toast.success('Configuração atualizada com sucesso');
@@ -160,8 +160,8 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
       const workbook = XLSX.utils.book_new();
 
       for (const dataType of selectedDataTypes) {
-        let rawData: any[] = [];
-        let formattedData: any[] = [];
+        let rawData: unknown[] = [];
+        let formattedData: unknown[] = [];
 
         if (dataType === 'attendance') {
           rawData = await getAttendanceHistory(startDate, endDate, selectedEmployee, undefined, undefined, companyId);
@@ -255,7 +255,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
         try {
           await handleGenerateBackup();
           toast.success('Backup gerado com sucesso');
-        } catch (error) {
+        } catch (_error) {
           toast.error('Erro ao gerar backup');
           return;
         }

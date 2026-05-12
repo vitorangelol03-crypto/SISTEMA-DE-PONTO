@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { ADMIN, loginAs, goToTab } from './helpers';
 import { getClient } from './cleanup';
 import {
@@ -190,7 +190,7 @@ test.describe('Errors — completo', () => {
 
   test('funcionário ausente NÃO recebe triagem', async ({ page }) => {
     const empPresente = await createTestEmployee({ name: `${PREFIX}Pres`, withPix: false });
-    const empAusente = await createTestEmployee({ name: `${PREFIX}Aus`, withPix: false });
+    const _empAusente = await createTestEmployee({ name: `${PREFIX}Aus`, withPix: false });
     await insertAttendance(empPresente, SAFE_DATE);
     // empAusente sem attendance
     await upsertTriageError(SAFE_DATE, { triage_type: 'value', direct_value: 50 });

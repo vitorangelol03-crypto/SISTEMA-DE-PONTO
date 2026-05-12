@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, FileText, Search, Wallet } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
   getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance,
@@ -58,7 +58,7 @@ const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
 export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermission }) => {
   const { company } = useCompany();
   const [bonusTypes, setBonusTypes] = useState<BonusTypeRecord[]>(FALLBACK_BONUS_TYPES);
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [_employees, setEmployees] = useState<Employee[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [financialData, setFinancialData] = useState<EmployeeFinancialData[]>([]);

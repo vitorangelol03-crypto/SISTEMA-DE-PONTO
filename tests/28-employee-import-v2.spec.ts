@@ -72,7 +72,7 @@ for (const cpf of TEST_CPFS) {
 
 // ─── Helpers locais ──────────────────────────────────────────────────────
 
-async function enterAdminAuth(page: Page): Promise<void> {
+async function _enterAdminAuth(page: Page): Promise<void> {
   // AdminTab tem auth por senha (mesmo padrão de 12-admin-tab.spec.ts).
   await goToTab(page, 'Admin');
   const senhaInput = page.getByPlaceholder('Senha');

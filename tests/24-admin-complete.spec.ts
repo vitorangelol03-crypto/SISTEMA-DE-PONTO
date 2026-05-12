@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { ADMIN, loginAs, goToTab } from './helpers';
 import { getClient } from './cleanup';
 import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from './integrity-helpers';
@@ -26,7 +26,7 @@ async function cleanup() {
   await cleanupByPrefix(PREFIX);
 }
 
-async function unlockAdmin(page: any) {
+async function unlockAdmin(page: Page) {
   await goToTab(page, 'Admin');
   const passwordInput = page.getByPlaceholder('Senha');
   await expect(passwordInput).toBeVisible({ timeout: 10_000 });

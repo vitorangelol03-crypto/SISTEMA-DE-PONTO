@@ -15,12 +15,12 @@ export default async function globalTeardown() {
   const today = new Date().toLocaleDateString('pt-BR');
   try {
     await cleanupAllTestArtifacts(since);
-    // eslint-disable-next-line no-console
+     
     console.log(`\n[cleanup] Artefatos de teste removidos (desde ${since})`);
-    // eslint-disable-next-line no-console
+     
     console.log(`[cleanup] Cleanup executado. Dados de ${today} foram PRESERVADOS.`);
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[cleanup] Falha ao limpar artefatos de teste:', err);
   } finally {
     try { fs.unlinkSync(SUITE_START_FILE); } catch { /* noop */ }

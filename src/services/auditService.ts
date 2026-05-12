@@ -8,8 +8,8 @@ export interface AuditLogData {
   module: string;
   entityType?: string;
   entityId?: string;
-  oldData?: Record<string, any>;
-  newData?: Record<string, any>;
+  oldData?: Record<string, unknown>;
+  newData?: Record<string, unknown>;
   description: string;
   ipAddress?: string;
   userAgent?: string;
@@ -19,7 +19,7 @@ export interface ActivityLogData {
   userId: string;
   activityType: string;
   module: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   durationMs?: number;
 }
 
@@ -72,7 +72,7 @@ class AuditService {
     module: string,
     entityType: string,
     entityId: string,
-    newData: Record<string, any>,
+    newData: Record<string, unknown>,
     description: string
   ): Promise<void> {
     await this.logAction({
@@ -91,8 +91,8 @@ class AuditService {
     module: string,
     entityType: string,
     entityId: string,
-    oldData: Record<string, any>,
-    newData: Record<string, any>,
+    oldData: Record<string, unknown>,
+    newData: Record<string, unknown>,
     description: string
   ): Promise<void> {
     await this.logAction({
@@ -112,7 +112,7 @@ class AuditService {
     module: string,
     entityType: string,
     entityId: string,
-    oldData: Record<string, any>,
+    oldData: Record<string, unknown>,
     description: string
   ): Promise<void> {
     await this.logAction({
@@ -147,7 +147,7 @@ class AuditService {
     userId: string,
     module: string,
     description: string,
-    details?: Record<string, any>
+    details?: Record<string, unknown>
   ): Promise<void> {
     await this.logAction({
       userId,
@@ -162,7 +162,7 @@ class AuditService {
     userId: string,
     module: string,
     description: string,
-    details?: Record<string, any>
+    details?: Record<string, unknown>
   ): Promise<void> {
     await this.logAction({
       userId,
@@ -196,7 +196,7 @@ class AuditService {
     module: string,
     description: string,
     affectedCount: number,
-    details?: Record<string, any>
+    details?: Record<string, unknown>
   ): Promise<void> {
     await this.logAction({
       userId,
@@ -252,7 +252,7 @@ class AuditService {
   async logFilter(
     userId: string,
     module: string,
-    filterCriteria: Record<string, any>
+    filterCriteria: Record<string, unknown>
   ): Promise<void> {
     await this.logActivity({
       userId,

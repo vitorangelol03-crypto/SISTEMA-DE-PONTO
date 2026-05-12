@@ -81,7 +81,7 @@ test.describe('Funcionários', () => {
 
   test('cria funcionário, edita PIN e exclui', async ({ page }) => {
     const cpfRaw = generateValidCPF();
-    const cpfFormatted = formatCPF(cpfRaw);
+    const _cpfFormatted = formatCPF(cpfRaw);
     const testName = `PW Test ${Date.now()}`;
 
     // Abre modal "Novo Funcionário"

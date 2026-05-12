@@ -105,6 +105,7 @@ test.describe('Geolocalização (/clock)', () => {
 
   test('dentro do raio: ponto registrado com geo_valid=true', async ({ page }) => {
     await page.addInitScript(({ lat, lon }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock de navigator.geolocation requer cast (typing readonly)
       (navigator as any).geolocation.getCurrentPosition = (success: PositionCallback) => {
         success({
           coords: {
@@ -135,6 +136,7 @@ test.describe('Geolocalização (/clock)', () => {
 
   test('fora do raio: ponto registrado silenciosamente, fraude registrada server-side', async ({ page }) => {
     await page.addInitScript(({ lat, lon }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock de navigator.geolocation requer cast (typing readonly)
       (navigator as any).geolocation.getCurrentPosition = (success: PositionCallback) => {
         success({
           coords: {
@@ -165,6 +167,7 @@ test.describe('Geolocalização (/clock)', () => {
 
   test('permissão negada: coleta silenciosa, sem modal vermelho', async ({ page }) => {
     await page.addInitScript(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock de navigator.geolocation requer cast (typing readonly)
       (navigator as any).geolocation.getCurrentPosition = (
         _success: PositionCallback,
         error: PositionErrorCallback,
@@ -189,6 +192,7 @@ test.describe('Geolocalização (/clock)', () => {
 
   test('erro técnico GPS: envia ao servidor com coords null, sem modal', async ({ page }) => {
     await page.addInitScript(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock de navigator.geolocation requer cast (typing readonly)
       (navigator as any).geolocation.getCurrentPosition = (
         _success: PositionCallback,
         error: PositionErrorCallback,

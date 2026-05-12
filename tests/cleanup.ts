@@ -67,7 +67,7 @@ export function getClient(): SupabaseClient {
     );
   }
   if (!serviceKey) {
-    // eslint-disable-next-line no-console
+     
     console.warn(
       '[cleanup.ts] SUPABASE_SERVICE_ROLE_KEY ausente — usando ANON_KEY como fallback. ' +
       'Specs que validam isolamento RLS direto (25/26-test6) podem falhar com resultados vazios. ' +
@@ -154,7 +154,7 @@ export async function cleanupTodaySince(sinceIso: string): Promise<{
   const today = todayIso();
   const yesterday = yesterdayIso();
 
-  // eslint-disable-next-line no-console
+   
   console.warn(
     `PROTEÇÃO: cleanup preservando registros com date=${today} (hoje) e date=${yesterday} (ontem — cobre suítes que atravessam meia-noite).`,
   );
@@ -194,7 +194,7 @@ export async function cleanupTodaySince(sinceIso: string): Promise<{
   let paymentsReset = 0;
   for (const p of touchedPayments || []) {
     if (p.date === today || p.date === yesterday) {
-      // eslint-disable-next-line no-console
+       
       console.warn(`PROTEÇÃO: payment de ${p.date} preservado (hoje ou ontem).`);
       continue;
     }

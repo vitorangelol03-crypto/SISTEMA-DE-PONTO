@@ -16,7 +16,7 @@ test.describe('Tela do Funcionário (/clock)', () => {
     const input = page.locator('input[placeholder="000.000.000-00"]');
     await input.fill('abc123xyz456');
     // Apenas os números devem permanecer
-    await expect(input).toHaveValue(/^[\d.\-]+$/);
+    await expect(input).toHaveValue(/^[\d.-]+$/);
     const value = await input.inputValue();
     expect(value.replace(/\D/g, '')).toBe('123456');
   });

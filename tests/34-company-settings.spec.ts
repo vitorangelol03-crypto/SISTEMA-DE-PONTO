@@ -20,7 +20,7 @@ import { getClient } from './cleanup';
  */
 
 const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
-const PONTE_NOVA_ID = '2b2abc4b-084c-4cf0-b5f1-02792513241d';
+const _PONTE_NOVA_ID = '2b2abc4b-084c-4cf0-b5f1-02792513241d';
 
 async function unlockAdmin(page: Page) {
   await goToTab(page, 'Admin');

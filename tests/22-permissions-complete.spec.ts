@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
 import { loginAs, goToTab } from './helpers';
-import { getClient } from './cleanup';
 import { createTestEmployee, insertAttendance, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from './integrity-helpers';
 
 function todayBR(): string {

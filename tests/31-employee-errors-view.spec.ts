@@ -28,7 +28,7 @@ import {
  * badge "✅ Pago"). Não criamos period novo pra não inflar fixtures.
  */
 
-const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
+const _CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}EmpErrV `;
 const EXISTING_PERIOD_DATE = '2026-04-22'; // último dia do period paid
 const PIN = '1234';

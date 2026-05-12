@@ -1,5 +1,5 @@
-import { test, expect, Page } from '@playwright/test';
-import { ADMIN, loginAs, goToTab, TEST_EMPLOYEE_CPF } from './helpers';
+import { test, expect } from '@playwright/test';
+import { ADMIN, loginAs, goToTab } from './helpers';
 import { cleanupAllTestArtifacts, readSuiteStart, getClient } from './cleanup';
 
 /**

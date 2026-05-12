@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { TEST_EMPLOYEE_CPF, TEST_EMPLOYEE_CPF_MASKED } from './helpers';
 import { getClient } from './cleanup';
 import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from './integrity-helpers';
 

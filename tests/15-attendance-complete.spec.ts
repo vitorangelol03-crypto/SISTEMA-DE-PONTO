@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { ADMIN, loginAs, goToTab } from './helpers';
 import { getClient } from './cleanup';
 import {
