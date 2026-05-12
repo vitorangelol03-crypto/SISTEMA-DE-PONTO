@@ -1,228 +1,279 @@
 # Sistema de Ponto
 
-Sistema completo de controle de ponto e gestão de funcionários desenvolvido para uso interno empresarial. Permite registro de presença, controle de horários, bonificações, relatórios financeiros e gerenciamento de erros operacionais.
+Sistema **multi-empresa** de controle de ponto, banco de horas, bonificações e folha-de-pagamento auxiliar. Cada empresa (tenant) tem dados completamente isolados via Row Level Security real no PostgreSQL. Autenticação via ID numérico + senha (sem email), com JWT custom HS256 emitido por edge function própria.
+
+**Versão atual:** `2.0.0-rc.1` (multi-tenant, RLS hardened — Fase 11 completa).
+**Branch:** `main` • **Produção:** Supabase (`flcncdidxmmornkgkfbb` — sa-east-1, PG 17.6).
+
+---
 
 ## Funcionalidades Principais
 
+### Multi-Empresa (Multi-Tenant)
+- 2 empresas em produção: **Caratinga** (CLAYTON B DOS SANTOS, ~30 employees, dados ativos) e **Ponte Nova** (CD LOGISTICA LTDA, em onboarding).
+- Isolamento total via RLS — `auth.jwt() ->> 'company_id'` em todas as 32 tabelas core.
+- Switcher de empresa no header (admin master '9999'). Supervisor vê só a empresa atrelada.
+- DEFAULT_COMPANY_ID = `'6583bb2a-e334-41a7-b69c-7d98f3b46dfc'` (Caratinga) como fallback documentado.
+
 ### Controle de Presença
-- Registro diário de presença e faltas
-- Registro de horários de saída
-- Marcação em massa de presença/falta
-- Busca por nome ou CPF
-- Visualização de estatísticas diárias (presentes, faltas, não marcados)
+- Registro diário via app (clock-in) com validação de geolocalização real (edge fn `clock-in-validated` v8).
+- Marcação em massa de presença/falta pela UI admin.
+- Busca por nome, CPF, PIN, badge.
+- Espelhamento de marcações (MirrorMassDialog) entre dias úteis.
+- Estatísticas: presentes, faltas, não marcados, atrasos.
+
+### Reconhecimento Facial (opcional)
+- `face-api.js` para validar identidade no clock-in.
+- Cadastro one-time via `FaceRegistration`. Reset manual sob auditoria.
 
 ### Gestão de Funcionários
-- Cadastro completo de funcionários (nome, CPF, cargo, salário)
-- Edição e exclusão de funcionários
-- Listagem com busca e filtros
-- Controle de usuários do sistema
+- Cadastro completo: nome, CPF, PIN, badge, PIS, cargo, salário, jornada esperada, tipo de contrato.
+- Tipos de pagamento configuráveis (mensalista, diarista, hora).
+- Importação em massa via XLSX.
+- Exportação para Excel.
+
+### Banco de Horas
+- Cálculo automático de créditos/débitos por dia (diurno + noturno).
+- Aplicação transacional via RPC `apply_bank_hours_to_payment` (SECURITY DEFINER) — preview + commit atômico.
+- Configuração de multiplicadores por empresa (`bank_hours_overrides`).
 
 ### Bonificações
-- Aplicação de bonificações para funcionários presentes
-- Remoção individual de bonificações com observação obrigatória
-- Remoção em massa de bonificações com justificativa
-- Histórico completo de remoções com auditoria
-- Exportação do histórico para Excel
-- Cálculo automático no relatório financeiro
+- Tipos custom por empresa (`bonus_types` table) — B, C1, C2 ou definidos pelo admin.
+- Aplicação individual ou em massa por data.
+- Remoção com observação obrigatória (10-500 chars) — auditoria completa.
+- Bloqueios programados (`bonus_blocks`) para impedir aplicação em períodos sensíveis.
 
 ### Relatórios Financeiros
-- Relatório mensal detalhado por funcionário
-- Cálculo de:
-  - Dias trabalhados
-  - Dias de falta
-  - Valor por dia
-  - Bonificações recebidas
-  - Total a receber
-- Histórico de remoções de bonificação com:
-  - Filtros por período e funcionário
-  - Detalhamento completo de cada remoção
-  - Observações obrigatórias para auditoria
-  - Identificação do responsável pela remoção
-- Exportação para Excel e PDF
-- Visualização gráfica de presença vs faltas
+- Cálculo de pagamento por período: dias trabalhados, faltas, hora-base, banco de horas, bonificações.
+- Visualização por funcionário ou agregada por empresa.
+- Exportação Excel + PDF.
+- Pagamento via C6 Bank (formato proprietário, validação PIX/CPF/CNPJ).
+- Histórico completo de remoções de bonificação para auditoria.
 
-### Registro de Erros
-- Registro de problemas operacionais
-- Categorização por tipo (falha de equipamento, erro humano, etc.)
-- Controle de status (pendente, resolvido, em andamento)
-- Priorização (baixa, média, alta, crítica)
+### Triagem e Registro de Erros
+- Registro de problemas operacionais com categorização.
+- Distribuição de erros entre funcionários (`triage_distribution`).
+- Cálculo de impacto financeiro por funcionário.
+- Visualização agregada (`EmployeeErrorsView`) com state machine completo.
 
-### Autenticação
-- Sistema de login seguro
-- Controle de acesso por usuário
-- Gestão de sessões
+### Autenticação e Permissões
+- Login: **ID numérico + senha** (sem email). Admin master ID `9999`.
+- JWT custom HS256 (24h) assinado com JWT_SECRET oficial do Supabase — RLS aceita via `auth.jwt() ->> 'company_id'`.
+- Permissões granulares por usuário (`user_permissions.permissions` jsonb): `users.*`, `employees.*`, `attendance.*`, `financial.*`, `errors.*`, `datamanagement.*`.
+- Admin '9999' tem bypass em todas as policies (`OR auth.jwt() ->> 'sub' = '9999'`).
 
-## Tecnologias Utilizadas
+---
 
-- **React 18** - Framework JavaScript para interface
-- **TypeScript** - Tipagem estática
-- **Vite** - Build tool e dev server
-- **Tailwind CSS** - Framework CSS utilitário
-- **Supabase** - Backend-as-a-Service (banco de dados PostgreSQL)
-- **date-fns** - Manipulação de datas
-- **Lucide React** - Ícones
-- **Recharts** - Gráficos e visualizações
-- **jsPDF** - Geração de PDFs
-- **XLSX** - Exportação para Excel
-- **React Hot Toast** - Notificações
+## Tecnologias
+
+### Frontend
+- **React 18.3** + **TypeScript 5.5** + **Vite 5.4**
+- **Tailwind CSS 3.4** (UI)
+- **date-fns 4** (datas), **lucide-react** (ícones), **recharts** (gráficos)
+- **jsPDF**, **xlsx-js-style** (exportação)
+- **face-api.js** (reconhecimento facial opcional)
+- **react-hot-toast** (notificações)
+
+### Backend (Supabase)
+- **PostgreSQL 17.6** com Row Level Security ativo em 47 tabelas (32 core + 15 legado isolado).
+- **Edge Functions** (Deno runtime):
+  - `auth-login` v9 (`verify_jwt:false`) — POST `{id, password}` → JWT custom HS256 com `{sub, role, aud, company_id, exp:24h}`.
+  - `clock-in-validated` v8 (`verify_jwt:true`) — validação geo real + INSERT/UPDATE attendance + log em `error_logs`.
+  - `create-user` v1 (`verify_jwt:true`) — bcrypt server-side + INSERT em `users.password_hash`. Substitui o INSERT plain antigo (sub-fase 11.7).
+- **bcryptjs 2.4.3** (via `https://esm.sh/`) — hash de senhas em edge fns + RPC `verify_admin_secret`.
+- **RPCs SECURITY DEFINER**: `verify_admin_secret`, `update_admin_secret`, `apply_bank_hours_to_payment`.
+
+### Testes
+- **Vitest 4** — 422 unit tests em 17 arquivos (~4s full run).
+- **Playwright 1.59** + `@testing-library/react` — 35+ specs E2E cobrindo auth, clock, financial, multi-empresa isolation, admin tab, triage.
+
+---
 
 ## Estrutura do Projeto
 
 ```
 src/
-├── components/           # Componentes React
-│   ├── attendance/      # Controle de ponto
-│   ├── auth/           # Autenticação
-│   ├── common/         # Componentes compartilhados
+├── components/          # Componentes React
+│   ├── admin/          # Tab Admin (master only)
+│   ├── attendance/     # Controle de ponto
+│   ├── auth/           # LoginForm, CompanySelector
+│   ├── c6payment/      # Exportação C6 Bank
+│   ├── common/         # Layout, TabNavigation
+│   ├── datamanagement/ # Retention, cleanup, audit
+│   ├── employee-clock/ # Clock-in funcionário (PWA mode)
 │   ├── employees/      # Gestão de funcionários
 │   ├── errors/         # Registro de erros
-│   ├── financial/      # Relatórios financeiros
+│   ├── financial/      # Folha + banco de horas
+│   ├── monitoring/     # Audit/activity logs
 │   ├── reports/        # Relatórios gerais
-│   ├── settings/       # Configurações
-│   └── users/          # Gestão de usuários
-├── hooks/              # Custom React hooks
-├── lib/                # Configurações de bibliotecas
-├── services/           # Serviços de banco de dados
-├── utils/              # Utilitários e helpers
-├── App.tsx            # Componente principal
-└── main.tsx           # Entry point
+│   ├── settings/       # Configurações por empresa
+│   ├── triage/         # Triagem de erros
+│   ├── tutorial/       # HelpButton, TutorialTab
+│   └── users/          # Gestão de supervisors
+├── contexts/           # CompanyContext (tenant ativo)
+├── hooks/              # useAuth, usePermissions
+├── lib/                # supabase client (proxy mutável)
+├── services/           # database.ts (~5180 lin), permissions.ts
+├── types/              # TS types compartilhados
+├── utils/              # Calculators (attendance, bank hours, validation)
+├── App.tsx
+└── main.tsx
+
+supabase/
+├── functions/
+│   ├── auth-login/     # v9 ACTIVE
+│   ├── clock-in-validated/  # v8 ACTIVE
+│   └── create-user/    # v1 ACTIVE
+└── migrations/         # 57 migrations versionadas
+
+tests/                  # Playwright specs E2E + unit
+docs/                   # security baselines pre/post RLS
+CHECKPOINT.md           # estado de retomada de sessão (regras + fases)
+TECH_DEBT.md            # bugs + histórico de resoluções
 ```
+
+---
 
 ## Configuração
 
 ### Pré-requisitos
-
-- Node.js 18+ instalado
-- Conta Supabase configurada
-- npm ou yarn
+- **Node.js 18+** (recomendado 20+)
+- **npm** ou **pnpm**
+- Conta Supabase com PostgreSQL ≥15
 
 ### Variáveis de Ambiente
 
-Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
-
+**Frontend (`.env`):**
 ```env
-VITE_SUPABASE_URL=sua_url_supabase
-VITE_SUPABASE_ANON_KEY=sua_chave_anonima_supabase
+VITE_SUPABASE_URL=https://flcncdidxmmornkgkfbb.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_...
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_...   # opcional — apenas pra specs E2E de isolation
 ```
+
+`SUPABASE_SERVICE_ROLE_KEY` é usada por `tests/cleanup.ts:getClient()` em specs que validam isolamento RLS direto contra o banco (sub-fases `25-multi-company-isolation` e parte de `26-multi-company-ui-isolation`).
+
+**Supabase Edge Function Secrets** (configurados via Dashboard → Settings → Edge Functions → Secrets):
+- `JWT_SECRET` — valor idêntico ao "JWT Secret" oficial do projeto (Settings → API → JWT Settings → JWT Secret). Sem prefixo `SUPABASE_` (Supabase rejeita prefixos reservados).
+- `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_URL` são injetados automaticamente.
 
 ### Instalação
 
-1. Clone o repositório
-2. Instale as dependências:
-
 ```bash
+git clone <repo>
+cd SISTEMA-DE-PONTO
 npm install
-```
-
-3. Configure as variáveis de ambiente no arquivo `.env`
-
-4. Execute o projeto em modo de desenvolvimento:
-
-```bash
+cp .env.example .env  # preencher com as keys reais
 npm run dev
 ```
+
+---
 
 ## Comandos Disponíveis
 
 ```bash
-npm run dev      # Inicia servidor de desenvolvimento
-npm run build    # Gera build de produção
-npm run preview  # Preview do build de produção
-npm run lint     # Executa linter
+# Dev
+npm run dev              # Vite dev server
+npm run build            # build de produção
+npm run preview          # preview do build
+npm run lint             # ESLint
+
+# Testes
+npm run test:unit        # vitest run (422 unit tests, ~4s)
+npm run test:unit:watch  # vitest watch mode
+npm run test             # Playwright E2E full suite (~10-20min)
+npm run test:headed      # Playwright em modo visível
+npm run test:report      # abre report HTML
 ```
 
-## Estrutura do Banco de Dados
+### Comandos de validação canônica
 
-O sistema utiliza as seguintes tabelas no Supabase:
+Antes de qualquer commit, executar:
+```bash
+npx tsc --noEmit         # TypeScript strict
+npx vitest run           # unit (deve passar 422/422)
+npx playwright test tests/<spec>.spec.ts --workers=1 --reporter=list  # E2E focal
+```
 
-### Tabelas Principais
-- **users** - Usuários do sistema
-- **employees** - Funcionários cadastrados
-- **attendance** - Registro de presença
-- **bonuses** - Bonificações aplicadas
-- **payments** - Pagamentos realizados
-- **error_records** - Registro de problemas operacionais
-- **bonus_removals** - Histórico de remoções de bonificação com observações
+---
 
-### Tabelas de Permissões
-- **user_permissions** - Permissões granulares por usuário
-- **permission_logs** - Histórico de mudanças em permissões
+## Banco de Dados
 
-### Tabelas de Auditoria e Monitoramento
-- **audit_logs** - Registros de auditoria de todas as ações
-- **activity_logs** - Logs de atividades do sistema
-- **error_logs** - Logs de erros técnicos
-- **usage_metrics** - Métricas de uso do sistema
-- **performance_metrics** - Métricas de performance
+### Tabelas core do Sistema de Ponto (32, todas com RLS ativo)
+- **Multi-empresa**: `companies`
+- **Usuários e permissões**: `users`, `user_permissions`, `permission_logs`, `admin_secret`
+- **Funcionários**: `employees`, `face_auth_attempts`, `face_recognition_config`
+- **Ponto**: `attendance`, `geolocation_config`, `geo_fraud_attempts`
+- **Banco de horas**: `bank_hours_overrides`, `bank_hours_application_log`
+- **Bonificações**: `bonuses`, `bonus_types`, `bonus_removals`, `bonus_blocks`
+- **Pagamentos**: `payments`, `payment_periods`, `payment_period_config`
+- **Erros e triagem**: `error_records`, `error_logs`, `triage_errors`, `triage_error_distributions`, `triage_distribution_employees`
+- **Auditoria**: `activity_logs`, `audit_logs`, `cleanup_logs`, `permission_logs`
+- **Configuração**: `admin_cleanup_config`, `auto_cleanup_config`, `data_retention_settings`
 
-### Tabelas de Configuração
-- **feature_versions** - Versionamento de funcionalidades
-- **data_retention_settings** - Configurações de retenção de dados
-- **auto_cleanup_config** - Configuração de limpeza automática
-- **cleanup_logs** - Histórico de limpezas realizadas
-- **monitoring_settings** - Configurações de monitoramento
+### Tabelas legado (15) — sistema "Objetos Perdidos"
+Compartilham o mesmo projeto Supabase mas pertencem a outro produto (`drivers`, `lost_*`, `routes`, `ai_reports`, etc.). **Não mexer** — coberto por políticas RLS próprias.
+
+### RLS Approach
+
+Todas as policies das tabelas core seguem o pattern:
+```sql
+CREATE POLICY "..." ON public.<tabela>
+  FOR <operação> TO public
+  USING (
+    company_id = (auth.jwt() ->> 'company_id')::uuid
+    OR (auth.jwt() ->> 'sub') = '9999'    -- admin master bypass
+  );
+```
+
+Detalhes completos em `docs/security-baseline-post-rls.md`.
+
+---
 
 ## Segurança
 
-- Sistema de autenticação integrado com Supabase
-- Row Level Security (RLS) habilitado em todas as tabelas
-- Validação de dados no frontend e backend
-- Senhas armazenadas de forma segura
-- Acesso restrito por usuário autenticado
+| Item | Status |
+|---|---|
+| **RLS ativo** | 47/47 tabelas core + legado |
+| **Senhas** | bcrypt `$2a$10$` (60 chars) em `users.password_hash` |
+| **Coluna `password` plain** | dropada na sub-fase 11.1 |
+| **JWT custom** | HS256 assinado com JWT_SECRET oficial, 24h, payload `{sub, role:'authenticated', aud, company_id, iat, exp}` |
+| **Login** | ID numérico + senha (sem email) via edge fn `auth-login` |
+| **SECURITY DEFINER fns** | `apply_bank_hours_to_payment` (revogada anon), `verify_admin_secret`, `update_admin_secret` |
+| **Security advisors (ERRORs)** | **0** do Sistema de Ponto (Fase 11 fechou 67 → 0) |
+| **Security advisors (WARNs)** | 22 — todos esperados (legado + 3 SECURITY DEFINER pré-login) |
+
+### Fluxo de autenticação
+
+1. Frontend `loginUser(id, password)` faz POST `/functions/v1/auth-login`.
+2. Edge fn busca `users.password_hash` via service_role, faz `bcryptjs.compare`.
+3. Se OK, assina JWT HS256 com payload de 24h e retorna `{token, user}`.
+4. Frontend chama `setAuthToken(token)` — `src/lib/supabase.ts` recria o client Supabase com header `Authorization: Bearer <jwt>`.
+5. Próximas queries Supabase trafegam o token; RLS policies validam via `auth.jwt() ->> 'company_id'`.
+6. Logout (`clearAuthToken`) limpa o token e recria o client sem headers.
+
+---
+
+## Documentação Adicional
+
+- **`CHECKPOINT.md`** — estado canônico de retomada de sessão (regras, fases, decisões).
+- **`TECH_DEBT.md`** — bugs ativos, características aceitas, histórico de resoluções.
+- **`PRE-LAUNCH-CHECKLIST.md`** — checklist de itens pra go-live.
+- **`ARCHITECTURE.md`** — diagramas Mermaid + decisões arquiteturais.
+- **`docs/edge-functions.md`** — referência das edge fns.
+- **`docs/security-baseline-post-rls.md`** — audit trail RLS pós-Fase 11.
+
+---
 
 ## Notas Importantes
 
-- Sistema desenvolvido para uso interno empresarial
-- Acesso restrito ao supervisor da empresa
-- Timezone configurado para Brasil (UTC-3)
-- Todos os valores monetários em Real (R$)
+- Sistema desenvolvido para uso interno empresarial — não é SaaS público.
+- Timezone fixo Brasil (UTC-3).
+- Valores monetários em Real (R$).
+- Auto-cleanup de fixtures de teste via prefix `PW Test ` + `cleanupByPrefix` em `tests/cleanup.ts`.
+- Edge fn `create-user` tem cold start lento (~150s) na primeira chamada pós-deploy (cf. TECH_DEBT 6.13) — UI deve mostrar spinner com aviso "pode levar até 2 minutos no primeiro uso".
+
+---
 
 ## Suporte
 
-Sistema desenvolvido para uso interno. Para suporte, entre em contato com o administrador do sistema.
-
-## Funcionalidades de Remoção de Bonificação
-
-### Como Funciona
-O sistema permite a remoção de bonificações já aplicadas, mantendo registro completo para auditoria.
-
-### Remoção Individual
-1. Acesse a aba "Ponto"
-2. Selecione a data desejada
-3. Localize o funcionário com bonificação aplicada
-4. Clique no botão de remover bonificação (ícone de lixeira ao lado do valor)
-5. Digite uma observação obrigatória (10-500 caracteres) explicando o motivo
-6. Confirme a remoção
-
-### Remoção em Massa
-1. Na aba "Ponto", com bonificações aplicadas na data
-2. Clique em "Remover Todas Bonificações"
-3. Digite uma observação obrigatória explicando o motivo da remoção em massa
-4. Confirme a operação
-
-### Visualização do Histórico
-1. Acesse a aba "Financeiro"
-2. Clique no botão "Histórico de Remoções"
-3. Use os filtros para:
-   - Selecionar período (data inicial e final)
-   - Filtrar por funcionário específico
-   - Ver todas as remoções ou de um funcionário
-4. Exporte o histórico para Excel clicando em "Exportar Excel"
-
-### Informações Registradas
-Cada remoção de bonificação registra:
-- Data da bonificação removida
-- Funcionário afetado
-- Valor da bonificação removida
-- Observação obrigatória (motivo)
-- Usuário responsável pela remoção
-- Data e hora exata da remoção
-
-### Permissões Necessárias
-- **Remover bonificação individual**: `financial.removeBonus`
-- **Remover bonificação em massa**: `financial.removeBonusBulk`
-- **Visualizar histórico**: `financial.viewHistory`
-
-## Versão
-
-2.7.0
+Sistema desenvolvido para uso interno. Para suporte, consulte o `CHECKPOINT.md` ou abra issue interna.
