@@ -282,6 +282,51 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — Sub-fase 11.0: baseline advisors + drop de 32 tabelas backup_* legado
+
+**Trabalho preparatório pra Fase 11 (hardening produção pública).**
+
+**Decisões confirmadas pelo Victor em 2026-05-11:**
+
+| Decisão | Resolução | Justificativa |
+|---|---|---|
+| **D3 — RLS strategy** | **C — SECURITY DEFINER + sessão custom** | Mantém schema `users (id, password)` sem mexer em email (login do Sistema de Ponto é só ID+senha). Opção B (Supabase Auth nativo) descartada — exigiria email/phone como identificador. |
+| **D4 — Hash senhas** | **B — Edge fn `auth-login` com bcrypt** | Cliente nunca vê hash. Server-side bcrypt no Deno. JWT custom `{ sub: id, company_id, role }` sem precisar email. |
+| **Q1 — Tabelas backup_* (32)** | **Drop todas** | Snapshots antigos de migrations passadas, sem mecanismo de restore. Limpa 32/64 lints `rls_disabled_in_public`. Remove vulnerabilidade crítica em `backup_pre_v2_users` que expunha `password` plain. |
+| **Q2 — Tabelas legado (15)** | **Ignorar** | Sistema de "objetos perdidos" (drivers/routes/lost_*/ai_reports/etc.) compartilha mesmo Supabase mas é outro projeto. Mantém `USING(true)` policies; documentar overlap em ARCHITECTURE.md. Audit final aceitará os 15 lints como "fora do escopo". |
+
+**Baseline salvo em:** `docs/security-baseline-pre-rls.md` — resumo completo dos 85 lints security + 107 performance ANTES da Fase 11.
+
+**Migration aplicada em prod:** `20260512002557_drop_legacy_backup_tables`
+
+**SQL:** 32 × `DROP TABLE IF EXISTS public.backup_* CASCADE;`
+
+**Tamanho removido (pré-drop):** ~1.4 MB total. Maiores: `backup_pre_v2_attendance` (464 KB, ~3143 rows), `backup_pre_v2_payments` (240 KB, ~1746 rows), `backup_pre_v2_error_records` (136 KB, ~510 rows). Demais 8 KB-72 KB (vazias ou poucos rows).
+
+**Validação pós-migration via MCP:**
+```sql
+SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+WHERE n.nspname='public' AND c.relkind='r' AND c.relname LIKE 'backup_%';
+-- Resultado: 0 (todas 32 dropadas)
+```
+
+**Impacto esperado nos advisors:**
+- `rls_disabled_in_public`: 64 → 32 (drop 32 backup_*; 32 core ainda pendentes pra 11.1)
+- `sensitive_columns_exposed`: 2 → 1 (drop `backup_pre_v2_users`; `users` ativa pendente pra 11.3)
+- `no_primary_key`: 32 → 0 (todas eram backup_*)
+- ERROR total: 67 → ~34 (estimativa; advisors completo será re-rodado em 11.5)
+
+**Backup strategy documentada:** sub-fase 11.3 (DROP COLUMN password) é IRREVERSÍVEL → backup JSON local obrigatório de `users.password` antes. Branch Supabase NÃO faz backup de dados (só replica migrations).
+
+**Próximos passos:**
+- 11.1 — RLS enable em 32 tabelas core (deny-all temporário)
+- 11.2 — Policies via `current_company_id()` + edge fn `set_company_context`
+- 11.3 — Hash bcrypt + DROP COLUMN password (com backup JSON local)
+- 11.4 — verify_jwt em clock-in-validated v7
+- 11.5 — Audit final
+
+---
+
 ### 2026-05-11 — Cobertura unit nova: FaceScanFrame (sub-fase 10.8)
 
 **Arquivo novo:** `tests/unit/faceScanFrame.spec.tsx` — 8 unit tests cobrindo `src/components/employee-clock/FaceScanFrame.tsx` (294 lin), componente puro de display (sem hooks de webcam/face-api).
