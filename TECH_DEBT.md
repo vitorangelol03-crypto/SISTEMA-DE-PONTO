@@ -282,6 +282,60 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-11 — Sub-fase 11.3 (parcial): ADD password_hash + edge fn auth-login v6 (BLOQUEADO em JWT_SECRET)
+
+**Trabalho completado:**
+
+1. **Migration aplicada em prod:** `20260512003248_add_password_hash_users` — `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text`. Coluna nullable, coexiste com `password` plain durante transição.
+
+2. **Edge fn `auth-login` v6 ACTIVE em prod** (`verify_jwt:false` porque é o emissor de tokens):
+   - Recebe `{id, password}` POST
+   - SELECT `users WHERE id` via service_role (bypass RLS)
+   - Tenta `bcryptjs.compare(password, password_hash)` se `password_hash` existe (lib `https://esm.sh/bcryptjs@2.4.3` — pure JS, sem deps nativas)
+   - Fallback pra `password === user.password` (plain) durante transição
+   - Retorna `{ok: true, user: {id, company_id}}` se válido, `{error: "Invalid credentials"}` se não
+   - CORS aberto, error handling robusto
+
+3. **Testes manuais via curl:**
+   - `9999/684171` (admin Caratinga): ✅ retorna user info
+   - `9999/wrong`: ✅ 401 Invalid credentials
+   - `0000/x` (inexistente): ✅ 401 Invalid credentials
+
+**BLOQUEIO: `SUPABASE_JWT_SECRET` não existe como env var built-in nas edge functions.**
+
+Verificação feita via debug edge fn v5:
+```
+SUPABASE_URL: ✅ (40 chars)
+SUPABASE_ANON_KEY: ✅ (46 chars, sb_publishable_*)
+SUPABASE_SERVICE_ROLE_KEY: ✅ (41 chars, sb_secret_*)
+SUPABASE_DB_URL: ✅ (102 chars)
+SUPABASE_JWT_SECRET: ❌ (empty)
+SUPABASE_FUNCTIONS_VERIFY_JWT: ❌ (empty)
+```
+
+**Decisão pendente Victor:**
+
+Pra completar 11.3 (JWT generation pra RLS via `auth.jwt() ->> 'company_id'`), preciso uma das opções:
+
+(A) **Setar JWT_SECRET manualmente via Supabase Dashboard:**
+   - Settings → API → copiar JWT Secret oficial do projeto
+   - Settings → Edge Functions → Secrets → add SUPABASE_JWT_SECRET com esse valor
+   - Re-deploy edge fn (já está pronta pra usar)
+
+(B) **Mudar estratégia D3 pra session-based (sem JWT custom):**
+   - Frontend não passa JWT custom
+   - Backend usa função `current_company_id()` que lê `current_setting('app.current_company_id')`
+   - Edge fn `set_company_context` chamada pós-login pra setar na sessão
+   - Mais complexo (cada call REST é session nova → SET LOCAL não persiste)
+   - Funciona apenas via RPC functions ou middleware
+   - Pode exigir reescrever várias chamadas Supabase do frontend
+
+Recomendação: (A) é mais limpo. Action manual de 2 minutos no dashboard.
+
+**Migration salva localmente:** `supabase/migrations/20260512003248_add_password_hash_users.sql`
+
+---
+
 ### 2026-05-11 — Sub-fase 11.0: baseline advisors + drop de 32 tabelas backup_* legado
 
 **Trabalho preparatório pra Fase 11 (hardening produção pública).**
