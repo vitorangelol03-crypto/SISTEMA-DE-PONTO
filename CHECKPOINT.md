@@ -2,7 +2,7 @@
 
 > **Arquivo de retomada de sessão.** Quando reabrir o Claude Code, mande este arquivo (`cat CHECKPOINT.md`) ou peça pra Claude lê-lo. Ele deve restaurar contexto completo + REGRAS antes de fazer qualquer coisa.
 
-**Última atualização:** 2026-05-12 (após Fase 11 completa)
+**Última atualização:** 2026-05-12 (após Fase 11 completa + adição Regra 8 "Qualidade > Velocidade")
 **Plano canônico:** `/home/victor/SISTEMA-DE-PONTO/PLANO_PRODUCAO.md`
 **TECH_DEBT canônico:** `/home/victor/SISTEMA-DE-PONTO/TECH_DEBT.md`
 **Memory:** `/home/victor/.claude/projects/-home-victor-SISTEMA-DE-PONTO/memory/`
@@ -11,7 +11,7 @@
 
 ## ⛔ REGRAS OBRIGATÓRIAS (NÃO IGNORAR — definem o que faz a diferença entre "sistema 100%" e "meia bomba")
 
-Estas regras valem **pra cada sub-fase**, **toda execução**. Foram negociadas com o Victor. **Quebrar elas é incidente.**
+Estas **8 regras** valem **pra cada sub-fase**, **toda execução**. Foram negociadas com o Victor. **Quebrar elas é incidente.**
 
 ### Regra 1 — VALIDAR TUDO REAL (não confiar só em tsc/lint/vitest)
 
@@ -63,6 +63,20 @@ Estas regras valem **pra cada sub-fase**, **toda execução**. Foram negociadas 
 - React hooks: `useCallback` com deps corretas — não suprime warning.
 - TypeScript: tipos explícitos. Sem `any` sem comentário.
 - Supabase queries: `const { data, error } = await ...; if (error) throw error;`
+
+### Regra 8 — QUALIDADE ACIMA DE VELOCIDADE (nunca "economizar")
+
+> **Diretriz canônica do Victor:** _"sistema 100%, não meia bomba"_.
+> Esta regra existe pra proteger a Claude de cair em quebra-galhos invisíveis. Economizar passos de validação abre brecha pra **"atalho que vira bug latente"** — exatamente o que as outras 7 regras tentam impedir. Quando em dúvida, qualidade > tempo. Sempre.
+
+- **Cada decisão favorece robustez, não atalho.** Quando dois caminhos são possíveis, escolher o que **valida mais**, mesmo se levar mais tempo ou mais sub-fases. Nunca o "que parece mais rápido".
+- **Não pular passos de validação alegando "é simples".** Pre-check via MCP sempre — mesmo em mudanças de 1 linha. Uma linha pode quebrar policy RLS, índice, trigger, constraint, JWT shape, edge fn binding.
+- **Não escrever boilerplate genérico.** Adaptar ao pattern idiomático do projeto (Regra 7). Copy-paste de docs externas / Stack Overflow / outras codebases vira tech debt latente — sempre revalidar contra o estado real do banco/código.
+- **Não simplificar teste/mock pra "passar".** Se validar a branch real exige 80 linhas de setup, escreve 80 linhas. Mock barato que passa NÃO é validação real (cross-ref Regra 1 + Regra 2 + Regra 4).
+- **Não deixar `TODO`/`// fix me later`/`// HACK`/`// XXX` no código.** Ou resolve agora, ou vira entry numerada em TECH_DEBT.md com sub-fase prevista (Regra 5). Comentário órfão é dívida silenciosa.
+- **Não economizar pre-check pensando "já fiz isso antes nesta sessão".** Estado pode ter mudado entre sub-fases (RLS toggle, edge fn redeploy, migration anterior, JWT_SECRET rotacionada). Re-confirmar via MCP custa 2s e pega regressão silenciosa.
+- **Reflexão obrigatória antes de cada commit:** _"Estou escolhendo o caminho mais robusto, ou o mais rápido?"_ Se a resposta honesta é "rápido" — reavaliar antes de commitar. Se faltar 1 validação que daria mais 5 min de trabalho, fazer essa validação.
+- **Quando o Victor diz "tá pronto?"**, a resposta correta é "sim" só se Steps 1-9 do pattern canônico (linha 304+ deste checkpoint) foram TODOS executados. "Quase pronto" = não pronto.
 
 ---
 
@@ -225,7 +239,7 @@ Vide CHECKPOINT anterior. Todo débito tratado como diurno, sem multiplier notur
 Quando o Victor reabrir o Claude Code, o assistente deve:
 
 1. **Ler este checkpoint** integralmente
-2. **Confirmar as 7 regras obrigatórias** acima — não pular nem 1
+2. **Confirmar as 8 regras obrigatórias** acima — não pular nem 1 (Regra 8 é "Qualidade > Velocidade", reforça as outras 7)
 3. **Verificar estado atual** via git:
    ```bash
    git log --oneline -5
