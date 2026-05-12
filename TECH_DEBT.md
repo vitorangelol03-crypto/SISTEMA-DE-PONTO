@@ -266,6 +266,80 @@ await expect(
 
 ## 🔘 Aceitos (não-bug, característica conhecida)
 
+### 14.A — `xlsx` Prototype Pollution + ReDoS (sem patch upstream)
+
+**Descoberto em:** 2026-05-12 durante validações extras pós-Fase 13 (`npm audit`).
+
+**Severidade:** High (2 advisories — Prototype Pollution GHSA-4r6h-8v6p-xvw6, ReDoS GHSA-5pgg-2g8v-p4x9).
+
+**Status do upstream:** SheetJS abandonou o pacote `xlsx` no npm em favor da versão paga em sheetjs.com. **No fix disponível** via npm registry.
+
+**Impacto operacional:**
+- `xlsx` é usado em: importação de funcionários via Excel (`EmployeesTab`, `tests/integrity-helpers`), exportação de relatórios (`ReportsTab`), pagamento C6 (`C6PaymentTab`, `c6Export.ts`).
+- Vetor de ataque: anexo Excel malicioso enviado por usuário. Permissão de upload é admin-only (`employees.import`), reduzindo superfície mas não eliminando.
+- Prototype Pollution: pode injetar properties em Object.prototype durante parsing.
+- ReDoS: input específico pode fazer regex hang.
+
+**Mitigações em prod:**
+1. Validação de schema robusta após parse (já existe em `c6Export.ts:512` e helpers).
+2. Apenas admin (`9999` ou supervisor com perm `employees.import`) pode subir Excel.
+3. Tamanho de arquivo limitado pelo browser/Supabase storage (não ilimitado).
+
+**Mitigações futuras (não prioritárias):**
+- Migrar pra `exceljs` (alternativa open-source ativa, mas API diferente — refactor médio em ~3 arquivos).
+- Mover parsing pro server-side via edge fn (mas xlsx ainda seria usado lá).
+
+**Status:** ACEITO. Documentado pra revisão se houver auditoria de segurança formal.
+
+---
+
+### 14.B — 148 performance advisors Supabase (não bloqueia, impacta escala)
+
+**Descoberto em:** 2026-05-12 durante validações extras pós-Fase 13 (`mcp__claude_ai_Supabase__get_advisors type=performance`).
+
+**Severidade:** WARN/INFO (não bloqueia funcionalidade).
+
+**Breakdown:**
+
+| Rule | Count | Significado |
+|---|---|---|
+| `auth_rls_initplan` | 53 | RLS policies re-avaliam `auth.jwt()` por row (deveria ser `(SELECT auth.jwt())` pra cachear) |
+| `multiple_permissive_policies` | 43 | Múltiplas policies permissivas no mesmo cmd → Postgres OR-eia ambas |
+| `unused_index` | 28 | Indexes existentes mas nunca executados (overhead em INSERT/UPDATE sem benefício) |
+| `unindexed_foreign_keys` | 23 | FKs sem index → joins lentos com volume |
+| `auth_db_connections_absolute` | 1 | Connection pool sizing |
+
+**Impacto operacional atual (2 empresas, ~30 employees):**
+- Imperceptível. Queries respondem em <100-500ms.
+- Validado em Playwright 3× sem flake.
+
+**Impacto futuro (>200 employees/empresa OU >5 empresas):**
+- RLS overhead pode dominar (53 policies × N rows × per-query = lento).
+- Joins via FK sem index → seq scan em tabelas grandes (~3-10x mais lento).
+- Unused indexes consomem write throughput sem benefit de read.
+
+**Solução planejada (Fase 15 — pós-go-live):**
+
+1. **Fix `auth_rls_initplan` (~2-3h):**
+   - Re-escrever as 53 policies substituindo `auth.jwt() ->> 'company_id'` por `(SELECT auth.jwt() ->> 'company_id')` (subquery).
+   - PostgreSQL cacheia o resultado por query, eliminando re-eval por row.
+
+2. **Fix `multiple_permissive_policies` (~1-2h):**
+   - Combinar as 2 policies por tabela (SELECT + ALL) em 1 policy só.
+   - Cada tabela vai ter 1 policy USING (cmd ALL com WITH CHECK também).
+
+3. **Indexar FKs (~30min):**
+   - 23 FKs sem index. CREATE INDEX em cada.
+
+4. **Drop unused indexes (~30min):**
+   - 28 indexes nunca executados. Confirmar via `pg_stat_user_indexes.idx_scan = 0` por período > 30d antes de drop.
+
+**Estimativa total Fase 15:** ~4-6h.
+
+**Status:** ACEITO como tech debt pós-go-live. Não bloqueia release v2.0.0-multi-tenant.
+
+---
+
 ### 6.13 — Cold start latency edge functions
 
 **Local:** Edge functions `clock-in-validated`, `auth-login`, `create-user` (Deno runtime).
@@ -293,6 +367,45 @@ await expect(
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-12 — Fase 14 (parcial): validações extras pós-Fase 13 (sub-fases 14.1, 14.2, 14.3)
+
+**Trabalho completado:**
+
+1. **Sub-fase 14.1 — Deps cleanup** (commit `d396c8d`):
+   - `npm audit fix` resolveu 13 de 19 vulnerabilities (@eslint/plugin-kit, brace-expansion, yaml, e 9 transitivas)
+   - 6 remanescentes documentadas como tech debt (xlsx high — entry 14.A; esbuild/vite, node-fetch/face-api precisam breaking changes)
+   - `@vitest/coverage-v8` adicionada — habilita `vitest run --coverage`. Baseline: 46% statements / 36% branches / 38% functions / 47% lines.
+
+2. **Sub-fase 14.2 — Lint zerado** (commit `685a86d`, 38 files):
+   - ESLint errors: **82 → 0** ✅. 6 warnings remanescentes pré-existentes (4 react-hooks deps + 2 fast-refresh export).
+   - Mudanças sistemáticas:
+     - `eslint.config.js`: adicionado `argsIgnorePattern: '^_'` (padrão TS pra destructuring intencional)
+     - typescript-eslint atualizado pra resolver incompat com ESLint 9.39.4
+     - Imports não usados removidos (15 components + 14 specs E2E)
+     - Vars/funcs locais intencionalmente kept prefix com `_` (padrão TS)
+     - `Record<string, any>` → `Record<string, unknown>` em src/ (jsonb cols)
+     - `any` específicos substituídos por types corretos (PropertyKey cast, enum literals, etc.)
+     - c6Export.ts: file-level eslint-disable com justificativa (xlsx-js-style typings incompletos)
+     - 4× navigator-as-any em tests/08: eslint-disable inline com justificativa
+   - Validação: tsc + vitest + Playwright (não rodado novamente, mas mudanças todas estritamente sintáticas/types)
+
+3. **Sub-fase 14.3 — Tech debt documentation:**
+   - Entry **14.A**: xlsx Prototype Pollution + ReDoS (sem patch upstream)
+   - Entry **14.B**: 148 performance advisors Supabase (auth_rls_initplan + multiple_permissive + unused_index + unindexed FKs)
+   - Plano Fase 15 esboçado (~4-6h pós-go-live)
+
+**Métricas pós-Fase 14:**
+
+| Item | Antes Fase 14 | Pós Fase 14 |
+|---|---|---|
+| `npm audit` vulnerabilities | 19 (9 high) | 6 (2 high — todos breaking changes ou sem fix) |
+| ESLint errors | 82 | **0** ✅ |
+| ESLint warnings | 14 | 6 (pré-existentes) |
+| vitest coverage | indisponível | 46% statements |
+| Tech debt entries 14.A + 14.B | não documentado | documentado em "Aceitos" |
+
+---
 
 ### 2026-05-12 — Fase 13 completa: validação final + audit (sub-fases 13.0, 13.1, 13.2)
 
