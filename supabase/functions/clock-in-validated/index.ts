@@ -102,7 +102,7 @@ async function logEdgeError(
         error_context: {
           db_error_message: params.db_error_message,
           db_error_code: params.db_error_code,
-          edge_function_version: 6,
+          edge_function_version: 7,
           ...params.context,
         },
         user_agent: "supabase-edge-runtime/deno",

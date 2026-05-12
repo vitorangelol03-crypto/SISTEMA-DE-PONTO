@@ -326,11 +326,16 @@ export const EmployeeClockIn: React.FC = () => {
       // GPS denied/unavailable/timeout → send null coords, server handles silently
     }
 
+    // Sub-fase 11.4 — clock-in-validated v7 tem verify_jwt:true.
+    // ANON_KEY é um JWT válido (assinado pelo Supabase). Cliente público
+    // do funcionário não faz login admin/supervisor — usa CPF+PIN local.
+    // ANON_KEY como Bearer satisfaz verify_jwt sem expor sessão privilegiada.
     const res = await fetch(EDGE_FN_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
       },
       body: JSON.stringify({
         employee_id: employee.id,
