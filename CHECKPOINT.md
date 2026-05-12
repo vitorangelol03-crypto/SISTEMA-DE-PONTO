@@ -2,9 +2,10 @@
 
 > **Arquivo de retomada de sessão.** Quando reabrir o Claude Code, mande este arquivo (`cat CHECKPOINT.md`) ou peça pra Claude lê-lo. Ele deve restaurar contexto completo + REGRAS antes de fazer qualquer coisa.
 
-**Última atualização:** 2026-05-11 (após sub-fase 8.5)
-**Plano canônico:** `/home/victor/.claude/plans/ent-o-divide-e-crie-zesty-biscuit.md`
+**Última atualização:** 2026-05-12 (após Fase 11 completa)
+**Plano canônico:** `/home/victor/SISTEMA-DE-PONTO/PLANO_PRODUCAO.md`
 **TECH_DEBT canônico:** `/home/victor/SISTEMA-DE-PONTO/TECH_DEBT.md`
+**Memory:** `/home/victor/.claude/projects/-home-victor-SISTEMA-DE-PONTO/memory/`
 
 ---
 
@@ -23,166 +24,199 @@ Estas regras valem **pra cada sub-fase**, **toda execução**. Foram negociadas 
   - Refactors de função pública: rodar specs E2E que exercitam o flow real (não só unit com mock).
   - RPC novas: criar a função + chamar via `supabase.rpc` real em spec E2E (não só mock).
 
-**Exemplo do que NÃO É validação real:**
-> "tsc passou, vitest passou, vou commitar." ❌
->
-> **Por quê é errado:** Testes podem ser genéricos. Specs E2E podem rodar caminhos felizes. Mock pode divergir da lib real. Já tivemos um bug latente na sub-fase 7.2 (PK default 'default' impedia upsert pra PN) que passou em TODOS os testes automatizados — só foi pego quando rodei INSERT manual via MCP simulando o que o app faria.
-
-**Exemplo do que É validação real:**
-> Sub-fase 7.2.1: `INSERT INTO admin_cleanup_config VALUES (PN_id, ...) ON CONFLICT DO UPDATE` simulado via MCP **antes** de declarar pronto. Descobriu bug do default 'default'. Depois: `SELECT * FROM admin_cleanup_config` confirmou 2 rows distintas, UUID auto. Cleanup deletando a row de teste pra restaurar prod state.
-
 ### Regra 2 — NUNCA QUEBRA-GALHOS
 
 - **Sem `as any`** sem documentar por quê em comentário inline.
-- **Sem suprimir warnings** (`eslint-disable`, `@ts-ignore`) sem justificativa concreta + ticket de cleanup. Já resolvemos 4 ocorrências de `eslint-disable react-hooks/exhaustive-deps` na sub-fase 5.2/5.6 — não introduzir novos.
+- **Sem suprimir warnings** (`eslint-disable`, `@ts-ignore`) sem justificativa concreta + ticket de cleanup.
 - **Sem hardcoded values** que dependem de empresa específica (`'6583bb2a-...'`) — usar `company_id` parametrizado. Default `DEFAULT_COMPANY_ID` constante é OK pra fallback documentado.
-- **Sem mock paralelo elaborado** quando o real funciona em jsdom. Exemplo: c6Export.spec.ts foi refatorado de mock paralelo XLSX → `vi.mock` com `importOriginal()` mantendo lib real. Mais robusto.
-- **Sem testes "que passam"** mas não validam fluxo real. Cada teste precisa exercitar uma BRANCH específica do código + assertar OUTPUT real (não só "não throw").
+- **Sem mock paralelo elaborado** quando o real funciona em jsdom.
+- **Sem testes "que passam"** mas não validam fluxo real. Cada teste precisa exercitar uma BRANCH específica do código + assertar OUTPUT real.
 
 ### Regra 3 — UMA SUB-FASE = UM COMMIT ATÔMICO
 
 - Mensagem padrão: `tipo(escopo): descrição (sub-fase X.Y)`
 - Co-author obrigatório: `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
-- **NUNCA `git push`** (Victor é o único push-er).
-- Se quebrar algo em prod (edge fn deploy quebrado, migration parcial): documentar imediatamente no TECH_DEBT como sub-fase X.Y.1 (fix latente).
+- **NUNCA `git push`** sem autorização explícita (Victor é o único push-er por default).
+- Se quebrar algo em prod: documentar imediatamente no TECH_DEBT como sub-fase X.Y.1 (fix latente).
 
 ### Regra 4 — SE TESTE FALHAR, MOSTRAR PRA VICTOR ANTES
 
 - Não "ajustar mock pra passar" se a falha indica problema real.
-- Investigar causa raiz primeiro. Exemplo: spec 26 test 6 falhou na sub-fase 7.3 — investiguei e descobri que era dados em prod (user 8888 admin criado em PN, não regressão minha). Reportei + refatorei spec pra ser robusto a dados.
+- Investigar causa raiz primeiro.
 
 ### Regra 5 — TECH_DEBT é CANÔNICO
 
 - Toda mudança que resolve bug: mover entry pra `## ✅ Histórico — Resolvidas` com data, sub-fase, validações reais executadas.
-- Toda descoberta nova: adicionar entry numerada (próximo número disponível, atualmente até 6.24).
-- Não deixar bug "meio resolvido" — ou está em Histórico ou está Pendente, sem zona cinzenta.
+- Toda descoberta nova: adicionar entry numerada.
+- Não deixar bug "meio resolvido" — ou está em Histórico ou está Pendente.
 
 ### Regra 6 — DECISÕES DE PRODUTO/SEMÂNTICA SEMPRE COM VICTOR
 
-- Decisões D1-D6 do plano. Resolvidas: D1=C (8.3), D2=ES (7.2), D5=A (7.4), D6=C (7.3). Pendentes: D3 (RLS strategy), D4 (hash senhas).
-- Não assumir nada que vire risco trabalhista/financeiro sem confirmar. Exemplo: na sub-fase 8.3 confirmamos D1=C com Victor mesmo já tendo investigação prévia que sugeria C.
+- Decisões D1-D6 do plano. **Status atualizado: TODAS resolvidas.**
+- Não assumir nada que vire risco trabalhista/financeiro sem confirmar.
 
 ### Regra 7 — PADRÃO IDIOMÁTICO DO PROJETO
 
-- Multi-empresa: `company.id` sempre passado por param (não localStorage direto exceto no `getCurrentCompanyId()` legacy).
-- useEffect com `[company?.id]` deve ser acompanhado de cleanup dos estados ID-based (vide 5.4/5.6/6.22).
-- React hooks: `useCallback` com deps corretas — não suprime warning. Padrão idiomático: `TriageTab.tsx`, `PaymentPeriodsTab.tsx`.
+- **Auth/login**: ID numérico + senha (SEM email). JWT custom assinado com JWT_SECRET oficial.
+- Multi-empresa: `company.id` sempre passado por param. RLS policies usam `auth.jwt() ->> 'company_id'`.
+- useEffect com `[company?.id]` deve ser acompanhado de cleanup dos estados ID-based.
+- React hooks: `useCallback` com deps corretas — não suprime warning.
 - TypeScript: tipos explícitos. Sem `any` sem comentário.
-- Supabase queries: `const { data, error } = await ...; if (error) throw error;` (30+ ocorrências em database.ts).
+- Supabase queries: `const { data, error } = await ...; if (error) throw error;`
 
 ---
 
-## 📊 ESTADO ATUAL — 22 commits nesta sessão
+## 📊 ESTADO ATUAL — Fases 5 a 11 ✅ COMPLETAS
 
 **Branch:** `main`
-**Último commit:** `a4d6884` (sub-fase 8.5 — RPC transacional apply_bank_hours_to_payment)
-**Working tree:** limpo (só `.claude/` untracked como sempre)
+**Último commit:** `0300e8a` (sub-fase 11.5 — baseline pós-Fase 11)
+**Working tree:** limpo (só `.claude/` untracked)
+**Sincronizado com `origin/main`:** sim
 
-**Resumo de tudo que foi feito (em ordem cronológica):**
+### Resumo das fases concluídas
 
-| Commit | Sub-fase | Resolução |
+| Fase | Tema | Sub-fases | Status |
+|---|---|---|---|
+| **5** | Quick wins | 5.1-5.6 | ✅ |
+| **6** | Cobertura unit tests | 6.1-6.6 | ✅ (414 unit tests) |
+| **7** | Migrations small + cleanups | 7.2-7.4 | ✅ |
+| **8** | Fixes médios | 8.1, 8.3, 8.4, 8.5 | ✅ |
+| **9** | E2E gaps fixáveis | 9.1-9.4 | ✅ (9 skips condicionais → 0; 4 specs E2E novas) |
+| **10** | E2E componentes | 10.1, 10.2, 10.4, 10.5, 10.6, 10.8 (6 ativas) + 10.3 cancelado + 10.7 postponed | ✅ (48 tests novos: 40 E2E + 8 unit) |
+| **11** | Hardening produção pública | 11.0-11.5 | ✅ **(67 ERRORs → 0 do Sistema de Ponto)** |
+
+### Métricas finais
+
+| Métrica | Inicial | Atual |
 |---|---|---|
-| `96f037d` | 5.1 | Fix data futura tests/10:107 (TECH_DEBT 6.4) |
-| `b14f739` | 5.2 | useCallback × 3 useEffect (6.14, 3 ocorrências) |
-| `0ba0e9d` | 5.3 | UNIQUE(company_id) em geolocation_config (6.11) |
-| `7e34daa` | 5.4 | C6PaymentTab cleanup cross-empresa (6.15) |
-| `523e296` | 5.5 | Audit padrão Wave 3 → entrada 6.22 |
-| `3fe9740` | 5.6 | EmployeesTab cleanup + 4ª ocorrência eslint-disable (6.14b + 6.22.A) |
-| `6f44c14` | 6.1 | Unit dateUtils (15 testes) |
-| `7e486d2` | 6.2 | Unit bonusHelpers (10 testes) |
-| `9748564` | 6.3 | Unit c6Export (44 testes) + descoberta 6.23 |
-| `a9b3098` | 6.4 | Unit mirrorGenerator (65 testes) |
-| `d8a238a` | 6.5 | Unit mirrorPdf (48 testes mocked) |
-| `ff51819` | 6.6 | Reforço REAL: c6Export sem mock paralelo + mirrorPdf.real.spec.ts (15 testes binários reais) |
-| `19a72f3` | 7.2 | UNIQUE(company_id) + lazy-create admin_cleanup_config (6.16) |
-| `0840f9c` | 7.2.1 | Fix latente: id PK default UUID (descoberto via validação real) |
-| `73d7649` | 7.3 | DROP TABLE bonus_defaults legacy + robustez spec 26 (D6=C) |
-| `b2a1bbb` | 7.4 | error_logs ADD company_id (D5=A, descoberta 6.24) |
-| `60d80a5` | 8.4 | Edge fn v6 — error handling 4 writes silenciosos (6.12) |
-| `05ac7ce` | 8.1 | Batch SQL em previewBankHoursForPeriod (6.7) — 150→6 queries |
-| `e70da28` | 8.3 | nightCreditMinutes real D1=C diurno-primeiro (6.6) |
-| `a4d6884` | 8.5 | RPC transacional apply_bank_hours_to_payment (6.8) |
+| **Security advisors total** | 85 | **23** (-73%) |
+| **Security ERRORs (Sistema de Ponto)** | 67 | **0** ✅ |
+| `rls_disabled_in_public` | 64 | 0 |
+| `sensitive_columns_exposed` (password plain) | 2 | 0 |
+| Tabelas com RLS ON | 0 | 47 (32 core + 15 legado) |
+| Senha plain text | sim (`users.password`) | **não** (bcrypt em `password_hash`) |
+| Edge fn `clock-in-validated` | v6 (`verify_jwt:false`) | **v8 (`verify_jwt:true`)** |
+| Edge fns ativos | 1 (`clock-in-validated`) | 2 (`+auth-login`) |
+| Unit tests | 414 | **422** (+8 FaceScanFrame) |
+| Specs E2E Playwright | 30 | **35** (+31 EmployeeErrorsView, +32 BonusTypesManager, +34 CompanySettings, +35 MirrorMassDialog, +36 EmployeeErrorsPage state machine, +26-extras 4 testes) |
+| Migrations | 50 | **57** (+7 na Fase 11) |
+| `users.password` plain em prod | sim | **dropada** |
 
-**TECH_DEBT bugs ativos resolvidos:** 6.4, 6.6, 6.7, 6.8, 6.11, 6.12, 6.14 (4 ocorrências), 6.15, 6.16.
+### Commits desta sessão (19, mais antigos primeiro)
 
-**TECH_DEBT descobertas novas resolvidas:** 6.22 (Wave 3 audit parcial), 6.23 (validatePixKey CPF formatado — apenas DOCUMENTADO, fix pendente), 6.24 (error_logs sem company_id).
-
-**Testes:**
-- Unit: 414 passing em 16 files (era 207 no início da sessão → +207 testes novos)
-- E2E Playwright: ~178 (cobertura inalterada — focamos em unit e fixes)
-- Edge fn: clock-in-validated v6 ACTIVE em prod (hash `ff0b9dd72005...`)
-- Migrations: 7 → 14 aplicadas (+ 7 novas via MCP, todas versionadas em `supabase/migrations/`)
-- RPC: `apply_bank_hours_to_payment` ACTIVE com SECURITY DEFINER
+```
+a4c3da3  test(e2e): data-testid pra remover 7 skips condicionais (sub-fase 9.1)
+5e77eb8  test(e2e): corrigir locator do filtro employment_type (sub-fase 9.2)
+de36d20  test(e2e): split 07-financial 'com/sem pagamentos' (sub-fase 9.3)
+a2b29b0  test(e2e): 4 specs isolamento UI multi-empresa (6.18-6.21) (sub-fase 9.4)
+138cec7  test(e2e): spec 31 EmployeeErrorsView (sub-fase 10.1)
+03687aa  test(e2e): spec 32 BonusTypesManager (sub-fase 10.2)
+f21062f  docs(tech-debt): sub-fase 10.3 cancelada — AuditLogsTab órfão
+ee0dbae  test(e2e): spec 34 CompanySettings (sub-fase 10.4)
+1c60430  test(e2e): spec 35 MirrorMassDialog (sub-fase 10.5)
+19ca891  test(e2e): spec 36 EmployeeErrorsPage state machine (sub-fase 10.6)
+b70b049  docs(tech-debt): sub-fase 10.7 (FaceRegistration) postponed
+4274876  test(unit): spec FaceScanFrame via @testing-library/react (sub-fase 10.8)
+6112ac1  chore(db): drop 32 tabelas backup_* legado (sub-fase 11.0)
+aab8389  feat(auth): add password_hash + edge fn auth-login v6 (sub-fase 11.3 parcial)
+41bd25c  feat(auth): completa 11.3 — bcrypt + JWT custom + auth-login v8 (sub-fase 11.3)
+27b7796  feat(db): criar 74 policies RLS dormentes em 32 tabelas core (sub-fase 11.2)
+ccc5a4c  feat(edge-fn): clock-in-validated v8 com verify_jwt:true (sub-fase 11.4)
+23dc365  feat(rls): cutover atômico — ENABLE RLS + DROP password (sub-fase 11.1)
+0300e8a  docs(security): baseline pós-Fase 11 + revoke anon apply_bank_hours (sub-fase 11.5)
+```
 
 ---
 
-## 📋 SUB-FASES PENDENTES
+## 📐 DECISÕES D1-D6 — TODAS RESOLVIDAS
 
-> Sequência canônica em `/home/victor/.claude/plans/ent-o-divide-e-crie-zesty-biscuit.md`. Recomendado seguir nessa ordem.
+| # | Decisão | Resolução | Sub-fase | Commit |
+|---|---|---|---|---|
+| **D1** | `nighttime_minutes → nightCreditMinutes` | **C — Diurno primeiro** | 8.3 | `e70da28` |
+| **D2** | `admin_cleanup_config` strategy | **ES — Estrutural** (UNIQUE + lazy-create) | 7.2 + 7.2.1 | `19a72f3`, `0840f9c` |
+| **D3** | **RLS strategy** | **C — auth.jwt() ->> 'company_id'** (com JWT custom HS256 assinado com JWT_SECRET oficial) | 11.2 + 11.1 | `27b7796`, `23dc365` |
+| **D4** | **Hash de senhas** | **B — Edge fn `auth-login` com bcrypt** | 11.3 | `41bd25c` |
+| **D5** | `error_logs` adicionar `company_id` | **A — Sim, adicionar** | 7.4 | `b2a1bbb` |
+| **D6** | `bonus_defaults` legacy | **C — Drop após validar callers** | 7.3 | `73d7649` |
 
-### Fase 9 — E2E gaps fixáveis (~10h estimadas)
+### Restrições arquiteturais confirmadas
 
-- **9.1** Adicionar `data-testid` em 7 elementos pra remover 7 skips condicionais (TECH_DEBT 6.3/6.9):
-  - `AttendanceTab.tsx` (bulk-approve button)
-  - `FinancialTab.tsx` (search input + history btn)
-  - `PaymentPeriodsTab.tsx` (auto-weekly toggle)
-  - `C6PaymentTab.tsx` (edit button per row)
-  - `AdminTab.tsx` (facial toggle + facial list rows)
-- **9.2** Corrigir seletor errado em `tests/16-financial-complete.spec.ts:149` (hasText em `<option>`)
-- **9.3** Split teste `tests/07-financial.spec.ts:43` em "com dados" / "sem dados"
-- **9.4** 4 specs E2E novos (TECH_DEBT 6.18-6.21):
-  - C6PaymentTab isolamento UI multi-empresa
-  - SettingsTab isolamento UI multi-empresa
-  - TriageTab isolamento UI multi-empresa
-  - AdminTab Bloqueios isolamento UI
+- **Login do Sistema de Ponto é APENAS ID numérico + senha. SEM email.** (Vide memory `project_auth_no_email`.)
+- Tabelas legado (15: drivers/lost_*/routes/ai_reports/etc.) compartilham mesmo Supabase mas são de OUTRO projeto ("objetos perdidos") — **não mexer**.
+- 32 tabelas backup_* foram dropadas em 11.0. Sem mecanismo de restore (backups antigos sem uso real).
 
-**Validação real obrigatória:** após cada `data-testid`, rodar a spec específica 3× sem flake. Após specs novas, fixtures com cleanup automático preservando prod.
+---
 
-### Fase 10 — E2E componentes sem cobertura (~30h)
+## 🔐 SETUP DE INFRA — JWT_SECRET CONFIGURADO
 
-- **10.1** EmployeeErrorsView (~80-120 linhas teste)
-- **10.2** BonusTypesManager (~120-150)
-- **10.3** AuditLogsTab (~100-140)
-- **10.4** CompanySettings + simulador (~200-250)
-- **10.5** MirrorMassDialog (~140-180)
-- **10.6** EmployeeErrorsPage state machine (~180-220)
-- **10.7** FaceRegistration com mock pesado (~200-250)
-- **10.8** FaceScanFrame snapshot (~60-80)
+`JWT_SECRET` foi configurada via Supabase Dashboard → Settings → Edge Functions → Secrets em 2026-05-12. Valor: JWT Secret oficial do projeto (Settings → API → JWT Secret).
 
-### Fase 11 — Hardening produção pública (~30h, **BLOQUEADA** por D3 + D4)
+**Pra resetar/conferir:**
+```
+Dashboard → Settings → API → "JWT Settings" → JWT Secret (Reveal)
+Dashboard → Settings → Edge Functions → Secrets → JWT_SECRET (deve ter o mesmo valor)
+```
 
-⚠️ **Decisão D3 pendente** (RLS strategy):
-- A — RLS via custom user_id (status quo, sem benefício real)
-- B — Migrar pra Supabase Auth + JWT custom claim company_id
-- C — Função SECURITY DEFINER + sessão custom
+A var NÃO pode ter prefixo `SUPABASE_` (Supabase rejeita prefixos reservados). Por isso é `JWT_SECRET`, não `SUPABASE_JWT_SECRET`.
 
-Plano atual sugere **C** mas é decisão do Victor.
+---
 
-⚠️ **Decisão D4 pendente** (hash senhas):
-- A — bcryptjs no cliente (lento)
-- B — Edge function `auth-login` que valida e devolve token (recomendado)
-- C — Ambos
+## 🚧 PENDÊNCIAS CONHECIDAS — PRECISAM AÇÃO NA PRÓXIMA SESSÃO
 
-Sub-fases:
-- **11.1** Habilitar RLS em 5 grupos de tabelas (~28 tabelas)
-- **11.2** Criar policies multi-empresa
-- **11.3** Hash bcrypt via edge fn auth-login (D4)
-- **11.4** verify_jwt:true em clock-in-validated v7
-- **11.5** Audit final via `get_advisors security`
+### 1. SERVICE_ROLE_KEY ausente no `.env`
 
-### Fase 12 — Documentação (~6h)
+Specs E2E `25-multi-company-isolation` e `26-multi-company-ui-isolation test 6` fazem queries direto via `tests/cleanup.ts:getClient()` (que usa `VITE_SUPABASE_ANON_KEY`). Após RLS ativo, anon retorna vazio.
 
-- **12.1** Atualizar README.md (RLS real, multi-empresa, versão atual)
-- **12.2** Atualizar PRE-LAUNCH-CHECKLIST.md
-- **12.3** Documentar edge function v7 (`supabase/functions/clock-in-validated/README.md`)
-- **12.4** ARCHITECTURE.md novo
+**Como resolver (próxima sessão):**
 
-### Fase 13 — Validação final + go-live (~3h)
+1. Victor copia o `service_role` key do Supabase Dashboard → Settings → API.
+2. Adicionar ao `.env` local:
+   ```
+   SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
+   ```
+3. Atualizar `tests/cleanup.ts:getClient()`:
+   ```typescript
+   const key = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY;
+   ```
+4. Rodar specs `25` e `26` pra confirmar volta ao verde.
 
-- **13.1** Full Playwright suite 3× consecutivos sem flake
-- **13.2** Audit final advisors via MCP
-- **13.3** [MANUAL — Victor] Onboarding Ponte Nova com dados reais
-- **13.4** [MANUAL — Victor] Tag de release + push
+**Impacto atual:** o APP em prod NÃO é afetado — só specs E2E de isolation. Outras specs (01-auth, 02-clock, 12-admin, 26 testes 1-5/7-9) passam.
+
+### 2. Sub-fase 10.3 (AuditLogsTab) CANCELADA — componente órfão
+
+`src/components/monitoring/AuditLogsTab.tsx` (319 lin) existe mas não é renderizado em nenhuma view. Decisão pendente: expor na UI ou remover dead code. Fase 12 (docs) é o momento certo pra avaliar.
+
+### 3. Sub-fase 10.7 (FaceRegistration) POSTPONED — mock pesado fora do escopo
+
+`face-api.js` + `navigator.mediaDevices.getUserMedia` + `<video>` element exigem mock library compartilhada (~6-8h). Precedente: `tests/23-employee-clock-complete.spec.ts:173` skipa explicitamente.
+
+### 4. 6 WARNs persistentes em advisors (intencionais)
+
+- 3 funções SECURITY DEFINER nossas: `apply_bank_hours_to_payment`, `verify_admin_secret`, `update_admin_secret`. Já revogamos anon em `apply_bank_hours_to_payment` (11.5). Outras 2 precisam de anon pra fluxo pré-login.
+- 16 WARNs no sistema legado (Q2 decisão Victor: não mexer).
+
+### 5. `nightDebitMinutes = 0` (decisão técnica conservadora, NÃO bug)
+
+Vide CHECKPOINT anterior. Todo débito tratado como diurno, sem multiplier noturno aplicado.
+
+---
+
+## 📋 PRÓXIMAS FASES
+
+### Fase 12 — Documentação (~6h, SEM bloqueio)
+
+- **12.1** — Atualizar `README.md` (RLS real, multi-empresa, bcrypt, JWT custom, versão atual)
+- **12.2** — Atualizar `PRE-LAUNCH-CHECKLIST.md`
+- **12.3** — Documentar edge functions (`auth-login`, `clock-in-validated` v7/v8)
+- **12.4** — `ARCHITECTURE.md` novo (Mermaid diagrams, multi-tenancy, auth flow, RLS approach)
+
+### Fase 13 — Validação final + go-live (~3h Claude + variable manual)
+
+- **13.0** *(pendência adicional)* — Adicionar `SUPABASE_SERVICE_ROLE_KEY` ao `.env` + atualizar `tests/cleanup.ts:getClient()` (vide pendência 1)
+- **13.1** — Full Playwright suite 3× consecutivos sem flake
+- **13.2** — Audit final advisors via MCP (re-confirmar 0 ERRORs Sistema de Ponto)
+- **13.3** — [MANUAL — Victor] Onboarding Ponte Nova com dados reais
+- **13.4** — [MANUAL — Victor] Tag `v2.0.0-multi-tenant` + push pra release
 
 ---
 
@@ -191,24 +225,22 @@ Sub-fases:
 Quando o Victor reabrir o Claude Code, o assistente deve:
 
 1. **Ler este checkpoint** integralmente
-2. **Confirmar regras obrigatórias** acima — não pular nem 1
+2. **Confirmar as 7 regras obrigatórias** acima — não pular nem 1
 3. **Verificar estado atual** via git:
    ```bash
    git log --oneline -5
    git status --short
    ```
-4. **Verificar tests baseline** (deve ser 414 unit + tsc limpo):
+4. **Verificar baseline** (deve ser tsc limpo + 422 unit tests + advisors 23):
    ```bash
    npx tsc --noEmit
    npx vitest run 2>&1 | tail -5
    ```
-5. **Perguntar ao Victor**:
-   - Continuar pela Fase 9 (E2E gaps fixáveis, sem bloqueio)?
-   - Ou Fase 10 (E2E componentes — escopo grande, ~30h)?
-   - Ou pular pra Fase 11 (Hardening — bloqueada D3/D4, precisa decisão)?
-   - Ou pular pra Fase 12/13 (docs + validação final)?
-
-**Não começar a executar nada antes do Victor confirmar prioridade.**
+5. **Perguntar ao Victor** qual fase atacar:
+   - Fase 12 (Documentação) — sem bloqueio
+   - Fase 13 — exige SERVICE_ROLE_KEY no .env primeiro
+   - Pendência 1 (SERVICE_ROLE_KEY) — preparar getClient()
+6. **Não começar a executar nada antes do Victor confirmar prioridade.**
 
 ---
 
@@ -238,93 +270,40 @@ npx playwright test --workers=1 --reporter=list
 
 ### Supabase MCP (sempre disponível)
 
-- `mcp__claude_ai_Supabase__execute_sql` — SELECT/INSERT/UPDATE/DELETE direto (read-only por padrão)
+- `mcp__claude_ai_Supabase__execute_sql` — SELECT/INSERT/UPDATE/DELETE direto
 - `mcp__claude_ai_Supabase__apply_migration` — DDL migrations
 - `mcp__claude_ai_Supabase__deploy_edge_function` — deploy edge fn
 - `mcp__claude_ai_Supabase__list_edge_functions` — confirmar versão ACTIVE
 - `mcp__claude_ai_Supabase__get_advisors` — security/performance
+- `mcp__claude_ai_Supabase__get_edge_function` — fetch source atual de edge fn
 - `mcp__claude_ai_Supabase__list_tables` — schema completo
+- `mcp__claude_ai_Supabase__get_logs` — logs de edge fn/postgres/auth
 
 **Project ID:** `flcncdidxmmornkgkfbb` (PNR Dashboard, sa-east-1, PG 17.6)
 
 ### Companies em prod
 
-- **Caratinga:** `6583bb2a-e334-41a7-b69c-7d98f3b46dfc` (CLAYTON B DOS SANTOS) — 30 employees, 3130 attendances, 1722 payments
-- **Ponte Nova:** `2b2abc4b-084c-4cf0-b5f1-02792513241d` (CD LOGISTICA LTDA) — dados em onboarding (1 user '8888' admin criado em 2026-05-11)
+- **Caratinga:** `6583bb2a-e334-41a7-b69c-7d98f3b46dfc` (CLAYTON B DOS SANTOS) — 30 employees, ~3130 attendances, ~1722 payments, dados reais ativos
+- **Ponte Nova:** `2b2abc4b-084c-4cf0-b5f1-02792513241d` (CD LOGISTICA LTDA) — empresa criada, 1 admin user (8888), demais dados em onboarding
+
+### Edge functions ACTIVE em prod
+
+| Slug | Versão | `verify_jwt` | Função |
+|---|---|---|---|
+| `auth-login` | v9 | `false` (emite tokens) | POST `{id, password}` → JWT custom HS256 com `{sub, role:'authenticated', aud, company_id, exp:24h}` |
+| `clock-in-validated` | v8 | **`true`** | Validação real de geolocalização + criação/update de attendance + logging em error_logs |
+
+### RPCs SECURITY DEFINER ativos
+
+- `verify_admin_secret(p_password text) → boolean` — valida admin via bcrypt
+- `update_admin_secret(p_new_password text) → void` — atualiza admin via bcrypt
+- `apply_bank_hours_to_payment(...21 args...) → uuid` — apply transacional bank hours
 
 ---
 
-## 📐 RACIONAL DAS DECISÕES (D1–D6) — INVIOLÁVEL
+## 📐 PATTERN CANÔNICO DE "VALIDAÇÃO REAL" (replicar SEMPRE)
 
-> Estas decisões foram tomadas com base em investigação real + dados de prod + conversa com Victor. **Reabrir uma decisão exige confirmação explícita.** Se o próximo Claude precisar tomar decisão SIMILAR em código novo (ex: tratamento de débito noturno), seguir a coerência destas decisões.
-
-### ✅ D1 — Mapeamento `nighttime_minutes → nightCreditMinutes` = **C (diurno primeiro)** (resolvida sub-fase 8.3, commit `e70da28`)
-
-**Fórmula validada com 5 samples reais de Caratinga via SQL antes de implementar:**
-
-```
-Por attendance:
-  daytime_extra  = max(0, daytime_minutes - expected_minutes)
-  nightCreditDay = max(0, bank_credit_minutes - daytime_extra)
-Total: sum nightCreditDay sobre todas attendances do range
-nightDebitMinutes = 0 sempre (conservador)
-```
-
-**Por que C e não A (proporcional) ou B (noturno primeiro):**
-- C é interpretação CLT mais comum: expected é "consumido" primeiro pelas horas diurnas; sobra noturna é a hora extra.
-- Favorável ao funcionário (sobra noturna ganha multiplier mais agressivamente).
-- Simples de auditar dia-a-dia (cálculo por linha, não por agregado).
-- A (proporcional) é matematicamente mais "justo" mas estranho de explicar ao funcionário ("você recebeu 87.3% do extra noturno proporcional").
-- B (noturno primeiro) é conservador pra empresa, complica com `is_absent_compensated`.
-
-**Caveat conhecido:** `nightDebitMinutes = 0` sempre (decisão pragmática). Se débito noturno virar caso real (ex: empresa cobra do funcionário por horas faltantes diferenciando dia/noite), revisitar. Hoje todo débito é tratado como diurno.
-
-### ✅ D2 — `admin_cleanup_config` strategy = **ES (estrutural)** (resolvida sub-fase 7.2 + 7.2.1, commits `19a72f3` + `0840f9c`)
-
-**Por que ES e não OP (operacional cadastro manual):**
-- Sistema é multi-tenant. OP exigiria INSERT manual a cada nova empresa.
-- ES (UNIQUE constraint + lazy-create via upsert) escala automaticamente.
-- Plus: descoberto bug latente em 7.2 — `id` PK com default `'default'` impedia INSERT pra novas empresas (PK collision). Fix em 7.2.1: `ALTER COLUMN id SET DEFAULT gen_random_uuid()::text`. Caratinga preserva `id='default'` legado, PN ganha UUID auto.
-
-### ✅ D5 — `error_logs` ADD `company_id` = **A (sim, adicionar)** (resolvida sub-fase 7.4, commit `b2a1bbb`)
-
-**Por que A:**
-- Auditoria por empresa é requisito de produção multi-tenant.
-- Coluna NULLABLE pra cobrir erros pré-login (sem contexto de empresa).
-- FK `ON DELETE SET NULL` preserva logs históricos se empresa for removida.
-- Index criado pra queries filtradas (`idx_error_logs_company_id`).
-
-### ✅ D6 — `bonus_defaults` legacy = **C (drop após validar callers)** (resolvida sub-fase 7.3, commit `73d7649`)
-
-**Por que C e não B (manter convivendo):**
-- Investigação anterior confirmou que `bonus_types` é fonte primária. Fallback `bonus_defaults` nunca disparado em prod (Caratinga em bonus_types tem mesmos valores).
-- C foi escolhida em vez de A (drop direto) pra preservar audit trail: dump completo salvo em `docs/bonus_defaults_legacy_dump_2026-05-11.json` antes do DROP TABLE.
-
-### ⚠️ D3 — RLS strategy = **PENDENTE** (bloqueia toda Fase 11)
-
-**3 opções abertas:**
-- **A (status quo):** Continuar sem RLS, usar tabela `users` plain + validações app-level. **Não traz benefício real** — anon key continua acessível.
-- **B (Supabase Auth nativo):** Migrar pra `auth.users`, JWT com custom claim `company_id`, policies usam `auth.jwt() ->> 'company_id'`. **Refactor pesado** mas canônico.
-- **C (Sessão custom + SECURITY DEFINER):** Função `current_company_id()` que lê `current_setting('app.current_company_id')`. Edge fn `set_company_context` seta na sessão pós-login. **Meio-termo viável** mantendo schema atual.
-
-**Recomendação do plano:** **C** (mais leve que B, mantém schema). Mas é decisão estrutural — Victor confirma antes da Fase 11.
-
-### ⚠️ D4 — Hash de senhas = **PENDENTE** (bloqueia sub-fase 11.3)
-
-**3 opções:**
-- **A (bcryptjs cliente):** Lento, expõe lógica. Não recomendado.
-- **B (edge fn `auth-login`):** Edge fn nova `auth-login` recebe `{id, password}`, faz `bcrypt.compare(password, password_hash)` no Deno, retorna JWT custom. **Recomendado.**
-- **C (ambos):** Excessivo.
-
-**Recomendação:** **B**. Migração de schema: `ALTER TABLE users ADD COLUMN password_hash` → script bcrypt hashing das senhas plain em prod → `DROP COLUMN password`. Destrutivo, exige backup obrigatório antes.
-
----
-
-## 🧪 PATTERN CANÔNICO DE "VALIDAÇÃO REAL" (exemplo completo)
-
-> Replicar este pattern em CADA sub-fase. Não é opcional. Foi o que pegou o bug latente em 7.2.1 que `tsc + lint + vitest + 38 unit tests` deixaram passar.
-
-**Caso de referência: sub-fase 7.4 (`error_logs` ADD `company_id`)**
+> Replicar este pattern em CADA sub-fase. Não é opcional. Foi o que pegou bugs latentes nas Fases 7-11.
 
 ### Step 1 — Pre-check via MCP (ANTES de codar nada)
 
@@ -332,164 +311,109 @@ nightDebitMinutes = 0 sempre (conservador)
 -- 1.1 Schema atual da tabela alvo
 SELECT column_name, data_type, is_nullable, column_default
 FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'error_logs'
+WHERE table_schema = 'public' AND table_name = 'X'
 ORDER BY ordinal_position;
--- → Confirmou SEM company_id (17 colunas existentes)
 
 -- 1.2 Estado dos dados (pra saber se precisa backfill)
-SELECT count(*) FROM error_logs;
--- → 0 rows. Sem backfill. Migration simples.
+SELECT count(*) FROM X;
 ```
 
 ### Step 2 — Grep callers no código
 
 ```bash
-grep -rn "error_logs\|errorLogs\|captureError\|logError" /home/victor/SISTEMA-DE-PONTO/src --include="*.ts" --include="*.tsx"
-# → Confirmou: errorTracking.ts (service, 16+ refs internos) + ErrorBoundary.tsx (1 caller).
-# → NENHUM outro caller. Surface area do refactor mapeado.
+grep -rn "from\\('X'\\)\\|tableName" /home/victor/SISTEMA-DE-PONTO/src --include="*.ts" --include="*.tsx"
 ```
 
-### Step 3 — Apply migration via MCP
-
-```sql
-ALTER TABLE public.error_logs
-  ADD COLUMN company_id uuid REFERENCES public.companies(id) ON DELETE SET NULL;
-CREATE INDEX IF NOT EXISTS idx_error_logs_company_id ON public.error_logs(company_id);
-```
+### Step 3 — Apply migration via MCP (`apply_migration`)
 
 ### Step 4 — Post-check via MCP (CONFIRMAR efeito real)
 
 ```sql
--- 4.1 Schema novo
-SELECT column_name, data_type, is_nullable
-FROM information_schema.columns
-WHERE table_schema='public' AND table_name='error_logs' AND column_name='company_id';
--- → company_id, uuid, YES (nullable correto)
-
--- 4.2 FK criada
-SELECT conname, contype FROM pg_constraint
-WHERE conrelid = 'public.error_logs'::regclass AND contype = 'f';
--- → error_logs_company_id_fkey (contype='f') ✓
-
--- 4.3 Index ativo
-SELECT indexname, indexdef FROM pg_indexes WHERE tablename='error_logs';
--- → idx_error_logs_company_id BTREE confirmado
+-- Schema novo, constraints, índices, advisors antes/depois
 ```
 
 ### Step 5 — Code change (TS)
 
-Alterar `src/services/errorTracking.ts` + `src/components/common/ErrorBoundary.tsx` pra propagar `companyId`.
-
 ### Step 6 — Validation E2E REAL via MCP (não só vitest)
 
 ```sql
--- 6.1 INSERT real simulando o que captureError do app faria — 3 cenários distintos
-INSERT INTO error_logs (user_id, company_id, error_type, severity, message, component, module, ...)
-VALUES
-  ('9999', '<caratinga_id>', 'js_error', 'high', 'PW Test Caratinga', ...),
-  ('8888', '<pn_id>', 'api_error', 'medium', 'PW Test PN', ...),
-  (NULL, NULL, 'js_error', 'low', 'PW Test pré-login', ...);
-
--- 6.2 SELECT filtrado confirma isolamento por company_id
-SELECT
-  CASE WHEN company_id = '<caratinga_id>' THEN 'Caratinga'
-       WHEN company_id = '<pn_id>' THEN 'PN'
-       ELSE 'NULL' END AS empresa,
-  count(*) FROM error_logs GROUP BY 1;
--- → Caratinga: 1, PN: 1, NULL: 1 ✓ ISOLAMENTO REAL
+-- INSERT real simulando o que app faria — N cenários distintos
+-- SELECT filtrado confirma comportamento
 ```
 
 ### Step 7 — Cleanup (RESTAURAR estado prod)
 
 ```sql
-DELETE FROM error_logs WHERE message LIKE 'PW Test %';
-SELECT count(*) FROM error_logs;
--- → 0 (estado prod restaurado)
+DELETE FROM X WHERE observation LIKE 'PW Test %';
 ```
 
 ### Step 8 — Rodar tsc + vitest + spec E2E relacionada
-
-(Apenas como CONFIRMAÇÃO adicional. Não substitui validação real acima.)
 
 ### Step 9 — Atualizar TECH_DEBT.md + Commit local + Reportar pro Victor
 
 ---
 
-## 🕳️ GAPS CONHECIDOS NÃO RESOLVIDOS (não fingir que está perfeito)
+## 🔑 CHAVES DE ARQUITETURA — FASE 11 (auth/RLS)
 
-> O próximo Claude DEVE saber dessas pendências. Se Victor perguntar "bug X tá resolvido?", a resposta honesta vem daqui.
+### Fluxo de login
 
-### 6.23 — `validatePixKey` em c6Export não normaliza CPF/CNPJ formatado
+1. **Frontend:** `loginUser(id, password)` faz `fetch POST /functions/v1/auth-login` com Authorization Bearer ANON_KEY.
+2. **Edge fn `auth-login` v9:**
+   - `SELECT users.password_hash WHERE id = ?` (via service_role)
+   - `bcryptjs.compare(password, password_hash)` → valid?
+   - Gera JWT HS256 manualmente: header + payload + HMAC-SHA256(data, JWT_SECRET)
+   - Retorna `{ token, user: {id, company_id} }`
+3. **Frontend `loginUser`:** chama `setAuthToken(token)` do `src/lib/supabase.ts`.
+4. **`setAuthToken`:** recria o `supabase` client com `global.headers.Authorization = Bearer ${token}` e salva no `sessionStorage`. Proxy export reflete novo client imediatamente.
+5. **Próximas queries Supabase:** RLS policies leem `auth.jwt() ->> 'company_id'`. Match passa, vê dados da empresa do user.
 
-- **Status:** Documentado no TECH_DEBT, FIX PENDENTE.
-- **Localização:** `src/utils/c6Export.ts:32-48`
-- **Problema:** `cleanKey = pixKey.replace(/[^\w@.-]/g, '')` mantém pontos/hífens. CPF `'123.456.789-01'` (formato comum de exibição) não bate `/^\d{11}$/` → marcado como `VERIFICAR` na planilha C6.
-- **Impacto:** Admin pode confundir status. Funcionário com PIX formatado fica "marcado errado" mas planilha ainda exporta.
-- **Fix sugerido inline no TECH_DEBT (trivial, ~3 linhas).**
-- **Por que não foi feito agora:** Exige coordenação com cadastros existentes — alguns funcionários hoje têm PIX formatado e contam como VERIFICAR; o fix vai converter status pra OK retroativamente.
+### Admin master '9999' bypass
 
-### 6.22 (parcial) — 3 tabs com cleanup cross-empresa PENDENTE
+Policies têm `OR auth.jwt() ->> 'sub' = '9999'`. Admin master vê todas empresas. Switch via CompanySwitcher persiste em `localStorage['sistema_ponto_company_id']` — JWT permanece com `company_id` original, mas o UI/state armazenam o switch.
 
-- **Status:** Audit completo (sub-fase 5.5). EmployeesTab resolvido (5.6).
-- **Pendente Severidade Alta:**
-  - `AttendanceTab.tsx`: `selectedEmployees: Set<string>`, `exitTimes`, `manualTimes`, `bonusAmounts`, `applyingBonus`, `employeeToReset`, `bonusTypeToRemove`
-  - `FinancialTab.tsx`: `selectedEmployees: Set<string>`, `editingPayment: {employeeId, date}`, `editValues`, `selectedPeriodId`
-  - `DataManagementTab.tsx`: `selectedEmployee: string` (id), wizard state
-- **Padrão de fix:** Idêntico ao 5.4/5.6 — 2º `useEffect([company?.id])` que zera estados ID-based.
-- **Por que não foi feito:** Escopo da Fase 5 fechado em 5.6 (1 tab por sub-fase). Cada tab vira sub-fase futura (5.7, 5.8, 5.9).
+### Logout
 
-### `nightDebitMinutes = 0` (decisão técnica conservadora, NÃO bug)
+`clearAuthToken()` no `src/lib/supabase.ts` recria client sem headers + remove sessionStorage. Próximas queries voltam a ser anon (bloqueadas pela maioria das policies).
 
-- **Onde:** `src/services/database.ts` helper `_sumBankBalanceWithNight` (sub-fase 8.3).
-- **Decisão:** Todo débito tratado como diurno, sem multiplier noturno aplicado.
-- **Implicação:** Funcionário com débito noturno é cobrado SEM o multiplier negativo. Favorece funcionário (conservador).
-- **Quando virar problema:** Se Caratinga/PN começar a configurar `bank_hours_night_separate=true` + diferenciação de débito noturno. Hoje não.
-- **Fix se necessário:** Implementar lógica simétrica ao credit ("diurno primeiro consome expected pelo débito"). Cuidado com `is_absent_compensated`.
+### Tabelas com RLS ativo (47)
 
-### Edge fn fail-path real NÃO testado (sub-fase 8.4 limitação reconhecida)
+- **32 core do Sistema de Ponto** (policies via `auth.jwt() ->> 'company_id'`):
+  Cat A (22): `admin_cleanup_config`, `attendance`, `bank_hours_application_log`, `bank_hours_overrides`, `bonus_blocks`, `bonus_removals`, `bonus_types`, `bonuses`, `employees`, `error_records`, `face_auth_attempts`, `face_recognition_config`, `geo_fraud_attempts`, `geolocation_config`, `payment_period_config`, `payment_periods`, `payments`, `triage_distribution_employees`, `triage_error_distributions`, `triage_errors`, `user_permissions`, `users`
+  + `error_logs` (NULLABLE company_id, policy especial)
+  + `companies` (SELECT TO public USING(true); modify só admin)
+  + `admin_secret` (DENY ALL — só RPC verify/update)
+  + 7 admin-only: `activity_logs`, `admin_cleanup_logs`, `audit_logs`, `auto_cleanup_config`, `cleanup_logs`, `data_retention_settings`, `permission_logs`
+- **15 legado** (não mexer — outro projeto)
 
-- **O que falta:** Validar que `logEdgeError` EFETIVAMENTE persiste em `error_logs` quando um write FALHA de verdade.
-- **Por que difícil:** Em prod atual (sem RLS, FKs validadas pré-write), não há como forçar falha sem mexer em dados.
-- **Mitigação:** Cobertura via mock supabase no Deno seria 100% mas exige refactor de testes Deno (atualmente E2E só cobre Node).
-- **Risco real:** Baixo. logEdgeError é simples (insert + try/catch). Probabilidade de bug não-detectado é mínima.
+### Specs E2E afetadas pelo RLS
 
-### `_calcPreviewFromBatch` não é unit-testado isoladamente
+✅ **Passando após Fase 11:**
+- `01-auth` (6/6), `02-employee-clock` (9/9), `08-geolocation` (4/4), `12-admin-tab` (3/3), `26-multi-company-ui-isolation` testes 1-5, 7-9, 10-13
 
-- **O que existe:** 8 testes em `applyBankHoursToPayment.spec.ts` exercitam o flow batch via `previewBankHoursForPeriod`.
-- **O que falta:** Testes UNIT da função pura `_calcPreviewFromBatch` (que recebe inputs e retorna `_PreviewInternalResult`).
-- **Por que adequado:** A função é interna (`_` prefix), não exportada. Cobertura via flow externo é suficiente.
-- **Quando virar problema:** Se a função for extraída pra módulo separado e usada em mais lugares. Aí vira candidata a unit isolado.
-
-### mirrorPdf — layout visual real NÃO validado
-
-- **O que existe:** `mirrorPdf.spec.ts` (48 mocks) + `mirrorPdf.real.spec.ts` (15 testes binários reais — PDF header, EOF, contagem de páginas via regex em bytes).
-- **O que falta:** Validar layout VISUAL real (posições x/y de elementos, sobreposições, quebras de página).
-- **Por que difícil:** jspdf comprime streams via zlib — texto literal não aparece como ASCII nos bytes. Validar precisa pdf-parse ou pdfjs-dist como dev dep.
-- **Mitigação:** Validação manual via `_generateTestSampleData` salvando PDF em disco e abrindo. Spec real garante estrutura básica (válido + N páginas + tamanho aceitável).
-
-### Spec 26 test 6 — REFATORADO (não é o original 3.4)
-
-- **Cuidado:** Se rodar full E2E suite e Spec 26 falhar inesperado, NÃO assumir regressão. O teste 6 foi refatorado na sub-fase 7.3 pra ser ROBUSTO a counts variáveis. Lê counts de Caratinga e PN do DB e adapta a assertion.
-- **Implicação:** Se PN ganhar/perder users entre runs, spec continua passando. Mas se a SEMÂNTICA de isolamento mudar (ex: PN começar a ver users de Caratinga), spec falha — aí é regressão real.
+❌ **Quebrados por SERVICE_ROLE_KEY ausente (vide pendência 1):**
+- `25-multi-company-isolation` (testes que fazem SELECT/INSERT via getClient como anon)
+- `26-multi-company-ui-isolation` teste 6 (count users via getClient)
 
 ---
 
 ## ⚠️ AVISOS IMPORTANTES PRA PRÓXIMA SESSÃO
 
-1. **Spec 26 test 6** foi refatorado na sub-fase 7.3 pra ser robusto a counts de users distintos (PN agora tem user 8888 admin). Se novos users forem criados em qualquer empresa, o spec se adapta sozinho.
+1. **JWT_SECRET configurada em prod (var custom).** NÃO recriar — Já existe. Se alterar JWT Secret do Supabase no Dashboard, tem que atualizar a var custom também.
 
-2. **TECH_DEBT 6.23** (validatePixKey não normaliza CPF formatado) está **documentado mas NÃO resolvido**. Tem fix sugerido inline na entry. Trivial (1 linha de regex), mas exige coordenação com cadastros existentes — quando atacar, validar via SQL como CPFs estão formatados em prod hoje.
+2. **`users.password` plain foi DROPADA em prod.** Não rollback fácil — `password_hash` bcrypt é o único guardião. 6 users + 1 admin_secret validados pre-drop (todos com hash `$2a$` length 60).
 
-3. **6.22 (Wave 3 audit)** lista 4 tabs com Severidade Alta de cleanup cross-empresa. Apenas EmployeesTab foi resolvido (sub-fase 5.6). AttendanceTab, FinancialTab, DataManagementTab ainda pendentes. Padrão é o mesmo do 5.4/5.6: 2º useEffect com cleanup de estados ID-based.
+3. **`createDefaultAdmin` em `database.ts:334-360` está obsoleto** — ainda tenta INSERT com `password` plain. Como admin '9999' já existe, never disparam INSERT. Mas tem WARN no console. Remover na próxima sessão (limpeza). **Não é bug crítico.**
 
-4. **Edge fn v6 está ACTIVE** em prod. Se sub-fase 11.4 fizer v7 com `verify_jwt:true`, vai exigir client mudar pra passar Bearer token. Cuidado: validation E2E real obrigatória (spec 02 + 08).
+4. **`User` interface (`database.ts:14-20`)** ainda tem `password: string` mas a coluna não existe. TS aceita (campo opcional faltante = undefined). Atualizar pra remover `password` ou marcar optional. **Limpeza cosmética.**
 
-5. **RPC `apply_bank_hours_to_payment`** validada via spec 29 Teste 1 que faz APPLY REAL contra DB de prod. Se mexer no schema da `bank_hours_application_log`, atualizar a RPC junto (atualmente tem 16 colunas no INSERT).
+5. **Auto-cleanup de tests:** specs criam fixtures com prefix `PW Test ...` e cleanup automático via `cleanupByPrefix`. Valida sempre via MCP que residue=0 pós-test. **Padrão obrigatório.**
 
-6. **Dump `bonus_defaults`** salvo em `docs/bonus_defaults_legacy_dump_2026-05-11.json` pra audit trail. Tabela DROP-ada na 7.3. Se algum bug aparecer mencionando "valores padrão de bônus": olhar `bonus_types` (single source of truth desde 7.3).
+6. **`docs/security-baseline-pre-rls.md` + `docs/security-baseline-post-rls.md`** salvos pra audit trail. Comparação direta lá.
 
-7. **Reminder de tasks recorrentes do harness** podem aparecer. **NÃO mencionar pro Victor** (regra do system prompt). Apenas usar TaskCreate/TaskUpdate se ajudar a organizar.
+7. **Spec 26 test 6** foi refatorado na sub-fase 7.3 pra ser robusto a counts variáveis. Continua quebrado pela pendência 1 (SERVICE_ROLE_KEY).
+
+8. **Memory atualizada:** `project_auth_no_email.md` tem D3/D4 confirmados. Outras conversas devem ler ela primeiro.
 
 ---
 
-**Fim do checkpoint.** Bom retorno ao trabalho — não economize qualidade pra economizar tempo. O Victor pediu "sistema 100%, não meia bomba".
+**Fim do checkpoint.** Bom retorno ao trabalho — não economize qualidade pra economizar tempo. O Victor pediu "sistema 100%, não meia bomba", e a Fase 11 entregou: **67 ERRORs → 0** ✅.
