@@ -47,7 +47,7 @@ test.describe('Bonificação — completo', () => {
   test('cálculo correto bonus_total + total quando bonus_b/c1/c2 setados via DB', async () => {
     const empId = await createTestEmployee({ name: `${PREFIX}TodosBonus` });
     const today = todayBR();
-    const _s = getClient();
+    const s = getClient();
     // Simula o que applyBonusToAllPresent faria — atualiza os 3 + recomputa
     await s.from('payments').insert([{
       employee_id: empId, date: today,
@@ -76,7 +76,6 @@ test.describe('Bonificação — completo', () => {
     const today = todayBR();
     await insertPaymentRow(empId, today, { daily_rate: 100, bonus_b: 10 });
 
-    const _s = getClient();
     // Tentamos via Supabase direto e checamos a validação na função
     // (alternativamente UI test, mas as restrições de min-length variam)
     // Aqui testamos que payment ainda tem bonus_b após "tentativa" malformada:
@@ -86,7 +85,7 @@ test.describe('Bonificação — completo', () => {
   test('histórico de remoções é salvo com observação completa', async () => {
     const empId = await createTestEmployee({ name: `${PREFIX}HistObs` });
     const today = todayBR();
-    const _s = getClient();
+    const s = getClient();
     await s.from('bonus_removals').insert([{
       employee_id: empId,
       date: today,
@@ -104,7 +103,7 @@ test.describe('Bonificação — completo', () => {
 
   test('bônus bloqueado por fraude geo (registro em bonus_blocks)', async () => {
     const empId = await createTestEmployee({ name: `${PREFIX}Blocked` });
-    const _s = getClient();
+    const s = getClient();
 
     // Bloqueio para a semana atual (week_start = segunda da semana)
     const now = new Date();
@@ -131,7 +130,7 @@ test.describe('Bonificação — completo', () => {
 
   test('desbloquear bônus: row removida de bonus_blocks', async () => {
     const empId = await createTestEmployee({ name: `${PREFIX}Unblock` });
-    const _s = getClient();
+    const s = getClient();
     const now = new Date();
     const dayOfWeek = now.getDay();
     const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
