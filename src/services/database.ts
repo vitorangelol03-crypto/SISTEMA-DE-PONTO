@@ -407,19 +407,41 @@ async function validatePermission(
 }
 
 // Auth functions
+// Sub-fase 11.3 — loginUser usa edge fn auth-login (bcrypt + JWT custom).
+// Auth-login internamente faz fallback pra plain durante transição.
+// JWT retornado é setado como sessão Supabase via setSession.
 export const loginUser = async (id: string, password: string): Promise<User | null> => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', id)
-    .eq('password', password)
-    .single();
+  type AuthLoginResponse = {
+    token?: string;
+    user?: { id: string; company_id: string };
+    error?: string;
+  };
 
-  if (error || !data) {
+  const { data, error } = await supabase.functions.invoke<AuthLoginResponse>('auth-login', {
+    body: { id, password },
+  });
+
+  if (error || !data?.token) {
     throw new Error('Credenciais inválidas');
   }
 
-  return data;
+  // Seta sessão Supabase com JWT custom. refresh_token vazio (sem renovação automática
+  // — exige novo login após exp 24h). Token é aceito pelo Supabase porque é assinado
+  // com JWT_SECRET (= JWT Secret oficial do projeto).
+  await supabase.auth.setSession({
+    access_token: data.token,
+    refresh_token: '',
+  });
+
+  // Fetch full User row (usa session ativa pra atender futuras policies RLS).
+  const { data: user, error: fetchErr } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (fetchErr || !user) throw new Error('Credenciais inválidas');
+  return user;
 };
 
 // User functions
@@ -3735,22 +3757,18 @@ export const getGeoAlerts = async (companyId: string): Promise<GeoAlert[]> => {
 
 // ─── Admin Secret ───────────────────────────────────────────────────────────
 
+// Sub-fase 11.3 — admin_secret.password_hash agora é bcrypt. Validação via
+// RPC `verify_admin_secret` (SECURITY DEFINER) que usa crypt() do pgcrypto.
 export const verifyAdminSecret = async (password: string): Promise<boolean> => {
-  const { data, error } = await supabase
-    .from('admin_secret')
-    .select('password_hash')
-    .eq('id', 'default')
-    .maybeSingle();
+  const { data, error } = await supabase.rpc('verify_admin_secret', { p_password: password });
   if (error) throw error;
-  if (!data) return false;
-  return data.password_hash === password;
+  return data === true;
 };
 
+// Sub-fase 11.3 — escreve via RPC `update_admin_secret` (SECURITY DEFINER)
+// que gera bcrypt hash via pgcrypto crypt(plain, gen_salt('bf', 10)).
 export const updateAdminSecret = async (newPassword: string): Promise<void> => {
-  const { error } = await supabase
-    .from('admin_secret')
-    .update({ password_hash: newPassword, updated_at: new Date().toISOString() })
-    .eq('id', 'default');
+  const { error } = await supabase.rpc('update_admin_secret', { p_new_password: newPassword });
   if (error) throw error;
 };
 

@@ -1,13 +1,16 @@
-// Sub-fase 11.3 — Edge fn auth-login
+// Sub-fase 11.3 — Edge fn auth-login v7 (com JWT generation)
+//
 // Recebe {id, password} → valida (bcrypt | plain fallback) → retorna JWT custom.
+// JWT é assinado com `JWT_SECRET` (Edge Function Secret, valor = JWT Secret oficial
+// do projeto Supabase, configurado via Dashboard → Settings → Edge Functions).
 //
-// Sistema de Ponto: login só por ID numérico + senha (sem email). JWT carrega
-// company_id como custom claim — policies RLS vão ler via auth.jwt() ->> 'company_id'.
+// Variável NÃO pode ter prefixo `SUPABASE_` (Supabase rejeita prefixos reservados),
+// por isso usamos `JWT_SECRET` em vez de `SUPABASE_JWT_SECRET`.
 //
-// Estratégia de migração (FASE 11.3):
-//   - Edge fn aceita password_hash (bcrypt) OU password (plain legacy).
-//   - Após esta fn rodar 1× pra cada user, password_hash fica populado.
-//   - Cutover atômico (11.1) dropa password plain — só password_hash sobrevive.
+// RLS policies poderão ler company_id via `auth.jwt() ->> 'company_id'` porque
+// o token é assinado com o secret oficial — Supabase Postgres aceita.
+//
+// Sistema de Ponto: login só por ID numérico + senha (sem email).
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -21,7 +24,7 @@ const CORS = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SRV = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const JWT_SECRET = Deno.env.get('SUPABASE_JWT_SECRET')!;
+const JWT_SECRET = Deno.env.get('JWT_SECRET')!;
 
 const supabase = createClient(SUPABASE_URL, SRV, { auth: { persistSession: false } });
 
@@ -32,20 +35,27 @@ function b64urlEncode(input: Uint8Array | string): string {
   return btoa(s).replace(/=+$/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
+let cryptoKeyPromise: Promise<CryptoKey> | null = null;
+function getCryptoKey(): Promise<CryptoKey> {
+  if (!cryptoKeyPromise) {
+    cryptoKeyPromise = crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(JWT_SECRET),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+  }
+  return cryptoKeyPromise;
+}
+
 async function signJWT(payload: Record<string, unknown>): Promise<string> {
   const header = b64urlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const body = b64urlEncode(JSON.stringify(payload));
   const data = `${header}.${body}`;
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(JWT_SECRET),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
+  const key = await getCryptoKey();
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
-  const sigB64 = b64urlEncode(new Uint8Array(sig));
-  return `${data}.${sigB64}`;
+  return `${data}.${b64urlEncode(new Uint8Array(sig))}`;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -60,6 +70,11 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   try {
+    if (!JWT_SECRET) {
+      console.error('[auth-login] JWT_SECRET not configured');
+      return json({ error: 'Server misconfigured', details: 'JWT_SECRET missing' }, 500);
+    }
+
     const { id, password } = await req.json();
     if (!id || !password) return json({ error: 'Missing id or password' }, 400);
 
@@ -76,15 +91,18 @@ Deno.serve(async (req) => {
     if (!user) return json({ error: 'Invalid credentials' }, 401);
 
     let valid = false;
+    let authMethod: 'bcrypt' | 'plain' | 'none' = 'none';
     if (user.password_hash) {
       try {
         valid = await bcryptjs.compare(String(password), user.password_hash);
+        if (valid) authMethod = 'bcrypt';
       } catch (err) {
-        console.error('[auth-login] bcrypt.compare error:', err);
+        console.error('[auth-login] bcrypt error:', err);
       }
     }
     if (!valid && user.password) {
       valid = String(password) === user.password;
+      if (valid) authMethod = 'plain';
     }
     if (!valid) return json({ error: 'Invalid credentials' }, 401);
 
@@ -101,6 +119,7 @@ Deno.serve(async (req) => {
     return json({
       token: jwt,
       user: { id: user.id, company_id: user.company_id },
+      auth_method: authMethod, // 'bcrypt' ou 'plain' (debug — remover em prod final)
     });
   } catch (err) {
     console.error('[auth-login] unhandled:', err);
