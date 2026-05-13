@@ -28,6 +28,12 @@ async function cleanupTestUsers(): Promise<void> {
 }
 
 test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
+  // ⚠️ Test timeout estendido: a edge fn create-user usa bcrypt(10) que pode
+  // levar 400ms (warm) a 150s (cold-start IDLE_TIMEOUT da Supabase Edge
+  // Functions). Em batch (após várias specs), workers ficam frios e timeouts
+  // são frequentes. 60s cobre ~99% dos casos sem mascarar bugs reais.
+  test.describe.configure({ timeout: 60_000 });
+
   test.beforeAll(cleanupTestUsers);
   test.afterAll(cleanupTestUsers);
 
@@ -53,8 +59,9 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     // Submit (botão dentro do form, type=submit)
     await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();
 
-    // Toast de sucesso (react-hot-toast)
-    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 15_000 });
+    // Toast de sucesso (react-hot-toast). Timeout 30s pra tolerar cold-start
+    // da edge fn create-user (bcrypt 10 rounds, ver describe timeout acima).
+    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 30_000 });
 
     // Valida row em DB com bcrypt $2a$10$
     const s = getClient();
@@ -74,7 +81,25 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
   test('2. ID duplicado → toast "ID já existe"', async ({ page }) => {
     const id = TEST_IDS[1];
 
-    // Cria primeiro (via UI pra exercitar mesmo fluxo)
+    // ⚠️ Fix de flakiness: a edge fn create-user usa bcrypt(10 rounds)
+    // que pode levar de 400ms a 150s (IDLE_TIMEOUT) por chamada cold-start.
+    // O teste anterior fazia 2 chamadas sequenciais via UI — a 2ª frequen-
+    // temente pegava cold worker e timeoutava antes do toast de erro
+    // aparecer. Solução: pré-criar o user direto via DB (bypassa bcrypt
+    // do edge fn) e validar que a 2ª chamada via UI retorna 409 conforme
+    // esperado. O fluxo crítico testado (UI → edge fn → 409 → toast)
+    // segue coberto, mas agora com APENAS 1 chamada de edge fn.
+    const s = getClient();
+    await s.from('users').insert([{
+      id,
+      // password_hash arbitrário válido bcrypt — não vamos logar com ele
+      password_hash: '$2a$10$abcdefghijklmnopqrstuv1234567890ABCDEFGHIJKLMNOPQRSTUV',
+      role: 'supervisor',
+      created_by: '9999',
+      company_id: '6583bb2a-e334-41a7-b69c-7d98f3b46dfc',
+    }]);
+
+    // Tenta criar via UI com mesmo ID → edge fn deve retornar 409
     await loginAs(page, ADMIN);
     await goToTab(page, 'Usuários');
     await page.getByRole('button', { name: /Criar Supervisor/ }).first().click();
@@ -82,17 +107,10 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     await page.locator('input[placeholder*="senha segura"]').fill(TEST_PASSWORD);
     await page.locator('input[placeholder*="Confirme a senha"]').fill(TEST_PASSWORD);
     await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();
-    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 15_000 });
 
-    // Reabre form e tenta criar de novo com mesmo ID
-    await page.getByRole('button', { name: /Criar Supervisor/ }).first().click();
-    await page.locator('input[placeholder*="apenas números"]').fill(id);
-    await page.locator('input[placeholder*="senha segura"]').fill(TEST_PASSWORD);
-    await page.locator('input[placeholder*="Confirme a senha"]').fill(TEST_PASSWORD);
-    await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();
-
-    // Toast de erro (mensagem do edge fn ou frontend)
-    await expect(page.getByText(/ID já existe/i)).toBeVisible({ timeout: 15_000 });
+    // Toast de erro (mensagem do edge fn ou frontend). Timeout maior pra
+    // tolerar cold-start ocasional da edge fn nessa única chamada.
+    await expect(page.getByText(/ID já existe/i)).toBeVisible({ timeout: 30_000 });
   });
 
   test('3. Senha < 4 caracteres → toast validação frontend', async ({ page }) => {
@@ -144,7 +162,8 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     await page.locator('input[placeholder*="senha segura"]').fill(TEST_PASSWORD);
     await page.locator('input[placeholder*="Confirme a senha"]').fill(TEST_PASSWORD);
     await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();
-    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 15_000 });
+    // Timeout 30s pra cold-start da edge fn create-user (ver test 1).
+    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 30_000 });
 
     // Logout do admin
     await logout(page);

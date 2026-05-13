@@ -119,37 +119,82 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     // Sem filtro temporal — getPaymentPeriods(company.id) busca todos.
     // Caratinga: 28 períodos persistentes (out/2025 → abr/2026).
     // Ponte Nova: 0 períodos.
+    //
+    // ⚠️ SETUP (fix de race): App.tsx tem useEffect global que chama
+    // autoCreateWeeklyPeriod(company.id) ao entrar em qualquer empresa
+    // (App.tsx:69). Como Ponte Nova não tem row em payment_period_config,
+    // o default é auto_weekly=true (database.ts:1848) → ao trocar pra
+    // Ponte Nova, o useEffect cria um período semanal automaticamente,
+    // quebrando a asserção "Nenhum período criado".
+    //
+    // O test 1 (linha 26) já dispara switchCompany→PN, então quando
+    // test 5 chega, PN já tem 1 período auto-criado. Fix: limpar
+    // qualquer período de PN ANTES de trocar de empresa E desativar
+    // auto_weekly de PN pela duração do teste (restaurar no finally).
+    const s = getClient();
+    const { data: pnCfgBefore } = await s
+      .from('payment_period_config')
+      .select('auto_weekly')
+      .eq('company_id', PONTE_NOVA_ID)
+      .maybeSingle();
+    const pnCfgExisted = !!pnCfgBefore;
+    const pnAutoWeeklyOriginal = pnCfgBefore?.auto_weekly ?? true;
 
-    // 1. Caratinga (default): aba Erros, sub-aba 'periods' NÃO é
-    //    default (default é 'individual'). Clicar no botão da
-    //    sub-aba pra ativar PaymentPeriodsTab.
-    await goToTab(page, 'Erros');
-    await page
-      .getByRole('button', { name: /Períodos/i })
-      .first()
-      .click();
+    await s.from('payment_period_config').upsert([{
+      auto_weekly: false,
+      updated_by: 'test_26_5',
+      updated_at: new Date().toISOString(),
+      company_id: PONTE_NOVA_ID,
+    }], { onConflict: 'company_id' });
+    await s.from('payment_periods').delete().eq('company_id', PONTE_NOVA_ID);
 
-    // PaymentPeriodsTab carrega 28 períodos. tbody tr first
-    // attached é suficiente — toBeAttached cobre <tr> dentro de
-    // <table> que pode estar atrás de overflow-x-auto.
-    await expect(
-      page.locator('tbody tr').first()
-    ).toBeAttached({ timeout: 15_000 });
+    try {
+      // 1. Caratinga (default): aba Erros, sub-aba 'periods' NÃO é
+      //    default (default é 'individual'). Clicar no botão da
+      //    sub-aba pra ativar PaymentPeriodsTab.
+      await goToTab(page, 'Erros');
+      await page
+        .getByRole('button', { name: /Períodos/i })
+        .first()
+        .click();
 
-    // 2. Trocar empresa + re-navegar. Reload reseta activeTab pra
-    //    'attendance' E activeSubTab do ErrorsTab pra 'individual'
-    //    (useState inicial L28). Precisa re-clicar 'Períodos'.
-    await switchCompany(page, 'Ponte Nova');
-    await goToTab(page, 'Erros');
-    await page
-      .getByRole('button', { name: /Períodos/i })
-      .first()
-      .click();
+      // PaymentPeriodsTab carrega 28 períodos. tbody tr first
+      // attached é suficiente — toBeAttached cobre <tr> dentro de
+      // <table> que pode estar atrás de overflow-x-auto.
+      await expect(
+        page.locator('tbody tr').first()
+      ).toBeAttached({ timeout: 15_000 });
 
-    // 3. Ponte Nova: 0 períodos → texto vazio exclusivo (L184).
-    await expect(
-      page.getByText(/Nenhum período criado/i)
-    ).toBeVisible({ timeout: 10_000 });
+      // 2. Trocar empresa + re-navegar. Reload reseta activeTab pra
+      //    'attendance' E activeSubTab do ErrorsTab pra 'individual'
+      //    (useState inicial L28). Precisa re-clicar 'Períodos'.
+      await switchCompany(page, 'Ponte Nova');
+      await goToTab(page, 'Erros');
+      await page
+        .getByRole('button', { name: /Períodos/i })
+        .first()
+        .click();
+
+      // 3. Ponte Nova: 0 períodos → texto vazio exclusivo (L184).
+      await expect(
+        page.getByText(/Nenhum período criado/i)
+      ).toBeVisible({ timeout: 10_000 });
+    } finally {
+      // Restaura config: se row não existia, deleta a row que criamos;
+      // senão restaura auto_weekly original. Apaga períodos auto-criados
+      // que possam ter aparecido durante o teste por timing residual.
+      await s.from('payment_periods').delete().eq('company_id', PONTE_NOVA_ID);
+      if (pnCfgExisted) {
+        await s.from('payment_period_config').upsert([{
+          auto_weekly: pnAutoWeeklyOriginal,
+          updated_by: 'test_26_5_cleanup',
+          updated_at: new Date().toISOString(),
+          company_id: PONTE_NOVA_ID,
+        }], { onConflict: 'company_id' });
+      } else {
+        await s.from('payment_period_config').delete().eq('company_id', PONTE_NOVA_ID);
+      }
+    }
   });
 
   test('6. Usuários: counts UI batem com counts do DB E são distintos entre empresas (isolamento real)', async ({ page }) => {
