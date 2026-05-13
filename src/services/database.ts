@@ -1869,6 +1869,13 @@ export const setPaymentPeriodAutoWeekly = async (enabled: boolean, updatedBy: st
  * períodos vencidos.
  */
 export const autoCreateWeeklyPeriod = async (companyId: string): Promise<void> => {
+  // Sub-fase 14.4.5: skip se não há JWT custom (race no boot ou nova aba
+  // com localStorage user mas sessionStorage token vazio). RLS de
+  // payment_periods exige authenticated, retornaria 401. Better fail silent.
+  if (!getAuthToken()) {
+    return;
+  }
+
   const config = await getPaymentPeriodConfig(companyId);
 
   const today = new Date();
