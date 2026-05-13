@@ -1914,6 +1914,10 @@ export const autoCreateWeeklyPeriod = async (companyId: string): Promise<void> =
 
   const label = `Semana ${mondayStr.slice(8, 10)}/${mondayStr.slice(5, 7)} a ${sundayStr.slice(8, 10)}/${sundayStr.slice(5, 7)}`;
 
+  // Sub-fase 14.4.8: created_by='auto' causava FK violation (409) porque
+  // 'auto' não existe em users.id. FK payment_periods.created_by → users.id.
+  // Usa '9999' (admin master) que sempre existe. Faz sentido semanticamente:
+  // auto-create roda em contexto privilegiado equivalente ao admin master.
   await supabase
     .from('payment_periods')
     .insert([{
@@ -1922,7 +1926,7 @@ export const autoCreateWeeklyPeriod = async (companyId: string): Promise<void> =
       payment_date: sundayStr,
       label,
       status: 'open',
-      created_by: 'auto',
+      created_by: '9999',
       company_id: companyId,
     }]);
 };
