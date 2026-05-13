@@ -139,25 +139,75 @@ Após deploy em prod e uso real, monitorar:
 | Reset facial automático após N tentativas falhas | Feedback usuários | Média |
 | Notificações push (clock-in atrasado) | Demanda admin | Baixa |
 | Export PDF holerite | Demanda funcionário | Média |
-| App mobile React Native | Decisão de produto | Baixa (web mobile-first cobre) |
+| **APK Android via Capacitor** (sub-fase 15) | Demanda mobile | Média (ver §7.1) |
 | Multi-idioma | Expansão geográfica | Baixa |
 | API pública pra integrações ERP | Demanda enterprise | Baixa |
+
+### 7.1 — APK Android via Capacitor (sub-fase 15 futura)
+
+**Objetivo:** transformar o webapp Vite+React em APK Android instalável com acesso a APIs nativas (câmera, geolocalização, notificações).
+
+**Stack escolhida:** Capacitor (Ionic) — wrapper nativo que embrulha o app web num WebView e expõe APIs nativas via plugins. Reaproveita 100% do React+TypeScript já existente.
+
+**Plugins envolvidos:**
+- `@capacitor/camera` — face-api.js continua funcionando, mas plugin nativo é alternativa pra captura
+- `@capacitor/geolocation` — substitui/complementa `navigator.geolocation` (mais robusto em background)
+- `@capacitor/local-notifications` — lembretes locais (e.g. "Você esqueceu de bater ponto?")
+- `@capacitor/push-notifications` — push server→device (requer Firebase Cloud Messaging)
+- `@capacitor/preferences` — fallback de localStorage se WebView resetar
+
+**Caminho escolhido pelo Victor (sem Play Store):** sideload via link direto/Slack/email.
+
+**Esforço estimado:** ~4 dias úteis
+- Dia 1: Setup Capacitor + AndroidManifest + permissões runtime
+- Dia 2: Adaptar serviços de geo + camera pra plugins nativos
+- Dia 3: Local notifications + UX de permissões
+- Dia 4: Keystore auto-assinado (Claude gera) + build release APK + smoke test device real
+
+**Pré-requisitos do Victor:**
+- [ ] **Android Studio instalado** (download ~3GB; única dependência chata)
+- [ ] **Decisão de senha do keystore** (Claude gera o arquivo `.jks`, Victor define senha + guarda backup)
+- [ ] **Projeto Firebase** (OPCIONAL — só se quiser push notifications server→device. Local notifications não precisam)
+
+**APK release auto-assinado (escolhido):**
+- ✅ Instala em qualquer Android via sideload ("Fontes desconhecidas" ativado uma vez)
+- ✅ Sem flag "debuggable" — performance otimizada
+- ✅ Zero custo recorrente, sem Google
+- ⚠️ **Sem auto-update** — cada nova versão precisa ser distribuída manualmente (link/Slack/email)
+- ⚠️ Funcionário precisa abrir o link e reinstalar a cada release
+
+**Play Store (descartado por Victor):**
+- Economizaria distribuição manual e auto-update
+- Custo: US$25 conta dev one-time + revisão Google 1-7 dias + políticas restritivas
+- Pode ser adicionado depois sem reescrita — mesmo APK, só upload
+
+**Tradeoffs:**
+- ✅ Reaproveita 100% do código React atual
+- ✅ Build APK direto, sem reescrita
+- ⚠️ APK fica ~15-20MB (overhead Capacitor + WebView)
+- ⚠️ `face-api.js` carrega modelos ~10MB pesados — primeira abertura lenta no celular
+- ⚠️ iOS exigiria Mac + Apple Developer ($99/ano) — adiar pra outra sub-fase
+
+**Alternativa zero-esforço:** PWA "Add to Home Screen" (Chrome → menu → "Instalar app"). Câmera + geo funcionam, mas notifications limitadas (iOS especialmente) e sem ícone próprio no app drawer.
+
+**Status:** Roadmap. Sem trigger imediato — esperar feedback de uso real pós-go-live.
 
 ---
 
 ## 8. 🔄 Estado atual do trabalho (2026-05-13)
 
-### Sub-fases concluídas nesta sessão pré-almoço Victor
+### Sub-fases concluídas nesta sessão
 
 - ✅ 14.5 + 14.6 + 14.7 + 14.8 — 5 specs novos (39, 40, 41, 42, edgeFn) + 2 race fixes (26, 37)
 - ✅ Fixes pós-criação (40 test 4, 41 test 5, 42 test 2) — strict mode + reload
 - ✅ Validação isolada de cada spec: 39 (5/5), 40 (5/5), 41 (5/5), 42 (3/3+1skip), edgeFn (4/4+1skip), 26 (9/9), 37 (5/5)
 - ✅ Checkpoint dividido em arquivos (este e os outros 5)
+- ✅ **14.9 — Batch 100% determinístico:**
+  - Spec 40 race AttendanceTab (loadData mount-only) → `searchEmployee` clica "Atualizar" antes do fill
+  - Spec 37 cold-start residual create-user → expect 30s→60s, describe 60s→90s
+  - Suite isolada validada (40: 5/5; 36+37: 13/13)
+  - `BATCH_FAILURES_REPORT.md` deletado (info migrada para `CHECKPOINT_FASES.md`)
 
-### Em andamento background
-- 🔄 Playwright suite completa (workers=1) — confirmar batch passa também
-
-### Pendente próxima sessão (após Victor reiniciar PC)
-- ⏳ Confirmar suite completa passou no batch (workers=1)
-- ⏳ Commit final consolidado (sub-fase 14.5/6/7/8 + race fixes)
-- ⏳ Próximo passo Victor: onboarding Ponte Nova OU release/deploy
+### Próximo passo Victor
+- ⏳ Onboarding Ponte Nova (1.1) **OU** release/deploy (1.2 + 1.3)
+- ⏳ Tech debt residual postponed (PIN bcrypt 11.9, `User.password` cleanup, Vite warnings)

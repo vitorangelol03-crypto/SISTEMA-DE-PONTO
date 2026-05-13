@@ -79,6 +79,11 @@ async function resetAllAttendanceViaUI(page: Page): Promise<void> {
 }
 
 async function searchEmployee(page: Page, name: string): Promise<void> {
+  // AttendanceTab faz query no mount com [company?.id]; employees criados via SQL
+  // após o mount não aparecem sem refetch manual (polling 30s é silencioso mas
+  // não cobre o início do teste). Click no botão "Atualizar" força loadData.
+  await page.getByRole('button', { name: /^Atualizar$/ }).click();
+
   const searchInput = page.getByPlaceholder(/Buscar por nome ou CPF/);
   await searchInput.fill(name);
   // Aguarda o filtro renderizar a row do test employee

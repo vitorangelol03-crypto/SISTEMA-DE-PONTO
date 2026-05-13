@@ -133,7 +133,25 @@ E adicionar test cases pra CPF/CNPJ com pontuação retornar OK.
 
 ## 🟢 Performance / qualidade
 
-(Sem itens pendentes — 6.7 movido pra histórico em 2026-05-11, sub-fase 8.1.)
+### 6.24 — [Baixa] `AttendanceTab.loadData` mount-only (sem refetch live)
+
+**Local:** `src/components/attendance/AttendanceTab.tsx:140-146` (`useEffect([selectedDate, employmentTypeFilter, company?.id])`).
+
+**Comportamento atual:**
+- `loadData` é disparado só no mount + ao mudar data/filtro/empresa.
+- Polling silencioso de 30s atualiza state sem spinner.
+- Botão "Atualizar" no header força refetch manual.
+
+**Impacto:**
+- Se outro usuário (ou batch SQL externo) cria/edita/remove funcionário, admin atual só vê após 30s polling OU click manual.
+- Em testes E2E que pré-criam dados via SQL: `searchEmployee` precisa de "Atualizar" antes (já aplicado no spec 40 em sub-fase 14.9).
+- UX em produção: aceitável (admin trabalha pouco em concorrência), mas não ideal.
+
+**Solução possível (postponed):**
+- Supabase Realtime subscription pra eventos `INSERT/UPDATE/DELETE` em `employees`/`attendance`/`payments` filtrados por `company_id`.
+- Custo: ~1 dia (subscription + reconnect handling + memory cleanup).
+
+**Status:** Aceito como baixa prioridade. Sub-fase futura (pós-go-live) se feedback demandar.
 
 ---
 

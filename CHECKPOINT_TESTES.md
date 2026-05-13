@@ -242,3 +242,20 @@ Após criação dos 5 specs novos via agents paralelos, 3 ajustes manuais:
 | `40-bonus-individual-ui` test 4 | `.first()/.last()` em getByText | Strict mode violation (2 toasts simultâneos) |
 | `41-company-settings-save` test 5 | `page.reload()` pós-setLatLngDirect | CompanyContext só carrega no mount inicial |
 | `42-bank-hours-apply-ui` test 2 | `getByText('Selecionados', {exact: true})` | Strict mode: 3 elementos matchavam regex `/Selecionados/i` |
+
+---
+
+## 10. Sub-fase 14.9 — Batch determinístico (race fixes finais)
+
+Após batch report (255 passed/18 skipped/4 failed onde TODOS passavam isoladas):
+
+| Spec | Fix | Causa raiz |
+|---|---|---|
+| `40-bonus-individual-ui` `searchEmployee` | Click "Atualizar" antes de `fill(searchInput)` | `AttendanceTab.loadData` mount-only — não vê emp criado via SQL pós-mount |
+| `37-create-user-e2e` `beforeAll` | Warmup completo: login admin → JWT custom → cria user `97000` real via edge fn | Cold-start residual `create-user` (>60s); warmup body vazio não força handler full |
+| `37-create-user-e2e` describe + expects | timeout describe 60s→180s, expect 30s→60s | Camada extra de safety pra cold-start residual residual |
+
+**Validação final:**
+- Spec 40 isolado: 5/5 ✅ (era 2 failed antes do fix)
+- Spec 37 isolado com warmup full: 5/5 ✅ em 27.1s (test 2: 4.5s, test 5: 6.4s)
+- **Suite completa: 259 passed / 18 skipped / 0 failed em 19.3min** (era 255/18/4)

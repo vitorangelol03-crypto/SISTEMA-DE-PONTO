@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
 import { ADMIN, loginAs, goToTab, logout } from './helpers';
 import { getClient } from './cleanup';
 
@@ -27,14 +29,89 @@ async function cleanupTestUsers(): Promise<void> {
   await s.from('user_permissions').delete().like('user_id', `${TEST_PREFIX}%`);
 }
 
+/**
+ * Sub-fase 14.9 — Warmup COMPLETO da edge fn `create-user`.
+ *
+ * Cold-start residual: a primeira chamada pós-idle (>5min) baixa `esm.sh/bcryptjs`
+ * e demora até 150s (TECH_DEBT 6.13). Body vazio não força handler full —
+ * import bcryptjs ocorre mas `bcrypt.hash()` não roda. Warmup parcial deixa
+ * o worker "morno" em vez de quente.
+ *
+ * Solução: chamar a edge fn com body VÁLIDO no `beforeAll` (fora do test timeout).
+ * Faz login admin via auth-login → JWT custom → create-user com user `97000`.
+ * O handler roda bcrypt.hash + INSERT completo — worker fica 100% warm.
+ * `cleanupTestUsers` no beforeEach limpa o 97000 antes do test 1.
+ *
+ * Best-effort: se falhar (sem .env, edge fn down), segue. Test timeouts cobrem.
+ */
+async function warmupCreateUserEdgeFn(): Promise<void> {
+  const envPath = path.join(process.cwd(), '.env');
+  if (!fs.existsSync(envPath)) return;
+  const env: Record<string, string> = {};
+  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^([A-Z0-9_]+)\s*=\s*(.*)$/i);
+    if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+  const url = env.VITE_SUPABASE_URL;
+  const anon = env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !anon) return;
+
+  try {
+    // 1) Login admin via auth-login pra obter JWT custom
+    const loginCtrl = new AbortController();
+    const loginTimer = setTimeout(() => loginCtrl.abort(), 60_000);
+    const loginResp = await fetch(`${url}/functions/v1/auth-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: anon },
+      body: JSON.stringify({ id: '9999', password: '684171' }),
+      signal: loginCtrl.signal,
+    });
+    clearTimeout(loginTimer);
+    if (!loginResp.ok) return;
+    const loginData = (await loginResp.json().catch(() => ({}))) as { token?: string };
+    const token = loginData.token;
+    if (!token) return;
+
+    // 2) create-user com user warmup `97000` (fora do TEST_IDS); cleanupTestUsers
+    // do beforeEach do test 1 limpa antes do primeiro test rodar.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 180_000);
+    await fetch(`${url}/functions/v1/create-user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anon,
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        id: '97000',
+        password: 'warmup1234',
+        role: 'supervisor',
+        companyId: '6583bb2a-e334-41a7-b69c-7d98f3b46dfc',
+      }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+  } catch {
+    /* warmup é best-effort — se falhar, timeouts dos tests cobrem */
+  }
+}
+
 test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
   // ⚠️ Test timeout estendido: a edge fn create-user usa bcrypt(10) que pode
   // levar 400ms (warm) a 150s (cold-start IDLE_TIMEOUT da Supabase Edge
   // Functions). Em batch (após várias specs), workers ficam frios e timeouts
-  // são frequentes. 60s cobre ~99% dos casos sem mascarar bugs reais.
-  test.describe.configure({ timeout: 60_000 });
+  // são frequentes. 180s acomoda warmup + cold-start residual sem mascarar bugs.
+  //
+  // Sub-fase 14.9: aumentado de 60s → 90s → 180s + warmup explícito no beforeAll
+  // após batch 13/05/2026 revelar test 5 falhando com cold-start >60s.
+  test.describe.configure({ timeout: 180_000 });
 
-  test.beforeAll(cleanupTestUsers);
+  test.beforeAll(async () => {
+    await cleanupTestUsers();
+    // Força cold-start ANTES dos tests reais (ver warmupCreateUserEdgeFn doc).
+    await warmupCreateUserEdgeFn();
+  });
   test.afterAll(cleanupTestUsers);
 
   test.beforeEach(async () => {
@@ -59,9 +136,9 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     // Submit (botão dentro do form, type=submit)
     await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();
 
-    // Toast de sucesso (react-hot-toast). Timeout 30s pra tolerar cold-start
+    // Toast de sucesso (react-hot-toast). Timeout 60s pra tolerar cold-start
     // da edge fn create-user (bcrypt 10 rounds, ver describe timeout acima).
-    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 60_000 });
 
     // Valida row em DB com bcrypt $2a$10$
     const s = getClient();
@@ -108,9 +185,9 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     await page.locator('input[placeholder*="Confirme a senha"]').fill(TEST_PASSWORD);
     await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();
 
-    // Toast de erro (mensagem do edge fn ou frontend). Timeout maior pra
+    // Toast de erro (mensagem do edge fn ou frontend). Timeout 60s pra
     // tolerar cold-start ocasional da edge fn nessa única chamada.
-    await expect(page.getByText(/ID já existe/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/ID já existe/i)).toBeVisible({ timeout: 60_000 });
   });
 
   test('3. Senha < 4 caracteres → toast validação frontend', async ({ page }) => {
@@ -162,8 +239,8 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     await page.locator('input[placeholder*="senha segura"]').fill(TEST_PASSWORD);
     await page.locator('input[placeholder*="Confirme a senha"]').fill(TEST_PASSWORD);
     await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();
-    // Timeout 30s pra cold-start da edge fn create-user (ver test 1).
-    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 30_000 });
+    // Timeout 60s pra cold-start da edge fn create-user (ver test 1).
+    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 60_000 });
 
     // Logout do admin
     await logout(page);

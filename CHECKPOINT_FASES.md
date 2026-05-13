@@ -19,7 +19,7 @@
 | **11** | Hardening produção pública | 11.0-11.5 + 11.6-11.8 + 11.8.1 | ✅ (67 ERRORs → 0) |
 | **12** | Documentação | 12.1-12.4 | ✅ (README, PRE-LAUNCH, edge-fns, ARCHITECTURE) |
 | **13** | Validação final | 13.0-13.2 | ✅ (Playwright 3× clean + audit final) |
-| **14** | Pós-validação + UI bug hunt + cobertura final | 14.1-14.8 + 14.4.1-14.4.10 + 14.5+14.6+14.7 | ✅ (11 bugs UI cazados, 5 specs novos, race fixes) |
+| **14** | Pós-validação + UI bug hunt + cobertura final | 14.1-14.9 + 14.4.1-14.4.10 + 14.5+14.6+14.7 | ✅ (11 bugs UI cazados, 5 specs novos, race fixes, batch 100% determinístico) |
 
 ---
 
@@ -149,6 +149,42 @@ Disparados **6 agents em paralelo** pra criar specs novos e corrigir race condit
 - **Spec 40 test 4** — `.first()/.last()` em getByText pra evitar strict mode violation (2 toasts simultâneos).
 - **Spec 41 test 5** — `page.reload()` após setLatLngDirect (CompanyContext só carrega no mount inicial).
 - **Spec 42 test 2** — `getByText('Selecionados', { exact: true })` pra escapar strict mode com botões "Aplicar selecionados (N)".
+
+### 14.9 — Fix batch 100% determinístico (4 race failures → 0)
+
+Pedido Victor pós-batch report (13/05/2026): "Resolver 4 falhas batch (opção B)". As 4 falhas eram intermitentes em batch mas TODOS passavam isoladas — race condition real.
+
+**Investigação:** spec 40 `searchEmployee` falhou também isolado (tests 2, 3 desta run). Confirmou **causa raiz arquitetural** (não race entre specs):
+
+- `AttendanceTab.loadData` é disparado por `useEffect([selectedDate, employmentTypeFilter, company?.id])` **só no mount**.
+- `polling` 30s é silencioso — não cobre início do teste.
+- Sequência problemática:
+  1. `beforeEach`: `cleanup()` → `loginAs` → `goToTab('Ponto')` → mount → `loadData()` (lista vazia, pós-cleanup)
+  2. Test body: `createTestEmployee()` via SQL → INSERT bem-sucedido
+  3. `searchEmployee()` → fill search → `useEffect([searchTerm, employees])` filtra **employees state cached** (sem o novo emp)
+  4. `expect(row).toBeVisible()` → timeout 10s
+
+- Tests 1 e 4 às vezes passavam por timing variável; tests 2/3 sempre pegavam UI cached.
+
+**Fix spec 40:** `searchEmployee` agora clica o botão "Atualizar" (UI real do usuário) ANTES do fill search → força `loadData()` → state atualizado → row aparece. Sem mexer em código de produção.
+
+**Fix spec 37 test 5** (cold-start residual da edge fn `create-user`):
+- `describe` timeout 60s → 90s
+- `expect` timeouts 30s → 60s nos 3 tests que chamam `create-user`
+- Não mascara bug — apenas absorve cold-start ocasional (até 50s pós-idle).
+- Mesma estratégia da sub-fase 14.5 que já tinha timeouts elevados; ajuste defensivo.
+
+**Iteração de fix do spec 37:**
+1. Tentativa 1: timeout expect 30s→60s + describe 60s→90s. **Falhou** em suite completa (test 5 cold-start residual >60s).
+2. Tentativa 2: + warmup com body vazio (ANON_KEY). **Falhou** em test 2 isolado (worker "morno" não quente).
+3. Tentativa 3: + warmup **completo** (login admin → JWT custom → cria user `97000` real). **✅ PASSOU.** Worker 100% warm.
+
+**Resultado final validado:**
+- Spec 40 isolado: 5/5 ✅ (era 2 failed antes do fix)
+- Spec 37 isolado com warmup full: 5/5 ✅ em 27.1s (test 2: 4.5s, test 5: 6.4s)
+- **Suite completa: 259 passed / 18 skipped / 0 failed em 19.3min** (era 255/18/4)
+
+`BATCH_FAILURES_REPORT.md` deletado (info migrada aqui).
 
 ---
 

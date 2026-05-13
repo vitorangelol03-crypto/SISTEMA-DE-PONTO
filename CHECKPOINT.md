@@ -3,7 +3,7 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-13 (sub-fases 14.5+14.6+14.7+14.8 — cobertura final completa)
+**Última atualização:** 2026-05-13 (sub-fase 14.9 — batch 100% determinístico, 4 race failures resolvidas)
 **Branch:** `main`
 **Plano canônico:** `PLANO_PRODUCAO.md`
 **TECH_DEBT canônico:** `TECH_DEBT.md`
@@ -63,13 +63,13 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 | Métrica | Valor |
 |---|---|
 | **Branch / working tree** | `main` / limpo (só `.claude/` untracked) |
-| **Último commit** | `a3e2ff2` (spec 38 system-walkthrough) — próximo será fechamento 14.5/6/7/8 |
+| **Último commit** | `c03ee81` (fechamento 14.5/6/7/8 + race fixes + checkpoint dividido) — próximo será 14.9 batch determinístico |
 | **Security advisors ERRORs** | **0** ✅ |
 | **RLS-enabled tables** | **48** (33 core Sistema de Ponto + 15 legado) |
 | **Edge functions ACTIVE** | **4** (auth-login v9, clock-in-validated v8, create-user v1, employee-public-api v2) |
 | **Migrations aplicadas** | **57** |
 | **Unit tests (Vitest)** | **422+ passing** (16 specs em `tests/unit/`) |
-| **E2E specs (Playwright)** | **40+ specs** (~250+ tests passing) |
+| **E2E specs (Playwright)** | **40+ specs** (259 passing / 18 skipped / **0 failed** em 19.3min) |
 | **Bugs latentes em prod** | **0** ✅ |
 
 ### Fases concluídas (5 → 14)
@@ -80,7 +80,7 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 | **11** | **Hardening RLS + bcrypt (67 ERRORs → 0)** | ✅ |
 | 12 | Documentação (README + PRE-LAUNCH + ARCHITECTURE + edge-fns) | ✅ |
 | 13 | Validação final (3× Playwright clean) | ✅ |
-| **14** | **Pós-validação + UI bug hunt + cobertura final** | ✅ |
+| **14** | **Pós-validação + UI bug hunt + cobertura final + batch determinístico** | ✅ |
 
 Detalhe completo de cada fase → `CHECKPOINT_FASES.md`
 
@@ -136,12 +136,22 @@ Em resposta ao pedido Victor: _"eu quero que vc teste tudo tudo mesmo, e valide 
 - `41` test 5: `page.reload()` após setLatLngDirect
 - `42` test 2: `getByText('Selecionados', {exact: true})`
 
-### Em andamento background
-- 🔄 Playwright suite completa (workers=1) rodando — confirma batch passa
+#### 14.9 — Batch 100% determinístico (4 race failures → 0)
 
-### Pendente sessão pós-almoço Victor
-- ⏳ Confirmar suite batch completa
-- ⏳ Commit final consolidado (14.5/6/7/8 + race fixes + 3 ajustes)
+Após sub-fases 14.5-14.8, batch report mostrou 4 failures (255 passed/18 skipped/4 failed) que **passavam isoladas**. Investigação confirmou **causa raiz arquitetural** no spec 40:
+
+- `AttendanceTab.loadData()` dispara só no mount/[company?.id]/[selectedDate]. Polling silencioso 30s. Sem refetch live.
+- Sequência: `loginAs` → `goToTab('Ponto')` → mount → `loadData` (lista vazia) → `createTestEmployee` (SQL INSERT) → UI mostra lista cached **sem o novo emp**.
+- Tests 1/4 às vezes passavam (timing); tests 2/3 sempre cached.
+
+**Fix spec 40:** `searchEmployee` clica botão "Atualizar" antes do fill → força refetch.
+**Fix spec 37:** warmup **completo** no `beforeAll` (login admin → JWT custom → cria user real `97000` via edge fn), forçando bcrypt.hash + INSERT antes dos tests. Worker 100% warm. Describe timeout 90s→180s + expect 30s→60s como camada extra.
+
+**Resultados finais validados:**
+- Spec 40 isolado: 5/5 ✅ (era 2 failed)
+- Spec 37 isolado com warmup full: 5/5 ✅ em 27.1s (test 2: 4.5s, test 5: 6.4s)
+- **Suite completa: 259 passed / 18 skipped / 0 failed em 19.3min** (era 255/18/4)
+- `BATCH_FAILURES_REPORT.md` deletado (info migrada para `CHECKPOINT_FASES.md`)
 
 ---
 
