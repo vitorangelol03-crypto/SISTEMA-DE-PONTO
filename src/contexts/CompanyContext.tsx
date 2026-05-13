@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { getCompanyById, getCompanies, DEFAULT_COMPANY_ID, type Company } from '../services/database';
+import { COMPANY_STORAGE_KEY } from './companyHelpers';
 
-const STORAGE_KEY = 'sistema_ponto_company_id';
+const STORAGE_KEY = COMPANY_STORAGE_KEY;
 
 interface CompanyContextValue {
   // Empresa atual (null durante carregamento inicial)
@@ -109,8 +110,8 @@ export function useCompany() {
   return ctx;
 }
 
-// Helper para uso em código que não pode ser hook
-// (ex: handlers async). Lê direto do localStorage com fallback.
-export function getCurrentCompanyId(): string {
-  return localStorage.getItem(STORAGE_KEY) || DEFAULT_COMPANY_ID;
-}
+// Sub-fase 14.4.9: getCurrentCompanyId movido pra ./companyHelpers.ts
+// (export incompatível com React Fast Refresh estava invalidando HMR
+// → page reload → module duplication → useCompany lançava "must be
+// used inside Provider" mesmo com Provider montado). Import direto:
+//   import { getCurrentCompanyId } from './contexts/companyHelpers';

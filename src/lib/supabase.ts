@@ -7,64 +7,61 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error('Missing Supabase environment variables. Please check your .env file.');
 }
 
-// Sub-fase 14.4.8: storageKey único por buildClient pra eliminar warning
-// "Multiple GoTrueClient instances detected" que aparecia toda vez que o
-// client era recriado (init + login + logout). GoTrueClient é instanciado
-// internamente pelo createClient; se múltiplos compartilham a mesma
-// storageKey (default 'sb-auth-token'), supabase-js warns. Como nós usamos
-// JWT custom em sessionStorage separado ('sb-custom-token') e desabilitamos
-// persistSession, a storageKey do GoTrueClient não é usada — qualquer valor
-// único funciona. Counter monotônico garante unicidade.
-// IMPORTANTE: declarado ANTES de _client porque buildClient lê esta var.
-let _clientBuildCounter = 0;
+// Sub-fase 14.4.9: refator definitivo. Era Proxy + buildClient recriando
+// client a cada setAuthToken → N instâncias de GoTrueClient → warning
+// "Multiple GoTrueClient instances detected". Solução: UMA instância +
+// fetch interceptor que lê o JWT custom de sessionStorage a CADA request.
+// Sem rebuild, sem proxy, sem warning.
 
-function buildClient(token: string | null): SupabaseClient {
-  const storageKey = `sistema-ponto-gotrue-${++_clientBuildCounter}`;
-  const baseAuth = { persistSession: false, autoRefreshToken: false, storageKey };
-  return createClient(supabaseUrl, supabaseKey, token
-    ? {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-        auth: baseAuth,
-      }
-    : { auth: baseAuth });
-}
+const TOKEN_STORAGE_KEY = 'sb-custom-token';
 
-// Sub-fase 11.3/11.1 — Client mutável pra trocar token em runtime.
-// Singleton com Proxy: imports de `supabase` resolvem dinamicamente o client
-// atual, mesmo se trocado após setAuthToken().
-let _client: SupabaseClient = buildClient(null);
+// Custom fetch: injeta Authorization Bearer <jwt> dinamicamente em cada
+// request. Sempre lê do sessionStorage (source-of-truth) — assim mudanças
+// via setAuthToken são imediatamente refletidas sem precisar rebuild.
+const customFetch: typeof fetch = (input, init) => {
+  let token: string | null = null;
+  try {
+    token = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(TOKEN_STORAGE_KEY) : null;
+  } catch { /* ignore */ }
 
-// Tenta restaurar token de sessionStorage (login anterior).
-try {
-  const saved = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('sb-custom-token') : null;
-  if (saved) _client = buildClient(saved);
-} catch { /* ignore */ }
+  if (!token) {
+    // Sem JWT custom → request usa apenas o anon key configurado pelo
+    // Supabase JS (Authorization padrão Bearer <anon>).
+    return fetch(input, init);
+  }
 
-// Proxy: redirige all property access pro client atual.
-// Bind nas funções pra preservar `this` correto.
-export const supabase = new Proxy({} as SupabaseClient, {
-  get(_target, prop) {
-    // deno-lint-ignore no-explicit-any
-    const value = (_client as unknown as Record<PropertyKey, unknown>)[prop];
-    if (typeof value === 'function') return value.bind(_client);
-    return value;
+  // Substitui Authorization pra Bearer <jwt custom>.
+  const headers = new Headers(init?.headers);
+  headers.set('Authorization', `Bearer ${token}`);
+  return fetch(input, { ...init, headers });
+};
+
+// UMA instância de SupabaseClient pro app inteiro.
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    storageKey: 'sistema-ponto-gotrue',
+  },
+  global: {
+    fetch: customFetch,
   },
 });
 
-/** Atualiza o JWT custom usado em todas próximas calls Supabase. */
+/** Atualiza o JWT custom em sessionStorage. fetch interceptor pega na
+ *  próxima call automaticamente — sem rebuild do client. */
 export function setAuthToken(token: string | null): void {
   try {
-    if (token) sessionStorage.setItem('sb-custom-token', token);
-    else sessionStorage.removeItem('sb-custom-token');
+    if (token) sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+    else sessionStorage.removeItem(TOKEN_STORAGE_KEY);
   } catch { /* ignore */ }
-  _client = buildClient(token);
 }
 
 /** Retorna o JWT custom atual (ou null se não logado). Usado por chamadas
  *  diretas a edge functions que precisam autorizar com o token do admin. */
 export function getAuthToken(): string | null {
   try {
-    return typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('sb-custom-token') : null;
+    return typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(TOKEN_STORAGE_KEY) : null;
   } catch {
     return null;
   }
