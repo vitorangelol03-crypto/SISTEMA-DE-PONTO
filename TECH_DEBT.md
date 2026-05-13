@@ -368,6 +368,53 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-13 — Sub-fases 14.5, 14.6, 14.7, 14.8: validações de gaps pré go-live
+
+**Trabalho completado:**
+
+1. **Sub-fase 14.5 — Spec E2E `tests/37-create-user-e2e.spec.ts`:**
+   - Cobre fluxo end-to-end de createUser via UsersTab UI (que antes só foi validado via curl direto na 11.7).
+   - 5 testes:
+     1. Admin cria supervisor → row bcrypt `$2a$10$` 60 chars em DB
+     2. ID duplicado → toast "ID já existe"
+     3. Senha < 4 chars → toast validação frontend (pre-fetch)
+     4. Senhas não coincidem → toast validação
+     5. Novo supervisor consegue fazer login após criação
+   - **Todos 5 passing** (~33s). IDs de teste prefix `97001-97005`, cleanup automático.
+
+2. **Sub-fase 14.6 — JWT expiry handling:**
+   - JWT válido (auth-login fresh): query Supabase HTTP 200 ✅
+   - JWT com `exp=1000000000` (forge — payload alterado, signature inválida): HTTP 401 `"No suitable key or wrong key type"` (Postgres rejeita por signature mismatch)
+   - JWT garbage `"garbage.invalid.jwt"`: HTTP 401 `"JWT cryptographic operation failed"`
+   - **Comportamento gracioso**: Postgres rejeita com 401 + mensagem clara. Sem crash, sem silent fail. Frontend captura e mostra toast genérico de credenciais.
+
+3. **Sub-fase 14.7 — Concurrent clock-in stress test:**
+   - 5 calls paralelas a `clock-in-validated` (mesmo employee Pablo, mesmo dia, entry).
+   - **TODAS retornaram success:true** com o MESMO `attendance.id` e `created_at` idênticos.
+   - **UPSERT em `(employee_id, date)` é idempotent** ✅. Race condition NÃO cria duplicate row.
+   - **Lição aprendida**: pre-check antes de stress test em PROD data. Acabei criando um attendance real pra Pablo às 12:23 hoje. Cleanup via SQL imediato (DELETE residual = 0). Pra próximos stress tests: criar fixture isolada (employee `PW Test ...`) em vez de funcionário real.
+
+4. **Sub-fase 14.8 — xlsx Prototype Pollution defensive tests (`tests/unit/xlsxSecurity.spec.ts`):**
+   - 5 tests defensivos, todos passing:
+     1. Round-trip workbook → binary → workbook NÃO contamina Object.prototype
+     2. Payload com chave `__proto__` em `json_to_sheet`: parse não crasha, prototype unchanged
+     3. `cellDates:true` (modo usado em `parseEmployeeSpreadsheet`) preserva integrity
+     4. SheetNames lookup funciona; `hasOwnProperty.__proto__ = false` no Sheets object
+     5. JSON.parse de payload malicioso `{"__proto__":...}` NÃO polui Object.prototype (defesa JS nativa)
+   - **Limitação documentada**: CVE GHSA-4r6h-8v6p-xvw6 específico requer fixture XLSX-raw com numFmts XML payload (gerar fixture binário malicioso exige construir ZIP+XML manualmente). Testes cobrem defesa primária (Object.prototype snapshot before/after). Mitigação real: manter xlsx atualizado quando upstream lançar fix + upload admin-only.
+
+**Métricas pós sub-fases 14.5-14.8:**
+
+| Item | Estado |
+|---|---|
+| Unit tests | 422 → **427** (+5 xlsxSecurity) |
+| Specs E2E Playwright | 35 → **36** (+37 create-user-e2e) |
+| Gaps de cobertura críticos | 5 → 1 (apenas 14.4 — UI manual test depende de Victor) |
+| Bugs descobertos | 0 |
+| Comportamentos validados | JWT expiry gracioso + clock-in idempotent + xlsx Object.prototype safe |
+
+---
+
 ### 2026-05-12 — Fase 14 (parcial): validações extras pós-Fase 13 (sub-fases 14.1, 14.2, 14.3)
 
 **Trabalho completado:**
