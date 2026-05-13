@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
+import path from 'node:path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -13,6 +14,14 @@ export default defineConfig({
       filename: 'dist/stats.html',
     }),
   ],
+  resolve: {
+    alias: {
+      // Sub-fase 14.4.6: silenciar warning Vite "Module 'stream' externalized
+      // for browser compat" que xlsx-js-style dispara em dev. Stub vazio
+      // (src/lib/stream-stub.ts) — o code path real nunca executa no browser.
+      stream: path.resolve(__dirname, 'src/lib/stream-stub.ts'),
+    },
+  },
   server: {
     host: true,
     https: false,
