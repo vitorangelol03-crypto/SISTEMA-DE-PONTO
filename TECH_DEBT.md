@@ -208,6 +208,50 @@ E adicionar test cases pra CPF/CNPJ com pontuação retornar OK.
 
 ---
 
+### 6.27 — [Baixa] Spec 22 "sup04 NÃO tem aba Admin" — premissa incorreta
+
+**Local:** `tests/22-permissions-complete.spec.ts:93` (test `sup04 NÃO tem aba Admin`).
+
+**Descoberto:** sub-fase 14.11 contra prod URL Vercel.
+
+**Causa raiz:**
+- `TabNavigation.tsx:31` define `{ id: 'admin', name: 'Admin', permission: null }` → aba **sempre visível** pra qualquer usuário logado.
+- O acesso ao conteúdo do AdminTab é gated por senha interna ("Clayton2024"), não por permission RLS.
+- Em localhost o teste passa por timing (UI ainda renderizando quando expect roda); em prod URL com latência diferente, eventualmente retorna `Received: 1`.
+
+**Não é bug do app** — UX intencional, Admin tab gated por password. Teste tem premissa errada.
+
+**Solução (postponed):**
+- Trocar `toHaveCount(0)` por `toBeVisible()` (Admin sempre visível) + adicionar test "clicar Admin sem senha mostra prompt de senha"
+- OU mover `Admin` tab pra dentro de `Gerenciamento` (admin tab interna), revisando UX
+
+**Status:** Aceito. Sub-fase 14.11.x futura quando refatorar UX do AdminTab.
+
+---
+
+### 6.28 — [Baixa] Spec 37 test 5 cold-start edge fn em prod URL (>3min)
+
+**Local:** `tests/37-create-user-e2e.spec.ts:233` (test 5).
+
+**Descoberto:** sub-fase 14.11 — suite contra prod URL Vercel.
+
+**Causa raiz:**
+- Edge fn `create-user` tem cold-start absoluto até 150s (esm.sh/bcryptjs download) — TECH_DEBT 6.13.
+- Warmup explícito no beforeAll (sub-fase 14.9) absorve test 1 em localhost.
+- Em prod URL, após tests 2-4 (validação local, sem chamar edge fn), worker fica idle ~2min e cold-start de novo.
+- Test 5 expect timeout = 180s ainda insuficiente em casos extremos.
+
+**Não é bug do app** — UX em produção tem spinner "pode levar até 2 minutos no primeiro uso" (documentado).
+
+**Solução (postponed):**
+- Warmup adicional antes do test 5: chamar edge fn `auth-login` (já warm) → garante worker create-user ainda warm
+- OU substituir `esm.sh/bcryptjs` por `jsr:` equivalente (mais rápido cold-start)
+- OU aceitar como tech debt (já documentado 6.13)
+
+**Status:** Aceito. TECH_DEBT 6.13 já registra cold-start como característica conhecida.
+
+---
+
 ## 🟢 Testes — fragilidade conhecida
 
 ### 6.1 — [Baixa] Flake C6 — helper `importC6`

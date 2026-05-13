@@ -105,7 +105,9 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
   //
   // Sub-fase 14.9: aumentado de 60s → 90s → 180s + warmup explícito no beforeAll
   // após batch 13/05/2026 revelar test 5 falhando com cold-start >60s.
-  test.describe.configure({ timeout: 180_000 });
+  // Sub-fase 14.11: aumentado pra 240s (test 1 contra prod URL pega cold-start
+  // residual mesmo após warmup beforeAll — TECH_DEBT 6.13).
+  test.describe.configure({ timeout: 240_000 });
 
   test.beforeAll(async () => {
     await cleanupTestUsers();
@@ -138,7 +140,7 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
 
     // Toast de sucesso (react-hot-toast). Timeout 60s pra tolerar cold-start
     // da edge fn create-user (bcrypt 10 rounds, ver describe timeout acima).
-    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 180_000 });
 
     // Valida row em DB com bcrypt $2a$10$
     const s = getClient();
@@ -187,7 +189,7 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
 
     // Toast de erro (mensagem do edge fn ou frontend). Timeout 60s pra
     // tolerar cold-start ocasional da edge fn nessa única chamada.
-    await expect(page.getByText(/ID já existe/i)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/ID já existe/i)).toBeVisible({ timeout: 180_000 });
   });
 
   test('3. Senha < 4 caracteres → toast validação frontend', async ({ page }) => {
@@ -240,7 +242,7 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     await page.locator('input[placeholder*="Confirme a senha"]').fill(TEST_PASSWORD);
     await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();
     // Timeout 60s pra cold-start da edge fn create-user (ver test 1).
-    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/Supervisor criado com sucesso/i)).toBeVisible({ timeout: 180_000 });
 
     // Logout do admin
     await logout(page);

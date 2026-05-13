@@ -361,7 +361,7 @@ test.describe('Isolamento multi-empresa', () => {
     await expect(page.getByText('Ponte Nova', { exact: false }).first()).toBeVisible({ timeout: 10_000 });
 
     await page.getByText('Ponte Nova', { exact: false }).first().click();
-    await expect(page.getByRole('button', { name: /Ponto/ })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Ponto', exact: true })).toBeVisible({ timeout: 15_000 });
   });
 
   test('11. Permissão dinâmica usa bt.id distinto por empresa', async () => {

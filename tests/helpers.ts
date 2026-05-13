@@ -25,7 +25,9 @@ export async function loginAs(page: Page, user: { id: string; password: string }
   }
 
   // Sanity check: chegou ao painel (aparece botão "Ponto" do TabNavigation).
-  await expect(page.getByRole('button', { name: /Ponto/ })).toBeVisible({ timeout: 15_000 });
+  // exact:true pra escapar strict mode (heading "Controle de Ponto" também
+  // bate em /Ponto/ regex — visível em prod URL com latência maior).
+  await expect(page.getByRole('button', { name: 'Ponto', exact: true })).toBeVisible({ timeout: 15_000 });
 }
 
 export async function logout(page: Page) {

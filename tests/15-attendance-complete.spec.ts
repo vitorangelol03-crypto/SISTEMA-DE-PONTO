@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { ADMIN, loginAs, goToTab } from './helpers';
 import { getClient } from './cleanup';
 import {
@@ -7,6 +7,18 @@ import {
   cleanupByPrefix,
   TEST_EMPLOYEE_NAME_PREFIX,
 } from './integrity-helpers';
+
+/**
+ * Helper: vai pra Ponto + clica "Atualizar" pra forçar refetch de employees.
+ * Necessário porque AttendanceTab.loadData só roda no mount/[company]; emp
+ * criado via SQL após o mount não aparece sem refresh (mesma race do spec 40,
+ * sub-fase 14.9, TECH_DEBT 6.24).
+ */
+async function gotoPontoFresh(page: Page): Promise<void> {
+  await goToTab(page, 'Ponto');
+  await page.getByRole('button', { name: /^Atualizar$/ }).click();
+  await page.waitForTimeout(800);
+}
 
 /**
  * Cobertura completa do AttendanceTab:
@@ -44,7 +56,7 @@ test.describe('Attendance — fluxos completos', () => {
   test('marcar Presente em funcionário cria attendance status=present', async ({ page }) => {
     const empId = await createTestEmployee({ name: `${PREFIX}MarcaPresente` });
 
-    await goToTab(page, 'Ponto');
+    await gotoPontoFresh(page);
     const row = page.locator('tr', { hasText: `${PREFIX}MarcaPresente` }).first();
     await expect(row).toBeVisible({ timeout: 15_000 });
     await row.getByRole('button', { name: 'Presente', exact: true }).click();
@@ -60,7 +72,7 @@ test.describe('Attendance — fluxos completos', () => {
   test('marcar Falta em funcionário cria attendance status=absent', async ({ page }) => {
     const empId = await createTestEmployee({ name: `${PREFIX}MarcaFalta` });
 
-    await goToTab(page, 'Ponto');
+    await gotoPontoFresh(page);
     const row = page.locator('tr', { hasText: `${PREFIX}MarcaFalta` }).first();
     await expect(row).toBeVisible({ timeout: 15_000 });
     await row.getByRole('button', { name: 'Falta', exact: true }).click();
@@ -127,7 +139,7 @@ test.describe('Attendance — fluxos completos', () => {
       hours_worked: 9,
     });
 
-    await goToTab(page, 'Ponto');
+    await gotoPontoFresh(page);
     // Subaba "Aprovações Pendentes"
     await page.getByRole('button', { name: /Aprovações/i }).first().click();
 
@@ -169,7 +181,7 @@ test.describe('Attendance — fluxos completos', () => {
     await insertAttendance(empA, todayBR(), { status: 'present', approval_status: 'pending', hours_worked: 8 });
     await insertAttendance(empB, todayBR(), { status: 'present', approval_status: 'pending', hours_worked: 8 });
 
-    await goToTab(page, 'Ponto');
+    await gotoPontoFresh(page);
     await page.getByRole('button', { name: /Aprovações/i }).first().click();
 
     // Marca os dois checkboxes (linhas têm checkbox)
@@ -198,7 +210,7 @@ test.describe('Attendance — fluxos completos', () => {
   test('funcionário sem attendance hoje aparece "não marcado"', async ({ page }) => {
     await createTestEmployee({ name: `${PREFIX}SemPonto` });
 
-    await goToTab(page, 'Ponto');
+    await gotoPontoFresh(page);
     const row = page.locator('tr', { hasText: `${PREFIX}SemPonto` }).first();
     await expect(row).toBeVisible({ timeout: 15_000 });
     // Linha deve ter botões "Presente" e "Falta" ativos (status=null)

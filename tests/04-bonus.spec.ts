@@ -59,12 +59,38 @@ async function resetAllAttendance(page: Page) {
 
 async function removeAllBonuses(page: Page) {
   const removeBtn = page.getByRole('button', { name: /Remover Todas/ });
-  if (await removeBtn.isVisible().catch(() => false)) {
-    await removeBtn.click();
-    await page.getByPlaceholder(/motivo da remoção/).fill('Limpeza automatizada dos testes Playwright');
-    await page.getByRole('button', { name: /Confirmar Remoção em Massa/ }).click();
-    await expect(page.getByRole('heading', { name: /Remover Todas as Bonificações/ })).toBeHidden({ timeout: 15_000 });
+  if (!(await removeBtn.isVisible().catch(() => false))) return;
+  await removeBtn.click();
+
+  // Aguarda modal aparecer
+  await expect(
+    page.getByRole('heading', { name: /Remover Todas as Bonificações/ })
+  ).toBeVisible({ timeout: 10_000 });
+
+  // Caso "Total R$ 0.00" — backend lança "Nenhuma bonificação encontrada"
+  // (database.ts:1421) e modal NÃO FECHA em erro. Cancelar pra não travar.
+  // Pega o <p> parent (tem "R$ X.XX"), não o <strong> interno.
+  const totalText = await page
+    .locator('p')
+    .filter({ hasText: /Total a Remover/ })
+    .first()
+    .textContent()
+    .catch(() => '');
+  if (totalText && /R\$\s*0[,.]00/.test(totalText)) {
+    await page.getByRole('button', { name: /^Cancelar$/ }).click();
+    await expect(
+      page.getByRole('heading', { name: /Remover Todas as Bonificações/ })
+    ).toBeHidden({ timeout: 10_000 });
+    return;
   }
+
+  // Caso normal: preenche obs + confirma
+  await page.getByPlaceholder(/motivo da remoção/).fill('Limpeza automatizada dos testes Playwright');
+  await page.getByRole('button', { name: /Confirmar Remoção em Massa/ }).click();
+  // Timeout 60s pra absorver latência prod URL (operação UI massiva)
+  await expect(
+    page.getByRole('heading', { name: /Remover Todas as Bonificações/ })
+  ).toBeHidden({ timeout: 60_000 });
 }
 
 test.describe('Bonificações (B / C1 / C2)', () => {
@@ -93,9 +119,9 @@ test.describe('Bonificações (B / C1 / C2)', () => {
     await page.getByRole('button', { name: /^Bonificação$/ }).click();
 
     await expect(page.getByRole('heading', { name: /Bonificação do Dia/ })).toBeVisible();
-    await expect(page.getByText('Tipo B', { exact: true })).toBeVisible();
-    await expect(page.getByText('Tipo C1', { exact: true })).toBeVisible();
-    await expect(page.getByText('Tipo C2', { exact: true })).toBeVisible();
+
+    // Valida os 3 botões "Aplicar X" — são únicos do modal (card "Bonificações
+    // Aplicadas" tem labels "Tipo X" mas não botões "Aplicar"). Strict-safe.
     await expect(page.getByRole('button', { name: 'Aplicar B', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Aplicar C1', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Aplicar C2', exact: true })).toBeVisible();
