@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import { LoginForm } from './components/auth/LoginForm';
 import { CompanySelector } from './components/auth/CompanySelector';
 import { Layout } from './components/common/Layout';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { TabNavigation, TabType } from './components/common/TabNavigation';
 import { HelpButton } from './components/tutorial/HelpButton';
 import { useAuth } from './hooks/useAuth';
@@ -172,16 +173,20 @@ function App() {
 
   return (
     <>
-      <Layout user={user} onLogout={handleLogout}>
-        <TabNavigation
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          userRole={user.role}
-          hasPermission={hasPermission}
-        />
-        {renderTabContent()}
-        <HelpButton currentTab={activeTab} hasPermission={hasPermission} />
-      </Layout>
+      <ErrorBoundary userId={user.id} module="App">
+        <Layout user={user} onLogout={handleLogout}>
+          <TabNavigation
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            userRole={user.role}
+            hasPermission={hasPermission}
+          />
+          <ErrorBoundary userId={user.id} module={`tab:${activeTab}`}>
+            {renderTabContent()}
+          </ErrorBoundary>
+          <HelpButton currentTab={activeTab} hasPermission={hasPermission} />
+        </Layout>
+      </ErrorBoundary>
       <Toaster position="top-right" />
     </>
   );

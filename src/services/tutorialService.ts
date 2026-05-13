@@ -16,11 +16,14 @@ export async function getFeatureVersions(): Promise<FeatureVersion[]> {
 }
 
 export async function isFeatureNew(featureKey: string): Promise<boolean> {
+  // Sub-fase 14.4.4: `.maybeSingle()` em vez de `.single()` — tabela vazia
+  // (release notes ainda não populada) era retornando 406 a cada call.
+  // maybeSingle retorna null em 0 rows, sem error → console limpo.
   const { data, error } = await supabase
     .from('feature_versions')
     .select('release_date')
     .eq('feature_key', featureKey)
-    .single();
+    .maybeSingle();
 
   if (error || !data) {
     return false;

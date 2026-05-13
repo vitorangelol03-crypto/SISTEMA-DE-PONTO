@@ -2553,12 +2553,15 @@ export const updateDataRetentionSettings = async (
 };
 
 export const getAutoCleanupConfig = async (): Promise<AutoCleanupConfig | null> => {
+  // Sub-fase 14.4.4: `.maybeSingle()` em vez de `.single()` — quando
+  // config ainda não foi criada, .single() retornava 406. maybeSingle
+  // retorna null em 0 rows sem error.
   const { data, error } = await supabase
     .from('auto_cleanup_config')
     .select('*')
-    .single();
+    .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') throw error;
+  if (error) throw error;
   return data;
 };
 
