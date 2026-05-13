@@ -18,17 +18,34 @@ interface CompanyContextValue {
 
 const CompanyContext = createContext<CompanyContextValue | null>(null);
 
+// Sub-fase 14.4.3: valida UUID antes de query. localStorage poluído com
+// string não-UUID fazia getCompanyById lançar PostgREST 22P02 (invalid_text_
+// representation), bloqueando o init inteiro e deixando company=null →
+// EmployeesTab.early-return → lista vazia silenciosa. Reportado por Victor
+// em UI manual test.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUuid(s: string | null): s is string {
+  return Boolean(s && UUID_RE.test(s));
+}
+
 export function CompanyProvider({ children }: { children: ReactNode }) {
   const [company, setCompanyState] = useState<Company | null>(null);
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Carregar empresa inicial: localStorage → DEFAULT
+  // Carregar empresa inicial: localStorage → DEFAULT (com validação UUID
+  // pra evitar crash em getCompanyById quando localStorage está poluído).
   useEffect(() => {
     const init = async () => {
       try {
         const stored = localStorage.getItem(STORAGE_KEY);
-        const companyId = stored || DEFAULT_COMPANY_ID;
+        const companyId = isValidUuid(stored) ? stored : DEFAULT_COMPANY_ID;
+        // Se localStorage tinha lixo, persistir DEFAULT imediatamente pra
+        // evitar bug repetir no próximo init.
+        if (stored && !isValidUuid(stored)) {
+          console.warn('CompanyContext: localStorage tinha company_id inválido', stored, '→ DEFAULT');
+          localStorage.setItem(STORAGE_KEY, DEFAULT_COMPANY_ID);
+        }
         // Paraleliza as duas chamadas iniciais — reduz tempo de boot e
         // janela de flake em testes E2E que disparam imediatamente após mount.
         const [c, all] = await Promise.all([
@@ -38,7 +55,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         if (c) {
           setCompanyState(c);
         } else {
-          // Fallback: stored ID inválido, usa DEFAULT
+          // Fallback: stored ID valid-format mas inexistente no DB → usa DEFAULT
           const fallback = await getCompanyById(DEFAULT_COMPANY_ID);
           setCompanyState(fallback);
           if (fallback) localStorage.setItem(STORAGE_KEY, fallback.id);
@@ -46,6 +63,16 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         setAvailableCompanies(all);
       } catch (e) {
         console.error('CompanyContext init error', e);
+        // Último fallback: tenta DEFAULT mesmo após erro
+        try {
+          const fallback = await getCompanyById(DEFAULT_COMPANY_ID);
+          if (fallback) {
+            setCompanyState(fallback);
+            localStorage.setItem(STORAGE_KEY, fallback.id);
+          }
+        } catch (e2) {
+          console.error('CompanyContext fallback também falhou', e2);
+        }
       } finally {
         setLoading(false);
       }
