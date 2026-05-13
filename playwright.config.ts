@@ -43,6 +43,12 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'], headless: true },
     },
+    {
+      // Subset mobile (sub-fase 14.10): roda via `--project=mobile-pixel5 --grep`
+      // para validar viewport Android (393x851, touch). NÃO executa por padrão.
+      name: 'mobile-pixel5',
+      use: { ...devices['Pixel 5'], headless: true },
+    },
   ],
 
   webServer: {

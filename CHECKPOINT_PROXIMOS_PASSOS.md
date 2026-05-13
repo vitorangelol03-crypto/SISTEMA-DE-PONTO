@@ -204,9 +204,15 @@ Após deploy em prod e uso real, monitorar:
 - ✅ Checkpoint dividido em arquivos (este e os outros 5)
 - ✅ **14.9 — Batch 100% determinístico:**
   - Spec 40 race AttendanceTab (loadData mount-only) → `searchEmployee` clica "Atualizar" antes do fill
-  - Spec 37 cold-start residual create-user → expect 30s→60s, describe 60s→90s
-  - Suite isolada validada (40: 5/5; 36+37: 13/13)
-  - `BATCH_FAILURES_REPORT.md` deletado (info migrada para `CHECKPOINT_FASES.md`)
+  - Spec 37 cold-start residual create-user → warmup completo no beforeAll
+  - Suite completa: 259 passed / 18 skipped / 0 failed em 19.3min
+- ✅ **14.10 — Validação ampla pré-go-live:**
+  - Build prod, Vitest coverage 45.96% Stmts, Supabase advisors 0 ERRORs core
+  - Edge fns warm <1s (curl direto)
+  - Dist serve + smoke chromium ✅
+  - Lighthouse: Perf 86 / A11y 75 / Best 100 / SEO 100
+  - Mobile E2E (project Pixel 5 adicionado): /clock 9/9 ✅, tabs admin regredem (helpers desktop-only)
+  - TECH_DEBT 6.25 (mobile UX) + 6.26 (a11y) registrados — postponed pós-go-live
 
 ### Próximo passo Victor
 - ⏳ Onboarding Ponte Nova (1.1) **OU** release/deploy (1.2 + 1.3)

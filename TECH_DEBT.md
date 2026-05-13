@@ -155,6 +155,59 @@ E adicionar test cases pra CPF/CNPJ com pontuação retornar OK.
 
 ---
 
+### 6.25 — [Baixa] UX mobile: TabNavigation hamburger + badges/botões icon-only
+
+**Local:**
+- `src/components/common/TabNavigation.tsx` (TabNavigation colapsa em hamburger `≡` em mobile)
+- Header: badge `Admin/Administrador` + `Supervisor/Super` duplicados (mobile/desktop variants)
+- Botão Sair: vira icon-only em mobile sem `aria-label="Sair"`
+
+**Descoberto:** sub-fase 14.10 — Mobile responsive E2E (Pixel 5 viewport 393×851 touch).
+
+**Resultado do subset mobile (14/31 passed, 17 regressões):**
+- `/clock` (fluxo público funcionário): **9/9 ✅** — já responsivo
+- `01-auth`: 3/6 (badge `.first()` resolve elemento desktop hidden; logout sem aria-label)
+- `35-mirror-mass-dialog`: 0/8 (TabNavigation oculta `getByRole('button',{name:/Ponto/})`)
+- `38-system-walkthrough`: 2/8 (mesma causa)
+
+**Impacto:**
+- Usuário final mobile: funcional via hamburger ☰ — UX OK.
+- E2E suite mobile: helpers (`loginAs`, `goToTab`, `logout`) assumem desktop selectors. Refatoração necessária pra suite mobile completa.
+
+**Solução (postponed, sub-fase 14.11 futura):**
+1. Adicionar `aria-label="Sair"` no botão logout do header.
+2. Helpers detectarem viewport e abrir hamburger antes de `goToTab` em mobile.
+3. Eliminar duplicação `Admin/Administrador` (usar 1 element com `aria-label` consistente; CSS faz responsive text).
+4. Manter project `mobile-pixel5` em playwright.config.ts (já aplicado em 14.10), rodar só pré-release ou sob demanda.
+
+**Status:** Aceito como tech debt. NÃO bloqueia go-live (web mobile funciona via hamburger). Sub-fase 14.11 futura quando refatorar helpers.
+
+---
+
+### 6.26 — [Baixa] Acessibilidade: 3 issues Lighthouse (a11y score 75)
+
+**Local:** descobertos via Lighthouse audit em `dist/` build prod (sub-fase 14.10).
+
+**Issues:**
+1. **Buttons do not have an accessible name** — alguns botões icon-only (Trash, Edit, X close) sem `aria-label` ou texto.
+2. **Background and foreground colors do not have sufficient contrast ratio** — pelo menos 1 elemento com contraste <4.5:1 (WCAG AA).
+3. **Document does not have a main landmark** — falta `<main>` no Layout (apenas `<div>`).
+
+**Scores Lighthouse atuais (dist build, desktop headless):**
+- Performance: 86 ✅
+- Accessibility: **75** ⚠️
+- Best Practices: 100 ✅
+- SEO: 100 ✅
+
+**Solução (postponed):**
+1. Adicionar `aria-label` nos botões icon-only (Trash2, Pencil, X).
+2. Auditar paleta Tailwind e ajustar 1-2 cores com contraste insuficiente.
+3. Trocar `<div>` wrapper principal por `<main>` em `Layout.tsx`.
+
+**Status:** Aceito. Tarefa de ~2-3h pra subir a11y de 75 → 95+. Sub-fase 14.12 futura.
+
+---
+
 ## 🟢 Testes — fragilidade conhecida
 
 ### 6.1 — [Baixa] Flake C6 — helper `importC6`

@@ -259,3 +259,39 @@ Após batch report (255 passed/18 skipped/4 failed onde TODOS passavam isoladas)
 - Spec 40 isolado: 5/5 ✅ (era 2 failed antes do fix)
 - Spec 37 isolado com warmup full: 5/5 ✅ em 27.1s (test 2: 4.5s, test 5: 6.4s)
 - **Suite completa: 259 passed / 18 skipped / 0 failed em 19.3min** (era 255/18/4)
+
+---
+
+## 11. Sub-fase 14.10 — Mobile responsive E2E + Lighthouse audit
+
+**Project mobile-pixel5** adicionado em `playwright.config.ts` (devices['Pixel 5'], 393×851, touch). Roda explicitamente via `--project=mobile-pixel5`. Default `chromium` continua único.
+
+**Resultado subset mobile (14/31 passed, 17 regressões):**
+
+| Spec | Pass/Total | Causa principal |
+|---|---|---|
+| `02-employee-clock` (/clock) | **9/9 ✅** | Público, já responsivo |
+| `01-auth` | 3/6 | Badge `.first()` resolve elemento desktop hidden; logout sem aria-label |
+| `35-mirror-mass-dialog` | 0/8 | TabNavigation colapsa em hamburger ☰ (Ponto invisível como botão) |
+| `38-system-walkthrough` | 2/8 | Mesma causa |
+
+**Lighthouse audit (dist build, desktop headless):**
+
+| Categoria | Score |
+|---|---|
+| Performance | 86 ✅ |
+| Accessibility | 75 ⚠️ |
+| Best Practices | 100 ✅ |
+| SEO | 100 ✅ |
+
+Metrics: FCP/LCP 3.3s, TBT 0ms, CLS 0.
+
+**Comando subset mobile (manual):**
+```bash
+npx playwright test --project=mobile-pixel5 --workers=1 --reporter=list \
+  tests/01-auth.spec.ts tests/02-employee-clock.spec.ts
+```
+
+**Tech debt registrado:**
+- 6.25 — UX mobile (TabNavigation + badges + logout icon-only)
+- 6.26 — A11y 3 issues (sub 75→95+ em ~2-3h)

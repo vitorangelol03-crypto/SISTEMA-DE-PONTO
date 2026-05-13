@@ -3,7 +3,7 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-13 (sub-fase 14.9 — batch 100% determinístico, 4 race failures resolvidas)
+**Última atualização:** 2026-05-13 (sub-fase 14.10 — validação ampla pré-go-live: build + lighthouse + mobile E2E)
 **Branch:** `main`
 **Plano canônico:** `PLANO_PRODUCAO.md`
 **TECH_DEBT canônico:** `TECH_DEBT.md`
@@ -152,6 +152,25 @@ Após sub-fases 14.5-14.8, batch report mostrou 4 failures (255 passed/18 skippe
 - Spec 37 isolado com warmup full: 5/5 ✅ em 27.1s (test 2: 4.5s, test 5: 6.4s)
 - **Suite completa: 259 passed / 18 skipped / 0 failed em 19.3min** (era 255/18/4)
 - `BATCH_FAILURES_REPORT.md` deletado (info migrada para `CHECKPOINT_FASES.md`)
+
+#### 14.10 — Validação ampla pré-go-live (build + lighthouse + mobile E2E)
+
+Resposta ao pedido "tem mais nada que vc possa testar?" + "use multiplos agentes se for preciso".
+
+**Quick wins (10min total):**
+- `npm run build`: 21.26s, dist/ produzido com warning chunks >600kB (aceitável)
+- Vitest coverage: 45.96% Stmts (utils 81%+; services testados via E2E)
+- Supabase advisors: 0 ERRORs Sistema de Ponto core
+- Edge fns warm: todas <1s (auth-login 0.67s, employee-public-api 0.30s, clock-in 0.28s, create-user 0.21s)
+
+**Médio (Lighthouse + dist smoke):**
+- Dist serve (`npx serve dist -l 4173`) + smoke chromium: ✅
+- Lighthouse: Perf **86** / A11y **75** / Best **100** / SEO **100**. FCP/LCP 3.3s, TBT 0ms, CLS 0
+
+**Alto (agent paralelo — Mobile E2E):**
+- Patch `playwright.config.ts`: project `mobile-pixel5` (Pixel 5, touch). Não roda por padrão.
+- Subset mobile: **14/31 passed**. `/clock` 9/9 ✅. Tabs admin: TabNavigation colapsa em hamburger (regressão helpers, não bug usuário).
+- TECH_DEBT registrados: 6.25 (UX mobile) + 6.26 (A11y).
 
 ---
 
