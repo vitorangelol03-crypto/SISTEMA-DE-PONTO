@@ -368,6 +368,75 @@ await expect(
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-13 — Sub-fase 14.4: UI manual test descobriu 2 bugs reais (e ambos fixados)
+
+**Trabalho completado:**
+
+`npm run dev` + Victor abriu http://localhost:5173/ e navegou. Descobriu **2 bugs que tsc + vitest + Playwright + lint TODOS deixaram passar** — porque eram bugs de browser real, não de código stricto:
+
+**Bug 1: `feature_versions` table 404 em cada aba (não-crítico, console pollution)**
+
+- **Sintoma:** ao navegar tab→tab, console mostra ~16 `GET /rest/v1/feature_versions?...` retornando 404.
+- **Causa raiz:** `src/services/tutorialService.ts` faz query em `public.feature_versions` (4 funções: `getFeatureVersions`, `isFeatureNew`, `getNewFeaturesCount`, `updateFeatureVersion`). Tabela **NUNCA existiu em prod** (era listada em PRE-LAUNCH antigo + types/tutorial.ts mas migration nunca foi aplicada).
+- **Disparado por:** `TutorialTab.tsx:24-25` (useEffect com `for (const tutorial of tutorialsContent)` chamando `isFeatureNew(tutorial.category)` por tutorial). Acontecia toda vez que admin abria Tutorial tab.
+- **Impacto:** apenas console pollution. App funciona (tutorialService captura error e retorna `false`/`[]`). Mas confunde debug e ofusca outros erros.
+
+**Fix:** Migration `20260513XXXXXX_create_feature_versions_table.sql`:
+```sql
+CREATE TABLE public.feature_versions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  feature_key text NOT NULL UNIQUE,
+  version text NOT NULL DEFAULT '1.0',
+  description text,
+  release_date timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.feature_versions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "feature_versions_public_select" ON public.feature_versions
+  FOR SELECT TO public USING (true);
+CREATE POLICY "feature_versions_admin_master_all" ON public.feature_versions
+  FOR ALL TO public USING ((auth.jwt() ->> 'sub') = '9999')
+  WITH CHECK ((auth.jwt() ->> 'sub') = '9999');
+```
+
+Tabela vazia (sem seed) — `isFeatureNew` retorna `false` sempre, que é o estado "neutro" esperado. UI futura pode popular pra mostrar badges "Novo!" em features recentes.
+
+**Bug 2: Trocar empresa → tela em branco até reload manual (CRÍTICO)**
+
+- **Sintoma:** Admin master abre CompanySwitcher, clica outra empresa, tela fica branca. Recarregar manual resolve.
+- **Causa raiz:** `CompanySwitcher.handleSelect` fazia `await setCompany(id)` → se `getCompanyById(id)` lançava (network/race/RLS edge case), exception propagava e bloqueava `setOpen(false)` + `onCompanyChange?.()`. O `onCompanyChange` é `() => window.location.reload()` (Layout.tsx:45). Logo: erro silencioso no setCompany → state UI fica inconsistente, sem reload, tela em branco.
+- **Por que tsc/Playwright não pegou:** specs de switch (25/26/30/32/34) usavam fluxo "happy path" — quando o switch funcionava OK, reload acontecia. Edge case de erro no `setCompany` era raro e nunca capturado por testes.
+
+**Fix:** `src/components/layout/CompanySwitcher.tsx` — bypass setCompany async:
+```typescript
+const handleSelect = (id: string) => {
+  if (id === company.id) { setOpen(false); return; }
+  // Salva direto em localStorage (source-of-truth do CompanyContext init)
+  try {
+    localStorage.setItem('sistema_ponto_company_id', id);
+  } catch (err) {
+    console.error('CompanySwitcher: falha ao persistir company_id', err);
+  }
+  setOpen(false);
+  onCompanyChange?.();  // SEMPRE reload
+};
+```
+
+`setCompany` removido do destructure de `useCompany()`. Reload garantido (não depende de Promise async resolver). Re-mount do CompanyProvider lê localStorage + carrega empresa correta.
+
+**Validação:**
+- `npx tsc --noEmit`: limpo
+- `npx vitest run`: 427/427 passing
+- Specs E2E multi-company (25/26/30/32/34): **45/45 passing em 3.5min** ✅
+- Migration confirmada: `feature_versions` table existe + 2 RLS policies ativas
+
+**Lições aprendidas (Regra 8):**
+- **`tsc + vitest + Playwright + lint NÃO cobrem TUDO.**" Browser real pegou 2 bugs em ~5 min de navegação que 6 horas de validação automatizada deixaram passar. Adicionar `npm run dev + manual click-through` como checklist obrigatório pré go-live em projetos futuros.
+- **Async com `await` em handlers sem try/catch é armadilha**. Sempre garantir cleanup via `finally` OU re-arquitetar pra não depender do happy path.
+
+---
+
 ### 2026-05-13 — Sub-fases 14.5, 14.6, 14.7, 14.8: validações de gaps pré go-live
 
 **Trabalho completado:**

@@ -7,21 +7,32 @@ interface CompanySwitcherProps {
 }
 
 export const CompanySwitcher: React.FC<CompanySwitcherProps> = ({ onCompanyChange }) => {
-  const { company, availableCompanies, setCompany } = useCompany();
+  const { company, availableCompanies } = useCompany();
   const [open, setOpen] = useState(false);
 
   if (!company || availableCompanies.length <= 1) {
     return null;
   }
 
-  const handleSelect = async (id: string) => {
+  const handleSelect = (id: string) => {
     if (id === company.id) {
       setOpen(false);
       return;
     }
-    await setCompany(id);
+    // Sub-fase 14.4.2: bypass setCompany async pra evitar tela-branca quando
+    // getCompanyById lança (network/race). Salva direto no localStorage que é
+    // a source-of-truth do CompanyContext init, e o reload garante state
+    // limpo. Antes: `await setCompany(id)` podia lançar e bloquear
+    // `onCompanyChange()` → app ficava com state stale sem reload.
+    try {
+      localStorage.setItem('sistema_ponto_company_id', id);
+    } catch (err) {
+      console.error('CompanySwitcher: falha ao persistir company_id', err);
+    }
     setOpen(false);
     onCompanyChange?.();
+    // Não usa setCompany — onCompanyChange (window.location.reload no Layout)
+    // re-monta CompanyProvider que lê localStorage e carrega corretamente.
   };
 
   return (
