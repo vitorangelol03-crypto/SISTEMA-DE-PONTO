@@ -223,7 +223,10 @@ export async function resetToDefault(
   changedBy: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const defaultPermissions = role === 'admin' ? DEFAULT_ADMIN_PERMISSIONS : DEFAULT_ADMIN_PERMISSIONS;
+    // BUG fix (sub-fase 14.13): branch else retornava DEFAULT_ADMIN_PERMISSIONS,
+    // o que transformava supervisor em admin ao "resetar permissões". CRÍTICO
+    // de segurança — descoberto via audit (relatório /tmp/permissions-audit-2026-05-14.md §6.2).
+    const defaultPermissions = role === 'admin' ? DEFAULT_ADMIN_PERMISSIONS : DEFAULT_SUPERVISOR_PERMISSIONS;
 
     return await saveUserPermissions(userId, defaultPermissions, changedBy);
   } catch (error) {

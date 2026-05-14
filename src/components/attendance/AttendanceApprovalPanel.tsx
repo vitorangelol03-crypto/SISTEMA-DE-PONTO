@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 
 interface AttendanceApprovalPanelProps {
   userId: string;
+  hasPermission: (permission: string) => boolean;
 }
 
 type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'manual';
@@ -55,7 +56,11 @@ function fraudAlerts(att: Attendance): string[] {
   return alerts;
 }
 
-export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = ({ userId }) => {
+export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = ({ userId, hasPermission }) => {
+  // Sub-fase 14.13: permissions granulares (audit /tmp/permissions-audit-2026-05-14.md §5)
+  const canApprove = hasPermission('attendance.approve');
+  const canReject = hasPermission('attendance.reject');
+  const canBulkApprove = hasPermission('attendance.bulkApprove');
   const { company } = useCompany();
   const [records, setRecords] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -184,7 +189,7 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
           </div>
         </div>
 
-        {selected.size > 0 && (
+        {selected.size > 0 && canBulkApprove && (
           <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
             <span className="text-sm text-green-800 font-medium">
               {selected.size} selecionado(s)
@@ -298,27 +303,31 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleApprove(att.id)}
-                            disabled={actionLoading}
-                            className="flex items-center gap-1 px-2.5 py-1.5 bg-green-100 text-green-700 text-xs font-medium rounded-md hover:bg-green-200 disabled:opacity-50 transition-colors"
-                            title="Aprovar"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            Aprovar
-                          </button>
-                          <button
-                            onClick={() => {
-                              setRejectModal({ id: att.id, name: att.employees?.name ?? 'Funcionário' });
-                              setRejectReason('');
-                            }}
-                            disabled={actionLoading}
-                            className="flex items-center gap-1 px-2.5 py-1.5 bg-red-100 text-red-700 text-xs font-medium rounded-md hover:bg-red-200 disabled:opacity-50 transition-colors"
-                            title="Rejeitar"
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                            Rejeitar
-                          </button>
+                          {canApprove && (
+                            <button
+                              onClick={() => handleApprove(att.id)}
+                              disabled={actionLoading}
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-green-100 text-green-700 text-xs font-medium rounded-md hover:bg-green-200 disabled:opacity-50 transition-colors"
+                              title="Aprovar"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              Aprovar
+                            </button>
+                          )}
+                          {canReject && (
+                            <button
+                              onClick={() => {
+                                setRejectModal({ id: att.id, name: att.employees?.name ?? 'Funcionário' });
+                                setRejectReason('');
+                              }}
+                              disabled={actionLoading}
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-red-100 text-red-700 text-xs font-medium rounded-md hover:bg-red-200 disabled:opacity-50 transition-colors"
+                              title="Rejeitar"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              Rejeitar
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -389,25 +398,29 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
                   )}
 
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <button
-                      onClick={() => handleApprove(att.id)}
-                      disabled={actionLoading}
-                      className="flex items-center justify-center gap-1 px-3 py-2 bg-green-100 text-green-700 text-sm font-medium rounded-md hover:bg-green-200 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:flex-1"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      Aprovar
-                    </button>
-                    <button
-                      onClick={() => {
-                        setRejectModal({ id: att.id, name: att.employees?.name ?? 'Funcionário' });
-                        setRejectReason('');
-                      }}
-                      disabled={actionLoading}
-                      className="flex items-center justify-center gap-1 px-3 py-2 bg-red-100 text-red-700 text-sm font-medium rounded-md hover:bg-red-200 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:flex-1"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      Rejeitar
-                    </button>
+                    {canApprove && (
+                      <button
+                        onClick={() => handleApprove(att.id)}
+                        disabled={actionLoading}
+                        className="flex items-center justify-center gap-1 px-3 py-2 bg-green-100 text-green-700 text-sm font-medium rounded-md hover:bg-green-200 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:flex-1"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Aprovar
+                      </button>
+                    )}
+                    {canReject && (
+                      <button
+                        onClick={() => {
+                          setRejectModal({ id: att.id, name: att.employees?.name ?? 'Funcionário' });
+                          setRejectReason('');
+                        }}
+                        disabled={actionLoading}
+                        className="flex items-center justify-center gap-1 px-3 py-2 bg-red-100 text-red-700 text-sm font-medium rounded-md hover:bg-red-200 disabled:opacity-50 transition-colors min-h-[44px] w-full sm:flex-1"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        Rejeitar
+                      </button>
+                    )}
                   </div>
                 </div>
               );

@@ -42,6 +42,8 @@ export interface FinancialPermissions extends TabPermissions {
   removeBonus: boolean;
   removeBonusByType: boolean;
   removeBonusBulk: boolean;
+  applyDiscount: boolean;
+  viewHistory: boolean;
   // Permissões dinâmicas por tipo de bônus: applyBonus_<bonusTypeId>, removeBonus_<bonusTypeId>.
   [dynamicKey: string]: boolean;
 }
@@ -49,6 +51,10 @@ export interface FinancialPermissions extends TabPermissions {
 export interface C6PaymentPermissions extends TabPermissions {
   generate: boolean;
   export: boolean;
+  import: boolean;
+  edit: boolean;
+  bulkEdit: boolean;
+  delete: boolean;
 }
 
 export interface ErrorsPermissions extends TabPermissions {
@@ -96,8 +102,8 @@ export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
   attendance: { view: true, mark: true, edit: true, search: true, reset: true, viewHistory: true, editHistory: true, approve: true, reject: true, bulkApprove: true, manualTime: true, generateMassMirror: true },
   employees: { view: true, create: true, edit: true, delete: true, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
-  financial: { view: true, viewPayments: true, editRate: true, editBonus: true, delete: true, clear: true, applyBonus: true, applyBonusB: true, applyBonusC1: true, applyBonusC2: true, removeBonus: true, removeBonusByType: true, removeBonusBulk: true },
-  c6payment: { view: true, generate: true, export: true },
+  financial: { view: true, viewPayments: true, editRate: true, editBonus: true, delete: true, clear: true, applyBonus: true, applyBonusB: true, applyBonusC1: true, applyBonusC2: true, removeBonus: true, removeBonusByType: true, removeBonusBulk: true, applyDiscount: true, viewHistory: true },
+  c6payment: { view: true, generate: true, export: true, import: true, edit: true, bulkEdit: true, delete: true },
   errors: { view: true, create: true, createByValue: true, edit: true, delete: true, viewStats: true, viewTriage: true, createTriage: true, distributeTriage: true },
   settings: { view: true, editDailyRate: true, editOther: true },
   users: { view: true, create: true, delete: true, managePermissions: true },
@@ -108,8 +114,12 @@ export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
   attendance: { view: true, mark: true, edit: false, search: true, reset: false, viewHistory: true, editHistory: true, approve: true, reject: true, bulkApprove: false, manualTime: false, generateMassMirror: true },
   employees: { view: true, create: true, edit: true, delete: false, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
-  financial: { view: true, viewPayments: true, editRate: false, editBonus: true, delete: false, clear: false, applyBonus: true, applyBonusB: false, applyBonusC1: false, applyBonusC2: false, removeBonus: true, removeBonusByType: false, removeBonusBulk: false },
-  c6payment: { view: true, generate: true, export: true },
+  // Sub-fase 14.13 (bug #6 audit): supervisor padrão tinha applyBonus=true mas
+  // applyBonusB/C1/C2=false. Como `canApplyBonus` em AttendanceTab.tsx:79 só
+  // testa applyBonus<code> (não applyBonus puro), supervisor default não conseguia
+  // aplicar nenhum bônus B/C1/C2. Alinhado agora pra true (mantém UX esperada).
+  financial: { view: true, viewPayments: true, editRate: false, editBonus: true, delete: false, clear: false, applyBonus: true, applyBonusB: true, applyBonusC1: true, applyBonusC2: true, removeBonus: true, removeBonusByType: false, removeBonusBulk: false, applyDiscount: false, viewHistory: false },
+  c6payment: { view: true, generate: true, export: true, import: true, edit: true, bulkEdit: false, delete: false },
   errors: { view: true, create: true, createByValue: false, edit: true, delete: false, viewStats: true, viewTriage: true, createTriage: true, distributeTriage: true },
   settings: { view: false, editDailyRate: false, editOther: false },
   users: { view: false, create: false, delete: false, managePermissions: false },
@@ -120,8 +130,8 @@ export const DEFAULT_READONLY_PERMISSIONS: UserPermissions = {
   attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false, approve: false, reject: false, bulkApprove: false, manualTime: false, generateMassMirror: false },
   employees: { view: true, create: false, edit: false, delete: false, import: false },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
-  financial: { view: true, viewPayments: true, editRate: false, editBonus: false, delete: false, clear: false, applyBonus: false, applyBonusB: false, applyBonusC1: false, applyBonusC2: false, removeBonus: false, removeBonusByType: false, removeBonusBulk: false },
-  c6payment: { view: true, generate: false, export: false },
+  financial: { view: true, viewPayments: true, editRate: false, editBonus: false, delete: false, clear: false, applyBonus: false, applyBonusB: false, applyBonusC1: false, applyBonusC2: false, removeBonus: false, removeBonusByType: false, removeBonusBulk: false, applyDiscount: false, viewHistory: false },
+  c6payment: { view: true, generate: false, export: false, import: false, edit: false, bulkEdit: false, delete: false },
   errors: { view: true, create: false, createByValue: false, edit: false, delete: false, viewStats: true, viewTriage: false, createTriage: false, distributeTriage: false },
   settings: { view: false, editDailyRate: false, editOther: false },
   users: { view: false, create: false, delete: false, managePermissions: false },
@@ -192,13 +202,19 @@ export const PERMISSION_LABELS = {
     applyBonusC2: 'Aplicar bonificação tipo C2',
     removeBonus: 'Remover bonificação individual',
     removeBonusByType: 'Remover bonificação por tipo específico',
-    removeBonusBulk: 'Remover todas bonificações de um dia'
+    removeBonusBulk: 'Remover todas bonificações de um dia',
+    applyDiscount: 'Aplicar desconto financeiro',
+    viewHistory: 'Visualizar histórico financeiro'
   },
   c6payment: {
     title: 'Pagamento C6',
     view: 'Ver aba',
     generate: 'Gerar arquivo',
-    export: 'Exportar'
+    export: 'Exportar',
+    import: 'Importar dados financeiros',
+    edit: 'Editar linhas de pagamento',
+    bulkEdit: 'Editar datas em lote',
+    delete: 'Excluir linhas de pagamento'
   },
   errors: {
     title: 'Erros',

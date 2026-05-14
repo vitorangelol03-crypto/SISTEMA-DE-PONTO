@@ -707,5 +707,984 @@ export const tutorialsContent: Tutorial[] = [
       'Monitore o uso de espaço regularmente',
       'Documente políticas de retenção da empresa'
     ]
+  },
+  {
+    id: 'company-multi-tenant',
+    category: 'datamanagement',
+    title: 'Alternar entre Empresas (Multi-Empresa)',
+    description: 'Como o admin master escolhe a empresa após login e troca de empresa pelo header',
+    icon: 'Building2',
+    requiredPermission: 'datamanagement.view',
+    steps: [
+      {
+        title: 'Entrar como admin master',
+        description: 'Faça login normalmente com seu usuário admin master. Diferente de supervisores, você não fica preso em uma única empresa.',
+        tips: ['Apenas usuários com perfil admin master veem o seletor de empresas', 'Supervisores entram já dentro da empresa em que estão vinculados']
+      },
+      {
+        title: 'Escolher empresa no seletor pós-login',
+        description: 'Logo após o login, o CompanySelector exibe os cards das empresas cadastradas (ex: Caratinga, Ponte Nova). Clique no card da empresa em que deseja operar.',
+        tips: ['A escolha define o tenant ativo para todas as queries da sessão', 'O nome da empresa selecionada aparece destacado no header']
+      },
+      {
+        title: 'Conferir empresa ativa no header',
+        description: 'O CompanySwitcher fica no topo da página, sempre visível. Mostra o nome da empresa atual e um ícone de troca rápida.',
+      },
+      {
+        title: 'Trocar de empresa sem deslogar',
+        description: 'Clique no CompanySwitcher do header e escolha a outra empresa. O sistema recarrega os dados do novo tenant sem precisar refazer login.',
+        tips: ['A troca preserva sua sessão JWT', 'Funcionarios, ponto, pagamentos e erros são todos isolados por empresa']
+      },
+      {
+        title: 'Validar isolamento de dados',
+        description: 'Após trocar, todos os indicadores (lista de funcionários, marcações, financeiro) refletem apenas a empresa selecionada. Nenhum dado vaza entre tenants.',
+      }
+    ],
+    useCases: [
+      {
+        title: 'Rodada matinal nas duas filiais',
+        description: 'Admin master gerencia ponto nas duas cidades sem precisar de dois usuários distintos.',
+        example: 'Exemplo: Às 08:00 abra Caratinga e marque presença. Às 08:30 troque para Ponte Nova pelo header e faça a mesma rotina.'
+      },
+      {
+        title: 'Fechamento financeiro por empresa',
+        description: 'Cada empresa tem seu próprio período de pagamento, taxa e bonificações. Alterne para fechar cada uma.',
+        example: 'Exemplo: Termine o C6 de Caratinga, troque para Ponte Nova e gere o C6 dessa unidade.'
+      },
+      {
+        title: 'Comparar erros entre filiais',
+        description: 'Use o CompanySwitcher para auditar erros de triagem em ambas as unidades no mesmo dia.',
+        example: 'Exemplo: Confira erros de carga em Caratinga, alterne para Ponte Nova e verifique se o mesmo padrão se repete.'
+      },
+      {
+        title: 'Onboarding de nova empresa',
+        description: 'Após criar a empresa nova no banco, ela aparece automaticamente no seletor pós-login.',
+        example: 'Exemplo: Ponte Nova foi cadastrada. No próximo login o admin master já vê o card e pode operar a unidade.'
+      }
+    ],
+    tips: [
+      'Mantenha a empresa correta sempre visível no header antes de qualquer ação crítica',
+      'Em caso de dúvida sobre o tenant ativo, troque e volte para forçar refresh',
+      'Supervisores não veem o CompanySwitcher — segurança garantida por permissões',
+      'Cada empresa tem domínio, raio de geolocalização e schedule próprios'
+    ]
+  },
+  {
+    id: 'employee-clock-app',
+    category: 'attendance',
+    title: 'Marcação de Ponto pelo Celular (App do Funcionário)',
+    description: 'Como o funcionário usa a URL pública /clock para registrar entrada e saída',
+    icon: 'Smartphone',
+    requiredPermission: 'attendance.view',
+    steps: [
+      {
+        title: 'Acessar a URL pública',
+        description: 'No navegador do celular, abra o link /clock divulgado pela empresa. Não é necessário login — é uma tela pública por empresa.',
+        tips: ['Salve o link como atalho na tela inicial do celular para acesso rápido', 'A URL é a mesma para todos os funcionários da unidade']
+      },
+      {
+        title: 'Informar CPF',
+        description: 'Digite o CPF cadastrado pela empresa. O sistema verifica se o funcionário existe e está ativo antes de avançar.',
+      },
+      {
+        title: 'Digitar PIN pessoal',
+        description: 'Informe o PIN de 4 dígitos. O PIN é entregue pelo admin no momento do cadastro e pode ser resetado pela aba Funcionários.',
+        tips: ['Nunca compartilhe o PIN com colegas', 'Se esquecer, peça reset ao supervisor']
+      },
+      {
+        title: 'Tirar foto facial (se ativada)',
+        description: 'Se a empresa exige reconhecimento facial, a câmera abre automaticamente. Posicione o rosto no quadro e aguarde a validação.',
+        tips: ['Boa iluminação melhora a precisão', 'Tire o boné ou óculos escuros para o cadastro inicial']
+      },
+      {
+        title: 'Liberar geolocalização',
+        description: 'O navegador pede permissão de localização. O sistema valida se o funcionário está dentro do raio configurado para a empresa antes de aceitar o ponto.',
+        tips: ['Negar a localização bloqueia o ponto', 'Em ambientes fechados, espere uns segundos para o GPS estabilizar']
+      },
+      {
+        title: 'Confirmar entrada ou saída',
+        description: 'O botão muda conforme o status: "Marcar entrada" no início e "Marcar saída" depois. Toque e aguarde a mensagem de sucesso.',
+      }
+    ],
+    useCases: [
+      {
+        title: 'Entrada no início do expediente',
+        description: 'O funcionário marca o próprio ponto ao chegar na unidade, sem depender do supervisor.',
+        example: 'Exemplo: Carlos chega às 07:55 em Caratinga, abre /clock no celular, digita CPF + PIN, libera GPS e marca entrada.'
+      },
+      {
+        title: 'Saída ao final do turno',
+        description: 'Mesma URL, mesmo fluxo. O botão já entende que é saída quando há ponto aberto.',
+        example: 'Exemplo: Às 17:02 o funcionário toca em "Marcar saída", o sistema fecha o registro e mostra horas trabalhadas.'
+      },
+      {
+        title: 'Trabalho em rota com checkpoint',
+        description: 'Funcionários de logística marcam ponto direto do pátio da filial via celular, sem precisar voltar à sala da supervisão.',
+        example: 'Exemplo: Motorista chega no pátio de Ponte Nova, abre /clock e marca entrada antes de pegar o caminhão.'
+      },
+      {
+        title: 'Substituir folha de ponto física',
+        description: 'A empresa elimina assinatura manual usando a URL pública como ponto oficial.',
+        example: 'Exemplo: Toda equipe usa /clock no celular pessoal — o supervisor só audita pelo painel.'
+      }
+    ],
+    tips: [
+      'A URL é pública mas o acesso individual depende de CPF + PIN — guarde os dois com cuidado',
+      'Se o ponto travar, verifique GPS, conexão e horário do celular',
+      'Foto facial é validada por similaridade — repita o cadastro se a aparência mudou muito',
+      'Em caso de falha de geo, contate o supervisor para registro manual',
+      'O ponto pelo app gera o mesmo registro do ponto feito pelo painel admin'
+    ]
+  },
+  {
+    id: 'employee-errors-app',
+    category: 'errors',
+    title: 'Consulta de Erros pelo Funcionário (/erros)',
+    description: 'Como o funcionário usa a URL pública /erros para ver seus erros individuais e de triagem',
+    icon: 'AlertCircle',
+    requiredPermission: 'errors.view',
+    steps: [
+      {
+        title: 'Abrir a URL /erros',
+        description: 'No celular, acesse o link /erros divulgado pela empresa. É uma tela pública, sem necessidade de login completo.',
+      },
+      {
+        title: 'Identificar com CPF',
+        description: 'Digite o mesmo CPF usado para marcar ponto. O sistema confirma se você está ativo na empresa.',
+      },
+      {
+        title: 'Confirmar com PIN',
+        description: 'Informe o PIN pessoal. As mesmas credenciais do /clock valem aqui.',
+        tips: ['Se o PIN não funciona em /erros, também não funciona em /clock — peça reset', 'PIN errado três vezes força aguardar antes da próxima tentativa']
+      },
+      {
+        title: 'Escolher período de consulta',
+        description: 'Selecione semana, quinzena ou mês. A lista carrega apenas erros do intervalo escolhido para evitar excesso de dados.',
+      },
+      {
+        title: 'Ver erros individuais',
+        description: 'Aparecem os erros lançados diretamente para você: data, descrição, valor e tipo. Cada linha mostra o impacto financeiro.',
+      },
+      {
+        title: 'Ver erros de triagem',
+        description: 'Em outra seção, aparecem os erros de triagem distribuídos ao seu nome — o sistema mostra a fatia que sobrou na sua escala.',
+        tips: ['Erros de triagem são divididos pelos funcionários do grupo no dia', 'O valor por pessoa é proporcional à participação na triagem']
+      }
+    ],
+    useCases: [
+      {
+        title: 'Conferência pré-pagamento',
+        description: 'Antes do dia do pagamento, o funcionário entra em /erros para conferir descontos já lançados.',
+        example: 'Exemplo: Sexta antes do C6, abre /erros e vê R$ 25,00 em triagem na quarta. Pode questionar o supervisor antes do fechamento.'
+      },
+      {
+        title: 'Contestação rápida',
+        description: 'Funcionário identifica um erro lançado por engano e leva para o supervisor com data e descrição em mãos.',
+        example: 'Exemplo: Aparece erro de carga em dia de folga. Vai até a supervisão com print do /erros e pede revisão.'
+      },
+      {
+        title: 'Acompanhamento mensal',
+        description: 'O time usa /erros para entender padrões e melhorar performance no mês seguinte.',
+        example: 'Exemplo: Conferente vê 4 erros no mês, todos do mesmo tipo, e pede treinamento adicional.'
+      },
+      {
+        title: 'Auditoria pessoal',
+        description: 'Funcionário guarda histórico próprio dos erros para arquivamento ou reuniões de avaliação.',
+        example: 'Exemplo: Antes da reunião de feedback trimestral, baixa print das telas de /erros nos três meses.'
+      }
+    ],
+    tips: [
+      'O /erros só mostra erros do funcionário logado — ele não vê erros de colegas',
+      'Se a lista vier vazia, confira o período selecionado',
+      'Erros editados ou apagados pelo supervisor desaparecem da consulta',
+      'O total exibido no rodapé já considera erros individuais + fatia de triagem',
+      'Senha (PIN) é a mesma do app de ponto — mantenha sigilo'
+    ]
+  },
+  {
+    id: 'geolocation-clockin',
+    category: 'attendance',
+    title: 'Geolocalização no Ponto',
+    description: 'Como o sistema bloqueia marcações fora do raio da empresa e como o admin configura',
+    icon: 'MapPin',
+    requiredPermission: 'attendance.mark',
+    steps: [
+      {
+        title: 'Entender o raio da empresa',
+        description: 'Cada empresa tem latitude, longitude e raio (em metros) configurados. Se o funcionário está fora dessa área, o ponto é recusado.',
+        tips: ['O raio padrão sugerido é 150-300 metros, suficiente para cobrir pátio + entrada', 'Raio muito amplo facilita fraude; raio muito pequeno frustra funcionários']
+      },
+      {
+        title: 'Permitir GPS no celular',
+        description: 'Quando o funcionário acessa /clock, o navegador pede permissão de geolocalização. Sem permissão, o sistema não consegue calcular distância.',
+      },
+      {
+        title: 'Validação automática no clock-in',
+        description: 'Ao tocar em "Marcar entrada", o sistema mede a distância entre o GPS do celular e o ponto cadastrado da empresa. Se for maior que o raio, retorna erro "Fora da área".',
+      },
+      {
+        title: 'Registro de coordenadas para auditoria',
+        description: 'Cada marcação bem-sucedida grava as coordenadas do funcionário. O admin pode revisar pontos suspeitos pela aba de Ponto.',
+        tips: ['Coordenadas ficam armazenadas com o registro e não podem ser editadas pelo funcionário', 'Padrão repetido fora do raio indica tentativa de fraude']
+      },
+      {
+        title: 'Configurar lat/lng/raio (admin)',
+        description: 'Na aba Admin > Configurações da Empresa, edite latitude, longitude e raio. Use o Google Maps para pegar as coordenadas exatas da entrada da filial.',
+      },
+      {
+        title: 'Testar com funcionário real',
+        description: 'Após salvar, peça a um funcionário no local para marcar ponto. Se funcionou, ajuste só se houver reclamação de borda.',
+      }
+    ],
+    useCases: [
+      {
+        title: 'Bloqueio de ponto em casa',
+        description: 'Funcionário tenta marcar entrada deitado na cama. O sistema retorna "Você está a 8 km do local de trabalho — ponto recusado".',
+        example: 'Exemplo: João tenta abrir /clock às 06:30 de casa em Caratinga. Sistema bloqueia porque a casa está a 6 km da filial.'
+      },
+      {
+        title: 'Ajuste de raio para filial nova',
+        description: 'Ao abrir Ponte Nova, o admin marca o pátio no mapa, define raio de 200m e habilita a empresa.',
+        example: 'Exemplo: Lat -20.4127, Lng -42.8723, raio 200m. Pessoal do pátio marca sem problema; quem está na cidade não consegue.'
+      },
+      {
+        title: 'Auditoria de fraude',
+        description: 'Admin filtra marcações com coordenadas distantes do centro para investigar.',
+        example: 'Exemplo: Carlos marcou três vezes na semana com coordenada idêntica a 50m do raio limite. Pode indicar GPS falso — investigar.'
+      },
+      {
+        title: 'Equipe externa autorizada',
+        description: 'Para motoristas que entram direto na rota, o admin amplia o raio ou cria exceção pontual no horário.',
+        example: 'Exemplo: Motorista sai direto da garagem 5 km à frente. Admin marca manualmente o ponto após confirmar via WhatsApp.'
+      }
+    ],
+    tips: [
+      'Use Google Maps em Satélite para pegar coordenadas precisas da entrada da filial',
+      'Comece com raio 200m e ajuste após uma semana de feedback',
+      'GPS de celulares antigos oscila — não defina raio menor que 100m',
+      'Sempre registre quando o sistema bloqueou ponto legítimo — pode indicar ajuste necessário',
+      'Coordenadas suspeitas + mesma rede WiFi de outro funcionário indicam compartilhamento de PIN'
+    ]
+  },
+  {
+    id: 'face-recognition',
+    category: 'attendance',
+    title: 'Reconhecimento Facial',
+    description: 'Cadastro inicial, validação no clock-in e reset facial pelo admin',
+    icon: 'Camera',
+    requiredPermission: 'attendance.mark',
+    steps: [
+      {
+        title: 'Ativar reconhecimento facial na empresa',
+        description: 'Na aba Admin > Configurações da Empresa, marque a opção "Exigir reconhecimento facial". A partir daí, novos pontos exigem foto.',
+        tips: ['Você pode ativar/desativar a qualquer momento', 'Empresas com câmera ruim no celular podem deixar desligado']
+      },
+      {
+        title: 'Cadastro inicial pelo funcionário',
+        description: 'No primeiro acesso ao /clock após ativação, o sistema abre a câmera e pede para o funcionário tirar a foto base. Essa imagem fica como referência.',
+        tips: ['Tire em local iluminado, rosto frontal e sem acessórios escuros', 'Sorria de leve mas mantenha rosto neutro para padronizar']
+      },
+      {
+        title: 'Validação a cada marcação',
+        description: 'Em todo clock-in seguinte, o funcionário tira uma nova foto e o sistema compara via similaridade com a base cadastrada.',
+      },
+      {
+        title: 'Falha de validação',
+        description: 'Se a similaridade ficar abaixo do limite, o sistema recusa e instrui a tentar novamente com melhor iluminação. Após várias falhas, o supervisor precisa intervir.',
+        tips: ['Mudança radical (barba, óculos novos) pode falhar — peça reset facial', 'Iluminação ruim é a causa mais comum']
+      },
+      {
+        title: 'Reset facial pelo admin',
+        description: 'Na aba Funcionários, clique no ícone de câmera ao lado do nome. Confirme o reset. No próximo /clock, o funcionário refaz o cadastro base.',
+        tips: ['Use quando o funcionário muda visualmente (corte, barba, óculos)', 'Não confunda com reset de PIN — são botões separados']
+      }
+    ],
+    useCases: [
+      {
+        title: 'Reforço anti-fraude',
+        description: 'Empresa adota facial para evitar que colegas marquem ponto uns pelos outros.',
+        example: 'Exemplo: Ponte Nova ativa facial. Tentativa do colega usando PIN do João é bloqueada porque a foto não bate.'
+      },
+      {
+        title: 'Cadastro inicial em massa',
+        description: 'Após ativar a feature, todos os funcionários precisam cadastrar foto base no próximo ponto.',
+        example: 'Exemplo: Supervisor avisa que segunda às 07h será obrigatório, libera 5 minutos extras para cada um cadastrar.'
+      },
+      {
+        title: 'Reset por mudança de visual',
+        description: 'Funcionário começou a usar barba grande e o sistema passa a recusar.',
+        example: 'Exemplo: Pedro deixou a barba crescer durante férias. Admin clica no botão de reset facial e Pedro refaz cadastro.'
+      },
+      {
+        title: 'Desligar em filial com câmera ruim',
+        description: 'Empresa com celulares antigos prefere deixar facial desligado para evitar trava no ponto.',
+        example: 'Exemplo: Filial onde 30% dos celulares são modelos antigos — admin desativa facial e mantém só CPF + PIN + GPS.'
+      }
+    ],
+    tips: [
+      'A foto fica salva em storage seguro, não exposta publicamente',
+      'Reset facial é uma ação de confiança — só faça com motivo claro',
+      'Reconhecimento depende de boa luz; oriente a equipe',
+      'Em última instância, supervisor pode marcar manualmente pelo painel',
+      'Combine facial + GPS para reduzir fraude a quase zero'
+    ]
+  },
+  {
+    id: 'bank-hours-apply',
+    category: 'financial',
+    title: 'Aplicar Banco de Horas',
+    description: 'Como compensar crédito ou débito de horas nos pagamentos com preview e cálculo dia/noite',
+    icon: 'Clock',
+    requiredPermission: 'financial.editBonus',
+    steps: [
+      {
+        title: 'Abrir aba Financeiro',
+        description: 'Acesse Financeiro e localize o funcionário com saldo de banco de horas a aplicar.',
+      },
+      {
+        title: 'Clicar em "Aplicar Banco de Horas"',
+        description: 'No card do funcionário, clique no botão dedicado. Um modal abre com o saldo atual (crédito ou débito).',
+      },
+      {
+        title: 'Conferir multiplicadores dia/noite',
+        description: 'O sistema separa horas diurnas (06:00-22:00) e noturnas (22:00-06:00) e aplica o multiplicador configurado. Veja o cálculo detalhado antes de confirmar.',
+        tips: ['Multiplicador noturno padrão é 1.20 — confirme com RH', 'Crédito vira valor positivo somado; débito vira desconto']
+      },
+      {
+        title: 'Selecionar período de aplicação',
+        description: 'Escolha em qual payment_period o ajuste será lançado. Normalmente o aberto atual.',
+      },
+      {
+        title: 'Revisar o preview',
+        description: 'O modal mostra: saldo antes, valor calculado, novo total do pagamento, número de horas consumidas. Confira tudo antes de confirmar.',
+        tips: ['Se o número parecer estranho, cancele e investigue o saldo de origem', 'O preview é meramente informativo — só persiste após o clique final']
+      },
+      {
+        title: 'Confirmar aplicação atômica',
+        description: 'Clique em "Confirmar". O sistema grava a movimentação, recalcula o pagamento e zera (ou ajusta) o saldo numa única transação.',
+      }
+    ],
+    useCases: [
+      {
+        title: 'Compensação de horas extras',
+        description: 'Funcionário fez 10h extras no mês. Empresa converte em valor no pagamento.',
+        example: 'Exemplo: 8h diurnas × R$ 15 + 2h noturnas × R$ 18 = R$ 156,00 somados ao pagamento do C6.'
+      },
+      {
+        title: 'Desconto de horas faltadas',
+        description: 'Funcionário ficou devendo 3h no mês anterior. Sistema desconta no pagamento atual.',
+        example: 'Exemplo: 3h × R$ 12 = R$ 36,00 descontados do total bruto do funcionário.'
+      },
+      {
+        title: 'Fechamento mensal limpo',
+        description: 'Ao final do mês, supervisor aplica banco de horas de todos para zerar saldos antes do próximo período.',
+        example: 'Exemplo: 12 funcionários com saldo positivo — aplicar um por um leva 5 minutos e fecha o mês limpo.'
+      },
+      {
+        title: 'Acerto antes de demissão',
+        description: 'Funcionário será desligado e tem saldo positivo. Aplica antes de gerar rescisão.',
+        example: 'Exemplo: Maria sai sexta. Aplica 15h de banco antes da rescisão para o valor entrar no acerto.'
+      }
+    ],
+    tips: [
+      'Confira sempre o preview — a operação é transacional mas irreversível em produção',
+      'Não confunda banco de horas com bonificação — são fluxos diferentes',
+      'Multiplicador dia/noite vem da configuração da empresa; mude com cuidado',
+      'Guarde o saldo histórico para auditoria — não delete movimentações',
+      'Aplique antes do fechamento do payment_period para evitar reabertura'
+    ]
+  },
+  {
+    id: 'admin-tab-access',
+    category: 'datamanagement',
+    title: 'Acesso à Aba Admin',
+    description: 'Como desbloquear a aba Admin com senha interna e o que cada seção faz',
+    icon: 'ShieldCheck',
+    requiredPermission: 'datamanagement.view',
+    steps: [
+      {
+        title: 'Localizar a aba Admin',
+        description: 'No menu superior, clique na aba "Admin". Ela só fica visível para usuários com permissão datamanagement.view.',
+      },
+      {
+        title: 'Inserir senha interna',
+        description: 'Mesmo com a permissão, o sistema pede uma senha extra: "Clayton2024". É uma trava adicional para evitar acesso acidental.',
+        tips: ['A senha é fixa e conhecida pelo admin master', 'Não compartilhe com supervisores comuns']
+      },
+      {
+        title: 'Navegar pelas seções',
+        description: 'Após desbloquear, aparecem as seções: Configurações da Empresa, Gestor de Bonificações, Reset Geral, Auditoria. Clique para entrar em cada uma.',
+      },
+      {
+        title: 'Configurações da Empresa',
+        description: 'Edite endereço, cidade, lat/lng, raio de geolocalização, schedule padrão e flags como facial obrigatório. Salvar persiste no banco.',
+      },
+      {
+        title: 'Gestor de Bonificações',
+        description: 'Crie, edite ou inative tipos de bonificação (B, C1, C2, customizados). Define rótulo, valor padrão e categoria.',
+      },
+      {
+        title: 'Reset Geral / Auditoria',
+        description: 'Reset Geral apaga marcações de um dia inteiro (ação destrutiva). Auditoria mostra log de ações sensíveis: remoções, resets, edições.',
+        tips: ['Reset Geral pede dupla confirmação', 'Auditoria não pode ser editada — é append-only']
+      }
+    ],
+    useCases: [
+      {
+        title: 'Onboarding de filial nova',
+        description: 'Após cadastrar Ponte Nova no banco, admin entra na aba Admin para configurar lat/lng, raio e schedule.',
+        example: 'Exemplo: Abre Configurações, preenche -20.4127 / -42.8723 / 200m, schedule 07:00-17:00 e salva.'
+      },
+      {
+        title: 'Criação de bonificação sazonal',
+        description: 'Para uma campanha de fim de ano, admin cria novo tipo "Bonus Natal" pelo Gestor de Bonificações.',
+        example: 'Exemplo: ID natal_2026, label "Bônus Natal", valor R$ 200, categoria sazonal — disponível na aba Ponto.'
+      },
+      {
+        title: 'Auditoria após reclamação',
+        description: 'Funcionário questiona desconto. Admin entra em Auditoria e localiza o evento original com usuário e timestamp.',
+        example: 'Exemplo: Pedro reclama de R$ 50 removidos — auditoria mostra supervisora Ana removendo com observação clara.'
+      },
+      {
+        title: 'Limpeza de dia errado',
+        description: 'Sistema registrou ponto errado por bug. Admin usa Reset Geral do dia para limpar e refaz manualmente.',
+        example: 'Exemplo: 12/04 todas as marcações vieram com horário UTC errado — Reset Geral do dia e refaz tudo.'
+      }
+    ],
+    tips: [
+      'Trate a aba Admin como zona crítica — ações afetam dados financeiros e fiscais',
+      'Mantenha a senha interna em local seguro e troque-a se vazar',
+      'Sempre revise a auditoria antes de aplicar Reset Geral',
+      'Não use Reset Geral como atalho para correção pontual — prefira reset individual',
+      'Documente cada mudança de configuração para passar o conhecimento adiante'
+    ]
+  },
+  {
+    id: 'mirror-mass-generation',
+    category: 'reports',
+    title: 'Geração de Espelhos de Ponto em Massa',
+    description: 'Como gerar PDFs de espelho para vários funcionários de uma vez na aba Ponto',
+    icon: 'FileText',
+    requiredPermission: 'reports.generate',
+    steps: [
+      {
+        title: 'Acessar a aba Ponto',
+        description: 'O botão "Gerar Espelhos" fica no topo da aba Ponto, ao lado dos demais controles. Só aparece para usuários com a permissão correspondente.',
+      },
+      {
+        title: 'Selecionar período',
+        description: 'Escolha datas de início e fim. O sistema costuma usar semana ou mês, mas aceita intervalos customizados.',
+        tips: ['Períodos muito grandes geram PDF pesado — prefira mensal', 'Datas precisam estar dentro do mesmo payment_period para coerência']
+      },
+      {
+        title: 'Escolher funcionários',
+        description: 'Marque os checkboxes dos funcionários alvo. Há opção "Selecionar todos" para gerar a unidade inteira.',
+      },
+      {
+        title: 'Gerar PDFs',
+        description: 'Clique em "Gerar". O sistema processa em lote — pode levar 10-30 segundos dependendo do volume.',
+        tips: ['Não recarregue a página durante o processamento', 'Mantenha o navegador aberto até concluir']
+      },
+      {
+        title: 'Baixar e distribuir',
+        description: 'Ao final, baixe o arquivo (ZIP com um PDF por funcionário ou PDF único compilado). Compartilhe via e-mail ou WhatsApp.',
+      },
+      {
+        title: 'Conferir conteúdo do espelho',
+        description: 'Cada PDF mostra: nome, CPF, função, lista de marcações com data/hora entrada e saída, total de horas, bônus e descontos do período.',
+      }
+    ],
+    useCases: [
+      {
+        title: 'Fechamento mensal padrão',
+        description: 'Todo dia 1 do mês, supervisor gera espelhos do mês anterior para todos os funcionários da filial.',
+        example: 'Exemplo: 1 de junho — gera espelhos de maio para os 18 funcionários de Caratinga em um clique.'
+      },
+      {
+        title: 'Auditoria por exigência fiscal',
+        description: 'Contabilidade pede espelhos retroativos para auditoria. Gere em massa o trimestre.',
+        example: 'Exemplo: Auditoria pede Q1 — gera Jan/Fev/Mar com seleção total e entrega ZIP.'
+      },
+      {
+        title: 'Acerto pré-rescisão',
+        description: 'Funcionário pede desligamento. Gera o espelho do período não pago para anexar à rescisão.',
+        example: 'Exemplo: João sai dia 20 — gera espelho do período 1-20 para o RH.'
+      },
+      {
+        title: 'Atendimento a fiscalização',
+        description: 'Em uma fiscalização do MTE, gerar espelhos da equipe inteira no período fiscalizado é obrigatório.',
+        example: 'Exemplo: Fiscal pede últimos 6 meses de toda a equipe — selecionar todos e usar intervalo de 6 meses.'
+      }
+    ],
+    tips: [
+      'Para times grandes (>30 pessoas), gere em duas levas para evitar timeout',
+      'Confira se o período cobre exatamente o que você precisa antes de gerar',
+      'Guarde os PDFs gerados em pasta com nome padrão (ex: espelhos_2026-05_caratinga)',
+      'Se um espelho vier sem marcação, confirme se o funcionário realmente faltou',
+      'A geração em massa não altera dados — é apenas leitura formatada em PDF'
+    ]
+  },
+  {
+    id: 'reset-pin-face',
+    category: 'employees',
+    title: 'Resetar PIN e Reset Facial do Funcionário',
+    description: 'Como o supervisor zera PIN ou foto base pela aba Funcionários',
+    icon: 'KeyRound',
+    requiredPermission: 'employees.edit',
+    steps: [
+      {
+        title: 'Abrir aba Funcionários',
+        description: 'Acesse a aba "Funcionários" no menu superior. A lista carrega todos os colaboradores da empresa ativa.',
+      },
+      {
+        title: 'Localizar o funcionário',
+        description: 'Use a busca por nome ou CPF para encontrar a pessoa. Os ícones de ação aparecem à direita do nome.',
+      },
+      {
+        title: 'Reset de PIN',
+        description: 'Clique no ícone de chave (KeyRound). Um modal pede confirmação. Após confirmar, o PIN do funcionário é zerado e ele precisa cadastrar novo no próximo /clock.',
+        tips: ['Avise o funcionário antes — ele não conseguirá marcar ponto até cadastrar', 'O novo PIN é digitado por ele, nunca compartilhado']
+      },
+      {
+        title: 'Reset Facial',
+        description: 'Clique no ícone de câmera. Confirme. A foto base é apagada e o sistema pede cadastro novo no próximo acesso ao /clock.',
+        tips: ['Use quando aparência mudou significativamente', 'Reset facial não mexe em PIN — são botões separados']
+      },
+      {
+        title: 'Confirmar mudança',
+        description: 'O modal mostra o resumo da ação. Confirme apenas quando tiver certeza — não há desfazer.',
+      },
+      {
+        title: 'Comunicar o funcionário',
+        description: 'Após o reset, mande mensagem para a pessoa explicar o novo procedimento (cadastrar PIN ou foto no próximo ponto).',
+      }
+    ],
+    useCases: [
+      {
+        title: 'PIN esquecido',
+        description: 'Funcionário tentou várias vezes e travou o ponto. Supervisor reseta para destravar.',
+        example: 'Exemplo: Carlos errou PIN 5x, conta bloqueou. Supervisor clica no ícone de chave, confirma, e Carlos cria novo PIN.'
+      },
+      {
+        title: 'Suspeita de compartilhamento',
+        description: 'Colega de trabalho marcou ponto por outro usando PIN — reset força mudança imediata.',
+        example: 'Exemplo: João descobre que Pedro sabia seu PIN. Supervisor reseta e João cria novo sozinho.'
+      },
+      {
+        title: 'Mudança de aparência',
+        description: 'Funcionário cortou barba e cabelo. Sistema passa a recusar facial — admin reseta foto base.',
+        example: 'Exemplo: Ana mudou visual no fim de semana. Reset facial pela aba Funcionários, ela tira nova foto na segunda.'
+      },
+      {
+        title: 'Onboarding refeito',
+        description: 'Funcionário voltou após longa licença. Garante credenciais limpas com reset duplo.',
+        example: 'Exemplo: Maria volta após 6 meses — reset PIN + reset facial e ela inicia tudo de novo.'
+      }
+    ],
+    tips: [
+      'Use os dois resets em conjunto após longas ausências para limpar credenciais',
+      'Reset não apaga histórico de pontos — só zera credenciais futuras',
+      'Confirme com o funcionário antes para evitar surpresa no próximo expediente',
+      'Cada reset fica registrado na auditoria com data, usuário e funcionário alvo',
+      'Nunca compartilhe PIN — o reset é para o próprio funcionário cadastrar de novo'
+    ]
+  },
+  {
+    id: 'company-settings',
+    category: 'datamanagement',
+    title: 'Configurações da Empresa',
+    description: 'Editar cidade, endereço, lat/lng, raio geo e schedule padrão dentro da aba Admin',
+    icon: 'Settings',
+    requiredPermission: 'datamanagement.view',
+    steps: [
+      {
+        title: 'Entrar na aba Admin',
+        description: 'Acesse Admin, informe a senha interna e clique em "Configurações da Empresa".',
+      },
+      {
+        title: 'Editar cidade e endereço',
+        description: 'Preencha cidade, rua e número. Esses campos aparecem em relatórios e espelhos de ponto.',
+        tips: ['Use o nome oficial da cidade para alinhamento com documentos', 'Endereço completo facilita auditoria']
+      },
+      {
+        title: 'Definir latitude e longitude',
+        description: 'Use Google Maps para pegar coordenadas exatas da entrada da filial. Cole os números nos campos correspondentes.',
+        tips: ['Formato esperado: -19.7892, -42.1391 (com ponto, sem aspas)', 'Confira no Maps que o ponto cai no portão de entrada']
+      },
+      {
+        title: 'Configurar raio de geolocalização',
+        description: 'Defina o raio em metros que delimita a área válida para ponto. Padrão 150-300m.',
+      },
+      {
+        title: 'Definir schedule padrão',
+        description: 'Configure horário de entrada e saída padrão da unidade. É usado como referência em relatórios e cálculos.',
+        tips: ['Use 24h: 07:00 / 17:00', 'Aplica a maioria do time; exceções são manuais']
+      },
+      {
+        title: 'Salvar e validar',
+        description: 'Clique em "Salvar". O sistema persiste no banco e refresca dados. Faça um teste de ponto para confirmar.',
+      }
+    ],
+    useCases: [
+      {
+        title: 'Cadastro inicial da filial',
+        description: 'Após criar empresa nova no banco, primeiro passo é preencher tudo nesta tela.',
+        example: 'Exemplo: Ponte Nova criada — admin abre Configurações, preenche endereço, coordenadas, raio 200m, horário 07:00-17:00.'
+      },
+      {
+        title: 'Mudança de endereço',
+        description: 'Empresa mudou de prédio na mesma cidade — atualizar coordenadas para o novo local.',
+        example: 'Exemplo: Caratinga muda para Av. Industrial. Pega nova coordenada e atualiza, mantendo raio.'
+      },
+      {
+        title: 'Ajuste de raio após reclamação',
+        description: 'Funcionários reclamam de bloqueio na portaria. Admin amplia raio em 50m.',
+        example: 'Exemplo: Raio 150m bloqueia quem está no portão externo — aumenta para 200m.'
+      },
+      {
+        title: 'Mudança de horário padrão',
+        description: 'Filial muda turno de 08:00-18:00 para 07:00-17:00 — atualizar schedule padrão.',
+        example: 'Exemplo: Acordo coletivo mudou jornada — admin edita schedule e a empresa toda se ajusta automaticamente.'
+      }
+    ],
+    tips: [
+      'Sempre teste após salvar — uma vírgula errada em lat/lng quebra geolocalização',
+      'Não use vírgula como separador decimal nas coordenadas — só ponto',
+      'Documente cada mudança em um log interno para histórico',
+      'Mudança de schedule deve ser comunicada à equipe com antecedência',
+      'Não confunda raio em metros com km — sempre metros'
+    ]
+  },
+  {
+    id: 'bonus-types-manager',
+    category: 'datamanagement',
+    title: 'Gestor de Tipos de Bonificação',
+    description: 'Criar, editar e inativar tipos de bônus na aba Admin com valor padrão e categoria',
+    icon: 'Gift',
+    requiredPermission: 'datamanagement.view',
+    steps: [
+      {
+        title: 'Abrir Gestor pelo painel Admin',
+        description: 'Na aba Admin, clique em "Gestor de Bonificações". A lista mostra tipos atuais: B, C1, C2 e customizados.',
+      },
+      {
+        title: 'Criar novo tipo',
+        description: 'Clique em "+ Novo Tipo". Preencha ID (kebab-case), label exibido, valor padrão em reais e categoria (produtividade, sazonal, etc).',
+        tips: ['ID precisa ser único na empresa', 'Label aparece nos botões da aba Ponto e nos relatórios']
+      },
+      {
+        title: 'Definir valor padrão',
+        description: 'Valor padrão é pré-preenchido quando o supervisor aplica o bônus. Pode ser sobrescrito no momento da aplicação.',
+      },
+      {
+        title: 'Editar tipo existente',
+        description: 'Clique no lápis ao lado do tipo. Mude label, valor ou categoria. Salvar atualiza globalmente.',
+        tips: ['Edição não retroage — bônus já aplicados continuam com valor antigo', 'Renomear label não muda histórico financeiro']
+      },
+      {
+        title: 'Inativar tipo',
+        description: 'Toggle "Ativo" para off. O tipo deixa de aparecer nos botões mas o histórico fica intacto.',
+        tips: ['Prefira inativar a deletar — deletar quebra histórico', 'Tipos inativos podem ser reativados depois']
+      },
+      {
+        title: 'Conferir aplicação',
+        description: 'Volte à aba Ponto e cheque se o novo tipo aparece nos botões de bonificação. Aplique de teste em um funcionário.',
+      }
+    ],
+    useCases: [
+      {
+        title: 'Campanha sazonal de Natal',
+        description: 'Empresa quer aplicar bônus único de fim de ano sem misturar com produtividade.',
+        example: 'Exemplo: Novo tipo "natal_2026", label "Bônus Natal", valor R$ 200, categoria sazonal — aparece nos botões da equipe inteira.'
+      },
+      {
+        title: 'Bônus de assiduidade',
+        description: 'Recompensa por presença sem faltas no mês.',
+        example: 'Exemplo: Cria tipo "assiduidade", valor R$ 80, aplica no primeiro dia do mês seguinte para quem teve presença total.'
+      },
+      {
+        title: 'Inativação de bônus descontinuado',
+        description: 'Bônus C1 não é mais usado mas histórico precisa ficar.',
+        example: 'Exemplo: Toggle C1 off — botão some da aba Ponto mas pagamentos antigos continuam com C1 visível.'
+      },
+      {
+        title: 'Ajuste de valor padrão',
+        description: 'Bônus B passa de R$ 50 para R$ 70 — basta editar o valor padrão.',
+        example: 'Exemplo: Edita B, troca valor 50 para 70, salva — próximas aplicações já usam 70 como sugestão.'
+      }
+    ],
+    tips: [
+      'ID do tipo é imutável após criação — escolha com cuidado',
+      'Valor padrão é apenas sugestão; o supervisor pode mudar no momento da aplicação',
+      'Inativar é seguro, deletar não',
+      'Categoria ajuda em relatórios — use produtividade, sazonal, assiduidade etc',
+      'Cada mudança fica registrada na auditoria'
+    ]
+  },
+  {
+    id: 'triage-errors',
+    category: 'errors',
+    title: 'Triagem de Erros (Distribuição em Grupo)',
+    description: 'Como criar erros de triagem com valor por erro e distribuir entre vários funcionários',
+    icon: 'ClipboardList',
+    requiredPermission: 'errors.viewTriage',
+    steps: [
+      {
+        title: 'Abrir aba Erros > Triagem',
+        description: 'Na aba Erros, clique na subaba "Triagem". A tela mostra erros de triagem do período aberto.',
+      },
+      {
+        title: 'Registrar novo erro de triagem',
+        description: 'Clique em "Novo Erro de Triagem". Informe data, descrição, quantidade de itens errados e valor unitário.',
+        tips: ['A descrição é compartilhada entre todos do grupo — seja claro', 'Valor unitário multiplicado pela quantidade gera o total']
+      },
+      {
+        title: 'Selecionar funcionários envolvidos',
+        description: 'Marque os checkboxes dos funcionários que estavam na triagem do dia. O sistema distribui o valor proporcionalmente.',
+        tips: ['Quem não estava na escala não deve ser marcado', 'Conferir antes de salvar — distribuição é automática mas os nomes vêm de você']
+      },
+      {
+        title: 'Conferir distribuição automática',
+        description: 'O preview mostra quanto vai sair de cada funcionário. Total dividido pela quantidade de pessoas.',
+      },
+      {
+        title: 'Salvar e distribuir',
+        description: 'Clique em "Salvar". O sistema cria registros individuais por funcionário, vinculados ao erro raiz.',
+      },
+      {
+        title: 'Auditar lançamento',
+        description: 'A lista atualiza mostrando o novo erro e os funcionários envolvidos. Pode editar ou apagar enquanto o período estiver aberto.',
+        tips: ['Após fechamento do period, edição fica bloqueada', 'Use a descrição como pista para encontrar depois']
+      }
+    ],
+    useCases: [
+      {
+        title: 'Erros de separação de carga',
+        description: 'Equipe de triagem deixou 5 caixas erradas. Cada caixa custa R$ 8.',
+        example: 'Exemplo: 5 caixas × R$ 8 = R$ 40 distribuídos entre 4 funcionários da escala — R$ 10 cada.'
+      },
+      {
+        title: 'Avarias coletivas',
+        description: 'Mercadorias avariadas durante turno coletivo — divisão proporcional.',
+        example: 'Exemplo: R$ 120 em avarias na escala de 6 pessoas — R$ 20 por funcionário.'
+      },
+      {
+        title: 'Erros de conferência em lote',
+        description: 'Conferência divergente em pallet — três conferentes presentes.',
+        example: 'Exemplo: R$ 90 de divergência ÷ 3 = R$ 30 cada, lançados como triagem.'
+      },
+      {
+        title: 'Distribuição justa em equipes',
+        description: 'Quando o erro não tem responsável único identificado, divisão proporcional é o caminho.',
+        example: 'Exemplo: Turno noturno tem 8 erros sem dono — distribui entre os 5 presentes.'
+      }
+    ],
+    tips: [
+      'Triagem só faz sentido quando a culpa é coletiva — culpa individual usa "Erro Individual"',
+      'O funcionário vê sua fatia em /erros como categoria "triagem"',
+      'Edite antes do fechamento — depois fica bloqueado',
+      'Documente bem a descrição para audit trail',
+      'Sempre confira escala do dia antes de marcar funcionários'
+    ]
+  },
+  {
+    id: 'permissions-granular',
+    category: 'users',
+    title: 'Permissões Granulares por Usuário',
+    description: 'Visualizar e editar a matriz de permissões por categoria no modal de Permissões',
+    icon: 'Lock',
+    requiredPermission: 'users.managePermissions',
+    steps: [
+      {
+        title: 'Acessar aba Usuários',
+        description: 'Na aba "Usuários" (visível apenas para admin master), localize o supervisor cuja permissão você quer ajustar.',
+      },
+      {
+        title: 'Abrir modal de Permissões',
+        description: 'Clique no ícone de cadeado ao lado do nome. O modal Permissões Granulares abre mostrando a matriz por categoria.',
+      },
+      {
+        title: 'Navegar pelas categorias',
+        description: 'As categorias são: Ponto, Funcionários, Relatórios, Financeiro, Pagamento C6, Erros, Configurações, Usuários, Gerenciamento de Dados. Cada uma tem várias permissões.',
+        tips: ['Ative apenas o necessário — princípio do menor privilégio', 'Use os presets DEFAULT_SUPERVISOR ou DEFAULT_READONLY como ponto de partida']
+      },
+      {
+        title: 'Marcar/desmarcar checkboxes',
+        description: 'Cada permissão é um checkbox. Marque para liberar, desmarque para bloquear. Mudanças são visuais até salvar.',
+      },
+      {
+        title: 'Conferir presets',
+        description: 'Botões "Aplicar preset Supervisor" e "Aplicar preset Read-only" preenchem a matriz inteira de uma vez.',
+        tips: ['Use preset como base e ajuste pontos específicos', 'Não tem preset admin — admin master tem tudo por padrão']
+      },
+      {
+        title: 'Salvar mudanças',
+        description: 'Clique em "Salvar". O sistema grava no banco, registra no permission_logs e o supervisor passa a ver/não ver abas de imediato.',
+        tips: ['Mudança crítica pode exigir o supervisor relogar para refresh do JWT', 'Sempre comunique o supervisor antes de cortar permissões']
+      }
+    ],
+    useCases: [
+      {
+        title: 'Onboarding de novo supervisor',
+        description: 'Aplicar preset Supervisor e ajustar 2-3 itens conforme função específica.',
+        example: 'Exemplo: Novo supervisor de turno noturno — preset Supervisor + desativa "Aplicar bônus C1/C2" e "Limpar período".'
+      },
+      {
+        title: 'Promoção de read-only para supervisor',
+        description: 'Auxiliar administrativo passa a operar — troca preset Read-only por Supervisor.',
+        example: 'Exemplo: Carla agora gerencia equipe — aplica preset Supervisor e libera "Importar planilha".'
+      },
+      {
+        title: 'Restrição temporária',
+        description: 'Supervisor cometeu erro grave — corta permissão de "Excluir pagamentos" temporariamente.',
+        example: 'Exemplo: Apagou pagamento errado por engano — admin desmarca financial.delete por 30 dias.'
+      },
+      {
+        title: 'Permissão sob demanda',
+        description: 'Supervisor precisa importar planilha mensal — libera só "Importar planilha".',
+        example: 'Exemplo: João pede para fazer carga mensal — admin marca employees.import só pra ele.'
+      }
+    ],
+    tips: [
+      'Comece sempre pelo preset mais restritivo e libere conforme necessário',
+      'Toda mudança fica em permission_logs com before/after para auditoria',
+      'Permissões dinâmicas de bonificação (applyBonus_<id>) podem ser ativadas por tipo',
+      'Não dê managePermissions a supervisores — só admin master',
+      'Revogue acessos imediatamente em caso de desligamento'
+    ]
+  },
+  {
+    id: 'payment-period-auto',
+    category: 'errors',
+    title: 'Toggle Auto-Weekly em Períodos de Pagamento',
+    description: 'Como ativar criação automática semanal ou criar períodos manuais',
+    icon: 'CalendarClock',
+    requiredPermission: 'errors.view',
+    steps: [
+      {
+        title: 'Abrir tela de Períodos de Pagamento',
+        description: 'Na aba Erros (ou Financeiro, dependendo da configuração), localize a seção "Períodos de Pagamento".',
+      },
+      {
+        title: 'Identificar o toggle auto_weekly',
+        description: 'No topo da seção, há um switch "Criação automática semanal". Quando ON, o sistema cria um novo período toda segunda-feira automaticamente.',
+        tips: ['ON é o padrão para empresas com pagamento semanal', 'OFF permite criação manual com qualquer cadência (quinzenal, mensal)']
+      },
+      {
+        title: 'Modo automático (ON)',
+        description: 'Com toggle ligado, todo início de semana o sistema gera um payment_period com janela seg-dom. Pagamentos, bônus e erros caem automaticamente nele.',
+        tips: ['Não precisa fazer nada — o cron interno cuida', 'O período anterior fica fechado e pronto para C6']
+      },
+      {
+        title: 'Modo manual (OFF)',
+        description: 'Com toggle desligado, o botão "Criar Período" aparece. Você define data inicial, data final e nome.',
+        tips: ['Use para quinzena (1-15, 16-fim) ou mensal (1-fim)', 'Pode coexistir com períodos antigos automáticos']
+      },
+      {
+        title: 'Criar período manual',
+        description: 'Clique em "Criar Período". Preencha datas e clique em salvar. Ele aparece no topo da lista como aberto.',
+      },
+      {
+        title: 'Fechar período',
+        description: 'Quando terminar a janela, clique em "Fechar". O período passa para read-only e libera espaço para o próximo.',
+      }
+    ],
+    useCases: [
+      {
+        title: 'Empresa com pagamento semanal',
+        description: 'Cadência fixa toda segunda — deixa toggle ON e esquece.',
+        example: 'Exemplo: Caratinga paga toda sexta a semana anterior — toggle ON, sistema cuida sozinho.'
+      },
+      {
+        title: 'Empresa quinzenal',
+        description: 'Pagamento dia 5 e dia 20 — toggle OFF e criação manual.',
+        example: 'Exemplo: Ponte Nova paga quinzena — OFF, cria período 1-15 manualmente, depois 16-fim.'
+      },
+      {
+        title: 'Mudança de cadência',
+        description: 'Empresa migra de semanal para mensal — desliga toggle e cria período mensal único.',
+        example: 'Exemplo: Acordo coletivo mudou para mensal — desliga toggle dia 1 e cria período do mês inteiro.'
+      },
+      {
+        title: 'Período especial (rescisão)',
+        description: 'Cria período curto para acerto de demissão fora do ciclo normal.',
+        example: 'Exemplo: João sai dia 22 — cria período 16-22 manualmente para fechar acerto.'
+      }
+    ],
+    tips: [
+      'Toggle é por empresa — uma pode ser automática e outra manual',
+      'Nunca mude o toggle no meio de um período aberto sem fechar antes',
+      'Período fechado fica imutável — toda nova movimentação cai no próximo',
+      'O C6 só gera com período fechado',
+      'Documente a cadência da empresa em algum lugar interno'
+    ]
+  },
+  {
+    id: 'security-overview',
+    category: 'settings',
+    title: 'Visão Geral de Segurança',
+    description: 'RLS multi-empresa, JWT custom HS256, bcrypt + PIN e fluxo público via edge function',
+    icon: 'ShieldCheck',
+    requiredPermission: 'settings.view',
+    steps: [
+      {
+        title: 'Entender o multi-tenant',
+        description: 'Cada empresa tem company_id próprio. Todas as tabelas críticas têm essa coluna e o RLS do Supabase garante que ninguém leia/escreva fora do tenant ativo.',
+        tips: ['RLS é a primeira camada — não confie só em filtros de aplicação', 'O company_id do JWT é a fonte da verdade']
+      },
+      {
+        title: 'JWT customizado HS256',
+        description: 'O login gera um JWT assinado com HS256 contendo user_id, company_id, role e permissões. O front guarda em sessionStorage e envia em cada request.',
+        tips: ['Segredo do HS256 fica apenas em variável de ambiente do backend', 'Token expira em 8h e exige novo login']
+      },
+      {
+        title: 'Senhas com bcrypt + PIN',
+        description: 'Senhas de supervisor são bcrypt (cost 12). PIN de funcionário também passa por bcrypt na sub-fase 11.9 — não há armazenamento em texto plano.',
+        tips: ['Bcrypt protege contra rainbow tables e brute force lento', 'Mesmo o admin master não consegue ver senhas — só resetar']
+      },
+      {
+        title: 'Fluxo público sem RLS',
+        description: 'URLs /clock e /erros são públicas. Não passam por RLS direto — vão a uma edge function que valida CPF + PIN e devolve dados específicos do funcionário.',
+        tips: ['A edge function tem service_role mas filtra rigorosamente por CPF + company', 'Tentativa de força bruta no PIN dispara rate limit']
+      },
+      {
+        title: 'Auditoria de ações sensíveis',
+        description: 'Toda remoção de bonificação, mudança de permissão e reset gera registro em logs append-only. Não há delete em log — só insert.',
+      },
+      {
+        title: 'Boas práticas operacionais',
+        description: 'Nunca compartilhe credenciais, troque a senha interna do Admin periodicamente, revogue acessos no desligamento e revise logs mensalmente.',
+        tips: ['Use gerenciador de senhas para a senha interna', 'Habilite facial + GPS para defesa em profundidade']
+      }
+    ],
+    useCases: [
+      {
+        title: 'Investigação de acesso suspeito',
+        description: 'Movimentação fora do horário — admin consulta logs e identifica quem fez o quê e quando.',
+        example: 'Exemplo: R$ 200 removidos às 23:30 — auditoria mostra o user_id, IP e observação registrada.'
+      },
+      {
+        title: 'Desligamento de supervisor',
+        description: 'Após desligar, admin invalida senha e zera permissões no mesmo dia.',
+        example: 'Exemplo: Carla saiu — admin reseta senha, desmarca todas permissões e remove acesso ao C6.'
+      },
+      {
+        title: 'Resposta a incidente',
+        description: 'Funcionário relata que o ponto foi marcado sem ele saber — admin checa logs, IP e foto.',
+        example: 'Exemplo: João alega não ter marcado quinta. Auditoria mostra GPS distante e similaridade facial baixa — reset PIN imediato.'
+      },
+      {
+        title: 'Onboarding de admin secundário',
+        description: 'Novo admin recebe acesso master mas é orientado a usar 2FA do gestor de senhas e nunca compartilhar credenciais.',
+        example: 'Exemplo: Cris vira admin secundário — recebe credenciais via cofre, lê este tutorial e ativa autenticação extra no PC.'
+      }
+    ],
+    tips: [
+      'RLS + JWT + bcrypt + edge function compõem defesa em profundidade — não fragilize nenhuma camada',
+      'Revise logs de remoção e permissões pelo menos uma vez por mês',
+      'Reset facial + reset PIN juntos limpam credenciais comprometidas',
+      'Senha interna da aba Admin deve ser rotacionada periodicamente',
+      'Documente o playbook de incidente em local seguro mas acessível'
+    ]
   }
 ];

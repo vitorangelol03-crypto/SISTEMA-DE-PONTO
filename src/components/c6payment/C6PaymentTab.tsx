@@ -24,7 +24,7 @@ interface PaymentRow {
   description: string;
 }
 
-export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId: _userId, hasPermission }) => {
+export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermission }) => {
   const { company } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([]);
@@ -118,7 +118,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId: _userId, has
     try {
       setLoading(true);
       const employmentType = filters.employmentType === 'all' ? undefined : filters.employmentType;
-      const netByEmployee = await getEmployeeNetPayments(filters.startDate, filters.endDate, employmentType, company.id);
+      const netByEmployee = await getEmployeeNetPayments(filters.startDate, filters.endDate, employmentType, company.id, userId);
 
       if (netByEmployee.size === 0) {
         toast.error('Nenhum pagamento encontrado no período selecionado');

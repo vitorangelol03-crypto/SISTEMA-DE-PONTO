@@ -263,7 +263,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const handleBulkApply = async () => {
-    if (!hasPermission('financial.applyPayment')) {
+    if (!hasPermission('financial.editRate')) {
       toast.error('Você não tem permissão para aplicar valores de pagamento');
       return;
     }
@@ -318,7 +318,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const handleSaveEdit = async () => {
-    if (!hasPermission('financial.editPayment')) {
+    if (!hasPermission('financial.editRate')) {
       toast.error('Você não tem permissão para editar pagamentos');
       return;
     }
@@ -341,7 +341,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const handleDeletePayment = async (paymentId: string) => {
-    if (!hasPermission('financial.deletePayment')) {
+    if (!hasPermission('financial.delete')) {
       toast.error('Você não tem permissão para excluir pagamentos');
       return;
     }
@@ -377,7 +377,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const handleClearPayments = async () => {
-    if (!hasPermission('financial.clearPayments')) {
+    if (!hasPermission('financial.clear')) {
       toast.error('Você não tem permissão para limpar pagamentos');
       return;
     }
@@ -911,8 +911,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               min="0"
               value={bulkDailyRate}
               onChange={(e) => setBulkDailyRate(e.target.value)}
-              disabled={!hasPermission('financial.applyPayment')}
-              title={!hasPermission('financial.applyPayment') ? 'Você não tem permissão para aplicar valores' : ''}
+              disabled={!hasPermission('financial.editRate')}
+              title={!hasPermission('financial.editRate') ? 'Você não tem permissão para aplicar valores' : ''}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed min-h-[44px] text-sm"
               placeholder="0.00"
             />
@@ -921,8 +921,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           <div className="flex items-end">
             <button
               onClick={selectAllEmployees}
-              disabled={!hasPermission('financial.applyPayment')}
-              title={!hasPermission('financial.applyPayment') ? 'Você não tem permissão para selecionar funcionários' : ''}
+              disabled={!hasPermission('financial.editRate')}
+              title={!hasPermission('financial.editRate') ? 'Você não tem permissão para selecionar funcionários' : ''}
               className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 min-h-[44px]"
             >
               {selectedEmployees.size === displayedFinancialData.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
@@ -932,8 +932,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           <div className="flex items-end">
             <button
               onClick={handleBulkApply}
-              disabled={!hasPermission('financial.applyPayment') || !bulkDailyRate || selectedEmployees.size === 0}
-              title={!hasPermission('financial.applyPayment') ? 'Você não tem permissão para aplicar valores' : ''}
+              disabled={!hasPermission('financial.editRate') || !bulkDailyRate || selectedEmployees.size === 0}
+              title={!hasPermission('financial.editRate') ? 'Você não tem permissão para aplicar valores' : ''}
               className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors disabled:bg-gray-300 min-h-[44px]"
             >
               Aplicar ({selectedEmployees.size} selecionados)
@@ -943,8 +943,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           <div className="flex items-end">
             <button
               onClick={() => setShowClearModal(true)}
-              disabled={!hasPermission('financial.clearPayments')}
-              title={!hasPermission('financial.clearPayments') ? 'Você não tem permissão para limpar pagamentos' : ''}
+              disabled={!hasPermission('financial.clear')}
+              title={!hasPermission('financial.clear') ? 'Você não tem permissão para limpar pagamentos' : ''}
               className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
             >
               <Trash2 className="w-4 h-4" />
@@ -981,7 +981,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {hasPermission('financial.applyPayment') && (
+                {hasPermission('financial.editRate') && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     <input
                       type="checkbox"
@@ -1018,7 +1018,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               {displayedFinancialData.map((data) => (
                 <React.Fragment key={data.employee.id}>
                   <tr className="hover:bg-gray-50">
-                    {hasPermission('financial.applyPayment') && (
+                    {hasPermission('financial.editRate') && (
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input
                           type="checkbox"
@@ -1240,7 +1240,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                       );
                                     })()}
                                     <div className="flex space-x-1 mt-2">
-                                      {hasPermission('financial.editPayment') && (
+                                      {hasPermission('financial.editRate') && (
                                         <button
                                           onClick={() => handleEditPayment(data.employee.id, payment.date)}
                                           className="p-1 text-blue-600 hover:bg-blue-50 rounded"
@@ -1249,7 +1249,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                           <Edit2 className="w-3 h-3" />
                                         </button>
                                       )}
-                                      {hasPermission('financial.deletePayment') && (
+                                      {hasPermission('financial.delete') && (
                                         <button
                                           onClick={() => handleDeletePayment(payment.id)}
                                           className="p-1 text-red-600 hover:bg-red-50 rounded"
@@ -1328,7 +1328,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           {displayedFinancialData.map((data) => (
             <div key={data.employee.id} className="p-4 hover:bg-gray-50">
               <div className="flex items-start gap-3 mb-3">
-                {hasPermission('financial.applyPayment') && (
+                {hasPermission('financial.editRate') && (
                   <input
                     type="checkbox"
                     checked={selectedEmployees.has(data.employee.id)}
@@ -1417,7 +1417,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                           Total: R$ {Number(payment.total ?? 0).toFixed(2).replace('.', ',')}
                         </div>
                         <div className="flex gap-2 mt-2">
-                          {hasPermission('financial.editPayment') && (
+                          {hasPermission('financial.editRate') && (
                             <button
                               onClick={() => handleEditPayment(data.employee.id, payment.date)}
                               className="flex-1 py-2 bg-blue-50 text-blue-600 rounded text-xs font-medium min-h-[40px]"
@@ -1425,7 +1425,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                               <Edit2 className="w-3 h-3 inline mr-1" /> Editar
                             </button>
                           )}
-                          {hasPermission('financial.deletePayment') && (
+                          {hasPermission('financial.delete') && (
                             <button
                               onClick={() => handleDeletePayment(payment.id)}
                               className="flex-1 py-2 bg-red-50 text-red-600 rounded text-xs font-medium min-h-[40px]"

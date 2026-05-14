@@ -603,7 +603,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       </div>
 
       {activeView === 'approvals' && (
-        <AttendanceApprovalPanel userId={userId} />
+        <AttendanceApprovalPanel userId={userId} hasPermission={hasPermission} />
       )}
 
       <div style={{ display: activeView === 'attendance' ? '' : 'none' }}>

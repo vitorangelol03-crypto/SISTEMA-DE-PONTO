@@ -2441,8 +2441,16 @@ export const getEmployeeNetPayments = async (
   startDate: string,
   endDate: string,
   employmentType: string | undefined,
-  companyId: string
+  companyId: string,
+  userId?: string
 ): Promise<Map<string, EmployeeNetPayment>> => {
+  if (userId) {
+    const permissionCheck = await validatePermission(userId, 'c6payment.import');
+    if (!permissionCheck.allowed) {
+      throw new Error(permissionCheck.error || 'Permissão negada');
+    }
+  }
+
   const [payments, errorRecords] = await Promise.all([
     getPayments(startDate, endDate, undefined, employmentType, companyId),
     getErrorRecords(startDate, endDate, undefined, employmentType, companyId),

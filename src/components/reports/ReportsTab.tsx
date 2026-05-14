@@ -202,7 +202,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   }, [displayedAttendances, paymentIndex, bonusTypes]);
 
   const exportToPDF = () => {
-    if (!hasPermission('reports.export')) {
+    // Sub-fase 14.13: chave correta é reports.exportPDF (matriz tem essa,
+    // não 'reports.export'). Audit /tmp/permissions-audit-2026-05-14.md §4.1.
+    if (!hasPermission('reports.exportPDF')) {
       toast.error('Você não tem permissão para exportar relatórios');
       return;
     }
@@ -317,7 +319,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   };
 
   const exportToExcel = () => {
-    if (!hasPermission('reports.export')) {
+    if (!hasPermission('reports.exportExcel')) {
       toast.error('Você não tem permissão para exportar relatórios');
       return;
     }
@@ -692,8 +694,8 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
 
           <button
             onClick={exportToExcel}
-            disabled={!hasPermission('reports.export') || displayedAttendances.length === 0}
-            title={!hasPermission('reports.export') ? 'Você não tem permissão para exportar relatórios' : ''}
+            disabled={!hasPermission('reports.exportExcel') || displayedAttendances.length === 0}
+            title={!hasPermission('reports.exportExcel') ? 'Você não tem permissão para exportar relatórios' : ''}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors disabled:bg-gray-300 min-h-[44px] w-full sm:w-auto"
           >
             <Download className="w-4 h-4" />
@@ -702,8 +704,8 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
 
           <button
             onClick={exportToPDF}
-            disabled={!hasPermission('reports.export') || displayedAttendances.length === 0}
-            title={!hasPermission('reports.export') ? 'Você não tem permissão para exportar relatórios' : ''}
+            disabled={!hasPermission('reports.exportPDF') || displayedAttendances.length === 0}
+            title={!hasPermission('reports.exportPDF') ? 'Você não tem permissão para exportar relatórios' : ''}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors disabled:bg-gray-300 min-h-[44px] w-full sm:w-auto"
           >
             <Printer className="w-4 h-4" />
