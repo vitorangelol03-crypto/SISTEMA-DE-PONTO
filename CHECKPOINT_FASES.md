@@ -300,6 +300,26 @@ Após Victor autorizar, executada migração massa dos 26 PINs plain → bcrypt 
 
 **Resultado final esperado próxima suite:** 268 passed / 18 skipped / 1 failed (apenas spec 37 cold-start).
 
+### 14.12 — Onboarding Ponte Nova (90%) — 2026-05-14
+
+Victor autorizou início do onboarding PN. Snapshot do DB revelou que PN já tinha muito mais setup do que esperado.
+
+**Estado de PN em prod (snapshot pré-onboarding):**
+- ✅ Company: "Ponte Nova" / CD LOGISTICA LTDA / Ponte Nova, MG
+- ✅ Admin local `8888` com password_hash setado
+- ✅ Geolocation: `-20.3908557, -42.8616382` + raio 150m + block_outside=true (coords confirmadas por Victor em 2026-05-14)
+- ✅ Bonus types: B=R$15, C1=R$20, C2=R$15
+- ❌ payment_period_config: ausente
+- ❌ Employees: 0
+
+**Aplicado nesta sub-fase:**
+- payment_period_config PN inserido: `auto_weekly=false` (mensal, decisão Victor)
+
+**Pendente — exige ação manual Victor:**
+- Planilha Excel com ~30 funcionários PN (nome+CPF+PIX+tipo de vínculo)
+- Importar via UI: login admin 9999 ou 8888 → aba Funcionários → "Importar Excel"
+- Smoke test pós-import: 1 funcionário marca ponto via `/clock` + valida geo bloqueio (lat/lng fora do raio 150m)
+
 ---
 
 ## Commits da sessão atual (mais recentes primeiro)

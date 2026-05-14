@@ -6,13 +6,17 @@
 
 ## 1. 🚀 GO-LIVE — Ações manuais do Victor (sistema 100% pronto técnico)
 
-### 1.1 Onboarding Ponte Nova com dados reais
-- [ ] Importar ~30 employees via UI Admin → Funcionários → Importar Excel
-- [ ] Configurar `payment_period_config` (auto_weekly?, semana de pagamento)
-- [ ] Configurar `geolocation_config` (lat/lng + radius do escritório de PN)
-- [ ] Configurar `bonus_types` (B, C1, C2 ou customizados)
-- [ ] Validar login do admin local de Ponte Nova (id `8888`)
-- [ ] Smoke test: 1 funcionário marca ponto via `/clock`
+### 1.1 Onboarding Ponte Nova com dados reais (em andamento — sub-fase 14.12)
+
+**✅ Concluído em 2026-05-14:**
+- [x] Login admin local 8888 (password_hash setado)
+- [x] `geolocation_config` PN: lat `-20.3908557`, lng `-42.8616382`, raio **150m**, block_outside=true
+- [x] `bonus_types` PN: B=R$15, C1=R$20, C2=R$15
+- [x] `payment_period_config` PN: mensal (`auto_weekly=false`)
+
+**⏳ Pendente:**
+- [ ] Importar ~30 employees via UI Admin → Funcionários → Importar Excel (Victor mandar planilha)
+- [ ] Smoke test pós-import: 1 funcionário marca ponto via `/clock` + verifica geo bloqueio
 
 ### 1.2 Release v2.0.0
 - [ ] Tag `v2.0.0-multi-tenant` no commit final da Fase 14
