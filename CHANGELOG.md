@@ -7,6 +7,48 @@ e este projeto adota [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [Unreleased] — sub-fases 14.11 a 14.14 (2026-05-13 a 2026-05-14)
+
+### 🚀 Deploy + Onboarding
+- **Caratinga em produção:** https://sistema-ponto-zeta.vercel.app ✅
+- **Ponte Nova 90% configurada:** geolocation + bonus_types + payment_period_config mensal ✅
+- **26 PINs Caratinga migrados** plain → bcrypt (pgcrypto compat com bcryptjs)
+
+### 🔒 Segurança
+- **Bug crítico fixado:** `resetToDefault()` transformava supervisor em admin
+- **PIN bcrypt dual-mode** edge fn employee-public-api v3
+- **6 bugs UX permissões** descobertos via audit + fixados (FinancialTab, C6PaymentTab, AttendanceApprovalPanel, ReportsTab, defaults applyBonus)
+
+### ♿ Acessibilidade + Mobile
+- **Lighthouse A11y: 75 → 100** (`<main>` landmark, aria-label nos botões eye, contraste WCAG AA)
+- **Mobile E2E: 14/31 → 30/31** (refactor TabNavigation drop hamburger, badge unificado, aria-label="Sair")
+
+### 🧪 Testes
+- **Spec Supremo 2.0** (`tests/100-supremo-v2.spec.ts`): 46 tests / 12 seções (A-L)
+  - localhost: 46/46 em 3.1min
+  - **prod: 46/46 em 2.0min** ✅
+- **Suite contra prod:** 263+/18/2 (apenas TECH_DEBT 6.13 cold-start aceito)
+- **Mobile E2E project** `mobile-pixel5` adicionado em playwright.config.ts
+
+### 📚 Ajuda
+- **15 tutoriais novos** (28 total) cobrindo features fases 8-14:
+  - multi-empresa, /clock, /erros, geo, facial, banco horas, admin tab, mirror massa, reset PIN/face, company settings, bonus types, triagem, permissões, payment period auto, security overview
+
+### 📊 Métricas atualizadas
+| Indicador | Valor |
+|---|---|
+| Migrations | 57 → **64** |
+| RLS tables | 48 → **50** |
+| Unit tests | 422 → **431** passing |
+| Edge fns ACTIVE | 4 (employee-public-api v2 → **v3 bcrypt**) |
+| E2E specs | 40 → **44** |
+| Tutoriais Ajuda | 13 → **28** |
+
+### 🔧 Tech debt residual aceito
+- **TECH_DEBT 6.13** — cold-start edge fn create-user em prod URL >3min (característica conhecida Supabase Edge Functions free tier)
+
+---
+
 ## [v2.0.0-multi-tenant] — 2026-05-13
 
 > **Marco:** refatoração completa para suporte multi-empresa via RLS + bcrypt.

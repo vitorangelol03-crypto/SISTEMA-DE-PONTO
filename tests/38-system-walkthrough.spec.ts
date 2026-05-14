@@ -170,7 +170,7 @@ test.describe('System walkthrough exaustivo (sub-fase 14.4.10)', () => {
     assertCleanConsole(capture, 'B-tabs-admin');
   });
 
-  test('C1. Funcionários: lista 30 employees em Caratinga', async ({ page }) => {
+  test('C1. Funcionários: lista 30 employees REAIS em Caratinga', async ({ page }) => {
     const capture = attachConsoleCapture(page);
     await loginAs(page, ADMIN);
     await goToTab(page, 'Funcionários');
@@ -178,13 +178,15 @@ test.describe('System walkthrough exaustivo (sub-fase 14.4.10)', () => {
     // Aguarda lista carregar
     await page.waitForTimeout(1500);
 
-    // Validar via SQL que CT tem 30 + UI mostra "30" ou nomes específicos
+    // Sub-fase 14.13: filtra fora PW Test pra ser robusto contra pollution
+    // de specs paralelos. Caratinga tem 30 employees reais (não-PW-Test).
     const s = getClient();
     const { data } = await s
       .from('employees')
       .select('id, name')
       .eq('company_id', CARATINGA_ID);
-    expect(data?.length).toBe(30);
+    const realEmployees = (data ?? []).filter((e) => !e.name.startsWith('PW Test'));
+    expect(realEmployees.length).toBe(30);
 
     // UI deveria mostrar pelo menos 1 dos employees conhecidos
     await expect(page.getByText(/Pablo Henrique/, { exact: false }).first()).toBeVisible({ timeout: 10_000 });

@@ -12,7 +12,7 @@
 | `auth-login` | **v9** | `false` (emite tokens) | POST `{id, password}` → JWT custom HS256 `{sub, role:'authenticated', aud, company_id, exp:24h}` |
 | `clock-in-validated` | **v8** | `true` | Validação real de geolocalização + criação/update attendance + logging em error_logs |
 | `create-user` | **v1** | `true` | POST `{id, password, role, companyId}` → bcrypt server-side + INSERT `users.password_hash`. Admin `9999` OK; supervisor precisa `permissions.users.create` em `user_permissions`. |
-| `employee-public-api` | **v2** | `false` | 11 actions cobrindo fluxo público do funcionário pós-RLS (ver §4) |
+| `employee-public-api` | **v3** | `false` | 12 actions cobrindo fluxo público + **dual-mode bcrypt PIN (sub-fase 11.9)** — ver §4 |
 
 ### Variáveis de ambiente (Edge Functions Secrets)
 - `JWT_SECRET` — JWT Secret oficial do projeto (Settings → API → JWT Settings). **NÃO** pode ter prefixo `SUPABASE_*`.
@@ -89,7 +89,7 @@ Fluxo público funcionário (`/clock` + `/erros`) — todas anon (verify_jwt: fa
 20260508_nighttime_to_night_credit_minutes.sql            (8.3 — D1)
 ```
 
-Total: **57 migrations** aplicadas.
+Total: **64 migrations** aplicadas (incluindo migração 11.9 PIN bcrypt + 14.12 PN payment_period_config).
 
 ---
 
@@ -97,8 +97,8 @@ Total: **57 migrations** aplicadas.
 
 | Company | UUID | Admin local | Employees | Data atual |
 |---|---|---|---|---|
-| **Caratinga** (CLAYTON B DOS SANTOS) | `6583bb2a-e334-41a7-b69c-7d98f3b46dfc` | 9999 (master) | ~30 | 3130+ attendances, 1722+ payments |
-| **Ponte Nova** (CD LOGISTICA LTDA) | `2b2abc4b-084c-4cf0-b5f1-02792513241d` | 8888 | 0 | Onboarding pendente |
+| **Caratinga** (CLAYTON B DOS SANTOS) | `6583bb2a-e334-41a7-b69c-7d98f3b46dfc` | 9999 (master) | 30 | 3130 attendances, 1726 payments, **26/26 PINs bcrypt** |
+| **Ponte Nova** (CD LOGISTICA LTDA) | `2b2abc4b-084c-4cf0-b5f1-02792513241d` | 8888 | 0 | Setup 90% (geo + bonus_types + payment_config); aguarda planilha 30 funcionários |
 
 ---
 
@@ -118,6 +118,21 @@ CREATE TABLE users (
 ```
 
 **Importante:** coluna `password` plain text foi **DROPADA em 11.1**. Único campo de senha é `password_hash`.
+
+---
+
+## 8. Schema crítico — `employees.pin_hash` (sub-fase 11.9)
+
+```sql
+ALTER TABLE employees ADD COLUMN pin_hash text;
+-- bcrypt $2a$10$... (60 chars)
+```
+
+Migração massa executada em 14.11.3: 26/26 PINs Caratinga migrados via pgcrypto `crypt(pin, gen_salt('bf', 10))`. Coluna `pin` plain agora NULL pra esses 26.
+
+Edge fn `employee-public-api` v3 dual-mode:
+- `verify-pin`: tenta `bcrypt.compare(pin, pin_hash)` → fallback `pin === pin` se `pin_hash IS NULL`
+- `set-pin`: grava `pin_hash` (bcryptjs.hash) + `pin = NULL`
 
 ---
 

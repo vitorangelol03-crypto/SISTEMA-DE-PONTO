@@ -214,9 +214,23 @@ Após deploy em prod e uso real, monitorar:
   - Build prod, Vitest coverage 45.96% Stmts, Supabase advisors 0 ERRORs core
   - Edge fns warm <1s (curl direto)
   - Dist serve + smoke chromium ✅
-  - Lighthouse: Perf 86 / A11y 75 / Best 100 / SEO 100
-  - Mobile E2E (project Pixel 5 adicionado): /clock 9/9 ✅, tabs admin regredem (helpers desktop-only)
-  - TECH_DEBT 6.25 (mobile UX) + 6.26 (a11y) registrados — postponed pós-go-live
+  - Lighthouse: Perf 86 / A11y 75 → **100** (sub-fase 14.11.2) / Best 100 / SEO 100
+  - Mobile E2E (project Pixel 5): 14/31 → **30/31** após refactor TabNavigation 14.11.2
+- ✅ **14.11.x — Caratinga deploy Vercel + onboarding parcial PN + tech debts:**
+  - Sistema online: https://sistema-ponto-zeta.vercel.app
+  - PN 90% configurada (geo, bonus_types, payment_period_config mensal)
+  - 26 PINs Caratinga migrados plain → bcrypt
+- ✅ **14.13 — 6 bugs UX permissões + 15 tutoriais novos + Spec Supremo 2.0:**
+  - Bug #1 CRÍTICO: resetToDefault transformava supervisor em admin
+  - Bugs #2-#6: FinancialTab/C6PaymentTab/AttendanceApprovalPanel/ReportsTab/defaults
+  - Ajuda: 13 → 28 tutoriais (todas features fases 8-14)
+  - Spec 100 (46 tests, 12 seções A-L): localhost 46/46 + prod 46/46
+- ✅ **14.14 — Auditoria final + correções + checkpoints:**
+  - Lint 2 errors fixados (tests/99-supremo path/fs unused)
+  - TECH_DEBT 6.10 movido pra histórico (já fixado em 9/5)
+  - TECH_DEBT 6.26/6.27/11.9.X marcados resolvidos
+  - Métricas atualizadas: 64 migrations, 50 RLS tables, 431 unit tests, 4 edge fns (auth v9, clock v8, create v1, public **v3 bcrypt**)
+  - testTimeout 15s pro set-pin flaky
 
 ### Próximo passo Victor
 - ⏳ Onboarding Ponte Nova (1.1) **OU** release/deploy (1.2 + 1.3)

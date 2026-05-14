@@ -69,6 +69,8 @@
 | `40-bonus-individual-ui` | **Bonificação individual UI** (sub-fase 14.6) | **5/5 ✅** |
 | `41-company-settings-save` | **Salvar CompanySettings** (sub-fase 14.7) | **5/5 ✅** |
 | `42-bank-hours-apply-ui` | **Apply bank hours UI** (sub-fase 14.7) | **3/3 ✅ + 1 skip** (revert UI inexistente) |
+| `99-supremo` | **Teste Supremo v1** (10 fluxos completos Caratinga, sub-fase 14.9) | **10/10 ✅** em 1.2min |
+| `100-supremo-v2` | **Teste Supremo v2** (46 tests, 12 seções A-L exaustivo, sub-fase 14.13) | **46/46 ✅** prod em 2.0min |
 
 ---
 

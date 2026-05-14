@@ -14,8 +14,6 @@
  */
 
 import { test, expect, Page, ConsoleMessage } from '@playwright/test';
-import path from 'node:path';
-import fs from 'node:fs';
 import { ADMIN, loginAs, goToTab, logout } from './helpers';
 import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
 import {

@@ -9,44 +9,7 @@
 
 ## 🔴 Bugs funcionais ativos
 
-### 6.10 — [Alta] `setPaymentPeriodAutoWeekly` corrompe config multi-empresa
-
-**Local exato:** `src/services/database.ts:1873-1886` (setter) + `src/services/database.ts:1863-1871` (getter)
-
-**Snippet do bug (auditoria 2026-05-09):**
-```typescript
-export const setPaymentPeriodAutoWeekly = async (
-  enabled: boolean, updatedBy: string, companyId: string
-): Promise<void> => {
-  const { error } = await supabase
-    .from('payment_period_config')
-    .upsert([{
-      id: 1,                    // ← HARDCODED
-      auto_weekly: enabled,
-      updated_by: updatedBy,
-      updated_at: new Date().toISOString(),
-      company_id: companyId,    // ← passado mas não respeitado pelo onConflict
-    }], {
-      onConflict: 'id',          // ← deveria ser 'company_id'
-    });
-  if (error) throw error;
-};
-```
-
-**Reprodução:**
-1. Admin de Caratinga clica toggle → grava `auto_weekly: true` em row `id=1, company_id: caratinga_id`
-2. Admin de Ponte Nova clica toggle → upsert sobrescreve row `id=1` com `company_id: pontenova_id`
-3. Caratinga perde sua config; `getPaymentPeriodConfig(caratinga_id)` retorna agora vazio (filtra por company_id) — config aparenta sumir
-4. Estado inconsistente: `auto_weekly` real está aplicado a Ponte Nova, mas Caratinga agora também não tem nenhuma row
-
-**Severidade:** **Alta** — corrupção de dados multi-empresa. Bug ATIVO em produção; dispara assim que CD Logística começar a usar Ponte Nova com toggle Auto-Weekly.
-
-**Solução estrutural:**
-1. Migration: `ALTER TABLE payment_period_config ADD CONSTRAINT payment_period_config_company_id_key UNIQUE (company_id)` (após verificar 0 duplicatas via pre-check)
-2. Refatorar `setPaymentPeriodAutoWeekly`: remover `id: 1` hardcoded, usar `onConflict: 'company_id'`
-3. Adicionar teste E2E (na spec 19 ou similar) que valide isolamento real do toggle entre as duas empresas
-
-**Status:** Pendente — **sub-fase 4.1** (próxima imediata após 4.0).
+(Sem itens pendentes — todos resolvidos ou aceitos. Ver Histórico §6.10 abaixo.)
 
 ---
 
@@ -184,86 +147,33 @@ E adicionar test cases pra CPF/CNPJ com pontuação retornar OK.
 
 ---
 
-### 6.26 — [Baixa] Acessibilidade: 3 issues Lighthouse (a11y score 75)
+### 6.26 — ✅ RESOLVIDO sub-fase 14.11.2 (Lighthouse A11y 75 → 100)
 
-**Local:** descobertos via Lighthouse audit em `dist/` build prod (sub-fase 14.10).
+Aplicado:
+- `<main>` landmark no `LoginForm.tsx`
+- `aria-label` nos botões "eye" (LoginForm + UsersTab x2)
+- `text-orange-600` → `text-orange-700` (contraste WCAG AA)
 
-**Issues:**
-1. **Buttons do not have an accessible name** — alguns botões icon-only (Trash, Edit, X close) sem `aria-label` ou texto.
-2. **Background and foreground colors do not have sufficient contrast ratio** — pelo menos 1 elemento com contraste <4.5:1 (WCAG AA).
-3. **Document does not have a main landmark** — falta `<main>` no Layout (apenas `<div>`).
-
-**Scores Lighthouse atuais (dist build, desktop headless):**
-- Performance: 86 ✅
-- Accessibility: **75** ⚠️
-- Best Practices: 100 ✅
-- SEO: 100 ✅
-
-**Solução (postponed):**
-1. Adicionar `aria-label` nos botões icon-only (Trash2, Pencil, X).
-2. Auditar paleta Tailwind e ajustar 1-2 cores com contraste insuficiente.
-3. Trocar `<div>` wrapper principal por `<main>` em `Layout.tsx`.
-
-**Status:** Aceito. Tarefa de ~2-3h pra subir a11y de 75 → 95+. Sub-fase 14.12 futura.
+Lighthouse pós-fix: Perf 87 / **A11y 100** / Best 100 / SEO 100.
 
 ---
 
-### 6.27 — [Baixa] Spec 22 "sup04 NÃO tem aba Admin" — premissa incorreta
+### 6.27 — ✅ RESOLVIDO sub-fase 14.11.2 (spec 22 sup04)
 
-**Local:** `tests/22-permissions-complete.spec.ts:93` (test `sup04 NÃO tem aba Admin`).
-
-**Descoberto:** sub-fase 14.11 contra prod URL Vercel.
-
-**Causa raiz:**
-- `TabNavigation.tsx:31` define `{ id: 'admin', name: 'Admin', permission: null }` → aba **sempre visível** pra qualquer usuário logado.
-- O acesso ao conteúdo do AdminTab é gated por senha interna ("Clayton2024"), não por permission RLS.
-- Em localhost o teste passa por timing (UI ainda renderizando quando expect roda); em prod URL com latência diferente, eventualmente retorna `Received: 1`.
-
-**Não é bug do app** — UX intencional, Admin tab gated por password. Teste tem premissa errada.
-
-**Solução (postponed):**
-- Trocar `toHaveCount(0)` por `toBeVisible()` (Admin sempre visível) + adicionar test "clicar Admin sem senha mostra prompt de senha"
-- OU mover `Admin` tab pra dentro de `Gerenciamento` (admin tab interna), revisando UX
-
-**Status:** Aceito. Sub-fase 14.11.x futura quando refatorar UX do AdminTab.
+Premissa corrigida: `toHaveCount(0)` → `toBeVisible()`. Admin tab é sempre visível (permission=null), gated por senha interna "Clayton2024".
 
 ---
 
-### 11.9.X — [Baixa] Migração massa PINs plain → bcrypt em prod (postponed)
+### 11.9.X — ✅ EXECUTADO sub-fase 14.11.3 (migração massa PINs)
 
-**Status sub-fase 11.9 atual (Fase A — implementada):**
-- Coluna `employees.pin_hash` adicionada (não-destrutiva).
-- Edge fn `employee-public-api` v3 com dual-mode:
-  - `verify-pin`: tenta `bcrypt.compare(pin, pin_hash)` primeiro; fallback `pin === pin` se `pin_hash IS NULL`.
-  - `set-pin`: grava `pin_hash` (bcryptjs.hash) + `pin = NULL`.
-- Novos PINs (set-pin) já são bcrypt. PINs antigos continuam plain até funcionário re-configurar OU admin forçar reset.
-
-**Fase B — migração massa dos PINs antigos (postponed):**
-
-26 employees em Caratinga ainda têm `pin` plain (não migrado pra `pin_hash`). Migração SQL com pgcrypto:
-
+26/26 PINs Caratinga migrados de plain → bcrypt `$2a$10$` via pgcrypto:
 ```sql
-UPDATE employees
-SET pin_hash = crypt(pin, gen_salt('bf', 10)),
-    pin = NULL
+UPDATE employees SET pin_hash = crypt(pin, gen_salt('bf', 10)), pin = NULL
 WHERE pin IS NOT NULL AND pin_hash IS NULL;
 ```
 
-**Compatibilidade validada:**
-- pgcrypto `crypt(text, gen_salt('bf', 10))` retorna `$2a$10$...` (60 chars) — formato bcrypt padrão
-- `bcryptjs.compare()` aceita esse formato (testado com 1 hash sample)
-
-**Por que postponed:**
-- Operação one-shot que afeta 26 employees reais em prod
-- Risco: se algo der errado, /clock fica down (PINs inválidos)
-- RLS já bloqueia leitura anon — risco real de plain text é apenas em caso de vazamento SERVICE_ROLE_KEY
-- Fallback dual-mode é seguro
-
-**Pra executar (quando Victor autorizar):**
-1. Backup `SELECT id, pin FROM employees WHERE pin IS NOT NULL` (cópia local)
-2. Aplicar UPDATE acima via MCP `execute_sql`
-3. Smoke test: 1-2 funcionários reais marcando ponto via `/clock`
-4. Se falha: restore via backup (UPDATE pin=X WHERE id=Y; pin_hash=NULL)
+Backup defensivo em `/tmp/pin-backup-2026-05-14.json` (não-commitado).
+Validação: 0 PINs plain restantes em Caratinga. Smoke test via spec E2E 05 isolado: passou em 5.3s.
 
 ---
 
@@ -520,6 +430,51 @@ await expect(
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-14 — Sub-fase 14.13 + 14.14: audit final + correções de lacunas
+
+**Trabalho completado:**
+
+**Audit completo do sistema** (`/tmp/audit-final-2026-05-14.md`, 444 linhas) revelou:
+- 6 OK / 4 Atenção / 0 lacunas críticas
+- Documentação defasada (TECH_DEBT marcava bug 6.10 ativo mas já fixado em 9/5)
+- 2 lint errors triviais em tests/99-supremo.spec.ts
+- Métricas no CHECKPOINT desatualizadas
+
+**Bugs de permissões granulares (6 fixados):**
+- **#1 CRÍTICO segurança**: `resetToDefault()` em services/permissions.ts:226 fazia supervisor virar admin. Bug literal `role === 'admin' ? ADMIN : ADMIN`. Fixado.
+- **#2 FinancialTab**: 6 chaves inexistentes (`applyPayment`/`editPayment`/`deletePayment`/`clearPayments`/`applyDiscount`/`viewHistory`). Substituídas por `editRate`/`delete`/`clear` (backend já valida) + 2 novas (`applyDiscount`/`viewHistory`) adicionadas à matriz.
+- **#3 C6PaymentTab**: 4 chaves inexistentes (`import`/`bulkEdit`/`edit`/`delete`). Adicionadas à matriz + `validatePermission` no backend `getEmployeeNetPayments`.
+- **#4 AttendanceApprovalPanel**: sem hasPermission. Botões Aprovar/Rejeitar/Bulk gated por `attendance.approve`/`reject`/`bulkApprove`.
+- **#5 ReportsTab**: usava `reports.export` (inexistente). Trocado para `reports.exportExcel`/`reports.exportPDF` separados.
+- **#6 Defaults applyBonus**: `DEFAULT_SUPERVISOR.applyBonusB/C1/C2` eram false (canApplyBonus testa `applyBonus<code>`). Mudados para true (alinha com applyBonus=true).
+
+**Ajuda — 15 tutoriais novos:**
+- Total: 13 → 28 tutoriais
+- Cobertura: multi-empresa, /clock, /erros, geo, facial, banco horas, admin tab, mirror massa, reset PIN/face, company settings, bonus types, triagem, permissões granulares, payment period auto, segurança.
+
+**Spec Supremo 2.0 criado** (`tests/100-supremo-v2.spec.ts`):
+- 46 tests / 12 seções (A-L)
+- localhost: 46/46 em 3.1min
+- prod URL: 46/46 em 2.0min ✅
+- Cobre todas features end-to-end com profundidade muito maior que spec 99 (10 tests)
+
+**Spec 38 C1 robustez:**
+- Antes: `expect(data?.length).toBe(30)` falhava com pollution de specs paralelos
+- Depois: filtra `!name.startsWith('PW Test')` antes do count = robusto
+
+**Lighthouse final:** Performance 87 / **A11y 100** / Best 100 / SEO 100.
+
+**Validações realizadas:**
+- tsc --noEmit exit 0
+- eslint 0 errors / 7 warnings cosméticos
+- vitest 431 passed / 1 skipped
+- npm run build 17.41s, 0 erros
+- Suite contra prod (v5): 263 passed / 18 skipped / 2 failed (TECH_DEBT 6.13 cold-start aceito)
+- Spec 100 contra prod: 46 passed / 0 failed
+- Supabase advisors: 0 ERRORs Sistema de Ponto core
+
+---
 
 ### 2026-05-13 — Sub-fase 14.4: UI manual test descobriu 2 bugs reais (e ambos fixados)
 

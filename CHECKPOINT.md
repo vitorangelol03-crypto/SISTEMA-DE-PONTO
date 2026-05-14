@@ -62,15 +62,19 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 
 | Métrica | Valor |
 |---|---|
-| **Branch / working tree** | `main` / limpo (só `.claude/` untracked) |
-| **Último commit** | `c03ee81` (fechamento 14.5/6/7/8 + race fixes + checkpoint dividido) — próximo será 14.9 batch determinístico |
-| **Security advisors ERRORs** | **0** ✅ |
-| **RLS-enabled tables** | **48** (33 core Sistema de Ponto + 15 legado) |
-| **Edge functions ACTIVE** | **4** (auth-login v9, clock-in-validated v8, create-user v1, employee-public-api v2) |
-| **Migrations aplicadas** | **57** |
-| **Unit tests (Vitest)** | **422+ passing** (16 specs em `tests/unit/`) |
-| **E2E specs (Playwright)** | **40+ specs** (259 passing / 18 skipped / **0 failed** em 19.3min) |
+| **Branch / working tree** | `main` / limpo (só `.claude/` + `coverage/` untracked) |
+| **Último commit** | `b34e258` (sub-fase 14.13 — 6 bugs UX permissões + 15 tutoriais) |
+| **Security advisors ERRORs (core)** | **0** ✅ |
+| **RLS-enabled tables** | **50** |
+| **Edge functions ACTIVE** | **4** (auth-login v9, clock-in-validated v8, create-user v1, **employee-public-api v3 bcrypt**) |
+| **Migrations aplicadas** | **64** |
+| **Unit tests (Vitest)** | **431 passing** + 1 skipped (16 specs em `tests/unit/`) |
+| **E2E specs (Playwright)** | **44 specs** (suite contra prod: 263+/18/2 — só TECH_DEBT 6.13 cold-start) |
+| **Spec Supremo 2.0** | `tests/100-supremo-v2.spec.ts` — **46/46** contra prod URL em 2.0min ✅ |
+| **Lighthouse (dist build)** | Perf 87 / **A11y 100** / Best 100 / SEO 100 |
+| **PINs bcrypt** | **26/26** Caratinga (0 plain restantes) ✅ |
 | **Bugs latentes em prod** | **0** ✅ |
+| **Tutoriais Ajuda** | **28** (13 originais + 15 novos cobrindo features fases 8-14) |
 
 ### Fases concluídas (5 → 14)
 
