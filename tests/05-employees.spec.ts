@@ -111,7 +111,10 @@ test.describe('Funcionários', () => {
     await expect(page.getByRole('heading', { name: /Definir PIN/ })).toBeVisible();
     await page.getByPlaceholder(/4 a 6 dígitos/).fill('1234');
     await page.getByRole('button', { name: /Salvar PIN/ }).click();
-    await expect(page.getByRole('heading', { name: /Definir PIN/ })).toBeHidden({ timeout: 10_000 });
+    // Sub-fase 11.9: set-pin agora chama bcrypt.hash na edge fn employee-public-api.
+    // Cold-start pode demorar >10s em prod URL (esm.sh/bcryptjs download).
+    // 60s acomoda cold-start residual.
+    await expect(page.getByRole('heading', { name: /Definir PIN/ })).toBeHidden({ timeout: 60_000 });
 
     // Campo PIN agora mostra "Configurado ✓"
     await expect(row.getByText(/Configurado/)).toBeVisible();

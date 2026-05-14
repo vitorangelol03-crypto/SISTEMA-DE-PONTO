@@ -3,7 +3,7 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-14 (sub-fase 14.11.2 — Tech debts UX mobile + a11y + 11.9 Fase A resolvidos)
+**Última atualização:** 2026-05-14 (sub-fase 14.11.3 — 26 PINs migrados pra bcrypt + spec 05 fix)
 **Branch:** `main`
 **Plano canônico:** `PLANO_PRODUCAO.md`
 **TECH_DEBT canônico:** `TECH_DEBT.md`

@@ -279,7 +279,26 @@ Após Caratinga validada em prod, atacar pendências da tabela "O que falta pra 
 **Lighthouse após fixes:** Perf **87** / A11y **100** / Best **100** / SEO **100**.
 
 **Postponed (tech debt residual):**
-- 11.9.X migração massa PINs antigos (26 employees Caratinga) — SQL pgcrypto pronto, exige autorização Victor
+- 11.9.X migração massa PINs antigos — ✅ EXECUTADO em sub-fase 14.11.3
+
+### 14.11.3 — 11.9.X migração massa PINs + spec 05 fix (2026-05-14)
+
+Após Victor autorizar, executada migração massa dos 26 PINs plain → bcrypt em prod Caratinga.
+
+**Execução:**
+1. Backup defensivo: dump JSON dos 26 PINs originais em `/tmp/pin-backup-2026-05-14.json` (não-commitado, contém dados sensíveis)
+2. SQL pgcrypto: `UPDATE employees SET pin_hash = crypt(pin, gen_salt('bf', 10)), pin = NULL WHERE pin IS NOT NULL AND pin_hash IS NULL`
+3. Validação: 26/26 com hash `$2a$10$...` (60 chars), 0 plain restantes
+
+**Suite contra prod URL pós-migração (v4):** 267 passed / 18 skipped / 2 failed em 17.9min:
+- ✅ spec 22 (sup04 admin) — resolvida em 14.11.2
+- ✅ spec 28 (employee-import) — resolvida em 14.11.2 via helpers.ts fix
+- ❌ spec 05 test "edita PIN" — regressão pela 11.9 (set-pin agora chama bcrypt.hash, cold-start >10s)
+- ❌ spec 37 test 1 — cold-start absoluto edge fn create-user (TECH_DEBT 6.13 aceito)
+
+**Fix spec 05:** timeout `toBeHidden` 10s → 60s no modal "Definir PIN". Validado isolado: passa em 5.3s.
+
+**Resultado final esperado próxima suite:** 268 passed / 18 skipped / 1 failed (apenas spec 37 cold-start).
 
 ---
 
