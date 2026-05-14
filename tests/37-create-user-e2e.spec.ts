@@ -231,6 +231,12 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
   });
 
   test('5. Novo supervisor consegue fazer login após criação', async ({ page }) => {
+    // Sub-fase 14.11 / TECH_DEBT 6.28: re-warmup antes do test 5. Tests 2-4
+    // são validação local (sem edge fn) — workers da `create-user` podem
+    // esfriar e o cold-start absoluto (~150s) excede o expect timeout.
+    // Warmup é fora do test timeout do test 5, força worker warm de novo.
+    await warmupCreateUserEdgeFn();
+
     const id = TEST_IDS[4];
 
     // Cria via UI

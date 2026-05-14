@@ -202,7 +202,8 @@ describe.skipIf(!HAS_SERVICE_ROLE)(
       }
     });
 
-    it('set-pin: PIN válido (4 dígitos) → {ok:true} + DB atualizado (pin, pin_configured=true)', async () => {
+    it('set-pin: PIN válido (4 dígitos) → {ok:true} + DB atualizado (pin_hash bcrypt, pin=null, pin_configured=true)', async () => {
+      // Sub-fase 11.9: set-pin agora grava bcrypt em pin_hash + zera pin plain.
       currentEmployee = await createFixtureEmployee('setpin');
 
       const { status, body } = await callEdgeFn('set-pin', {
@@ -213,11 +214,13 @@ describe.skipIf(!HAS_SERVICE_ROLE)(
       expect(status).toBe(200);
       expect(body).toEqual({ ok: true });
 
-      const [row] = await supaSelect<{ pin: string; pin_configured: boolean }>(
+      const [row] = await supaSelect<{ pin: string | null; pin_hash: string | null; pin_configured: boolean }>(
         'employees',
-        `select=pin,pin_configured&id=eq.${currentEmployee.id}`,
+        `select=pin,pin_hash,pin_configured&id=eq.${currentEmployee.id}`,
       );
-      expect(row.pin).toBe('1234');
+      expect(row.pin).toBeNull();
+      expect(row.pin_hash).toMatch(/^\$2[aby]\$10\$/);
+      expect(row.pin_hash!.length).toBe(60);
       expect(row.pin_configured).toBe(true);
     });
 

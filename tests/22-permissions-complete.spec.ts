@@ -90,9 +90,13 @@ test.describe('Permissions — Supervisor 04 restrito', () => {
     await expect(page.getByRole('button', { name: /^Usuários$/ })).toHaveCount(0);
   });
 
-  test('sup04 NÃO tem aba Admin', async ({ page }) => {
+  test('sup04 VÊ aba Admin (sempre visível, gated por senha interna)', async ({ page }) => {
+    // Sub-fase 14.11 (TECH_DEBT 6.27): aba Admin tem permission=null em
+    // TabNavigation.tsx — sempre visível. Acesso ao AdminTab é gated pela
+    // senha interna ("Clayton2024"), não por permission UI. Premissa
+    // original do teste (sup04 NÃO tem Admin) estava incorreta.
     await loginAs(page, SUP04);
-    await expect(page.getByRole('button', { name: /^Admin$/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Admin$/ })).toBeVisible();
   });
 });
 

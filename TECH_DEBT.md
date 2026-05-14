@@ -229,6 +229,44 @@ E adicionar test cases pra CPF/CNPJ com pontuação retornar OK.
 
 ---
 
+### 11.9.X — [Baixa] Migração massa PINs plain → bcrypt em prod (postponed)
+
+**Status sub-fase 11.9 atual (Fase A — implementada):**
+- Coluna `employees.pin_hash` adicionada (não-destrutiva).
+- Edge fn `employee-public-api` v3 com dual-mode:
+  - `verify-pin`: tenta `bcrypt.compare(pin, pin_hash)` primeiro; fallback `pin === pin` se `pin_hash IS NULL`.
+  - `set-pin`: grava `pin_hash` (bcryptjs.hash) + `pin = NULL`.
+- Novos PINs (set-pin) já são bcrypt. PINs antigos continuam plain até funcionário re-configurar OU admin forçar reset.
+
+**Fase B — migração massa dos PINs antigos (postponed):**
+
+26 employees em Caratinga ainda têm `pin` plain (não migrado pra `pin_hash`). Migração SQL com pgcrypto:
+
+```sql
+UPDATE employees
+SET pin_hash = crypt(pin, gen_salt('bf', 10)),
+    pin = NULL
+WHERE pin IS NOT NULL AND pin_hash IS NULL;
+```
+
+**Compatibilidade validada:**
+- pgcrypto `crypt(text, gen_salt('bf', 10))` retorna `$2a$10$...` (60 chars) — formato bcrypt padrão
+- `bcryptjs.compare()` aceita esse formato (testado com 1 hash sample)
+
+**Por que postponed:**
+- Operação one-shot que afeta 26 employees reais em prod
+- Risco: se algo der errado, /clock fica down (PINs inválidos)
+- RLS já bloqueia leitura anon — risco real de plain text é apenas em caso de vazamento SERVICE_ROLE_KEY
+- Fallback dual-mode é seguro
+
+**Pra executar (quando Victor autorizar):**
+1. Backup `SELECT id, pin FROM employees WHERE pin IS NOT NULL` (cópia local)
+2. Aplicar UPDATE acima via MCP `execute_sql`
+3. Smoke test: 1-2 funcionários reais marcando ponto via `/clock`
+4. Se falha: restore via backup (UPDATE pin=X WHERE id=Y; pin_hash=NULL)
+
+---
+
 ### 6.28 — [Baixa] Spec 37 test 5 cold-start edge fn em prod URL (>3min)
 
 **Local:** `tests/37-create-user-e2e.spec.ts:233` (test 5).

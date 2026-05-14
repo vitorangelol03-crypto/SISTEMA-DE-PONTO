@@ -48,7 +48,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <main className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
           <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-blue-100">
@@ -109,6 +109,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                   type="button"
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4 text-gray-400" />
@@ -151,13 +152,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
             <button
               type="button"
               onClick={() => window.location.href = '/?mode=erros'}
-              className="w-full py-2 px-4 border-2 border-orange-600 text-orange-600 text-sm font-medium rounded-md hover:bg-orange-50 transition-colors"
+              className="w-full py-2 px-4 border-2 border-orange-700 text-orange-700 text-sm font-medium rounded-md hover:bg-orange-50 transition-colors"
             >
               Ver meus erros
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </main>
   );
 };

@@ -261,6 +261,26 @@ Pedido Victor: "vamos testar em caratinga agora" + "teste tem que validar agora 
 - Suite completa contra prod: **267 passed (93%) / 18 skipped / 2 failed em 18.2min**
 - 2 failures = tech debt do teste, não bug do app
 
+### 14.11.2 — Resolver tech debts postponed (2026-05-14)
+
+Após Caratinga validada em prod, atacar pendências da tabela "O que falta pra 100%". Quick wins + médio esforço com agent paralelo.
+
+**Resolvidos:**
+
+| Item | Resultado |
+|---|---|
+| 6.27 spec 22 sup04 admin tab | `toHaveCount(0)` → `toBeVisible()` (Admin tab sempre visível, gated por senha interna) |
+| 6.26 A11y 3 issues (75 → 100) | `<main>` no LoginForm + aria-label nos botões eye (Login + UsersTab x2) + `text-orange-600` → `text-orange-700` (contraste WCAG AA) |
+| 6.25 UX mobile (agent paralelo) | Layout.tsx unificou badges Admin/Administrador + aria-label="Sair" permanente; TabNavigation.tsx droppou hamburger drawer, virou nav horizontal scrollable. Mobile passes: 14/31 → **30/31** (+16) |
+| 6.28 spec 37 test 5 cold-start | Re-warmupCreateUserEdgeFn no início do test 5 — força worker warm após tests 2-4 (validação local sem edge fn) |
+| User.password cosmetic | Verificado: interface User já não tem `password` field (limpo em sub-fase anterior). Checkpoint estava desatualizado |
+| 11.9 PIN bcrypt (Fase A) | Coluna `pin_hash` adicionada; edge fn `employee-public-api` v3 deployed com dual-mode (verify-pin bcrypt → fallback plain; set-pin bcrypt). Novos PINs já bcrypt. Migração massa 26 PINs antigos postponed (tech debt 11.9.X) |
+
+**Lighthouse após fixes:** Perf **87** / A11y **100** / Best **100** / SEO **100**.
+
+**Postponed (tech debt residual):**
+- 11.9.X migração massa PINs antigos (26 employees Caratinga) — SQL pgcrypto pronto, exige autorização Victor
+
 ---
 
 ## Commits da sessão atual (mais recentes primeiro)

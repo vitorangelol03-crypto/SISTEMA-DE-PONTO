@@ -225,6 +225,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                     type="button"
                     className="absolute inset-y-0 right-0 pr-3 flex items-center min-h-[44px]"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
                   >
                     {showPassword ? (
                       <EyeOff className="h-5 w-5 text-gray-400" />
@@ -255,6 +256,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                     type="button"
                     className="absolute inset-y-0 right-0 pr-3 flex items-center min-h-[44px]"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    aria-label={showConfirmPassword ? 'Ocultar confirmação de senha' : 'Mostrar confirmação de senha'}
                   >
                     {showConfirmPassword ? (
                       <EyeOff className="h-5 w-5 text-gray-400" />
