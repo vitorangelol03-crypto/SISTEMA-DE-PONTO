@@ -1,0 +1,143 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CI — Sistema de Ponto
+#
+# Roda em todo push para `main`, em todos os pull requests e via trigger manual
+# (workflow_dispatch). Garante zero regressão automática validando 3 frentes:
+#
+#   1. tsc-lint        ~1min   typecheck (tsc --noEmit) + ESLint
+#   2. vitest-unit     ~1min   unit tests (431 testes em tests/unit/ + src/**)
+#   3. playwright-e2e  ~25min  E2E (workers=1, serializado pelo Supabase real)
+#
+# Os jobs `tsc-lint` e `vitest-unit` rodam em paralelo (sem depends_on).
+# `playwright-e2e` só dispara em push/PR para main pra economizar minutos GH.
+#
+# ─── SECRETS necessárias (Settings → Secrets and variables → Actions) ────────
+#
+#   VITE_SUPABASE_URL            URL pública do projeto Supabase
+#   VITE_SUPABASE_ANON_KEY       anon key pública (build do frontend)
+#   SUPABASE_SERVICE_ROLE_KEY    service_role key (privada — só usada por
+#                                tests/cleanup.ts pra bypassar RLS em queries
+#                                diretas das specs 25/26 de isolamento multi-
+#                                empresa). NUNCA expor pro frontend.
+#
+# ─── Como Victor habilita ────────────────────────────────────────────────────
+#
+#   1. GitHub → repo → Settings → Secrets and variables → Actions → New
+#   2. Adicionar os 3 secrets acima
+#   3. Fazer push deste arquivo — workflow começa a rodar automaticamente
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Cancela runs anteriores do mesmo branch/PR quando um novo commit chega.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ─── 1. Typecheck + Lint ───────────────────────────────────────────────────
+  tsc-lint:
+    name: tsc + eslint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npm run lint
+
+  # ─── 2. Unit tests (vitest) ────────────────────────────────────────────────
+  vitest-unit:
+    name: vitest (unit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+  # ─── 3. E2E (Playwright) ───────────────────────────────────────────────────
+  # Sobe `npm run dev` automaticamente via playwright.config.ts (webServer).
+  # workers=1 obrigatório: testes mexem no mesmo Supabase real e precisam
+  # ser serializados pra não derrubarem uns aos outros (ver helpers.ts).
+  playwright-e2e:
+    name: playwright (e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Só roda em push/PR pra main (pula em pushes diretos a branches feature).
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    env:
+      # Vite lê durante `npm run dev` (webServer do playwright)
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      # tests/cleanup.ts usa pra bypassar RLS em queries diretas (specs 25/26)
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: npx playwright test --workers=1
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() && failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload test results (traces, videos, screenshots)
+        if: ${{ !cancelled() && failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 14

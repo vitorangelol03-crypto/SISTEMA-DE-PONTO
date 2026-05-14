@@ -192,7 +192,7 @@ test.describe('Módulo 42 — Fluxos UI de aplicar banco de horas', () => {
 
     const safeDelete = async (fn: () => Promise<unknown>, label: string) => {
       try { await fn(); } catch (err) {
-        // eslint-disable-next-line no-console
+         
         console.error(`[afterAll cleanup ${label}]`, err);
       }
     };

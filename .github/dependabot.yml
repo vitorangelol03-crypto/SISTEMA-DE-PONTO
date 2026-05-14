@@ -1,0 +1,35 @@
+# Dependabot — atualização automática de dependências.
+# Abre PRs semanais com bumps de npm e GitHub Actions.
+# Cada PR dispara o workflow ci.yml automaticamente, então só mergeia se passar.
+
+version: 2
+updates:
+  # npm (package.json)
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'America/Sao_Paulo'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+    groups:
+      # Agrupa minor/patch num PR só (menos ruído)
+      minor-and-patch:
+        update-types:
+          - 'minor'
+          - 'patch'
+
+  # GitHub Actions (.github/workflows/*.yml)
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'America/Sao_Paulo'
+    labels:
+      - 'dependencies'
+      - 'github-actions'

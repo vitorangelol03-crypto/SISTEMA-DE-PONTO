@@ -2,16 +2,23 @@
 
 Sistema **multi-empresa** de controle de ponto, banco de horas, bonificações e folha-de-pagamento auxiliar. Cada empresa (tenant) tem dados completamente isolados via Row Level Security real no PostgreSQL. Autenticação via ID numérico + senha (sem email), com JWT custom HS256 emitido por edge function própria.
 
-**Versão atual:** `2.0.0-rc.1` (multi-tenant, RLS hardened — Fase 11 completa).
-**Branch:** `main` • **Produção:** Supabase (`flcncdidxmmornkgkfbb` — sa-east-1, PG 17.6).
+**Versão atual:** `2.0.0-multi-tenant` (Fase 11-14 completas, em produção).
+**Branch:** `main` • **Produção web:** https://sistema-ponto-zeta.vercel.app • **Backend:** Supabase (`flcncdidxmmornkgkfbb` — sa-east-1, PG 17.6).
+
+**Status (2026-05-14):**
+- Caratinga: 100% online, 30 funcionários, **26/26 PINs em bcrypt** ✅
+- Ponte Nova: 90% setup (geo + bonus_types + payment_period_config); aguarda planilha 30 funcionários
+- Lighthouse: Perf 87 / A11y **100** / Best 100 / SEO 100
+- Suite E2E contra prod URL: 263+ passed / 18 skipped / 2 failed (apenas tech debt aceito cold-start)
+- Spec Supremo 2.0 (46 tests / 12 seções): 46/46 ✅ prod
 
 ---
 
 ## Funcionalidades Principais
 
 ### Multi-Empresa (Multi-Tenant)
-- 2 empresas em produção: **Caratinga** (CLAYTON B DOS SANTOS, ~30 employees, dados ativos) e **Ponte Nova** (CD LOGISTICA LTDA, em onboarding).
-- Isolamento total via RLS — `auth.jwt() ->> 'company_id'` em todas as 32 tabelas core.
+- 2 empresas em produção: **Caratinga** (CLAYTON B DOS SANTOS, 30 employees, dados ativos) e **Ponte Nova** (CD LOGISTICA LTDA, em onboarding — 90% setup).
+- Isolamento total via RLS — `auth.jwt() ->> 'company_id'` em todas as 50 tabelas com RLS ativo.
 - Switcher de empresa no header (admin master '9999'). Supervisor vê só a empresa atrelada.
 - DEFAULT_COMPANY_ID = `'6583bb2a-e334-41a7-b69c-7d98f3b46dfc'` (Caratinga) como fallback documentado.
 

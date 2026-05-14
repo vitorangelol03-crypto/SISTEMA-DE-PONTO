@@ -24,7 +24,7 @@ export const useAuth = () => {
     const hasJwt = !!getAuthToken();
 
     if (savedUser && !hasJwt) {
-      // eslint-disable-next-line no-console
+       
       console.warn(
         '[useAuth] localStorage tem user mas sessionStorage não tem JWT — ' +
         'forçando re-login (sessão expirada ou nova aba/dev restart).',
