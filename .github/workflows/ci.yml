@@ -116,7 +116,9 @@ jobs:
   playwright-e2e:
     name: playwright (e2e)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 60min: CI rodou 44m42s antes do timeout 45min (workers=1 + Supabase real
+    # + cold-start edge fns frequentes). Local leva ~17min. Suite ~287 tests.
+    timeout-minutes: 60
     # Só roda em push/PR pra main (pula em pushes diretos a branches feature).
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     env:
