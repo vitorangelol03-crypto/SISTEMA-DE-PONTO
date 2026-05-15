@@ -157,7 +157,8 @@ jobs:
         # Exclui spec 99 (já 100% coberto por 100-supremo-v2, redundante).
         # Reduz ~5-10min em CI sem perder cobertura real. Regex casa só o
         # describe do spec 99 (não pega 100 ou 101).
-        run: npx playwright test --workers=1 --grep-invert="Teste Supremo: fluxo completo"
+        run: |
+          npx playwright test --workers=1 --grep-invert="Teste Supremo: fluxo completo"
 
       - name: Upload Playwright report
         if: ${{ !cancelled() && failure() }}
