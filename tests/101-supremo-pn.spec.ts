@@ -105,21 +105,27 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
       await expect(page.getByRole('button', { name: 'Ponto', exact: true })).toBeVisible({ timeout: 15_000 });
     });
 
-    // A2/H1/H2: senha do admin local 8888 ainda não confirmada por Victor.
-    // Quando confirmar, substituir PN_ADMIN.password pelo valor correto.
-    test.skip('A2. Admin local 8888 (PN) → login direto sem CompanySelector', async ({ page }) => {
+    test('A2. Admin local 8888 (PN) → CompanySelector aparece (todo admin role vê ambas empresas)', async ({ page }) => {
+      // Sub-fase 14.17: admin local NÃO se distingue de admin master no frontend
+      // — todo user com role='admin' passa pelo CompanySelector. Após selecionar
+      // a empresa, JWT custom é emitido com company_id correspondente.
       await page.goto('/');
       await page.locator('#id').fill(PN_ADMIN.id);
       await page.locator('#password').fill(PN_ADMIN.password);
       await page.getByRole('button', { name: 'Entrar' }).click();
 
-      // Admin local NÃO vê CompanySelector — vai direto pro dashboard
+      // CompanySelector aparece com ambas empresas
+      await expect(page.getByText('Caratinga', { exact: false }).first()).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('Ponte Nova', { exact: false }).first()).toBeVisible({ timeout: 10_000 });
+
+      // Escolhe Ponte Nova (default natural pra admin 8888 PN)
+      await page.getByText('Ponte Nova', { exact: false }).first().click();
       await expect(page.getByRole('button', { name: 'Ponto', exact: true })).toBeVisible({ timeout: 15_000 });
 
-      // JWT custom com company_id = PN
+      // JWT custom emitido
       const token = await page.evaluate(() => sessionStorage.getItem('sb-custom-token'));
       expect(token).toBeTruthy();
-      expect(token!.split('.').length).toBe(3); // JWT padrão
+      expect(token!.split('.').length).toBe(3);
     });
 
     test('A3. Login 8888 senha errada → toast/erro de credencial', async ({ page }) => {
@@ -554,25 +560,40 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
   // H. PERMISSÕES ADMIN LOCAL 8888
   // ============================================================================
   test.describe('H. Admin local 8888 permissões', () => {
-    test.skip('H1. Admin 8888 vê suas próprias abas (sem CompanySwitcher se só 1 empresa)', async ({ page }) => {
+    test('H1. Admin 8888 vê abas operacionais + Admin, NÃO vê Usuários/Gerenciamento', async ({ page }) => {
+      // Admin local 8888 tem role='admin' mas permissões restritas (sem users.view,
+      // sem datamanagement.view). Master 9999 vê tudo; 8888 vê 8 abas:
+      // Ponto, Funcionários, Relatórios, Financeiro, Pagamento C6, Erros, Ajuda, Admin.
       await page.goto('/');
       await page.locator('#id').fill(PN_ADMIN.id);
       await page.locator('#password').fill(PN_ADMIN.password);
       await page.getByRole('button', { name: 'Entrar' }).click();
+
+      await expect(page.getByText('Ponte Nova', { exact: false }).first()).toBeVisible({ timeout: 15_000 });
+      await page.getByText('Ponte Nova', { exact: false }).first().click();
 
       await expect(page.getByRole('button', { name: 'Ponto', exact: true })).toBeVisible({ timeout: 15_000 });
 
-      // Vê abas admin
+      // Abas QUE vê
       await expect(page.getByRole('button', { name: /^Funcionários$/ }).first()).toBeVisible();
-      await expect(page.getByRole('button', { name: /^Usuários$/ }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Financeiro$/ }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Erros$/ }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /^Admin$/ }).first()).toBeVisible();
+
+      // Abas QUE NÃO vê (permission restrita vs admin master)
+      await expect(page.getByRole('button', { name: /^Usuários$/ })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /^Gerenciamento$/ })).toHaveCount(0);
     });
 
-    test.skip('H2. Admin 8888 logout limpa state corretamente', async ({ page }) => {
+    test('H2. Admin 8888 logout limpa state corretamente', async ({ page }) => {
       await page.goto('/');
       await page.locator('#id').fill(PN_ADMIN.id);
       await page.locator('#password').fill(PN_ADMIN.password);
       await page.getByRole('button', { name: 'Entrar' }).click();
+
+      // CompanySelector → escolhe PN
+      await expect(page.getByText('Ponte Nova', { exact: false }).first()).toBeVisible({ timeout: 15_000 });
+      await page.getByText('Ponte Nova', { exact: false }).first().click();
       await expect(page.getByRole('button', { name: 'Ponto', exact: true })).toBeVisible({ timeout: 15_000 });
 
       // Token presente
