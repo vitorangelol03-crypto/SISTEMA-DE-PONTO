@@ -317,8 +317,39 @@ Victor autorizou início do onboarding PN. Snapshot do DB revelou que PN já tin
 
 **Pendente — exige ação manual Victor:**
 - Planilha Excel com ~30 funcionários PN (nome+CPF+PIX+tipo de vínculo)
-- Importar via UI: login admin 9999 ou 8888 → aba Funcionários → "Importar Excel"
+- Importar via UI: login admin 9999 ou 8888 → aba Funcionários → "Importar"
 - Smoke test pós-import: 1 funcionário marca ponto via `/clock` + valida geo bloqueio (lat/lng fora do raio 150m)
+
+### 14.16 — Demo PN: 30 funcionários fictícios + Spec 101 supremo PN (2026-05-15)
+
+Vitor pediu: "podemos gerar dados ficticios de ponte novo em quanto a planilha não fica pronta".
+
+**Seed Demo PN (`scripts/seed-pn-fake.mjs`):**
+- 30 funcionários `Demo PN ...` em Ponte Nova
+- CPFs sintéticos válidos por algoritmo Mod11
+- PINs migrados pra bcrypt via pgcrypto `crypt(pin, gen_salt('bf', 10))` (mesma fórmula que 11.9.X)
+- Distribuição: 20 CLT + 8 Diarista + 2 PJ
+- Cidade=Ponte Nova, UF=MG, schedule padrão
+- Idempotente (cleanup `Demo PN%` antes de re-inserir)
+- Remoção quando planilha real chegar: `DELETE FROM employees WHERE company_id = '<pn>' AND name LIKE 'Demo PN%';`
+
+**Spec Supremo PN (`tests/101-supremo-pn.spec.ts`):**
+
+8 seções (A-H) cobrindo PN end-to-end:
+- A. Login + Multi-empresa (CompanySelector PN, switcher CT↔PN, senha errada) — 3 passing (1 skipped 8888)
+- B. Funcionários PN (lista 30 Demo PN, distribuição CLT/Diarista/PJ, PINs bcrypt) — 3/3
+- C. Marcação presença (lista cards, busca Demo PN, marcar presente via UI) — 3/3
+- D. /clock fluxo público (CPF Demo PN → PIN, edge fn verify-pin bcrypt valid/invalid, /erros) — 5/5
+- E. Isolamento RLS CT↔PN (employees, attendance, sem vazamento) — 3/3
+- F. Geolocalização (lat/lng/raio/block_outside corretos) — 3/3
+- G. Sweep visual 10 abas em PN sem console errors + import button — 2/2
+- H. Admin local 8888 (skipped — senha não confirmada por Victor)
+
+**Validação:**
+- Local chromium: 22 passed / 3 skipped em 1.4min
+- **Contra prod URL Vercel: 22 passed / 3 skipped em 60s** ✅
+
+**Pendência mínima:** Senha do admin local 8888 pra ativar 3 tests skipped.
 
 ---
 

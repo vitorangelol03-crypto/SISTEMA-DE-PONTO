@@ -3,7 +3,7 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-14 (sub-fase 14.12 — onboarding Ponte Nova 90% — falta planilha funcionários)
+**Última atualização:** 2026-05-15 (sub-fase 14.16 — PN com 30 Demo PN + Spec 101 22/22 contra prod)
 **Branch:** `main`
 **Plano canônico:** `PLANO_PRODUCAO.md`
 **TECH_DEBT canônico:** `TECH_DEBT.md`
@@ -69,7 +69,9 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 | **Edge functions ACTIVE** | **4** (auth-login v9, clock-in-validated v8, create-user v1, **employee-public-api v3 bcrypt**) |
 | **Migrations aplicadas** | **64** |
 | **Unit tests (Vitest)** | **431 passing** + 1 skipped (16 specs em `tests/unit/`) |
-| **E2E specs (Playwright)** | **44 specs** (suite contra prod: 263+/18/2 — só TECH_DEBT 6.13 cold-start) |
+| **E2E specs (Playwright)** | **49 specs** (suite contra prod: 263+/18/2 — só TECH_DEBT 6.13 cold-start) |
+| **Spec Supremo PN** | `tests/101-supremo-pn.spec.ts` — **22/22** + 3 skipped contra prod em 60s ✅ |
+| **Funcionários PN** | **30 Demo PN** (20 CLT + 8 Diarista + 2 PJ) com PINs bcrypt |
 | **Spec Supremo 2.0** | `tests/100-supremo-v2.spec.ts` — **46/46** contra prod URL em 2.0min ✅ |
 | **Lighthouse (dist build)** | Perf 87 / **A11y 100** / Best 100 / SEO 100 |
 | **PINs bcrypt** | **26/26** Caratinga (0 plain restantes) ✅ |

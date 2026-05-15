@@ -78,15 +78,15 @@ test.describe('HelpButton — botão flutuante de ajuda', () => {
       page.getByRole('heading', { name: /Ajuda Rápida/i })
     ).toBeVisible({ timeout: 5_000 });
 
-    // Section heading "Tutoriais desta aba" presente (currentTab === 'attendance')
-    await expect(
-      page.getByRole('heading', { name: /Tutoriais desta aba/i })
-    ).toBeVisible();
+    // Seção "Tutoriais desta aba" (currentTab === 'attendance')
+    const tabSection = page
+      .locator('section')
+      .filter({ hasText: 'Tutoriais desta aba' });
+    await expect(tabSection).toBeVisible({ timeout: 5_000 });
 
-    // O tutorial 'attendance-overview' (category='attendance') deve aparecer
-    await expect(
-      page.getByRole('heading', { name: 'Controle de Ponto' })
-    ).toBeVisible({ timeout: 5_000 });
+    // Tutorial 'attendance-overview' aparece dentro da seção contextual
+    // (escopado para evitar colidir com h2 "Controle de Ponto" do AttendanceTab)
+    await expect(tabSection.getByText('Controle de Ponto', { exact: true })).toBeVisible({ timeout: 5_000 });
   });
 
   test('d. click em tutorial dentro do modal abre TutorialDetail', async ({ page }) => {
@@ -98,8 +98,12 @@ test.describe('HelpButton — botão flutuante de ajuda', () => {
       page.getByRole('heading', { name: /Ajuda Rápida/i })
     ).toBeVisible({ timeout: 5_000 });
 
-    // Click no card "Controle de Ponto" dentro do modal HelpButton
-    await page.getByRole('heading', { name: 'Controle de Ponto' }).first().click();
+    // Click no card "Controle de Ponto" dentro da seção "Tutoriais desta aba"
+    // (escopado pra evitar colidir com heading h2 do AttendanceTab)
+    const tabSection = page
+      .locator('section')
+      .filter({ hasText: 'Tutoriais desta aba' });
+    await tabSection.getByText('Controle de Ponto', { exact: true }).click();
 
     // TutorialDetail abriu (mostra "Passo a Passo")
     await expect(
@@ -113,15 +117,16 @@ test.describe('HelpButton — botão flutuante de ajuda', () => {
   test('e. tutoriais contextuais MUDAM entre aba Ponto e aba Financeiro', async ({ page }) => {
     await loginAs(page, ADMIN);
 
-    // 1. Em Ponto: tutorial contextual é 'Controle de Ponto'
+    // 1. Em Ponto: tutorial contextual da seção "Tutoriais desta aba" é
+    //    "Controle de Ponto" (card h4 dentro do modal). Escopo direto na
+    //    seção evita colidir com h2 "Controle de Ponto" do AttendanceTab.
     await goToTab(page, 'Ponto');
     await floatingHelpButton(page).click();
-    await expect(
-      page.getByRole('heading', { name: /Tutoriais desta aba/i })
-    ).toBeVisible({ timeout: 5_000 });
-    await expect(
-      page.getByRole('heading', { name: 'Controle de Ponto' })
-    ).toBeVisible();
+    const tabSection = page
+      .locator('section')
+      .filter({ hasText: 'Tutoriais desta aba' });
+    await expect(tabSection).toBeVisible({ timeout: 5_000 });
+    await expect(tabSection.getByText('Controle de Ponto', { exact: true })).toBeVisible();
 
     // Fecha modal: X é o último botão dentro do header sticky do modal
     await page
@@ -141,18 +146,19 @@ test.describe('HelpButton — botão flutuante de ajuda', () => {
       page.getByRole('heading', { name: /Ajuda Rápida/i })
     ).toBeVisible({ timeout: 5_000 });
 
-    // 2. Em Financeiro: tutorial contextual inclui 'Histórico de Remoções de Bonificação'
-    //    (id=financial-bonus-history, category=financial em tutorialContent.ts:189)
+    // 2. Em Financeiro: tutorial contextual da seção "Tutoriais desta aba"
+    //    inclui "Histórico de Remoções de Bonificação"
+    //    (id=financial-bonus-history, category=financial em tutorialContent.ts:189).
+    const tabSectionFin = page
+      .locator('section')
+      .filter({ hasText: 'Tutoriais desta aba' });
+    await expect(tabSectionFin).toBeVisible({ timeout: 5_000 });
     await expect(
-      page.getByRole('heading', { name: /Histórico de Remoções de Bonificação/i })
+      tabSectionFin.getByText(/Histórico de Remoções de Bonificação/i)
     ).toBeVisible({ timeout: 5_000 });
 
-    // E "Controle de Ponto" (categoria attendance) NÃO está na seção "Tutoriais
-    // desta aba" — mas pode aparecer em "Outras funcionalidades". Validar que
-    // a section "Tutoriais desta aba" não inclui o título exato de attendance:
-    // o tutorial attendance pode estar em "Outras funcionalidades" (slice 5),
-    // mas o contextualTutorials filtrado por currentTab='financial' não inclui.
-    // Aqui apenas validamos a inversão da seção principal — assertion suficiente.
+    // E "Controle de Ponto" NÃO aparece na seção "Tutoriais desta aba" do Financeiro
+    await expect(tabSectionFin.getByText('Controle de Ponto', { exact: true })).toHaveCount(0);
   });
 
   test('f. botão X fecha modal HelpButton', async ({ page }) => {
