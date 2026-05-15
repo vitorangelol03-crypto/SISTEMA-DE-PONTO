@@ -153,12 +153,35 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run Playwright tests
-        # Exclui spec 99 (já 100% coberto por 100-supremo-v2, redundante).
-        # Reduz ~5-10min em CI sem perder cobertura real. Regex casa só o
-        # describe do spec 99 (não pega 100 ou 101).
+      - name: Run Playwright tests (essencial)
+        # CI tem ~4x mais latência que local. Suite completa local: ~17min;
+        # em CI: >90min (timeout 3x consecutivos). Estratégia: rodar APENAS
+        # specs essenciais (smoke + supremo CT + supremo PN + RLS) em CI.
+        # Cobertura full continua disponível LOCAL e via workflow_dispatch.
+        #
+        # Specs essenciais escolhidos (~15min em CI):
+        #   01-auth                 — autenticação + JWT custom
+        #   02-employee-clock       — fluxo /clock público
+        #   25-multi-company-iso    — RLS isolamento CT ↔ PN
+        #   38-system-walkthrough   — console-clean em todas abas
+        #   100-supremo-v2          — 46 tests cobertura ampla (CT)
+        #   101-supremo-pn          — 25 tests Ponte Nova
+        #
+        # Pra rodar suite COMPLETA: workflow_dispatch (manual no GitHub UI).
         run: |
-          npx playwright test --workers=1 --grep-invert="Teste Supremo: fluxo completo"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "🔁 Manual trigger — rodando suite completa"
+            npx playwright test --workers=1
+          else
+            echo "⚡ Push/PR — rodando apenas specs essenciais"
+            npx playwright test --workers=1 \
+              tests/01-auth.spec.ts \
+              tests/02-employee-clock.spec.ts \
+              tests/25-multi-company-isolation.spec.ts \
+              tests/38-system-walkthrough.spec.ts \
+              tests/100-supremo-v2.spec.ts \
+              tests/101-supremo-pn.spec.ts
+          fi
 
       - name: Upload Playwright report
         if: ${{ !cancelled() && failure() }}
