@@ -96,6 +96,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Vite só lê VITE_* de arquivo .env (não de process.env).
+      # Cria .env temporário no CI a partir dos secrets do job env.
+      - name: Create .env from secrets
+        run: |
+          cat > .env <<EOF
+          VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+          VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+          SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
+          EOF
+
       - name: Run unit tests
         run: npm run test:unit
 
@@ -127,6 +137,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Vite (webServer do playwright) só lê VITE_* de arquivo .env.
+      - name: Create .env from secrets
+        run: |
+          cat > .env <<EOF
+          VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+          VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+          SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
+          EOF
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
