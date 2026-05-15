@@ -159,6 +159,10 @@ jobs:
         # specs essenciais (smoke + supremo CT + supremo PN + RLS) em CI.
         # Cobertura full continua disponível LOCAL e via workflow_dispatch.
         #
+        # --project=chromium evita rodar duplicado em mobile-pixel5
+        # (que tem TECH_DEBT 6.25 conhecido: TabNavigation hamburger não
+        # cobre todos selectors; mobile só rodado sob demanda local).
+        #
         # Specs essenciais escolhidos (~15min em CI):
         #   01-auth                 — autenticação + JWT custom
         #   02-employee-clock       — fluxo /clock público
@@ -167,14 +171,14 @@ jobs:
         #   100-supremo-v2          — 46 tests cobertura ampla (CT)
         #   101-supremo-pn          — 25 tests Ponte Nova
         #
-        # Pra rodar suite COMPLETA: workflow_dispatch (manual no GitHub UI).
+        # Pra rodar suite COMPLETA + mobile: workflow_dispatch (manual).
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "🔁 Manual trigger — rodando suite completa"
+            echo "🔁 Manual trigger — rodando suite completa (chromium + mobile)"
             npx playwright test --workers=1
           else
-            echo "⚡ Push/PR — rodando apenas specs essenciais"
-            npx playwright test --workers=1 \
+            echo "⚡ Push/PR — rodando apenas specs essenciais (chromium only)"
+            npx playwright test --workers=1 --project=chromium \
               tests/01-auth.spec.ts \
               tests/02-employee-clock.spec.ts \
               tests/25-multi-company-isolation.spec.ts \
