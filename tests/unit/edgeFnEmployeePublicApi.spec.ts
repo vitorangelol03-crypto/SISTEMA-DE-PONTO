@@ -173,9 +173,10 @@ async function callEdgeFn(action: string, payload: Record<string, unknown>): Pro
 // `describe.skipIf` documenta o motivo no relatório do vitest.
 describe.skipIf(!HAS_SERVICE_ROLE)(
   'edge fn employee-public-api — happy paths (set-pin, save-face, log-face-attempt)',
-  // Sub-fase 14.13: timeout 15s — set-pin é flaky em ~5s sob carga
-  // (cold-start residual edge fn + bcryptjs.hash).
-  { timeout: 15_000 },
+  // Sub-fase 14.13/14.17: timeout 30s — set-pin chama bcrypt.hash que pode
+  // bater cold-start absoluto da edge fn (~150s pior caso, ~5s warm). Em CI
+  // GitHub Actions o cold-start é mais frequente. 30s acomoda warm + slack.
+  { timeout: 30_000 },
   () => {
     let currentEmployee: FixtureEmployee | null = null;
 

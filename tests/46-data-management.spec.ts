@@ -26,8 +26,6 @@ import { getClient } from './cleanup';
  *  - Histórico: lista cleanup_logs (mesmo que vazio mostra placeholder)
  */
 
-const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
-
 async function unlockDataMgmt(page: Page): Promise<void> {
   await goToTab(page, 'Gerenciamento');
   // Heading principal renderiza imediatamente quando company.id resolve
