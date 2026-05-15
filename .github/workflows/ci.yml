@@ -75,6 +75,14 @@ jobs:
     name: vitest (unit)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # tests/unit/edgeFnEmployeePublicApi.spec.ts faz chamadas reais à edge fn
+      # employee-public-api e usa SERVICE_ROLE_KEY pra cleanup. Sem essas vars
+      # o describe.skipIf(!HAS_SERVICE_ROLE) pula a suite inteira (válido), mas
+      # outros tests podem usar VITE_* indiretamente via imports de src/.
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
