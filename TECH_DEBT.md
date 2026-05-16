@@ -16,39 +16,11 @@
 
 ## 🟡 Inconsistências arquiteturais
 
-### 6.23 — [Baixa-Média] `validatePixKey` em c6Export não normaliza CPF/CNPJ formatado
+### 6.23 — ✅ RESOLVIDO sub-fase 14.20 (2026-05-16)
 
-**Local:** `src/utils/c6Export.ts:32-48` (função interna não-exportada).
+Refactor aplicado em `src/utils/c6Export.ts:33-52`: `onlyDigits = pixKey.replace(/\D/g, '')` aplicado em CPF/CNPJ/phone regexes. Email/UUID continuam usando string original. CPF formatado (`123.456.789-01`), CNPJ formatado (`12.345.678/0001-95`) e phone formatado (`(11) 98765-4321`) agora retornam **OK** no Status do sheet.
 
-**Comportamento descoberto na sub-fase 6.3 (auditoria de testes):**
-```typescript
-const cleanKey = pixKey.replace(/[^\w@.-]/g, ''); // mantém . e -
-return cpfRegex.test(cleanKey) || ...
-// onde cpfRegex = /^\d{11}$/
-```
-
-O regex `cleanKey` remove apenas caracteres FORA de `[\w@.-]`. Pontos e hífens são MANTIDOS. CPF `'123.456.789-01'` (formato padrão de exibição) NÃO bate `/^\d{11}$/` e é marcado como `VERIFICAR` na planilha C6.
-
-**Impacto operacional:**
-- Funcionários cadastrados com PIX em formato `XXX.XXX.XXX-XX` (CPF formatado) viram VERIFICAR no relatório.
-- Status incorreto pode atrasar pagamento se admin confiar cegamente na coluna Status.
-- Mitigação atual: admin precisa cadastrar `pix_key` sem pontuação.
-
-**Severidade:** Baixa-Média — não bloqueia pagamento (sheet ainda exporta), mas confunde admin. Risco maior em empresas com importação automática de PIX (não controlam formato).
-
-**Solução estrutural sugerida:**
-```typescript
-// Trocar regex de limpeza pra remover TUDO que não é número (pra CPF/CNPJ/phone)
-const cleanDigits = pixKey.replace(/\D/g, '');
-const cleanKey = pixKey.replace(/[^\w@.-]/g, ''); // mantém pra email/UUID
-return cpfRegex.test(cleanDigits) || cnpjRegex.test(cleanDigits) ||
-       emailRegex.test(pixKey) || phoneRegex.test(cleanDigits) ||
-       randomKeyRegex.test(cleanKey);
-```
-
-E adicionar test cases pra CPF/CNPJ com pontuação retornar OK.
-
-**Status:** Pendente — sub-fase futura (fix trivial, mas precisa coordenação com cadastros existentes pra não invalidar PIX que hoje passa como `VERIFICAR` mas era válido apesar do formato).
+3 test cases novos adicionados em `tests/unit/c6Export.spec.ts` (4b, 4c, 4d) — total 51 testes vitest passando. Ver entrada no Histórico.
 
 ---
 
@@ -412,6 +384,36 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-16 — Sub-fase 14.20: TECH_DEBT 6.23 (validatePixKey aceita CPF/CNPJ formatado)
+
+**Resolvido:** `validatePixKey` em `src/utils/c6Export.ts:33-52` agora aceita CPF/CNPJ/phone formatados (`123.456.789-01`, `12.345.678/0001-95`, `(11) 98765-4321`).
+
+**Fix aplicado:**
+```typescript
+// Antes: cleanKey mantinha . e -, /^\d{11}$/ não batia em CPF formatado
+const cleanKey = pixKey.replace(/[^\w@.-]/g, '');
+return cpfRegex.test(cleanKey) || ...
+
+// Depois: onlyDigits remove tudo não-numérico antes de bater CPF/CNPJ/phone
+const onlyDigits = pixKey.replace(/\D/g, '');
+return cpfRegex.test(onlyDigits) ||
+       cnpjRegex.test(onlyDigits) ||
+       phoneRegex.test(onlyDigits) ||
+       emailRegex.test(pixKey) ||          // string original (precisa @)
+       randomKeyRegex.test(pixKey);        // string original (formato UUID)
+```
+
+**Why:** Admin C6 confundia com `VERIFICAR` em chaves PIX formatadas (formato natural de exibição). Mitigação atual era cadastrar sem pontuação — workaround frágil. Fix trivial e seguro: email/UUID continuam validados em string original (não dependem de normalização).
+
+**Test cases novos** (`tests/unit/c6Export.spec.ts`):
+- `4b` CNPJ formatado `12.345.678/0001-95` → OK
+- `4c` Phone formatado `(11) 98765-4321` (11 dígitos) → OK
+- `4d` Phone formatado `(11) 9876-5432` (10 dígitos) → OK
+
+Total vitest: 48 → **51 passing** em 1.44s.
+
+---
 
 ### 2026-05-16 — Sub-fase 14.19: TECH_DEBT 6.17 (flake 24-admin timeout)
 

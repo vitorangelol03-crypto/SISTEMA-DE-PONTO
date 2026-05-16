@@ -39,13 +39,17 @@ const validatePixKey = (pixKey: string): boolean => {
   const phoneRegex = /^\d{10,11}$/;
   const randomKeyRegex = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 
-  const cleanKey = pixKey.replace(/[^\w@.-]/g, '');
+  // Sub-fase 14.20 (TECH_DEBT 6.23): CPF/CNPJ/phone formatados
+  // (123.456.789-01, 12.345.678/0001-95, (11) 98765-4321) devem passar.
+  // Normaliza só pra dígitos antes de bater regex numéricas.
+  // Email/UUID usam string original (precisam @ e - exatos).
+  const onlyDigits = pixKey.replace(/\D/g, '');
 
-  return cpfRegex.test(cleanKey) ||
-         cnpjRegex.test(cleanKey) ||
+  return cpfRegex.test(onlyDigits) ||
+         cnpjRegex.test(onlyDigits) ||
+         phoneRegex.test(onlyDigits) ||
          emailRegex.test(pixKey) ||
-         phoneRegex.test(cleanKey) ||
-         randomKeyRegex.test(cleanKey);
+         randomKeyRegex.test(pixKey);
 };
 
 export const exportC6PaymentSheet = async (

@@ -109,12 +109,24 @@ describe('validatePixKey (testado via coluna Status do sheet Pagamentos PIX)', (
     expect(await statusFor('123456789')).toBe('VERIFICAR');
   });
 
-  it('3. CPF com pontuação (123.456.789-01) → VERIFICAR (não normaliza, TECH_DEBT 6.23)', async () => {
-    expect(await statusFor('123.456.789-01')).toBe('VERIFICAR');
+  it('3. CPF com pontuação (123.456.789-01) → OK (sub-fase 14.20 normaliza)', async () => {
+    expect(await statusFor('123.456.789-01')).toBe('OK');
   });
 
   it('4. CNPJ 14 dígitos → OK', async () => {
     expect(await statusFor('12345678000195')).toBe('OK');
+  });
+
+  it('4b. CNPJ formatado (12.345.678/0001-95) → OK (sub-fase 14.20 normaliza)', async () => {
+    expect(await statusFor('12.345.678/0001-95')).toBe('OK');
+  });
+
+  it('4c. Phone formatado ((11) 98765-4321) → OK (sub-fase 14.20 normaliza)', async () => {
+    expect(await statusFor('(11) 98765-4321')).toBe('OK');
+  });
+
+  it('4d. Phone formatado com hifen (11) 9876-5432 (10 dígitos) → OK', async () => {
+    expect(await statusFor('(11) 9876-5432')).toBe('OK');
   });
 
   it('5. Email válido → OK', async () => {
