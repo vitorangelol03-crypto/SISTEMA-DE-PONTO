@@ -277,27 +277,9 @@ if (!(await elem.isVisible().catch(() => false))) {
 
 ---
 
-### 6.17 — [Baixa] Flake `tests/24-admin-complete.spec.ts:49` sob carga
+### 6.17 — ✅ RESOLVIDO sub-fase 14.19 (2026-05-16)
 
-**Local exato:** `tests/24-admin-complete.spec.ts:49` (teste "senha errada → 'Senha incorreta'")
-
-**Pattern (auditoria 2026-05-09):**
-```typescript
-await expect(
-  page.getByText(/Senha incorreta/i).first()
-).toBeVisible({ timeout: 10_000 });
-```
-
-**Sintoma:** passa em isolamento (6.2s), falha sob carga de full suite Playwright (timeout 10s). Reproduzido na validação 3.5 prep da Etapa 3.
-
-**Severidade:** Baixa.
-
-**Solução proposta:**
-- Aumentar timeout pra 15-20s; OU
-- Substituir por `data-testid` mais específico; OU
-- Isolar em retry block
-
-**Status:** Pendente — não bloqueante.
+Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Validação isolada: 5.3s passou. Ver entrada no Histórico.
 
 ---
 
@@ -430,6 +412,26 @@ await expect(
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-16 — Sub-fase 14.19: TECH_DEBT 6.17 (flake 24-admin timeout)
+
+**Resolvido:** flake `tests/24-admin-complete.spec.ts:48` ("senha errada → 'Senha incorreta'").
+
+**Fix aplicado** (linha 53):
+```typescript
+// Antes
+await expect(page.getByText(/Senha incorreta/i).first()).toBeVisible({ timeout: 10_000 });
+
+// Depois
+// Sub-fase 14.19 (TECH_DEBT 6.17): timeout 10s→20s — flake sob carga full suite
+await expect(page.getByText(/Senha incorreta/i).first()).toBeVisible({ timeout: 20_000 });
+```
+
+**Validação isolada:** `npx playwright test tests/24-admin-complete.spec.ts:48 --workers=1` → 5.3s ✅.
+
+**Why:** O teste passava isolado em 6.2s mas falhava sob carga de full suite (timeout 10s curto). Aumentar pra 20s dá margem 3x sem mexer em selector ou estrutura.
+
+---
 
 ### 2026-05-14 — Sub-fase 14.13 + 14.14: audit final + correções de lacunas
 

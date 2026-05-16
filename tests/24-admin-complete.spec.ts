@@ -49,7 +49,8 @@ test.describe('Admin — completo', () => {
     await goToTab(page, 'Admin');
     await page.getByPlaceholder('Senha').fill('senha-errada-123');
     await page.getByRole('button', { name: /^Entrar$/ }).click();
-    await expect(page.getByText(/Senha incorreta/i).first()).toBeVisible({ timeout: 10_000 });
+    // Sub-fase 14.19 (TECH_DEBT 6.17): timeout 10s→20s — flake sob carga full suite
+    await expect(page.getByText(/Senha incorreta/i).first()).toBeVisible({ timeout: 20_000 });
   });
 
   test.skip('senha correta → painel desbloqueado — coberto em 12-admin-tab.spec.ts', async () => {});
