@@ -7,17 +7,21 @@ e este projeto adota [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
-## [Unreleased] — sub-fases 14.11 a 14.14 (2026-05-13 a 2026-05-14)
+## [Unreleased] — sub-fases 14.11 a 14.23 (2026-05-13 a 2026-05-16)
+
+> Quando promovido para release, vai virar `v2.0.0-multi-tenant` (consolidado).
 
 ### 🚀 Deploy + Onboarding
 - **Caratinga em produção:** https://sistema-ponto-zeta.vercel.app ✅
-- **Ponte Nova 90% configurada:** geolocation + bonus_types + payment_period_config mensal ✅
+- **Ponte Nova 90% configurada:** geolocation + bonus_types + payment_period_config mensal ✅ (pendente: planilha real ~30 funcionários)
 - **26 PINs Caratinga migrados** plain → bcrypt (pgcrypto compat com bcryptjs)
+- **30 funcionários Demo PN** com PINs bcrypt (20 CLT + 8 Diarista + 2 PJ) — sub-fase 14.16
 
 ### 🔒 Segurança
 - **Bug crítico fixado:** `resetToDefault()` transformava supervisor em admin
 - **PIN bcrypt dual-mode** edge fn employee-public-api v3
 - **6 bugs UX permissões** descobertos via audit + fixados (FinancialTab, C6PaymentTab, AttendanceApprovalPanel, ReportsTab, defaults applyBonus)
+- **Login admin local PN 8888** com password_hash bcrypt aplicado — sub-fase 14.17
 
 ### ♿ Acessibilidade + Mobile
 - **Lighthouse A11y: 75 → 100** (`<main>` landmark, aria-label nos botões eye, contraste WCAG AA)
@@ -27,32 +31,53 @@ e este projeto adota [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - **Spec Supremo 2.0** (`tests/100-supremo-v2.spec.ts`): 46 tests / 12 seções (A-L)
   - localhost: 46/46 em 3.1min
   - **prod: 46/46 em 2.0min** ✅
+- **Spec Supremo PN** (`tests/101-supremo-pn.spec.ts`): **25/25 contra prod em 1.1min** ✅ — sub-fase 14.16/14.17
 - **Suite contra prod:** 263+/18/2 (apenas TECH_DEBT 6.13 cold-start aceito)
 - **Mobile E2E project** `mobile-pixel5` adicionado em playwright.config.ts
+
+### 🤖 CI GitHub Actions (sub-fases 14.17.1 a 14.17.10 — 2026-05-15/16)
+- **Run #21 SUCCESS** (sha b18fd38, 8m47s): vitest 30s + tsc 22s + playwright 8m43s ✅
+- 10 iterações pra deixar CI 100% verde — causa raiz: Vite só lê `VITE_*` de arquivo `.env` (não `process.env`). Workflow agora cria `.env` from secrets antes dos tests.
+- **Suite essencial CI:** 6 specs chromium (auth, clock, multi-empresa, walkthrough, supremos v2/PN)
+- **Full suite manual:** workflow_dispatch via GitHub UI
+
+### 🔧 Quick wins (sub-fases 14.18 a 14.21 — 2026-05-16)
+- **PLANO_100.md** criado — roadmap completo até 100% (sub-fase 14.18)
+- **TECH_DEBT 6.17 resolvido**: timeout `24-admin:48` "Senha incorreta" 10s→20s — sub-fase 14.19
+- **TECH_DEBT 6.23 resolvido**: `validatePixKey` aceita CPF/CNPJ/phone formatados (`123.456.789-01`, `12.345.678/0001-95`, `(11) 98765-4321`). +3 unit tests, total 51 vitest passing — sub-fase 14.20
+- **Vite chunk warning silenciado**: `chunkSizeWarningLimit` 600→1000kB (2 chunks excedem 600kB; gzip reduz ~70%) — sub-fase 14.21
+- **Docs obsoletas limpas**: `CHECKPOINT_PROXIMOS_PASSOS.md` entries 3.5/3.6 — sub-fase 14.21
 
 ### 📚 Ajuda
 - **15 tutoriais novos** (28 total) cobrindo features fases 8-14:
   - multi-empresa, /clock, /erros, geo, facial, banco horas, admin tab, mirror massa, reset PIN/face, company settings, bonus types, triagem, permissões, payment period auto, security overview
 
-### 📊 Métricas atualizadas
+### 📊 Métricas atualizadas (consolidadas 2026-05-16)
 | Indicador | Valor |
 |---|---|
 | Migrations | 57 → **64** |
 | RLS tables | 48 → **50** |
-| Unit tests | 422 → **431** passing |
+| Unit tests | 422 → **434** passing (+3 quick wins) |
 | Edge fns ACTIVE | 4 (employee-public-api v2 → **v3 bcrypt**) |
-| E2E specs | 40 → **44** |
+| E2E specs | 40 → **49** |
 | Tutoriais Ajuda | 13 → **28** |
+| CI GitHub Actions | **100% VERDE** (Run #21 8m47s) ✅ |
 
 ### 🔧 Tech debt residual aceito
 - **TECH_DEBT 6.13** — cold-start edge fn create-user em prod URL >3min (característica conhecida Supabase Edge Functions free tier)
+- **TECH_DEBT 14.A** — xlsx Prototype Pollution + ReDoS (sem patch upstream; mitigado por admin-only upload + validação schema)
+- **TECH_DEBT 14.B** — 148 performance advisors Supabase (não bloqueia; planejado Fase 15 pós-onboarding PN com dados reais)
 
 ---
 
-## [v2.0.0-multi-tenant] — 2026-05-13
+## [v2.0.0-multi-tenant] — 2026-05-13 (estado base; consolidação com hotfixes em [Unreleased] acima)
 
 > **Marco:** refatoração completa para suporte multi-empresa via RLS + bcrypt.
 > Resultado: **0 ERRORs** no Sistema de Ponto core, **259 specs E2E passing 100% determinístico**.
+>
+> ⚠️ **Nota 2026-05-16:** este entry cobre o estado base de 13/5. Hotfixes/quick wins
+> aplicados desde então (sub-fases 14.13-14.21) estão na seção [Unreleased] acima.
+> Tag final `v2.0.0-multi-tenant` aponta pro estado consolidado.
 
 ### 🎯 Visão geral
 
@@ -142,8 +167,8 @@ Diagramas detalhados em `ARCHITECTURE.md`.
 | A11y 3 issues (buttons sem accessible name, contraste, `<main>` landmark) | Baixa | ~2-3h |
 | PIN funcionário plain text (mitigado por RLS) | Baixa | ~2h (bcrypt migrate) |
 | Cold start `create-user` ~150s primeira chamada pós-deploy | Aceito | N/A (UI spinner) |
-| `User.password` cosmetic cleanup em `database.ts:14-20` | Trivial | 10min |
-| Vite warnings (esbuild deprecated, optimizeDeps.esbuildOptions) | Baixa | Vite 5→6 migration |
+| ~~`User.password` cosmetic cleanup em `database.ts:14-20`~~ | ✅ Resolvido | Sub-fase 14.21 |
+| ~~Vite warnings (esbuild deprecated, optimizeDeps.esbuildOptions)~~ | ✅ Mitigado | Sub-fase 14.21 |
 | 6 WARNs persistentes em advisors (3 SECURITY DEFINER nossas intencionais + 16 legado) | Aceito | N/A |
 
 Detalhes em `TECH_DEBT.md`.
@@ -156,10 +181,13 @@ Detalhes em `TECH_DEBT.md`.
 3. Admin master `9999/684171` existente no DB (já criado em prod)
 4. **NUNCA** colocar `SUPABASE_SERVICE_ROLE_KEY` no frontend prod (bypassa RLS)
 
-**Pendente go-live:**
-- [ ] Onboarding Ponte Nova (~30 funcionários + geo + bonus + admin local 8888)
-- [ ] Deploy frontend prod (Vercel/Netlify/Cloudflare Pages)
-- [ ] Smoke test pós-deploy (login admin + clock-in real)
+**Pendente go-live (status 2026-05-16):**
+- [x] Deploy frontend prod — **Caratinga em prod** https://sistema-ponto-zeta.vercel.app ✅
+- [x] Smoke test pós-deploy (login admin Caratinga + clock-in real) ✅
+- [x] Admin local PN `8888` configurado com password_hash bcrypt ✅
+- [x] PN geo + bonus_types + payment_period_config mensal ✅
+- [ ] Importar planilha real PN (~30 funcionários) — **aguarda Victor**
+- [ ] Push tag `v2.0.0-multi-tenant` + GitHub Release — **aguarda Victor**
 
 ### 🔗 Referências
 
