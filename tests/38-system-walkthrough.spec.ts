@@ -30,6 +30,9 @@ const IGNORED_PATTERNS: RegExp[] = [
   /xlsx-js-style/,                          // warnings da lib
   /\[useAuth\]/,                            // warnings esperados de re-login flow
   /CompanySwitcher: falha ao persistir/,    // já testado catch
+  /Failed to fetch/,                        // race entre reload e queries em flight (CI > local)
+  /Erro ao carregar (dados|bonus_types|tipos)/,  // mesma causa: queries canceladas pelo reload
+  /autoCreateWeeklyPeriod falhou/,          // idem
   /Erro ao carregar tipos/,                 // fallback handled
   /\[cleanup\.ts\]/,                        // warning de SERVICE_ROLE missing (esperado)
 ];

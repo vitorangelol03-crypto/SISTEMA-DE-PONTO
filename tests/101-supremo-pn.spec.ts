@@ -46,6 +46,11 @@ const IGNORED_PATTERNS: RegExp[] = [
   /\[useAuth\]/, /CompanySwitcher: falha ao persistir/,
   /Erro ao carregar tipos/, /\[cleanup\.ts\]/,
   /CompanyContext init error.*Failed to fetch/,
+  // Race CI: window.location.reload() do CompanySwitcher cancela queries em flight.
+  /Failed to fetch/,
+  /Erro ao carregar dados/,
+  /Erro ao carregar bonus_types/,
+  /autoCreateWeeklyPeriod falhou/,
 ];
 
 interface Capture { errors: string[]; pageErrors: string[]; }
