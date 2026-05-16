@@ -536,7 +536,17 @@ Fechamento sólido do bloco quick wins 14.18-14.22 (~2h10 total executado).
 - `CHECKPOINT_PROXIMOS_PASSOS.md`: entries 3.5/3.6 marcadas como resolvidas (em 14.21)
 - `TECH_DEBT.md`: 3 entries resolvidos hoje no Histórico (14.19, 14.20, 14.21)
 
-**Tag local criada:** `v2.0.0-multi-tenant` apontando pra este commit (push fica com Victor).
+**Tag NÃO criada** (decisão segura):
+- Tag `v2.0.0-multi-tenant` JÁ existe local + remote apontando pra `d94a324` (sub-fase 14.10, 2026-05-14)
+- Recriar exigiria deletar tag remote (destrutivo — pode bagunçar consumidores)
+- Recomendação pra Victor: criar **`v2.0.0-multi-tenant.1`** (patch release) apontando pro commit `c04a869` (este sub-fase), cobrindo o bloco quick wins 14.18-14.23
+
+```bash
+# Quando Victor decidir:
+git tag -a v2.0.0-multi-tenant.1 c04a869 -m "Patch release: quick wins 14.18-14.23 + checkpoint completo"
+git push origin v2.0.0-multi-tenant.1
+gh release create v2.0.0-multi-tenant.1 --title "v2.0.0.1 — Quick wins consolidados" --notes-file RELEASE_NOTES_v2.0.0.md
+```
 
 **Resumo bloco quick wins 14.18-14.22:**
 

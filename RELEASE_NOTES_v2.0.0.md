@@ -1,8 +1,17 @@
-# 🚀 Release v2.0.0-multi-tenant
+# 🚀 Release v2.0.0-multi-tenant.1 (patch consolidado)
 
 **Data:** 2026-05-16
-**Tag:** `v2.0.0-multi-tenant`
-**Commit base:** (atualizar com sha do commit final pós-checkpoint 14.23)
+**Tag sugerida:** `v2.0.0-multi-tenant.1` (patch)
+**Commit base:** `c04a869` (sub-fase 14.23 — checkpoint completo)
+
+> ⚠️ **Por que `.1`?** A tag `v2.0.0-multi-tenant` já existe local + remote
+> apontando pra `d94a324` (sub-fase 14.10, 2026-05-14). Pra preservar histórico,
+> sugiro criar tag patch `v2.0.0-multi-tenant.1` cobrindo:
+> - Sub-fases 14.11 → 14.17.10 (Caratinga prod, PN onboarding parcial, CI verde)
+> - Sub-fases 14.18 → 14.23 (PLANO_100 + 4 quick wins + checkpoint)
+>
+> Alternativa: deletar tag existente e recriar (destrutivo no remote — só se
+> ninguém consumiu a tag ainda).
 
 > Refatoração completa do Sistema de Ponto pra suporte multi-empresa via Row Level
 > Security + bcrypt. **Sistema em produção** desde 14/5 com Caratinga validada.
@@ -176,15 +185,27 @@ Após validar o estado:
 # 1. Push do branch main com todos os commits da Fase 14
 git push origin main
 
-# 2. Criar tag local (já preparada após sub-fase 14.23)
-# Se a tag local existir: git tag -l v2.0.0-multi-tenant
-# Senão: git tag v2.0.0-multi-tenant -m "Release v2.0.0 multi-tenant"
+# 2. Criar tag patch (a v2.0.0-multi-tenant existente fica como marco original)
+git tag -a v2.0.0-multi-tenant.1 c04a869 -m "Patch v2.0.0.1 — Quick wins 14.18-14.23"
 
-# 3. Push da tag
-git push origin v2.0.0-multi-tenant
+# 3. Push da tag patch
+git push origin v2.0.0-multi-tenant.1
 
 # 4. Criar GitHub Release usando este arquivo como notes
-gh release create v2.0.0-multi-tenant \
-  --title "v2.0.0-multi-tenant — Sistema de Ponto Multi-Empresa" \
+gh release create v2.0.0-multi-tenant.1 \
+  --title "v2.0.0-multi-tenant.1 — Quick wins consolidados" \
   --notes-file RELEASE_NOTES_v2.0.0.md
+```
+
+**Alternativa (destrutivo — só se ninguém consumiu a tag original):**
+
+```bash
+# Delete tag local + remote
+git tag -d v2.0.0-multi-tenant
+git push origin :refs/tags/v2.0.0-multi-tenant
+
+# Recriar apontando pro commit atual
+git tag -a v2.0.0-multi-tenant c04a869 -m "Release v2.0.0 consolidada"
+git push origin v2.0.0-multi-tenant
+gh release create v2.0.0-multi-tenant --title "..." --notes-file RELEASE_NOTES_v2.0.0.md
 ```
