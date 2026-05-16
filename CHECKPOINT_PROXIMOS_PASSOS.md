@@ -75,13 +75,13 @@
 - Característica conhecida — esm.sh bcryptjs download. Warm 0.57s.
 - UI tem spinner com mensagem "pode levar até 2 minutos no primeiro uso".
 
-### 3.5 `User` interface (`database.ts:14-20`) ainda tem `password: string`
-- TS aceita (campo opcional faltante = undefined).
-- **Limpeza cosmética** — não funcional. Sub-fase 14.X cleanup.
+### 3.5 ~~`User` interface tem `password: string`~~ — ✅ Resolvido em 11.6 (cleanup confirmado em 14.21)
+- Interface `User` em `src/services/database.ts:41-46` já está limpa: `{ id, role, created_by, created_at }`.
+- Doc atualizada em 14.21 (entry estava obsoleta).
 
-### 3.6 Vite warnings (esbuild deprecated, optimizeDeps.esbuildOptions)
-- Vite 5 → 6 migration trigger.
-- Sem impacto funcional. Sub-fase 14.X cleanup.
+### 3.6 ~~Vite warnings (esbuild deprecated)~~ — ✅ Mitigado em 14.21
+- `chunkSizeWarningLimit` bumpado de 600→1000kB em `vite.config.ts:48`.
+- Warnings de `vite:react-babel` (esbuild→oxc, optimizeDeps.esbuildOptions→rolldownOptions) são internos do plugin `@vitejs/plugin-react` — só resolvem com upgrade Vite 6 + plugin novo. Fora do escopo quick win.
 
 ---
 

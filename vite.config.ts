@@ -45,6 +45,10 @@ export default defineConfig({
         },
       },
     },
-    chunkSizeWarningLimit: 600,
+    // Sub-fase 14.21: bump 600→1000kB pra silenciar warning informativo.
+    // 2 chunks excedem 600kB (index ~880kB, xlsx ~870kB) — não bloqueia
+    // funcionalidade nem perf prod (gzip reduz ~70%). Code splitting real
+    // via React.lazy() fica pra refator maior (não é quick win).
+    chunkSizeWarningLimit: 1000,
   },
 });

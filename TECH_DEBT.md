@@ -385,6 +385,20 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-16 — Sub-fase 14.21: Docs obsoletas + chunkSizeWarningLimit bump
+
+**Trabalho:**
+- `CHECKPOINT_PROXIMOS_PASSOS.md` entries 3.5 e 3.6 marcadas como resolvidas (estavam obsoletas).
+- `vite.config.ts:48` — `chunkSizeWarningLimit` 600→1000kB (silencia warning informativo de 2 chunks grandes: `index ~880kB`, `xlsx ~870kB`). Gzip reduz ~70% — não impacta perf prod.
+
+**Why entry 3.5:** Interface `User` em `src/services/database.ts:41-46` JÁ ESTAVA limpa (`{id, role, created_by, created_at}` sem `password`). Sub-fase 11.6 removeu o campo plain. Entry no `CHECKPOINT_PROXIMOS_PASSOS.md` apontava `database.ts:14-20` (linha desatualizada) e dizia "ainda tem password" — entrada obsoleta. Validado via grep: sem refs a `User.password`.
+
+**Why entry 3.6:** Vite warnings (esbuild deprecated → oxc, optimizeDeps.esbuildOptions → rolldownOptions) vêm de `vite:react-babel` plugin interno do `@vitejs/plugin-react`. Resolvem só com upgrade Vite 5→6 + plugin novo — fora de quick win. Bump do chunkSizeWarningLimit é mitigação parcial (silencia chunk warning, não os deprecation warnings que só aparecem no dev/vitest).
+
+**Code splitting via React.lazy** documentado em `PLANO_100.md` como refator futuro (não é quick win).
+
+---
+
 ### 2026-05-16 — Sub-fase 14.20: TECH_DEBT 6.23 (validatePixKey aceita CPF/CNPJ formatado)
 
 **Resolvido:** `validatePixKey` em `src/utils/c6Export.ts:33-52` agora aceita CPF/CNPJ/phone formatados (`123.456.789-01`, `12.345.678/0001-95`, `(11) 98765-4321`).
