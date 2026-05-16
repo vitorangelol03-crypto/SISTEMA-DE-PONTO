@@ -44,14 +44,14 @@ Sistema considerado 100% quando:
 
 | Sub-fase | Item | Esforço | Bloqueia? | Status |
 |---|---|---|---|---|
-| **14.18** | Análise + plano mestre PLANO_100.md | 30min | — | **EM EXECUÇÃO** |
-| **14.19** | Quick win C — Flake `24-admin:49` timeout 10s→20s (TECH_DEBT 6.17) | 15min | Não | Pending |
-| **14.20** | Quick win B — `validatePixKey` aceita CPF/CNPJ formatado (TECH_DEBT 6.23) + testes vitest | 45min | Não | Pending |
-| **14.21** | Quick win D — Atualizar docs obsoletas (3.5 User.password já clean) + bump `chunkSizeWarningLimit` em vite.config | 20min | Não | Pending |
-| **14.22** | Quick win A — Release v2.0.0-multi-tenant (CHANGELOG + tag local) | 30min | Não (mas push fica com Victor) | Pending |
-| **14.23** | Checkpoint completo — atualizar CHECKPOINT.md/FASES/TECH_DEBT, validar baseline final | 20min | Não | Pending |
+| **14.18** | Análise + plano mestre PLANO_100.md | 15min | — | ✅ **CONCLUÍDO 2026-05-16** (commit `b7e78a1`) |
+| **14.19** | Quick win C — Flake `24-admin:48` timeout 10s→20s (TECH_DEBT 6.17) | 10min | Não | ✅ **CONCLUÍDO 2026-05-16** (commit `e2ae2b8`) |
+| **14.20** | Quick win B — `validatePixKey` aceita CPF/CNPJ formatado (TECH_DEBT 6.23) + testes vitest | 25min | Não | ✅ **CONCLUÍDO 2026-05-16** (commit `3f4ecc1`) |
+| **14.21** | Quick win D — Atualizar docs obsoletas (3.5 User.password já clean) + bump `chunkSizeWarningLimit` em vite.config | 15min | Não | ✅ **CONCLUÍDO 2026-05-16** (commit `dd190f3`) |
+| **14.22** | Quick win A — Release v2.0.0-multi-tenant (CHANGELOG + RELEASE_NOTES + tag local) | 20min | Não (push fica com Victor) | ✅ **CONCLUÍDO 2026-05-16** (commit `aacee54`) |
+| **14.23** | Checkpoint completo — atualizar CHECKPOINT.md/FASES/TECH_DEBT, validar baseline final + tag local | 20min | Não | ✅ **CONCLUÍDO 2026-05-16** |
 
-**Total bloco:** ~2h20.
+**Total bloco real:** ~1h45 (abaixo da estimativa 2h20 — sem retrabalho).
 
 ---
 
@@ -149,15 +149,16 @@ Sistema considerado 100% quando:
 
 ## 📅 ORDEM DE EXECUÇÃO RECOMENDADA
 
-### Hoje (sessão atual — sub-fases 14.18 → 14.23):
-1. ✅ 14.18 — PLANO_100.md criado (este arquivo)
-2. ⏳ 14.19 — Quick win C (timeout flake)
-3. ⏳ 14.20 — Quick win B (validatePixKey)
-4. ⏳ 14.21 — Quick win D (docs obsoletas + chunk warning)
-5. ⏳ 14.22 — Quick win A (release v2.0.0)
-6. ⏳ 14.23 — Checkpoint completo
+### Hoje (sessão concluída — sub-fases 14.18 → 14.23):
+1. ✅ 14.18 — PLANO_100.md criado (este arquivo) — commit `b7e78a1`
+2. ✅ 14.19 — Quick win C (timeout flake) — commit `e2ae2b8`
+3. ✅ 14.20 — Quick win B (validatePixKey) — commit `3f4ecc1`
+4. ✅ 14.21 — Quick win D (docs obsoletas + chunk warning) — commit `dd190f3`
+5. ✅ 14.22 — Quick win A (release v2.0.0 preparação) — commit `aacee54`
+6. ✅ 14.23 — Checkpoint completo + tag local
 
-**Tempo total estimado:** ~2h10.
+**Tempo total real:** ~1h45 (estimativa era 2h10 — abaixo).
+**Tag local criada:** `v2.0.0-multi-tenant` (push fica com Victor).
 
 ### Próxima sessão (sub-fases 14.24 → 14.27):
 - Bloco TECH DEBT MÉDIO (estados UI cross-empresa + mobile UX)

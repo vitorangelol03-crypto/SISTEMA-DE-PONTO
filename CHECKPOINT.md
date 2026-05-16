@@ -3,10 +3,11 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-16 (sub-fase 14.17.10 — CI GitHub Actions 100% VERDE)
-**Branch:** `main`
-**Plano canônico:** `PLANO_PRODUCAO.md`
+**Última atualização:** 2026-05-16 (sub-fase 14.23 — Checkpoint completo bloco quick wins 14.18-14.22 ✅)
+**Branch:** `main` (limpa, sem push pendente)
+**Plano canônico:** `PLANO_PRODUCAO.md` + `PLANO_100.md` (roadmap pra 100%)
 **TECH_DEBT canônico:** `TECH_DEBT.md`
+**Release pronto pra tag:** `v2.0.0-multi-tenant` (notes em `RELEASE_NOTES_v2.0.0.md`, aguarda push Victor)
 **Memory:** `/home/victor/.claude/projects/-home-victor-SISTEMA-DE-PONTO/memory/`
 
 ---
@@ -62,22 +63,24 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 
 | Métrica | Valor |
 |---|---|
-| **Branch / working tree** | `main` / limpo (só `.claude/` + `coverage/` untracked) |
-| **Último commit** | `b34e258` (sub-fase 14.13 — 6 bugs UX permissões + 15 tutoriais) |
+| **Branch / working tree** | `main` / limpo (só `coverage/` untracked, ignorado) |
+| **Último commit** | sub-fase 14.23 (checkpoint completo) |
 | **Security advisors ERRORs (core)** | **0** ✅ |
 | **RLS-enabled tables** | **50** |
 | **Edge functions ACTIVE** | **4** (auth-login v9, clock-in-validated v8, create-user v1, **employee-public-api v3 bcrypt**) |
 | **Migrations aplicadas** | **64** |
-| **Unit tests (Vitest)** | **431 passing** + 1 skipped (16 specs em `tests/unit/`) |
+| **Unit tests (Vitest)** | **434 passing** + 1 skipped (19 specs em `tests/unit/`) — **+3 quick wins 14.20** |
 | **E2E specs (Playwright)** | **49 specs** (suite contra prod: 263+/18/2 — só TECH_DEBT 6.13 cold-start) |
 | **Spec Supremo PN** | `tests/101-supremo-pn.spec.ts` — **25/25** contra prod em 1.1min ✅ |
 | **Funcionários PN** | **30 Demo PN** (20 CLT + 8 Diarista + 2 PJ) com PINs bcrypt |
 | **CI GitHub Actions** | **100% VERDE** ✅ (Run #21: vitest 30s + tsc 22s + playwright 8m43s) |
 | **Spec Supremo 2.0** | `tests/100-supremo-v2.spec.ts` — **46/46** contra prod URL em 2.0min ✅ |
 | **Lighthouse (dist build)** | Perf 87 / **A11y 100** / Best 100 / SEO 100 |
-| **PINs bcrypt** | **26/26** Caratinga (0 plain restantes) ✅ |
+| **PINs bcrypt** | **26/26** Caratinga + 30/30 PN Demo (0 plain restantes) ✅ |
 | **Bugs latentes em prod** | **0** ✅ |
 | **Tutoriais Ajuda** | **28** (13 originais + 15 novos cobrindo features fases 8-14) |
+| **TECH_DEBT entries resolvidos hoje** | **3** (6.17 flake timeout, 6.23 validatePixKey, 3.5+3.6 docs/Vite) |
+| **Roadmap canônico** | `PLANO_100.md` (sub-fases 14.18 → 17.X pra 100%) |
 
 ### Fases concluídas (5 → 14)
 
@@ -181,16 +184,30 @@ Resposta ao pedido "tem mais nada que vc possa testar?" + "use multiplos agentes
 
 ---
 
-## 🚀 PRÓXIMOS PASSOS — Go-Live (ações manuais do Victor)
+## 🚀 PRÓXIMOS PASSOS
 
-Sistema técnico está **100% pronto.** Próximos passos exigem ação do Victor:
+**Sistema técnico está 100% pronto** + Caratinga em prod desde 14/5. Próximas ações:
 
-1. **Onboarding Ponte Nova** — importar 30 employees, configurar geo, bonus_types, validar login 8888
-2. **Tag v2.0.0-multi-tenant** — release final
-3. **Deploy frontend prod** — Vercel/Netlify/Cloudflare (env vars: VITE_*; NUNCA SERVICE_ROLE_KEY)
-4. **Smoke test pós-deploy** — login admin + supervisor + clock-in real
+### Bloqueado por Victor (não posso fazer):
+1. **Onboarding Ponte Nova real** — importar planilha de ~30 employees (Victor mandar planilha)
+2. **Push tag `v2.0.0-multi-tenant`** + GitHub Release publicada (Victor faz push)
+3. **Smoke test pós-onboarding PN** — 1 funcionário marca ponto + geo bloqueio
 
-Detalhes completos → `CHECKPOINT_PROXIMOS_PASSOS.md`
+### Pode executar sem Victor (roadmap `PLANO_100.md`):
+4. **Bloco Tech Debt Médio** — sub-fases 14.24-14.27 (~5-6h):
+   - 14.24/14.25/14.26 Estados UI cross-empresa em 3 tabs (AttendanceTab, FinancialTab, DataManagementTab)
+   - 14.27 UX mobile completa (aria-label, helpers detect viewport)
+5. **Bloco Estabilidade** — sub-fases 14.28-14.29 (~1-2 dias):
+   - 14.28 Flake C6 helper `importC6`
+   - 14.29 AttendanceTab refetch live (Realtime)
+
+### Pós-onboarding PN (Fase 15+):
+6. Fase 15 — Performance advisors (148 advisors otimizados, ~4-7h)
+7. Fase 16 — Cobertura postponed (FaceRegistration, Firefox/Safari, etc.)
+8. Fase 17 — Features novas (APK Android, export PDF, push notifications)
+
+Roadmap completo → **`PLANO_100.md`**
+Detalhes go-live → `CHECKPOINT_PROXIMOS_PASSOS.md`
 
 ---
 
