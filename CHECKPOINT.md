@@ -68,10 +68,10 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 | **Branch / working tree** | `main` / limpo (só `coverage/` untracked, ignorado) |
 | **Último commit** | sub-fase 14.23 (checkpoint completo) |
 | **Security advisors ERRORs (core)** | **0** ✅ |
-| **RLS-enabled tables** | **50** |
-| **Edge functions ACTIVE** | **4** (auth-login v9, clock-in-validated v8, create-user v1, **employee-public-api v3 bcrypt**) |
-| **Migrations aplicadas** | **64** |
-| **Unit tests (Vitest)** | **434 passing** + 1 skipped (19 specs em `tests/unit/`) em 4.61s |
+| **RLS-enabled tables** | **52** (+2: api_keys + push_subscriptions + push_send_log) |
+| **Edge functions ACTIVE** | **6** (auth-login v9, clock-in-validated v8, create-user v1, employee-public-api v3 bcrypt, **public-api-v1 v2**, **send-push v2**) |
+| **Migrations DB / repo** | **74 DB / 35 repo** (recuperadas via auditoria forense) |
+| **Unit tests (Vitest)** | **458 passing** + 1 skipped (24 specs em `tests/unit/`) |
 | **Performance Supabase** | RLS cache subquery em 55 policies ✅, 23 FKs indexadas ✅, 22 multiple_permissive eliminadas ✅ |
 | **Estados UI cross-empresa** | 7/7 tabs resolvidas (4 Sev Alta + 3 Sev Média) ✅ |
 | **UX mobile** | 31/31 subset mobile-pixel5 ✅ (era 14/31 inicial) |
@@ -91,7 +91,7 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 | **Firebase Push infra local** | ✅ Tabela + edge fn `send-push` + SW + cliente `pushNotifications.ts` (sub-fase 17.4.1) — falta só Firebase project |
 | **Spec 48 FaceRegistration** | ⏸️ Skipped (TECH_DEBT 16.1.X — mock pesado postponed) |
 | **Tutorial Victor** | ✅ `TUTORIAL_VICTOR.md` com 7 itens step-by-step |
-| **E2E specs (Playwright)** | **49 specs** (suite contra prod: 263+/18/2 — só TECH_DEBT 6.13 cold-start) |
+| **E2E specs (Playwright)** | **53 specs** (CI essencial: 9 specs / Full local: 334 passed / 0 failed em 44.5min) |
 | **Spec Supremo PN** | `tests/101-supremo-pn.spec.ts` — **25/25** contra prod em 1.1min ✅ |
 | **Funcionários PN** | **30 Demo PN** (20 CLT + 8 Diarista + 2 PJ) com PINs bcrypt |
 | **CI GitHub Actions** | **100% VERDE** ✅ (Run #21: vitest 30s + tsc 22s + playwright 8m43s) |
