@@ -63,9 +63,14 @@ Refactor aplicado em `src/utils/c6Export.ts:33-52`: `onlyDigits = pixKey.replace
 
 **Progresso Sev Alta — COMPLETO (4/4):**
 - [x] `EmployeesTab` — ✅ sub-fase 5.6
-- [x] `AttendanceTab` — ✅ sub-fase 14.24 (2026-05-16) — useEffect[company?.id] zera selectedEmployees, exitTimes/manualTimes/savingManualTime são limpos via loadData, bonusAmounts/applyingBonus/employeeToReset/employeeToRemoveBonus/bonusTypeToRemove zerados, todos modais fechados
-- [x] `FinancialTab` — ✅ sub-fase 14.25 (2026-05-16) — useEffect[company?.id] zera selectedEmployees, editingPayment/editValues, selectedPeriodId, bulkDailyRate, errorDiscountValue, employeeSearch/historyEmployeeSearch, modais (Apply/Clear/ErrorDiscount), bonusRemovals e historyFilters.employeeId
-- [x] `DataManagementTab` — ✅ sub-fase 14.26 (2026-05-16) — useEffect[company?.id] zera wizard state (selectedDataTypes, startDate/endDate, selectedEmployee, previewCounts, showPreview, confirmStep, confirmPassword), reseta generateBackup=true, isProcessing=false e activeSection='overview'
+- [x] `AttendanceTab` — ✅ sub-fase 14.24 (2026-05-16)
+- [x] `FinancialTab` — ✅ sub-fase 14.25 (2026-05-16)
+- [x] `DataManagementTab` — ✅ sub-fase 14.26 (2026-05-16)
+
+**Progresso Sev Média — COMPLETO (3/3):**
+- [x] `UsersTab` — ✅ sub-fase 14.31 (2026-05-16) — useEffect[company?.id] limpa selectedUser/userPermissions (ID-based), fecha showPermissionsModal/showForm/showPassword/showConfirmPassword, reseta formData
+- [x] `ErrorsTab` — ✅ sub-fase 14.31 (2026-05-16) — fecha editingError ({employeeId,date}), showErrorForm, reseta errorFormData (com employeeId zerado), searchTerm, filters.employeeId, activeSubTab='individual'
+- [x] `PaymentPeriodsTab` — ✅ sub-fase 14.31 (2026-05-16) — fecha showForm, reseta formData pra defaults (datas atual sem ID empresa), reseta saving=false
 
 ---
 
@@ -373,6 +378,33 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-16 — Sub-fase 14.31: TECH_DEBT 6.22 Sev Média — UsersTab + ErrorsTab + PaymentPeriodsTab
+
+**Resolvido (bloco 6.22 100% completo — 7 tabs total):** Estados UI ID-based + modais nas 3 tabs Sev Média agora zerados ao trocar empresa.
+
+**`src/components/users/UsersTab.tsx`** (após useEffect[loadUsers]):
+- Limpa `selectedUser`/`userPermissions` (ID-based)
+- Fecha `showPermissionsModal`, `showForm`, `showPassword`, `showConfirmPassword`
+- Reseta `formData` pra defaults
+
+**`src/components/errors/ErrorsTab.tsx`** (após useEffect[filters,isEditingDate,loadData]):
+- Limpa `editingError` ({employeeId,date}) — ID-based
+- Fecha `showErrorForm`, reseta `searchTerm`
+- Reseta `errorFormData` (com `employeeId` zerado)
+- Limpa `filters.employeeId`, volta `activeSubTab='individual'`
+
+**`src/components/errors/PaymentPeriodsTab.tsx`** (após useEffect[load]):
+- Fecha `showForm`, reseta `saving=false`
+- Reseta `formData` pra datas atuais (sem pre-fill da empresa anterior)
+
+**Validação:**
+- tsc --noEmit → exit 0 ✅
+- spec 26 multi-company-ui + spec 19 payment-periods → 14/14 em 1.6min ✅
+
+**Why:** Bloco 6.22 (Estados UI cross-empresa) agora 100% resolvido em todas as 7 tabs auditadas. Modais com state stale (`showPermissionsModal` referenciando user de Caratinga em PN) eram bug UX real. ErrorsTab tinha `editingError` com `{employeeId, date}` da empresa anterior — se admin editasse, gravava em employee errado.
+
+---
 
 ### 2026-05-16 — Sub-fases 15.1 + 15.2 + 15.3: TECH_DEBT 14.B Performance Supabase
 

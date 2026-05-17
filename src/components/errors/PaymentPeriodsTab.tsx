@@ -49,6 +49,20 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
 
   useEffect(() => { load(); }, [load]);
 
+  // Sub-fase 14.31 (TECH_DEBT 6.22 Sev Média): troca de empresa fecha form
+  // aberto, reseta dados pra defaults (sem datas pre-preenchidas da empresa
+  // anterior).
+  useEffect(() => {
+    setShowForm(false);
+    setSaving(false);
+    setFormData({
+      startDate: getBrazilDate(),
+      endDate: getBrazilDate(),
+      paymentDate: getBrazilDate(),
+      label: '',
+    });
+  }, [company?.id]);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.startDate > formData.endDate) {

@@ -134,6 +134,26 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
     }
   }, [filters, isEditingDate, loadData]);
 
+  // Sub-fase 14.31 (TECH_DEBT 6.22 Sev Média): troca de empresa fecha modal
+  // de erro aberto, reseta editingError (ID-based) e limpa form com
+  // employeeId da empresa anterior. statistics/employeesWithErrors são
+  // refetchados via loadData[company.id], mas modais/form persistem.
+  useEffect(() => {
+    setEditingError(null);
+    setShowErrorForm(false);
+    setSearchTerm('');
+    setErrorFormData({
+      employeeId: '',
+      date: getBrazilDate(),
+      errorType: 'quantity' as ErrorType,
+      errorCount: '',
+      errorValue: '',
+      observations: '',
+    });
+    setFilters(prev => ({ ...prev, employeeId: '' }));
+    setActiveSubTab('individual');
+  }, [company?.id]);
+
   useEffect(() => {
     if (!searchTerm.trim()) {
       setFilteredEmployees(employeesWithErrors);

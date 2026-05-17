@@ -47,6 +47,18 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
     loadUsers();
   }, [loadUsers]);
 
+  // Sub-fase 14.31 (TECH_DEBT 6.22 Sev Média): troca de empresa fecha modais
+  // abertos, reseta form e limpa selectedUser/userPermissions (ID-based).
+  useEffect(() => {
+    setSelectedUser(null);
+    setUserPermissions(null);
+    setShowPermissionsModal(false);
+    setShowForm(false);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+    setFormData({ id: '', password: '', confirmPassword: '' });
+  }, [company?.id]);
+
   const resetForm = () => {
     setFormData({ id: '', password: '', confirmPassword: '' });
     setShowForm(false);
