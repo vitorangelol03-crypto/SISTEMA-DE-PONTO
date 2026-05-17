@@ -38,11 +38,15 @@ Health check (sem auth).
 {"status":"ok","version":"v1","endpoints":["GET /employees"]}
 ```
 
-### `GET /employees`
+### `GET /employees?limit=100&offset=0`
 
-Lista todos employees da empresa dona da API key.
+Lista todos employees da empresa dona da API key, paginados.
 
 **Scope requerido:** `read:employees`
+
+**Query params:**
+- `limit` (default 100, max 500) — registros por página
+- `offset` (default 0) — offset pra paginação
 
 **Request:**
 ```bash
@@ -60,13 +64,104 @@ curl -sS -X GET "https://flcncdidxmmornkgkfbb.supabase.co/functions/v1/public-ap
       "name": "Funcionário Nome",
       "cpf": "12345678900",
       "employment_type": "Carteira Assinada" | "Diarista" | "PJ" | null,
+      "function_role": "Motorista" | null,
       "address": "Rua X, 123" | null,
       "city": "Caratinga" | null,
       "state": "MG" | null,
+      "hire_date": "2026-01-01" | null,
       "created_at": "2026-01-01T00:00:00Z"
     }
   ],
-  "count": 47
+  "count": 47,
+  "limit": 100,
+  "offset": 0
+}
+```
+
+### `GET /attendance?from=YYYY-MM-DD&to=YYYY-MM-DD&employee_id=<uuid>&limit=100&offset=0`
+
+Lista registros de ponto (attendance) da empresa, com filtros opcionais.
+
+**Scope requerido:** `read:attendance`
+
+**Query params:**
+- `from`, `to` (opcionais) — range de datas (YYYY-MM-DD)
+- `employee_id` (opcional, UUID) — filtra por funcionário específico
+- `limit`, `offset` — paginação (max 500)
+
+**Request:**
+```bash
+curl -sS -X GET "https://flcncdidxmmornkgkfbb.supabase.co/functions/v1/public-api-v1/attendance?from=2026-05-01&to=2026-05-15&limit=50" \
+  -H "X-API-Key: <sua key>" \
+  -H "apikey: <ANON_KEY>" \
+  -H "Authorization: Bearer <ANON_KEY>"
+```
+
+**Response 200:**
+```json
+{
+  "attendance": [
+    {
+      "id": "uuid",
+      "employee_id": "uuid",
+      "date": "2026-05-15",
+      "status": "present" | "absent" | "vacation" | "sick" | ...,
+      "entry_time": "2026-05-15T08:00:00Z" | null,
+      "exit_time": "17:30:00" | null,
+      "exit_time_full": "2026-05-15T17:30:00Z" | null,
+      "marked_by": "9999" | null,
+      "approved_by": "9999" | null,
+      "created_at": "2026-05-15T08:00:00Z"
+    }
+  ],
+  "count": 3130,
+  "limit": 50,
+  "offset": 0,
+  "filters": { "from": "2026-05-01", "to": "2026-05-15", "employee_id": null }
+}
+```
+
+### `GET /payments?period_id=<uuid>&from=&to=&employee_id=&limit=100&offset=0`
+
+Lista pagamentos da empresa, com filtros opcionais.
+
+**Scope requerido:** `read:payments`
+
+**Query params:**
+- `period_id` (opcional, UUID) — filtra por payment_period (resolve datas auto)
+- `from`, `to` (opcionais) — range de datas
+- `employee_id` (opcional) — filtra por funcionário
+- `limit`, `offset` — paginação
+
+**Request:**
+```bash
+curl -sS -X GET "https://flcncdidxmmornkgkfbb.supabase.co/functions/v1/public-api-v1/payments?period_id=<uuid>" \
+  -H "X-API-Key: <sua key>" \
+  -H "apikey: <ANON_KEY>" \
+  -H "Authorization: Bearer <ANON_KEY>"
+```
+
+**Response 200:**
+```json
+{
+  "payments": [
+    {
+      "id": "uuid",
+      "employee_id": "uuid",
+      "date": "2026-05-15",
+      "daily_rate": 100.00,
+      "bonus_b": 15.00,
+      "bonus_c1": 20.00,
+      "bonus_c2": 15.00,
+      "created_by": "9999",
+      "created_at": "2026-05-15T08:00:00Z",
+      "updated_at": "2026-05-15T08:00:00Z"
+    }
+  ],
+  "count": 1727,
+  "limit": 100,
+  "offset": 0,
+  "filters": { "period_id": null, "from": null, "to": null, "employee_id": null }
 }
 ```
 
@@ -128,28 +223,28 @@ key existe).
 
 ---
 
-## Limitações MVP
+## Limitações v1.1
 
-- **Read-only**: sem POST/PUT/DELETE. Write scope (`write:attendance`,
-  `write:employees`) fica como follow-up se houver demanda.
-- **Sem rate limiting**: cliente pode hammerar. Supabase Edge Functions tem
-  rate limit global do projeto (~500/s) — proteção mínima.
-- **Sem pagination**: `/employees` retorna todos sem cursor. OK pra <1000
-  funcionários. Pra escala maior, adicionar `?limit=50&offset=0`.
-- **Scopes limitados**: só `read:employees` agora.
+- **Read-only**: sem POST/PUT/DELETE. Write scopes (`write:attendance`,
+  `write:employees`) fica como follow-up.
+- **Sem rate limiting por key**: cliente pode hammerar. Supabase Edge Functions
+  tem rate limit global do projeto (~500/s) — proteção mínima.
 - **Sem versionamento de campos**: response shape pode mudar — clientes devem
   ignorar campos desconhecidos.
+- **Scopes disponíveis** (sub-fase 17.6.1): `read:employees`, `read:attendance`,
+  `read:payments`
 
 ---
 
 ## Roadmap (follow-ups)
 
-- `GET /attendance?from=&to=` — histórico de pontos
-- `GET /payments?period_id=` — pagamentos por período
+- ✅ ~~`GET /attendance?from=&to=`~~ — implementado em 17.6.1
+- ✅ ~~`GET /payments?period_id=`~~ — implementado em 17.6.1
 - `POST /clock-in` (write scope) — marcar ponto via integração
-- UI admin pra gerar/revogar keys
+- UI admin pra gerar/revogar keys (atualmente via SQL direto)
 - Rate limiting por key
 - Webhook subscriptions (notificações de eventos)
+- Endpoints adicionais: `GET /companies`, `GET /bonus_types`, `GET /error_records`
 
 ---
 
