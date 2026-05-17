@@ -421,17 +421,23 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
       const bulkBtn = page.getByTestId('bulk-approve-button');
       await expect(bulkBtn).toBeVisible({ timeout: 10_000 });
       await bulkBtn.click();
-      await page.waitForTimeout(2500);
 
-      const { data } = await s
-        .from('attendance')
-        .select('approval_status')
-        .in('employee_id', [empA, empB])
-        .eq('date', today);
-      expect(data?.length).toBe(2);
-      for (const r of data!) {
-        expect(r.approval_status).toBe('approved');
+      // Sub-fase 14.X (CI fix): polling no DB em vez de waitForTimeout fixo.
+      // CI tem ~4x latência local — 2.5s não cobria request UI em flight.
+      // Polling até 15s OU até ambos virarem 'approved'.
+      let approvedCount = 0;
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline) {
+        const { data } = await s
+          .from('attendance')
+          .select('approval_status')
+          .in('employee_id', [empA, empB])
+          .eq('date', today);
+        approvedCount = (data || []).filter(r => r.approval_status === 'approved').length;
+        if (approvedCount === 2) break;
+        await page.waitForTimeout(500);
       }
+      expect(approvedCount).toBe(2);
     });
 
     test('B5. Status manual: setManualTime cria approval_status=manual', async () => {
