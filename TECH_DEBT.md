@@ -79,25 +79,11 @@ Refactor aplicado em `src/utils/c6Export.ts:33-52`: `onlyDigits = pixKey.replace
 
 ## 🟢 Performance / qualidade
 
-### 6.24 — [Baixa] `AttendanceTab.loadData` mount-only (sem refetch live)
+### 6.24 — ✅ RESOLVIDO sub-fase 14.29 (2026-05-16)
 
-**Local:** `src/components/attendance/AttendanceTab.tsx:140-146` (`useEffect([selectedDate, employmentTypeFilter, company?.id])`).
+Realtime subscription implementada em `src/components/attendance/AttendanceTab.tsx`. 3 channels Supabase (employees, attendance, payments) filtrados por `company_id` disparam `loadData(silent=true)` em qualquer INSERT/UPDATE/DELETE. Cleanup completo no unmount/troca de empresa.
 
-**Comportamento atual:**
-- `loadData` é disparado só no mount + ao mudar data/filtro/empresa.
-- Polling silencioso de 30s atualiza state sem spinner.
-- Botão "Atualizar" no header força refetch manual.
-
-**Impacto:**
-- Se outro usuário (ou batch SQL externo) cria/edita/remove funcionário, admin atual só vê após 30s polling OU click manual.
-- Em testes E2E que pré-criam dados via SQL: `searchEmployee` precisa de "Atualizar" antes (já aplicado no spec 40 em sub-fase 14.9).
-- UX em produção: aceitável (admin trabalha pouco em concorrência), mas não ideal.
-
-**Solução possível (postponed):**
-- Supabase Realtime subscription pra eventos `INSERT/UPDATE/DELETE` em `employees`/`attendance`/`payments` filtrados por `company_id`.
-- Custo: ~1 dia (subscription + reconnect handling + memory cleanup).
-
-**Status:** Aceito como baixa prioridade. Sub-fase futura (pós-go-live) se feedback demandar.
+Polling 30s mantido como fallback (network drop, idle WebSocket). Ver entrada no Histórico.
 
 ---
 
@@ -378,6 +364,42 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-16 — Sub-fase 14.29: TECH_DEBT 6.24 — AttendanceTab Realtime subscription
+
+**Resolvido:** AttendanceTab agora atualiza instantaneamente via Supabase Realtime quando há INSERT/UPDATE/DELETE em employees/attendance/payments da empresa atual.
+
+**Fix aplicado** (`src/components/attendance/AttendanceTab.tsx` após useEffect cleanup cross-empresa):
+```typescript
+useEffect(() => {
+  if (!company?.id || !isViewingToday) return;
+  const refetch = () => loadData(selectedDate, true);
+  const channels = [
+    supabase.channel(`employees:${company.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter: `company_id=eq.${company.id}` }, refetch)
+      .subscribe(),
+    supabase.channel(`attendance:${company.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance', filter: `company_id=eq.${company.id}` }, refetch)
+      .subscribe(),
+    supabase.channel(`payments:${company.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments', filter: `company_id=eq.${company.id}` }, refetch)
+      .subscribe(),
+  ];
+  return () => channels.forEach((ch) => supabase.removeChannel(ch));
+}, [company?.id, isViewingToday, selectedDate, employmentTypeFilter]);
+```
+
+**Polling 30s mantido como FALLBACK:** se WebSocket cair (network drop, idle), polling garante atualização eventual. UX híbrida (Realtime instantâneo + polling resiliente).
+
+**Validação:** spec 26 (multi-empresa) + spec 40 (bonus-individual-ui) → 14/14 em 1.9min ✅.
+
+**Why:** AttendanceTab tinha 2 cenários frustrantes:
+1. Outro admin/supervisor (ou batch SQL externo) cria funcionário → admin atual só vê após 30s polling
+2. Testes E2E que pré-criavam dados via SQL precisavam de click "Atualizar" antes (aplicado workaround em spec 40 sub-fase 14.9)
+
+Realtime resolve ambos: UI reage instantaneamente a qualquer mudança DB.
+
+---
 
 ### 2026-05-16 — Sub-fase 14.31: TECH_DEBT 6.22 Sev Média — UsersTab + ErrorsTab + PaymentPeriodsTab
 

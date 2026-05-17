@@ -23,6 +23,7 @@ import {
   BonusTypeRecord,
 } from '../../services/database';
 import { useCompany } from '../../contexts/CompanyContext';
+import { supabase } from '../../lib/supabase';
 import { getBrazilDate, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
@@ -147,6 +148,9 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
 
   // Polling automático a cada 30s quando está visualizando hoje — silencioso,
   // sem spinner e sem re-render se nada mudou (merge inteligente no loadData).
+  // Mantido como FALLBACK do Realtime (sub-fase 14.29) — se WebSocket
+  // desconectar (mudança de network, idle long-lived, etc.) o polling
+  // garante atualização eventual.
   useEffect(() => {
     if (!isViewingToday) return;
     const interval = setInterval(() => {
@@ -155,6 +159,55 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isViewingToday, selectedDate, employmentTypeFilter, company?.id]);
+
+  // Sub-fase 14.29 (TECH_DEBT 6.24): Realtime subscription pra atualização
+  // instantânea quando INSERT/UPDATE/DELETE acontecem em employees/attendance/
+  // payments da empresa atual. Substitui (e complementa) o polling 30s.
+  //
+  // Strategy:
+  // - 3 channels separados (um por tabela) filtrados por company_id
+  // - Trigger comum: loadData silencioso (merge inteligente, sem flash UI)
+  // - Cleanup: unsubscribe todos channels no unmount/troca de empresa
+  // - Polling continua como fallback se WebSocket cair (network/idle)
+  useEffect(() => {
+    if (!company?.id || !isViewingToday) return;
+
+    const refetch = () => loadData(selectedDate, true);
+
+    const channels = [
+      supabase
+        .channel(`employees:${company.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'employees', filter: `company_id=eq.${company.id}` },
+          refetch,
+        )
+        .subscribe(),
+      supabase
+        .channel(`attendance:${company.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'attendance', filter: `company_id=eq.${company.id}` },
+          refetch,
+        )
+        .subscribe(),
+      supabase
+        .channel(`payments:${company.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'payments', filter: `company_id=eq.${company.id}` },
+          refetch,
+        )
+        .subscribe(),
+    ];
+
+    return () => {
+      channels.forEach((ch) => {
+        supabase.removeChannel(ch);
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company?.id, isViewingToday, selectedDate, employmentTypeFilter]);
 
   // Sub-fase 14.24 (TECH_DEBT 6.22 Sev Alta): troca de empresa zera estados
   // locais ID-based (Set/Record com employee_id) e fecha modais abertos.
