@@ -152,21 +152,64 @@ Via UI Admin Tab → Section "Reset Geral" → digita senha + nome empresa pra c
 
 ---
 
-## 10. Backup + restore (manual)
+## 10. Backup + restore (sub-fase 16.5 — drill automatizado)
 
-### Backup do schema + dados
+### 10.1 Snapshot JSON aplicacional (todas empresas)
+
+Script generalizado pra fazer snapshot de TODOS os dados das tabelas core,
+particionado por `company_id` + dados globais (companies, feature_versions).
+
+```bash
+# Backup completo (~4-30 MB JSON dependendo do volume)
+node scripts/backup-all.mjs
+# → cria backups/all-YYYY-MM-DDTHHmm.json
+
+# Backup Caratinga-only (legacy, mantido)
+node scripts/backup-caratinga.mjs
+# → cria backups/caratinga-YYYY-MM-DD-HHMMSS.json
+```
+
+Requer `SUPABASE_SERVICE_ROLE_KEY` em `.env` (bypassa RLS).
+
+### 10.2 Verificação de integridade (drill)
+
+```bash
+# Compara backup vs estado atual do DB (row counts por tabela)
+node scripts/verify-backup.mjs backups/all-YYYY-MM-DDTHHmm.json
+# Exit codes: 0=match perfeito, 1=drift (DB ativo), 2=erro
+```
+
+Output:
+- `✅ Match`: row count idêntico (sem mudanças desde backup)
+- `⚠️  Drift`: count diferente (esperado se DB ativo)
+- `❌ Error`: falha de acesso a tabela
+
+**Use como drill mensal:** rodar backup-all + verify-backup. Drift > 100 rows
+em tabelas core sem atividade real = investigar (possível corrupção, race).
+
+### 10.3 Backup schema + dados completo (DDL)
+
 ```bash
 # Via supabase CLI (instalar primeiro: npm i -g supabase)
 supabase db dump --project-ref flcncdidxmmornkgkfbb > backup-$(date +%Y%m%d).sql
 ```
 
-### Restore (CUIDADO — só em emergência total)
+Diferença vs JSON aplicacional:
+- `db dump` = schema + dados completos (~MB grandes, restore via psql)
+- `backup-all.mjs` = só dados aplicacionais (sem schema, restore via UPSERT manual)
+
+### 10.4 Restore (CUIDADO — só em emergência total)
+
 ```bash
-# Restore via psql (URL do project)
+# Schema + dados (SQL completo)
 psql "postgres://postgres:<password>@db.flcncdidxmmornkgkfbb.supabase.co:5432/postgres" < backup-XXXX.sql
+
+# Dados JSON aplicacional: restore manual via UPSERT (não automatizado)
+# Pra cada tabela: ler backup.companies_data[id].tables[name].rows
+# e UPSERT via service_role respeitando FKs.
 ```
 
-**Backups antigos backup_*** foram dropados em 11.0 — não tentar restore de backup_*.
+**Backups antigos `backup_*`** foram dropados em 11.0 — não tentar restore de `backup_*`.
 
 ---
 
