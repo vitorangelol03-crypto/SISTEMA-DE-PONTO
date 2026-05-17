@@ -707,10 +707,156 @@ sido refatorados em 14.11.2, e perf Supabase via migration foi rápido).
 
 ---
 
+### 14.31 — TECH_DEBT 6.22 Sev Média (3 tabs) — 2026-05-16 (commit `90a6500`)
+
+Completa o bloco 6.22 — 100% das 7 tabs auditadas resolvidas (4 Sev Alta + 3 Sev Média).
+
+**`UsersTab.tsx`**: useEffect[company?.id] limpa `selectedUser`/`userPermissions`, fecha 4 modais/toggles, reseta form.
+
+**`ErrorsTab.tsx`**: limpa `editingError` ({employeeId,date}), `searchTerm`, reseta `errorFormData` (employeeId zerado), `filters.employeeId`, volta `activeSubTab='individual'`.
+
+**`PaymentPeriodsTab.tsx`**: fecha `showForm`, reseta `formData` pra datas atuais, `saving=false`.
+
+**Validação:** specs 26 (multi-company-ui) + 19 (payment-periods) → 14/14 em 1.6min ✅.
+
+---
+
+### 16.3 — Spec 47 supervisor users.create perm — 2026-05-16 (commit `605a335`)
+
+Cenário descoberto em auditoria 14.X mas não exercitado em E2E.
+
+**Migration helper** (Supabase MCP): `_test_create_supervisor_with_perms(sup_id, plain_pass, perms_json, company_uuid, created_by_id)` — cria supervisor com bcrypt password + permissions custom em RPC única. Sem SECURITY DEFINER (service_role bypassa RLS).
+
+**Spec novo** `tests/47-supervisor-users-create.spec.ts`:
+- beforeAll: cria supervisor `7770` com permissions `users.view + users.create=true`, restos false
+- test 1: login → vê tab Usuários ✅
+- test 2: cria user `7771` via UI, valida DB com `created_by=7770` + `company_id=Caratinga` ✅
+- afterAll: cleanup supervisor + user criado
+
+**Validação:** spec 47 → 2/2 em 12.6s ✅.
+
+---
+
+### 16.2 — Browser compat Firefox + Webkit projects — 2026-05-16 (commit `552b39a`)
+
+`playwright.config.ts`: adiciona 2 projects opcionais (não rodam por default):
+- `firefox` (Desktop Firefox, engine Gecko)
+- `webkit` (Desktop Safari, engine Webkit — cobre Safari macOS + iOS)
+
+**Validação Firefox:**
+- `npx playwright install firefox` → OK (fallback ubuntu24.04-x64)
+- `npx playwright test --project=firefox tests/01-auth tests/02-employee-clock` → **15/15 em 1.2min** ✅
+
+**Webkit postponed:** instalação falha por `libavif16` ausente. Requer `sudo apt-get install libavif16` (Victor decide quando instalar).
+
+---
+
+### 14.29 — AttendanceTab Realtime subscription — 2026-05-16 (commit `e113095`)
+
+TECH_DEBT 6.24 resolvido — UI atualiza instantaneamente em mudanças DB.
+
+**`AttendanceTab.tsx`** (após useEffect cleanup cross-empresa):
+- Import `supabase` client
+- useEffect novo cria 3 channels (`employees`, `attendance`, `payments`) filtrados por `company_id`
+- Trigger comum: `loadData(silent=true)` — merge inteligente, sem flash UI
+- Cleanup: `removeChannel` em todos no unmount/troca de empresa/data
+- Polling 30s mantido como FALLBACK (network drop, idle WebSocket)
+
+**Validação:** spec 26 (multi-empresa) + spec 40 (bonus-individual) → 14/14 em 1.9min ✅.
+
+---
+
+### 16.5 — Backup/restore drill script — 2026-05-16 (commit `ab65a47`)
+
+Generalização do backup mensal pra suportar TODAS empresas + verify integridade.
+
+**`scripts/backup-all.mjs` (novo):**
+- Itera todas companies do DB (não só Caratinga)
+- 23 tabelas core por empresa + 2 globais (companies, feature_versions)
+- Output: `backups/all-YYYY-MM-DDTHHmm.json`
+- Requer `SUPABASE_SERVICE_ROLE_KEY`
+
+**`scripts/verify-backup.mjs` (novo):**
+- Compara backup JSON vs estado atual DB (row counts por tabela)
+- Output: ✅ match, ⚠️ drift, ❌ error
+- Exit codes: 0=match, 1=drift, 2=erro (útil pra CI)
+- Use como drill mensal
+
+**`CHECKPOINT_OPERACAO.md` seção 10 expandida** — 4 sub-seções (10.1-10.4).
+
+**Smoke test:**
+- backup-all → 5698 rows, 4.07 MB, 2 empresas ✅
+- verify-backup → 46 matches | 2 drifts (DB ativo, esperado) | 0 errors ✅
+
+---
+
+### 17.3 — Reset facial automático após N falhas — 2026-05-16 (commit `f7ab015`)
+
+Implementação backend de auto-reset facial após acumulação de falhas.
+
+**Migration Supabase MCP** (não vai pro git):
+- `ALTER face_recognition_config`:
+  - `max_attempts_before_reset INTEGER DEFAULT 5`
+  - `attempts_window_minutes INTEGER DEFAULT 60`
+- `_check_face_auto_reset()` (SECURITY DEFINER, plpgsql): AFTER INSERT trigger em `face_auth_attempts` conta falhas recentes do `employee_id`. Se ≥ max, marca `employees.face_reset_requested = true`.
+- `trg_face_auto_reset` AFTER INSERT FOR EACH ROW.
+
+**Validação SQL:** insert 5 falhas em employee Caratinga → `face_reset_requested=true` ✅. Cleanup restaura estado ✅.
+
+**`CHECKPOINT_OPERACAO.md` seção 7 expandida:**
+- 7.1 Manual (existente)
+- 7.2 Automático com defaults razoáveis + comandos pra ajustar threshold
+
+UI de admin pra ajustar threshold via form fica como follow-up.
+
+---
+
+### 14.40 — Checkpoint final sessão estendida — 2026-05-16
+
+Fechamento sólido das sub-fases 14.31 + 16.2/16.3/16.5 + 14.29 + 17.3 + 14.40 (~3h real).
+
+**Validação baseline final:**
+- `npx tsc --noEmit` → exit 0 ✅
+- `npx vitest run` → 434 passing / 1 skipped em 4.23s ✅
+- spec 01+02+26 → 24/24 em 1.9min ✅
+- Working tree limpo (só `coverage/` untracked)
+
+**Atualizações de docs:**
+- `CHECKPOINT.md` — última atualização, métricas, próximos passos
+- `CHECKPOINT_FASES.md` — sub-fases 14.31 + 16.2/16.3/16.5 + 14.29 + 17.3 + 14.40 detalhadas (este texto)
+- `TECH_DEBT.md` — 3 entries movidos pra Histórico (6.22 Sev Média complete, 6.24)
+- `PLANO_100.md` — bloco extra marcado completed
+
+**Resumo sessão estendida 14.31 + 16.2/16.3/16.5 + 14.29 + 17.3:**
+
+| Sub-fase | Item | Esforço real | Validação |
+|---|---|---|---|
+| 14.31 | TECH_DEBT 6.22 Sev Média (3 tabs) | ~25min | spec 26+19 14/14 ✅ |
+| 16.3 | Spec 47 supervisor users.create | ~30min | spec 47 2/2 ✅ |
+| 16.2 | Browser compat Firefox+Webkit | ~15min | Firefox 15/15 ✅ (Webkit postponed) |
+| 14.29 | AttendanceTab Realtime | ~25min | spec 26+40 14/14 ✅ |
+| 16.5 | Backup/restore drill | ~30min | backup-all + verify-backup ✅ |
+| 17.3 | Face auto-reset trigger | ~25min | SQL test 5 falhas → reset ✅ |
+| 14.40 | Checkpoint completo (este) | ~25min | tsc + vitest + smoke ✅ |
+
+**Total real:** ~2h55 (estimativa era 4-5h — abaixo).
+
+**Status sistema:** mais robusto, mais rápido, mais testado e com features novas
+(Realtime, backup drill, face auto-reset). Pronto pra próxima sessão.
+
+---
+
 ## Commits da sessão atual (mais recentes primeiro)
 
 ```
-[14.30] checkpoint(*): bloco médio fechado — 14.24-14.28 + 15.1-15.3 (próximo)
+[14.40] checkpoint(*): sessão estendida fechada — 14.31 + 16.2/16.3/16.5 + 14.29 + 17.3 (próximo)
+f7ab015  feat(face): reset facial automático após N falhas (sub-fase 17.3)
+ab65a47  feat(ops): backup/restore drill scripts (sub-fase 16.5)
+e113095  feat(realtime): AttendanceTab Supabase Realtime subscription (sub-fase 14.29)
+552b39a  test(config): browser compat Firefox + Webkit projects (sub-fase 16.2)
+605a335  test(e2e): spec 47 supervisor users.create perm (sub-fase 16.3)
+90a6500  fix(ui): estados cross-empresa UsersTab + ErrorsTab + PaymentPeriodsTab (sub-fase 14.31)
+8991a13  checkpoint(*): bloco médio + perf Supabase fechado — 14.24-14.28 + 15.1-15.3 (sub-fase 14.30)
 99d85c9  fix(test): TECH_DEBT 6.1 flake C6 importC6 helper (sub-fase 14.28)
 1372f2f  test(mobile): TECH_DEBT 6.25 UX mobile 100% — specs outdated fixados (sub-fase 14.27)
 6002c5e  fix(ui): estados cross-empresa DataManagementTab (sub-fase 14.26)

@@ -3,8 +3,8 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-16 (sub-fase 14.30 — Checkpoint bloco médio + perf 14.24-14.28 + 15.1-15.3 ✅)
-**Branch:** `main` (limpa, sem push pendente — 13 commits ahead de origin/main)
+**Última atualização:** 2026-05-16 (sub-fase 14.40 — Checkpoint sessão estendida 14.31 + 16.2/16.3/16.5 + 14.29 + 17.3 ✅)
+**Branch:** `main` (limpa, sem push pendente — 21 commits ahead de origin/main)
 **Plano canônico:** `PLANO_PRODUCAO.md` + `PLANO_100.md` (roadmap pra 100%)
 **TECH_DEBT canônico:** `TECH_DEBT.md`
 **Release pronto pra tag:** `v2.0.0-multi-tenant` (notes em `RELEASE_NOTES_v2.0.0.md`, aguarda push Victor)
@@ -71,8 +71,13 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 | **Migrations aplicadas** | **64** |
 | **Unit tests (Vitest)** | **434 passing** + 1 skipped (19 specs em `tests/unit/`) em 4.61s |
 | **Performance Supabase** | RLS cache subquery em 55 policies ✅, 23 FKs indexadas ✅, 22 multiple_permissive eliminadas ✅ |
-| **Estados UI cross-empresa Sev Alta** | 4/4 tabs resolvidas (EmployeesTab, AttendanceTab, FinancialTab, DataManagementTab) ✅ |
+| **Estados UI cross-empresa** | 7/7 tabs resolvidas (4 Sev Alta + 3 Sev Média) ✅ |
 | **UX mobile** | 31/31 subset mobile-pixel5 ✅ (era 14/31 inicial) |
+| **Browser compat** | Chromium ✅ + Firefox ✅ (15/15 essencial) + Webkit pendente (precisa libavif16) |
+| **Realtime AttendanceTab** | ✅ 3 channels (employees, attendance, payments) + polling 30s fallback |
+| **Backup drill** | ✅ `backup-all.mjs` + `verify-backup.mjs` (drift detection) |
+| **Face auto-reset** | ✅ Trigger DB N falhas (default 5 em 60min) |
+| **Spec 47 supervisor users.create** | ✅ 2/2 cenário descoberto exercitado |
 | **E2E specs (Playwright)** | **49 specs** (suite contra prod: 263+/18/2 — só TECH_DEBT 6.13 cold-start) |
 | **Spec Supremo PN** | `tests/101-supremo-pn.spec.ts` — **25/25** contra prod em 1.1min ✅ |
 | **Funcionários PN** | **30 Demo PN** (20 CLT + 8 Diarista + 2 PJ) com PINs bcrypt |

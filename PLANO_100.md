@@ -72,10 +72,11 @@ Sistema considerado 100% quando:
 
 | Sub-fase | Item | Esforço | Status |
 |---|---|---|---|
-| **14.28** | TECH_DEBT 6.1 — Flake helper `importC6` em `tests/20-c6-complete.spec.ts:30` | ~20min real | ✅ **CONCLUÍDO 2026-05-16** (commit `99d85c9`) — aguarda tfoot persistente em vez de toast |
-| **14.29** | TECH_DEBT 6.24 — `AttendanceTab.loadData` refetch live via Supabase Realtime | ~1 dia | Postponed (baixa prioridade, polling 30s atual aceitável) |
+| **14.28** | TECH_DEBT 6.1 — Flake helper `importC6` em `tests/20-c6-complete.spec.ts:30` | ~20min real | ✅ **CONCLUÍDO 2026-05-16** (commit `99d85c9`) |
+| **14.29** | TECH_DEBT 6.24 — `AttendanceTab.loadData` Realtime subscription | ~25min real | ✅ **CONCLUÍDO 2026-05-16** (commit `e113095`) — 3 channels + polling fallback |
+| **14.31** | TECH_DEBT 6.22 Sev Média — `UsersTab` + `ErrorsTab` + `PaymentPeriodsTab` | ~25min real | ✅ **CONCLUÍDO 2026-05-16** (commit `90a6500`) — bloco 6.22 100% (7/7 tabs) |
 
-**Total bloco real:** ~20min (14.29 não executada).
+**Total bloco real:** ~70min.
 
 ---
 
@@ -107,13 +108,11 @@ Sistema considerado 100% quando:
 
 | Sub-fase | Item | Esforço | Trigger |
 |---|---|---|---|
-| **16.1** | Spec FaceRegistration (face-api.js + getUserMedia mock pesado) | ~6-8h | Feedback usuários (falsos negativos face) |
-| **16.2** | Browser compat (Firefox/Safari projects no Playwright) | ~2h | Reports de bug Firefox/Safari |
-| **16.3** | Spec supervisor com `permissions.users.create` | ~1h | Cenário descoberto em fase 14 |
-| **16.4** | Performance benchmarks (k6 ou Playwright) | ~1 dia | Dados reais PN |
-| **16.5** | Backup/restore drill operacional (script + agenda mensal) | ~3-4h | Pós-go-live estável |
-
-**Total Fase 16:** ~2-3 dias.
+| **16.1** | Spec FaceRegistration (face-api.js + getUserMedia mock pesado) | ~6-8h | Postponed — espera feedback ou prioridade |
+| **16.2** | Browser compat Firefox + Webkit projects | ~15min real | ✅ **CONCLUÍDO 2026-05-16** (commit `552b39a`) — Firefox 15/15, Webkit postponed (libavif16) |
+| **16.3** | Spec 47 supervisor users.create perm | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `605a335`) — 2/2 |
+| **16.4** | Performance benchmarks (k6 ou Playwright) | ~1 dia | Postponed — espera dados reais PN |
+| **16.5** | Backup/restore drill script | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `ab65a47`) — backup-all + verify-backup |
 
 ---
 
@@ -121,14 +120,14 @@ Sistema considerado 100% quando:
 
 | Sub-fase | Item | Esforço | Pré-requisitos |
 |---|---|---|---|
-| **17.1** | APK Android via Capacitor (sub-fase 15 do plano original) | ~4 dias | Android Studio instalado + Victor decide senha keystore |
-| **17.2** | Export PDF holerite | ~1 dia | Demanda funcionário |
-| **17.3** | Reset facial automático após N tentativas falhas | ~半 dia | Feedback usuários |
-| **17.4** | Push notifications server→device (Firebase) | ~1-2 dias | Projeto Firebase + decisão de produto |
-| **17.5** | Multi-idioma (i18n) | ~3-5 dias | Expansão geográfica |
-| **17.6** | API pública pra integrações ERP | ~5-10 dias | Demanda enterprise |
+| **17.1** | APK Android via Capacitor (sub-fase 15 do plano original) | ~4 dias | Bloqueado — Android Studio + senha keystore (Victor) |
+| **17.2** | Export PDF holerite | ~1 dia | Postponed — espera decisão produto (layout) |
+| **17.3** | Reset facial automático após N tentativas falhas | ~25min real | ✅ **CONCLUÍDO 2026-05-16** (commit `f7ab015`) — trigger DB N=5/60min default |
+| **17.4** | Push notifications server→device (Firebase) | ~1-2 dias | Bloqueado — projeto Firebase (Victor) |
+| **17.5** | Multi-idioma (i18n) | ~3-5 dias | Bloqueado — decisão produto |
+| **17.6** | API pública pra integrações ERP | ~5-10 dias | Bloqueado — decisão produto |
 
-**Total roadmap features:** ~3 semanas se tudo for feito.
+**Total roadmap features executado:** 17.3 done.
 
 ---
 
