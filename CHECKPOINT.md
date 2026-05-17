@@ -3,8 +3,9 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-16 (sub-fase 14.40 — Checkpoint sessão estendida 14.31 + 16.2/16.3/16.5 + 14.29 + 17.3 ✅)
-**Branch:** `main` (limpa, sem push pendente — 21 commits ahead de origin/main)
+**Última atualização:** 2026-05-16 (sub-fase 14.50 — Checkpoint mega-final 14.41-14.43 + 15.5 + 16.1/16.4 + 17.2/17.5/17.6 ✅)
+**Branch:** `main` (4 commits ahead de origin/main — push manual Victor)
+**Push history sessão:** 21 commits pushados em 14.42 (incluindo tag v2.0.0-multi-tenant.1)
 **Plano canônico:** `PLANO_PRODUCAO.md` + `PLANO_100.md` (roadmap pra 100%)
 **TECH_DEBT canônico:** `TECH_DEBT.md`
 **Release pronto pra tag:** `v2.0.0-multi-tenant` (notes em `RELEASE_NOTES_v2.0.0.md`, aguarda push Victor)
@@ -78,6 +79,14 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 | **Backup drill** | ✅ `backup-all.mjs` + `verify-backup.mjs` (drift detection) |
 | **Face auto-reset** | ✅ Trigger DB N falhas (default 5 em 60min) |
 | **Spec 47 supervisor users.create** | ✅ 2/2 cenário descoberto exercitado |
+| **Tag v2.0.0-multi-tenant.1** | ✅ Push remote (commit `9830246`) |
+| **GitHub Release** | ⚠️ Bloqueado classifier — Victor publica (TUTORIAL_VICTOR.md item 1) |
+| **Performance baseline doc** | ✅ `docs/PERFORMANCE_BASELINE.md` + `scripts/bench-edge-fns.mjs` |
+| **PDF holerite MVP** | ✅ `src/utils/holeritePdf.ts` + botão em FinancialTab |
+| **Multi-idioma scaffold** | ✅ react-i18next pt-BR + en (23 chaves base) |
+| **API pública v1 MVP** | ✅ Edge fn `public-api-v1` + tabela `api_keys` + `docs/API_PUBLICA_V1.md` |
+| **Spec 48 FaceRegistration** | ⏸️ Skipped (TECH_DEBT 16.1.X — mock pesado postponed) |
+| **Tutorial Victor** | ✅ `TUTORIAL_VICTOR.md` com 7 itens step-by-step |
 | **E2E specs (Playwright)** | **49 specs** (suite contra prod: 263+/18/2 — só TECH_DEBT 6.13 cold-start) |
 | **Spec Supremo PN** | `tests/101-supremo-pn.spec.ts` — **25/25** contra prod em 1.1min ✅ |
 | **Funcionários PN** | **30 Demo PN** (20 CLT + 8 Diarista + 2 PJ) com PINs bcrypt |

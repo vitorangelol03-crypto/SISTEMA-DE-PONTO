@@ -363,6 +363,31 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 
 ---
 
+### 16.1.X — [Baixa] Spec FaceRegistration success case (mock pesado)
+
+**Local:** `tests/48-face-registration-smoke.spec.ts` (criado em 16.1, marked skipped).
+
+**Estado atual:**
+- Setup de DB (face_recognition_config + employee.face_reset_requested + face_recognition_enabled + pin temporário) está pronto e funcional
+- Cleanup do afterAll restaura state corretamente
+- Test marked `test.skip` com docstring detalhada da investigação
+
+**Por que postponed:**
+- Gate facial não dispara em headless mesmo com setup correto (provável catch silencioso em `continueAfterPin().getFaceRecognitionConfig()` ou face-api models >60s load)
+- Implementação correta requer mock pesado:
+  1. Mock `navigator.mediaDevices.getUserMedia` retornando fake MediaStream
+  2. Mock `window.faceapi` (ou interceptar fetch dos modelos ~10MB)
+  3. Aguardar phases controladas (loading → no-face → detected → countdown → capturing → saving → success)
+  4. Validar `saveFaceData` chamada via DB
+
+**Severidade:** Baixa — face em prod funciona, validação é manual.
+
+**Esforço estimado:** ~6-8h trabalho + debug.
+
+**Status:** Postponed até demanda real (regressão facial em prod) OR sub-fase dedicada de cobertura E2E.
+
+---
+
 ## ✅ Histórico — Resolvidas
 
 ### 2026-05-16 — Sub-fase 14.29: TECH_DEBT 6.24 — AttendanceTab Realtime subscription

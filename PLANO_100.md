@@ -97,8 +97,8 @@ Sistema considerado 100% quando:
 | **15.1** | Fix `auth_rls_initplan` (55 policies reescritas com `(SELECT auth.jwt())`) | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (migration `rls_initplan_cache_subfase_15_1`) |
 | **15.2** | Fix `multiple_permissive_policies` (22 redundantes droppadas) | ~15min real | ✅ **CONCLUÍDO 2026-05-16** (migration `rls_drop_redundant_select_policies_subfase_15_2`) |
 | **15.3** | Indexar 23 FKs sem index | ~15min real | ✅ **CONCLUÍDO 2026-05-16** (migration `add_missing_fk_indexes_subfase_15_3`) — `pg_constraint` confirma 0 missing |
-| **15.4** | Drop 50 unused indexes (após validar `idx_scan = 0` >30d em prod) | ~30min | Postponed — espera dados reais |
-| **15.5** | Performance baseline pós-otimização | ~1h | Postponed — espera dados reais PN |
+| **15.4** | Drop 50 unused indexes (após validar `idx_scan = 0` >30d em prod) | ~30min análise real | ⏸️ **SKIPPED 2026-05-16** — análise mostrou todos serem ou recém-criados (15.3) ou em tabelas LEGADO. Sem 30d dados reais, risco > benefício. Re-avaliar pós-PN |
+| **15.5** | Performance baseline pós-otimização | ~1h | ✅ **CONCLUÍDO 2026-05-16** (commit `8fbf9f8`) — `docs/PERFORMANCE_BASELINE.md` |
 
 **Total Fase 15 real:** ~1h (15.1+15.2+15.3 executadas). Itens 15.4/15.5 aguardam dados reais.
 
@@ -108,10 +108,10 @@ Sistema considerado 100% quando:
 
 | Sub-fase | Item | Esforço | Trigger |
 |---|---|---|---|
-| **16.1** | Spec FaceRegistration (face-api.js + getUserMedia mock pesado) | ~6-8h | Postponed — espera feedback ou prioridade |
+| **16.1** | Spec FaceRegistration (face-api.js + getUserMedia mock pesado) | ~30min setup | ⏸️ **SKIPPED 2026-05-16** (commit `49ad14a`) — spec criado com setup pronto, marked skip + TECH_DEBT 16.1.X. Gate facial não dispara em headless. Postponed mock pesado (~6-8h) |
 | **16.2** | Browser compat Firefox + Webkit projects | ~15min real | ✅ **CONCLUÍDO 2026-05-16** (commit `552b39a`) — Firefox 15/15, Webkit postponed (libavif16) |
 | **16.3** | Spec 47 supervisor users.create perm | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `605a335`) — 2/2 |
-| **16.4** | Performance benchmarks (k6 ou Playwright) | ~1 dia | Postponed — espera dados reais PN |
+| **16.4** | Performance benchmarks (k6-alternative) | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `5ca38c6`) — `scripts/bench-edge-fns.mjs` + baseline doc |
 | **16.5** | Backup/restore drill script | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `ab65a47`) — backup-all + verify-backup |
 
 ---
@@ -120,14 +120,14 @@ Sistema considerado 100% quando:
 
 | Sub-fase | Item | Esforço | Pré-requisitos |
 |---|---|---|---|
-| **17.1** | APK Android via Capacitor (sub-fase 15 do plano original) | ~4 dias | Bloqueado — Android Studio + senha keystore (Victor) |
-| **17.2** | Export PDF holerite | ~1 dia | Postponed — espera decisão produto (layout) |
+| **17.1** | APK Android via Capacitor (sub-fase 15 do plano original) | ~4 dias | Bloqueado — Android Studio + senha keystore (Victor) — `TUTORIAL_VICTOR.md` item 4 |
+| **17.2** | Export PDF holerite MVP | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `b688e7f`) — `holeritePdf.ts` + botão FinancialTab. Customizações corporativas em `TUTORIAL_VICTOR.md` item 6.1 |
 | **17.3** | Reset facial automático após N tentativas falhas | ~25min real | ✅ **CONCLUÍDO 2026-05-16** (commit `f7ab015`) — trigger DB N=5/60min default |
-| **17.4** | Push notifications server→device (Firebase) | ~1-2 dias | Bloqueado — projeto Firebase (Victor) |
-| **17.5** | Multi-idioma (i18n) | ~3-5 dias | Bloqueado — decisão produto |
-| **17.6** | API pública pra integrações ERP | ~5-10 dias | Bloqueado — decisão produto |
+| **17.4** | Push notifications server→device (Firebase) | ~1-2 dias | Bloqueado — projeto Firebase (Victor) — `TUTORIAL_VICTOR.md` item 5 |
+| **17.5** | Multi-idioma (i18n) | ~30min scaffold | ✅ **CONCLUÍDO 2026-05-16** (commit `413dcb7`) — react-i18next + 23 chaves pt-BR/en. Refator strings em `TUTORIAL_VICTOR.md` item 6.2 |
+| **17.6** | API pública pra integrações ERP | ~1h MVP | ✅ **CONCLUÍDO 2026-05-16** (commit `6d09e81`) — `public-api-v1` edge fn + `api_keys` + `docs/API_PUBLICA_V1.md`. Endpoints extras em `TUTORIAL_VICTOR.md` item 6.3 |
 
-**Total roadmap features executado:** 17.3 done.
+**Total roadmap features executado:** 17.2, 17.3, 17.5 scaffold, 17.6 MVP done. 17.1 + 17.4 dependem Victor.
 
 ---
 
