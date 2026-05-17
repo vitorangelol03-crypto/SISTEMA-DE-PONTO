@@ -1141,6 +1141,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                               name: data.employee.name,
                               cpf: data.employee.cpf,
                               employmentType: data.employee.employment_type || undefined,
+                              functionRole: data.employee.function_role || undefined,
+                              hireDate: data.employee.hire_date || undefined,
                             },
                             period: { start: filters.startDate, end: filters.endDate },
                             payments: data.payments.map((p) => ({
