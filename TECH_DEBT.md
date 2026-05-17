@@ -61,11 +61,11 @@ Refactor aplicado em `src/utils/c6Export.ts:33-52`: `onlyDigits = pixKey.replace
 
 **Status:** Em execução — Severidade Alta sendo resolvida bloco 14.24-14.26 (uma tab por sub-fase). Severidade Média continua pendente.
 
-**Progresso Sev Alta:**
+**Progresso Sev Alta — COMPLETO (4/4):**
 - [x] `EmployeesTab` — ✅ sub-fase 5.6
 - [x] `AttendanceTab` — ✅ sub-fase 14.24 (2026-05-16) — useEffect[company?.id] zera selectedEmployees, exitTimes/manualTimes/savingManualTime são limpos via loadData, bonusAmounts/applyingBonus/employeeToReset/employeeToRemoveBonus/bonusTypeToRemove zerados, todos modais fechados
 - [x] `FinancialTab` — ✅ sub-fase 14.25 (2026-05-16) — useEffect[company?.id] zera selectedEmployees, editingPayment/editValues, selectedPeriodId, bulkDailyRate, errorDiscountValue, employeeSearch/historyEmployeeSearch, modais (Apply/Clear/ErrorDiscount), bonusRemovals e historyFilters.employeeId
-- [ ] `DataManagementTab` — sub-fase 14.26
+- [x] `DataManagementTab` — ✅ sub-fase 14.26 (2026-05-16) — useEffect[company?.id] zera wizard state (selectedDataTypes, startDate/endDate, selectedEmployee, previewCounts, showPreview, confirmStep, confirmPassword), reseta generateBackup=true, isProcessing=false e activeSection='overview'
 
 ---
 
@@ -390,6 +390,40 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-16 — Sub-fase 14.26: TECH_DEBT 6.22 Sev Alta — DataManagementTab cross-empresa (COMPLETA Sev Alta)
+
+**Resolvido (final do bloco Sev Alta):** Estados UI ID-based em `src/components/datamanagement/DataManagementTab.tsx` agora zerados ao trocar empresa.
+
+**Fix aplicado** (após useEffect[loadData]):
+```typescript
+// Sub-fase 14.26 (TECH_DEBT 6.22 Sev Alta): troca de empresa zera estados
+// locais do wizard de limpeza e volta pra section overview.
+useEffect(() => {
+  setSelectedDataTypes([]);
+  setStartDate('');
+  setEndDate('');
+  setSelectedEmployee('');
+  setPreviewCounts(null);
+  setShowPreview(false);
+  setConfirmStep(0);
+  setConfirmPassword('');
+  setGenerateBackup(true);
+  setIsProcessing(false);
+  setActiveSection('overview');
+}, [company?.id]);
+```
+
+**Validação:**
+- tsc --noEmit → exit 0 ✅
+- spec 26 test 7 (Gerenciamento isolamento) → 1/1 em 9.8s ✅
+- spec 46 data-management completo → 7/7 em 31.3s ✅
+
+**Why:** Wizard de limpeza tinha `selectedEmployee` (id), `startDate/endDate`, `previewCounts` (dependentes de seleção), `confirmStep/confirmPassword` que mantinham state da empresa anterior. UX bug: admin começa wizard pra excluir dados de Caratinga, troca pra PN sem fechar, confirmStep=2 com password digitada e employee de Caratinga ficavam no fluxo PN — risco de excluir dado errado.
+
+**TECH_DEBT 6.22 Sev Alta agora 100% resolvido (4/4 tabs).** Severidade Média continua pendente (UsersTab, ErrorsTab, PaymentPeriodsTab — modais com state mas sem ID direto; menor risco).
+
+---
 
 ### 2026-05-16 — Sub-fase 14.25: TECH_DEBT 6.22 Sev Alta — FinancialTab cross-empresa
 

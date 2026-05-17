@@ -90,6 +90,25 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
     loadData();
   }, [loadData]);
 
+  // Sub-fase 14.26 (TECH_DEBT 6.22 Sev Alta): troca de empresa zera estados
+  // locais do wizard de limpeza (employee ID, datas, preview, confirm step,
+  // password) e volta pra section overview. Isso previne UX onde admin
+  // começa wizard em Caratinga, troca pra PN e o employee/preview da
+  // empresa anterior ficam visíveis no flow.
+  useEffect(() => {
+    setSelectedDataTypes([]);
+    setStartDate('');
+    setEndDate('');
+    setSelectedEmployee('');
+    setPreviewCounts(null);
+    setShowPreview(false);
+    setConfirmStep(0);
+    setConfirmPassword('');
+    setGenerateBackup(true);
+    setIsProcessing(false);
+    setActiveSection('overview');
+  }, [company?.id]);
+
   const handleUpdateRetention = async (dataType: string, months: number) => {
     try {
       await updateDataRetentionSettings(dataType, months, userId);
