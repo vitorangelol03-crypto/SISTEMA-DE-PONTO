@@ -103,12 +103,36 @@ WHERE id = '<uuid>';
 
 ---
 
-## 7. Reset facial de funcionário (manual)
+## 7. Reset facial de funcionário (manual + automático)
 
-Via UI:
+### 7.1 Manual via UI
 1. Admin master → tab Funcionários → "Editar" → "Resetar Face"
 2. `face_reset_requested = true` → próximo login funcionário precisa re-cadastrar
 3. Audit trail em `face_auth_attempts`
+
+### 7.2 Automático após N falhas (sub-fase 17.3)
+**Trigger DB:** `_check_face_auto_reset()` em `face_auth_attempts` (AFTER INSERT).
+
+Conta falhas recentes (`success=false`) do `employee_id` na janela
+`attempts_window_minutes` (config). Se ≥ `max_attempts_before_reset`, marca
+automaticamente `employees.face_reset_requested = true`.
+
+**Defaults por empresa** (em `face_recognition_config`):
+- `max_attempts_before_reset` = **5** falhas
+- `attempts_window_minutes` = **60** minutos
+
+**Ajustar via SQL** (exemplo Caratinga):
+```sql
+UPDATE public.face_recognition_config
+   SET max_attempts_before_reset = 3,
+       attempts_window_minutes = 30
+ WHERE company_id = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
+```
+
+**Desligar auto-reset:** setar `max_attempts_before_reset = 0` (trigger não age) OU
+deletar row de `face_recognition_config` (cfg NULL → trigger não age).
+
+UI de admin pra ajustar threshold via formulário fica como follow-up.
 
 ---
 
