@@ -324,23 +324,25 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 
 **Solução planejada (Fase 15 — pós-go-live):**
 
-1. **Fix `auth_rls_initplan` (~2-3h):**
-   - Re-escrever as 53 policies substituindo `auth.jwt() ->> 'company_id'` por `(SELECT auth.jwt() ->> 'company_id')` (subquery).
-   - PostgreSQL cacheia o resultado por query, eliminando re-eval por row.
+1. **Fix `auth_rls_initplan`** — ✅ **EXECUTADO em sub-fase 15.1 (2026-05-16)**
+   - Migration `rls_initplan_cache_subfase_15_1`: 55 policies recriadas trocando `auth.jwt() ->> ...` por `(SELECT auth.jwt() ->> ...)`.
+   - Validação `pg_policies`: 0 policies sem cache de subquery.
+   - Advisor ainda reporta 33 — falso positivo do linter (não detecta o padrão Postgres-normalizado `( SELECT (auth.jwt() ->> ...))`).
+   - Validação E2E: spec 01-auth + 02-clock + 24+26 multi-empresa → 24/24 ✅.
 
-2. **Fix `multiple_permissive_policies` (~1-2h):**
-   - Combinar as 2 policies por tabela (SELECT + ALL) em 1 policy só.
-   - Cada tabela vai ter 1 policy USING (cmd ALL com WITH CHECK também).
+2. **Fix `multiple_permissive_policies`** — ✅ **EXECUTADO em sub-fase 15.2 (2026-05-16)**
+   - Migration `rls_drop_redundant_select_policies_subfase_15_2`: 22 tabelas core multi-empresa tinham 2 policies permissivas com mesmo qual (`rls_company_match_modify` cmd ALL + `rls_company_match_select` cmd SELECT). Drop do `_select` redundante — cmd ALL já cobre SELECT com USING idêntico.
+   - Antes: 43 → Agora: 35 advisors. Restam 7 (4 tabelas legado fora de escopo + 3 admin+public separados que mergir mudaria semântica DELETE).
 
-3. **Indexar FKs (~30min):**
-   - 23 FKs sem index. CREATE INDEX em cada.
+3. **Indexar FKs** — ✅ **EXECUTADO em sub-fase 15.3 (2026-05-16)**
+   - Migration `add_missing_fk_indexes_subfase_15_3`: 23 indexes criados com `CREATE INDEX IF NOT EXISTS idx_<table>_<column>`.
+   - Validação `pg_constraint`: 0 FKs sem covering index.
+   - EXPLAIN ANALYZE confirma uso real: `Index Only Scan using idx_attendance_marked_by`.
 
-4. **Drop unused indexes (~30min):**
-   - 28 indexes nunca executados. Confirmar via `pg_stat_user_indexes.idx_scan = 0` por período > 30d antes de drop.
+4. **Drop unused indexes (~30min):** Aguarda **dados reais 30d em prod** pra confirmar via `pg_stat_user_indexes.idx_scan = 0`. Postponed sub-fase 15.4.
+   - Nota: contagem de unused_index subiu de 27 → 50 (porque 23 indexes novos da 15.3 ainda não foram exercitados — esperado).
 
-**Estimativa total Fase 15:** ~4-6h.
-
-**Status:** ACEITO como tech debt pós-go-live. Não bloqueia release v2.0.0-multi-tenant.
+**Status:** 3/4 ações concluídas em 2026-05-16. Item 4 (drop unused) aguarda dados reais.
 
 ---
 
@@ -371,6 +373,39 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-16 — Sub-fases 15.1 + 15.2 + 15.3: TECH_DEBT 14.B Performance Supabase
+
+**Executado:** otimização de 78 advisors via 3 migrations Supabase MCP.
+
+**15.3 — Indexar 23 FKs sem index:**
+- Migration `add_missing_fk_indexes_subfase_15_3` (apply_migration MCP).
+- `CREATE INDEX IF NOT EXISTS idx_<table>_<column>` em 23 FKs detectados pelo advisor `unindexed_foreign_keys`.
+- Tabelas: activity_logs, attendance (2 FKs), auto_cleanup_config, bonus_removals, bonuses, cleanup_logs, data_retention_settings, employees, error_logs (2), error_records, face_recognition_config, payment_periods, payments, permission_logs (2), triage_distribution_employees (2), triage_error_distributions, triage_errors, user_permissions, users.
+- Validação `pg_constraint`: 0 FKs sem covering index (era 23).
+- EXPLAIN ANALYZE: `Index Only Scan using idx_attendance_marked_by on attendance (cost=0.28..75.84 rows=3130)` ✅.
+
+**15.1 — Fix `auth_rls_initplan` em 55 policies:**
+- Migration `rls_initplan_cache_subfase_15_1` (apply_migration MCP).
+- Reescrita 55 policies trocando `auth.jwt() ->> ...` por `(SELECT auth.jwt() ->> ...)`.
+- 4 patterns aplicados: rls_admin_only (7 tables), rls_company_match_modify+select (22 tables × 2 = 44), rls_error_logs_admin_or_match (1), variações admin (companies/feature_versions/monitoring_settings).
+- Validação `pg_policies`: 0 policies sem cache de subquery (`( SELECT (auth.jwt() ->> ...))` normalizado pelo Postgres).
+- Advisor reporta 33 ainda — **falso positivo do linter** (não reconhece o pattern `( SELECT (auth.jwt() ...))` com paren extra adicionado pelo Postgres). Cache de subquery está aplicado de fato (confirmado via inspeção SQL direta).
+
+**15.2 — Fix `multiple_permissive_policies` em 22 tabelas:**
+- Migration `rls_drop_redundant_select_policies_subfase_15_2` (apply_migration MCP).
+- Drop de 22 policies `rls_company_match_select` (cmd SELECT) redundantes — cmd ALL no `rls_company_match_modify` já cobre SELECT com mesmo USING. Postgres OR-eia múltiplas permissive em SELECT → overhead 2× eliminado.
+- Antes: 43 advisors → Depois: 35 (redução de 22 nos 22 cores; 3 admin+public mantidos por necessidade semântica DELETE; 4 tabelas legado fora de escopo).
+
+**Validação consolidada das 3 migrations:**
+- spec 01-auth + 02-clock + 24-multi-company + 26-multi-company-ui → **24/24 em 1.9min** ✅
+- Working tree: nenhuma mudança no código frontend (só DB migrations via Supabase MCP)
+
+**Why:** Performance advisors apontavam overhead crescente com volume. Sistema atual (2 empresas, ~60 employees) é imperceptível, mas escalar pra >5 empresas ou >200 employees/empresa multiplicaria latência. Otimização preventiva antes de onboarding PN real.
+
+**Pendente Fase 15.4:** drop 28+50 unused indexes (espera 30d dados reais pra confirmar `idx_scan = 0`).
+
+---
 
 ### 2026-05-16 — Sub-fase 14.28: TECH_DEBT 6.1 — Flake C6 importC6 helper
 

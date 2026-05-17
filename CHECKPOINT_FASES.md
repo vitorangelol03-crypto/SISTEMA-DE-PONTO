@@ -563,10 +563,161 @@ gh release create v2.0.0-multi-tenant.1 --title "v2.0.0.1 — Quick wins consoli
 
 ---
 
+### 14.24-14.27 — Bloco Tech Debt Médio (Estados UI cross-empresa + UX mobile) — 2026-05-16
+
+Resposta ao "vamos continuar agora, não precisa economizar... faça todas as etapas
+que não precisam de mim e valide elas e sistema". Bloco de 4 sub-fases em sequência
+respeitando MODO CIRÚRGICO (uma sub-fase = um commit atômico, sem subagentes
+paralelos, validação real entre cada).
+
+**14.24 — AttendanceTab cross-empresa (commit `404c3a5`):**
+- useEffect[company?.id] novo após polling effect — zera 7 estados ID-based +
+  fecha 5 modais + reseta 3 inputs (selectedEmployees, bonusAmounts,
+  applyingBonus, savingManualTime, employeeToReset, employeeToRemoveBonus,
+  bonusTypeToRemove, modais bonus/reset/removeBonus/removeAllBonus/mirrorMass,
+  inputs bonusRemovalObservation/removeAllBonusObservation/searchTerm).
+- Refactor adicional spec 26 tests 1/2/4/8 (premissa "PN vazio" outdated por
+  14.16) pra padrão dinâmico DB count.
+- Validação: spec 26 → 9/9 em 1.1min ✅.
+
+**14.25 — FinancialTab cross-empresa (commit `3e706bd`):**
+- useEffect[company?.id] novo após auto-fill startDate/endDate.
+- Zera selectedEmployees, editingPayment, editValues, selectedPeriodId,
+  bulkDailyRate, errorDiscountValue, employeeSearch, historyEmployeeSearch,
+  bonusRemovals, historyFilters.employeeId. Fecha modais Apply/Clear/ErrorDiscount.
+- Validação: spec 16 financial-complete → 8/8 ✅, spec 26 → 9/9 ✅.
+
+**14.26 — DataManagementTab cross-empresa (commit `6002c5e`):**
+- useEffect[company?.id] zera wizard state (selectedDataTypes, datas,
+  selectedEmployee, previewCounts, confirmStep, confirmPassword).
+- Reseta defaults (generateBackup=true, isProcessing=false, activeSection='overview').
+- Bloco 6.22 Sev Alta COMPLETO (4/4 tabs).
+- Validação: spec 46 data-management → 7/7 ✅, spec 26 test 7 → 1/1 ✅.
+
+**14.27 — UX mobile completa (commit `1372f2f`):**
+- Componentes (Layout.tsx, TabNavigation.tsx) já estavam OK desde 14.11.2 —
+  sem hamburger, aria-label="Sair", badge único responsivo.
+- Specs outdated fixados:
+  - `tests/38-system-walkthrough.spec.ts:195` — toBeVisible → toBeAttached
+    (Pablo Henrique fica em scroll horizontal no mobile).
+  - `tests/35-mirror-mass-dialog.spec.ts:110` — refactor test 8 pra pattern
+    dinâmico DB count (igual spec 26).
+- Validação: subset mobile-pixel5 nos 4 specs originais → **31/31 em 2.2min** ✅
+  (era 14/31 em 14.10, 30/31 em 14.11.2).
+
+---
+
+### 15.1, 15.2, 15.3 — Bloco Performance Supabase (TECH_DEBT 14.B) — 2026-05-16
+
+3 migrations aplicadas via Supabase MCP (sem mudanças no working tree git).
+
+**15.3 — Indexar 23 FKs sem index:**
+Migration `add_missing_fk_indexes_subfase_15_3`. CREATE INDEX IF NOT EXISTS em
+todas 23 FKs detectadas pelo advisor `unindexed_foreign_keys`.
+
+Validação `pg_constraint`: 0 FKs sem covering index (era 23). EXPLAIN ANALYZE
+confirma `Index Only Scan using idx_attendance_marked_by`.
+
+**15.1 — Fix `auth_rls_initplan` em 55 policies:**
+Migration `rls_initplan_cache_subfase_15_1`. Reescreve TODAS as 55 policies
+RLS trocando `auth.jwt() ->> ...` por `(SELECT auth.jwt() ->> ...)` pra cachear
+o resultado por query (subquery executada uma vez em vez de per-row).
+
+4 patterns aplicados:
+- `rls_admin_only` (7 tabelas) — admin master sub=9999
+- `rls_company_match_modify`+`_select` (22 tabelas × 2 = 44) — multi-empresa
+- `rls_error_logs_admin_or_match` (1) — variação com NULL company_id
+- Variações admin (companies, feature_versions, monitoring_settings) — 3
+
+Validação `pg_policies`: 0 policies sem cache de subquery. Advisor reporta 33
+ainda — **falso positivo do linter** (não detecta o pattern Postgres-normalizado
+`( SELECT (auth.jwt() ->> ...))` com paren extra adicionado pelo PG).
+
+**15.2 — Drop policies redundantes `_select`:**
+Migration `rls_drop_redundant_select_policies_subfase_15_2`. 22 tabelas core
+multi-empresa tinham 2 policies permissivas com mesmo qual:
+- `rls_company_match_modify` (cmd ALL) — cobre SELECT/INSERT/UPDATE/DELETE
+- `rls_company_match_select` (cmd SELECT) — redundante (mesmo USING)
+
+Postgres OR-eia ambas em SELECT → overhead 2×. Drop do `_select` mantém
+semântica idêntica (cmd ALL já cobre SELECT com USING).
+
+Advisor: 43 → 35 (redução de 22 nos 22 cores; restam 4 tabelas legado +
+3 admin+public que mergir mudaria semântica DELETE).
+
+**Validação consolidada:**
+- spec 01-auth + 02-clock + 24-multi-company + 26-multi-company-ui → 24/24 em 1.9min ✅
+
+---
+
+### 14.28 — Flake C6 importC6 helper (TECH_DEBT 6.1) — 2026-05-16 (commit `99d85c9`)
+
+Refactor de `tests/20-c6-complete.spec.ts:30-44` (helper `importC6`):
+
+```typescript
+// Antes (race 4-5s toast efêmero)
+await expect(page.getByText(/importado/)).toBeVisible({ timeout: 15_000 });
+
+// Depois (estado persistente)
+await expect(page.getByText(/^Total:\s*\d+\s*pagamento/).first()).toBeVisible({ timeout: 15_000 });
+```
+
+`C6PaymentTab.tsx:744-748` quando `dataImported=true` renderiza tfoot
+"Total: N pagamento(s)" que persiste enquanto importação visível.
+
+**Strict mode:** `.first()` necessário porque texto aparece em desktop tfoot +
+mobile cards. Sem `.first()`, violation em 2 elementos.
+
+**Validação:** spec 20 c6-complete → 8/8 em 42.3s ✅.
+
+---
+
+### 14.30 — Checkpoint completo bloco médio — 2026-05-16
+
+Fechamento sólido do bloco médio (sub-fases 14.24-14.28 + 15.1-15.3, ~3h real
+abaixo da estimativa 6-8h).
+
+**Validação baseline final:**
+- `npx tsc --noEmit` → exit 0 ✅
+- `npx vitest run` → **434 passing** / 1 skipped em 4.61s ✅
+- Working tree limpo (só `coverage/` untracked, ignorado)
+
+**Atualizações de docs:**
+- `CHECKPOINT.md` — data, métricas (perf Supabase, Sev Alta 4/4, mobile 31/31)
+- `CHECKPOINT_FASES.md` — sub-fases 14.24-14.30 + 15.1/15.2/15.3 detalhadas
+- `TECH_DEBT.md` — 4 entries movidos pra Histórico (6.22 Sev Alta complete, 6.25, 6.1, 14.B parcial)
+- `PLANO_100.md` — bloco médio marcado completed, bloco perf 3/4 done
+
+**Resumo bloco médio 14.24-14.28 + 15.1-15.3:**
+
+| Sub-fase | Item | Esforço real | Validação |
+|---|---|---|---|
+| 14.24 | AttendanceTab cross-empresa | ~25min | spec 26 9/9 ✅ |
+| 14.25 | FinancialTab cross-empresa | ~20min | specs 16 + 26 ✅ |
+| 14.26 | DataManagementTab cross-empresa | ~15min | specs 46 + 26 ✅ |
+| 14.27 | UX mobile completa | ~20min | mobile 31/31 ✅ |
+| 15.3 | 23 FKs indexadas | ~15min | pg_constraint 0 missing ✅ |
+| 15.1 | 55 RLS policies cache | ~30min | pg_policies confirma ✅ |
+| 15.2 | 22 multiple_permissive drop | ~15min | 43→35 advisors ✅ |
+| 14.28 | Flake C6 importC6 | ~20min | spec 20 8/8 ✅ |
+| 14.30 | Checkpoint completo | ~20min | tsc + vitest ✅ |
+
+**Total real:** ~3h (estimativa 6-8h — abaixo porque componentes mobile já tinham
+sido refatorados em 14.11.2, e perf Supabase via migration foi rápido).
+
+---
+
 ## Commits da sessão atual (mais recentes primeiro)
 
 ```
-[14.23] checkpoint(*): bloco quick wins fechado + tag local v2.0.0-multi-tenant
+[14.30] checkpoint(*): bloco médio fechado — 14.24-14.28 + 15.1-15.3 (próximo)
+99d85c9  fix(test): TECH_DEBT 6.1 flake C6 importC6 helper (sub-fase 14.28)
+1372f2f  test(mobile): TECH_DEBT 6.25 UX mobile 100% — specs outdated fixados (sub-fase 14.27)
+6002c5e  fix(ui): estados cross-empresa DataManagementTab (sub-fase 14.26)
+3e706bd  fix(ui): estados cross-empresa FinancialTab (sub-fase 14.25)
+404c3a5  fix(ui): estados cross-empresa AttendanceTab + refactor spec 26 (sub-fase 14.24)
+d1a75d5  docs(release): tag v2.0.0-multi-tenant já existe — proposta v2.0.0.1 patch (14.23 follow-up)
+c04a869  checkpoint(*): bloco quick wins fechado + tag local v2.0.0-multi-tenant (14.23)
 aacee54  docs(release): consolidar CHANGELOG + RELEASE_NOTES v2.0.0-multi-tenant (sub-fase 14.22)
 dd190f3  chore(vite+docs): chunkSizeWarningLimit 600→1000 + docs obsoletas (sub-fase 14.21)
 3f4ecc1  fix(c6): validatePixKey aceita CPF/CNPJ/phone formatado (sub-fase 14.20)

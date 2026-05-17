@@ -57,25 +57,25 @@ Sistema considerado 100% quando:
 
 ### 🟡 BLOCO TECH DEBT MÉDIO — pode executar sem PN (sub-fases 14.24 → 14.27)
 
-| Sub-fase | Item | Esforço | Bloqueia? | Notas |
+| Sub-fase | Item | Esforço | Bloqueia? | Status |
 |---|---|---|---|---|
-| **14.24** | TECH_DEBT 6.22 Sev Alta — Estados UI cross-empresa `AttendanceTab` (`selectedEmployees`, `exitTimes`, `manualTimes`, `bonusAmounts`, `applyingBonus`, `employeeToReset`, `bonusTypeToRemove`) | ~45min | Não | useEffect[company?.id] limpa estados ID-based |
-| **14.25** | TECH_DEBT 6.22 Sev Alta — Estados UI cross-empresa `FinancialTab` (`selectedEmployees`, `editingPayment`, `editValues`, `selectedPeriodId`) | ~45min | Não | Mesmo pattern |
-| **14.26** | TECH_DEBT 6.22 Sev Alta — Estados UI cross-empresa `DataManagementTab` (wizard state) | ~30min | Não | Mesmo pattern |
-| **14.27** | TECH_DEBT 6.25 — UX mobile (`aria-label="Sair"`, helpers detect viewport pra hamburger, unificar duplicação `Admin/Administrador`) | ~3-4h | Não | Habilita suite mobile completa |
+| **14.24** | TECH_DEBT 6.22 Sev Alta — Estados UI cross-empresa `AttendanceTab` | ~25min real | Não | ✅ **CONCLUÍDO 2026-05-16** (commit `404c3a5`) |
+| **14.25** | TECH_DEBT 6.22 Sev Alta — Estados UI cross-empresa `FinancialTab` | ~20min real | Não | ✅ **CONCLUÍDO 2026-05-16** (commit `3e706bd`) |
+| **14.26** | TECH_DEBT 6.22 Sev Alta — Estados UI cross-empresa `DataManagementTab` | ~15min real | Não | ✅ **CONCLUÍDO 2026-05-16** (commit `6002c5e`) |
+| **14.27** | TECH_DEBT 6.25 — UX mobile (já estava OK em components; specs outdated fixados) | ~20min real | Não | ✅ **CONCLUÍDO 2026-05-16** (commit `1372f2f`) — mobile 31/31 ✅ |
 
-**Total bloco:** ~5-6h.
+**Total bloco real:** ~1h20 (estimativa era 5-6h — abaixo porque componentes mobile já estavam refatorados em 14.11.2).
 
 ---
 
 ### 🟢 BLOCO ESTABILIDADE TESTES — pode executar sem PN (sub-fases 14.28 → 14.29)
 
-| Sub-fase | Item | Esforço | Notas |
+| Sub-fase | Item | Esforço | Status |
 |---|---|---|---|
-| **14.28** | TECH_DEBT 6.1 — Flake helper `importC6` em `tests/20-c6-complete.spec.ts:39` (toast `/importado/` race) | ~1h | Substituir `getByText` por aguardar evento DB direto |
-| **14.29** | TECH_DEBT 6.24 — `AttendanceTab.loadData` refetch live via Supabase Realtime subscription | ~1 dia | Custo maior — postponed natural |
+| **14.28** | TECH_DEBT 6.1 — Flake helper `importC6` em `tests/20-c6-complete.spec.ts:30` | ~20min real | ✅ **CONCLUÍDO 2026-05-16** (commit `99d85c9`) — aguarda tfoot persistente em vez de toast |
+| **14.29** | TECH_DEBT 6.24 — `AttendanceTab.loadData` refetch live via Supabase Realtime | ~1 dia | Postponed (baixa prioridade, polling 30s atual aceitável) |
 
-**Total bloco:** ~1-2 dias (14.29 é o pesado).
+**Total bloco real:** ~20min (14.29 não executada).
 
 ---
 
@@ -89,19 +89,17 @@ Sistema considerado 100% quando:
 
 ---
 
-### 🟢 BLOCO PERFORMANCE — pós-onboarding PN (Fase 15)
+### 🟢 BLOCO PERFORMANCE — Fase 15
 
-| Sub-fase | Item | Esforço | Justificativa |
+| Sub-fase | Item | Esforço | Status |
 |---|---|---|---|
-| **15.1** | Fix `auth_rls_initplan` (53 policies — `auth.jwt() ->> 'company_id'` → `(SELECT auth.jwt() ->> 'company_id')`) | ~2-3h | Cache JWT por query |
-| **15.2** | Fix `multiple_permissive_policies` (43 — combinar 2 policies por tabela em 1) | ~1-2h | Reduz OR-eval Postgres |
-| **15.3** | Indexar 23 FKs sem index | ~30min | Joins mais rápidos |
-| **15.4** | Drop 28 unused indexes (após validar `idx_scan = 0` >30d em prod) | ~30min | Reduz write overhead |
-| **15.5** | Performance baseline pós-otimização (queries lentas, edge fn warm vs cold) | ~1h | Métricas em `/tmp/perf-baseline.md` |
+| **15.1** | Fix `auth_rls_initplan` (55 policies reescritas com `(SELECT auth.jwt())`) | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (migration `rls_initplan_cache_subfase_15_1`) |
+| **15.2** | Fix `multiple_permissive_policies` (22 redundantes droppadas) | ~15min real | ✅ **CONCLUÍDO 2026-05-16** (migration `rls_drop_redundant_select_policies_subfase_15_2`) |
+| **15.3** | Indexar 23 FKs sem index | ~15min real | ✅ **CONCLUÍDO 2026-05-16** (migration `add_missing_fk_indexes_subfase_15_3`) — `pg_constraint` confirma 0 missing |
+| **15.4** | Drop 50 unused indexes (após validar `idx_scan = 0` >30d em prod) | ~30min | Postponed — espera dados reais |
+| **15.5** | Performance baseline pós-otimização | ~1h | Postponed — espera dados reais PN |
 
-**Total Fase 15:** ~4-7h.
-
-**Nota:** trigger pra Fase 15 é **dados reais PN + 30 dias de uso** pra `idx_scan` significativo.
+**Total Fase 15 real:** ~1h (15.1+15.2+15.3 executadas). Itens 15.4/15.5 aguardam dados reais.
 
 ---
 
@@ -160,21 +158,31 @@ Sistema considerado 100% quando:
 **Tempo total real:** ~1h45 (estimativa era 2h10 — abaixo).
 **Tag local criada:** `v2.0.0-multi-tenant` (push fica com Victor).
 
-### Próxima sessão (sub-fases 14.24 → 14.27):
-- Bloco TECH DEBT MÉDIO (estados UI cross-empresa + mobile UX)
-- **Tempo total:** ~5-6h, pode ser dividido em 2 sessões
+### Sessão 2 (executada 2026-05-16 — sub-fases 14.24 → 14.30):
+- ✅ 14.24 — AttendanceTab cross-empresa (commit `404c3a5`)
+- ✅ 14.25 — FinancialTab cross-empresa (commit `3e706bd`)
+- ✅ 14.26 — DataManagementTab cross-empresa (commit `6002c5e`)
+- ✅ 14.27 — UX mobile completa (commit `1372f2f`) — mobile 31/31 ✅
+- ✅ 15.3 — 23 FKs indexadas (Supabase migration)
+- ✅ 15.1 — 55 RLS policies otimizadas com cache (Supabase migration)
+- ✅ 15.2 — 22 multiple_permissive policies eliminadas (Supabase migration)
+- ✅ 14.28 — Flake C6 importC6 fixado (commit `99d85c9`)
+- ✅ 14.30 — Checkpoint completo (este)
+
+**Tempo total real Sessão 2:** ~3h (estimativa era 6-8h).
 
 ### Quando Victor mandar planilha PN:
-- 14.30 — Import
-- 14.31 — Smoke test
-- 14.32 — Push tag + GitHub Release
+- 14.32 — Import (era 14.30 — renumberado pelo bloco médio)
+- 14.33 — Smoke test
+- 14.34 — Push tag + GitHub Release
 
 ### Pós-go-live estabilizado (30 dias com dados reais):
-- Fase 15 — Performance advisors
-- Fase 16 — Cobertura postponed
+- 15.4 — Drop unused indexes (~30min)
+- 15.5 — Performance baseline
+- Fase 16 — Cobertura postponed (FaceRegistration, Firefox/Safari, etc.)
 
 ### Roadmap features (sem trigger):
-- Fase 17 — APK Android, export PDF, etc.
+- Fase 17 — APK Android, export PDF, push notifications, etc.
 
 ---
 

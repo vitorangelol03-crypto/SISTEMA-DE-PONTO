@@ -3,8 +3,8 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-16 (sub-fase 14.23 — Checkpoint completo bloco quick wins 14.18-14.22 ✅)
-**Branch:** `main` (limpa, sem push pendente)
+**Última atualização:** 2026-05-16 (sub-fase 14.30 — Checkpoint bloco médio + perf 14.24-14.28 + 15.1-15.3 ✅)
+**Branch:** `main` (limpa, sem push pendente — 13 commits ahead de origin/main)
 **Plano canônico:** `PLANO_PRODUCAO.md` + `PLANO_100.md` (roadmap pra 100%)
 **TECH_DEBT canônico:** `TECH_DEBT.md`
 **Release pronto pra tag:** `v2.0.0-multi-tenant` (notes em `RELEASE_NOTES_v2.0.0.md`, aguarda push Victor)
@@ -69,7 +69,10 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 | **RLS-enabled tables** | **50** |
 | **Edge functions ACTIVE** | **4** (auth-login v9, clock-in-validated v8, create-user v1, **employee-public-api v3 bcrypt**) |
 | **Migrations aplicadas** | **64** |
-| **Unit tests (Vitest)** | **434 passing** + 1 skipped (19 specs em `tests/unit/`) — **+3 quick wins 14.20** |
+| **Unit tests (Vitest)** | **434 passing** + 1 skipped (19 specs em `tests/unit/`) em 4.61s |
+| **Performance Supabase** | RLS cache subquery em 55 policies ✅, 23 FKs indexadas ✅, 22 multiple_permissive eliminadas ✅ |
+| **Estados UI cross-empresa Sev Alta** | 4/4 tabs resolvidas (EmployeesTab, AttendanceTab, FinancialTab, DataManagementTab) ✅ |
+| **UX mobile** | 31/31 subset mobile-pixel5 ✅ (era 14/31 inicial) |
 | **E2E specs (Playwright)** | **49 specs** (suite contra prod: 263+/18/2 — só TECH_DEBT 6.13 cold-start) |
 | **Spec Supremo PN** | `tests/101-supremo-pn.spec.ts` — **25/25** contra prod em 1.1min ✅ |
 | **Funcionários PN** | **30 Demo PN** (20 CLT + 8 Diarista + 2 PJ) com PINs bcrypt |
