@@ -34,3 +34,12 @@ teste-espelho-v6.pdf
 .vercel
 # Backups locais (dados sensíveis — não commitar)
 backups/
+
+# Sub-fase 17.1.1: Capacitor Android build artifacts
+android/app/build/
+android/build/
+android/.gradle/
+android/capacitor-cordova-android-plugins/build/
+android/app/src/main/assets/public/
+android/keystore/
+*.jks
