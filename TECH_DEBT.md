@@ -64,7 +64,7 @@ Refactor aplicado em `src/utils/c6Export.ts:33-52`: `onlyDigits = pixKey.replace
 **Progresso Sev Alta:**
 - [x] `EmployeesTab` — ✅ sub-fase 5.6
 - [x] `AttendanceTab` — ✅ sub-fase 14.24 (2026-05-16) — useEffect[company?.id] zera selectedEmployees, exitTimes/manualTimes/savingManualTime são limpos via loadData, bonusAmounts/applyingBonus/employeeToReset/employeeToRemoveBonus/bonusTypeToRemove zerados, todos modais fechados
-- [ ] `FinancialTab` — sub-fase 14.25
+- [x] `FinancialTab` — ✅ sub-fase 14.25 (2026-05-16) — useEffect[company?.id] zera selectedEmployees, editingPayment/editValues, selectedPeriodId, bulkDailyRate, errorDiscountValue, employeeSearch/historyEmployeeSearch, modais (Apply/Clear/ErrorDiscount), bonusRemovals e historyFilters.employeeId
 - [ ] `DataManagementTab` — sub-fase 14.26
 
 ---
@@ -390,6 +390,43 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-16 — Sub-fase 14.25: TECH_DEBT 6.22 Sev Alta — FinancialTab cross-empresa
+
+**Resolvido (parcial):** Estados UI ID-based em `src/components/financial/FinancialTab.tsx` agora zerados ao trocar empresa.
+
+**Fix aplicado** (após useEffect L246 auto-fill startDate/endDate):
+```typescript
+// Sub-fase 14.25 (TECH_DEBT 6.22 Sev Alta): troca de empresa zera estados
+// locais ID-based (Set/objeto com employee_id), fecha modais abertos e
+// limpa inputs/filtros referenciando dados da empresa anterior.
+useEffect(() => {
+  setSelectedEmployees(new Set());
+  setEditingPayment(null);
+  setEditValues({ dailyRate: '', bonus: '' });
+  setSelectedPeriodId('');
+  setBulkDailyRate('');
+  setErrorDiscountValue('');
+  setEmployeeSearch('');
+  setHistoryEmployeeSearch('');
+  setShowApplyModal(false);
+  setShowClearModal(false);
+  setShowErrorDiscountModal(false);
+  setBonusRemovals([]);
+  setHistoryFilters(prev => ({ ...prev, employeeId: '' }));
+}, [company?.id]);
+```
+
+**Validação:**
+- tsc --noEmit → exit 0 ✅
+- spec 26 multi-company-ui-isolation → 9/9 passou em 1.1min ✅
+- spec 16 financial-complete → 8/8 + 2 skipped (legítimos) em 46.2s ✅
+
+**Why:** Mesmo padrão do 14.24 (AttendanceTab). FinancialTab tinha `selectedEmployees`, `editingPayment` ({employeeId, date}), `selectedPeriodId`, `bonusRemovals` referenciando IDs/periods da empresa anterior. UX bug concreto: trocar empresa mantinha modal "Aplicar valores" aberto com selecionados de Caratinga em PN.
+
+DataManagementTab Sev Alta segue em 14.26.
+
+---
 
 ### 2026-05-16 — Sub-fase 14.24: TECH_DEBT 6.22 Sev Alta — AttendanceTab cross-empresa
 

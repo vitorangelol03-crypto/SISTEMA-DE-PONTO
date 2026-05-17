@@ -250,6 +250,27 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     setFilters(prev => ({ ...prev, startDate: p.start_date, endDate: p.end_date }));
   }, [selectedPeriodId, periods]);
 
+  // Sub-fase 14.25 (TECH_DEBT 6.22 Sev Alta): troca de empresa zera estados
+  // locais ID-based (Set/objeto com employee_id), fecha modais abertos e
+  // limpa inputs/filtros referenciando dados da empresa anterior.
+  // payments/attendances/financialData são refetchados pelo useEffect L211
+  // (loadData) quando company.id muda via loadData closure.
+  useEffect(() => {
+    setSelectedEmployees(new Set());
+    setEditingPayment(null);
+    setEditValues({ dailyRate: '', bonus: '' });
+    setSelectedPeriodId('');
+    setBulkDailyRate('');
+    setErrorDiscountValue('');
+    setEmployeeSearch('');
+    setHistoryEmployeeSearch('');
+    setShowApplyModal(false);
+    setShowClearModal(false);
+    setShowErrorDiscountModal(false);
+    setBonusRemovals([]);
+    setHistoryFilters(prev => ({ ...prev, employeeId: '' }));
+  }, [company?.id]);
+
   const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
   };
