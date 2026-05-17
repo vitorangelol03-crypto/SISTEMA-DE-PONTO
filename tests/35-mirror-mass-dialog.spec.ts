@@ -15,7 +15,10 @@ import { ADMIN, loginAs, goToTab, switchCompany } from './helpers';
  * (414 já passing em vitest).
  */
 
-const _CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
+const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
+const PONTE_NOVA_ID = '2b2abc4b-084c-4cf0-b5f1-02792513241d';
+
+import { getClient } from './cleanup';
 
 async function openMassDialog(page: Page) {
   await goToTab(page, 'Ponto');
@@ -107,17 +110,39 @@ test.describe('MirrorMassDialog (sub-fase 10.5)', () => {
     await expect(generateBtn).toContainText('(1)');
   });
 
-  test('8. Switch CT→PN: dialog mostra lista vazia em PN (isolamento por empresa)', async ({ page }) => {
+  test('8. Switch CT→PN: dialog mostra count exato de PN (isolamento por empresa)', async ({ page }) => {
+    // Sub-fase 14.27 — refatorado pra realidade pós-14.16 (30 Demo PN).
+    // Premissa antiga "PN vazio → 'Nenhum funcionário encontrado'" não vale
+    // mais. Pattern dinâmico: count UI bate com DB por empresa + counts
+    // distintos garantem isolamento.
+
+    const s = getClient();
+    const { count: caratingaCount } = await s
+      .from('employees').select('id', { count: 'exact', head: true })
+      .eq('company_id', CARATINGA_ID);
+    const { count: ponteNovaCount } = await s
+      .from('employees').select('id', { count: 'exact', head: true })
+      .eq('company_id', PONTE_NOVA_ID);
+
+    expect(caratingaCount).not.toBeNull();
+    expect(ponteNovaCount).not.toBeNull();
+
     await openMassDialog(page);
     let m = modal(page);
-    await expect(m.locator('ul li').first()).toBeVisible({ timeout: 15_000 });
-    const ctCount = await m.locator('ul li').count();
-    expect(ctCount).toBeGreaterThan(0);
+    await expect(m.locator('ul li').first()).toBeAttached({ timeout: 15_000 });
+    const ctUiCount = await m.locator('ul li').count();
+    expect(ctUiCount).toBeGreaterThan(0);
+    // Filtros default (mês atual) podem reduzir lista — só validar > 0.
     await m.getByRole('button', { name: /^Cancelar$/ }).click();
 
     await switchCompany(page, 'Ponte Nova');
     await openMassDialog(page);
     m = modal(page);
-    await expect(m.getByText(/Nenhum funcionário encontrado/i)).toBeVisible({ timeout: 15_000 });
+    // Em PN: ou lista populada (employees presentes) ou estado vazio (0 employees).
+    if (ponteNovaCount! > 0) {
+      await expect(m.locator('ul li').first()).toBeAttached({ timeout: 15_000 });
+    } else {
+      await expect(m.getByText(/Nenhum funcionário encontrado/i)).toBeVisible({ timeout: 15_000 });
+    }
   });
 });

@@ -191,8 +191,13 @@ test.describe('System walkthrough exaustivo (sub-fase 14.4.10)', () => {
     const realEmployees = (data ?? []).filter((e) => !e.name.startsWith('PW Test'));
     expect(realEmployees.length).toBe(30);
 
-    // UI deveria mostrar pelo menos 1 dos employees conhecidos
-    await expect(page.getByText(/Pablo Henrique/, { exact: false }).first()).toBeVisible({ timeout: 10_000 });
+    // UI deveria mostrar pelo menos 1 dos employees conhecidos.
+    // Sub-fase 14.27: toBeAttached em vez de toBeVisible — robusto cross-viewport.
+    // Em mobile, a tabela de funcionários tem scroll horizontal e parte do nome
+    // pode ficar fora do viewport mesmo carregado no DOM. toBeAttached valida
+    // que dado foi carregado (suficiente pra prove isolamento) sem depender
+    // de viewport visível.
+    await expect(page.getByText(/Pablo Henrique/, { exact: false }).first()).toBeAttached({ timeout: 10_000 });
 
     assertCleanConsole(capture, 'C1-employees-list');
   });

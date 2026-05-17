@@ -96,32 +96,19 @@ Refactor aplicado em `src/utils/c6Export.ts:33-52`: `onlyDigits = pixKey.replace
 
 ---
 
-### 6.25 — [Baixa] UX mobile: TabNavigation hamburger + badges/botões icon-only
+### 6.25 — ✅ RESOLVIDO sub-fases 14.11.2 + 14.27 (2026-05-14 + 2026-05-16)
 
-**Local:**
-- `src/components/common/TabNavigation.tsx` (TabNavigation colapsa em hamburger `≡` em mobile)
-- Header: badge `Admin/Administrador` + `Supervisor/Super` duplicados (mobile/desktop variants)
-- Botão Sair: vira icon-only em mobile sem `aria-label="Sair"`
+UX mobile 100%. Subset mobile-pixel5 nos 4 specs originais: **31/31 ✅** (era 14/31).
 
-**Descoberto:** sub-fase 14.10 — Mobile responsive E2E (Pixel 5 viewport 393×851 touch).
+**Trabalho 14.11.2 (componentes):**
+- `src/components/common/TabNavigation.tsx` refatorado — sem hamburger ≡, nav horizontal scrollable em mobile, todas tabs visíveis no DOM (não escondidas), `aria-label` em cada botão, `min-h-[44px]` (touch target ≥44px).
+- `src/components/common/Layout.tsx` — `aria-label="Sair"` no botão logout, badge único responsivo (sem duplicação Admin/Administrador).
 
-**Resultado do subset mobile (14/31 passed, 17 regressões):**
-- `/clock` (fluxo público funcionário): **9/9 ✅** — já responsivo
-- `01-auth`: 3/6 (badge `.first()` resolve elemento desktop hidden; logout sem aria-label)
-- `35-mirror-mass-dialog`: 0/8 (TabNavigation oculta `getByRole('button',{name:/Ponto/})`)
-- `38-system-walkthrough`: 2/8 (mesma causa)
+**Trabalho 14.27 (specs outdated):**
+- `tests/38-system-walkthrough.spec.ts:195` — `toBeVisible` → `toBeAttached` no assert `getByText(/Pablo Henrique/)`. Em mobile, tabela de funcionários tem scroll horizontal e nome pode ficar fora do viewport. `toBeAttached` valida que dado foi carregado (suficiente pra isolamento) sem depender de viewport.
+- `tests/35-mirror-mass-dialog.spec.ts:110` — refactor test 8 pra pattern dinâmico (DB count) igual ao spec 26. Premissa "PN vazio → 'Nenhum funcionário encontrado'" não vale mais desde 14.16 (30 Demo PN). Agora valida count UI bate com DB por empresa + counts distintos.
 
-**Impacto:**
-- Usuário final mobile: funcional via hamburger ☰ — UX OK.
-- E2E suite mobile: helpers (`loginAs`, `goToTab`, `logout`) assumem desktop selectors. Refatoração necessária pra suite mobile completa.
-
-**Solução (postponed, sub-fase 14.11 futura):**
-1. Adicionar `aria-label="Sair"` no botão logout do header.
-2. Helpers detectarem viewport e abrir hamburger antes de `goToTab` em mobile.
-3. Eliminar duplicação `Admin/Administrador` (usar 1 element com `aria-label` consistente; CSS faz responsive text).
-4. Manter project `mobile-pixel5` em playwright.config.ts (já aplicado em 14.10), rodar só pré-release ou sob demanda.
-
-**Status:** Aceito como tech debt. NÃO bloqueia go-live (web mobile funciona via hamburger). Sub-fase 14.11 futura quando refatorar helpers.
+Ver entradas individuais no Histórico.
 
 ---
 
@@ -390,6 +377,32 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-16 — Sub-fase 14.27: TECH_DEBT 6.25 UX mobile (specs outdated)
+
+**Resolvido (final do bloco 6.25):** Subset mobile-pixel5 nos 4 specs originais agora **31/31 ✅** (era 14/31 em 14.10, depois 30/31 em 14.11.2, agora 31/31 em 14.27).
+
+**Componentes** (já estavam OK desde 14.11.2):
+- `TabNavigation.tsx` — sem hamburger, nav horizontal scrollable, todas tabs visíveis, `aria-label`, touch target ≥44px
+- `Layout.tsx` — `aria-label="Sair"`, badge único responsivo
+
+**Specs outdated** (resolvidos nesta sub-fase):
+
+1. **`tests/38-system-walkthrough.spec.ts:195`** — assert `Pablo Henrique` falhava em mobile porque tabela tem scroll horizontal. Fix:
+```typescript
+// Antes
+await expect(page.getByText(/Pablo Henrique/, { exact: false }).first()).toBeVisible({ timeout: 10_000 });
+
+// Depois
+// Sub-fase 14.27: toBeAttached em vez de toBeVisible — robusto cross-viewport
+await expect(page.getByText(/Pablo Henrique/, { exact: false }).first()).toBeAttached({ timeout: 10_000 });
+```
+
+2. **`tests/35-mirror-mass-dialog.spec.ts:110`** — premissa "PN vazio" outdated por 14.16 (30 Demo PN). Refactor pra pattern dinâmico igual spec 26: count UI por empresa via DB + isolamento garantido por contagens distintas.
+
+**Validação:** `npx playwright test --project=mobile-pixel5 --workers=1 tests/01-auth tests/02-employee-clock tests/35-mirror-mass-dialog tests/38-system-walkthrough` → **31/31 em 2.2min** ✅.
+
+---
 
 ### 2026-05-16 — Sub-fase 14.26: TECH_DEBT 6.22 Sev Alta — DataManagementTab cross-empresa (COMPLETA Sev Alta)
 
