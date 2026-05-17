@@ -36,7 +36,12 @@ async function importC6(page: Page, date: string) {
   await dateInputs.nth(1).blur();
   await page.locator('body').click({ position: { x: 5, y: 5 } });
   await page.getByRole('button', { name: /Importar Dados/ }).click();
-  await expect(page.getByText(/importado/)).toBeVisible({ timeout: 15_000 });
+  // Sub-fase 14.28 (TECH_DEBT 6.1): aguarda estado PERSISTENTE (tfoot Total)
+  // em vez do toast `/importado/` (4-5s race). C6PaymentTab L744-748: quando
+  // dataImported=true a tabela renderiza tfoot "Total: N pagamento(s)" que
+  // persiste enquanto a importação está visível (sem timeout, sem race).
+  // .first() porque o texto aparece em desktop tfoot + mobile cards.
+  await expect(page.getByText(/^Total:\s*\d+\s*pagamento/).first()).toBeVisible({ timeout: 15_000 });
 }
 
 test.describe('C6 — completo', () => {

@@ -167,19 +167,13 @@ Validação: 0 PINs plain restantes em Caratinga. Smoke test via spec E2E 05 iso
 
 ## 🟢 Testes — fragilidade conhecida
 
-### 6.1 — [Baixa] Flake C6 — helper `importC6`
+### 6.1 — ✅ RESOLVIDO sub-fase 14.28 (2026-05-16)
 
-**Local atual:** `tests/20-c6-complete.spec.ts:39` (helper `importC6`)
+Helper `importC6` em `tests/20-c6-complete.spec.ts:39` refatorado pra aguardar estado PERSISTENTE (`tfoot Total: N pagamento(s)`) em vez de toast efêmero `/importado/` (race 4-5s).
 
-**Δ vs versão anterior:** versão anterior listava 6 ocorrências espalhadas (linhas 51, 68, 109, 139, 167, 183). Refactor centralizou tudo no helper L39 — 1 ocorrência única.
+`C6PaymentTab.tsx:744-748` quando `dataImported=true` renderiza tfoot que persiste enquanto a importação está visível. `.first()` necessário porque o texto também aparece em mobile cards.
 
-**Pattern:** `getByText(/importado/)` timeout 15s
-
-**Causa raiz:** race condition entre import e UI render do toast (toast desaparece em 4-5s, depende de quando importação termina).
-
-**Severidade:** Baixa.
-
-**Status:** Pendente — investigar como sub-fase isolada.
+**Validação:** spec 20 c6-complete → **8/8 em 42.3s** ✅. Ver entrada no Histórico.
 
 ---
 
@@ -377,6 +371,27 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-16 — Sub-fase 14.28: TECH_DEBT 6.1 — Flake C6 importC6 helper
+
+**Resolvido:** flake do helper `importC6` em `tests/20-c6-complete.spec.ts:30-44`.
+
+**Fix:**
+```typescript
+// Antes (race 4-5s toast efêmero)
+await expect(page.getByText(/importado/)).toBeVisible({ timeout: 15_000 });
+
+// Depois (estado persistente)
+await expect(page.getByText(/^Total:\s*\d+\s*pagamento/).first()).toBeVisible({ timeout: 15_000 });
+```
+
+**Why:** `C6PaymentTab.tsx:744-748` quando `dataImported=true` renderiza tfoot com "Total: N pagamento(s)" que persiste enquanto a importação está visível. Toast `success/importado` desaparece em 4-5s — assert podia chegar depois do toast sumir, causando timeout flaky.
+
+**Validação:** spec 20 c6-complete → **8/8 em 42.3s** ✅ (era 6 failed na primeira execução antes do .first() fix).
+
+**Strict mode fix:** `.first()` necessário porque a UI tem tfoot desktop + mobile cards com mesmo texto. Sem `.first()`, strict mode violation em 2 elementos.
+
+---
 
 ### 2026-05-16 — Sub-fase 14.27: TECH_DEBT 6.25 UX mobile (specs outdated)
 
