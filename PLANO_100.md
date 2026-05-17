@@ -109,7 +109,7 @@ Sistema considerado 100% quando:
 | Sub-fase | Item | Esforço | Trigger |
 |---|---|---|---|
 | **16.1** | Spec FaceRegistration (face-api.js + getUserMedia mock pesado) | ~30min setup | ⏸️ **SKIPPED 2026-05-16** (commit `49ad14a`) — spec criado com setup pronto, marked skip + TECH_DEBT 16.1.X. Gate facial não dispara em headless. Postponed mock pesado (~6-8h) |
-| **16.2** | Browser compat Firefox + Webkit projects | ~15min real | ✅ **CONCLUÍDO 2026-05-16** (commit `552b39a`) — Firefox 15/15, Webkit postponed (libavif16) |
+| **16.2** | Browser compat Firefox + Webkit projects | ~15min real | ✅ **CONCLUÍDO 2026-05-16/17** — Firefox 15/15 + Webkit 15/15 (sub-fase 16.2.1 após Victor instalar libavif16) |
 | **16.3** | Spec 47 supervisor users.create perm | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `605a335`) — 2/2 |
 | **16.4** | Performance benchmarks (k6-alternative) | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `5ca38c6`) — `scripts/bench-edge-fns.mjs` + baseline doc |
 | **16.5** | Backup/restore drill script | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `ab65a47`) — backup-all + verify-backup |

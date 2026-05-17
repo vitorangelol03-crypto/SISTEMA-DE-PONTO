@@ -75,7 +75,7 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 | **Performance Supabase** | RLS cache subquery em 55 policies ✅, 23 FKs indexadas ✅, 22 multiple_permissive eliminadas ✅ |
 | **Estados UI cross-empresa** | 7/7 tabs resolvidas (4 Sev Alta + 3 Sev Média) ✅ |
 | **UX mobile** | 31/31 subset mobile-pixel5 ✅ (era 14/31 inicial) |
-| **Browser compat** | Chromium ✅ + Firefox ✅ (15/15 essencial) + Webkit pendente (precisa libavif16) |
+| **Browser compat** | Chromium ✅ + Firefox 15/15 ✅ + Webkit 15/15 ✅ (sub-fase 16.2.1, 2026-05-17) |
 | **Realtime AttendanceTab** | ✅ 3 channels (employees, attendance, payments) + polling 30s fallback |
 | **Backup drill** | ✅ `backup-all.mjs` + `verify-backup.mjs` (drift detection) |
 | **Face auto-reset** | ✅ Trigger DB N falhas (default 5 em 60min) |

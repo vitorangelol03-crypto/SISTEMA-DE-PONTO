@@ -66,25 +66,13 @@ O `!` faz rodar no seu terminal autenticado, fora do meu sandbox.
 
 ---
 
-## 🌐 3. Instalar Webkit (opcional — pra browser compat Safari)
+## 🌐 3. ~~Instalar Webkit~~ ✅ FEITO em 2026-05-17
 
-**Estado atual:** Firefox subset passa 15/15. Webkit (Safari) bloqueado por
-dependência OS-level.
+- libavif16 instalado por Victor ✅
+- `npx playwright install webkit` ✅
+- Subset essencial Webkit → **15/15 em 1.3min** ✅
 
-**O que fazer:**
-
-```bash
-sudo apt-get update
-sudo apt-get install -y libavif16
-npx playwright install webkit
-```
-
-Depois, no Claude Code (eu posso rodar):
-```bash
-npx playwright test --project=webkit tests/01-auth.spec.ts tests/02-employee-clock.spec.ts
-```
-
-Se passar 15/15, Webkit pronto pra CI.
+Webkit pronto pra CI futuro (`--project=webkit`).
 
 ---
 
@@ -224,7 +212,7 @@ manual do que eu pushar sem revisão.
 |---|---|---|---|
 | 🔴 Alta | Publicar GitHub Release (item 1) | 30s | Bloqueado classifier |
 | 🟡 Média | Importar planilha real PN (item 2) | 30min | Esperando você mandar |
-| 🟢 Baixa | Webkit Linux deps (item 3) | 2min sudo | Opcional |
+| ✅ DONE | Webkit Linux deps (item 3) | 2min sudo | Resolvido 2026-05-17 |
 | 🟢 Baixa | Android Studio (item 4) | 1-2h setup | Opcional, sub-fase 17.1 |
 | 🟢 Baixa | Firebase (item 5) | 30min | Opcional, sub-fase 17.4 |
 | 🟢 Baixa | Decisões produto (item 6) | depende | Quando você quiser expandir features |
