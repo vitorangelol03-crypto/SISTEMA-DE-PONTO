@@ -61,12 +61,12 @@ const benchmarks = [
     },
   },
   {
-    name: 'employee-public-api lookup-cpf',
+    name: 'employee-public-api lookup-employee',
     fn: async () => {
       const res = await fetch(`${URL}/functions/v1/employee-public-api`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: ANON, Authorization: `Bearer ${ANON}` },
-        body: JSON.stringify({ action: 'lookup-cpf', params: { cpf: TEST_EMP_CPF } }),
+        body: JSON.stringify({ action: 'lookup-employee', params: { cpf: TEST_EMP_CPF } }),
       });
       await res.text();
       return res.status;
