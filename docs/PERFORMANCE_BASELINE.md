@@ -58,7 +58,30 @@ ativa (esperado: queries hot em `getAllEmployees`, `getAttendanceHistory`,
 
 ---
 
-## 3. Edge function warm vs cold latency (auditado 2026-05-12)
+## 3.1 Benchmark sintético (sub-fase 16.4 — `scripts/bench-edge-fns.mjs`)
+
+Rodado 2026-05-16 — **20 iterações sequenciais** por edge fn (rede produção
+Vercel → Supabase). Status codes esperados (400/401 com inputs inválidos pra
+não poluir DB).
+
+| Edge fn | Mean | Min | p50 | p95 | p99 | Max |
+|---|---|---|---|---|---|---|
+| `auth-login` (invalid creds) | **254 ms** | 172 | 249 | 324 | 411 | 411 |
+| `employee-public-api lookup-cpf` | **238 ms** | 120 | 217 | 268 | 655 | 655 |
+| `employee-public-api verify-pin` | **179 ms** | 39 | 199 | 251 | 269 | 269 |
+
+**Conclusões:**
+- Latência média 180-260ms p95 — **aceitável** pra uso real (clock-in não é interativo crítico)
+- p99 até 655ms em lookup-cpf (1 outlier em 20 — provável network jitter)
+- Sem cold start ativo nessas iterações (1-30 todas warm)
+
+**Como re-rodar:**
+```bash
+node scripts/bench-edge-fns.mjs 30           # 30 calls cada fn
+node scripts/bench-edge-fns.mjs 100 auth-login # 100 calls só auth-login
+```
+
+## 3.2 Edge function warm vs cold latency (auditado 2026-05-12)
 
 | Edge fn | Warm | Cold (1ª invocação pós-deploy) |
 |---|---|---|
