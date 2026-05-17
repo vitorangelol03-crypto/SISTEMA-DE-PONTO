@@ -168,6 +168,9 @@ jobs:
         #   02-employee-clock       — fluxo /clock público
         #   25-multi-company-iso    — RLS isolamento CT ↔ PN
         #   38-system-walkthrough   — console-clean em todas abas
+        #   47-supervisor-users-create — supervisor com users.create perm (sub-fase 16.3)
+        #   49-pdf-holerite-download — PDF holerite download (sub-fase 17.2.2)
+        #   50-i18n-switch          — LanguageSwitcher pt/en (sub-fase 17.5.2)
         #   100-supremo-v2          — 46 tests cobertura ampla (CT)
         #   101-supremo-pn          — 25 tests Ponte Nova
         #
@@ -183,6 +186,9 @@ jobs:
               tests/02-employee-clock.spec.ts \
               tests/25-multi-company-isolation.spec.ts \
               tests/38-system-walkthrough.spec.ts \
+              tests/47-supervisor-users-create.spec.ts \
+              tests/49-pdf-holerite-download.spec.ts \
+              tests/50-i18n-switch.spec.ts \
               tests/100-supremo-v2.spec.ts \
               tests/101-supremo-pn.spec.ts
           fi
