@@ -20,6 +20,7 @@ import {
   runAutoCleanup,
   getFaceRecognitionConfig,
   setFaceRecognitionGlobal,
+  setFaceAutoResetThresholds,
   setFaceRecognitionForEmployee,
   resetFaceForEmployee,
   getFaceAuthAttempts,
@@ -127,6 +128,10 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
 
   // ─── Face Recognition ────────────────────────────────────────────────────
   const [faceGlobalEnabled, setFaceGlobalEnabled] = useState(false);
+  // Sub-fase 17.3.1 — thresholds de auto-reset facial
+  const [faceMaxAttempts, setFaceMaxAttempts] = useState(5);
+  const [faceWindowMinutes, setFaceWindowMinutes] = useState(60);
+  const [faceThresholdsSaving, setFaceThresholdsSaving] = useState(false);
   const [faceGlobalLoading, setFaceGlobalLoading] = useState(true);
   const [faceGlobalSaving, setFaceGlobalSaving] = useState(false);
   const [faceEmpSaving, setFaceEmpSaving] = useState<string | null>(null);
@@ -199,6 +204,9 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
     try {
       const cfg = await getFaceRecognitionConfig(company.id);
       setFaceGlobalEnabled(cfg.enabled);
+      // Sub-fase 17.3.1: carrega thresholds (com defaults se config nova)
+      setFaceMaxAttempts(cfg.maxAttemptsBeforeReset ?? 5);
+      setFaceWindowMinutes(cfg.attemptsWindowMinutes ?? 60);
     } catch (err) {
       console.error('Erro ao carregar config facial:', err);
     } finally {
@@ -418,6 +426,25 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       toast.error('Erro ao atualizar configuração');
     } finally {
       setFaceGlobalSaving(false);
+    }
+  };
+
+  // Sub-fase 17.3.1: salvar thresholds de auto-reset facial
+  const handleSaveFaceThresholds = async () => {
+    if (!company?.id) return;
+    setFaceThresholdsSaving(true);
+    try {
+      await setFaceAutoResetThresholds(faceMaxAttempts, faceWindowMinutes, userId, company.id);
+      toast.success(
+        faceMaxAttempts === 0
+          ? 'Auto-reset DESLIGADO'
+          : `Auto-reset: ${faceMaxAttempts} falhas em ${faceWindowMinutes} min`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar thresholds');
+    } finally {
+      setFaceThresholdsSaving(false);
     }
   };
 
@@ -695,6 +722,62 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
                 <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-amber-800">
                   Atenção: com o reconhecimento facial desativado, qualquer pessoa pode bater ponto apenas com o PIN.
+                </p>
+              </div>
+            )}
+
+            {/* Sub-fase 17.3.1: thresholds de auto-reset facial */}
+            {faceGlobalEnabled && (
+              <div className="p-3 sm:p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                <div className="flex items-start gap-2">
+                  <ScanFace className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-blue-900">Auto-reset facial</p>
+                    <p className="text-xs text-blue-700 mt-0.5">
+                      Após N falhas faciais em janela de tempo, o funcionário é forçado a recadastrar a face no próximo acesso. Defina <strong>0 falhas</strong> pra desligar o auto-reset.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-blue-900">Máx. falhas antes de reset</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={faceMaxAttempts}
+                      onChange={(e) => setFaceMaxAttempts(Math.max(0, parseInt(e.target.value || '0', 10)))}
+                      className="px-3 py-2 border border-blue-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 min-h-[44px]"
+                      data-testid="face-max-attempts-input"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-blue-900">Janela (minutos)</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="1440"
+                      value={faceWindowMinutes}
+                      onChange={(e) => setFaceWindowMinutes(Math.max(1, parseInt(e.target.value || '1', 10)))}
+                      className="px-3 py-2 border border-blue-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 min-h-[44px]"
+                      data-testid="face-window-minutes-input"
+                    />
+                  </label>
+                </div>
+
+                <button
+                  onClick={handleSaveFaceThresholds}
+                  disabled={faceThresholdsSaving}
+                  data-testid="face-thresholds-save"
+                  className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 min-h-[44px]"
+                >
+                  {faceThresholdsSaving ? 'Salvando...' : 'Salvar thresholds'}
+                </button>
+
+                <p className="text-xs text-blue-700">
+                  Configuração atual: <strong>{faceMaxAttempts} falhas</strong> em <strong>{faceWindowMinutes} min</strong>
+                  {faceMaxAttempts === 0 && ' (auto-reset DESLIGADO)'}
                 </p>
               </div>
             )}

@@ -4000,6 +4000,8 @@ export const runAutoCleanup = async (companyId: string): Promise<boolean> => {
 
 export interface FaceRecognitionConfig {
   enabled: boolean;
+  maxAttemptsBeforeReset?: number;
+  attemptsWindowMinutes?: number;
 }
 
 export interface FaceAuthAttempt {
@@ -4014,9 +4016,21 @@ export interface FaceAuthAttempt {
 
 // Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
 // Admin autenticado também passa por aqui pra simplificar o caller path.
+// Sub-fase 17.3.1 — lê max_attempts_before_reset + attempts_window_minutes
+// via SELECT direto (edge fn employee-public-api só retorna enabled).
 export const getFaceRecognitionConfig = async (companyId: string): Promise<FaceRecognitionConfig> => {
   const data = await callEmployeePublicApi<{ enabled: boolean }>('face-config', { companyId });
-  return { enabled: Boolean(data.enabled) };
+  // Busca thresholds via SELECT direto (RLS permite admin/supervisor da empresa)
+  const { data: thresholds } = await supabase
+    .from('face_recognition_config')
+    .select('max_attempts_before_reset, attempts_window_minutes')
+    .eq('company_id', companyId)
+    .maybeSingle();
+  return {
+    enabled: Boolean(data.enabled),
+    maxAttemptsBeforeReset: thresholds?.max_attempts_before_reset ?? 5,
+    attemptsWindowMinutes: thresholds?.attempts_window_minutes ?? 60,
+  };
 };
 
 export const setFaceRecognitionGlobal = async (
@@ -4025,8 +4039,6 @@ export const setFaceRecognitionGlobal = async (
   companyId: string
 ): Promise<void> => {
   const now = new Date().toISOString();
-  // updated_by é FK para users.id; só inclui no payload se for um id válido
-  // (string não-vazia). Coluna é nullable, então ausência é aceita.
   const auditor = updatedBy && updatedBy.trim() ? updatedBy.trim() : null;
 
   const { data: existing } = await supabase
@@ -4048,6 +4060,29 @@ export const setFaceRecognitionGlobal = async (
       .insert([{ enabled, updated_by: auditor, company_id: companyId }]);
     if (error) throw error;
   }
+};
+
+// Sub-fase 17.3.1: atualiza thresholds de auto-reset facial.
+export const setFaceAutoResetThresholds = async (
+  maxAttempts: number,
+  windowMinutes: number,
+  updatedBy: string,
+  companyId: string
+): Promise<void> => {
+  const now = new Date().toISOString();
+  const auditor = updatedBy && updatedBy.trim() ? updatedBy.trim() : null;
+
+  // Garante row exista (upsert pra evitar 2 queries)
+  const { error } = await supabase
+    .from('face_recognition_config')
+    .upsert([{
+      company_id: companyId,
+      max_attempts_before_reset: Math.max(0, Math.floor(maxAttempts)),
+      attempts_window_minutes: Math.max(1, Math.floor(windowMinutes)),
+      updated_by: auditor,
+      updated_at: now,
+    }], { onConflict: 'company_id' });
+  if (error) throw error;
 };
 
 export const setFaceRecognitionForEmployee = async (
