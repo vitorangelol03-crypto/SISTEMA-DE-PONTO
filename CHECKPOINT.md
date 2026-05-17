@@ -3,9 +3,10 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-16 (sub-fase 14.50 — Checkpoint mega-final 14.41-14.43 + 15.5 + 16.1/16.4 + 17.2/17.5/17.6 ✅)
-**Branch:** `main` (4 commits ahead de origin/main — push manual Victor)
-**Push history sessão:** 21 commits pushados em 14.42 (incluindo tag v2.0.0-multi-tenant.1)
+**Última atualização:** 2026-05-17 (sub-fase 14.60 — Checkpoint mega-final-2 14.51-14.52 + 17.X.1 todos ✅)
+**Branch:** `main` (8 commits ahead de origin/main — push final Victor ou auto)
+**Release publicada:** https://github.com/vitorangelol03-crypto/SISTEMA-DE-PONTO/releases/tag/v2.0.0-multi-tenant.1
+**Push history sessão:** 21 commits pushados em 14.42 + 4 commits em 14.50 + 8 pendentes
 **Plano canônico:** `PLANO_PRODUCAO.md` + `PLANO_100.md` (roadmap pra 100%)
 **TECH_DEBT canônico:** `TECH_DEBT.md`
 **Release pronto pra tag:** `v2.0.0-multi-tenant` (notes em `RELEASE_NOTES_v2.0.0.md`, aguarda push Victor)
@@ -80,11 +81,14 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 | **Face auto-reset** | ✅ Trigger DB N falhas (default 5 em 60min) |
 | **Spec 47 supervisor users.create** | ✅ 2/2 cenário descoberto exercitado |
 | **Tag v2.0.0-multi-tenant.1** | ✅ Push remote (commit `9830246`) |
-| **GitHub Release** | ⚠️ Bloqueado classifier — Victor publica (TUTORIAL_VICTOR.md item 1) |
+| **GitHub Release** | ✅ Publicada em 14.52 |
 | **Performance baseline doc** | ✅ `docs/PERFORMANCE_BASELINE.md` + `scripts/bench-edge-fns.mjs` |
-| **PDF holerite MVP** | ✅ `src/utils/holeritePdf.ts` + botão em FinancialTab |
-| **Multi-idioma scaffold** | ✅ react-i18next pt-BR + en (23 chaves base) |
-| **API pública v1 MVP** | ✅ Edge fn `public-api-v1` + tabela `api_keys` + `docs/API_PUBLICA_V1.md` |
+| **PDF holerite v2** | ✅ `src/utils/holeritePdf.ts` v2 (sub-fase 17.2.1) — grid dados, breakdown, resumo, assinaturas |
+| **Multi-idioma real** | ✅ react-i18next + LoginForm + Layout + TabNavigation + LanguageSwitcher (sub-fase 17.5.1) — 60 chaves pt-BR/en |
+| **API pública v1.1** | ✅ Edge fn `public-api-v1` v2 + endpoints `/employees`, `/attendance`, `/payments` com pagination (sub-fase 17.6.1) |
+| **UI admin face threshold** | ✅ Form em AdminTab pra ajustar max_attempts + window via UI (sub-fase 17.3.1) |
+| **Capacitor Android setup** | ✅ Estrutura 100% pronta (`android/`, AndroidManifest, 4 plugins) — falta só Studio (sub-fase 17.1.1) |
+| **Firebase Push infra local** | ✅ Tabela + edge fn `send-push` + SW + cliente `pushNotifications.ts` (sub-fase 17.4.1) — falta só Firebase project |
 | **Spec 48 FaceRegistration** | ⏸️ Skipped (TECH_DEBT 16.1.X — mock pesado postponed) |
 | **Tutorial Victor** | ✅ `TUTORIAL_VICTOR.md` com 7 itens step-by-step |
 | **E2E specs (Playwright)** | **49 specs** (suite contra prod: 263+/18/2 — só TECH_DEBT 6.13 cold-start) |
