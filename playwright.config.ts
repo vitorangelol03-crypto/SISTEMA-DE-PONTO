@@ -49,6 +49,20 @@ export default defineConfig({
       name: 'mobile-pixel5',
       use: { ...devices['Pixel 5'], headless: true },
     },
+    {
+      // Browser compat Firefox (sub-fase 16.2): roda via `--project=firefox`
+      // para validar engine Gecko (regressões CSS/JS específicas). NÃO executa por padrão.
+      // Suite essencial: tests/01-auth + tests/02-employee-clock + tests/100-supremo-v2.
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'], headless: true },
+    },
+    {
+      // Browser compat Webkit/Safari (sub-fase 16.2): roda via `--project=webkit`
+      // para validar engine Safari (regressões CSS/JS Apple). NÃO executa por padrão.
+      // Cobre Safari macOS e iOS (mesmo engine). Suite essencial idêntica ao firefox.
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'], headless: true },
+    },
   ],
 
   webServer: {
