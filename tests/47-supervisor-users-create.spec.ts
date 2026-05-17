@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, goToTab } from './helpers';
+import { goToTab } from './helpers';
 import { getClient } from './cleanup';
 
 /**
