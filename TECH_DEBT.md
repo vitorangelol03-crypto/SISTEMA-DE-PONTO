@@ -59,7 +59,13 @@ Refactor aplicado em `src/utils/c6Export.ts:33-52`: `onlyDigits = pixKey.replace
 
 **Achado adicional:** auditoria também detectou 4ª ocorrência de `// eslint-disable-next-line react-hooks/exhaustive-deps` em `src/components/employees/EmployeesTab.tsx:120` — não estava listada no TECH_DEBT 6.14 original (que listava 3). Será resolvida na sub-fase 5.6 junto com cleanup de estados de EmployeesTab.
 
-**Status:** Pendente — fixes individuais ficam pra Victor priorizar. Recomendação: atacar Severidade Alta agora (3-4 sub-fases de ~30 min cada), Severidade Média junto com refactor futuro.
+**Status:** Em execução — Severidade Alta sendo resolvida bloco 14.24-14.26 (uma tab por sub-fase). Severidade Média continua pendente.
+
+**Progresso Sev Alta:**
+- [x] `EmployeesTab` — ✅ sub-fase 5.6
+- [x] `AttendanceTab` — ✅ sub-fase 14.24 (2026-05-16) — useEffect[company?.id] zera selectedEmployees, exitTimes/manualTimes/savingManualTime são limpos via loadData, bonusAmounts/applyingBonus/employeeToReset/employeeToRemoveBonus/bonusTypeToRemove zerados, todos modais fechados
+- [ ] `FinancialTab` — sub-fase 14.25
+- [ ] `DataManagementTab` — sub-fase 14.26
 
 ---
 
@@ -384,6 +390,43 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 ---
 
 ## ✅ Histórico — Resolvidas
+
+### 2026-05-16 — Sub-fase 14.24: TECH_DEBT 6.22 Sev Alta — AttendanceTab cross-empresa
+
+**Resolvido (parcial):** Estados UI ID-based em `src/components/attendance/AttendanceTab.tsx` agora zerados ao trocar empresa.
+
+**Fix aplicado** (após o useEffect de polling, ~linha 159):
+```typescript
+// Sub-fase 14.24 (TECH_DEBT 6.22 Sev Alta): troca de empresa zera estados
+// locais ID-based (Set/Record com employee_id) e fecha modais abertos.
+useEffect(() => {
+  setSelectedEmployees(new Set());
+  setBonusAmounts({});
+  setApplyingBonus({});
+  setSavingManualTime({});
+  setEmployeeToReset(null);
+  setEmployeeToRemoveBonus(null);
+  setBonusTypeToRemove(null);
+  setShowBonusModal(false);
+  setShowResetConfirmModal(false);
+  setShowRemoveBonusModal(false);
+  setShowRemoveAllBonusModal(false);
+  setShowMirrorMassDialog(false);
+  setBonusRemovalObservation('');
+  setRemoveAllBonusObservation('');
+  setSearchTerm('');
+}, [company?.id]);
+```
+
+**Validação:** spec 26 multi-company-ui-isolation **9/9 passou em 1.1min** ✅.
+
+**Refactor adicional:** spec 26 tests 1, 2, 4, 8 estavam outdated por 14.16 (30 Demo PN). Reescritos pra pattern dinâmico baseado em DB count (igual ao test 6 existente). Premissa "PN vazio" foi substituída por "count exato do DB por empresa + isolamento por contagens distintas".
+
+**Why:** Trocar de empresa mantinha estados locais (Set de seleção, modais abertos, inputs) com IDs da empresa anterior. UX poderia mostrar funcionário X de Caratinga selecionado em PN, ou modal "Resetar bonificação" aberto referenciando employeeToReset de outra empresa. Fix zera tudo explicitamente — UX limpa.
+
+FinancialTab + DataManagementTab Sev Alta seguem em 14.25/14.26.
+
+---
 
 ### 2026-05-16 — Sub-fase 14.21: Docs obsoletas + chunkSizeWarningLimit bump
 

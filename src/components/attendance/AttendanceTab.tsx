@@ -156,6 +156,29 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isViewingToday, selectedDate, employmentTypeFilter, company?.id]);
 
+  // Sub-fase 14.24 (TECH_DEBT 6.22 Sev Alta): troca de empresa zera estados
+  // locais ID-based (Set/Record com employee_id) e fecha modais abertos.
+  // loadData() já refresca employees/attendances/payments/bonusInfo via
+  // setState, mas estados puramente UI (seleção, modais, inputs) persistem
+  // com IDs da empresa anterior. Reset explícito evita vazamento UX.
+  useEffect(() => {
+    setSelectedEmployees(new Set());
+    setBonusAmounts({});
+    setApplyingBonus({});
+    setSavingManualTime({});
+    setEmployeeToReset(null);
+    setEmployeeToRemoveBonus(null);
+    setBonusTypeToRemove(null);
+    setShowBonusModal(false);
+    setShowResetConfirmModal(false);
+    setShowRemoveBonusModal(false);
+    setShowRemoveAllBonusModal(false);
+    setShowMirrorMassDialog(false);
+    setBonusRemovalObservation('');
+    setRemoveAllBonusObservation('');
+    setSearchTerm('');
+  }, [company?.id]);
+
   useEffect(() => {
     if (!searchTerm.trim()) {
       setFilteredEmployees(employees);

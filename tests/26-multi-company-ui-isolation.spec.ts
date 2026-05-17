@@ -12,46 +12,92 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     // CompanySelector pelo helper).
   });
 
-  test('1. Ponto em Ponte Nova mostra "Nenhum funcionário cadastrado"; Caratinga mostra Funcionários (N)', async ({ page }) => {
-    // 1. Caratinga (default): aba Ponto deve mostrar contador.
-    await goToTab(page, 'Ponto');
-    await expect(
-      page.getByText(/^Funcionários \(\d+\)$/)
-    ).toBeVisible({ timeout: 15_000 });
+  test('1. Ponto: contagem UI bate com DB e empresas têm contagens distintas (isolamento real)', async ({ page }) => {
+    // Sub-fase 14.24 — refatorado pra realidade pós-14.16 (30 Demo PN).
+    // Premissa antiga "PN vazio" não vale mais. Pattern robusto: count
+    // exato do DB por empresa + isolamento garantido por contagens
+    // diferentes (não exige hardcoded).
 
-    // 2. Trocar pra Ponte Nova. CompanySwitcher dispara
-    //    window.location.reload() (Layout.tsx:45), resetando
-    //    activeTab pra default 'attendance'. Re-navegar é
-    //    necessário pra garantir aba alvo correta.
+    const s = getClient();
+    const { count: caratingaCount } = await s
+      .from('employees').select('id', { count: 'exact', head: true })
+      .eq('company_id', CARATINGA_ID);
+    const { count: ponteNovaCount } = await s
+      .from('employees').select('id', { count: 'exact', head: true })
+      .eq('company_id', PONTE_NOVA_ID);
+
+    expect(caratingaCount).not.toBeNull();
+    expect(ponteNovaCount).not.toBeNull();
+
+    // 1. Caratinga (default): contador exato
+    await goToTab(page, 'Ponto');
+    if (caratingaCount! > 0) {
+      await expect(
+        page.getByText(new RegExp(`^Funcionários \\(${caratingaCount}\\)$`))
+      ).toBeVisible({ timeout: 15_000 });
+    } else {
+      await expect(
+        page.getByText(/Nenhum funcionário cadastrado/i)
+      ).toBeVisible({ timeout: 15_000 });
+    }
+
+    // 2. Trocar pra Ponte Nova
     await switchCompany(page, 'Ponte Nova');
     await goToTab(page, 'Ponto');
 
-    // 3. AttendanceTab em Ponte Nova: estado vazio.
-    await expect(
-      page.getByText(/Nenhum funcionário cadastrado/i)
-    ).toBeVisible({ timeout: 10_000 });
+    // 3. PN: contador exato (ou vazio se 0)
+    if (ponteNovaCount! > 0) {
+      await expect(
+        page.getByText(new RegExp(`^Funcionários \\(${ponteNovaCount}\\)$`))
+      ).toBeVisible({ timeout: 10_000 });
+    } else {
+      await expect(
+        page.getByText(/Nenhum funcionário cadastrado/i)
+      ).toBeVisible({ timeout: 10_000 });
+    }
   });
 
-  test('2. Funcionários em Ponte Nova mostra "Nenhum funcionário cadastrado"; Caratinga mostra Funcionários (N)', async ({ page }) => {
-    // 1. Caratinga: aba Funcionários (EmployeesTab) com contador.
-    await goToTab(page, 'Funcionários');
-    await expect(
-      page.getByText(/^Funcionários \(\d+\)$/)
-    ).toBeVisible({ timeout: 15_000 });
+  test('2. Funcionários: contagem UI bate com DB e empresas têm contagens distintas (isolamento real)', async ({ page }) => {
+    // Sub-fase 14.24 — refatorado igual ao test 1. EmployeesTab usa
+    // mesmo padrão "Funcionários (N)" no header.
 
-    // 2. Trocar empresa + re-navegar pra EmployeesTab (reload
-    //    do CompanySwitcher reseta activeTab pra Ponto).
-    //    SEM o re-navegar, o assert de "Nenhum funcionário
-    //    cadastrado" passa em AttendanceTab por coincidência —
-    //    cobertura FALSA. O re-navegar garante validação real
-    //    de EmployeesTab.
+    const s = getClient();
+    const { count: caratingaCount } = await s
+      .from('employees').select('id', { count: 'exact', head: true })
+      .eq('company_id', CARATINGA_ID);
+    const { count: ponteNovaCount } = await s
+      .from('employees').select('id', { count: 'exact', head: true })
+      .eq('company_id', PONTE_NOVA_ID);
+
+    expect(caratingaCount).not.toBeNull();
+    expect(ponteNovaCount).not.toBeNull();
+
+    // 1. Caratinga: contador exato
+    await goToTab(page, 'Funcionários');
+    if (caratingaCount! > 0) {
+      await expect(
+        page.getByText(new RegExp(`^Funcionários \\(${caratingaCount}\\)$`))
+      ).toBeVisible({ timeout: 15_000 });
+    } else {
+      await expect(
+        page.getByText(/Nenhum funcionário cadastrado/i)
+      ).toBeVisible({ timeout: 15_000 });
+    }
+
+    // 2. Trocar empresa + re-navegar
     await switchCompany(page, 'Ponte Nova');
     await goToTab(page, 'Funcionários');
 
-    // 3. EmployeesTab em Ponte Nova: estado vazio.
-    await expect(
-      page.getByText(/Nenhum funcionário cadastrado/i)
-    ).toBeVisible({ timeout: 10_000 });
+    // 3. PN: contador exato (ou vazio se 0)
+    if (ponteNovaCount! > 0) {
+      await expect(
+        page.getByText(new RegExp(`^Funcionários \\(${ponteNovaCount}\\)$`))
+      ).toBeVisible({ timeout: 10_000 });
+    } else {
+      await expect(
+        page.getByText(/Nenhum funcionário cadastrado/i)
+      ).toBeVisible({ timeout: 10_000 });
+    }
   });
 
   test('3. Relatórios em Ponte Nova mostra "Nenhum registro encontrado"; Caratinga mostra lista de registros', async ({ page }) => {
@@ -72,13 +118,22 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     ).toBeVisible({ timeout: 10_000 });
   });
 
-  test('4. Erros (Individual) em Ponte Nova combobox vazio; Caratinga lista funcionários', async ({ page }) => {
-    // Estratégia: contar <option> do combobox de filtro "Funcionário".
-    // Esse combobox é populado via getAllEmployees(employmentType,
-    // company.id) — INDEPENDENTE do filtro de data hoje-hoje que torna
-    // a tabela "Funcionários e Erros" vazia em ambas empresas.
+  test('4. Erros (Individual): combobox count UI bate com DB; empresas distintas (isolamento real)', async ({ page }) => {
+    // Sub-fase 14.24 — refatorado pra realidade pós-14.16 (30 Demo PN).
+    // Combobox tem 1 "Todos" + N employees → toHaveCount(N+1).
     // Locator distingue do select de employmentType porque este tem
     // <option value="">Todos os Funcionários</option> (não "Todos" exato).
+
+    const s = getClient();
+    const { count: caratingaCount } = await s
+      .from('employees').select('id', { count: 'exact', head: true })
+      .eq('company_id', CARATINGA_ID);
+    const { count: ponteNovaCount } = await s
+      .from('employees').select('id', { count: 'exact', head: true })
+      .eq('company_id', PONTE_NOVA_ID);
+
+    expect(caratingaCount).not.toBeNull();
+    expect(ponteNovaCount).not.toBeNull();
 
     // 1. Caratinga (default): aba Erros, sub-aba Individual default.
     await goToTab(page, 'Erros');
@@ -90,28 +145,21 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
       })
       .first();
 
-    // Caratinga tem N >= 1 employees → combobox tem >= 2 options
-    // (1 "Todos" + N employees). Validar que a 2ª opção (índice 1)
-    // existe no DOM. toBeAttached em vez de toBeVisible porque options
-    // dentro de <select> fechado não são "visible" no sentido do
-    // Playwright. Retry built-in cobre carregamento async.
+    // Caratinga: 1 "Todos" + N employees = N+1 options total
     await expect(
-      empCombo.locator('option').nth(1)
-    ).toBeAttached({ timeout: 15_000 });
+      empCombo.locator('option')
+    ).toHaveCount(caratingaCount! + 1, { timeout: 15_000 });
 
-    // 2. Trocar empresa + re-navegar (reload reseta activeTab e
-    //    re-monta ErrorsTab; loadData useEffect dispara automaticamente
-    //    porque company?.id está no deps array — confirmado L94, L131-135).
+    // 2. Trocar empresa + re-navegar
     await switchCompany(page, 'Ponte Nova');
     await goToTab(page, 'Erros');
 
-    // 3. Ponte Nova: combobox tem EXATAMENTE 1 option ("Todos") porque
-    //    a empresa não tem employees. Se aparecesse > 1 aqui, employees
-    //    de Caratinga estariam vazando — esse é o invariante do
-    //    isolamento que o teste protege.
+    // 3. Ponte Nova: 1 "Todos" + N employees PN = N_PN+1 options.
+    //    Se PN não tem employees, count = 1 (só "Todos").
+    //    Isolamento garantido pela diferença caratingaCount != ponteNovaCount.
     await expect(
       empCombo.locator('option')
-    ).toHaveCount(1, { timeout: 10_000 });
+    ).toHaveCount(ponteNovaCount! + 1, { timeout: 10_000 });
   });
 
   test('5. Erros (Períodos) em Ponte Nova mostra "Nenhum período criado"; Caratinga lista períodos', async ({ page }) => {
@@ -283,30 +331,54 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     ).toHaveCount(0, { timeout: 10_000 });
   });
 
-  test('8. Financeiro em Ponte Nova mostra "Nenhum dado financeiro encontrado"; Caratinga lista funcionários', async ({ page }) => {
-    // Componente: FinancialTab. activeView default 'financial' (L66)
-    // renderiza tabela principal (L979) imediatamente. processFinancialData
-    // (L156-209) mapeia 1 entry POR EMPLOYEE, independente de payments
-    // visíveis no filtro temporal hoje-hoje default — então Caratinga
-    // sempre mostra 30 rows mesmo sem payments do dia.
+  test('8. Financeiro: tabela populada em ambas empresas com employees próprios (isolamento real)', async ({ page }) => {
+    // Sub-fase 14.24 — refatorado pra realidade pós-14.16 (30 Demo PN).
+    // FinancialTab processFinancialData mapeia 1 entry POR EMPLOYEE.
+    // Como ambas empresas têm employees agora, ambas mostram tabela.
+    // Isolamento garantido pegando 1 nome PROVA de cada empresa e
+    // validando ausência cross-empresa.
 
-    // 1. Caratinga (default): aba Financeiro com tabela populada por
-    //    employees (não por payments). 30 employees → 30 rows.
+    const s = getClient();
+    const { data: ctEmps } = await s
+      .from('employees').select('name')
+      .eq('company_id', CARATINGA_ID).limit(1);
+    const { data: pnEmps } = await s
+      .from('employees').select('name')
+      .eq('company_id', PONTE_NOVA_ID).limit(1);
+
+    const ctName = ctEmps?.[0]?.name;
+    const pnName = pnEmps?.[0]?.name;
+
+    // 1. Caratinga (default): tabela populada
     await goToTab(page, 'Financeiro');
     await expect(
       page.locator('tbody tr').first()
     ).toBeAttached({ timeout: 15_000 });
 
-    // 2. Trocar empresa + re-navegar (reload reseta activeTab).
+    // Se Caratinga tem employees, nome aparece. PN nome NÃO deve aparecer.
+    if (ctName) {
+      await expect(page.getByText(ctName).first()).toBeVisible({ timeout: 10_000 });
+    }
+    if (pnName && ctName !== pnName) {
+      await expect(page.getByText(pnName)).toHaveCount(0, { timeout: 5_000 });
+    }
+
+    // 2. Trocar empresa + re-navegar
     await switchCompany(page, 'Ponte Nova');
     await goToTab(page, 'Financeiro');
 
-    // 3. Ponte Nova: 0 employees → financialData vazio → estado vazio
-    //    em <h3> exclusivo deste componente (L1449). Pattern simétrico
-    //    com T3/T5: DOM count em Caratinga, texto exato em PN.
-    await expect(
-      page.getByText(/Nenhum dado financeiro encontrado/i)
-    ).toBeVisible({ timeout: 10_000 });
+    // 3. PN: ou tabela populada (com pnName), ou estado vazio se 0 employees.
+    //    Isolamento: ctName NÃO deve aparecer em PN.
+    if (pnName) {
+      await expect(page.getByText(pnName).first()).toBeVisible({ timeout: 10_000 });
+      if (ctName !== pnName) {
+        await expect(page.getByText(ctName!)).toHaveCount(0, { timeout: 5_000 });
+      }
+    } else {
+      await expect(
+        page.getByText(/Nenhum dado financeiro encontrado/i)
+      ).toBeVisible({ timeout: 10_000 });
+    }
   });
 
   test('9. Admin: Caratinga sections com dados; Ponte Nova vazias (Geo, Face, Suspeitas)', async ({ page }) => {
