@@ -1131,6 +1131,41 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                       >
                         Ver Detalhes
                       </button>
+                      <button
+                        onClick={async () => {
+                          // Sub-fase 17.2: gera holerite PDF MVP do funcionário no período atual
+                          const { downloadHoleritePdf } = await import('../../utils/holeritePdf');
+                          await downloadHoleritePdf({
+                            company: { name: company?.display_name || company?.legal_name || 'Empresa', cnpj: company?.cnpj || undefined },
+                            employee: {
+                              name: data.employee.name,
+                              cpf: data.employee.cpf,
+                              employmentType: data.employee.employment_type || undefined,
+                            },
+                            period: { start: filters.startDate, end: filters.endDate },
+                            payments: data.payments.map((p) => ({
+                              date: p.date,
+                              dailyRate: p.daily_rate || 0,
+                              bonusB: p.bonus_b || 0,
+                              bonusC1: p.bonus_c1 || 0,
+                              bonusC2: p.bonus_c2 || 0,
+                            })),
+                            errorDiscount: data.totalErrorValue || 0,
+                            triageDiscount: data.totalTriageDiscount || 0,
+                            totalDailyRate: data.totalDailyRate || 0,
+                            totalBonusB: data.totalBonusB || 0,
+                            totalBonusC1: data.totalBonusC1 || 0,
+                            totalBonusC2: data.totalBonusC2 || 0,
+                            totalGross: data.totalEarnedGross || 0,
+                            totalNet: data.totalEarned || 0,
+                          });
+                          toast.success('Holerite PDF gerado');
+                        }}
+                        className="text-green-600 hover:text-green-900"
+                        title="Exportar holerite PDF"
+                      >
+                        Holerite PDF
+                      </button>
                     </td>
                   </tr>
                   
