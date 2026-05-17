@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { loginUser, User } from '../../services/database';
 import { isNumericString } from '../../utils/validation';
 import toast from 'react-hot-toast';
@@ -9,6 +10,7 @@ interface LoginFormProps {
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
+  const { t } = useTranslation();
   const [id, setId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -20,12 +22,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     setError('');
 
     if (!id || !password) {
-      setError('Preencha todos os campos');
+      setError(t('login.error_empty'));
       return;
     }
 
     if (!isNumericString(id)) {
-      setError('ID deve conter apenas números');
+      setError(t('login.error_numeric'));
       return;
     }
 
@@ -33,18 +35,18 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
 
     try {
       const user = await loginUser(id, password);
-      toast.success('Login realizado com sucesso!');
+      toast.success(t('login.success'));
       onLogin(user);
     } catch {
-      setError('Credenciais inválidas');
-      toast.error('Erro ao fazer login');
+      setError(t('login.error_credentials'));
+      toast.error(t('login.error_generic'));
     } finally {
       setLoading(false);
     }
   };
 
   const handleForgotPassword = () => {
-    toast.error('Entre em contato com o administrador do sistema');
+    toast.error(t('login.forgot_help'));
   };
 
   return (
@@ -55,10 +57,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
             <LogIn className="h-6 w-6 text-blue-600" />
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sistema de Ponto
+            {t('app.name')}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Entre com suas credenciais
+            {t('login.subtitle')}
           </p>
         </div>
 
@@ -73,7 +75,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
           <div className="space-y-4">
             <div>
               <label htmlFor="id" className="block text-sm font-medium text-gray-700">
-                ID do Usuário
+                {t('login.id_label')}
               </label>
               <input
                 id="id"
@@ -86,14 +88,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                   setId(value);
                 }}
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Digite apenas números"
+                placeholder={t('login.id_placeholder')}
                 required
               />
             </div>
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Senha
+                {t('login.password_label')}
               </label>
               <div className="mt-1 relative">
                 <input
@@ -102,14 +104,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="appearance-none relative block w-full px-3 py-2 pr-10 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="Digite sua senha"
+                  placeholder={t('login.password_placeholder')}
                   required
                 />
                 <button
                   type="button"
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  aria-label={showPassword ? t('login.hide_password') : t('login.show_password')}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4 text-gray-400" />
@@ -127,7 +129,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
               disabled={loading}
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? 'Entrando...' : 'Entrar'}
+              {loading ? t('login.submitting') : t('login.submit')}
             </button>
           </div>
 
@@ -137,7 +139,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
               onClick={handleForgotPassword}
               className="text-sm text-blue-600 hover:text-blue-500"
             >
-              Esqueceu a senha?
+              {t('login.forgot')}
             </button>
           </div>
 
@@ -147,14 +149,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
               onClick={() => window.location.href = '/?mode=clock'}
               className="w-full py-2 px-4 border-2 border-blue-600 text-blue-600 text-sm font-medium rounded-md hover:bg-blue-50 transition-colors"
             >
-              Sou funcionário — Registrar Ponto
+              {t('login.employee_button')}
             </button>
             <button
               type="button"
               onClick={() => window.location.href = '/?mode=erros'}
               className="w-full py-2 px-4 border-2 border-orange-700 text-orange-700 text-sm font-medium rounded-md hover:bg-orange-50 transition-colors"
             >
-              Ver meus erros
+              {t('login.errors_button')}
             </button>
           </div>
         </form>

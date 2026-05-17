@@ -1,34 +1,49 @@
 /**
- * Sub-fase 17.5: setup multi-idioma (pt-BR default + en placeholder).
+ * Sub-fase 17.5 + 17.5.1: setup multi-idioma (pt-BR + en).
  *
- * MVP: usa react-i18next sem detection de browser language (default pt-BR
- * porque produto é brasileiro). Switch idiomático futuro via UI Header.
+ * v2 (17.5.1): expansão de chaves pra cobrir Login + Header + TabNavigation
+ * (~60 strings). Refator real aplicado nos componentes correspondentes.
  *
- * Estratégia incremental: refator de 10-20 strings core agora (Login, Header,
- * Tabs); resto migra conforme demanda.
+ * Locale persistido em localStorage.app_locale (default pt-BR).
  *
- * Como adicionar nova string:
- *   1. Adicionar key em `pt-BR` (default) + `en` aqui
- *   2. Substituir literal por `t('key')` no componente
- *   3. Componente precisa importar `useTranslation()`
+ * Como adicionar novo idioma:
+ *   1. Adicionar entrada em `resources` (linha ~155)
+ *   2. Traduzir cada chave de `ptBR` pro idioma
+ *   3. Adicionar opção no LanguageSwitcher
  */
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 const ptBR = {
-  // Login
-  'login.title': 'Sistema de Ponto',
-  'login.id_placeholder': 'ID do usuário',
-  'login.password_placeholder': 'Senha',
+  // App / Login
+  'app.name': 'Sistema de Ponto',
+  'login.subtitle': 'Entre com suas credenciais',
+  'login.id_label': 'ID do Usuário',
+  'login.id_placeholder': 'Digite apenas números',
+  'login.password_label': 'Senha',
+  'login.password_placeholder': 'Digite sua senha',
   'login.submit': 'Entrar',
-  'login.invalid': 'ID ou senha incorretos',
+  'login.submitting': 'Entrando...',
+  'login.success': 'Login realizado com sucesso!',
+  'login.error_credentials': 'Credenciais inválidas',
+  'login.error_generic': 'Erro ao fazer login',
+  'login.error_empty': 'Preencha todos os campos',
+  'login.error_numeric': 'ID deve conter apenas números',
+  'login.forgot': 'Esqueceu a senha?',
+  'login.forgot_help': 'Entre em contato com o administrador do sistema',
+  'login.show_password': 'Mostrar senha',
+  'login.hide_password': 'Ocultar senha',
+  'login.employee_button': 'Sou funcionário — Registrar Ponto',
+  'login.errors_button': 'Ver meus erros',
 
   // Header / Layout
   'header.role.admin': 'Administrador',
   'header.role.supervisor': 'Supervisor',
   'header.logout': 'Sair',
+  'header.user_id': 'ID',
+  'header.language': 'Idioma',
 
-  // Tabs (mantém pt-BR original — mas chaves prontas pra futura tradução)
+  // Tabs
   'tab.attendance': 'Ponto',
   'tab.employees': 'Funcionários',
   'tab.reports': 'Relatórios',
@@ -48,18 +63,42 @@ const ptBR = {
   'common.edit': 'Editar',
   'common.confirm': 'Confirmar',
   'common.loading': 'Carregando...',
+  'common.search': 'Buscar',
+  'common.add': 'Adicionar',
+  'common.export': 'Exportar',
+  'common.import': 'Importar',
+  'common.back': 'Voltar',
+  'common.continue': 'Continuar',
+  'common.yes': 'Sim',
+  'common.no': 'Não',
 };
 
-const en = {
-  'login.title': 'Time Clock System',
-  'login.id_placeholder': 'User ID',
-  'login.password_placeholder': 'Password',
+const en: typeof ptBR = {
+  'app.name': 'Time Clock System',
+  'login.subtitle': 'Sign in with your credentials',
+  'login.id_label': 'User ID',
+  'login.id_placeholder': 'Numbers only',
+  'login.password_label': 'Password',
+  'login.password_placeholder': 'Enter your password',
   'login.submit': 'Sign in',
-  'login.invalid': 'Invalid ID or password',
+  'login.submitting': 'Signing in...',
+  'login.success': 'Login successful!',
+  'login.error_credentials': 'Invalid credentials',
+  'login.error_generic': 'Login error',
+  'login.error_empty': 'Fill in all fields',
+  'login.error_numeric': 'ID must contain only numbers',
+  'login.forgot': 'Forgot password?',
+  'login.forgot_help': 'Contact the system administrator',
+  'login.show_password': 'Show password',
+  'login.hide_password': 'Hide password',
+  'login.employee_button': "I'm an employee — Clock In",
+  'login.errors_button': 'View my errors',
 
   'header.role.admin': 'Administrator',
   'header.role.supervisor': 'Supervisor',
   'header.logout': 'Sign out',
+  'header.user_id': 'ID',
+  'header.language': 'Language',
 
   'tab.attendance': 'Clock',
   'tab.employees': 'Employees',
@@ -79,6 +118,14 @@ const en = {
   'common.edit': 'Edit',
   'common.confirm': 'Confirm',
   'common.loading': 'Loading...',
+  'common.search': 'Search',
+  'common.add': 'Add',
+  'common.export': 'Export',
+  'common.import': 'Import',
+  'common.back': 'Back',
+  'common.continue': 'Continue',
+  'common.yes': 'Yes',
+  'common.no': 'No',
 };
 
 i18n
@@ -95,15 +142,13 @@ i18n
 
 export default i18n;
 
-/**
- * Setter de idioma persistido em localStorage.
- * Uso: setLocale('en'); window.location.reload() (ou re-render).
- */
-export function setLocale(locale: 'pt-BR' | 'en'): void {
+export type SupportedLocale = 'pt-BR' | 'en';
+
+export function setLocale(locale: SupportedLocale): void {
   localStorage.setItem('app_locale', locale);
   i18n.changeLanguage(locale);
 }
 
-export function getLocale(): string {
-  return i18n.language;
+export function getLocale(): SupportedLocale {
+  return (i18n.language as SupportedLocale) || 'pt-BR';
 }

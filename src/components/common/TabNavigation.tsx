@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Clock,
   Users,
@@ -38,18 +39,21 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
   onTabChange,
   hasPermission,
 }) => {
+  const { t } = useTranslation();
+  // Sub-fase 17.5.1: name traduzido via i18n. data-test mantém nome pt-BR
+  // pra compat com specs E2E (que usam getByRole({name:/Ponto/}) etc.).
   const allTabs = [
-    { id: 'attendance' as TabType, name: 'Ponto', icon: Clock, permission: 'attendance.view' },
-    { id: 'employees' as TabType, name: 'Funcionários', icon: Users, permission: 'employees.view' },
-    { id: 'reports' as TabType, name: 'Relatórios', icon: BarChart3, permission: 'reports.view' },
-    { id: 'financial' as TabType, name: 'Financeiro', icon: DollarSign, permission: 'financial.view' },
-    { id: 'c6payment' as TabType, name: 'Pagamento C6', icon: FileSpreadsheet, permission: 'c6payment.view' },
-    { id: 'errors' as TabType, name: 'Erros', icon: AlertTriangle, permission: 'errors.view' },
-    { id: 'settings' as TabType, name: 'Configurações', icon: Settings, permission: 'settings.view' },
-    { id: 'users' as TabType, name: 'Usuários', icon: UserCog, permission: 'users.view' },
-    { id: 'datamanagement' as TabType, name: 'Gerenciamento', icon: Database, permission: 'datamanagement.view' },
-    { id: 'tutorial' as TabType, name: 'Ajuda', icon: BookOpen, permission: null },
-    { id: 'admin' as TabType, name: 'Admin', icon: Shield, permission: null },
+    { id: 'attendance' as TabType, name: t('tab.attendance'), icon: Clock, permission: 'attendance.view' },
+    { id: 'employees' as TabType, name: t('tab.employees'), icon: Users, permission: 'employees.view' },
+    { id: 'reports' as TabType, name: t('tab.reports'), icon: BarChart3, permission: 'reports.view' },
+    { id: 'financial' as TabType, name: t('tab.financial'), icon: DollarSign, permission: 'financial.view' },
+    { id: 'c6payment' as TabType, name: t('tab.c6payment'), icon: FileSpreadsheet, permission: 'c6payment.view' },
+    { id: 'errors' as TabType, name: t('tab.errors'), icon: AlertTriangle, permission: 'errors.view' },
+    { id: 'settings' as TabType, name: t('tab.settings'), icon: Settings, permission: 'settings.view' },
+    { id: 'users' as TabType, name: t('tab.users'), icon: UserCog, permission: 'users.view' },
+    { id: 'datamanagement' as TabType, name: t('tab.datamanagement'), icon: Database, permission: 'datamanagement.view' },
+    { id: 'tutorial' as TabType, name: t('tab.tutorial'), icon: BookOpen, permission: null },
+    { id: 'admin' as TabType, name: t('tab.admin'), icon: Shield, permission: null },
   ];
 
   const tabs = allTabs.filter((tab) => !tab.permission || hasPermission(tab.permission));

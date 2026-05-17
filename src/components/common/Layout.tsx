@@ -1,7 +1,9 @@
 import React from 'react';
 import { User, LogOut } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { User as UserType } from '../../services/database';
 import { CompanySwitcher } from '../layout/CompanySwitcher';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface LayoutProps {
   user: UserType;
@@ -10,7 +12,8 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
-  const roleLabel = user.role === 'admin' ? 'Administrador' : 'Supervisor';
+  const { t } = useTranslation();
+  const roleLabel = user.role === 'admin' ? t('header.role.admin') : t('header.role.supervisor');
   const roleColors =
     user.role === 'admin'
       ? 'bg-blue-100 text-blue-800'
@@ -30,7 +33,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
             <div className="flex items-center gap-2 sm:gap-4">
               <div className="hidden sm:flex items-center space-x-2 text-sm text-gray-600">
                 <User className="w-4 h-4" />
-                <span>ID: {user.id}</span>
+                <span>{t('header.user_id')}: {user.id}</span>
               </div>
 
               {/*
@@ -51,13 +54,15 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
                 <CompanySwitcher onCompanyChange={() => window.location.reload()} />
               )}
 
+              <LanguageSwitcher />
+
               <button
                 onClick={onLogout}
-                aria-label="Sair"
+                aria-label={t('header.logout')}
                 className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors min-h-[44px]"
               >
                 <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Sair</span>
+                <span className="hidden sm:inline">{t('header.logout')}</span>
               </button>
             </div>
           </div>
