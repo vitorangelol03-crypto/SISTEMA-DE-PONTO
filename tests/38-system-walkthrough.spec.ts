@@ -182,14 +182,17 @@ test.describe('System walkthrough exaustivo (sub-fase 14.4.10)', () => {
     await page.waitForTimeout(1500);
 
     // Sub-fase 14.13: filtra fora PW Test pra ser robusto contra pollution
-    // de specs paralelos. Caratinga tem 30 employees reais (não-PW-Test).
+    // de specs paralelos. Caratinga tem 30+ employees reais (não-PW-Test).
+    // Sub-fase pós-incidente 2026-05-18: trocado toBe(30) por
+    // toBeGreaterThanOrEqual(30) — novos cadastros legítimos não devem
+    // quebrar o spec (admin cadastra funcionários reais com frequência).
     const s = getClient();
     const { data } = await s
       .from('employees')
       .select('id, name')
       .eq('company_id', CARATINGA_ID);
     const realEmployees = (data ?? []).filter((e) => !e.name.startsWith('PW Test'));
-    expect(realEmployees.length).toBe(30);
+    expect(realEmployees.length).toBeGreaterThanOrEqual(30);
 
     // UI deveria mostrar pelo menos 1 dos employees conhecidos.
     // Sub-fase 14.27: toBeAttached em vez de toBeVisible — robusto cross-viewport.
