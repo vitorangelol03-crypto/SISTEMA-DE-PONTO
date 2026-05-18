@@ -23,9 +23,9 @@ interface Props {
   confidence?: number;  // 0..1 — undefined → sem barra
 }
 
-const FRAME_SIZE = 280;
-const CORNER_SIZE = 30;
-const CORNER_THICK = 4;
+const FRAME_WIDTH = 220;
+const FRAME_HEIGHT = 290;
+const BORDER_THICK = 3;
 const STYLE_ID = 'face-scan-frame-keyframes';
 
 // Injeta keyframes uma única vez no <head>. Evita duplicação se o componente
@@ -85,22 +85,12 @@ export const FaceScanFrame: React.FC<Props> = ({ visual, countdown = 0, confiden
     : confidence >= 0.4 ? '#EAB308'
     : COLORS.red;
 
-  const corners = [
-    { key: 'tl', top: -CORNER_THICK, left: -CORNER_THICK,
-      borderTopLeftRadius: 16,  borderTopWidth: CORNER_THICK,  borderLeftWidth:  CORNER_THICK },
-    { key: 'tr', top: -CORNER_THICK, right: -CORNER_THICK,
-      borderTopRightRadius: 16, borderTopWidth: CORNER_THICK,  borderRightWidth: CORNER_THICK },
-    { key: 'bl', bottom: -CORNER_THICK, left: -CORNER_THICK,
-      borderBottomLeftRadius: 16,  borderBottomWidth: CORNER_THICK, borderLeftWidth:  CORNER_THICK },
-    { key: 'br', bottom: -CORNER_THICK, right: -CORNER_THICK,
-      borderBottomRightRadius: 16, borderBottomWidth: CORNER_THICK, borderRightWidth: CORNER_THICK },
-  ] as const;
-
+  // 4 partículas posicionadas em 12h, 3h, 6h, 9h da elipse (topo/direita/baixo/esquerda)
   const particles = [
-    { key: 'p0', top: -4, left: -4, delay: '0s' },
-    { key: 'p1', top: -4, right: -4, delay: '0.15s' },
-    { key: 'p2', bottom: -4, right: -4, delay: '0.3s' },
-    { key: 'p3', bottom: -4, left: -4, delay: '0.45s' },
+    { key: 'p0', top: -5,  left: FRAME_WIDTH / 2 - 5,  delay: '0s'    }, // topo
+    { key: 'p1', top: FRAME_HEIGHT / 2 - 5, right: -5, delay: '0.15s' }, // direita
+    { key: 'p2', bottom: -5, left: FRAME_WIDTH / 2 - 5, delay: '0.3s'  }, // baixo
+    { key: 'p3', top: FRAME_HEIGHT / 2 - 5, left: -5, delay: '0.45s' }, // esquerda
   ] as const;
 
   return (
@@ -120,68 +110,38 @@ export const FaceScanFrame: React.FC<Props> = ({ visual, countdown = 0, confiden
         />
       )}
 
-      {/* Scan frame — 280x280 centralizado com spotlight via box-shadow */}
+      {/* Frame oval — formato de rosto, com borda contínua e spotlight via box-shadow */}
       <div
         style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
-          width: FRAME_SIZE,
-          height: FRAME_SIZE,
+          width: FRAME_WIDTH,
+          height: FRAME_HEIGHT,
           transform: 'translate(-50%, -50%)',
-          borderRadius: 16,
+          borderRadius: '50%',
+          borderStyle: 'solid',
+          borderWidth: BORDER_THICK,
+          borderColor: color,
           boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)',
+          overflow: 'hidden',
           pointerEvents: 'none',
           animation: shake
             ? 'fsf-shake 400ms ease-in-out'
             : pulse
             ? 'fsf-pulse 1.8s ease-in-out infinite'
             : 'none',
+          transition: 'border-color 300ms',
           zIndex: 5,
         }}
       >
-        {/* Cantos em L */}
-        {corners.map(({ key, ...pos }) => (
-          <div
-            key={key}
-            style={{
-              position: 'absolute',
-              width: CORNER_SIZE,
-              height: CORNER_SIZE,
-              borderStyle: 'solid',
-              borderColor: color,
-              transition: 'border-color 300ms',
-              ...pos,
-            }}
-          />
-        ))}
-
-        {/* Partículas nos cantos */}
-        {particles.map(({ key, delay, ...pos }) => (
-          <div
-            key={key}
-            style={{
-              position: 'absolute',
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              background: color,
-              boxShadow: `0 0 12px ${color}`,
-              animation: 'fsf-particle 1.4s ease-in-out infinite',
-              animationDelay: delay,
-              transition: 'background 300ms, box-shadow 300ms',
-              ...pos,
-            }}
-          />
-        ))}
-
-        {/* Linha de scan */}
+        {/* Linha de scan — dentro da elipse (overflow:hidden corta nas pontas) */}
         {showScanLine && (
           <div
             style={{
               position: 'absolute',
-              left: 12,
-              right: 12,
+              left: 0,
+              right: 0,
               height: 2,
               background: `linear-gradient(to right, transparent, ${color}, transparent)`,
               boxShadow: `0 0 10px ${color}`,
@@ -211,6 +171,38 @@ export const FaceScanFrame: React.FC<Props> = ({ visual, countdown = 0, confiden
             {countdown}
           </div>
         )}
+      </div>
+
+      {/* Partículas em 12h/3h/6h/9h — wrapper externo pra não serem cortadas pelo overflow:hidden */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          width: FRAME_WIDTH,
+          height: FRAME_HEIGHT,
+          transform: 'translate(-50%, -50%)',
+          pointerEvents: 'none',
+          zIndex: 6,
+        }}
+      >
+        {particles.map(({ key, delay, ...pos }) => (
+          <div
+            key={key}
+            style={{
+              position: 'absolute',
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: color,
+              boxShadow: `0 0 12px ${color}`,
+              animation: 'fsf-particle 1.4s ease-in-out infinite',
+              animationDelay: delay,
+              transition: 'background 300ms, box-shadow 300ms',
+              ...pos,
+            }}
+          />
+        ))}
       </div>
 
       {/* Barra de confiança (verificação) */}

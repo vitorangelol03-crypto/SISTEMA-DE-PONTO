@@ -36,16 +36,23 @@ const baseVisual: FaceScanVisual = {
 describe('FaceScanFrame', () => {
   beforeEach(() => cleanup());
 
-  it('1. Render default (color=blue) — 4 cantos com borderColor azul (#3B82F6)', () => {
+  it('1. Render default (color=blue) — frame oval com borda azul + 4 partículas azuis', () => {
     const { container } = render(<FaceScanFrame visual={baseVisual} />);
-    // Os 4 corners são <div>s com borderStyle: solid, borderColor: '#3B82F6'.
-    // Filtramos por inline style (a única forma de distinguir).
     const allDivs = Array.from(container.querySelectorAll('div'));
-    const corners = allDivs.filter(d => {
+    // Frame oval: borderColor azul + borderRadius 50%
+    const frame = allDivs.find(d => {
       const s = d.getAttribute('style') || '';
-      return s.includes('border-color: rgb(59, 130, 246)') && s.includes('border-style: solid');
+      return s.includes('border-color: rgb(59, 130, 246)')
+          && s.includes('border-radius: 50%')
+          && s.includes('border-style: solid');
     });
-    expect(corners.length).toBe(4);
+    expect(frame).toBeDefined();
+    // 4 partículas com background azul (não border) + animação fsf-particle
+    const particles = allDivs.filter(d => {
+      const s = d.getAttribute('style') || '';
+      return s.includes('background: rgb(59, 130, 246)') && s.includes('fsf-particle');
+    });
+    expect(particles.length).toBe(4);
   });
 
   it('2. Label aparece no DOM (texto "Posicione o rosto")', () => {

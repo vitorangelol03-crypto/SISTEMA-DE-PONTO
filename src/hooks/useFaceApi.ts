@@ -15,6 +15,26 @@ async function loadModelsOnce(): Promise<void> {
       faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODELS_URL),
       faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URL),
     ]);
+    // Warmup invisível: compila shaders WebGL antes do 1º uso real.
+    // Elimina 1-3s de cold start na primeira inferência em mobile.
+    try {
+      if (typeof document !== 'undefined') {
+        const canvas = document.createElement('canvas');
+        canvas.width = 224;
+        canvas.height = 224;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#808080';
+          ctx.fillRect(0, 0, 224, 224);
+        }
+        await faceapi
+          .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+          .withFaceLandmarks(true)
+          .withFaceDescriptor();
+      }
+    } catch {
+      // Warmup pode falhar (ex: ambiente sem WebGL) — não bloqueia uso real
+    }
     modelsLoaded = true;
   })();
   return modelsLoadingPromise;
