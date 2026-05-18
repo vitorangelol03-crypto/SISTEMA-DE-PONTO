@@ -68,7 +68,7 @@ export function useFaceApi(): UseFaceApi {
       if (!modelsLoaded) return null;
       if (video.readyState < 2 || video.videoWidth === 0) return null;
       const detection = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
         .withFaceLandmarks(true)
         .withFaceDescriptor();
       return detection?.descriptor ?? null;

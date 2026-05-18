@@ -236,7 +236,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
       } catch (err) {
         console.error('Erro na verificação:', err);
       }
-    }, 400);
+    }, 600);
 
     return () => {
       mounted = false;
