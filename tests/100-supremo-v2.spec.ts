@@ -50,6 +50,7 @@ import {
   insertErrorValue,
   cleanupByPrefix,
 } from './integrity-helpers';
+import { snapshotRealPayments, restoreRealPayments } from './_bonusIsolation';
 
 // ============================================================================
 // CONSTANTES + HELPERS
@@ -498,23 +499,10 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
       await s.from('bonus_removals').delete().in('employee_id', empIds).eq('date', today);
       await s.from('payments').update({ bonus_b: 0, bonus: 0 }).in('employee_id', empIds).eq('date', today);
 
-      // Snapshot payments REAIS de Caratinga hoje ANTES de aplicar bônus em massa.
-      // Necessário porque o botão "Aplicar B" do sistema aplica em TODOS os
-      // funcionários presentes da empresa — não só PW Test. Sem snapshot/restore,
-      // funcionários REAIS ficam com bônus poluindo prod (incidente 2026-05-18).
-      const { data: realEmpRows } = await s
-        .from('employees')
-        .select('id')
-        .eq('company_id', CARATINGA_ID)
-        .not('name', 'ilike', 'PW Test%');
-      const realIds = (realEmpRows ?? []).map((r) => r.id as string);
-      const { data: paymentsBefore } = realIds.length > 0
-        ? await s.from('payments')
-            .select('id, employee_id, bonus_b, bonus, total')
-            .eq('date', today)
-            .in('employee_id', realIds)
-        : { data: [] as Array<{ id: string; employee_id: string; bonus_b: number; bonus: number; total: number }> };
-      const idsBefore = new Set((paymentsBefore ?? []).map((r) => r.id));
+      // Snapshot payments REAIS antes — botão "Aplicar B" aplica em TODOS
+      // os presentes da empresa, incluindo REAIS. Restore no fim evita
+      // poluição em prod (incidente 2026-05-18).
+      const snapshot = await snapshotRealPayments(s, CARATINGA_ID, today);
 
       // Garante este emp presente
       await s.from('attendance').delete().eq('employee_id', empId).eq('date', today);
@@ -542,37 +530,8 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
         .single();
       expect(Number(pay?.bonus_b)).toBe(10);
 
-      // RESTORE: reverter polução em funcionários REAIS ao estado pré-teste.
-      // Roda em try/finally implícito via afterAll do describe? Não — rodamos
-      // aqui no fim do test pra garantir cleanup imediato mesmo se afterAll
-      // for skipped por falha em outro test do describe.
-      for (const row of paymentsBefore ?? []) {
-        await s.from('payments').update({
-          bonus_b: row.bonus_b,
-          bonus: row.bonus,
-          total: row.total,
-        }).eq('id', row.id);
-      }
-      // Deleta payments NOVAS criadas pra funcionários REAIS que não tinham
-      // payment row antes (criadas pelo applyBonusToAllPresent).
-      if (realIds.length > 0 && idsBefore.size > 0) {
-        await s.from('payments')
-          .delete()
-          .eq('date', today)
-          .in('employee_id', realIds)
-          .not('id', 'in', `(${Array.from(idsBefore).join(',')})`);
-      } else if (realIds.length > 0) {
-        // Nenhum payment real existia antes — deleta tudo dos REAIS criado hoje
-        await s.from('payments')
-          .delete()
-          .eq('date', today)
-          .in('employee_id', realIds);
-      }
-      // Deleta a row em bonuses criada pelo "Aplicar B" (regra por dia/empresa).
-      await s.from('bonuses')
-        .delete()
-        .eq('date', today)
-        .eq('company_id', CARATINGA_ID);
+      // RESTORE imediato — não confia em afterAll que pode ser skipped
+      await restoreRealPayments(s, snapshot);
     });
 
     test('C3. Remover bônus individual via ícone trash + obs ≥10 chars', async ({ page }) => {

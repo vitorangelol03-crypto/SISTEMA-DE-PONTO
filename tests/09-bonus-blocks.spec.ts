@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { ADMIN, loginAs } from './helpers';
 import { getClient } from './cleanup';
+import { snapshotRealPayments, restoreRealPayments } from './_bonusIsolation';
+
+const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
 const TEST_NAME = 'PW Test Blocked Employee';
 const TEST_CPF = '99977766655';
@@ -123,6 +126,10 @@ test.describe('Bloqueio de Bonificação (silencioso)', () => {
       reason: 'Tentativa de fraude',
     }], { onConflict: 'employee_id,week_start' });
 
+    // Snapshot REAIS antes de aplicar em massa (evita polução em prod —
+    // incidente 2026-05-18)
+    const snapshot = await snapshotRealPayments(supabase, CARATINGA_ID, today);
+
     await loginAs(page, ADMIN);
 
     await page.getByRole('button', { name: /^Bonificação$/ }).click();
@@ -136,6 +143,9 @@ test.describe('Bloqueio de Bonificação (silencioso)', () => {
     await expect(page.getByText(/Bonificação B aplicada com sucesso/)).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole('button', { name: /^Fechar$/ }).click();
+
+    // Restore REAIS ao estado pré-teste
+    await restoreRealPayments(supabase, snapshot);
   });
 
   test('configurações NÃO mostra seção de bloqueios (removida)', async ({ page }) => {

@@ -7,6 +7,9 @@ import {
   cleanupByPrefix,
   TEST_EMPLOYEE_NAME_PREFIX,
 } from './integrity-helpers';
+import { snapshotRealPayments, restoreRealPayments } from './_bonusIsolation';
+
+const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
 /**
  * Cobertura E2E pra bonificação INDIVIDUAL via UI (lacuna do 04-bonus.spec.ts).
@@ -182,6 +185,11 @@ test.describe('Bonificação INDIVIDUAL via UI — aplica + remove em 1 funcion�
     await searchEmployee(page, name);
     await markPresentByName(page, name);
 
+    // Snapshot REAIS antes de aplicar em massa (evita polução em prod —
+    // incidente 2026-05-18)
+    const isolationClient = getClient();
+    const snapshot = await snapshotRealPayments(isolationClient, CARATINGA_ID, todayBR());
+
     // Abre modal
     await page.getByRole('button', { name: /^Bonificação$/ }).click();
     await expect(page.getByRole('heading', { name: /Bonificação do Dia/ })).toBeVisible();
@@ -222,6 +230,9 @@ test.describe('Bonificação INDIVIDUAL via UI — aplica + remove em 1 funcion�
     // UI mostra "B: R$ 15.00" na linha do PW Test (tabela desktop)
     const row = page.locator('tr', { hasText: name }).first();
     await expect(row.getByText(/B:\s*R\$\s*15[.,]00/)).toBeVisible({ timeout: 10_000 });
+
+    // Restore REAIS ao estado pré-teste
+    await restoreRealPayments(isolationClient, snapshot);
   });
 
   test('4. aplicar bônus negativo dispara validação (botão "Aplicar B" fica disabled OU toast erro)', async ({

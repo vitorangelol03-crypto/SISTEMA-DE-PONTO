@@ -21,6 +21,7 @@ import {
   insertAttendance,
   cleanupByPrefix,
 } from './integrity-helpers';
+import { snapshotRealPayments, restoreRealPayments } from './_bonusIsolation';
 
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}Supremo `;
 const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
@@ -205,6 +206,10 @@ test.describe('SPEC 99 — Teste Supremo: fluxo completo Caratinga', () => {
     await s.from('bonus_removals').delete().in('employee_id', empIds).eq('date', todayBR());
     await s.from('payments').update({ bonus_b: 0, bonus: 0 }).in('employee_id', empIds).eq('date', todayBR());
 
+    // Snapshot REAIS antes — "Aplicar B" aplica em TODOS presentes, não só
+    // PW Test. Restore no fim evita polução em prod (incidente 2026-05-18).
+    const snapshot = await snapshotRealPayments(s, CARATINGA_ID, todayBR());
+
     await loginAs(page, ADMIN);
     await goToTab(page, 'Ponto');
     await page.getByRole('button', { name: /^Atualizar$/ }).click();
@@ -233,6 +238,9 @@ test.describe('SPEC 99 — Teste Supremo: fluxo completo Caratinga', () => {
     payments?.forEach((p) => {
       expect(Number(p.bonus_b)).toBe(10);
     });
+
+    // Restore REAIS
+    await restoreRealPayments(s, snapshot);
   });
 
   // ==========================================================================
