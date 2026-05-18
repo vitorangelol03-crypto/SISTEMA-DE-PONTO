@@ -69,7 +69,12 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, children }) => {
         </div>
       </header>
 
-      <main className="px-3 sm:px-4 lg:px-8 py-4 sm:py-6">
+      {/*
+        sm:pb-24 (96px) reserva espaço pra última linha não ficar coberta pelo
+        HelpButton (FAB hidden sm:flex fixed bottom-6 right-6 w-14 h-14 =
+        ocupa ~80px do bottom em sm+). Mobile (sem FAB visível) mantém pb-4.
+      */}
+      <main className="px-3 sm:px-4 lg:px-8 pt-4 sm:pt-6 pb-4 sm:pb-24">
         {children}
       </main>
     </div>
