@@ -3,14 +3,36 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-17 (sub-fase 14.60 — Checkpoint mega-final-2 14.51-14.52 + 17.X.1 todos ✅)
-**Branch:** `main` (8 commits ahead de origin/main — push final Victor ou auto)
+**Última atualização:** 2026-05-17 (auditoria forense 3 rounds — 12 bugs/gaps detectados e fixados ✅)
+**Branch:** `main` (sincronizada com origin)
 **Release publicada:** https://github.com/vitorangelol03-crypto/SISTEMA-DE-PONTO/releases/tag/v2.0.0-multi-tenant.1
-**Push history sessão:** 21 commits pushados em 14.42 + 4 commits em 14.50 + 8 pendentes
-**Plano canônico:** `PLANO_PRODUCAO.md` + `PLANO_100.md` (roadmap pra 100%)
+**CI status:** ✅ verde no commit `cc0dcd9` (vitest 37s + tsc/eslint 22s + playwright 8m33s)
+**Plano canônico:** `PLANO_100.md` (roadmap completo até 100%)
 **TECH_DEBT canônico:** `TECH_DEBT.md`
-**Release pronto pra tag:** `v2.0.0-multi-tenant` (notes em `RELEASE_NOTES_v2.0.0.md`, aguarda push Victor)
 **Memory:** `/home/victor/.claude/projects/-home-victor-SISTEMA-DE-PONTO/memory/`
+
+## 🔍 Auditoria Forense (2026-05-17 final) — 12 bugs/gaps detectados + fixados
+
+Após afirmar "100% validado" várias vezes prematuramente, Victor pediu auditoria
+rigorosa. 3 rounds de investigação detectaram:
+
+| # | Bug/Gap | Severidade | Round | Commit fix |
+|---|---|---|---|---|
+| 1 | CI ESLint error (`loginAs` unused em spec 47) | 🔴 Alta | 1 | `d6b876a` |
+| 2 | Spec 100 B4 flake CI (waitForTimeout 2.5s → polling DB) | 🔴 Alta | 1 | `50f3ea3` |
+| 3 | Trigger face auto-reset: threshold=0 NÃO desligava (bug lógico) | 🔴 Alta | 1 | migration MCP |
+| 4 | Edge fn `send-push` role check via JWT (sempre `authenticated`) | 🔴 Alta | 1 | edge fn v2 |
+| 5 | Edge fns `public-api-v1` + `send-push` SEM source no repo | 🔴 Alta | 2 | `8dbc9c6` |
+| 6 | `coverage/` faltava no `.gitignore` | 🟡 Média | 2 | `8dbc9c6` |
+| 7 | **11 migrations MCP fora de `supabase/migrations/`** | 🔴 Alta | 2 | `65ce593` |
+| 8 | CI essencial não rodava specs 47/49/50 | 🔴 Alta | 2 | `65ce593` |
+| 9 | `_test_create_supervisor_with_perms` `gen_salt` schema → CI fail | 🔴 Alta | 3 | `714b5e3` |
+| 10 | CHECKPOINT.md: 5 métricas defasadas | 🟡 Média | 3 | `7dc3827` |
+| 11 | `bench-edge-fns.mjs` action `lookup-cpf` inexistente | 🟡 Média | 3 | `cc0dcd9` |
+| 12 | Afirmação "7 edge fns" (era 6) em docs | 🟢 Baixa | 3 | `7dc3827` |
+
+**Lição aprendida:** verificação rigorosa antes de afirmar. Cada vez que disse
+"100%" sem auditar, novo bug aparecia. Audit forense 3x detectou + fixou tudo.
 
 ---
 

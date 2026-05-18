@@ -1245,6 +1245,122 @@ infra pronta + UI admin face threshold + PDF holerite v2 + Release publicada".
 
 ---
 
+### 14.61 — Auditoria Forense Round 1 (2026-05-17 tarde)
+
+Após eu afirmar "100% validado", Victor pediu vistoria rigorosa. Round 1
+detectou 4 bugs reais que escaparam:
+
+**Bug 1 — ESLint error real (commit `d6b876a`):**
+- `tests/47-supervisor-users-create.spec.ts` tinha `loginAs` importado mas não usado
+- Eu rodava `eslint src/` (só src/), CI roda `eslint .` (tudo) — eu não tinha visto
+- Fix: removeu import + adicionou `coverage/`, `android/`, `playwright-report/`,
+  `test-results/` ao ignore do eslint.config.js (commit `eac4f1e`)
+
+**Bug 2 — Spec 100 B4 flake CI (commit `50f3ea3`):**
+- `expect(approval_status).toBe('approved')` retornou 'pending' em CI
+- waitForTimeout(2500) era insuficiente em CI (~4x latência local)
+- Fix: substituiu por polling DB até 15s ou approvedCount === 2
+
+**Bug 3 — Trigger face auto-reset bug lógico (migration MCP):**
+- Detectado pelo spec 17.3.2 que escrevi durante audit
+- Condição `recent_failures >= cfg.max_attempts_before_reset` era sempre true
+  quando `max_attempts = 0` (porque N >= 0 sempre)
+- Fix: guard explícito `IF cfg.max_attempts_before_reset > 0 THEN ...`
+- Migration `fix_face_auto_reset_threshold_zero` aplicada
+
+**Bug 4 — Edge fn send-push role check (edge fn v2):**
+- Spec 17.4.2 detectou: edge fn checava `role` do JWT custom (sempre `'authenticated'`)
+- Deveria buscar `users.role` real via DB lookup
+- Fix: edge fn v2 deployed com DB lookup + cross-check company_id
+
+---
+
+### 14.62 — Auditoria Forense Round 2 (2026-05-17 noite)
+
+Audit profunda revelou mais 4 gaps:
+
+**Gap 5 — Edge fns deployed SEM source no repo (commit `8dbc9c6`):**
+- `supabase/functions/public-api-v1/` e `send-push/` NÃO existiam no repo
+- Deployed apenas via MCP — single source of truth quebrada
+- Risco: se Supabase project resetar, edge fns somem sem audit trail
+- Fix: extraídas via `mcp__get_edge_function` + commitadas
+
+**Gap 6 — `coverage/` faltava no .gitignore (commit `8dbc9c6`):**
+- `npx vitest --coverage` gerava 30+ files no working tree
+- ESLint pegava esses files também (3 warnings extras)
+- Fix: adicionado `coverage/` ao .gitignore
+
+**Gap 7 — 11 migrations MCP fora do repo (commit `65ce593`):**
+- Aplicações via `mcp__apply_migration` ficavam só em
+  `supabase_migrations.schema_migrations` (DB), nunca no `supabase/migrations/`
+- 11 SQL files faltantes — risco real de perda se Supabase resetar
+- Fix: extraídas via `execute_sql` + commitadas:
+  - `20260514121730_add_pin_hash_employees`
+  - `20260517011520_add_missing_fk_indexes_subfase_15_3`
+  - `20260517011820_rls_initplan_cache_subfase_15_1`
+  - `20260517012213_rls_drop_redundant_select_policies_subfase_15_2`
+  - `20260517014438_test_helper_create_supervisor_with_perms`
+  - `20260517015653_face_auto_reset_after_failures_subfase_17_3`
+  - `20260517022343_api_keys_table_subfase_17_6`
+  - `20260517030207_push_subscriptions_subfase_17_4_1`
+  - `20260517170336_fix_advisors_face_autoreset_and_test_helper`
+  - `20260517200752_test_helper_bcrypt_hash_v2`
+  - `20260517200907_fix_face_auto_reset_threshold_zero`
+
+**Gap 8 — CI essencial não cobria specs novos (commit `65ce593`):**
+- Specs 47, 49, 50 (criados nas sub-fases 16.3, 17.2.2, 17.5.2) NÃO estavam
+  no `.github/workflows/ci.yml` essencial
+- Regression invisível ao CI
+- Fix: adicionados ao step "Run Playwright tests (essencial)"
+
+---
+
+### 14.63 — Auditoria Forense Round 3 (2026-05-17 noite)
+
+Após audit round 2, CI rodou specs novos e DETECTOU mais 1 bug. Plus duas
+inconsistências doc:
+
+**Bug 9 — `gen_salt` schema path em test helper (commit `714b5e3`):**
+- Spec 47 falhou em CI: "function gen_salt(unknown, integer) does not exist"
+- Local funcionava (search_path Postgres padrão inclui extensions)
+- CI ambiente tem search_path restrito → `gen_salt` (em extensions schema) não resolvido
+- Fix: `ALTER FUNCTION ... SET search_path = public, extensions, pg_temp`
+  + qualificar `extensions.crypt(...)` e `extensions.gen_salt(...)`
+- Migration `20260517225000_fix_test_create_supervisor_schema_path`
+
+**Gap 10 — CHECKPOINT.md métricas defasadas (commit `7dc3827`):**
+- 5 valores errados:
+  - RLS tables: dizia 50 → real 52
+  - Edge fns: dizia 4 → real 6
+  - Migrations: dizia 64 → real 74 (DB) / 35 (repo)
+  - Vitest: dizia 434 → real 458
+  - E2E specs: dizia 49 → real 53
+- Fix: atualizado pra realidade atual
+
+**Bug 11 — bench-edge-fns action errada (commit `cc0dcd9`):**
+- `scripts/bench-edge-fns.mjs` chamava action `lookup-cpf` que NÃO EXISTE
+  na edge fn employee-public-api (actions reais: `lookup-employee`,
+  `verify-pin`, etc.)
+- Bench retornava 400 "Unknown action" mas script não validava body, então
+  bench "passava" com latência inválida (mede só HTTP overhead)
+- Fix: replace-all `lookup-cpf` → `lookup-employee`
+
+**Gap 12 — Afirmação "7 edge fns ACTIVE" (era 6):**
+- Eu havia escrito 7 em mensagens anteriores ao Victor
+- Real: 6 (auth-login v9, clock-in-validated v8, create-user v1,
+  employee-public-api v3, public-api-v1 v2, send-push v2)
+- Corrigido no CHECKPOINT.md
+
+**Resultado da auditoria forense:**
+- 12 bugs/gaps detectados ao longo de 3 rounds (8 ainda não tinham aparecido
+  nas validações antes)
+- 4 commits + 3 migrations + 1 edge fn redeploy
+- CI verde final no commit `cc0dcd9` (114 testes essenciais, era 108)
+- **Lição:** "tem certeza?" do Victor revelou 12 bugs. Auditoria forense >
+  confiança cega.
+
+---
+
 ## Commits da sessão atual (mais recentes primeiro)
 
 ```

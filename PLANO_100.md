@@ -6,10 +6,10 @@
 > **Escopo:** lista exaustiva e ordenada de todas as sub-fases pendentes pra
 > chegar a 100%, com estimativas de esforço, dependências e bloqueios.
 >
-> **Sistema técnico atual:** já está em **PRODUÇÃO** (https://sistema-ponto-zeta.vercel.app)
-> com 0 ERRORs advisors, 431 unit tests, 49 specs E2E, CI 100% verde.
+> **Sistema técnico atual:** em **PRODUÇÃO** (https://sistema-ponto-zeta.vercel.app)
+> com 0 ERRORs advisors core, **458 unit tests, 53 specs E2E, CI 100% verde**.
 >
-> **Última atualização:** 2026-05-16
+> **Última atualização:** 2026-05-17 (pós auditoria forense 3 rounds — 12 bugs/gaps fixados)
 
 ---
 
@@ -113,6 +113,19 @@ Sistema considerado 100% quando:
 | **16.3** | Spec 47 supervisor users.create perm | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `605a335`) — 2/2 |
 | **16.4** | Performance benchmarks (k6-alternative) | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `5ca38c6`) — `scripts/bench-edge-fns.mjs` + baseline doc |
 | **16.5** | Backup/restore drill script | ~30min real | ✅ **CONCLUÍDO 2026-05-16** (commit `ab65a47`) — backup-all + verify-backup |
+
+---
+
+### 🔍 BLOCO AUDITORIA FORENSE — 2026-05-17
+
+| Sub-fase | Item | Bugs detectados | Status |
+|---|---|---|---|
+| **14.61** | Audit Round 1: validações superficiais | 4 bugs (ESLint, spec 100 flake, trigger threshold, send-push role) | ✅ Fixado |
+| **14.62** | Audit Round 2: paper trail | 4 gaps (2 edge fns sem source, coverage gitignore, 11 migrations MCP, CI specs novos) | ✅ Fixado |
+| **14.63** | Audit Round 3: pós-fix verificação | 1 bug (gen_salt schema) + 3 inconsistências (métricas/bench/contagem) | ✅ Fixado |
+
+**Total auditoria:** 12 bugs/gaps detectados + fixados. CI verde final no commit `cc0dcd9`.
+Sistema realmente 100% técnico após. **Lição:** sempre auditar antes de afirmar 100%.
 
 ---
 

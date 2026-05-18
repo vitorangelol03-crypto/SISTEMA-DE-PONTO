@@ -390,6 +390,47 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-17 — Auditoria Forense (3 rounds, 12 bugs/gaps detectados)
+
+Vitória do "tem certeza?" do Victor: 3 rounds de auditoria rigorosa detectaram
+12 bugs/gaps que escaparam às validações anteriores. Todos fixados.
+
+**Round 1 (4 bugs reais — sub-fase 14.61):**
+1. CI ESLint error em spec 47 (loginAs unused) — commit `d6b876a` + `eac4f1e`
+2. Spec 100 B4 flake CI (waitForTimeout fixo → polling DB) — commit `50f3ea3`
+3. **Trigger face auto-reset bug**: threshold=0 NÃO desligava (recent_failures
+   >= 0 sempre true). Migration `fix_face_auto_reset_threshold_zero` aplicada.
+   Detectado pelo spec 17.3.2 escrito durante audit.
+4. **Edge fn send-push role check via JWT**: claim era `'authenticated'` literal
+   (Padrão Supabase), não o role real. Fix: DB lookup via `users.role` + cross-check
+   company_id. Edge fn v2 deployed.
+
+**Round 2 (4 gaps de paper trail — sub-fase 14.62):**
+5. Edge fns `public-api-v1` e `send-push` SEM source no repo — commit `8dbc9c6`
+6. `coverage/` faltava no .gitignore — commit `8dbc9c6`
+7. **11 migrations MCP fora de `supabase/migrations/`** — single source of truth
+   quebrada. Recuperadas via `execute_sql` em `supabase_migrations.schema_migrations`.
+   Commit `65ce593`.
+8. CI essencial não rodava specs 47/49/50 (regression invisível). Commit `65ce593`.
+
+**Round 3 (1 bug + 3 inconsistências — sub-fase 14.63):**
+9. **`_test_create_supervisor_with_perms` `gen_salt` schema path**: local OK,
+   CI falhava por search_path restrito. Fix: `extensions.crypt()` +
+   `extensions.gen_salt()` qualificados. Migration aplicada.
+10. CHECKPOINT.md 5 métricas defasadas (RLS 50→52, edge fns 4→6, migrations
+    64→74, vitest 434→458, E2E 49→53)
+11. `bench-edge-fns.mjs` chamava action `lookup-cpf` inexistente — commit `cc0dcd9`
+12. Eu afirmava "7 edge fns ACTIVE" — real era 6. Corrigido.
+
+**Resultado:** CI verde final no commit `cc0dcd9` com 114 testes essenciais
+(era 108). Sistema técnico **realmente 100%** após audit.
+
+**Lição aprendida:** verificação rigorosa antes de afirmar 100%. Auditoria
+forense > confiança cega.
+
+---
+
+
 ### 2026-05-16 — Sub-fase 14.29: TECH_DEBT 6.24 — AttendanceTab Realtime subscription
 
 **Resolvido:** AttendanceTab agora atualiza instantaneamente via Supabase Realtime quando há INSERT/UPDATE/DELETE em employees/attendance/payments da empresa atual.
