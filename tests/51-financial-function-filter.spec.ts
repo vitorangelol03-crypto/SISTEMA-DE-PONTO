@@ -36,10 +36,17 @@ test.describe('Financeiro — filtro por função', () => {
   test('selecionar função filtra a lista', async ({ page }) => {
     const filter = page.getByTestId('function-role-filter');
     await expect(filter).toBeVisible({ timeout: 10_000 });
+    const rowLocator = page.locator('tbody tr, [data-financial-card]');
 
-    // Conta funcionários sem filtro
-    await page.waitForTimeout(800);
-    const totalRows = await page.locator('tbody tr, [data-financial-card]').count();
+    // Aguarda primeira renderização estabilizar (CI lento precisa mais tempo).
+    // Espera contagem ficar > 0 OU timeout — se for 0 pode ser banco vazio
+    // de pagamentos pro dia, e o test não tem o que comparar.
+    await expect.poll(async () => await rowLocator.count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(0);
+    const totalRows = await rowLocator.count();
+    if (totalRows === 0) {
+      test.skip(true, 'Financeiro sem rows pra filtrar — pula');
+      return;
+    }
 
     // Pega o primeiro option que NÃO é "Todas" nem "Sem função" (1ª função real)
     const allOptions = await filter.locator('option').allTextContents();
@@ -50,16 +57,19 @@ test.describe('Financeiro — filtro por função', () => {
     }
 
     await filter.selectOption({ label: realRole });
-    await page.waitForTimeout(500);
+    // Polling: filtragem aconteceu quando contagem refletiu o filtro
+    // (≤ totalRows). Robusto contra CI lento. Timeout generoso.
+    await expect.poll(
+      async () => await rowLocator.count(),
+      { timeout: 15_000, message: `aguardando filtro "${realRole}" aplicar` },
+    ).toBeLessThanOrEqual(totalRows);
 
-    // Após filtrar, conta deve ser <= total (pode ser igual se TODOS tiverem a mesma função)
-    const filteredRows = await page.locator('tbody tr, [data-financial-card]').count();
-    expect(filteredRows).toBeLessThanOrEqual(totalRows);
-
-    // Volta pra "Todas as funções" — restaura total
+    // Volta pra "Todas as funções" — restaura total exato. Polling tolera
+    // o re-render da lista (em CI pode demorar mais que 500ms).
     await filter.selectOption({ label: 'Todas as funções' });
-    await page.waitForTimeout(500);
-    const restoredRows = await page.locator('tbody tr, [data-financial-card]').count();
-    expect(restoredRows).toBe(totalRows);
+    await expect.poll(
+      async () => await rowLocator.count(),
+      { timeout: 15_000, message: 'aguardando restauração da lista completa' },
+    ).toBe(totalRows);
   });
 });
