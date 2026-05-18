@@ -20,6 +20,7 @@ import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
+import FunctionRoleFilter, { FUNCTION_ROLE_ALL, FUNCTION_ROLE_NONE } from '../common/FunctionRoleFilter';
 import * as XLSX from 'xlsx';
 
 interface FinancialTabProps {
@@ -69,7 +70,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     startDate: getBrazilDate(),
     endDate: getBrazilDate(),
     employeeId: '',
-    employmentType: 'all' as EmploymentType
+    employmentType: 'all' as EmploymentType,
+    functionRole: FUNCTION_ROLE_ALL,
   });
 
   const [isEditingDate, setIsEditingDate] = useState({
@@ -109,9 +111,18 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
   const displayedFinancialData = React.useMemo(() => {
     const q = employeeSearch.trim().toLowerCase();
-    if (!q) return financialData;
-    return financialData.filter(d => d.employee.name.toLowerCase().includes(q));
-  }, [financialData, employeeSearch]);
+    const role = filters.functionRole;
+    let data = financialData;
+    if (role !== FUNCTION_ROLE_ALL) {
+      if (role === FUNCTION_ROLE_NONE) {
+        data = data.filter(d => !d.employee.function_role || !d.employee.function_role.trim());
+      } else {
+        data = data.filter(d => d.employee.function_role === role);
+      }
+    }
+    if (q) data = data.filter(d => d.employee.name.toLowerCase().includes(q));
+    return data;
+  }, [financialData, employeeSearch, filters.functionRole]);
 
   const displayedBonusRemovals = React.useMemo(() => {
     const q = historyEmployeeSearch.trim().toLowerCase();
@@ -766,6 +777,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             <EmploymentTypeFilter
               value={filters.employmentType}
               onChange={(value) => setFilters(prev => ({ ...prev, employmentType: value }))}
+              showLabel={true}
+            />
+
+            <FunctionRoleFilter
+              value={filters.functionRole}
+              onChange={(value) => setFilters(prev => ({ ...prev, functionRole: value }))}
+              companyId={company?.id}
               showLabel={true}
             />
           </div>

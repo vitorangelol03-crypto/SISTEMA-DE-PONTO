@@ -189,6 +189,7 @@ jobs:
               tests/47-supervisor-users-create.spec.ts \
               tests/49-pdf-holerite-download.spec.ts \
               tests/50-i18n-switch.spec.ts \
+              tests/51-financial-function-filter.spec.ts \
               tests/100-supremo-v2.spec.ts \
               tests/101-supremo-pn.spec.ts
           fi

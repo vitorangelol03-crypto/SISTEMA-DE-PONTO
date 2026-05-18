@@ -530,6 +530,24 @@ export const getAllEmployeesAcrossAllCompanies = async (
   return data || [];
 };
 
+// Lista distinta de funções (function_role) cadastradas na empresa.
+// Usado pelo combobox de cadastro (datalist) e pelo filtro do Financeiro.
+export const getFunctionRoles = async (companyId: string): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('function_role')
+    .eq('company_id', companyId)
+    .not('function_role', 'is', null);
+
+  if (error) throw error;
+  const unique = new Set<string>();
+  for (const row of data ?? []) {
+    const v = (row as { function_role: string | null }).function_role?.trim();
+    if (v) unique.add(v);
+  }
+  return Array.from(unique).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+};
+
 export const createEmployee = async (
   name: string,
   cpf: string,

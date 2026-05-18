@@ -31,6 +31,7 @@ import { validateCPF, formatCPF } from '../../utils/validation';
 import { generateEmployeeTemplate, parseEmployeeSpreadsheet, generateErrorReport, generateImportReport, parsedToImportData, ImportValidationResult, EmployeeImportData } from '../../utils/employeeImport';
 import { validateImportRow, normalizeCPF, type ValidationContext, type ImportRow } from '../../utils/employeeImportValidation';
 import { useCompany } from '../../contexts/CompanyContext';
+import { FunctionRoleInput } from '../common/FunctionRoleInput';
 import toast from 'react-hot-toast';
 
 interface EmployeesTabProps {
@@ -1006,10 +1007,10 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                     <Briefcase className="w-3.5 h-3.5 text-gray-400" /> Função
                   </label>
-                  <input
-                    type="text"
+                  <FunctionRoleInput
                     value={formData.functionRole}
-                    onChange={(e) => setFormData(prev => ({ ...prev, functionRole: e.target.value }))}
+                    onChange={(v) => setFormData(prev => ({ ...prev, functionRole: v }))}
+                    companyId={company?.id}
                     placeholder={company?.default_function_role ?? 'Função padrão da empresa'}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
                   />
