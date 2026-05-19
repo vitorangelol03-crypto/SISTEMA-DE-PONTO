@@ -1,11 +1,11 @@
 # CHECKPOINT_BANCO.md — Schema, RLS, Edge Functions, RPCs
 
 > Inventário do estado do banco em prod (Supabase project `flcncdidxmmornkgkfbb`).
-> Última atualização: **2026-05-13**.
+> Última atualização: **2026-05-19**.
 
 ---
 
-## 1. Edge Functions ACTIVE em prod (4)
+## 1. Edge Functions ACTIVE em prod (6)
 
 | Slug | Versão | `verify_jwt` | Função |
 |---|---|---|---|
@@ -208,3 +208,79 @@ Se rotacionar JWT Secret no Dashboard → **atualizar a var custom também** ou 
   - 16 WARNs legado (não mexer)
 
 Pre/post-RLS baselines: `docs/security-baseline-pre-rls.md` + `docs/security-baseline-post-rls.md`.
+
+---
+
+## 12. Queries novas (sub-fase 18.3, 2026-05-18)
+
+### `getFunctionRoles(companyId): Promise<string[]>` — src/services/database.ts
+
+DISTINCT de `function_role` por empresa, ordenado pt-BR. Lista zero migration.
+Usada por `FunctionRoleInput` (combobox autocomplete em EmployeesTab) e
+`FunctionRoleFilter` (dropdown no Financeiro).
+
+```sql
+SELECT function_role FROM employees
+WHERE company_id=$1 AND function_role IS NOT NULL;
+-- DISTINCT + sort no client (Set + Array.sort com locale='pt-BR')
+```
+
+Em Caratinga hoje: **1 função distinta** ("Auxiliar Administrativo" em 5 employees, 26 sem function_role).
+Em Ponte Nova: **8 funções distintas** (Demo PN seed).
+
+---
+
+## 13. Mudanças DB-only desta sessão (2026-05-18/19, sem commit)
+
+### DELETE row em `user_permissions` do supervisor 01
+
+Causa: alguém via UI zerou múltiplos módulos (`errors.view`, `reports.view`,
+`users.view`, `settings.view`, `c6payment.view`, `datamanagement.view`),
+deixando supervisor sem abas Erros + Relatórios. Spec 100 A3 começou a falhar.
+
+```sql
+DELETE FROM public.user_permissions WHERE user_id = '01';
+```
+
+Resultado: `getUserPermissions` cai no `DEFAULT_SUPERVISOR_PERMISSIONS` definido
+em `src/types/permissions.ts:113-127` → tabs voltam. Admin pode re-customizar
+via UI se quiser restringir depois.
+
+### UPDATE 4 payments REAIS + DELETE row em `bonuses` (incidente polução)
+
+CI rodando spec 100 C2 aplicou bônus B R$10 em massa em Caratinga, afetando
+4 funcionários REAIS. Cleanup:
+
+```sql
+UPDATE public.payments
+SET bonus_b=0, bonus=0, total=daily_rate
+WHERE date='2026-05-18'
+  AND company_id='6583bb2a-e334-41a7-b69c-7d98f3b46dfc'
+  AND employee_id IN (
+    SELECT id FROM public.employees
+    WHERE company_id='6583bb2a-e334-41a7-b69c-7d98f3b46dfc'
+      AND name NOT ILIKE 'PW Test%'
+  );
+
+DELETE FROM public.bonuses
+WHERE id='7a6461af-f182-4b1d-9be4-13a902802549';
+```
+
+Fix permanente em commit `823f45f` (helper `tests/_bonusIsolation.ts` aplicado
+em 4 specs). Ver `CHECKPOINT_FASES.md` §18.5.
+
+### INSERT row em `admin_cleanup_config` pra Ponte Nova
+
+Victor pediu equiparar config a Caratinga. Antes: PN sem config (cleanup
+desabilitado). Depois:
+
+```sql
+INSERT INTO public.admin_cleanup_config
+  (id, company_id, enabled, interval_months, next_cleanup_at, updated_at)
+VALUES (gen_random_uuid()::text,
+        '2b2abc4b-084c-4cf0-b5f1-02792513241d',
+        true, 3, now() + interval '3 months', now());
+```
+
+Resultado: PN com cleanup automático ativo, interval 3 meses, próxima rodada
+**2026-08-18**. Mesma config de Caratinga (next: 2026-07-17).

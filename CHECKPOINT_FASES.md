@@ -1432,3 +1432,201 @@ c7e9a7f  docs(tech-debt): documentar xlsx + 148 performance advisors (sub-fase 1
 d396c8d  chore(deps): npm audit fix + add @vitest/coverage-v8 (sub-fase 14.1)
 caae714  docs(checkpoint): fechamento Fase 13 + audit final (sub-fase 13.2)
 ```
+
+---
+
+## Sub-fase 18 — Sessão 2026-05-18/19 (pós-deploy ajustes UX + isolamento E2E)
+
+Sessão tactical (não planejada). Surgiu de feedback do Victor após primeiro uso real
+em produção: validação facial travada no celular + botão flutuante de ajuda cobrindo
+ações de tabela. Em paralelo, descoberta de incidente: CI E2E estava poluindo bônus
+em funcionários reais. Sessão fechou 6 fixes + nova feature de funções reutilizáveis.
+
+### 18.1 — Face perf mobile (commit `322d40d`, 2026-05-18)
+
+Otimização da fluidez do reconhecimento facial em celular após Victor reportar
+"trava ~5s antes de validar".
+
+- `src/hooks/useFaceApi.ts:71`: `inputSize 320 → 224` no `TinyFaceDetectorOptions`
+  (~50% menos compute por inferência; é o default recomendado pra mobile da própria
+  face-api.js)
+- `src/components/employee-clock/FaceVerification.tsx:239`: intervalo de detecção
+  `400ms → 600ms` (main thread respira entre inferências)
+- `src/components/employee-clock/FaceScanFrame.tsx:273`: remove `backdrop-filter:
+  blur(8px)` do pill (caro em Android WebView); compensa contraste com `bg
+  rgba(0,0,0,0.82)`
+
+Sem mudança de lógica: threshold de match, retry, layout permanecem. Validação:
+tsc + eslint + build + vitest (458 passed) + push CI verde.
+
+### 18.2 — Face perf v2 + frame oval (commit `e9d7f63`, 2026-05-18)
+
+Vitor reportou após primeiro fix: "ainda trava ~5s, formato quadrado feio".
+
+**Pre-warmup invisible** em `useFaceApi.ts:loadModelsOnce()`:
+- Após carregar os 3 modelos (6.5MB total), roda 1 inferência fake com canvas
+  cinza 224×224 → compila shaders WebGL no GPU
+- Resultado: quando câmera abre, detector já está aquecido → barra começa a
+  mexer no 1º frame em vez de 1-3s depois
+
+**Frame oval** em `FaceScanFrame.tsx`:
+- `FRAME_WIDTH=220 × FRAME_HEIGHT=290` (proporção rosto vertical) em vez de
+  280×280 quadrado
+- `borderRadius: '50%'` + borda contínua colorida (em vez de 4 cantos em L)
+- `overflow: hidden` no frame pra scanline ser cortada na elipse
+- Partículas reposicionadas em 12h/3h/6h/9h num wrapper externo (evita
+  serem cortadas pelo overflow)
+- Teste unitário `tests/unit/faceScanFrame.spec.tsx` atualizado pra refletir
+  nova estrutura (frame oval + 4 partículas em vez de 4 cantos)
+
+**Pendência #1**: Victor vai testar no celular após redeploy e confirmar.
+
+### 18.3 — Função reutilizável + filtro Financeiro (commit `a3b50aa`, 2026-05-18)
+
+Feature pedida pelo Victor: quando admin cadastra função em um funcionário, ela
+vira sugestão reutilizável nos próximos cadastros da mesma empresa. Plus, novo
+filtro por função no Financeiro pra recortar lista.
+
+**Backend:**
+- `src/services/database.ts`: nova fn `getFunctionRoles(companyId): Promise<string[]>`
+  que retorna `SELECT DISTINCT function_role` ordenado pt-BR
+
+**Componentes novos:**
+- `src/components/common/FunctionRoleInput.tsx` — input + `<datalist>` HTML nativo;
+  permite valor livre + sugestões
+- `src/components/common/FunctionRoleFilter.tsx` — `<select>` com "Todas as funções"
+  + lista + "Sem função"
+
+**Integração:**
+- `EmployeesTab.tsx` linha 1009: substitui `<input>` livre por `FunctionRoleInput`
+- `FinancialTab.tsx`: adiciona `functionRole` ao state filters + UI ao lado do
+  `EmploymentTypeFilter` + filtro client-side em `displayedFinancialData`
+- `tests/51-financial-function-filter.spec.ts` (NOVO) — 2 testes E2E
+- `.github/workflows/ci.yml`: adiciona spec 51 ao CI essencial (agora 10 specs)
+
+**Zero migration de banco**: `employees.function_role` continua TEXT NULL. Lista
+é DISTINCT em tempo real. PDFs (holerite, espelho, mirror), import de planilha
+e `CompanySettings.default_function_role` permanecem inalterados.
+
+### 18.4 — Bug visual FAB ajuda sobrepõe ações (commit `e1bd010`, 2026-05-18)
+
+Bug visual reportado com screenshot: botão `?` flutuante (HelpButton, fixed
+bottom-6 right-6, z-40) cobria "Ver Detalhes" + "Holerite PDF" da última linha
+da tabela do Financeiro.
+
+**Fix global**: `src/components/common/Layout.tsx` linha 72 — `<main>` ganha
+`pt-4 sm:pt-6 pb-4 sm:pb-24` em vez de `py-4 sm:py-6`. Como Layout é wrapper
+único de TODAS as 10 abas administrativas (App.tsx:177), o fix cobre Ponto,
+Funcionários, Relatórios, Financeiro, C6, Erros, Configurações, Usuários,
+Dados e Admin de uma vez.
+
+Mobile (`hidden` no FAB) mantém pb-4 — sem padding desnecessário.
+
+### 18.5 — Incidente polução bônus em prod (2026-05-18, 4 funcionários reais)
+
+**O que aconteceu**: Victor notou bônus B R$10 em payments de funcionários reais
+sem ter aplicado nada. Investigação detectou que CI rodando spec 100 C2
+("Aplicar B=10") aplica via UI o botão "Aplicar B" do modal Bonificação, que
+chama `applyBonusToAllPresent` — função afeta TODOS os presentes da empresa,
+sem diferenciar PW Test de funcionário real.
+
+**Linha do tempo** (Brasília):
+- 18:14:13 — CI rodou spec 100 C2 e criou row em `bonuses` (R$10, B, Caratinga)
+  + payment rows com `bonus_b=10` em 4 funcionários REAIS (Pablo, Lara,
+  Diendrel, Victor Angelo) + 7 PW Test
+
+**Cleanup imediato** (SQL com autorização textual do admin):
+```sql
+UPDATE public.payments SET bonus_b=0, bonus=0, total=daily_rate
+WHERE date='2026-05-18' AND company_id='6583bb2a-...'
+  AND employee_id IN (SELECT id FROM employees
+    WHERE company_id='6583bb2a-...' AND name NOT ILIKE 'PW Test%');
+
+DELETE FROM public.bonuses WHERE id='7a6461af-f182-4b1d-9be4-13a902802549';
+```
+Resultado: 4 REAIS zerados, row em `bonuses` deletada, 0 polução.
+
+**Fix permanente** (commit `823f45f`): novo helper `tests/_bonusIsolation.ts`
+exporta `snapshotRealPayments()` + `restoreRealPayments()`. Filtra REAL como
+`NOT name LIKE 'PW Test%' AND NOT name LIKE 'Demo PN%'` (cobre 2 prefixos
+sintéticos do projeto).
+
+Aplicado em **4 specs** que clicam "Aplicar B/C1/C2" via UI:
+- `tests/100-supremo-v2.spec.ts` C2 (refatorado de inline pra helper)
+- `tests/09-bonus-blocks.spec.ts` ("bonificação aplicada com bloqueio")
+- `tests/40-bonus-individual-ui.spec.ts` test 3 ("aplicar B=15")
+- `tests/99-supremo.spec.ts` test 4 ("Bonificação massiva B=10")
+
+Validação: rodou os 4 specs em sequência local → DB pós-execução: **0 REAIS
+poluídos, 0 rows em `bonuses` do dia**.
+
+**Lição**: testes E2E sobre banco compartilhado precisam blindagem explícita
+quando função sob teste afeta toda a empresa. Não basta cleanup de PW Test no
+afterAll — row em `bonuses` (regra por dia/empresa) e payments de funcionários
+reais persistem.
+
+### 18.6 — Fixes auxiliares de CI (commits `14d685f`, `af62a53`, `cf08976`, `e3ec3b0`)
+
+Sequência de fixes pra fechar CI verde após sub-fase 18.5:
+
+- `14d685f` — spec 100 C2 cleanup inline (depois refatorado em 18.5)
+- `af62a53` — `tests/38-system-walkthrough.spec.ts:192`: trocou `toBe(30)`
+  por `toBeGreaterThanOrEqual(30)` porque Victor cadastrou a funcionária Lara
+  Cipriano legitimamente, virando a 31ª real em Caratinga (não é regressão)
+- `cf08976` — `tests/51-financial-function-filter.spec.ts:36`: trocou
+  `waitForTimeout(500)` por `expect.poll` em 2 lugares (CI lento precisa
+  esperar re-render)
+- `e3ec3b0` — `tests/51`: trocou `count()` snapshot por `expect.poll` + reduz
+  mínimo pra 2 (empresa sem function_role cadastrada é estado válido,
+  Caratinga só tinha 1 função distinta)
+
+### 18.7 — Fix permissões supervisor 01 (DB-only, sem commit)
+
+Investigação do CI run 26037523443 que falhava em spec 100 A3 ("Login
+supervisor 01 → permissions corretas"): supervisor estava sem abas Erros +
+Relatórios na UI. Screenshot do test confirmou.
+
+Causa: alguém via UI (UsersTab > Permissões) zerou `errors.view`,
+`reports.view`, `users.view`, `settings.view`, `c6payment.view`, `datamanagement.view`
+do supervisor 01. `mergePermissionsWithDefaults` em `src/services/permissions.ts`
+substitui defaults só quando há registro no banco — então as permissions
+custom prevaleciam.
+
+Cleanup via SQL com autorização textual:
+```sql
+DELETE FROM public.user_permissions WHERE user_id = '01';
+```
+Resultado: `getUserPermissions` cai no `DEFAULT_SUPERVISOR_PERMISSIONS` →
+abas Erros + Relatórios voltam.
+
+Mudança não vai pro git (DB-only). Admin pode re-customizar via UI se quiser
+restringir o supervisor depois.
+
+### 18.8 — Config cleanup automático pra Ponte Nova (DB-only, sem commit)
+
+Victor pediu: "deixa a config de ponte nova a mesma de caratinga".
+
+```sql
+INSERT INTO public.admin_cleanup_config (id, company_id, enabled, interval_months,
+  last_cleanup_at, next_cleanup_at, updated_at)
+VALUES (gen_random_uuid()::text, '2b2abc4b-...', true, 3, NULL,
+        (now() + interval '3 months'), now());
+```
+
+Resultado: Ponte Nova agora tem cleanup automático trigger client-side igual
+Caratinga. Próxima rodada: 2026-08-18.
+
+### Commits da sub-fase 18
+
+```
+b65c460  docs(checkpoint): registrar sessão 2026-05-18/19 (sub-fase 18.9)
+e3ec3b0  fix(spec-51): polling no count + min 2 (sub-fase 18.6)
+823f45f  fix(specs): isolar bônus em massa em todos os 4 specs (sub-fase 18.5)
+cf08976  fix(spec-51): polling em vez de waitForTimeout (sub-fase 18.6)
+af62a53  fix(spec-38): flexibilizar contagem REAIS (sub-fase 18.6)
+14d685f  fix(spec-100): C2 não polui mais bônus de funcionários reais (sub-fase 18.5 inicial)
+e1bd010  fix(layout): reservar espaço no fim de cada aba (sub-fase 18.4)
+a3b50aa  feat(employees,financial): biblioteca de funções + filtro (sub-fase 18.3)
+e9d7f63  perf(face): pre-warmup do face-api + frame oval estilo rosto (sub-fase 18.2)
+322d40d  perf(face): otimizar fluidez do reconhecimento facial em mobile (sub-fase 18.1)
+```

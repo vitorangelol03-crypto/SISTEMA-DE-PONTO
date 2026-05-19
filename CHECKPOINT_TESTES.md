@@ -1,6 +1,6 @@
 # CHECKPOINT_TESTES.md — Specs, Coverage, Comandos
 
-> Estado da bateria de testes pós-Fase 14. Última atualização: **2026-05-13**.
+> Estado da bateria de testes pós-Fase 14. Última atualização: **2026-05-19**.
 
 ---
 
@@ -8,10 +8,13 @@
 
 | Métrica | Valor atual |
 |---|---|
-| Unit tests (Vitest) | **422+ passing** (incluindo 16 specs `tests/unit/`) |
-| E2E specs (Playwright) | **40+ specs** (specs `tests/01-*` a `tests/42-*`) |
-| Tests E2E individuais | **~250+ passing**, 0 flakes em workers=1 |
+| Unit tests (Vitest) | **458 passing / 1 skipped** (24 specs `tests/unit/`) |
+| E2E specs (Playwright) | **54 specs** (`tests/01-*` a `tests/51-*` + `99/100/101`) |
+| Tests E2E individuais | **334+ passing**, 0 flakes em workers=1 |
+| CI essencial (push/PR) | **10 specs** (01/02/25/38/47/49/50/**51**/100/101) |
+| CI full (workflow_dispatch) | suíte completa em ~45min |
 | Coverage tool | `@vitest/coverage-v8` instalado (14.1) |
+| Helper anti-polução | **`tests/_bonusIsolation.ts`** (sub-fase 18.5, blindagem em 4 specs) |
 
 ---
 
@@ -69,8 +72,14 @@
 | `40-bonus-individual-ui` | **Bonificação individual UI** (sub-fase 14.6) | **5/5 ✅** |
 | `41-company-settings-save` | **Salvar CompanySettings** (sub-fase 14.7) | **5/5 ✅** |
 | `42-bank-hours-apply-ui` | **Apply bank hours UI** (sub-fase 14.7) | **3/3 ✅ + 1 skip** (revert UI inexistente) |
-| `99-supremo` | **Teste Supremo v1** (10 fluxos completos Caratinga, sub-fase 14.9) | **10/10 ✅** em 1.2min |
-| `100-supremo-v2` | **Teste Supremo v2** (46 tests, 12 seções A-L exaustivo, sub-fase 14.13) | **46/46 ✅** prod em 2.0min |
+| `47-supervisor-users-create` | Supervisor cria user (sub-fase 16.3) | **2/2 ✅** |
+| `48-face-registration-smoke` | FaceRegistration smoke | ⏸️ skipped (16.1.X postponed) |
+| `49-pdf-holerite-download` | PDF holerite download (17.2.1) | ✅ |
+| `50-i18n-switch` | LanguageSwitcher pt-BR/en (17.5.1) | ✅ |
+| `51-financial-function-filter` | **Filtro de função no Financeiro** (sub-fase 18.3) — datalist + filter | **2/2 ✅** em 13.6s |
+| `99-supremo` | **Teste Supremo v1** (10 fluxos completos Caratinga, sub-fase 14.9) | **10/10 ✅** em 1.2min — blindado contra polução em 18.5 |
+| `100-supremo-v2` | **Teste Supremo v2** (46 tests, 12 seções A-L exaustivo, sub-fase 14.13) | **46/46 ✅** prod em 2.0min — C2 blindado em 18.5 |
+| `101-supremo-pn` | **Teste Supremo PN** (25 tests, Ponte Nova) | **25/25 ✅** em 1.1min |
 
 ---
 
@@ -115,6 +124,41 @@
 - `insertAttendance(empId, date, {status, ...})` → uuid
 - `cleanupByPrefix(prefix, dates?)` — DELETE FK-safe por prefix
 - `insertPaymentRow(empId, date, {...})` → uuid
+
+### `tests/_bonusIsolation.ts` (sub-fase 18.5, 2026-05-18)
+
+Helper crítico pra evitar polução de prod em specs que clicam botões de
+aplicação em massa no modal Bonificação ("Aplicar B/C1/C2"). A função do
+sistema `applyBonusToAllPresent` afeta TODOS os funcionários presentes da
+empresa, sem diferenciar PW Test de funcionário real.
+
+**API:**
+- `snapshotRealPayments(s, companyId, date): Promise<BonusSnapshot>`
+  - Snapshot dos payments REAIS (filtra `!name LIKE 'PW Test%' AND !name LIKE 'Demo PN%'`)
+  - Salva: `paymentsBefore`, `realIds`, `companyId`, `date`
+- `restoreRealPayments(s, snapshot): Promise<void>`
+  - UPDATE pra cada row pré-snapshot (restaura bonus_b, bonus, total)
+  - DELETE de payments NOVAS criadas pra REAIS pelo applyBonusToAllPresent
+  - DELETE da row em `bonuses` do dia/empresa (regra geral criada)
+
+**Aplicado em 4 specs**:
+- `tests/100-supremo-v2.spec.ts` C2 ("Aplicar B=10")
+- `tests/09-bonus-blocks.spec.ts` ("bonificação aplicada com bloqueio")
+- `tests/40-bonus-individual-ui.spec.ts` test 3 ("aplicar B=15")
+- `tests/99-supremo.spec.ts` test 4 ("Bonificação massiva B=10")
+
+**Validação pós-helper**: rodou os 4 specs em sequência local → DB
+pós-execução: **0 REAIS poluídos, 0 rows em `bonuses` do dia**.
+
+**Incidente de referência**: 2026-05-18 — 4 funcionários reais de Caratinga
+(Pablo Henrique, Lara Cipriano, Diendrel Marques, Victor Angelo) ficaram
+com `bonus_b=10` em prod sem admin ter aplicado. Cleanup imediato via SQL,
+fix permanente via este helper. Ver `CHECKPOINT_FASES.md` §18.5.
+
+**Quando usar este pattern**: qualquer spec que dispare função do sistema
+que afeta empresa inteira via dispatch UI (não só bonus — vale pra futuro
+"aplicar desconto em massa", etc.). Pattern documentado em
+`CHECKPOINT_ARQUITETURA.md` §7 (decisão).
 
 ---
 

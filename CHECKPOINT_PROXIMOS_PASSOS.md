@@ -1,6 +1,25 @@
 # CHECKPOINT_PROXIMOS_PASSOS.md — Pendências + Ações Victor + Gaps
 
-> O que falta pra go-live e além. Última atualização: **2026-05-13**.
+> O que falta pra go-live e além. Última atualização: **2026-05-19**.
+
+---
+
+## 0. ⏳ Pendências ATIVAS (pós-sessão 2026-05-18/19)
+
+| # | Item | Status | Bloqueador |
+|---|---|---|---|
+| 1 | Testar fluidez facial no celular (pós-deploy do commit `e9d7f63`) | ⏳ aguardando | redeploy do build novo |
+| 2 | Spec 101 PN hardcodes — fix preventivo | ✅ NÃO PRECISA (já filtra por `name LIKE 'Demo PN%'`) | — |
+| 3 | Auditar specs que poluem prod com bônus em massa | ✅ RESOLVIDO em `823f45f` (helper `_bonusIsolation` + 4 specs blindados) | — |
+| 4 | Redeploy de produção pegar build atualizado | ⏳ aguardando | Victor dispara via hosting (Vercel/Netlify/etc.) |
+
+**O que validar quando Victor testar no celular (pendência #1):**
+- [ ] Não tem mais "travadinha" de ~5s antes da barra começar a mexer
+- [ ] Frame oval (220×290) está visualmente OK em vez do quadrado
+- [ ] Barra de confiança começa a mexer no 1º frame após câmera abrir
+- [ ] Animações fluem sem jank durante detecção
+- [ ] Cadastro de funcionário: ao digitar Função, datalist mostra sugestões
+- [ ] No Financeiro, filtro por função funciona
 
 ---
 

@@ -283,3 +283,83 @@ npx tsc --noEmit
 npx vitest run
 npx playwright test --workers=1 --reporter=line
 ```
+
+---
+
+## 14. SOP — Cleanup polução de bônus em prod (sub-fase 18.5, 2026-05-18)
+
+**Quando usar**: bônus em payments de funcionários reais sem ter aplicado nada
+via UI. Causa: CI E2E (specs que clicam "Aplicar B/C1/C2") rodou e o helper
+`tests/_bonusIsolation.ts` não foi aplicado naquele spec.
+
+### Diagnóstico
+
+```sql
+SELECT e.name, p.date, p.bonus_b, p.bonus, p.total, p.created_at,
+  CASE WHEN e.name ILIKE 'PW Test%' THEN 'TESTE' ELSE 'REAL' END AS tipo
+FROM public.payments p
+JOIN public.employees e ON e.id = p.employee_id
+WHERE p.date = current_date
+  AND p.company_id = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc'
+  AND p.bonus_b > 0
+ORDER BY p.created_at;
+```
+
+### Cleanup
+
+```sql
+UPDATE public.payments
+SET bonus_b=0, bonus=0, total=daily_rate
+WHERE date=current_date
+  AND company_id='6583bb2a-e334-41a7-b69c-7d98f3b46dfc'
+  AND employee_id IN (
+    SELECT id FROM public.employees
+    WHERE company_id='6583bb2a-e334-41a7-b69c-7d98f3b46dfc'
+      AND name NOT ILIKE 'PW Test%'
+      AND name NOT ILIKE 'Demo PN%'
+  );
+
+DELETE FROM public.bonuses
+WHERE date=current_date
+  AND company_id='6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
+```
+
+⚠️ Atenção: se admin aplicou bônus REAL no dia, UPDATE também zera. Snapshot
+antes se possível.
+
+### Fix permanente (se for spec sem blindagem)
+
+```bash
+# Lista specs que clicam "Aplicar B/C1/C2" sem usar o helper:
+grep -l "Aplicar B\b\|Aplicar C1\|Aplicar C2" tests/*.spec.ts | \
+  xargs grep -L "_bonusIsolation"
+```
+
+Se aparecer spec sem o helper → blindar seguindo o pattern em commits
+`823f45f` (helper) + exemplos em `tests/100-supremo-v2.spec.ts:493`,
+`tests/09-bonus-blocks.spec.ts:113`, `tests/40-bonus-individual-ui.spec.ts:176`,
+`tests/99-supremo.spec.ts:202`.
+
+---
+
+## 15. SOP — Reset permissões de usuário restritas (sub-fase 18.7)
+
+**Quando usar**: admin via UI zerou permissões de supervisor sem querer e ele
+perdeu acesso a abas. Spec 100 A3 começa a falhar com screenshot mostrando
+header sem tabs esperadas.
+
+### Diagnóstico
+
+```sql
+SELECT user_id, permissions FROM public.user_permissions WHERE user_id = '<id>';
+```
+
+### Fix: deletar pra cair no default
+
+```sql
+DELETE FROM public.user_permissions WHERE user_id = '<id>';
+```
+
+`getUserPermissions(userId)` em `src/services/permissions.ts:23` faz fallback
+pra `DEFAULT_SUPERVISOR_PERMISSIONS` (definido em `src/types/permissions.ts:113`).
+Admin re-customiza via UI depois.

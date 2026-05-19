@@ -390,6 +390,76 @@ Timeout 10s→20s aplicado na linha 53 (`tests/24-admin-complete.spec.ts`). Vali
 
 ## ✅ Histórico — Resolvidas
 
+### 2026-05-18/19 — Sub-fase 18 — Pós-deploy ajustes (4 fixes + 1 feature)
+
+Sessão tactical (não planejada) com 4 fixes UX/cobertura + 1 feature nova
++ 1 incidente de polução de prod resolvido.
+
+**Fix 18.1/18.2: face perf mobile** — commits `322d40d` + `e9d7f63`
+- Reduz inputSize 320→224 em `useFaceApi.ts` (~50% menos compute por inferência)
+- Intervalo de detecção 400ms→600ms (main thread respira)
+- Remove `backdrop-filter: blur(8px)` do pill (caro em Android WebView)
+- Adiciona pre-warmup invisível: canvas cinza 224×224 + 1 inferência fake
+  após carregar modelos → compila shaders WebGL no GPU antes da câmera abrir
+  (elimina cold-start de 1-3s)
+- Frame quadrado 280×280 com cantos em L → **oval 220×290** com borda contínua
+- Teste unitário `tests/unit/faceScanFrame.spec.tsx` atualizado pra refletir
+  nova estrutura (frame oval + 4 partículas em vez de 4 cantos)
+
+**Fix 18.4: bug visual FAB ajuda sobrepõe ações** — commit `e1bd010`
+- Bug: HelpButton (`fixed bottom-6 right-6 w-14 h-14 z-40`) cobria
+  "Ver Detalhes" + "Holerite PDF" da última linha em tabelas administrativas
+- Fix global em `src/components/common/Layout.tsx`: `<main>` ganha
+  `sm:pb-24` (96px) em sm+, mantém `pb-4` em mobile (FAB oculto)
+- Como Layout é wrapper único (App.tsx:177), cobre as 10 abas admin de uma vez
+
+**Feature 18.3: biblioteca de funções + filtro Financeiro** — commit `a3b50aa`
+- Nova função `getFunctionRoles(companyId)` em database.ts (DISTINCT
+  ordenado pt-BR, zero migration de banco)
+- 2 componentes novos: `FunctionRoleInput` (input + `<datalist>` HTML) +
+  `FunctionRoleFilter` (dropdown "Todas / função / Sem função")
+- `EmployeesTab` substitui `<input>` livre por combobox autocomplete
+- `FinancialTab` adiciona filtro de função ao lado do EmploymentTypeFilter
+- Novo spec E2E `tests/51-financial-function-filter.spec.ts` (2 testes)
+- CI essencial agora cobre 10 specs (com spec 51 incluído)
+
+**Incidente 18.5: polução de bônus em prod** — RESOLVIDO em `823f45f`
+- CI rodando spec 100 C2 ("Aplicar B=10") aplicou bônus em massa em
+  Caratinga via `applyBonusToAllPresent` — função afeta TODOS presentes
+  da empresa, sem diferenciar PW Test de funcionário real
+- 4 funcionários REAIS (Pablo Henrique, Lara, Diendrel, Victor Angelo)
+  ficaram com `bonus_b=10` em prod sem admin ter aplicado
+- Cleanup imediato: UPDATE payments + DELETE row em bonuses (SQL via MCP
+  com autorização textual do admin)
+- Fix permanente: novo helper `tests/_bonusIsolation.ts` exportando
+  `snapshotRealPayments` + `restoreRealPayments`. Aplicado em 4 specs
+  que clicam "Aplicar B/C1/C2" via UI:
+  - `tests/100-supremo-v2.spec.ts` C2
+  - `tests/09-bonus-blocks.spec.ts` ("bonificação aplicada com bloqueio")
+  - `tests/40-bonus-individual-ui.spec.ts` test 3 ("aplicar B=15")
+  - `tests/99-supremo.spec.ts` test 4 ("Bonificação massiva B=10")
+- Validação pós-helper: 4 specs rodados em sequência local → DB pós-execução
+  **0 REAIS poluídos, 0 rows em `bonuses` do dia**
+- Decisão D7 documentada em `CHECKPOINT_ARQUITETURA.md` §12
+- SOP de cleanup documentado em `CHECKPOINT_OPERACAO.md` §14
+
+**Fix 18.6: 4 fixes auxiliares de CI** — commits `14d685f`, `af62a53`,
+`cf08976`, `e3ec3b0`
+- `14d685f` — spec 100 C2 cleanup inline (depois refatorado em 18.5)
+- `af62a53` — spec 38 `toBe(30)` → `toBeGreaterThanOrEqual(30)`
+  (admin cadastrou Lara Cipriano legitimamente, virou 31ª real)
+- `cf08976` + `e3ec3b0` — spec 51 polling robusto pra CI lento + min 2
+  (empresa sem function_role é estado válido)
+
+**Mudanças DB-only desta sessão** (não vão pro git, documentadas em
+`CHECKPOINT_BANCO.md` §13):
+- DELETE row `user_permissions` do supervisor 01 (acesso restaurado via
+  fallback DEFAULT_SUPERVISOR_PERMISSIONS)
+- INSERT row `admin_cleanup_config` pra Ponte Nova (cleanup automático
+  ativo, interval 3 meses, next 2026-08-18)
+
+---
+
 ### 2026-05-17 — Auditoria Forense (3 rounds, 12 bugs/gaps detectados)
 
 Vitória do "tem certeza?" do Victor: 3 rounds de auditoria rigorosa detectaram

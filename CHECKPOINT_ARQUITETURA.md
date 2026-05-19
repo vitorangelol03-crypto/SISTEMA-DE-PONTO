@@ -1,6 +1,7 @@
 # CHECKPOINT_ARQUITETURA.md — Arquitetura técnica + Decisões
 
-> Stack, padrões, fluxos, decisões D1-D6. Para visão executiva, ver `CHECKPOINT.md`.
+> Stack, padrões, fluxos, decisões D1-D6 + D7. Para visão executiva, ver `CHECKPOINT.md`.
+> Última atualização: **2026-05-19**.
 
 ---
 
@@ -203,3 +204,67 @@ export const supabase = createClient(url, anonKey, {
 - `employee-errors-by-period` — busca erros do funcionário num período
 
 Todas exigem `cpf` ou `employeeId` no body — auth via dados do próprio funcionário (não JWT).
+
+---
+
+## 12. Decisão D7 — Snapshot/restore em E2E sobre banco compartilhado (sub-fase 18.5, 2026-05-18)
+
+**Contexto**: testes E2E rodam sobre banco Supabase **compartilhado** com prod
+(não há staging dedicado). Funções do sistema que afetam empresa inteira
+(`applyBonusToAllPresent`, futuro `applyDiscount`, etc.) não diferenciam
+funcionário de teste de funcionário real. Cleanup tradicional por prefix
+("PW Test%", "Demo PN%") não é suficiente: rows globais (regra em `bonuses`)
+e payments de funcionários reais persistem após o teste.
+
+**Incidente referência**: 2026-05-18 — 4 funcionários reais de Caratinga
+ficaram com bônus B R$10 sem admin aplicar. Detectado por Victor; cleanup
+imediato via SQL; fix permanente via helper. Ver `CHECKPOINT_FASES.md` §18.5.
+
+**Decisão**: especs E2E que disparam funções de aplicação em massa **DEVEM**
+usar o pattern snapshot/restore via `tests/_bonusIsolation.ts`:
+
+```ts
+import { snapshotRealPayments, restoreRealPayments } from './_bonusIsolation';
+
+// ANTES de aplicar:
+const snapshot = await snapshotRealPayments(s, COMPANY_ID, today);
+
+// roda o teste (clica "Aplicar B" etc.) ...
+
+// DEPOIS de assertions:
+await restoreRealPayments(s, snapshot);
+```
+
+**Filtragem REAL**: `NOT name LIKE 'PW Test%' AND NOT name LIKE 'Demo PN%'`
+(cobre os 2 prefixos sintéticos do projeto).
+
+**Garantias do helper**:
+1. Restaura payments REAIS ao estado pré-snapshot (UPDATE de cada row salva)
+2. Deleta payments NOVAS criadas pra REAIS pelo applyBonusToAllPresent
+3. Deleta a row em `bonuses` do dia/empresa (regra geral criada pelo teste)
+
+**Cobertura atual**: 4 specs blindados (`100` C2, `09`, `40` test 3, `99` test 4).
+
+**Como expandir**: se uma feature nova introduzir "aplicar em massa" (ex:
+desconto, banco de horas em massa), criar variante similar (`snapshotRealX`,
+`restoreRealX`) seguindo o mesmo padrão.
+
+**Não invalida testes**: o helper roda DEPOIS das assertions do teste — não
+afeta o que está sendo validado, apenas limpa o estado residual.
+
+---
+
+## 13. Padrão Layout — `<main>` reserva espaço para FAB (sub-fase 18.4, 2026-05-18)
+
+`src/components/common/Layout.tsx` é wrapper único de todas as 10 abas
+administrativas (App.tsx:177). Define padding-bottom do `<main>` em sm+
+(`sm:pb-24` = 96px) pra reservar espaço sob o HelpButton flutuante
+(`fixed bottom-6 right-6 w-14 h-14 z-40`, hidden sm:flex = só desktop).
+
+Resultado: a última linha de qualquer tabela administrativa (com botões
+"Ver Detalhes", "Holerite PDF", "Editar", etc.) não fica embaixo do FAB.
+Mobile mantém `pb-4` — sem padding desnecessário.
+
+**Quando criar componente flutuante fixed bottom novo**: reservar espaço
+equivalente no Layout ou no container, NÃO criar overlay que cubra UI
+interativa.
