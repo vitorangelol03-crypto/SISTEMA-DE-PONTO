@@ -3,13 +3,82 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-17 (auditoria forense 3 rounds — 12 bugs/gaps detectados e fixados ✅)
+**Última atualização:** 2026-05-19 (sessão pós-deploy — 6 commits: face perf mobile + função reutilizável + filtro financeiro + 4 specs blindados contra polução de prod ✅)
 **Branch:** `main` (sincronizada com origin)
 **Release publicada:** https://github.com/vitorangelol03-crypto/SISTEMA-DE-PONTO/releases/tag/v2.0.0-multi-tenant.1
-**CI status:** ✅ verde no commit `cc0dcd9` (vitest 37s + tsc/eslint 22s + playwright 8m33s)
+**CI status:** ✅ verde no commit `e3ec3b0` (run 26065259300 — vitest + tsc/eslint + playwright)
 **Plano canônico:** `PLANO_100.md` (roadmap completo até 100%)
 **TECH_DEBT canônico:** `TECH_DEBT.md`
 **Memory:** `/home/victor/.claude/projects/-home-victor-SISTEMA-DE-PONTO/memory/`
+
+## 🆕 Sessão 2026-05-18/19 — Pós-deploy ajustes (6 commits + incidente de polução)
+
+Sessão focada em UX mobile + nova feature de funções + auditoria de polução prod.
+
+### Commits da sessão (todos pushed e CI verde)
+
+| commit | tema | descrição |
+|---|---|---|
+| `322d40d` | **face perf** | `inputSize 320→224`, intervalo 400→600ms, sem `backdrop-filter` |
+| `e9d7f63` | **face perf** | pre-warmup WebGL + frame oval estilo rosto (220×290) |
+| `a3b50aa` | **feat funções** | biblioteca de funções (`getFunctionRoles`) + datalist autocomplete + filtro no Financeiro |
+| `e1bd010` | **Layout fix** | `<main>` ganha `sm:pb-24` → FAB de ajuda não sobrepõe ações de tabela (10 abas) |
+| `14d685f` | **spec 100 C2** | snapshot/restore de payments REAIS antes de aplicar bônus em massa |
+| `af62a53` | **spec 38** | `toBe(30)` → `toBeGreaterThanOrEqual(30)` (admin pode cadastrar reais) |
+| `cf08976` | **spec 51** | polling robusto pra CI lento |
+| `823f45f` | **isolamento bônus** | helper `tests/_bonusIsolation.ts` + blindagem dos specs 100/C2, 09, 40/test3, 99/test4 |
+| `e3ec3b0` | **spec 51** | polling no `count()` + mínimo 2 (empresa sem funções é válido) |
+
+### Incidente: poluição de bônus em prod (2026-05-18)
+
+**O que aconteceu**: CI rodando spec 100 C2 (botão "Aplicar B=10") aplicou bônus em massa em Caratinga via `applyBonusToAllPresent` — função do sistema afeta TODOS os presentes da empresa, não diferencia PW Test de funcionário real. 4 funcionários REAIS (Pablo, Lara, Diendrel, Victor Angelo) ficaram com `bonus_b=10` sem admin ter aplicado.
+
+**Cleanup imediato** (via SQL com autorização do admin):
+- `UPDATE payments SET bonus_b=0, bonus=0, total=daily_rate` nos 4 REAIS
+- `DELETE FROM bonuses WHERE id='7a6461af...'` (regra do dia)
+
+**Fix permanente** (commit `823f45f`):
+- Novo helper `tests/_bonusIsolation.ts`: `snapshotRealPayments` + `restoreRealPayments`
+- Aplicado em **4 specs** que clicavam "Aplicar B/C1/C2" via UI:
+  - `tests/100-supremo-v2.spec.ts` C2
+  - `tests/09-bonus-blocks.spec.ts` (test "bonificação aplicada com bloqueio")
+  - `tests/40-bonus-individual-ui.spec.ts` test 3 ("aplicar B=15")
+  - `tests/99-supremo.spec.ts` test 4 ("Bonificação massiva B=10")
+- Filtra REAL como `!name LIKE 'PW Test%' AND !name LIKE 'Demo PN%'` (cobre os 2 prefixos sintéticos)
+- Validação: rodou os 4 specs em sequência local → DB pós-execução: **0 REAIS poluídos, 0 rows em `bonuses` do dia**
+
+**Lição**: testes E2E sobre banco compartilhado precisam blindagem explícita quando a função sob teste afeta toda a empresa. Não basta limpar PW Test no afterAll — a row em `bonuses` (regra por dia/empresa) e os payments de funcionários reais persistem.
+
+### Feature nova: biblioteca de funções + filtro Financeiro (commit `a3b50aa`)
+
+Quando admin cadastra função em um funcionário, ela vira sugestão reutilizável (`<datalist>` HTML nativo) nos próximos cadastros da mesma empresa. Novo filtro no Financeiro permite recortar lista por função.
+
+- `src/services/database.ts` — `getFunctionRoles(companyId)` retorna DISTINCT ordenado pt-BR
+- `src/components/common/FunctionRoleInput.tsx` (NOVO) — input + datalist
+- `src/components/common/FunctionRoleFilter.tsx` (NOVO) — dropdown com "Todas / função X / Sem função"
+- `EmployeesTab.tsx` — substitui `<input>` por `FunctionRoleInput`
+- `FinancialTab.tsx` — adiciona filtro ao lado do `EmploymentTypeFilter`
+- `tests/51-financial-function-filter.spec.ts` (NOVO) — 2 testes E2E
+- CI essencial agora cobre spec 51
+
+**Zero migration de banco**: `function_role` continua TEXT NULL em employees, lista é DISTINCT em tempo real.
+
+### Outros achados desta sessão
+
+- **Permissions custom do supervisor 01 deletadas** (DB-only, não vai pro git) — supervisor estava sem abas Erros + Relatórios porque alguém via UI tinha zerado `errors.view` + `reports.view`. DELETE da row em `user_permissions` → caiu no `DEFAULT_SUPERVISOR_PERMISSIONS` → tabs voltaram.
+- **Spec 101 PN não precisa fix** — confirmou que filtra por `name LIKE 'Demo PN%'`, robusto contra cadastros reais
+- **Caratinga só tem 1 função distinta** ("Auxiliar Administrativo"). As 9 funções vistas inicialmente estavam concentradas em Ponte Nova (8 distintas)
+
+### Pendências remanescentes (dependem do Victor)
+
+| # | item | status |
+|---|---|---|
+| 1 | Testar face fluidez no celular (warmup + oval + inputSize 224) | ⏳ aguardando |
+| 2 | Spec 101 PN hardcodes | ✅ não precisava (filtra por "Demo PN%") |
+| 3 | Specs com bônus em massa | ✅ helper + 4 specs blindados |
+| 4 | Deploy de produção (redeploy do build atualizado) | ⏳ Victor dispara |
+
+---
 
 ## 🔍 Auditoria Forense (2026-05-17 final) — 12 bugs/gaps detectados + fixados
 
@@ -111,9 +180,13 @@ Estas regras valem **pra cada sub-fase, toda execução**. Foram negociadas com 
 | **UI admin face threshold** | ✅ Form em AdminTab pra ajustar max_attempts + window via UI (sub-fase 17.3.1) |
 | **Capacitor Android setup** | ✅ Estrutura 100% pronta (`android/`, AndroidManifest, 4 plugins) — falta só Studio (sub-fase 17.1.1) |
 | **Firebase Push infra local** | ✅ Tabela + edge fn `send-push` + SW + cliente `pushNotifications.ts` (sub-fase 17.4.1) — falta só Firebase project |
+| **Face perf mobile** | ✅ inputSize 320→224, intervalo 400→600ms, pre-warmup WebGL, frame oval 220×290 (sessão 2026-05-18) |
+| **Função reutilizável** | ✅ `getFunctionRoles` + datalist autocomplete em cadastro + filtro no Financeiro (commit `a3b50aa`) |
+| **Helper isolamento bônus** | ✅ `tests/_bonusIsolation.ts` — 4 specs blindados contra polução prod (commit `823f45f`) |
+| **Bug visual FAB ajuda** | ✅ `<main>` ganha `sm:pb-24` — botão não cobre mais ações da última linha (commit `e1bd010`) |
 | **Spec 48 FaceRegistration** | ⏸️ Skipped (TECH_DEBT 16.1.X — mock pesado postponed) |
 | **Tutorial Victor** | ✅ `TUTORIAL_VICTOR.md` com 7 itens step-by-step |
-| **E2E specs (Playwright)** | **53 specs** (CI essencial: 9 specs / Full local: 334 passed / 0 failed em 44.5min) |
+| **E2E specs (Playwright)** | **54 specs** (CI essencial: 10 specs — spec 51 incluído / Full local: 334+ em 44.5min) |
 | **Spec Supremo PN** | `tests/101-supremo-pn.spec.ts` — **25/25** contra prod em 1.1min ✅ |
 | **Funcionários PN** | **30 Demo PN** (20 CLT + 8 Diarista + 2 PJ) com PINs bcrypt |
 | **CI GitHub Actions** | **100% VERDE** ✅ (Run #21: vitest 30s + tsc 22s + playwright 8m43s) |
