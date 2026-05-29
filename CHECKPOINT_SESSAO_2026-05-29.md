@@ -144,4 +144,24 @@ Primeira coisa: "Lê CHECKPOINT_SESSAO_2026-05-29.md e o CHECKPOINT_REVISAO_2026
 
 ---
 
-*Sessão 2026-05-29. Backup + investigação + feature "funcionário sem CPF". Mantido por Victor + Claude Opus 4.8.*
+## 12. Verificação final de produção (fim da sessão)
+
+> Tudo confirmado empiricamente ao fechar a sessão.
+
+**Sistema vivo e saudável:**
+- 17 batidas de ponto hoje (última 2026-05-29 11:52) → app em uso real, ponta a ponta.
+- **0 erros** em `error_logs` nas últimas 12h (a migration e as mudanças não quebraram nada).
+- 77 funcionários (igual ao backup); 0 sem CPF ainda (feature disponível, não usada ainda).
+- Site no ar responde (`https://sistema-ponto-zeta.vercel.app`, título "Sistema de Ponto"). Vercel redeploya a partir do push `9a1cd4c`.
+
+**Sem perda de dados (verificado):**
+- 52 tabelas comparadas backup×banco: nenhuma diminuiu. Só `audit_logs` (+3) e `payment_periods` (+1) cresceram (atividade normal do dia).
+- `employees` (única tabela escrita): md5 do conjunto de IDs **idêntico** ao backup → nenhum funcionário perdido, 0 registros de teste sobrando. Banco voltou exatamente ao estado original.
+
+**Estado final do git:** branch `main` em sincronia com `origin/main`. Último commit de código: `9a1cd4c` (feature funcionário sem CPF). Tudo no GitHub.
+
+**Pendência técnica pré-existente (não bloqueia):** 63 erros de `tsc` de dívida técnica do projeto (imports não usados etc.) — o build ignora, sistema roda normal. `permissions.test.ts` só roda no CI (precisa de `.env`).
+
+---
+
+*Sessão 2026-05-29. Backup + investigação + feature "funcionário sem CPF" + verificação de integridade. Tudo funcionando, zero perda de dados. Mantido por Victor + Claude Opus 4.8.*
