@@ -165,7 +165,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
     
     const filtered = employeesWithErrors.filter(item => {
       const nameMatch = item.employee.name.toLowerCase().includes(searchLower);
-      const cpfMatch = searchNumbers && item.employee.cpf.includes(searchNumbers);
+      const cpfMatch = searchNumbers && (item.employee.cpf ?? '').includes(searchNumbers);
       return nameMatch || cpfMatch;
     });
     

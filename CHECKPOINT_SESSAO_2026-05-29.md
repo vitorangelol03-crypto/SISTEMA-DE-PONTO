@@ -113,4 +113,35 @@ Primeira coisa: "Lê CHECKPOINT_SESSAO_2026-05-29.md e o CHECKPOINT_REVISAO_2026
 
 ---
 
-*Sessão 2026-05-29. Backup + investigação. Mantido por Victor + Claude Opus 4.8.*
+## 11. FEATURE (mesma sessão, parte 2): funcionário SEM CPF
+
+> Pedido do Victor: permitir cadastrar funcionário sem CPF, sem quebrar nada.
+> Decisão de produto (Opção A, confirmada): funcionário sem CPF é **gerido
+> manualmente pelo supervisor** — NÃO loga sozinho no /clock (login é por CPF+PIN).
+
+### O que mudou
+- **Migration** `20260529120000_employees_cpf_optional.sql` → `cpf DROP NOT NULL`. **Aplicada em produção** via MCP. `UNIQUE(cpf, company_id)` mantida (múltiplos NULL não conflitam no Postgres — provado: 2 inserts NULL coexistem).
+- **Tipo** `Employee.cpf: string` → `string | null`. "Sem CPF" = **NULL** (não `''`).
+- **`validation.ts`**: `formatCPF`/`validateCPF` à prova de nulo (conserta os 23 pontos de exibição de uma vez).
+- **Formulário** (`EmployeesTab`): CPF opcional (label "CPF (opcional)", sem `required`); se preenchido, valida; em branco → grava NULL.
+- **`createEmployee`/`updateEmployee`/`bulkCreateEmployees`**: aceitam CPF nulo; dedupe por CPF só quando há CPF.
+- **5 filtros de busca** (`EmployeesTab`, `AttendanceTab`, `ErrorsTab`, `ReportsTab`, `MirrorMassDialog`) → `(cpf ?? '')` pra não quebrar com nulo.
+- **Import Excel** (`employeeImport.ts` + `employeeImportValidation.ts`): CPF opcional, sem erro `cpf_empty`, dedupe só com CPF.
+- **`holeritePdf`/`mirrorGenerator`**: aceitam CPF nulo (mostram vazio).
+- **Testes**: `validation.test.ts` (casos nulo/vazio) + `employeeImportValidation.spec.ts` teste 27 atualizado (CPF vazio = sem erro).
+
+### O que NÃO mudou (de propósito)
+- Login do /clock (CPF+PIN) e edge function `employee-public-api` — intocados.
+- Os 63 erros pré-existentes do `tsc` (dívida técnica do projeto, não bloqueiam build).
+
+### Validação (tudo verde)
+- `vite build` ✅ (1m05s) · `tsc` 0 erros novos (63 baseline mantido) ✅ · `vitest` 433 passed / 0 falhas ✅
+- Teste real no banco: 2 funcionários sem CPF na mesma empresa inseridos sem violar UNIQUE, depois removidos ✅
+- `permissions.test.ts` falha só por `.env` ausente no WSL (ambiental/pré-existente, passa no CI).
+
+### Pendência conhecida (não bloqueia)
+- PIX configurado como tipo "CPF" sem CPF: inconsistência possível, sem crash. Pode-se adicionar aviso suave depois.
+
+---
+
+*Sessão 2026-05-29. Backup + investigação + feature "funcionário sem CPF". Mantido por Victor + Claude Opus 4.8.*

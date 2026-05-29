@@ -185,9 +185,11 @@ describe('validateImportRow - obrigatórios', () => {
     expect(r.errors.some((e) => e.code === 'name_too_short')).toBe(true);
   });
 
-  it('27. cpf vazio → error cpf_empty', () => {
+  it('27. cpf vazio → SEM erro de CPF (CPF é opcional)', () => {
     const r = validateImportRow({ nome: 'João Silva', cpf: '' }, 2, defaultContext());
-    expect(r.errors.some((e) => e.code === 'cpf_empty')).toBe(true);
+    // CPF passou a ser opcional: vazio não gera erro algum de CPF.
+    expect(r.errors.some((e) => e.code === 'cpf_empty')).toBe(false);
+    expect(r.errors.some((e) => e.code === 'cpf_invalid')).toBe(false);
   });
 
   it('28. cpf com 10 dígitos → error cpf_invalid', () => {

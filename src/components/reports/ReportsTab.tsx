@@ -121,7 +121,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       if (!attendance.employees) return false;
       
       const nameMatch = attendance.employees.name.toLowerCase().includes(searchLower);
-      const cpfMatch = searchNumbers && attendance.employees.cpf.includes(searchNumbers);
+      const cpfMatch = searchNumbers && (attendance.employees.cpf ?? '').includes(searchNumbers);
       return nameMatch || cpfMatch;
     });
     

@@ -148,7 +148,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       const nameMatch = searchTerm
         ? employee.name.toLowerCase().includes(searchTerm.toLowerCase())
         : true;
-      const cpfMatch = searchNumbers ? employee.cpf.includes(searchNumbers) : false;
+      const cpfMatch = searchNumbers ? (employee.cpf ?? '').includes(searchNumbers) : false;
       const matchesSearch = !searchTerm || nameMatch || cpfMatch;
 
       const matchesCity = !cityFilter || employee.city?.toLowerCase().includes(cityFilter.toLowerCase());
@@ -193,7 +193,9 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       return;
     }
 
-    if (!validateCPF(formData.cpf)) {
+    // CPF é opcional. Se preenchido, precisa ser válido.
+    const cpfTrimmed = formData.cpf.trim();
+    if (cpfTrimmed && !validateCPF(cpfTrimmed)) {
       toast.error('CPF inválido');
       return;
     }
@@ -204,7 +206,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     }
 
     try {
-      const cpfNumbers = formData.cpf.replace(/\D/g, '');
+      const cpfNumbers = cpfTrimmed ? formData.cpf.replace(/\D/g, '') : null;
 
       // Validações específicas dos campos novos (2.8)
       const pisDigits = formData.pis.replace(/\D/g, '');
@@ -380,10 +382,11 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       }
 
       const existingCpfsInCompany = new Set(
-        thisCompanyEmployees.map((e) => normalizeCPF(e.cpf)),
+        thisCompanyEmployees.flatMap((e) => (e.cpf ? [normalizeCPF(e.cpf)] : [])),
       );
       const existingCpfsOtherCompanies = new Map<string, string>();
       for (const emp of allEmployees) {
+        if (!emp.cpf) continue; // funcionário sem CPF não entra na dedupe por CPF
         const cpfNorm = normalizeCPF(emp.cpf);
         const empCompanyId = (emp as Employee & { company_id?: string }).company_id;
         if (empCompanyId && empCompanyId !== company.id && !existingCpfsInCompany.has(cpfNorm)) {
@@ -843,16 +846,15 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  CPF *
+                  CPF (opcional)
                 </label>
                 <input
                   type="text"
                   value={formData.cpf}
                   onChange={(e) => handleCPFChange(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px]"
-                  placeholder="000.000.000-00"
+                  placeholder="000.000.000-00 (deixe em branco se não tiver)"
                   maxLength={14}
-                  required
                 />
               </div>
 

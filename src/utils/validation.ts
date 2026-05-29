@@ -1,4 +1,5 @@
-export const validateCPF = (cpf: string): boolean => {
+export const validateCPF = (cpf: string | null | undefined): boolean => {
+  if (!cpf) return false;
   // Remove caracteres não numéricos
   cpf = cpf.replace(/[^\d]/g, '');
   
@@ -28,7 +29,8 @@ export const validateCPF = (cpf: string): boolean => {
   return true;
 };
 
-export const formatCPF = (cpf: string): string => {
+export const formatCPF = (cpf: string | null | undefined): string => {
+  if (!cpf) return '';
   cpf = cpf.replace(/[^\d]/g, '');
   return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 };

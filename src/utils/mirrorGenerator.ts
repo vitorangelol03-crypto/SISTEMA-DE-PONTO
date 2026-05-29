@@ -335,7 +335,7 @@ export function buildMirrorData(input: BuildMirrorDataInput): MirrorData {
     },
     employee: {
       name: employee.name,
-      cpf: employee.cpf,
+      cpf: employee.cpf ?? '',
       pis: employee.pis ?? '',
       badge_number: employee.badge_number ?? '',
       function_role: employee.function_role ?? company.default_function_role ?? '',

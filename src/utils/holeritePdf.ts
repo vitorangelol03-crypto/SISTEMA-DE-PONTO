@@ -35,7 +35,7 @@ export interface HoleriteData {
   company: { name: string; cnpj?: string };
   employee: {
     name: string;
-    cpf: string;
+    cpf: string | null;
     functionRole?: string;
     employmentType?: string;
     hireDate?: string;

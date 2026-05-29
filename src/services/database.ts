@@ -48,7 +48,7 @@ export interface User {
 export interface Employee {
   id: string;
   name: string;
-  cpf: string;
+  cpf: string | null;
   pin: string | null;
   pin_configured: boolean | null;
   pix_key: string | null;
@@ -550,7 +550,7 @@ export const getFunctionRoles = async (companyId: string): Promise<string[]> => 
 
 export const createEmployee = async (
   name: string,
-  cpf: string,
+  cpf: string | null,
   pixKey: string | null,
   createdBy: string,
   pixType: string | null | undefined,
@@ -597,7 +597,7 @@ export const createEmployee = async (
 export const updateEmployee = async (
   id: string,
   name: string,
-  cpf: string,
+  cpf: string | null,
   pixKey: string | null,
   userId: string,
   pixType?: string | null,
@@ -658,7 +658,7 @@ export interface BulkEmployeeResult {
   errors: Array<{
     row: number;
     name: string;
-    cpf: string;
+    cpf: string | null;
     error: string;
   }>;
 }
@@ -666,7 +666,7 @@ export interface BulkEmployeeResult {
 export const bulkCreateEmployees = async (
   employees: Array<{
     name: string;
-    cpf: string;
+    cpf: string | null;
     pixKey: string | null;
     pixType?: string | null;
     address?: string | null;
@@ -701,13 +701,14 @@ export const bulkCreateEmployees = async (
   };
 
   const existingEmployees = await getAllEmployees(undefined, companyId);
-  const existingCPFs = new Set(existingEmployees.map(emp => emp.cpf));
+  const existingCPFs = new Set(existingEmployees.map(emp => emp.cpf).filter((c): c is string => !!c));
 
   for (let i = 0; i < employees.length; i++) {
     const employee = employees[i];
     const rowNumber = i + 2;
 
-    if (existingCPFs.has(employee.cpf)) {
+    // CPF é opcional: só checa duplicidade quando há CPF informado.
+    if (employee.cpf && existingCPFs.has(employee.cpf)) {
       result.errors.push({
         row: rowNumber,
         name: employee.name,
@@ -720,7 +721,7 @@ export const bulkCreateEmployees = async (
     try {
       const insertRow: Record<string, unknown> = {
         name: employee.name,
-        cpf: employee.cpf,
+        cpf: employee.cpf || null,
         pix_key: employee.pixKey,
         pix_type: employee.pixType,
         address: employee.address,
@@ -772,7 +773,7 @@ export const bulkCreateEmployees = async (
         }
       } else if (data) {
         result.success.push(data);
-        existingCPFs.add(employee.cpf);
+        if (employee.cpf) existingCPFs.add(employee.cpf);
       }
     } catch (error) {
       result.errors.push({

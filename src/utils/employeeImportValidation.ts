@@ -274,7 +274,7 @@ export function validateImportRow(
   const cpfRaw = getField(raw, 'cpf', 'CPF');
   const cpf = normalizeCPF(cpfRaw);
   if (!cpfRaw) {
-    errors.push({ field: 'cpf', code: 'cpf_empty', message: 'CPF é obrigatório' });
+    // CPF é opcional: sem CPF, segue sem erro (parsed.cpf fica vazio → null no insert).
   } else if (cpf.length !== 11 || !validateCPF(cpf)) {
     errors.push({ field: 'cpf', code: 'cpf_invalid', message: `CPF inválido: ${cpfRaw}` });
   } else {

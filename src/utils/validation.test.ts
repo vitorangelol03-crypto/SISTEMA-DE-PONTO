@@ -24,6 +24,12 @@ describe('validation.ts - Funções de Validação', () => {
       expect(validateCPF('22222222222')).toBe(false);
       expect(validateCPF('99999999999')).toBe(false);
     });
+
+    it('deve rejeitar CPF nulo, vazio ou indefinido (CPF é opcional)', () => {
+      expect(validateCPF('')).toBe(false);
+      expect(validateCPF(null)).toBe(false);
+      expect(validateCPF(undefined)).toBe(false);
+    });
   });
 
   describe('formatCPF', () => {
@@ -34,6 +40,12 @@ describe('validation.ts - Funções de Validação', () => {
     it('deve remover caracteres não numéricos antes de formatar', () => {
       expect(formatCPF('123.456.789-09')).toBe('123.456.789-09');
       expect(formatCPF('123abc456def789ghi09')).toBe('123.456.789-09');
+    });
+
+    it('deve retornar string vazia para CPF nulo, vazio ou indefinido (CPF é opcional)', () => {
+      expect(formatCPF('')).toBe('');
+      expect(formatCPF(null)).toBe('');
+      expect(formatCPF(undefined)).toBe('');
     });
   });
 

@@ -9,7 +9,7 @@ import {
 
 export interface EmployeeImportData {
   name: string;
-  cpf: string;
+  cpf: string | null;
   pixKey: string | null;
   pixType?: string | null;
   address?: string | null;
@@ -253,15 +253,9 @@ export const validateEmployeeData = (
     });
   }
 
+  // CPF é opcional. Se informado, precisa ser válido.
   const cpfNumbers = cpf.replace(/\D/g, '');
-  if (!cpfNumbers) {
-    errors.push({
-      row,
-      field: 'CPF',
-      message: 'CPF é obrigatório',
-      value: '(vazio)'
-    });
-  } else if (!validateCPF(cpfNumbers)) {
+  if (cpfNumbers && !validateCPF(cpfNumbers)) {
     errors.push({
       row,
       field: 'CPF',
@@ -362,7 +356,8 @@ export const parseEmployeeSpreadsheet = (
 
           const cpfNumbers = cpfRaw.replace(/\D/g, '');
 
-          if (cpfSet.has(cpfNumbers)) {
+          // CPF é opcional: só checa/registra duplicidade quando há CPF informado.
+          if (cpfNumbers && cpfSet.has(cpfNumbers)) {
             duplicateCPFs.push(formatCPF(cpfNumbers));
             errors.push({
               row: rowNumber,
@@ -373,10 +368,10 @@ export const parseEmployeeSpreadsheet = (
             continue;
           }
 
-          cpfSet.add(cpfNumbers);
+          if (cpfNumbers) cpfSet.add(cpfNumbers);
           valid.push({
             name,
-            cpf: cpfNumbers,
+            cpf: cpfNumbers || null,
             pixKey: pixKey || null,
             pixType: pixType || null,
             address: address || null,
@@ -491,7 +486,7 @@ export function parsedToImportData(p: ParsedEmployee): EmployeeImportData {
   // schedule_type='Normal', contract_type='CLT'). Forçar null sobrescrevia.
   return {
     name: p.name,
-    cpf: p.cpf,
+    cpf: p.cpf || null,
     pixKey: p.pix_key ?? null,
     pixType: p.pix_type ?? null,
     address: p.address ?? null,
@@ -546,8 +541,8 @@ export const generateErrorReport = (
 export const generateImportReport = (
   successCount: number,
   errorCount: number,
-  successEmployees: Array<{ name: string; cpf: string }>,
-  errorEmployees: Array<{ row: number; name: string; cpf: string; error: string }>
+  successEmployees: Array<{ name: string; cpf: string | null }>,
+  errorEmployees: Array<{ row: number; name: string; cpf: string | null; error: string }>
 ): void => {
   const wb = XLSX.utils.book_new();
 

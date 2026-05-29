@@ -243,7 +243,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     
     const filtered = employees.filter(employee => {
       const nameMatch = employee.name.toLowerCase().includes(searchLower);
-      const cpfMatch = searchNumbers && employee.cpf.includes(searchNumbers);
+      const cpfMatch = searchNumbers && (employee.cpf ?? '').includes(searchNumbers);
       return nameMatch || cpfMatch;
     });
     

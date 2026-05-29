@@ -85,7 +85,7 @@ export const MirrorMassDialog: React.FC<MirrorMassDialogProps> = ({ open, onClos
     const q = search.toLowerCase().trim();
     const qDigits = search.replace(/\D/g, '');
     return employees.filter(e =>
-      e.name.toLowerCase().includes(q) || (qDigits && e.cpf.includes(qDigits)),
+      e.name.toLowerCase().includes(q) || (qDigits && (e.cpf ?? '').includes(qDigits)),
     );
   }, [employees, search]);
 

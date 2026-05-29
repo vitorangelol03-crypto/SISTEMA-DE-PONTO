@@ -497,8 +497,10 @@ export const EmployeeClockIn: React.FC = () => {
     if (!employee) return;
     // Recarrega employee p/ pegar face_registered atualizado e pula pro dashboard
     try {
-      const fresh = await getEmployeeByCpf(employee.cpf, employee.company_id);
-      if (fresh) setEmployee(fresh);
+      if (employee.cpf) {
+        const fresh = await getEmployeeByCpf(employee.cpf, employee.company_id);
+        if (fresh) setEmployee(fresh);
+      }
     } catch { /* segue com o que tem */ }
     setFaceGateActive(true); // agora cadastrado, próximas batidas precisam verificar
     await loadDashboard(employee);
