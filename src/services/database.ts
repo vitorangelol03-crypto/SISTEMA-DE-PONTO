@@ -1,5 +1,6 @@
 import { supabase, setAuthToken, getAuthToken } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
+import { isMaster, isPontoEditPermission, canEditPonto } from '../config/masters';
 import {
   computeWorkedMinutes,
   computeIntervalMinutes,
@@ -358,8 +359,16 @@ async function validatePermission(
   userId: string,
   permission: string
 ): Promise<PermissionCheckResult> {
-  // Admin (ID 9999) always has all permissions
-  if (userId === '9999') {
+  // Edição de ponto (data/horário) e reset são EXCLUSIVOS do editor de ponto (2626),
+  // acima de qualquer bypass de mestre. Espelha o trigger enforce_ponto_master_only.
+  if (isPontoEditPermission(permission)) {
+    return canEditPonto(userId)
+      ? { allowed: true }
+      : { allowed: false, error: 'Apenas o usuário mestre (2626) pode alterar registros de ponto' };
+  }
+
+  // Mestres (9999 / 2626) têm todas as demais permissões.
+  if (isMaster(userId)) {
     return { allowed: true };
   }
 
@@ -475,7 +484,7 @@ export const deleteUser = async (id: string, userId: string): Promise<void> => {
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
-  if (id === '9999') {
+  if (isMaster(id)) {
     throw new Error('Não é possível excluir o administrador principal');
   }
 
@@ -1561,7 +1570,7 @@ export const updateBonusDefault = async (
   updatedBy: string,
   companyId: string
 ): Promise<void> => {
-  if (updatedBy !== '9999') {
+  if (!isMaster(updatedBy)) {
     throw new Error('Apenas o administrador pode alterar os valores padrão de bonificação');
   }
 
@@ -3575,7 +3584,7 @@ export const unblockEmployeeBonus = async (
   employeeId: string,
   adminId: string
 ): Promise<void> => {
-  if (adminId !== '9999') {
+  if (!isMaster(adminId)) {
     throw new Error('Apenas o administrador pode desbloquear bonificação');
   }
   const { weekStart } = getWeekBounds();

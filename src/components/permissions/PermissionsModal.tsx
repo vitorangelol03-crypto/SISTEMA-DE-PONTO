@@ -4,6 +4,7 @@ import { UserPermissions, PERMISSION_LABELS, DEFAULT_ADMIN_PERMISSIONS, DEFAULT_
 import { saveUserPermissions } from '../../services/permissions';
 import { getBonusTypes, BonusTypeRecord } from '../../services/database';
 import { useCompany } from '../../contexts/CompanyContext';
+import { isMaster } from '../../config/masters';
 import toast from 'react-hot-toast';
 
 const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
@@ -72,7 +73,7 @@ export function PermissionsModal({
   if (!isOpen) return null;
 
   const handleSave = async () => {
-    if (userId === '9999') {
+    if (isMaster(userId)) {
       toast.error('Não é possível alterar permissões do administrador principal');
       return;
     }

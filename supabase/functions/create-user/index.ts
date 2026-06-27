@@ -49,10 +49,10 @@ function decodeJWTPayload(token: string): Record<string, unknown> | null {
 }
 
 // Replica validatePermission do frontend (database.ts:330) + checkPermission
-// de permissions.ts. Admin '9999' sempre OK. Demais: lê user_permissions.permissions
+// de permissions.ts. Mestres '9999'/'2626' sempre OK. Demais: lê user_permissions.permissions
 // jsonb e checa `users.create === true`.
 async function callerCanCreateUser(callerId: string): Promise<boolean> {
-  if (callerId === '9999') return true;
+  if (callerId === '9999' || callerId === '2626') return true;
 
   const { data: caller, error: callerErr } = await supabase
     .from('users')

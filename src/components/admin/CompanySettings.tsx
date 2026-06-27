@@ -15,6 +15,7 @@ import {
   type BankHoursSettings,
 } from '../../utils/bankHoursCalculator';
 import { parseNumericInput, isInRange } from '../../utils/numericInputHelpers';
+import { isMaster } from '../../config/masters';
 
 const DAY_LABELS: ReadonlyArray<{ index: number; label: string; short: string }> = [
   { index: 0, label: 'Domingo',  short: 'Dom' },
@@ -62,7 +63,7 @@ const BANK_HOURS_DEFAULTS = {
 export const CompanySettings: React.FC = () => {
   const { company, setCompany } = useCompany();
   const { user } = useAuth();
-  const isAdminMaster = user?.id === '9999';
+  const isAdminMaster = isMaster(user?.id);
   const [city, setCity] = useState('');
   const [addressFull, setAddressFull] = useState('');
   const [defaultFunctionRole, setDefaultFunctionRole] = useState('');

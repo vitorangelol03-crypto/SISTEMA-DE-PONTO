@@ -7,6 +7,7 @@ import {
   BonusType,
 } from '../../services/database';
 import { useCompany } from '../../contexts/CompanyContext';
+import { isMaster } from '../../config/masters';
 
 interface SettingsTabProps {
   userId: string;
@@ -16,7 +17,7 @@ interface SettingsTabProps {
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
   const { company } = useCompany();
-  const isAdmin = userId === '9999';
+  const isAdmin = isMaster(userId);
 
   const [bonusDefaults, setBonusDefaults] = useState<Record<BonusType, string>>({
     B: '',

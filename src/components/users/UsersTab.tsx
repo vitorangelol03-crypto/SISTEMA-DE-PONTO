@@ -6,6 +6,7 @@ import { isValidPassword, isNumericString } from '../../utils/validation';
 import { getUserPermissions } from '../../services/permissions';
 import { UserPermissions } from '../../types/permissions';
 import { PermissionsModal } from '../permissions/PermissionsModal';
+import { isMaster } from '../../config/masters';
 import toast from 'react-hot-toast';
 
 interface UsersTabProps {
@@ -111,7 +112,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
       return;
     }
 
-    if (user.id === '9999') {
+    if (isMaster(user.id)) {
       toast.error('Não é possível excluir o administrador principal');
       return;
     }
@@ -339,8 +340,8 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">
-                      {user.id === '9999' 
-                        ? 'Sistema' 
+                      {isMaster(user.id)
+                        ? 'Sistema'
                         : new Date(user.created_at).toLocaleDateString('pt-BR')
                       }
                     </div>
@@ -361,7 +362,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                           <Shield className="w-4 h-4" />
                         </button>
                       )}
-                      {hasPermission('users.delete') && user.id !== '9999' && (
+                      {hasPermission('users.delete') && !isMaster(user.id) && (
                         <button
                           onClick={() => handleDelete(user)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
@@ -395,7 +396,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                     </span>
                   </div>
                   <p className="text-xs text-gray-500">
-                    Criado em: {user.id === '9999' ? 'Sistema' : new Date(user.created_at).toLocaleDateString('pt-BR')}
+                    Criado em: {isMaster(user.id) ? 'Sistema' : new Date(user.created_at).toLocaleDateString('pt-BR')}
                   </p>
                   <p className="text-xs text-gray-500">
                     Criado por: {user.created_by || 'Sistema'}
@@ -412,7 +413,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                     <span>Permissões</span>
                   </button>
                 )}
-                {hasPermission('users.delete') && user.id !== '9999' && (
+                {hasPermission('users.delete') && !isMaster(user.id) && (
                   <button
                     onClick={() => handleDelete(user)}
                     className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm text-red-700 bg-red-50 rounded-md hover:bg-red-100 transition-colors min-h-[44px]"
