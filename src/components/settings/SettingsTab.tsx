@@ -208,7 +208,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
               <li>Acesso completo ao sistema</li>
               <li>Podem criar e gerenciar supervisores</li>
               <li>Visualizam todas as funcionalidades</li>
-              <li>Usuário padrão: ID 9999, Senha: 684171</li>
             </ul>
           </div>
 
