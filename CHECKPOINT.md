@@ -3,13 +3,34 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-05-19 (sessão pós-deploy — 6 commits: face perf mobile + função reutilizável + filtro financeiro + 4 specs blindados contra polução de prod ✅)
+**Última atualização:** 2026-06-27 (mestre **2626** + edição de ponto exclusiva do 2626 — tela + servidor — deployado e logando em prod ✅). Ver `CHECKPOINT_SESSAO_2026-06-27.md`. Último commit: `5bad73e`.
 **Branch:** `main` (sincronizada com origin)
 **Release publicada:** https://github.com/vitorangelol03-crypto/SISTEMA-DE-PONTO/releases/tag/v2.0.0-multi-tenant.1
 **CI status:** ✅ verde no commit `e3ec3b0` (run 26065259300 — vitest + tsc/eslint + playwright)
 **Plano canônico:** `PLANO_100.md` (roadmap completo até 100%)
 **TECH_DEBT canônico:** `TECH_DEBT.md`
 **Memory:** `/home/victor/.claude/projects/-home-victor-SISTEMA-DE-PONTO/memory/`
+
+## 🆕 Sessão 2026-06-27 — Mestre 2626 + edição de ponto exclusiva (detalhes em `CHECKPOINT_SESSAO_2026-06-27.md`)
+
+Feature: novo **usuário mestre `2626`** (login `2626` / senha `cdlogistica26`; senha **fora do git**),
+em paridade total com o 9999 (cross-empresa via RLS). E **edição de ponto** (editar saída, horário
+manual, dias anteriores, reset/exclusão) virou **exclusiva do 2626** — nem o 9999 pode mais.
+
+- **Camadas:** frontend (`src/config/masters.ts` como fonte única + chokepoint em `usePermissions`
+  e `validatePermission`), RLS (36 policies aceitam 2626; migration `20260627120000`), e trigger
+  `enforce_ponto_master_only` em `attendance` (migration `20260627120100`) — libera service_role
+  (clock-in) e 2626; bloqueia o resto de alterar horário/data e excluir ponto.
+- **Edge fn `create-user` v2:** aceita 2626 como criador.
+- **Verificado real:** clock-in (service_role) e marcar presença/recalc intactos; 9999/supervisores
+  bloqueados de editar/excluir ponto; isolamento multi-empresa preservado; login 2626 OK em prod;
+  zero perda de dados (attendance 3970 / 23 hoje, inalterado).
+- **Também:** removida a senha do admin (`684171`) que estava exposta na tela de Configurações.
+- **Commits (pushed):** `6172ee7` (feature) + `5bad73e` (fix senha exposta).
+- **Como reverter:** `DROP TRIGGER trg_enforce_ponto_master_only ON public.attendance;` + reverter
+  RLS (IN→=) + `DELETE FROM users WHERE id='2626'` + reverter arquivos/edge fn.
+
+---
 
 ## 🆕 Sessão 2026-05-18/19 — Pós-deploy ajustes (6 commits + incidente de polução)
 

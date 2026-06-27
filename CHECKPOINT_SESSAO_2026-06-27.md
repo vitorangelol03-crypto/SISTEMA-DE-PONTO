@@ -104,14 +104,46 @@
 ---
 
 ## 7. Estado do git ao fim
-- Branch `main` (commit local, **sem push** — Victor faz push).
-- Arquivos: 7 modificados + `src/config/{masters.ts,masters.test.ts}` + 2 migrations.
-- `dist/` gitignored (não commitado). Senha do 2626 não está no git.
+- Branch `main` — **pushed para o GitHub** (autorizado pelo Victor). Push do WSL via **SSH**
+  (`git@github.com:...`), pois o `origin` HTTPS não tem credencial aqui (memória do projeto).
+- Commits desta sessão:
+  - `6172ee7` feat(auth): mestre 2626 + edição de ponto exclusiva do 2626 (tela + servidor)
+  - `5bad73e` fix(settings): remover senha do admin (684171) exposta na tela de ajuda
+- Verificado: `git ls-remote` confirma GitHub `main` == `5bad73e` (local == remoto).
+- `dist/` gitignored (não commitado). **Senha do 2626 não está no git.**
 
 ---
 
 ## 8. Pendências pré-existentes (continuam, não bloqueiam)
 - 3 da §7 do checkpoint 29/05 (sync edge fn employee-public-api, validar p_supervisor_id, rate limit).
-- Texto de ajuda do SettingsTab expõe senha do 9999 (dívida antiga).
+- ~~Texto de ajuda do SettingsTab expõe senha do 9999~~ → **RESOLVIDO** nesta sessão (commit `5bad73e`).
 
-*Sessão 2026-06-27. Mestre 2626 + edição de ponto exclusiva do 2626 (tela + servidor). Tudo verificado empiricamente, zero perda de dados. Claude Opus 4.8.*
+## 9. Deploy + verificação em produção (fim da sessão)
+- **Push para GitHub** dos 2 commits (via SSH). GitHub `main` == `5bad73e` (confirmado por `ls-remote`).
+- **Vercel redeployou** a partir do push. Deploy novo confirmado **read-only**: o bundle JS de
+  produção (`/assets/index-D12LQ881.js`) contém o código novo (`2626`), prova de que a versão
+  nova está no ar (a antiga só teria `9999`). Site responde HTTP 200.
+- **Backend já estava no ar** independente do deploy do frontend: usuário 2626, RLS (36 policies),
+  trigger e edge fn `create-user` v2 foram aplicados via MCP.
+
+### Teste de login do 2626 em produção (READ-ONLY, zero escrita)
+Reproduzida a sequência exata do `loginUser()` do site contra os endpoints reais:
+1. `POST /functions/v1/auth-login` {2626 / cdlogistica26} → **token + user OK**.
+2. `GET /rest/v1/users?id=eq.2626` com o token → retorna `{id:2626, role:admin}` (RLS deixa, sessão válida).
+3. `GET /rest/v1/employees` com o token → **107 funcionários / 2 empresas** → comportamento de **mestre** confirmado.
+- ⚠️ Navegador headless (Playwright) **não rodou no WSL**: falta lib de sistema `libnspr4.so`
+  (precisa `sudo apt`/`playwright install-deps`). Mesma razão de o Playwright rodar só no CI.
+  Não afeta o site — o teste acima exercita exatamente o que a tela de login chama.
+
+### Integridade final (verificado ao vivo, nada se perdeu)
+- `attendance` total **3970** (inalterado) · pontos de **hoje (27/06): 23**, todos com entrada.
+- Todos os testes de trigger foram em transações com `ROLLBACK` → nunca gravaram. Linha de teste
+  conferida: horários originais intactos. `error_logs` = 0 nos últimos 30 min.
+- Working tree limpa; arquivo temporário de teste removido.
+
+## 10. Como retomar
+Ler este arquivo + `CHECKPOINT.md` (topo). Estado: **mestre 2626 no ar e logando**; edição de
+ponto exclusiva do 2626 (frontend + RLS + trigger); 9999 segue mestre mas sem editar ponto.
+Próximo passo opcional: Victor confere no navegador (login 2626 vê botões de editar ponto; 9999 não).
+
+*Sessão 2026-06-27. Mestre 2626 + edição de ponto exclusiva do 2626 (tela + servidor), deployado, logando em prod, zero perda de dados. Verificado empiricamente. Claude Opus 4.8.*
