@@ -25,6 +25,7 @@ const UsersTab = lazy(() => import('./components/users/UsersTab').then(m => ({ d
 const FinancialTab = lazy(() => import('./components/financial/FinancialTab').then(m => ({ default: m.FinancialTab })));
 const ErrorsTab = lazy(() => import('./components/errors/ErrorsTab').then(m => ({ default: m.ErrorsTab })));
 const C6PaymentTab = lazy(() => import('./components/c6payment/C6PaymentTab').then(m => ({ default: m.C6PaymentTab })));
+const DriverPayTab = lazy(() => import('./components/driverpay/DriverPayTab').then(m => ({ default: m.DriverPayTab })));
 const DataManagementTab = lazy(() => import('./components/datamanagement/DataManagementTab').then(m => ({ default: m.DataManagementTab })));
 const TutorialTab = lazy(() => import('./components/tutorial/TutorialTab').then(m => ({ default: m.TutorialTab })));
 const AdminTab = lazy(() => import('./components/admin/AdminTab').then(m => ({ default: m.AdminTab })));
@@ -151,6 +152,8 @@ function App() {
           return hasPermission('financial.view') ? <FinancialTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'c6payment':
           return hasPermission('c6payment.view') ? <C6PaymentTab userId={user.id} hasPermission={hasPermission} /> : null;
+        case 'driverpay':
+          return hasPermission('driverpay.view') ? <DriverPayTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'errors':
           return hasPermission('errors.view') ? <ErrorsTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'settings':
