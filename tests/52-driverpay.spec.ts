@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN, loginAs, goToTab } from './helpers';
+import { MASTER_2626, loginAs, goToTab } from './helpers';
 import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
 
 /**
@@ -25,23 +25,24 @@ const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}DriverPay `; // 'PW Test DriverPay '
 
 // ─── Smoke: a aba abre (roda hoje, contra o placeholder) ─────────────────────
 
-test.describe('Pagamentos Driver — smoke (aba abre)', () => {
+test.describe('Pagamentos Driver — smoke (aba abre, exclusiva do 2626)', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAs(page, ADMIN);
+    await loginAs(page, MASTER_2626);
   });
 
-  test('a aba "Pagamentos Driver" aparece na navegação do admin', async ({ page }) => {
+  test('a aba "Pagamentos Driver" aparece na navegação do mestre 2626', async ({ page }) => {
     await expect(
       page.getByRole('button', { name: /^Pagamentos Driver$/ }).first(),
     ).toBeVisible();
   });
 
-  test('clicar na aba abre o módulo (cabeçalho "Pagamentos Driver")', async ({ page }) => {
+  test('clicar na aba abre a grade (cabeçalho + TOTAL GERAL)', async ({ page }) => {
     await goToTab(page, 'Pagamentos Driver');
-    // Placeholder e UI final expõem um heading "Pagamentos Driver".
     await expect(
       page.getByRole('heading', { name: /Pagamentos Driver/i }).first(),
     ).toBeVisible({ timeout: 15_000 });
+    // A grade real renderiza o rodapé "TOTAL GERAL" (com o seed de Caratinga).
+    await expect(page.getByText(/TOTAL GERAL/i).first()).toBeVisible({ timeout: 15_000 });
   });
 });
 

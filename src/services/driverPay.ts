@@ -12,7 +12,7 @@
  */
 import { supabase } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
-import { isMaster } from '../config/masters';
+import { isMaster, isDriverpayPermission, canAccessDriverpay } from '../config/masters';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -141,6 +141,11 @@ const num = (v: unknown): number => Number(v ?? 0);
 
 /** Espelha validatePermission (privado no database.ts) com os helpers exportados. */
 async function ensurePerm(userId: string, permission: string): Promise<void> {
+  // Modulo Pagamentos Driver e EXCLUSIVO do 2626 (nem 9999). Acima do bypass de mestre.
+  if (isDriverpayPermission(permission)) {
+    if (canAccessDriverpay(userId)) return;
+    throw new Error('Apenas o usuário mestre 2626 pode acessar Pagamentos Driver');
+  }
   if (isMaster(userId)) return;
   const perms = await getUserPermissions(userId);
   if (!perms || !checkPermission(perms, permission)) {

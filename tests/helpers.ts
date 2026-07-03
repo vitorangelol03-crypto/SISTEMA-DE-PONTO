@@ -2,6 +2,8 @@ import { Page, expect } from '@playwright/test';
 
 export const ADMIN = { id: '9999', password: '684171' };
 export const SUPERVISOR = { id: '01', password: '9098' };
+/** Mestre 2626 — único que acessa a aba Pagamentos Driver (senha fora do git). */
+export const MASTER_2626 = { id: '2626', password: 'cdlogistica26' };
 export const TEST_EMPLOYEE_CPF = '12232625613';
 export const TEST_EMPLOYEE_CPF_MASKED = '122.326.256-13';
 
@@ -17,8 +19,8 @@ export async function loginAs(page: Page, user: { id: string; password: string }
   await page.locator('#password').fill(user.password);
   await page.getByRole('button', { name: 'Entrar' }).click();
 
-  // Admin: lidar com CompanySelector — clica em Caratinga (empresa default dos testes).
-  if (user.id === '9999') {
+  // Admin/mestre: lidar com CompanySelector — clica em Caratinga (empresa default dos testes).
+  if (user.id === '9999' || user.id === '2626') {
     const caratingaCard = page.getByText('Caratinga', { exact: false }).first();
     await expect(caratingaCard).toBeVisible({ timeout: 10_000 });
     await caratingaCard.click();

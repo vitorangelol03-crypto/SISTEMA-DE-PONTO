@@ -41,3 +41,16 @@ export function canEditPonto(userId: string | null | undefined): boolean {
 export function isPontoEditPermission(permission: string): boolean {
   return PONTO_EDIT_PERMISSIONS.includes(permission);
 }
+
+/**
+ * Pagamentos Driver (2026-07-03): TODO o módulo (aba + ações) é EXCLUSIVO do 2626 —
+ * nem o 9999 nem admins/supervisores veem a aba ou usam qualquer ação. Decisão do Victor.
+ */
+export function isDriverpayPermission(permission: string): boolean {
+  return permission.startsWith('driverpay.');
+}
+
+/** True se o usuário pode acessar Pagamentos Driver (somente 2626). */
+export function canAccessDriverpay(userId: string | null | undefined): boolean {
+  return userId === PONTO_EDITOR_ID;
+}

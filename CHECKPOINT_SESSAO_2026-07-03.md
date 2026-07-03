@@ -49,8 +49,11 @@ tabelas novas usam o prefixo **`driverpay_*`**, 100% isolado. Nada do SPX foi to
 - **Import/seed**: `src/utils/driverImport.ts` (parser pareado/plano) + `src/data/driverSeed.ts` (57).
 - **Cálculo puro testável**: `src/utils/driverPayCalc.ts`.
 - **Fiação** (aditiva): TabType + ícone Truck (TabNavigation), lazy+case (App.tsx),
-  `DriverPayPermissions` + 3 defaults + labels (types/permissions.ts — supervisor NÃO vê por padrão,
-  decisão Victor "admin/mestre por ora"), i18n pt/en.
+  `DriverPayPermissions` + 3 defaults + labels (types/permissions.ts), i18n pt/en.
+- **Acesso EXCLUSIVO do 2626** (decisão Victor 2026-07-03): nem 9999 nem admin/supervisor veem a
+  aba. Reforçado em 4 camadas (mesmo padrão do ponto exclusivo): `masters.ts`
+  (`isDriverpayPermission`/`canAccessDriverpay`), `usePermissions` (esconde a aba), `driverPay.ensurePerm`
+  e `database.validatePermission` (bloqueiam ações). Validado ao vivo no navegador.
 
 ## 5. Seed em prod (Caratinga) — 57 drivers reais
 Aplicado via MCP (DO block, idempotente). Plataformas eMile+ANJUN, 57 drivers, 114 taxas,
@@ -70,15 +73,24 @@ gravado == recálculo da view (prova a fórmula ponta a ponta).
   concluído ✓.
 - SPX (`drivers` 96) e ponto (`attendance` 4077) **intactos** o tempo todo.
 
+## 6.1 Validação no NAVEGADOR (2026-07-03, resolvida a limitação do WSL)
+Libs do Chromium instaladas (`sudo playwright install-deps`), `.env.local` com a chave anon (pública),
+dev server local + Playwright headless:
+- **2626 loga → vê a aba "Pagamentos Driver" → grade renderiza os 57 drivers reais** (KPIs: 57 drivers,
+  R$ 27.862,30; Caio −R$50; Fernando "2 rotas"; Gessiley "3 rotas"; TOTAL GERAL correto). Screenshot conferido.
+- **9999 loga → a aba NÃO aparece** (restrição 2626-only confirmada visualmente).
+- **`npx playwright test tests/52-driverpay.spec.ts --project=chromium`**: 2 smoke **passed**
+  (aba abre + grade com TOTAL GERAL), 2 grade skipped (precisam de service_role no .env → rodam no CI).
+  `helpers.ts` ganhou `MASTER_2626` e o spec passou a logar como 2626.
+
 ## 7. O que NÃO foi feito / pendências
-- **E2E Playwright (browser)**: `tests/52-driverpay.spec.ts` criado, mas **não roda no WSL**
-  (falta `libnspr4` — mesma limitação do resto; roda no CI). O E2E de backend acima cobre os
-  fluxos críticos server-side.
 - **Deploy do frontend**: a aba só aparece em produção depois do Victor dar deploy (Vercel) do build
   novo. O banco já está no ar.
+- Testes de "grade" (recálculo via UI) do spec 52 ficam skipped local (precisam de
+  `SUPABASE_SERVICE_ROLE_KEY` no `.env` pro seed 'PW Test'); rodam no CI.
 - Driver cadastrado DEPOIS do período existir só entra na grade no próximo período (ou recriando com
   preload) — fluxo natural: cadastrar/importar drivers → criar período.
-- Supervisores não veem a aba por padrão (liberável por usuário no PermissionsModal).
+- **Acesso exclusivo do 2626**: nem 9999/admin/supervisor veem a aba (por design, decisão Victor).
 
 ## 8. Git
 - Branch **`feature/pagamentos-driver`** (isolada do main). Commit local (SEM push).
