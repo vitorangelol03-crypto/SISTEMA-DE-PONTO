@@ -46,6 +46,12 @@ export interface RouteLine {
   packages: Record<string, number>;
   /** platformName -> id da linha driverpay_payment_packages (para delete/rename) */
   packageIds: Record<string, string>;
+  /**
+   * platformName -> valor por pacote DESTA rota (rate_snapshot do pacote).
+   * Taxa por rota: rota 1 pode ser 2,00 e rota 2 pode ser 2,50 na mesma plataforma.
+   * Ausente/rota vazia => cai no fallback row.ratesByPlatform[platform].
+   */
+  rates: Record<string, number>;
 }
 
 /** Linha da grade: um pagamento (driver x periodo) com rotas, taxas, descontos e vales. */
@@ -64,6 +70,8 @@ export interface DriverRowData {
   cpf: string | null;
   phone: string | null;
   active: boolean;
+  /** true quando o operador confirmou que o driver ja enviou as notas fiscais deste pagamento. */
+  notaFiscal: boolean;
 }
 
 export interface RowTotals {
@@ -82,7 +90,12 @@ export interface RowHandlers {
   onCityBlur: (paymentId: string, routeIndex: number, prevRoute: string) => void;
   onAddRoute: (paymentId: string) => void;
   onRemoveRoute: (paymentId: string, routeIndex: number) => void;
-  onJoinRoutes: (paymentId: string) => void;
+  /** Edita a taxa (R$/pacote) de uma plataforma NUMA rota especifica (por rota, nao global). */
+  onRateChange: (paymentId: string, routeIndex: number, platformName: string, value: number) => void;
+  /** Persiste a taxa da rota ao sair do campo (reupsert do pacote com o novo rate_snapshot). */
+  onRateBlur: (paymentId: string, routeIndex: number, platformName: string) => void;
+  /** Alterna o check de nota fiscal recebida deste pagamento (current = valor atual). */
+  onToggleNota: (paymentId: string, current: boolean) => void;
   onConfigDriver: (row: DriverRowData) => void;
   onDiscount: (row: DriverRowData) => void;
   onVale: (row: DriverRowData) => void;
@@ -102,7 +115,8 @@ export function computeRowTotals(row: DriverRowData): RowTotals {
   for (const rl of row.routes) {
     for (const platformName of Object.keys(rl.packages)) {
       const pkgs = rl.packages[platformName] ?? 0;
-      const rate = row.ratesByPlatform[platformName] ?? 0;
+      // Taxa POR ROTA: usa o rate desta rota; fallback no default por plataforma do driver.
+      const rate = rl.rates[platformName] ?? row.ratesByPlatform[platformName] ?? 0;
       packagesAmount += pkgs * rate;
       totalPackages += pkgs;
     }
@@ -137,20 +151,27 @@ export function buildRows(
     const order: string[] = [];
     const byRoute = new Map<string, Record<string, number>>();
     const idsByRoute = new Map<string, Record<string, string>>();
+    const ratesByRoute = new Map<string, Record<string, number>>();
     const rateByPlatform: Record<string, number> = {};
 
     for (const pk of pkgs) {
       let rp = byRoute.get(pk.route);
       let ids = idsByRoute.get(pk.route);
-      if (!rp || !ids) {
+      let rt = ratesByRoute.get(pk.route);
+      if (!rp || !ids || !rt) {
         rp = {};
         ids = {};
+        rt = {};
         byRoute.set(pk.route, rp);
         idsByRoute.set(pk.route, ids);
+        ratesByRoute.set(pk.route, rt);
         order.push(pk.route);
       }
       rp[pk.platform_name] = (rp[pk.platform_name] ?? 0) + pk.packages;
       ids[pk.platform_name] = pk.id;
+      // Taxa POR ROTA: cada rota guarda o proprio rate_snapshot por plataforma.
+      rt[pk.platform_name] = pk.rate_snapshot;
+      // Default por plataforma do driver (fallback p/ rota nova): ultimo rate visto.
       rateByPlatform[pk.platform_name] = pk.rate_snapshot;
     }
 
@@ -160,11 +181,12 @@ export function buildRows(
 
     const routes: RouteLine[] =
       order.length === 0
-        ? [{ route: p.route_snapshot ?? driver?.route ?? '', packages: {}, packageIds: {} }]
+        ? [{ route: p.route_snapshot ?? driver?.route ?? '', packages: {}, packageIds: {}, rates: {} }]
         : order.map((r) => ({
             route: r,
             packages: { ...(byRoute.get(r) ?? {}) },
             packageIds: { ...(idsByRoute.get(r) ?? {}) },
+            rates: { ...(ratesByRoute.get(r) ?? {}) },
           }));
 
     return {
@@ -181,6 +203,7 @@ export function buildRows(
       cpf: driver?.cpf ?? null,
       phone: driver?.phone ?? null,
       active: driver?.active ?? true,
+      notaFiscal: Boolean(p.nota_fiscal_recebida),
     };
   });
 }
@@ -228,9 +251,19 @@ export function buildDriverMirrorData(
     },
     platforms: platforms
       .map((pl) => {
-        const packages = platformPackages(row, pl.name);
-        const unitValue = row.ratesByPlatform[pl.name] ?? pl.default_rate;
-        return { platform: pl.name, packages, unitValue, subtotal: packages * unitValue };
+        // Taxa POR ROTA: subtotal = Σ_rotas (pacotes da rota × taxa da rota).
+        let packages = 0;
+        let subtotal = 0;
+        for (const rl of row.routes) {
+          const pkgs = rl.packages[pl.name] ?? 0;
+          if (pkgs === 0) continue;
+          const rate = rl.rates[pl.name] ?? row.ratesByPlatform[pl.name] ?? pl.default_rate;
+          packages += pkgs;
+          subtotal += pkgs * rate;
+        }
+        // Media ponderada -> mantem a identidade subtotal = packages × unitValue.
+        const unitValue = packages > 0 ? subtotal / packages : (row.ratesByPlatform[pl.name] ?? pl.default_rate);
+        return { platform: pl.name, packages, unitValue, subtotal };
       })
       .filter((p) => p.packages > 0),
     discounts: row.discounts.map((d) => ({
@@ -287,9 +320,17 @@ export function buildReportRows(rows: DriverRowData[], platforms: DriverPlatform
     const route = row.routes.map((r) => r.route).filter(Boolean).join(', ') || (row.route ?? '');
     const platformsRec: Record<string, { packages: number; value: number }> = {};
     for (const pl of platforms) {
-      const packages = platformPackages(row, pl.name);
-      const rate = row.ratesByPlatform[pl.name] ?? pl.default_rate ?? 0;
-      platformsRec[pl.name] = { packages, value: packages * rate };
+      // Taxa POR ROTA: value = Σ_rotas (pacotes da rota × taxa da rota).
+      let packages = 0;
+      let value = 0;
+      for (const rl of row.routes) {
+        const pkgs = rl.packages[pl.name] ?? 0;
+        if (pkgs === 0) continue;
+        const rate = rl.rates[pl.name] ?? row.ratesByPlatform[pl.name] ?? pl.default_rate ?? 0;
+        packages += pkgs;
+        value += pkgs * rate;
+      }
+      platformsRec[pl.name] = { packages, value };
     }
     return {
       name: row.name,

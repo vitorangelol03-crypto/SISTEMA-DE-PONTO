@@ -121,6 +121,7 @@ export interface DriverPayment {
   total_discounts: number;
   total_vales: number;
   total_net: number;
+  nota_fiscal_recebida: boolean;
   created_at: string;
   updated_at: string;
   // joins opcionais (embutidos via select aninhado)
@@ -176,6 +177,7 @@ function mapPayment(r: Record<string, unknown>): DriverPayment {
     total_discounts: num(p.total_discounts),
     total_vales: num(p.total_vales),
     total_net: num(p.total_net),
+    nota_fiscal_recebida: Boolean(p.nota_fiscal_recebida),
     packages: Array.isArray(p.packages) ? (p.packages as Record<string, unknown>[]).map(mapPackage) : undefined,
     discounts: Array.isArray(p.discounts) ? (p.discounts as Record<string, unknown>[]).map(mapDiscount) : undefined,
     vales: Array.isArray(p.vales) ? (p.vales as Record<string, unknown>[]).map(mapVale) : undefined,
@@ -349,6 +351,62 @@ export const upsertDriverRate = async (
       { onConflict: 'driver_id,platform_id' }
     );
   if (error) throw error;
+};
+
+/**
+ * Taxa/pacote padrao do driver, por plataforma, herdada do ULTIMO pagamento dele.
+ * Serve para pre-preencher a rate ao adicionar uma nova rota / um novo driver sem
+ * cair no fixo (2,00): pega o rate_snapshot mais recente de cada plataforma no
+ * pagamento mais recente do driver. A quinzena aberta ja vem pre-carregada com o
+ * snapshot do ultimo periodo concluido (RPC driverpay_conclude_period), entao ler o
+ * pagamento mais recente ja reflete "a ultima taxa usada". Fallback: taxas fixas
+ * configuradas em driverpay_platform_rates; se nao houver nada, retorna {}.
+ */
+export const getDriverDefaultRates = async (
+  companyId: string,
+  driverId: string
+): Promise<Record<string, number>> => {
+  const rates: Record<string, number> = {};
+
+  // 1) Pagamento mais recente do driver, com seus pacotes (join com os pacotes filhos).
+  const { data: payRows, error: payErr } = await supabase
+    .from('driverpay_payments')
+    .select('id, packages:driverpay_payment_packages(platform_name, rate_snapshot, created_at)')
+    .eq('company_id', companyId)
+    .eq('driver_id', driverId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (payErr) throw payErr;
+
+  const latest = (payRows || [])[0] as { packages?: Record<string, unknown>[] } | undefined;
+  const pkgs = latest?.packages;
+  if (Array.isArray(pkgs) && pkgs.length > 0) {
+    // ordena por created_at asc: o pacote mais recente de cada plataforma sobrescreve.
+    const ordered = [...pkgs].sort((a, b) =>
+      String(a.created_at ?? '').localeCompare(String(b.created_at ?? ''))
+    );
+    for (const row of ordered) {
+      const name = typeof row.platform_name === 'string' ? row.platform_name : '';
+      const rate = num(row.rate_snapshot);
+      if (name && rate > 0) rates[name] = rate;
+    }
+  }
+  if (Object.keys(rates).length > 0) return rates;
+
+  // 2) Fallback: taxas fixas do driver por plataforma (driverpay_platform_rates).
+  const { data: rateRows, error: rateErr } = await supabase
+    .from('driverpay_platform_rates')
+    .select('rate, platform:driverpay_platforms(name)')
+    .eq('company_id', companyId)
+    .eq('driver_id', driverId);
+  if (rateErr) throw rateErr;
+  (rateRows || []).forEach((r: Record<string, unknown>) => {
+    const plat = r.platform as { name?: string } | null;
+    const rate = num(r.rate);
+    if (plat?.name && rate > 0) rates[plat.name] = rate;
+  });
+
+  return rates;
 };
 
 // ─── Grupos ──────────────────────────────────────────────────────────────────
@@ -556,6 +614,33 @@ export const deletePackage = async (id: string, paymentId: string, userId: strin
   const { error } = await supabase.from('driverpay_payment_packages').delete().eq('id', id);
   if (error) throw error;
   await recomputePaymentTotals(paymentId);
+};
+
+/**
+ * Marca/desmarca o recebimento das notas fiscais do driver naquele pagamento
+ * (check do supervisor na grade). Registra quem marcou (nota_fiscal_by) e, quando
+ * marcado, o timestamp (nota_fiscal_at); ao desmarcar, limpa o timestamp. Nao mexe
+ * nos totais. O escopo por company_id (alem do id) reforca o isolamento ja garantido
+ * pela RLS. O guard de periodo concluido nao bloqueia o mestre 2626 (unico com acesso
+ * ao modulo), entao a NF pode ser conferida inclusive apos a conclusao.
+ */
+export const setNotaFiscal = async (
+  companyId: string,
+  paymentId: string,
+  received: boolean,
+  userId: string
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase
+    .from('driverpay_payments')
+    .update({
+      nota_fiscal_recebida: received,
+      nota_fiscal_at: received ? new Date().toISOString() : null,
+      nota_fiscal_by: userId,
+    })
+    .eq('id', paymentId)
+    .eq('company_id', companyId);
+  if (error) throw error;
 };
 
 // ─── Descontos e Vales ───────────────────────────────────────────────────────

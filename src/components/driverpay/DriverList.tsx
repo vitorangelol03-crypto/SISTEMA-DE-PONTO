@@ -1,5 +1,16 @@
 import React from 'react';
-import { MapPin, Settings, Minus, Wallet, FileText, ChevronRight, Users, Tag } from 'lucide-react';
+import {
+  MapPin,
+  Settings,
+  Minus,
+  Wallet,
+  FileText,
+  ChevronRight,
+  Users,
+  Tag,
+  CheckCircle2,
+  Circle,
+} from 'lucide-react';
 import type { DriverPlatform } from '../../services/driverPay';
 import { DriverRow } from './DriverRow';
 import {
@@ -68,6 +79,7 @@ export const DriverList: React.FC<DriverListProps> = ({
 }) => {
   const renderTable = (subset: DriverRowData[], withFooter: boolean) => {
     const totals = withFooter ? sumTotals(subset) : null;
+    const nfCount = subset.filter((r) => r.notaFiscal).length;
     return (
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse">
@@ -98,6 +110,9 @@ export const DriverList: React.FC<DriverListProps> = ({
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                 Total a receber
+              </th>
+              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                NF
               </th>
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Ações
@@ -135,6 +150,9 @@ export const DriverList: React.FC<DriverListProps> = ({
                 </td>
                 <td className="px-3 py-3.5 text-right text-base font-bold text-green-600 whitespace-nowrap">
                   {formatBRL(totals.net)}
+                </td>
+                <td className="px-3 py-3.5 text-center text-xs font-bold text-gray-700 whitespace-nowrap">
+                  NF {nfCount}/{totals.drivers}
                 </td>
                 <td />
               </tr>
@@ -200,6 +218,26 @@ export const DriverList: React.FC<DriverListProps> = ({
             Multi-rota: edite os pacotes por rota no computador (visão de tabela).
           </p>
         )}
+
+        {/* Nota fiscal — check grande e obvio */}
+        <button
+          type="button"
+          onClick={() => handlers.onToggleNota(row.paymentId, row.notaFiscal)}
+          disabled={readOnly || !canEdit}
+          aria-pressed={row.notaFiscal}
+          className={`w-full mb-2 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium min-h-[40px] border ${
+            row.notaFiscal
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : 'bg-gray-50 border-gray-200 text-gray-500'
+          } disabled:opacity-50 disabled:cursor-not-allowed`}
+        >
+          {row.notaFiscal ? (
+            <CheckCircle2 className="w-5 h-5 fill-green-100" />
+          ) : (
+            <Circle className="w-5 h-5" />
+          )}
+          {row.notaFiscal ? 'Nota fiscal recebida' : 'Marcar nota fiscal'}
+        </button>
 
         <div className="flex items-center justify-between text-sm mb-2">
           <span className="text-gray-500">

@@ -28,6 +28,7 @@ import {
   getDriverRates,
   upsertPackage,
   deletePackage,
+  setNotaFiscal,
 } from '../../services/driverPay';
 import { exportDriverGeneralReportExcel } from '../../utils/driverReport';
 import {
@@ -279,7 +280,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       const rl = row?.routes[routeIndex];
       if (!row || !rl) return;
       const packages = rl.packages[platformName] ?? 0;
-      const rate = row.ratesByPlatform[platformName] ?? 0;
+      // Taxa POR ROTA: usa o rate desta rota (fallback no default por plataforma do driver).
+      const rate = rl.rates[platformName] ?? row.ratesByPlatform[platformName] ?? 0;
       try {
         await upsertPackage(company.id, paymentId, platformName, rl.route, packages, rate, userId);
       } catch (e) {
@@ -311,7 +313,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         for (const pid of Object.values(rl.packageIds)) await deletePackage(pid, paymentId, userId);
         for (const [platformName, pkgs] of Object.entries(rl.packages)) {
           if (pkgs > 0) {
-            await upsertPackage(company.id, paymentId, platformName, rl.route, pkgs, row.ratesByPlatform[platformName] ?? 0, userId);
+            // Preserva a taxa POR ROTA ao renomear (fallback no default por plataforma).
+            const rate = rl.rates[platformName] ?? row.ratesByPlatform[platformName] ?? 0;
+            await upsertPackage(company.id, paymentId, platformName, rl.route, pkgs, rate, userId);
           }
         }
         await reloadPayments();
@@ -328,7 +332,12 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     setRows((prev) =>
       prev.map((r) =>
         r.paymentId === paymentId
-          ? { ...r, routes: [...r.routes, { route: '', packages: {}, packageIds: {} }] }
+          ? {
+              ...r,
+              // A nova rota herda a taxa padrao do driver por plataforma (ratesByPlatform,
+              // que ja vem do ultimo periodo concluido), em vez de cair no fixo 2,00.
+              routes: [...r.routes, { route: '', packages: {}, packageIds: {}, rates: { ...r.ratesByPlatform } }],
+            }
           : r,
       ),
     );
@@ -351,7 +360,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           prev.map((r) => {
             if (r.paymentId !== paymentId) return r;
             const routes = r.routes.filter((_, i) => i !== routeIndex);
-            return { ...r, routes: routes.length ? routes : [{ route: r.route ?? '', packages: {}, packageIds: {} }] };
+            return {
+              ...r,
+              routes: routes.length ? routes : [{ route: r.route ?? '', packages: {}, packageIds: {}, rates: {} }],
+            };
           }),
         );
         await reloadPayments();
@@ -364,36 +376,57 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     [company?.id, userId, reloadPayments],
   );
 
-  const onJoinRoutes = useCallback(
-    async (paymentId: string) => {
-      if (isReadOnlyRef.current || !company?.id) return;
+  // Taxa POR ROTA: atualiza o rate local da rota (reflete no total e no "vários" na hora).
+  const onRateChange = useCallback(
+    (paymentId: string, routeIndex: number, platformName: string, value: number) => {
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.paymentId !== paymentId) return r;
+          const routes = r.routes.map((rl, i) =>
+            i === routeIndex ? { ...rl, rates: { ...rl.rates, [platformName]: value } } : rl,
+          );
+          return { ...r, routes };
+        }),
+      );
+    },
+    [],
+  );
+
+  const onRateBlur = useCallback(
+    async (paymentId: string, routeIndex: number, platformName: string) => {
+      if (isReadOnlyRef.current || !company?.id || !hasPermission('driverpay.editDriver')) return;
       const row = rowsRef.current.find((r) => r.paymentId === paymentId);
-      if (!row) return;
-      if (!window.confirm('Juntar todas as rotas num número só? Os pacotes serão somados.')) return;
-      const joined = row.routes.map((r) => r.route).filter(Boolean).join(' + ') || (row.route ?? '');
-      const sums: Record<string, number> = {};
-      for (const rl of row.routes) {
-        for (const [platformName, pkgs] of Object.entries(rl.packages)) {
-          sums[platformName] = (sums[platformName] ?? 0) + pkgs;
-        }
-      }
+      const rl = row?.routes[routeIndex];
+      if (!row || !rl) return;
+      const packages = rl.packages[platformName] ?? 0;
+      const rate = rl.rates[platformName] ?? row.ratesByPlatform[platformName] ?? 0;
       try {
-        for (const rl of row.routes) {
-          for (const pid of Object.values(rl.packageIds)) await deletePackage(pid, paymentId, userId);
-        }
-        for (const [platformName, pkgs] of Object.entries(sums)) {
-          if (pkgs > 0) {
-            await upsertPackage(company.id, paymentId, platformName, joined, pkgs, row.ratesByPlatform[platformName] ?? 0, userId);
-          }
-        }
-        await reloadPayments();
+        // Persiste a taxa DA ROTA como rate_snapshot do pacote (mesmo padrao do onPackageBlur).
+        await upsertPackage(company.id, paymentId, platformName, rl.route, packages, rate, userId);
       } catch (e) {
-        console.error('Erro ao juntar rotas:', e);
-        toast.error('Erro ao juntar rotas');
+        console.error('Erro ao salvar taxa da rota:', e);
+        toast.error('Erro ao salvar taxa');
         reloadPayments();
       }
     },
-    [company?.id, userId, reloadPayments],
+    [company?.id, hasPermission, userId, reloadPayments],
+  );
+
+  const onToggleNota = useCallback(
+    async (paymentId: string, current: boolean) => {
+      if (!company?.id || !hasPermission('driverpay.editDriver')) return;
+      // Atualiza otimista (check instantaneo) e persiste; em erro, recarrega e reverte.
+      setRows((prev) => prev.map((r) => (r.paymentId === paymentId ? { ...r, notaFiscal: !current } : r)));
+      try {
+        await setNotaFiscal(company.id, paymentId, !current, userId);
+        await reloadPayments();
+      } catch (e) {
+        console.error('Erro ao atualizar nota fiscal:', e);
+        toast.error('Erro ao atualizar nota fiscal');
+        reloadPayments();
+      }
+    },
+    [company?.id, hasPermission, userId, reloadPayments],
   );
 
   const onToggleExpand = useCallback((paymentId: string) => {
@@ -443,7 +476,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onCityBlur,
       onAddRoute,
       onRemoveRoute,
-      onJoinRoutes,
+      onRateChange,
+      onRateBlur,
+      onToggleNota,
       onConfigDriver,
       onDiscount,
       onVale,
@@ -457,7 +492,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onCityBlur,
       onAddRoute,
       onRemoveRoute,
-      onJoinRoutes,
+      onRateChange,
+      onRateBlur,
+      onToggleNota,
       onConfigDriver,
       onDiscount,
       onVale,

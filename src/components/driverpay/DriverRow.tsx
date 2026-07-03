@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ChevronRight,
+  ChevronUp,
   MapPin,
   Plus,
-  Link2,
   X,
   Settings,
   Minus,
   Wallet,
   FileText,
+  CheckCircle2,
+  Circle,
 } from 'lucide-react';
 import type { DriverPlatform } from '../../services/driverPay';
 import {
@@ -39,6 +41,16 @@ const parsePackages = (raw: string): number => {
   return digits ? parseInt(digits, 10) : 0;
 };
 
+/** Aceita "R$ 2,00" / "2,5" / "2.5" -> 2.5 (mesmo parser do DriverFormModal). */
+const parseRate = (raw: string): number => {
+  const normalized = raw.replace(/[^\d,.-]/g, '').replace(',', '.');
+  const value = parseFloat(normalized);
+  return Number.isFinite(value) ? value : 0;
+};
+
+/** Numero -> string editavel em pt-BR (ex.: 2 -> "2,00"). */
+const formatRateInput = (n: number): string => n.toFixed(2).replace('.', ',');
+
 export const DriverRow: React.FC<DriverRowProps> = ({
   row,
   platforms,
@@ -53,8 +65,13 @@ export const DriverRow: React.FC<DriverRowProps> = ({
 }) => {
   const multi = isMultiRoute(row);
   const totals = computeRowTotals(row);
-  const totalCols = 2 + platforms.length + 4 + 1;
+  // driver+grupo (2) + plataformas + 4 totais + NF (1) + acoes (1)
+  const totalCols = 2 + platforms.length + 4 + 1 + 1;
   const inputsDisabled = readOnly || !canEdit;
+
+  // Rascunhos locais dos inputs de taxa por rota (chave `${routeIndex}:${plataforma}`),
+  // para permitir digitar decimais com virgula sem o valor "colapsar" a cada tecla.
+  const [rateDrafts, setRateDrafts] = useState<Record<string, string>>({});
 
   return (
     <>
@@ -118,7 +135,13 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         {/* Colunas por plataforma */}
         {platforms.map((pl) => {
           const sum = platformPackages(row, pl.name);
-          const rate = row.ratesByPlatform[pl.name] ?? pl.default_rate;
+          // Taxa por rota: em multi-rota o resumo mostra a taxa comum, ou "vários"
+          // quando as rotas divergem naquela plataforma. O total em R$ (coluna
+          // "Total pacotes") ja soma corretamente via computeRowTotals.
+          const routeRates = row.routes.map(
+            (rl) => rl.rates[pl.name] ?? row.ratesByPlatform[pl.name] ?? pl.default_rate,
+          );
+          const allSameRate = routeRates.every((r) => r === routeRates[0]);
           return (
             <td key={pl.id} className="px-3 py-3 text-center align-middle">
               <div className="inline-flex flex-col items-center gap-0.5">
@@ -139,7 +162,16 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                     className="w-14 text-right border border-gray-300 rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                   />
                 )}
-                <span className="text-gray-400 text-xs whitespace-nowrap">{formatBRL(rate)}</span>
+                {multi && !allSameRate ? (
+                  <span
+                    className="text-gray-400 text-xs whitespace-nowrap"
+                    title="taxas diferentes por rota — abra as rotas para editar"
+                  >
+                    vários
+                  </span>
+                ) : (
+                  <span className="text-gray-400 text-xs whitespace-nowrap">{formatBRL(routeRates[0] ?? 0)}</span>
+                )}
               </div>
             </td>
           );
@@ -177,6 +209,24 @@ export const DriverRow: React.FC<DriverRowProps> = ({
           >
             {formatBRL(totals.net)}
           </span>
+        </td>
+
+        {/* Nota Fiscal (check grande e obvio) */}
+        <td className="px-3 py-3 text-center align-middle">
+          <button
+            type="button"
+            onClick={() => handlers.onToggleNota(row.paymentId, row.notaFiscal)}
+            disabled={inputsDisabled}
+            title={row.notaFiscal ? 'Nota fiscal recebida' : 'Marcar nota fiscal recebida'}
+            aria-pressed={row.notaFiscal}
+            className="inline-flex items-center justify-center rounded-full hover:bg-gray-100 p-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            {row.notaFiscal ? (
+              <CheckCircle2 className="w-6 h-6 text-green-600 fill-green-100" />
+            ) : (
+              <Circle className="w-6 h-6 text-gray-300" />
+            )}
+          </button>
         </td>
 
         {/* Acoes */}
@@ -259,25 +309,64 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 )}
               </div>
             </td>
-            {platforms.map((pl) => (
-              <td key={pl.id} className="px-3 py-2 text-center align-middle">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  disabled={inputsDisabled}
-                  value={rl.packages[pl.name] ?? 0}
-                  onChange={(e) =>
-                    handlers.onPackageChange(row.paymentId, ri, pl.name, parsePackages(e.target.value))
-                  }
-                  onBlur={() => handlers.onPackageBlur(row.paymentId, ri, pl.name)}
-                  className="w-14 text-right border border-gray-300 rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
-                />
-              </td>
-            ))}
+            {platforms.map((pl) => {
+              const rateKey = `${ri}:${pl.name}`;
+              const rateNum = rl.rates[pl.name] ?? row.ratesByPlatform[pl.name] ?? pl.default_rate;
+              const rateValue = rateDrafts[rateKey] ?? formatRateInput(rateNum);
+              return (
+                <td key={pl.id} className="px-3 py-2 text-center align-middle">
+                  <div className="inline-flex flex-col items-center gap-1">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      disabled={inputsDisabled}
+                      value={rl.packages[pl.name] ?? 0}
+                      title="Pacotes desta rota"
+                      onChange={(e) =>
+                        handlers.onPackageChange(row.paymentId, ri, pl.name, parsePackages(e.target.value))
+                      }
+                      onBlur={() => handlers.onPackageBlur(row.paymentId, ri, pl.name)}
+                      className="w-14 text-right border border-gray-300 rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                    />
+                    {/* Taxa (R$/pacote) DESTA rota — editavel por rota */}
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]">
+                        R$
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        disabled={inputsDisabled}
+                        value={rateValue}
+                        title="Valor por pacote desta rota"
+                        onFocus={(e) => {
+                          setRateDrafts((prev) => ({ ...prev, [rateKey]: formatRateInput(rateNum) }));
+                          e.currentTarget.select();
+                        }}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          setRateDrafts((prev) => ({ ...prev, [rateKey]: raw }));
+                          handlers.onRateChange(row.paymentId, ri, pl.name, parseRate(raw));
+                        }}
+                        onBlur={() => {
+                          setRateDrafts((prev) => {
+                            const next = { ...prev };
+                            delete next[rateKey];
+                            return next;
+                          });
+                          handlers.onRateBlur(row.paymentId, ri, pl.name);
+                        }}
+                        className="w-20 pl-6 pr-1.5 text-right border border-gray-200 rounded-md py-1 text-xs tabular-nums text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                      />
+                    </div>
+                  </div>
+                </td>
+              );
+            })}
             <td className="px-3 py-2 text-right text-xs text-gray-400 align-middle">
               {formatInt(Object.values(rl.packages).reduce((s, n) => s + n, 0))} pct
             </td>
-            <td colSpan={4} />
+            <td colSpan={5} />
           </tr>
         ))}
 
@@ -295,10 +384,11 @@ export const DriverRow: React.FC<DriverRowProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => handlers.onJoinRoutes(row.paymentId)}
+                onClick={() => handlers.onToggleExpand(row.paymentId)}
+                title="Recolhe a edição por rota; mantém cada rota e seu valor unitário (não destrói nada)."
                 className="text-blue-600 hover:bg-blue-50 rounded px-1 inline-flex items-center gap-1 text-xs font-medium"
               >
-                <Link2 className="w-4 h-4" /> Juntar num número só
+                <ChevronUp className="w-4 h-4" /> Recolher (ver só o total)
               </button>
             </div>
           </td>
