@@ -21,6 +21,7 @@ import type {
   DriverPaymentPeriod,
   DriverDiscount,
   DriverVale,
+  DriverZapex,
 } from '../../services/driverPay';
 import type { DriverMirrorData, DriverGroupMirrorData } from '../../utils/driverMirrorPdf';
 import type { DriverReportRow } from '../../utils/driverReport';
@@ -72,11 +73,21 @@ export interface DriverRowData {
   active: boolean;
   /** true quando o operador confirmou que o driver ja enviou as notas fiscais deste pagamento. */
   notaFiscal: boolean;
+  /**
+   * Itens Zapex lancados neste pagamento (1 item = 1 entrega). Cada item so tem
+   * codigo + data; o VALOR vem do zapexRate individual do driver. Total Zapex do
+   * driver = zapex.length * zapexRate.
+   */
+  zapex: DriverZapex[];
+  /** Valor unitario individual do driver por item Zapex (driverpay_payments.zapex_rate; default 0). */
+  zapexRate: number;
 }
 
 export interface RowTotals {
   totalPackages: number;
   packagesAmount: number;
+  /** Ganho Zapex em R$ = zapex.length * zapexRate. Soma no net. */
+  zapex: number;
   discounts: number;
   vales: number;
   net: number;
@@ -99,6 +110,8 @@ export interface RowHandlers {
   onConfigDriver: (row: DriverRowData) => void;
   onDiscount: (row: DriverRowData) => void;
   onVale: (row: DriverRowData) => void;
+  /** Abre o modal de Zapex (lancar/editar/excluir itens + configurar valor unitario). */
+  onZapex: (row: DriverRowData) => void;
   onMirror: (row: DriverRowData) => void;
   onToggleExpand: (paymentId: string) => void;
 }
@@ -121,9 +134,18 @@ export function computeRowTotals(row: DriverRowData): RowTotals {
       totalPackages += pkgs;
     }
   }
+  // Ganho Zapex: cada item vale zapexRate; soma no total a receber.
+  const zapexAmount = row.zapex.length * row.zapexRate;
   const discounts = row.discounts.reduce((sum, d) => sum + d.amount, 0);
   const vales = row.vales.reduce((sum, v) => sum + v.amount, 0);
-  return { totalPackages, packagesAmount, discounts, vales, net: packagesAmount - discounts - vales };
+  return {
+    totalPackages,
+    packagesAmount,
+    zapex: zapexAmount,
+    discounts,
+    vales,
+    net: packagesAmount + zapexAmount - discounts - vales,
+  };
 }
 
 /** True quando o driver tem mais de uma rota (grade mostra soma + expansao por rota). */
@@ -204,6 +226,8 @@ export function buildRows(
       phone: driver?.phone ?? null,
       active: driver?.active ?? true,
       notaFiscal: Boolean(p.nota_fiscal_recebida),
+      zapex: p.zapex ?? [],
+      zapexRate: Number(p.zapex_rate ?? 0),
     };
   });
 }
@@ -238,6 +262,8 @@ export function buildDriverMirrorData(
   period: DriverPaymentPeriod,
 ): DriverMirrorData {
   const totals = computeRowTotals(row);
+  // Ganho Zapex (R$) do driver: entra como uma "plataforma" no espelho e soma no packagesValue.
+  const zapexAmount = row.zapex.length * row.zapexRate;
   return {
     company: companyInfo(company),
     period: periodInfo(period),
@@ -249,23 +275,29 @@ export function buildDriverMirrorData(
       })),
       group: row.groupName,
     },
-    platforms: platforms
-      .map((pl) => {
-        // Taxa POR ROTA: subtotal = Σ_rotas (pacotes da rota × taxa da rota).
-        let packages = 0;
-        let subtotal = 0;
-        for (const rl of row.routes) {
-          const pkgs = rl.packages[pl.name] ?? 0;
-          if (pkgs === 0) continue;
-          const rate = rl.rates[pl.name] ?? row.ratesByPlatform[pl.name] ?? pl.default_rate;
-          packages += pkgs;
-          subtotal += pkgs * rate;
-        }
-        // Media ponderada -> mantem a identidade subtotal = packages × unitValue.
-        const unitValue = packages > 0 ? subtotal / packages : (row.ratesByPlatform[pl.name] ?? pl.default_rate);
-        return { platform: pl.name, packages, unitValue, subtotal };
-      })
-      .filter((p) => p.packages > 0),
+    platforms: [
+      ...platforms
+        .map((pl) => {
+          // Taxa POR ROTA: subtotal = Σ_rotas (pacotes da rota × taxa da rota).
+          let packages = 0;
+          let subtotal = 0;
+          for (const rl of row.routes) {
+            const pkgs = rl.packages[pl.name] ?? 0;
+            if (pkgs === 0) continue;
+            const rate = rl.rates[pl.name] ?? row.ratesByPlatform[pl.name] ?? pl.default_rate;
+            packages += pkgs;
+            subtotal += pkgs * rate;
+          }
+          // Media ponderada -> mantem a identidade subtotal = packages × unitValue.
+          const unitValue = packages > 0 ? subtotal / packages : (row.ratesByPlatform[pl.name] ?? pl.default_rate);
+          return { platform: pl.name, packages, unitValue, subtotal };
+        })
+        .filter((p) => p.packages > 0),
+      // Zapex como linha propria: pacotes = qtd de itens, valor unit = zapexRate do driver.
+      ...(row.zapex.length > 0
+        ? [{ platform: 'Zapex', packages: row.zapex.length, unitValue: row.zapexRate, subtotal: zapexAmount }]
+        : []),
+    ],
     discounts: row.discounts.map((d) => ({
       packageId: d.package_code ?? '',
       value: d.amount,
@@ -277,7 +309,8 @@ export function buildDriverMirrorData(
       note: v.observation,
     })),
     totals: {
-      packagesValue: totals.packagesAmount,
+      // packagesValue inclui o ganho Zapex para casar com a soma dos subtotais (linha Zapex) e com o toReceive.
+      packagesValue: totals.packagesAmount + zapexAmount,
       discountsValue: totals.discounts,
       valesValue: totals.vales,
       toReceive: totals.net,
@@ -332,12 +365,17 @@ export function buildReportRows(rows: DriverRowData[], platforms: DriverPlatform
       }
       platformsRec[pl.name] = { packages, value };
     }
+    // Zapex como coluna dinamica: pacotes = qtd de itens, value = itens × zapexRate.
+    const zapexValue = row.zapex.length * row.zapexRate;
+    if (row.zapex.length > 0) {
+      platformsRec['Zapex'] = { packages: row.zapex.length, value: zapexValue };
+    }
     return {
       name: row.name,
       route,
       group: row.groupName ?? '',
       platforms: platformsRec,
-      totalPackages: t.packagesAmount,
+      totalPackages: t.packagesAmount + zapexValue,
       discount: t.discounts,
       vale: t.vales,
       totalToReceive: t.net,

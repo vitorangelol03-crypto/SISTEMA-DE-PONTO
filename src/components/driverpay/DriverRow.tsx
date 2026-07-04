@@ -8,6 +8,7 @@ import {
   Settings,
   Minus,
   Wallet,
+  Zap,
   FileText,
   CheckCircle2,
   Circle,
@@ -65,9 +66,12 @@ export const DriverRow: React.FC<DriverRowProps> = ({
 }) => {
   const multi = isMultiRoute(row);
   const totals = computeRowTotals(row);
-  // driver+grupo (2) + plataformas + 4 totais + NF (1) + acoes (1)
-  const totalCols = 2 + platforms.length + 4 + 1 + 1;
+  // driver+grupo (2) + plataformas + 5 totais (pacotes, ZAPEX, desconto, vale, receber) + NF (1) + acoes (1)
+  const totalCols = 2 + platforms.length + 5 + 1 + 1;
   const inputsDisabled = readOnly || !canEdit;
+  // Ganho Zapex do driver: qtd de itens x valor unitario individual (soma no total a receber).
+  const zapexCount = row.zapex.length;
+  const zapexAmount = zapexCount * row.zapexRate;
 
   // Rascunhos locais dos inputs de taxa por rota (chave `${routeIndex}:${plataforma}`),
   // para permitir digitar decimais com virgula sem o valor "colapsar" a cada tecla.
@@ -182,6 +186,22 @@ export const DriverRow: React.FC<DriverRowProps> = ({
           {formatBRL(totals.packagesAmount)}
         </td>
 
+        {/* Zapex (ganho por item = qtd x valor unitario do driver) */}
+        <td className="px-3 py-3 text-right align-middle">
+          {zapexCount > 0 ? (
+            <div className="inline-flex flex-col items-end leading-tight">
+              <span className="font-semibold text-green-600 whitespace-nowrap tabular-nums">
+                {formatBRL(zapexAmount)}
+              </span>
+              <span className="text-[11px] text-gray-400">
+                {zapexCount} Zapex
+              </span>
+            </div>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+
         {/* Desconto */}
         <td className="px-3 py-3 text-right align-middle">
           {totals.discounts > 0 ? (
@@ -262,6 +282,17 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 className="text-amber-600 hover:text-amber-800 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Wallet className="w-4 h-4" />
+              </button>
+            )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => handlers.onZapex(row)}
+                disabled={readOnly}
+                title="Lançar Zapex"
+                className="text-indigo-600 hover:text-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Zap className="w-4 h-4" />
               </button>
             )}
             {canMirror && (
@@ -366,7 +397,8 @@ export const DriverRow: React.FC<DriverRowProps> = ({
             <td className="px-3 py-2 text-right text-xs text-gray-400 align-middle">
               {formatInt(Object.values(rl.packages).reduce((s, n) => s + n, 0))} pct
             </td>
-            <td colSpan={5} />
+            {/* ZAPEX + Desconto + Vale + Total a receber + NF + Ações (Zapex é por driver, não por rota) */}
+            <td colSpan={6} />
           </tr>
         ))}
 

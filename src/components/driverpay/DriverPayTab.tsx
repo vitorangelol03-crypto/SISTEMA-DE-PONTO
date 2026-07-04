@@ -49,6 +49,7 @@ import { DriverList } from './DriverList';
 import { DriverFormModal } from './DriverFormModal';
 import { DiscountModal } from './DiscountModal';
 import { ValeModal } from './ValeModal';
+import { ZapexModal } from './ZapexModal';
 import { GroupManagerModal } from './GroupManagerModal';
 import { PlatformModal } from './PlatformModal';
 import { PeriodCreateModal } from './PeriodCreateModal';
@@ -113,6 +114,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [formModal, setFormModal] = useState<{ mode: 'create' | 'edit'; driver: Driver | null } | null>(null);
   const [discountRowId, setDiscountRowId] = useState<string | null>(null);
   const [valeRowId, setValeRowId] = useState<string | null>(null);
+  const [zapexRowId, setZapexRowId] = useState<string | null>(null);
   const [showGroups, setShowGroups] = useState(false);
   const [showPlatform, setShowPlatform] = useState(false);
   const [showCreatePeriod, setShowCreatePeriod] = useState(false);
@@ -228,6 +230,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     setFormModal(null);
     setDiscountRowId(null);
     setValeRowId(null);
+    setZapexRowId(null);
     setShowGroups(false);
     setShowPlatform(false);
     setShowCreatePeriod(false);
@@ -449,6 +452,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
   const onDiscount = useCallback((row: DriverRowData) => setDiscountRowId(row.paymentId), []);
   const onVale = useCallback((row: DriverRowData) => setValeRowId(row.paymentId), []);
+  const onZapex = useCallback((row: DriverRowData) => setZapexRowId(row.paymentId), []);
 
   const onMirror = useCallback(
     (row: DriverRowData) => {
@@ -482,6 +486,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onConfigDriver,
       onDiscount,
       onVale,
+      onZapex,
       onMirror,
       onToggleExpand,
     }),
@@ -498,6 +503,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onConfigDriver,
       onDiscount,
       onVale,
+      onZapex,
       onMirror,
       onToggleExpand,
     ],
@@ -560,7 +566,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       await exportDriverGeneralReportExcel(reportRows, {
         companyName: `${MIRROR_COMPANY_NAME}${company?.city ? ` — ${company.city}` : ''}`,
         periodLabel: selectedPeriod?.label ?? '',
-        platforms: platforms.map((p) => p.name),
+        // Zapex sai como coluna do relatório (buildReportRows preenche row.platforms['Zapex']).
+        platforms: [...platforms.map((p) => p.name), 'Zapex'],
       });
       toast.success('Relatório gerado');
     } catch (e) {
@@ -642,6 +649,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
   const discountRow = discountRowId ? rows.find((r) => r.paymentId === discountRowId) ?? null : null;
   const valeRow = valeRowId ? rows.find((r) => r.paymentId === valeRowId) ?? null : null;
+  const zapexRow = zapexRowId ? rows.find((r) => r.paymentId === zapexRowId) ?? null : null;
 
   const canEditDriver = hasPermission('driverpay.editDriver');
   const canMirror = hasPermission('driverpay.generateMirror');
@@ -828,6 +836,17 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           userId={userId}
           readOnly={isReadOnly}
           onClose={() => setValeRowId(null)}
+          onChanged={reloadPayments}
+        />
+      )}
+
+      {zapexRow && (
+        <ZapexModal
+          row={zapexRow}
+          userId={userId}
+          readOnly={isReadOnly}
+          hasPermission={hasPermission}
+          onClose={() => setZapexRowId(null)}
           onChanged={reloadPayments}
         />
       )}

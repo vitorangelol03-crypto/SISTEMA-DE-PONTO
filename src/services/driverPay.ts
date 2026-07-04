@@ -110,6 +110,16 @@ export interface DriverVale {
   created_at: string;
 }
 
+export interface DriverZapex {
+  id: string;
+  company_id: string;
+  payment_id: string;
+  code: string;
+  delivery_date: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface DriverPayment {
   id: string;
   company_id: string;
@@ -121,6 +131,8 @@ export interface DriverPayment {
   total_discounts: number;
   total_vales: number;
   total_net: number;
+  zapex_rate: number;
+  total_zapex: number;
   nota_fiscal_recebida: boolean;
   created_at: string;
   updated_at: string;
@@ -128,6 +140,7 @@ export interface DriverPayment {
   packages?: DriverPaymentPackage[];
   discounts?: DriverDiscount[];
   vales?: DriverVale[];
+  zapex?: DriverZapex[];
 }
 
 /** Linha do relatorio geral / grade, ja com grupo e agregados por plataforma. */
@@ -169,6 +182,9 @@ function mapDiscount(r: Record<string, unknown>): DriverDiscount {
 function mapVale(r: Record<string, unknown>): DriverVale {
   return { ...(r as unknown as DriverVale), amount: num(r.amount) };
 }
+function mapZapex(r: Record<string, unknown>): DriverZapex {
+  return { ...(r as unknown as DriverZapex) };
+}
 function mapPayment(r: Record<string, unknown>): DriverPayment {
   const p = r as Record<string, unknown>;
   return {
@@ -177,10 +193,13 @@ function mapPayment(r: Record<string, unknown>): DriverPayment {
     total_discounts: num(p.total_discounts),
     total_vales: num(p.total_vales),
     total_net: num(p.total_net),
+    zapex_rate: num(p.zapex_rate),
+    total_zapex: num(p.total_zapex),
     nota_fiscal_recebida: Boolean(p.nota_fiscal_recebida),
     packages: Array.isArray(p.packages) ? (p.packages as Record<string, unknown>[]).map(mapPackage) : undefined,
     discounts: Array.isArray(p.discounts) ? (p.discounts as Record<string, unknown>[]).map(mapDiscount) : undefined,
     vales: Array.isArray(p.vales) ? (p.vales as Record<string, unknown>[]).map(mapVale) : undefined,
+    zapex: Array.isArray(p.zapex) ? (p.zapex as Record<string, unknown>[]).map(mapZapex) : undefined,
   };
 }
 
@@ -580,7 +599,7 @@ export const getPayments = async (
 ): Promise<DriverPayment[]> => {
   const { data, error } = await supabase
     .from('driverpay_payments')
-    .select('*, packages:driverpay_payment_packages(*), discounts:driverpay_discounts(*), vales:driverpay_vales(*)')
+    .select('*, packages:driverpay_payment_packages(*), discounts:driverpay_discounts(*), vales:driverpay_vales(*), zapex:driverpay_zapex(*)')
     .eq('period_id', periodId)
     .eq('company_id', companyId)
     .order('driver_name_snapshot', { ascending: true });
@@ -691,6 +710,72 @@ export const removeVale = async (id: string, paymentId: string, userId: string):
   await recomputePaymentTotals(paymentId);
 };
 
+// ─── Zapex (ganho por item; total = qtd de itens x zapex_rate do driver) ─────
+
+/**
+ * Lanca um item Zapex (1 entrega) no pagamento: apenas codigo + data de entrega,
+ * sem valor no lancamento — o ganho vem do zapex_rate individual do driver, aplicado
+ * no recomputo (view driverpay_payment_computed.calc_zapex = round(count x rate, 2)).
+ */
+export const addZapex = async (
+  companyId: string,
+  paymentId: string,
+  code: string,
+  deliveryDate: string | null,
+  userId: string
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase
+    .from('driverpay_zapex')
+    .insert([{ company_id: companyId, payment_id: paymentId, code, delivery_date: deliveryDate, created_by: userId }]);
+  if (error) throw error;
+  await recomputePaymentTotals(paymentId);
+};
+
+export const updateZapex = async (
+  id: string,
+  paymentId: string,
+  code: string,
+  deliveryDate: string | null,
+  userId: string
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase
+    .from('driverpay_zapex')
+    .update({ code, delivery_date: deliveryDate })
+    .eq('id', id);
+  if (error) throw error;
+  await recomputePaymentTotals(paymentId);
+};
+
+export const removeZapex = async (id: string, paymentId: string, userId: string): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase.from('driverpay_zapex').delete().eq('id', id);
+  if (error) throw error;
+  await recomputePaymentTotals(paymentId);
+};
+
+/**
+ * Define o valor unitario Zapex do driver naquele pagamento (zapex_rate). O total_zapex
+ * e sempre derivado (qtd de itens x rate) no recomputo — aqui so persistimos a taxa e
+ * disparamos o recomputo para refletir imediatamente no total a receber.
+ */
+export const setZapexRate = async (
+  companyId: string,
+  paymentId: string,
+  rate: number,
+  userId: string
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.configRate');
+  const { error } = await supabase
+    .from('driverpay_payments')
+    .update({ zapex_rate: rate })
+    .eq('id', paymentId)
+    .eq('company_id', companyId);
+  if (error) throw error;
+  await recomputePaymentTotals(paymentId);
+};
+
 // ─── Totais (recomputo em tempo real; a conclusao congela via RPC) ───────────
 
 /**
@@ -701,7 +786,7 @@ export const removeVale = async (id: string, paymentId: string, userId: string):
 export const recomputePaymentTotals = async (paymentId: string): Promise<void> => {
   const { data, error } = await supabase
     .from('driverpay_payment_computed')
-    .select('calc_packages, calc_discounts, calc_vales, calc_net')
+    .select('calc_packages, calc_discounts, calc_vales, calc_zapex, calc_net')
     .eq('payment_id', paymentId)
     .maybeSingle();
   if (error) throw error;
@@ -712,6 +797,7 @@ export const recomputePaymentTotals = async (paymentId: string): Promise<void> =
       total_packages_amount: num(data.calc_packages),
       total_discounts: num(data.calc_discounts),
       total_vales: num(data.calc_vales),
+      total_zapex: num(data.calc_zapex),
       total_net: num(data.calc_net),
       updated_at: new Date().toISOString(),
     })

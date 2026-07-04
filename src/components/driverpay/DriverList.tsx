@@ -4,6 +4,7 @@ import {
   Settings,
   Minus,
   Wallet,
+  Zap,
   FileText,
   ChevronRight,
   Users,
@@ -42,6 +43,7 @@ const NO_GROUP = 'Sem grupo';
 interface Totals {
   drivers: number;
   packagesAmount: number;
+  zapex: number;
   discounts: number;
   vales: number;
   net: number;
@@ -54,12 +56,13 @@ function sumTotals(rows: DriverRowData[]): Totals {
       return {
         drivers: acc.drivers + 1,
         packagesAmount: acc.packagesAmount + t.packagesAmount,
+        zapex: acc.zapex + t.zapex,
         discounts: acc.discounts + t.discounts,
         vales: acc.vales + t.vales,
         net: acc.net + t.net,
       };
     },
-    { drivers: 0, packagesAmount: 0, discounts: 0, vales: 0, net: 0 },
+    { drivers: 0, packagesAmount: 0, zapex: 0, discounts: 0, vales: 0, net: 0 },
   );
 }
 
@@ -103,6 +106,9 @@ export const DriverList: React.FC<DriverListProps> = ({
                 Total pacotes
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Zapex
+              </th>
+              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Desconto
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -141,6 +147,9 @@ export const DriverList: React.FC<DriverListProps> = ({
               <tr className="border-t-2 border-gray-300">
                 <td colSpan={3 + platforms.length} className="px-4 py-3.5 text-sm font-bold text-gray-900">
                   TOTAL GERAL — {totals.drivers} driver(s)
+                </td>
+                <td className="px-3 py-3.5 text-right text-sm font-bold text-green-600 whitespace-nowrap">
+                  {totals.zapex > 0 ? formatBRL(totals.zapex) : '—'}
                 </td>
                 <td className="px-3 py-3.5 text-right text-sm font-bold text-red-600 whitespace-nowrap">
                   {totals.discounts > 0 ? `− ${formatBRL(totals.discounts)}` : '—'}
@@ -243,11 +252,19 @@ export const DriverList: React.FC<DriverListProps> = ({
           <span className="text-gray-500">
             Desc. {t.discounts > 0 ? <span className="text-red-600">− {formatBRL(t.discounts)}</span> : '—'} · Vale{' '}
             {t.vales > 0 ? <span className="text-amber-600">− {formatBRL(t.vales)}</span> : '—'}
+            {row.zapex.length > 0 && (
+              <>
+                {' '}· Zapex{' '}
+                <span className="text-green-600">
+                  + {formatBRL(t.zapex)} <span className="text-gray-400">({row.zapex.length})</span>
+                </span>
+              </>
+            )}
           </span>
           <span className={`font-bold ${t.net < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatBRL(t.net)}</span>
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           {canConfig && (
             <button
               type="button"
@@ -275,6 +292,16 @@ export const DriverList: React.FC<DriverListProps> = ({
               className="inline-flex items-center justify-center gap-1 px-2 py-2 bg-amber-50 text-amber-700 rounded-md text-xs font-medium min-h-[40px] disabled:opacity-40"
             >
               <Wallet className="w-4 h-4" />
+            </button>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => handlers.onZapex(row)}
+              disabled={readOnly}
+              className="inline-flex items-center justify-center gap-1 px-2 py-2 bg-indigo-50 text-indigo-700 rounded-md text-xs font-medium min-h-[40px] disabled:opacity-40"
+            >
+              <Zap className="w-4 h-4" />
             </button>
           )}
           {canMirror && (
