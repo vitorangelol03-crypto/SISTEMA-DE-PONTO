@@ -566,8 +566,12 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       await exportDriverGeneralReportExcel(reportRows, {
         companyName: `${MIRROR_COMPANY_NAME}${company?.city ? ` — ${company.city}` : ''}`,
         periodLabel: selectedPeriod?.label ?? '',
-        // Zapex sai como coluna do relatório (buildReportRows preenche row.platforms['Zapex']).
-        platforms: [...platforms.map((p) => p.name), 'Zapex'],
+        // Zapex vira coluna do relatório só quando algum driver do filtro tem Zapex
+        // (buildReportRows preenche row.platforms['Zapex']; TOTAL PACOTES a inclui, como as demais).
+        platforms: [
+          ...platforms.map((p) => p.name),
+          ...(filteredRows.some((r) => r.zapex.length > 0) ? ['Zapex'] : []),
+        ],
       });
       toast.success('Relatório gerado');
     } catch (e) {
