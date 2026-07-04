@@ -3,13 +3,23 @@
 > **Arquivo principal de retomada.** Ao abrir o Claude Code, este é o índice mestre.
 > Detalhes técnicos foram divididos em 5 arquivos auxiliares — ver §3.
 
-**Última atualização:** 2026-06-27 (mestre **2626** + edição de ponto exclusiva do 2626 — tela + servidor — deployado e logando em prod ✅). Ver `CHECKPOINT_SESSAO_2026-06-27.md`. Último commit: `5bad73e`.
-**Branch:** `main` (sincronizada com origin)
+**Última atualização:** 2026-07-03/04 (aba **Pagamentos Driver**: nota fiscal, taxa por rota, **Zapex**, **desconto com provas** — na branch `feature/pagamentos-driver`, falta `git push` + deploy). Ver `CHECKPOINT_SESSAO_2026-07-04.md`. Anterior: `CHECKPOINT_SESSAO_2026-06-27.md` (mestre 2626, commit `5bad73e`).
+**Branch:** `main` (produção). Feature em andamento na branch `feature/pagamentos-driver` (último commit `c78674f`).
 **Release publicada:** https://github.com/vitorangelol03-crypto/SISTEMA-DE-PONTO/releases/tag/v2.0.0-multi-tenant.1
 **CI status:** ✅ verde no commit `e3ec3b0` (run 26065259300 — vitest + tsc/eslint + playwright)
 **Plano canônico:** `PLANO_100.md` (roadmap completo até 100%)
 **TECH_DEBT canônico:** `TECH_DEBT.md`
 **Memory:** `/home/victor/.claude/projects/-home-victor-SISTEMA-DE-PONTO/memory/`
+
+## 🆕 Sessão 2026-07-03/04 — Aba Pagamentos Driver (detalhes em `CHECKPOINT_SESSAO_2026-07-04.md`)
+
+Branch **`feature/pagamentos-driver`** (ainda NÃO na main — falta `git push` + deploy Vercel, feitos por você).
+Aba nova **"Pagamentos Driver"** (exclusiva do 2626, iMile CTGA/Caratinga): **nota fiscal**, **taxa por rota**
+(juntar→"Recolher"), valor padrão do último período, plataforma **Zapex** (ganho por item, auto-save, grupo/espelho/relatório),
+botão **"Baixar modelo"** no import, e **desconto com provas** — até 2 fotos (+Ctrl+V) + 1 vídeo, marca **PNR/LOST**,
+**lightbox** (ver/assistir sem baixar) e **busca de pacotes descontados** (status pendente/descontado). Bucket Storage
+`driverpay-discount-proofs`. Manual: `MANUAL_Pagamentos_Driver.pdf` (12 seções, telas reais, setas vermelhas).
+Validado no navegador; prod íntegra (total R$ 27.862,30, SPX 96 e ponto intactos). Último commit `c78674f`.
 
 ## 🆕 Sessão 2026-06-27 — Mestre 2626 + edição de ponto exclusiva (detalhes em `CHECKPOINT_SESSAO_2026-06-27.md`)
 
