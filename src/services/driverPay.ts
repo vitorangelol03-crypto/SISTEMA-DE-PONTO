@@ -95,6 +95,13 @@ export interface DriverDiscount {
   amount: number;
   package_code: string | null;
   observation: string | null;
+  /** Marca do pacote no desconto: 'PNR' | 'LOST' | null (sem marca). */
+  package_status: 'PNR' | 'LOST' | null;
+  /** Caminhos das ate 2 imagens de prova no bucket driverpay-discount-proofs (null = sem foto). */
+  proof1_path: string | null;
+  proof2_path: string | null;
+  /** Caminho do video de prova (filmagem das cameras) no mesmo bucket (null = sem video). */
+  proof_video_path: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -664,27 +671,163 @@ export const setNotaFiscal = async (
 
 // ─── Descontos e Vales ───────────────────────────────────────────────────────
 
+/** Bucket publico das provas de desconto (escrita so 2626/9999 via RLS). */
+const DISCOUNT_PROOF_BUCKET = 'driverpay-discount-proofs';
+
+/** Extensao a partir do MIME da imagem (default jpg). */
+const proofExt = (blob: Blob): string => {
+  const t = (blob.type || '').toLowerCase();
+  if (t === 'image/png') return 'png';
+  if (t === 'image/webp') return 'webp';
+  return 'jpg';
+};
+
+/** Extensao a partir do MIME do video (default mp4). */
+const videoExt = (blob: Blob): string => {
+  const t = (blob.type || '').toLowerCase();
+  if (t === 'video/webm') return 'webm';
+  if (t === 'video/quicktime') return 'mov';
+  return 'mp4';
+};
+
+/** URL publica de uma prova de desconto (path do Storage -> URL exibivel). */
+export const discountProofUrl = (path: string): string =>
+  supabase.storage.from(DISCOUNT_PROOF_BUCKET).getPublicUrl(path).data.publicUrl;
+
+/**
+ * Lanca um desconto e, opcionalmente, sobe ate 2 imagens + 1 video de prova. O
+ * desconto e inserido primeiro (fonte da verdade do valor); as provas (imagens e
+ * video) sao complementares — se o upload falhar, o desconto continua valendo (so
+ * loga o aviso).
+ */
 export const addDiscount = async (
   companyId: string,
   paymentId: string,
   amount: number,
   packageCode: string | null,
   observation: string | null,
-  userId: string
+  userId: string,
+  packageStatus: 'PNR' | 'LOST' | null = null,
+  images?: (Blob | null | undefined)[],
+  video?: Blob | null
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.manageDiscount');
-  const { error } = await supabase
+  const { data: inserted, error } = await supabase
     .from('driverpay_discounts')
-    .insert([{ company_id: companyId, payment_id: paymentId, amount, package_code: packageCode, observation, created_by: userId }]);
+    .insert([{ company_id: companyId, payment_id: paymentId, amount, package_code: packageCode, observation, package_status: packageStatus, created_by: userId }])
+    .select('id')
+    .single();
   if (error) throw error;
+
+  const discountId = (inserted as { id: string }).id;
+  const paths: (string | null)[] = [null, null];
+  const list = (images ?? []).slice(0, 2);
+  for (let i = 0; i < list.length; i++) {
+    const blob = list[i];
+    if (!blob) continue;
+    const path = `${companyId}/${paymentId}/${discountId}-${i + 1}.${proofExt(blob)}`;
+    const { error: upErr } = await supabase.storage
+      .from(DISCOUNT_PROOF_BUCKET)
+      .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: true });
+    if (upErr) console.warn('Upload da prova de desconto falhou:', upErr.message);
+    else paths[i] = path;
+  }
+
+  // Video de prova (complementar): sobe apos as imagens, no mesmo bucket.
+  let videoPath: string | null = null;
+  if (video) {
+    const path = `${companyId}/${paymentId}/${discountId}-video.${videoExt(video)}`;
+    const { error: vidErr } = await supabase.storage
+      .from(DISCOUNT_PROOF_BUCKET)
+      .upload(path, video, { contentType: video.type || 'video/mp4', upsert: true });
+    if (vidErr) console.warn('Upload do video de prova falhou:', vidErr.message);
+    else videoPath = path;
+  }
+
+  if (paths[0] || paths[1] || videoPath) {
+    const { error: updErr } = await supabase
+      .from('driverpay_discounts')
+      .update({ proof1_path: paths[0], proof2_path: paths[1], proof_video_path: videoPath })
+      .eq('id', discountId)
+      .eq('company_id', companyId);
+    if (updErr) console.warn('Nao foi possivel gravar os caminhos das provas:', updErr.message);
+  }
+
   await recomputePaymentTotals(paymentId);
 };
 
 export const removeDiscount = async (id: string, paymentId: string, userId: string): Promise<void> => {
   await ensurePerm(userId, 'driverpay.manageDiscount');
+  // Limpa as provas (imagens + video) do Storage antes de apagar o desconto.
+  const { data: existing } = await supabase
+    .from('driverpay_discounts')
+    .select('proof1_path, proof2_path, proof_video_path')
+    .eq('id', id)
+    .maybeSingle();
+  const proofs = [existing?.proof1_path, existing?.proof2_path, existing?.proof_video_path].filter((p): p is string => !!p);
+  if (proofs.length > 0) {
+    const { error: rmErr } = await supabase.storage.from(DISCOUNT_PROOF_BUCKET).remove(proofs);
+    if (rmErr) console.warn('Nao foi possivel remover as provas do Storage:', rmErr.message);
+  }
   const { error } = await supabase.from('driverpay_discounts').delete().eq('id', id);
   if (error) throw error;
   await recomputePaymentTotals(paymentId);
+};
+
+/** Uma linha da busca de pacotes descontados (desconto + driver + status do periodo). */
+export interface DiscountSearchRow {
+  id: string;
+  amount: number;
+  package_code: string | null;
+  package_status: 'PNR' | 'LOST' | null;
+  observation: string | null;
+  created_at: string;
+  driver_name: string;
+  period_label: string;
+  period_status: DriverPeriodStatus;
+  /** null enquanto o periodo esta aberto; data ISO quando ja foi concluido. */
+  concluded_at: string | null;
+  proof1_path: string | null;
+  proof2_path: string | null;
+  proof_video_path: string | null;
+}
+
+/**
+ * Busca descontos pelo codigo do pacote (ilike). Junta pagamento+periodo para
+ * dizer se o desconto ja foi efetivado (periodo concluido) e quando. Sem codigo,
+ * lista os descontos mais recentes da empresa (limite 200).
+ */
+export const searchDiscounts = async (companyId: string, code: string): Promise<DiscountSearchRow[]> => {
+  const q = code.trim();
+  let query = supabase
+    .from('driverpay_discounts')
+    .select(
+      'id, amount, package_code, package_status, observation, created_at, proof1_path, proof2_path, proof_video_path, payment:driverpay_payments!inner(driver_name_snapshot, period:driverpay_periods!inner(label, status, concluded_at))'
+    )
+    .eq('company_id', companyId);
+  if (q) query = query.ilike('package_code', `%${q}%`);
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(200);
+  if (error) throw error;
+  return (data ?? []).map((r) => {
+    const rec = r as Record<string, unknown>;
+    const payment = rec.payment as Record<string, unknown> | null;
+    const period = (payment?.period as Record<string, unknown> | null) ?? null;
+    return {
+      id: String(rec.id),
+      amount: num(rec.amount),
+      package_code: (rec.package_code as string | null) ?? null,
+      package_status: (rec.package_status as 'PNR' | 'LOST' | null) ?? null,
+      observation: (rec.observation as string | null) ?? null,
+      created_at: String(rec.created_at),
+      driver_name: (payment?.driver_name_snapshot as string) ?? '—',
+      period_label: (period?.label as string) ?? '—',
+      period_status: (period?.status as DriverPeriodStatus) ?? 'aberto',
+      concluded_at: (period?.concluded_at as string | null) ?? null,
+      proof1_path: (rec.proof1_path as string | null) ?? null,
+      proof2_path: (rec.proof2_path as string | null) ?? null,
+      proof_video_path: (rec.proof_video_path as string | null) ?? null,
+    };
+  });
 };
 
 export const addVale = async (

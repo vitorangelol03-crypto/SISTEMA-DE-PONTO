@@ -11,6 +11,7 @@ import {
   Download,
   Upload,
   Loader2,
+  Search,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCompany } from '../../contexts/CompanyContext';
@@ -48,6 +49,7 @@ import { DriverPeriodSelector } from './DriverPeriodSelector';
 import { DriverList } from './DriverList';
 import { DriverFormModal } from './DriverFormModal';
 import { DiscountModal } from './DiscountModal';
+import { DiscountSearchModal } from './DiscountSearchModal';
 import { ValeModal } from './ValeModal';
 import { ZapexModal } from './ZapexModal';
 import { GroupManagerModal } from './GroupManagerModal';
@@ -121,6 +123,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [showConclude, setShowConclude] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showDiscountSearch, setShowDiscountSearch] = useState(false);
   const [mirror, setMirror] = useState<MirrorRequest | null>(null);
 
   // Refs para leitura estavel em callbacks assincronos
@@ -237,6 +240,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     setShowConclude(false);
     setShowHistory(false);
     setShowImport(false);
+    setShowDiscountSearch(false);
     setMirror(null);
     refresh();
   }, [refresh]);
@@ -760,6 +764,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
           <span className="flex-1" />
 
+          <button
+            type="button"
+            onClick={() => setShowDiscountSearch(true)}
+            className="px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 inline-flex items-center gap-1.5 min-h-[40px]"
+          >
+            <Search className="w-4 h-4" /> Pacotes descontados
+          </button>
           {canMirror && (
             <button
               type="button"
@@ -905,6 +916,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           onSelect={changePeriod}
           onClose={() => setShowHistory(false)}
         />
+      )}
+
+      {showDiscountSearch && (
+        <DiscountSearchModal companyId={company.id} onClose={() => setShowDiscountSearch(false)} />
       )}
 
       {showImport && (
