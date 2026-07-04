@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Upload, Download, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   DriverPlatform,
@@ -10,7 +10,7 @@ import {
 // Contrato consumido do agente de Import (../../utils/driverImport):
 //   parseDriverSpreadsheet(file): Promise<DriverImportResult>
 //   DriverImportResult = { drivers: DriverSeed[]; warnings: string[]; errors: string[] }
-import { parseDriverSpreadsheet, type DriverImportResult } from '../../utils/driverImport';
+import { parseDriverSpreadsheet, generateDriverTemplate, type DriverImportResult } from '../../utils/driverImport';
 import { ModalShell } from './ModalShell';
 
 interface DriverImportModalProps {
@@ -82,6 +82,16 @@ export const DriverImportModal: React.FC<DriverImportModalProps> = ({
     }
   };
 
+  const handleTemplate = () => {
+    try {
+      generateDriverTemplate();
+      toast.success('Modelo baixado — preencha 1 linha por driver e importe');
+    } catch (e) {
+      console.error('Erro ao gerar modelo:', e);
+      toast.error('Erro ao gerar o modelo');
+    }
+  };
+
   return (
     <ModalShell
       icon={<FileSpreadsheet className="w-5 h-5" />}
@@ -143,6 +153,20 @@ export const DriverImportModal: React.FC<DriverImportModalProps> = ({
               }}
             />
           </label>
+
+          {/* Modelo pronto: baixa um .xlsx com as colunas certas + aba de instrucoes. */}
+          <div className="flex flex-col items-center gap-1.5 pt-1">
+            <button
+              type="button"
+              onClick={handleTemplate}
+              className="inline-flex items-center gap-2 px-4 py-2 border border-blue-200 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 text-sm font-medium min-h-[40px]"
+            >
+              <Download className="w-4 h-4" /> Baixar modelo (.xlsx)
+            </button>
+            <span className="text-xs text-gray-500 text-center">
+              Não tem a planilha pronta? Baixe o modelo, preencha <b>1 linha por driver</b> e importe.
+            </span>
+          </div>
         </div>
       )}
 
