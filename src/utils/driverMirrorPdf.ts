@@ -501,20 +501,30 @@ function drawGroupSummaryPage(
   y = ensureSpace(doc, y, 90);
   drawSectionTitle(doc, 'RESUMO DO GRUPO · PACOTES POR PLATAFORMA', y);
 
-  const platformNames = collectPlatformNames(drivers);
-  const descIdx = 2 + platformNames.length;
+  // Zapex e modelada como "plataforma", mas no resumo do grupo entra como uma coluna
+  // de VALOR (R$) destacada em verde — nao como quantidade junto dos pacotes. So aparece
+  // quando algum driver do grupo tem Zapex.
+  const platformNames = collectPlatformNames(drivers).filter((n) => n !== 'Zapex');
+  const zapexValueOf = (d: DriverMirrorData): number =>
+    d.platforms.find((p) => p.platform === 'Zapex')?.subtotal ?? 0;
+  const hasZapex = drivers.some((d) => zapexValueOf(d) > 0);
+  const zapexTotal = drivers.reduce((s, d) => s + zapexValueOf(d), 0);
+  const zapexIdx = 2 + platformNames.length; // valido apenas quando hasZapex
+  const descIdx = 2 + platformNames.length + (hasZapex ? 1 : 0);
   const valeIdx = descIdx + 1;
   const netIdx = valeIdx + 1;
 
   const head: RowInput[] = [
-    ['Driver', 'Rota(s)', ...platformNames, 'Desconto', 'Vale', 'A Receber'],
+    ['Driver', 'Rota(s)', ...platformNames, ...(hasZapex ? ['Zapex'] : []), 'Desconto', 'Vale', 'A Receber'],
   ];
   const body: RowInput[] = drivers.map((d) => {
     const platCols = platformNames.map((name) => fmtQty(packagesForPlatform(d, name)));
+    const zapexCol = hasZapex ? [zapexValueOf(d) > 0 ? `+ ${fmtBRL(zapexValueOf(d))}` : '—'] : [];
     return [
       d.driver.name,
       joinRouteCities(d.driver.routes) || '—',
       ...platCols,
+      ...zapexCol,
       d.totals.discountsValue > 0 ? `− ${fmtBRL(d.totals.discountsValue)}` : '—',
       d.totals.valesValue > 0 ? `− ${fmtBRL(d.totals.valesValue)}` : '—',
       fmtBRL(d.totals.toReceive),
@@ -527,6 +537,7 @@ function drawGroupSummaryPage(
     [
       { content: `SUBTOTAL — ${fmtQty(groupTotals.driverCount)} driver(s)`, colSpan: 2 },
       ...footPlatSums.map((v) => ({ content: v })),
+      ...(hasZapex ? [{ content: `+ ${fmtBRL(zapexTotal)}` }] : []),
       { content: `− ${fmtBRL(groupTotals.discountsValue)}` },
       { content: `− ${fmtBRL(groupTotals.valesValue)}` },
       { content: fmtBRL(groupTotals.toReceive) },
@@ -538,6 +549,7 @@ function drawGroupSummaryPage(
     1: { halign: 'left' },
   };
   for (let i = 2; i < 2 + platformNames.length; i++) columnStyles[i] = { halign: 'right' };
+  if (hasZapex) columnStyles[zapexIdx] = { halign: 'right' };
   columnStyles[descIdx] = { halign: 'right' };
   columnStyles[valeIdx] = { halign: 'right' };
   columnStyles[netIdx] = { halign: 'right' };
@@ -559,6 +571,10 @@ function drawGroupSummaryPage(
           cell.cell.text[0] !== '—'
         ) {
           cell.cell.styles.textColor = COLOR_DANGER;
+        }
+        if (hasZapex && cell.column.index === zapexIdx && cell.cell.text[0] !== '—') {
+          cell.cell.styles.textColor = COLOR_SUCCESS;
+          cell.cell.styles.fontStyle = 'bold';
         }
         if (cell.column.index === netIdx) {
           cell.cell.styles.textColor = COLOR_SUCCESS;

@@ -22,6 +22,10 @@ interface DriverMirrorPreviewDialogProps {
   onClose: () => void;
 }
 
+/** Ganho Zapex (R$) de um espelho: a Zapex e modelada como uma "plataforma". */
+const zapexValueOf = (d: DriverMirrorData): number =>
+  d.platforms.find((p) => p.platform === 'Zapex')?.subtotal ?? 0;
+
 const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => (
   <div className="bg-white border border-gray-200 rounded-lg shadow-sm max-w-[720px] mx-auto overflow-hidden">
     <div className="p-6 sm:p-8">
@@ -169,6 +173,8 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
 }) => {
   const [generating, setGenerating] = useState(false);
   const [includeReceipts, setIncludeReceipts] = useState(true);
+  const groupHasZapex =
+    request.mode === 'group' && request.data.drivers.some((d) => zapexValueOf(d) > 0);
 
   const handleGenerate = async () => {
     if (!canGenerate) {
@@ -268,6 +274,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                   <tr className="text-gray-500 text-xs">
                     <th className="text-left py-1.5">Driver</th>
                     <th className="text-right py-1.5">Pacotes</th>
+                    {groupHasZapex && <th className="text-right py-1.5">Zapex</th>}
                     <th className="text-right py-1.5">Desc.</th>
                     <th className="text-right py-1.5">Vale</th>
                     <th className="text-right py-1.5">A receber</th>
@@ -277,7 +284,14 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                   {request.data.drivers.map((d, i) => (
                     <tr key={i} className="border-t border-gray-100">
                       <td className="py-1.5 break-words">{d.driver.name}</td>
-                      <td className="py-1.5 text-right tabular-nums">{formatBRL(d.totals.packagesValue)}</td>
+                      <td className="py-1.5 text-right tabular-nums">
+                        {formatBRL(d.totals.packagesValue - zapexValueOf(d))}
+                      </td>
+                      {groupHasZapex && (
+                        <td className="py-1.5 text-right tabular-nums font-semibold text-green-700">
+                          {zapexValueOf(d) > 0 ? `+ ${formatBRL(zapexValueOf(d))}` : '—'}
+                        </td>
+                      )}
                       <td className="py-1.5 text-right tabular-nums text-red-600">
                         {d.totals.discountsValue > 0 ? `− ${formatBRL(d.totals.discountsValue)}` : '—'}
                       </td>
