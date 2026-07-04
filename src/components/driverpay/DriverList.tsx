@@ -80,7 +80,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   handlers,
   onGroupMirror,
 }) => {
-  const renderTable = (subset: DriverRowData[], withFooter: boolean) => {
+  const renderTable = (subset: DriverRowData[], withFooter: boolean, footerLabel = 'TOTAL GERAL') => {
     const totals = withFooter ? sumTotals(subset) : null;
     const nfCount = subset.filter((r) => r.notaFiscal).length;
     return (
@@ -146,7 +146,7 @@ export const DriverList: React.FC<DriverListProps> = ({
             <tfoot className="bg-gray-50">
               <tr className="border-t-2 border-gray-300">
                 <td colSpan={3 + platforms.length} className="px-4 py-3.5 text-sm font-bold text-gray-900">
-                  TOTAL GERAL — {totals.drivers} driver(s)
+                  {footerLabel} — {totals.drivers} driver(s)
                 </td>
                 <td className="px-3 py-3.5 text-right text-sm font-bold text-green-600 whitespace-nowrap">
                   {totals.zapex > 0 ? formatBRL(totals.zapex) : '—'}
@@ -357,7 +357,12 @@ export const DriverList: React.FC<DriverListProps> = ({
                   {name === NO_GROUP ? <Users className="w-4 h-4 text-gray-400" /> : <Tag className="w-4 h-4 text-blue-600" />}
                   {name}
                 </span>
-                <span className="text-xs text-gray-500">· {t.drivers} drivers · {formatInt(packages)} pacotes</span>
+                <span className="text-xs text-gray-500">
+                  · {t.drivers} drivers · {formatInt(packages)} pacotes
+                  {t.zapex > 0 && (
+                    <> · <span className="font-medium text-green-600">Zapex {formatBRL(t.zapex)}</span></>
+                  )}
+                </span>
                 <span className="ml-auto flex items-center gap-3">
                   {canMirror && (
                     <button
@@ -374,7 +379,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                   <span className={`font-bold ${t.net < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatBRL(t.net)}</span>
                 </span>
               </summary>
-              <div className="hidden md:block">{renderTable(groupRows, false)}</div>
+              <div className="hidden md:block">{renderTable(groupRows, true, 'SUBTOTAL DO GRUPO')}</div>
               <div className="md:hidden divide-y divide-gray-200">{groupRows.map(renderMobileCard)}</div>
             </details>
           );
