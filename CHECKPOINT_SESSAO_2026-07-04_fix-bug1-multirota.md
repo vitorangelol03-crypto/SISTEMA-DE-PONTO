@@ -4,7 +4,8 @@
 > adversarial) e correção dos **Bug #1 (rota-fantasma/duplicata multi-rota)** e
 > **Bug #2 (salvar cadastro do driver apagava a taxa por rota)**. 100% aditivo, sem
 > migration, validado ponta a ponta. Branch `feature/pagamentos-driver`.
-> **Commit ainda NÃO feito** (aguarda ok do Victor); push é manual.
+> **COMMITADO e PUSHADO** pro GitHub (commits `e2d5e0d` fix + `266fd14` checkpoint; remote trocado p/ SSH).
+> Falta só o deploy/merge para produção.
 
 ---
 
@@ -59,9 +60,14 @@ mas os dados de Ponte Nova estão **zerados** (0 drivers/plataformas/períodos/p
 Para usar em Ponte Nova: logar 2626 + Ponte Nova → cadastrar/importar drivers → plataformas → criar período. Sem mudança de código.
 
 ## 5. Estado / próximos passos
-- **Git:** 4 arquivos modificados + 1 teste novo (`driverPayRateReapply.spec.ts`), **sem commit** (aguarda ok). Push é manual.
-- **Pendências da auditoria** (não tocadas): 🟠 Segurança 2626 server-side, 🟡 trava de `driverpay_periods`,
-  bucket público, `driverPayCalc` Zapex, e as 🟢 baixas/UX.
-- Próximo passo sugerido: commitar Fix #1 + Fix #2 e decidir os itens de segurança.
+- **Git:** COMMITADO + PUSHADO na branch `feature/pagamentos-driver` (remoto = local em `84e11af`, verificado por SHA):
+  - `e2d5e0d` — fix(driverpay): Bug #1 + Bug #2 (4 arquivos de código + `tests/unit/driverPayRateReapply.spec.ts`).
+  - `266fd14` — docs(checkpoint).
+  - `84e11af` — "update" (commit do Victor: `MANUAL_*.pdf`, planilha `.xlsx`, `tsconfig.*.tsbuildinfo`).
+  - Remote trocado p/ **SSH** (`git@github.com:vitorangelol03-crypto/SISTEMA-DE-PONTO.git`) porque o HTTPS não tinha credencial (`gh` não autenticado); a chave `id_ed25519` autentica.
+- **Falta p/ produção:** deploy do Vercel (preview a partir da branch) e, quando quiser, **merge para `main`**.
+- **Pendências da auditoria** (não tocadas): 🟠 Segurança 2626 server-side (RLS/RPC), 🟡 trava de `driverpay_periods`,
+  bucket público, `driverPayCalc` Zapex; 🟢 baixas/UX. Higiene: pôr `*.tsbuildinfo` no `.gitignore`.
+- **Ponte Nova:** aba existe mas dados zerados — popular quando o Victor tiver a lista de drivers.
 
 *Sessão 2026-07-04. Bug #1 e Bug #2 corrigidos na raiz, 100% aditivos, validados (tsc+build+unit 481/0+E2E banco real revertido+smoke). Claude Opus 4.8.*
