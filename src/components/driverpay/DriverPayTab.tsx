@@ -26,9 +26,9 @@ import {
   getGroups,
   getDriverGroupMap,
   getPayments,
-  getDriverRates,
   upsertPackage,
-  deletePackage,
+  deletePackagesByRoute,
+  renameRoutePackages,
   setNotaFiscal,
 } from '../../services/driverPay';
 import { exportDriverGeneralReportExcel } from '../../utils/driverReport';
@@ -40,6 +40,7 @@ import {
   buildDriverMirrorData,
   buildGroupMirrorData,
   buildReportRows,
+  planRateReapply,
   formatBRL,
   formatInt,
   MIRROR_COMPANY_NAME,
@@ -47,7 +48,7 @@ import {
 import { DriverFilters, GROUP_NONE } from './DriverFilters';
 import { DriverPeriodSelector } from './DriverPeriodSelector';
 import { DriverList } from './DriverList';
-import { DriverFormModal } from './DriverFormModal';
+import { DriverFormModal, type DriverRateChange } from './DriverFormModal';
 import { DiscountModal } from './DiscountModal';
 import { DiscountSearchModal } from './DiscountSearchModal';
 import { ValeModal } from './ValeModal';
@@ -317,14 +318,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       const rl = row?.routes[routeIndex];
       if (!row || !rl || rl.route === prevRoute) return;
       try {
-        for (const pid of Object.values(rl.packageIds)) await deletePackage(pid, paymentId, userId);
-        for (const [platformName, pkgs] of Object.entries(rl.packages)) {
-          if (pkgs > 0) {
-            // Preserva a taxa POR ROTA ao renomear (fallback no default por plataforma).
-            const rate = rl.rates[platformName] ?? row.ratesByPlatform[platformName] ?? 0;
-            await upsertPackage(company.id, paymentId, platformName, rl.route, pkgs, rate, userId);
-          }
-        }
+        // Renomeia a rota de forma ATOMICA (um UPDATE do campo route), preservando
+        // packages e rate_snapshot. Substitui o delete+reinsert nao-atomico que dependia
+        // de packageIds locais (raiz da rota-fantasma/duplicata numa rota recem-criada).
+        await renameRoutePackages(company.id, paymentId, prevRoute, rl.route, userId);
         await reloadPayments();
       } catch (e) {
         console.error('Erro ao renomear rota:', e);
@@ -362,7 +359,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       const rl = row?.routes[routeIndex];
       if (!row || !rl) return;
       try {
-        for (const pid of Object.values(rl.packageIds)) await deletePackage(pid, paymentId, userId);
+        // Apaga os pacotes da rota por (payment_id, route) — nao depende dos packageIds
+        // locais (vazios numa rota recem-criada), entao a rota removida nao reaparece no
+        // reload com o valor ainda somando no total a receber.
+        await deletePackagesByRoute(company.id, paymentId, rl.route, userId);
         setRows((prev) =>
           prev.map((r) => {
             if (r.paymentId !== paymentId) return r;
@@ -516,28 +516,23 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // ── Acoes de topo ──────────────────────────────────────────────────────────
 
   const handleDriverSaved = useCallback(
-    async (driverId: string) => {
-      // Reflete as novas taxas nos pacotes ja lancados do periodo aberto.
-      if (company?.id && !isReadOnlyRef.current) {
+    async (driverId: string, rateChanges: DriverRateChange[]) => {
+      // Reaplica ao periodo aberto SO as taxas que realmente mudaram no cadastro, e SO
+      // nas rotas que ainda usavam a taxa antiga — preservando os overrides por rota
+      // (taxa por rota). Se nenhuma taxa mudou (ex.: editou so PIX/telefone), nao toca
+      // em nenhum pacote.
+      if (company?.id && !isReadOnlyRef.current && rateChanges.length > 0) {
         const row = rowsRef.current.find((r) => r.driverId === driverId);
         if (row) {
           try {
-            const driverRates = await getDriverRates(driverId);
-            const rateByName: Record<string, number> = {};
-            for (const rr of driverRates) {
-              const pl = platformsRef.current.find((p) => p.id === rr.platform_id);
-              if (pl) rateByName[pl.name] = rr.rate;
-            }
-            for (const rl of row.routes) {
-              for (const [platformName, pkgs] of Object.entries(rl.packages)) {
-                const newRate = rateByName[platformName];
-                if (newRate != null && pkgs > 0 && rl.route) {
-                  await upsertPackage(company.id, row.paymentId, platformName, rl.route, pkgs, newRate, userId);
-                }
-              }
+            // planRateReapply preserva os overrides por rota: so reaplica onde a rota
+            // ainda usava a taxa antiga (ver testes em driverPayRateReapply.spec.ts).
+            const plan = planRateReapply(row.routes, row.ratesByPlatform, rateChanges);
+            for (const it of plan) {
+              await upsertPackage(company.id, row.paymentId, it.platformName, it.route, it.packages, it.newRate, userId);
             }
           } catch (e) {
-            console.error('Erro ao aplicar taxas ao período:', e);
+            console.error('Erro ao aplicar novas taxas ao período:', e);
           }
         }
       }

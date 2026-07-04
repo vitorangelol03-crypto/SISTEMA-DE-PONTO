@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Truck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -11,6 +11,13 @@ import {
 } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
 
+/** Uma taxa (por plataforma) que MUDOU no cadastro do driver: valor antigo -> novo. */
+export interface DriverRateChange {
+  platformName: string;
+  oldRate: number;
+  newRate: number;
+}
+
 interface DriverFormModalProps {
   mode: 'create' | 'edit';
   driver: Driver | null;
@@ -19,8 +26,13 @@ interface DriverFormModalProps {
   userId: string;
   hasPermission: (permission: string) => boolean;
   onClose: () => void;
-  /** Chamado apos persistir. Recebe o id do driver (novo ou editado). */
-  onSaved: (driverId: string) => void | Promise<void>;
+  /**
+   * Chamado apos persistir. Recebe o id do driver e as taxas por plataforma que
+   * REALMENTE mudaram (lista vazia quando nenhuma taxa mudou — ex.: editou so
+   * PIX/telefone). Permite reaplicar a taxa aos pacotes do periodo aberto sem
+   * atropelar os overrides por rota.
+   */
+  onSaved: (driverId: string, rateChanges: DriverRateChange[]) => void | Promise<void>;
 }
 
 const parseRate = (raw: string): number => {
@@ -49,6 +61,11 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
     for (const pl of platforms) initial[pl.id] = String(pl.default_rate);
     return initial;
   });
+  // Taxas por plataforma como estavam AO ABRIR o modal (numero), para detectar no save
+  // exatamente o que mudou. Inicia nos defaults; a edicao carrega as taxas reais do driver.
+  const originalRatesRef = useRef<Record<string, number>>(
+    Object.fromEntries(platforms.map((pl) => [pl.id, pl.default_rate])),
+  );
   const [saving, setSaving] = useState(false);
 
   const canConfigRate = hasPermission('driverpay.configRate');
@@ -65,6 +82,10 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
             for (const r of driverRates) next[r.platform_id] = String(r.rate);
             return next;
           });
+          // Snapshot das taxas originais (numero) para o diff no save.
+          const orig = { ...originalRatesRef.current };
+          for (const r of driverRates) orig[r.platform_id] = Number(r.rate);
+          originalRatesRef.current = orig;
         })
         .catch((e) => {
           console.error('Erro ao carregar taxas do driver:', e);
@@ -102,15 +123,22 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
         return;
       }
 
+      const rateChanges: DriverRateChange[] = [];
       if (canConfigRate) {
         for (const pl of platforms) {
           const rate = parseRate(rates[pl.id] ?? String(pl.default_rate));
           if (rate > 0) await upsertDriverRate(companyId, driverId, pl.id, rate, userId);
+          // So marca como mudanca quando a taxa DE FATO mudou (compara em centavos,
+          // robusto a float). Alimenta a reaplicacao seletiva no periodo aberto.
+          const oldRate = originalRatesRef.current[pl.id] ?? pl.default_rate;
+          if (rate > 0 && Math.round(rate * 100) !== Math.round(Number(oldRate) * 100)) {
+            rateChanges.push({ platformName: pl.name, oldRate: Number(oldRate), newRate: rate });
+          }
         }
       }
 
       toast.success(mode === 'create' ? 'Driver cadastrado' : 'Driver atualizado');
-      await onSaved(driverId);
+      await onSaved(driverId, rateChanges);
       onClose();
     } catch (e) {
       console.error('Erro ao salvar driver:', e);

@@ -643,6 +643,56 @@ export const deletePackage = async (id: string, paymentId: string, userId: strin
 };
 
 /**
+ * Apaga TODOS os pacotes de uma rota por (payment_id, route) — sem depender dos ids
+ * em cache no cliente. Robusto contra o estado local desatualizado de uma rota
+ * recem-criada (cujos pacotes foram gravados via upsert sem refetch): a rota "removida"
+ * some de verdade e nao reaparece no reload com o valor ainda no total. O company_id
+ * reforca o isolamento ja garantido pela RLS.
+ */
+export const deletePackagesByRoute = async (
+  companyId: string,
+  paymentId: string,
+  route: string,
+  userId: string
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase
+    .from('driverpay_payment_packages')
+    .delete()
+    .eq('company_id', companyId)
+    .eq('payment_id', paymentId)
+    .eq('route', route);
+  if (error) throw error;
+  await recomputePaymentTotals(paymentId);
+};
+
+/**
+ * Renomeia uma rota de forma ATOMICA: um unico UPDATE do campo `route` em todos os
+ * pacotes daquela (payment_id, route). Preserva packages e rate_snapshot por rota,
+ * sem janela de perda (nao ha delete+reinsert). Elimina o bug de rota-fantasma/duplicata
+ * (que dependia de packageIds locais). Se o novo nome colidir com uma rota ja existente
+ * do mesmo pagamento, o UNIQUE(payment_id, platform_name, route) barra o UPDATE inteiro
+ * (rollback do statement) e o erro sobe para a UI — sem merge silencioso.
+ */
+export const renameRoutePackages = async (
+  companyId: string,
+  paymentId: string,
+  fromRoute: string,
+  toRoute: string,
+  userId: string
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase
+    .from('driverpay_payment_packages')
+    .update({ route: toRoute })
+    .eq('company_id', companyId)
+    .eq('payment_id', paymentId)
+    .eq('route', fromRoute);
+  if (error) throw error;
+  await recomputePaymentTotals(paymentId);
+};
+
+/**
  * Marca/desmarca o recebimento das notas fiscais do driver naquele pagamento
  * (check do supervisor na grade). Registra quem marcou (nota_fiscal_by) e, quando
  * marcado, o timestamp (nota_fiscal_at); ao desmarcar, limpa o timestamp. Nao mexe

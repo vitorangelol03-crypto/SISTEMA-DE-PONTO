@@ -148,6 +148,46 @@ export function computeRowTotals(row: DriverRowData): RowTotals {
   };
 }
 
+/** Uma reaplicacao de taxa a decidir: (rota, plataforma) -> nova taxa. */
+export interface RateReapplyItem {
+  route: string;
+  platformName: string;
+  packages: number;
+  newRate: number;
+}
+
+/**
+ * Decide QUAIS pacotes do periodo aberto devem receber a nova taxa quando o cadastro
+ * do driver muda a taxa padrao de uma plataforma. Regra (corrige o clobber da taxa por
+ * rota): reaplica SO nas rotas que ainda usavam a taxa ANTIGA (seguiam o padrao) — as
+ * rotas com taxa diferente sao overrides manuais por rota e sao PRESERVADAS. So considera
+ * plataformas cuja taxa realmente mudou; se `rateChanges` vier vazio (ex.: editou so
+ * PIX/telefone), nao reaplica nada. Comparacao em centavos (robusta a float).
+ */
+export function planRateReapply(
+  routes: RouteLine[],
+  ratesByPlatform: Record<string, number>,
+  rateChanges: Array<{ platformName: string; oldRate: number; newRate: number }>,
+): RateReapplyItem[] {
+  if (rateChanges.length === 0) return [];
+  const changeByPlatform = new Map(rateChanges.map((c) => [c.platformName, c]));
+  const sameCents = (a: number, b: number) =>
+    Math.round(Number(a) * 100) === Math.round(Number(b) * 100);
+  const out: RateReapplyItem[] = [];
+  for (const rl of routes) {
+    if (!rl.route) continue;
+    for (const [platformName, pkgs] of Object.entries(rl.packages)) {
+      const change = changeByPlatform.get(platformName);
+      if (!change || pkgs <= 0) continue;
+      const currentRate = rl.rates[platformName] ?? ratesByPlatform[platformName] ?? 0;
+      if (sameCents(currentRate, change.oldRate)) {
+        out.push({ route: rl.route, platformName, packages: pkgs, newRate: change.newRate });
+      }
+    }
+  }
+  return out;
+}
+
 /** True quando o driver tem mais de uma rota (grade mostra soma + expansao por rota). */
 export function isMultiRoute(row: DriverRowData): boolean {
   return row.routes.length > 1;
