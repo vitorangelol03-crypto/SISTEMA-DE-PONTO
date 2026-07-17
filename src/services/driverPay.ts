@@ -629,6 +629,47 @@ export const concludePeriod = async (
   return data as string;
 };
 
+/** Reabre uma quinzena concluida (volta para 'aberto' e libera a edicao). So 2626. */
+export const reopenPeriod = async (periodId: string, companyId: string, userId: string): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.managePeriods');
+  const { error } = await supabase
+    .from('driverpay_periods')
+    .update({ status: 'aberto', concluded_at: null, concluded_by: null })
+    .eq('id', periodId)
+    .eq('company_id', companyId);
+  if (error) throw error;
+};
+
+/** Edita rotulo e datas de uma quinzena (aberta ou concluida). So 2626. */
+export const updatePeriod = async (
+  periodId: string,
+  companyId: string,
+  userId: string,
+  data: { label?: string; start?: string | null; end?: string | null },
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.managePeriods');
+  const upd: Record<string, unknown> = {};
+  if (data.label != null) upd.label = data.label;
+  if (data.start !== undefined) upd.start_date = data.start;
+  if (data.end !== undefined) upd.end_date = data.end;
+  if (Object.keys(upd).length === 0) return;
+  const { error } = await supabase.from('driverpay_periods').update(upd).eq('id', periodId).eq('company_id', companyId);
+  if (error) throw error;
+};
+
+/** Exclui uma quinzena inteira (pagamentos + pacotes/descontos/vales via cascade + o periodo). So 2626. */
+export const deletePeriod = async (periodId: string, companyId: string, userId: string): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.managePeriods');
+  const { error: e1 } = await supabase
+    .from('driverpay_payments')
+    .delete()
+    .eq('period_id', periodId)
+    .eq('company_id', companyId);
+  if (e1) throw e1;
+  const { error: e2 } = await supabase.from('driverpay_periods').delete().eq('id', periodId).eq('company_id', companyId);
+  if (e2) throw e2;
+};
+
 // ─── Pagamentos do periodo (grade) ───────────────────────────────────────────
 
 export const getPayments = async (

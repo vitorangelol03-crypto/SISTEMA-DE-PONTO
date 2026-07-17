@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Lock, History, Plus, ChevronDown } from 'lucide-react';
+import { Check, Lock, History, Plus, ChevronDown, RotateCcw, Pencil, Trash2 } from 'lucide-react';
 import type { DriverPaymentPeriod } from '../../services/driverPay';
 
 interface DriverPeriodSelectorProps {
@@ -9,6 +9,9 @@ interface DriverPeriodSelectorProps {
   onNewPeriod: () => void;
   onConclude: () => void;
   onHistory: () => void;
+  onReopen: () => void;
+  onEditPeriod: () => void;
+  onDeletePeriod: () => void;
   canManagePeriods: boolean;
   canComplete: boolean;
   canViewHistory: boolean;
@@ -21,6 +24,9 @@ export const DriverPeriodSelector: React.FC<DriverPeriodSelectorProps> = ({
   onNewPeriod,
   onConclude,
   onHistory,
+  onReopen,
+  onEditPeriod,
+  onDeletePeriod,
   canManagePeriods,
   canComplete,
   canViewHistory,
@@ -89,6 +95,34 @@ export const DriverPeriodSelector: React.FC<DriverPeriodSelectorProps> = ({
           >
             <Check className="w-4 h-4" /> Concluir
           </button>
+        )}
+        {canManagePeriods && isConcluded && selected && (
+          <>
+            <button
+              type="button"
+              onClick={onReopen}
+              title="Reabrir a quinzena para editar"
+              className="px-3 py-2 text-sm font-medium bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 inline-flex items-center gap-2 min-h-[40px]"
+            >
+              <RotateCcw className="w-4 h-4" /> Reabrir
+            </button>
+            <button
+              type="button"
+              onClick={onEditPeriod}
+              title="Editar rótulo / datas da quinzena"
+              className="px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 inline-flex items-center gap-2 min-h-[40px]"
+            >
+              <Pencil className="w-4 h-4" /> Editar
+            </button>
+            <button
+              type="button"
+              onClick={onDeletePeriod}
+              title="Excluir esta quinzena e seus lançamentos"
+              className="px-3 py-2 text-sm font-medium bg-red-50 text-red-700 rounded-md hover:bg-red-100 inline-flex items-center gap-2 min-h-[40px]"
+            >
+              <Trash2 className="w-4 h-4" /> Excluir
+            </button>
+          </>
         )}
       </div>
     </div>

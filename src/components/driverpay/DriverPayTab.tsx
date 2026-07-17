@@ -23,6 +23,7 @@ import {
   getPeriods,
   getDrivers,
   getAllDriverRates,
+  reopenPeriod,
   getPlatforms,
   getGroups,
   getDriverGroupMap,
@@ -58,6 +59,7 @@ import { GroupManagerModal } from './GroupManagerModal';
 import { PlatformModal } from './PlatformModal';
 import { PeriodCreateModal } from './PeriodCreateModal';
 import { PeriodConcludeModal } from './PeriodConcludeModal';
+import { PeriodEditModal } from './PeriodEditModal';
 import { DriverPaymentHistory } from './DriverPaymentHistory';
 import { DriverImportModal } from './DriverImportModal';
 import { PlatformImportModal } from './PlatformImportModal';
@@ -124,6 +126,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [showPlatform, setShowPlatform] = useState(false);
   const [showCreatePeriod, setShowCreatePeriod] = useState(false);
   const [showConclude, setShowConclude] = useState(false);
+  const [editPeriodModal, setEditPeriodModal] = useState<{ period: DriverPaymentPeriod; confirmDelete: boolean } | null>(
+    null,
+  );
   const [showHistory, setShowHistory] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showPlatformImport, setShowPlatformImport] = useState(false);
@@ -706,6 +711,18 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           onNewPeriod={() => setShowCreatePeriod(true)}
           onConclude={() => setShowConclude(true)}
           onHistory={() => setShowHistory(true)}
+          onReopen={async () => {
+            if (!company?.id || !selectedPeriod) return;
+            try {
+              await reopenPeriod(selectedPeriod.id, company.id, userId);
+              toast.success('Quinzena reaberta — já pode editar');
+              await refresh();
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : 'Erro ao reabrir quinzena');
+            }
+          }}
+          onEditPeriod={() => selectedPeriod && setEditPeriodModal({ period: selectedPeriod, confirmDelete: false })}
+          onDeletePeriod={() => selectedPeriod && setEditPeriodModal({ period: selectedPeriod, confirmDelete: true })}
           canManagePeriods={hasPermission('driverpay.managePeriods')}
           canComplete={hasPermission('driverpay.complete')}
           canViewHistory={hasPermission('driverpay.viewHistory')}
@@ -930,6 +947,18 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           driverCount={allTotals.count}
           onClose={() => setShowConclude(false)}
           onConcluded={handleConcluded}
+        />
+      )}
+
+      {editPeriodModal && (
+        <PeriodEditModal
+          period={editPeriodModal.period}
+          companyId={company.id}
+          userId={userId}
+          initialConfirmDelete={editPeriodModal.confirmDelete}
+          onClose={() => setEditPeriodModal(null)}
+          onSaved={refresh}
+          onDeleted={refresh}
         />
       )}
 
