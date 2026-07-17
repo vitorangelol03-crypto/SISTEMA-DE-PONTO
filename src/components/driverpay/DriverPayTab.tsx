@@ -59,6 +59,7 @@ import { PeriodCreateModal } from './PeriodCreateModal';
 import { PeriodConcludeModal } from './PeriodConcludeModal';
 import { DriverPaymentHistory } from './DriverPaymentHistory';
 import { DriverImportModal } from './DriverImportModal';
+import { PlatformImportModal } from './PlatformImportModal';
 import { DriverMirrorPreviewDialog, type MirrorRequest } from './DriverMirrorPreviewDialog';
 
 interface DriverPayTabProps {
@@ -124,6 +125,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [showConclude, setShowConclude] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showPlatformImport, setShowPlatformImport] = useState(false);
   const [showDiscountSearch, setShowDiscountSearch] = useState(false);
   const [mirror, setMirror] = useState<MirrorRequest | null>(null);
 
@@ -754,6 +756,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               >
                 <Upload className="w-4 h-4" /> Importar Excel
               </button>
+              <button
+                type="button"
+                onClick={() => setShowPlatformImport(true)}
+                className="px-3 py-2 text-sm font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700 inline-flex items-center gap-1.5 min-h-[40px]"
+              >
+                <Upload className="w-4 h-4" /> Importar planilha
+              </button>
             </>
           )}
 
@@ -923,6 +932,15 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           userId={userId}
           platforms={platforms}
           onClose={() => setShowImport(false)}
+          onImported={refresh}
+        />
+      )}
+
+      {showPlatformImport && (
+        <PlatformImportModal
+          companyId={company.id}
+          userId={userId}
+          onClose={() => setShowPlatformImport(false)}
           onImported={refresh}
         />
       )}
