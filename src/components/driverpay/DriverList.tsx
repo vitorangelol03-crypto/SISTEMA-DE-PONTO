@@ -88,7 +88,7 @@ export const DriverList: React.FC<DriverListProps> = ({
         <table className="min-w-full border-collapse">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="sticky left-0 z-20 bg-gray-50 border-r border-gray-200 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Driver / Rota
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -126,10 +126,11 @@ export const DriverList: React.FC<DriverListProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {subset.map((row) => (
+            {subset.map((row, index) => (
               <DriverRow
                 key={row.paymentId}
                 row={row}
+                index={index}
                 platforms={platforms}
                 expanded={expanded.has(row.paymentId)}
                 readOnly={readOnly}

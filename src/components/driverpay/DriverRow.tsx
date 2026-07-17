@@ -26,6 +26,8 @@ import {
 
 interface DriverRowProps {
   row: DriverRowData;
+  /** Posição do driver na lista (0-based) — base do zebra striping (linhas alternadas). */
+  index: number;
   platforms: DriverPlatform[];
   expanded: boolean;
   readOnly: boolean;
@@ -54,6 +56,7 @@ const formatRateInput = (n: number): string => n.toFixed(2).replace('.', ',');
 
 export const DriverRow: React.FC<DriverRowProps> = ({
   row,
+  index,
   platforms,
   expanded,
   readOnly,
@@ -77,11 +80,19 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   // para permitir digitar decimais com virgula sem o valor "colapsar" a cada tecla.
   const [rateDrafts, setRateDrafts] = useState<Record<string, string>>({});
 
+  // Zebra striping: linhas alternadas (branca / cinza bem claro) para não perder a
+  // linha ao ler a tabela larga. Cores OPACAS porque a 1ª coluna é sticky (precisa
+  // cobrir as demais ao rolar na horizontal). Hover realça a linha; foco em qualquer
+  // input dela (editando) destaca mais forte via focus-within.
+  const zebra = index % 2 === 1 ? 'bg-gray-50' : 'bg-white';
+
   return (
     <>
-      <tr className="hover:bg-gray-50">
-        {/* Driver / Rota */}
-        <td className="px-4 py-3 align-middle">
+      <tr className={`group ${zebra} transition-colors hover:bg-blue-50 focus-within:bg-blue-100`}>
+        {/* Driver / Rota — coluna "grudada" (sticky) ao rolar na horizontal */}
+        <td
+          className={`sticky left-0 z-10 border-r border-gray-200 px-4 py-3 align-middle ${zebra} group-hover:bg-blue-50 group-focus-within:bg-blue-100`}
+        >
           <div className="flex flex-col gap-1">
             <span className="font-semibold text-gray-900 flex items-center gap-2">
               {multi && (
