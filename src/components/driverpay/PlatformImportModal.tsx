@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ModalShell } from './ModalShell';
-import { parseDriverSheetFile, type DriverSheetResult } from '../../utils/driverSheetImport';
+import { parseDriverSheetFileInWorker, type DriverSheetResult } from '../../utils/driverSheetImport';
 import {
   matchDriver,
   normalizeDriverName,
@@ -72,7 +72,7 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
       setResult(null);
       try {
         const [parsed, ctx, pers] = await Promise.all([
-          parseDriverSheetFile(file),
+          parseDriverSheetFileInWorker(file),
           getDriverMatchContext(companyId),
           getPeriods(companyId),
         ]);
@@ -213,7 +213,10 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
             {parsing ? (
               <>
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                <span className="text-sm text-gray-600">Lendo a planilha…</span>
+                <span className="text-sm text-gray-600">Processando a planilha…</span>
+                <span className="text-xs text-gray-400 text-center max-w-xs">
+                  Arquivos grandes (Shopee, ~130 mil linhas) podem levar até 1 minuto. A tela continua respondendo.
+                </span>
               </>
             ) : (
               <>

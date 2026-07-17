@@ -214,3 +214,29 @@ export function parseDriverSheetFile(file: File): Promise<DriverSheetResult> {
     reader.readAsBinaryString(file);
   });
 }
+
+/**
+ * Igual a `parseDriverSheetFile`, mas roda o processamento pesado num Web Worker —
+ * a tela NAO congela durante o parse (essencial para a Shopee, ~132 mil linhas).
+ */
+export function parseDriverSheetFileInWorker(file: File): Promise<DriverSheetResult> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./driverSheetImport.worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e: MessageEvent<{ ok: true; result: DriverSheetResult } | { ok: false; error: string }>) => {
+      worker.terminate();
+      if (e.data.ok) resolve(e.data.result);
+      else reject(new Error(e.data.error));
+    };
+    worker.onerror = (err) => {
+      worker.terminate();
+      reject(new Error(err.message || 'Erro no processamento da planilha.'));
+    };
+    file
+      .arrayBuffer()
+      .then((buf) => worker.postMessage({ buffer: buf }, [buf]))
+      .catch((err) => {
+        worker.terminate();
+        reject(err instanceof Error ? err : new Error('Erro ao ler o arquivo.'));
+      });
+  });
+}
