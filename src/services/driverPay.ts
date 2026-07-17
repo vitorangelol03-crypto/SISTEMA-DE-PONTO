@@ -544,11 +544,15 @@ export const getPeriods = async (companyId: string): Promise<DriverPaymentPeriod
 };
 
 export const getOpenPeriod = async (companyId: string): Promise<DriverPaymentPeriod | null> => {
+  // Pode haver mais de um periodo aberto por empresa (a trava uq_driverpay_one_open_period
+  // foi removida em 20260717 para permitir varios abertos). Retorna o mais recente aberto.
   const { data, error } = await supabase
     .from('driverpay_periods')
     .select('*')
     .eq('company_id', companyId)
     .eq('status', 'aberto')
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error) throw error;
   return (data as DriverPaymentPeriod) ?? null;
