@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Wallet, Trash2, Plus } from 'lucide-react';
+import { Wallet, Trash2, Plus, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { addVale, removeVale } from '../../services/driverPay';
+import { addVale, updateVale, removeVale } from '../../services/driverPay';
 import { getBrazilDate, formatDateBR } from '../../utils/dateUtils';
 import { ModalShell } from './ModalShell';
 import { DriverRowData, formatBRL } from './driverPayShared';
@@ -26,8 +26,23 @@ export const ValeModal: React.FC<ValeModalProps> = ({ row, companyId, userId, re
   const [valeDate, setValeDate] = useState(getBrazilDate());
   const [observation, setObservation] = useState('');
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const total = row.vales.reduce((s, v) => s + v.amount, 0);
+
+  const resetForm = () => {
+    setAmount('');
+    setValeDate(getBrazilDate());
+    setObservation('');
+    setEditingId(null);
+  };
+
+  const startEdit = (v: (typeof row.vales)[number]) => {
+    setEditingId(v.id);
+    setAmount(String(v.amount).replace('.', ','));
+    setValeDate(v.vale_date ?? getBrazilDate());
+    setObservation(v.observation ?? '');
+  };
 
   const handleAdd = async () => {
     const value = parseAmount(amount);
@@ -37,14 +52,22 @@ export const ValeModal: React.FC<ValeModalProps> = ({ row, companyId, userId, re
     }
     setBusy(true);
     try {
-      await addVale(companyId, row.paymentId, value, valeDate || null, observation.trim() || null, userId);
-      setAmount('');
-      setObservation('');
-      toast.success('Vale lançado');
+      if (editingId) {
+        await updateVale(editingId, companyId, row.paymentId, userId, {
+          amount: value,
+          valeDate: valeDate || null,
+          observation: observation.trim() || null,
+        });
+        toast.success('Vale atualizado');
+      } else {
+        await addVale(companyId, row.paymentId, value, valeDate || null, observation.trim() || null, userId);
+        toast.success('Vale lançado');
+      }
+      resetForm();
       await onChanged();
     } catch (e) {
-      console.error('Erro ao lançar vale:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao lançar vale');
+      console.error('Erro ao salvar vale:', e);
+      toast.error(e instanceof Error ? e.message : 'Erro ao salvar vale');
     } finally {
       setBusy(false);
     }
@@ -93,15 +116,26 @@ export const ValeModal: React.FC<ValeModalProps> = ({ row, companyId, userId, re
                   </div>
                 </div>
                 {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(v.id)}
-                    disabled={busy}
-                    className="text-red-600 hover:text-red-800 disabled:opacity-40"
-                    title="Remover vale"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(v)}
+                      disabled={busy}
+                      className="text-blue-600 hover:text-blue-800 disabled:opacity-40"
+                      title="Editar vale"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(v.id)}
+                      disabled={busy}
+                      className="text-red-600 hover:text-red-800 disabled:opacity-40"
+                      title="Remover vale"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -148,14 +182,26 @@ export const ValeModal: React.FC<ValeModalProps> = ({ row, companyId, userId, re
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
               />
             </div>
-            <button
-              type="button"
-              onClick={handleAdd}
-              disabled={busy}
-              className="w-full sm:w-auto px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 text-sm font-medium inline-flex items-center justify-center gap-2 min-h-[40px] disabled:opacity-50"
-            >
-              <Plus className="w-4 h-4" /> Lançar vale
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleAdd}
+                disabled={busy}
+                className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 text-sm font-medium inline-flex items-center justify-center gap-2 min-h-[40px] disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" /> {editingId ? 'Salvar edição' : 'Lançar vale'}
+              </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={busy}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium min-h-[40px]"
+                >
+                  Cancelar edição
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

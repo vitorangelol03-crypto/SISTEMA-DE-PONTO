@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Minus, Trash2, Plus, ImagePlus, X, AlertTriangle, Play, Video } from 'lucide-react';
+import { Minus, Trash2, Plus, ImagePlus, X, AlertTriangle, Play, Video, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { addDiscount, removeDiscount, discountProofUrl } from '../../services/driverPay';
+import { addDiscount, updateDiscount, removeDiscount, discountProofUrl } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
 import { ImageLightbox } from './ImageLightbox';
 import { DriverRowData, formatBRL } from './driverPayShared';
@@ -51,6 +51,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
   const [busy, setBusy] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [packageStatus, setPackageStatus] = useState<'PNR' | 'LOST' | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
 
@@ -127,6 +128,26 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
 
   const removeVideo = () => setVideo(null);
 
+  const resetForm = () => {
+    setAmount('');
+    setPackageCode('');
+    setObservation('');
+    setPackageStatus(null);
+    setImages([]);
+    setVideo(null);
+    setEditingId(null);
+  };
+
+  const startEdit = (d: (typeof row.discounts)[number]) => {
+    setEditingId(d.id);
+    setAmount(String(d.amount).replace('.', ','));
+    setPackageCode(d.package_code ?? '');
+    setObservation(d.observation ?? '');
+    setPackageStatus(d.package_status ?? null);
+    setImages([]);
+    setVideo(null);
+  };
+
   const handleAdd = async () => {
     const value = parseAmount(amount);
     if (value <= 0) {
@@ -135,28 +156,33 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
     }
     setBusy(true);
     try {
-      await addDiscount(
-        companyId,
-        row.paymentId,
-        value,
-        packageCode.trim() || null,
-        observation.trim() || null,
-        userId,
-        packageStatus,
-        images,
-        video,
-      );
-      setAmount('');
-      setPackageCode('');
-      setObservation('');
-      setPackageStatus(null);
-      setImages([]);
-      setVideo(null);
-      toast.success('Desconto lançado');
+      if (editingId) {
+        await updateDiscount(editingId, companyId, row.paymentId, userId, {
+          amount: value,
+          packageCode: packageCode.trim() || null,
+          observation: observation.trim() || null,
+          packageStatus,
+        });
+        toast.success('Desconto atualizado');
+      } else {
+        await addDiscount(
+          companyId,
+          row.paymentId,
+          value,
+          packageCode.trim() || null,
+          observation.trim() || null,
+          userId,
+          packageStatus,
+          images,
+          video,
+        );
+        toast.success('Desconto lançado');
+      }
+      resetForm();
       await onChanged();
     } catch (e) {
-      console.error('Erro ao lançar desconto:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao lançar desconto');
+      console.error('Erro ao salvar desconto:', e);
+      toast.error(e instanceof Error ? e.message : 'Erro ao salvar desconto');
     } finally {
       setBusy(false);
     }
@@ -212,15 +238,26 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
                       </div>
                     </div>
                     {!readOnly && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemove(d.id)}
-                        disabled={busy}
-                        className="text-red-600 hover:text-red-800 disabled:opacity-40 flex-shrink-0"
-                        title="Remover desconto"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(d)}
+                          disabled={busy}
+                          className="text-blue-600 hover:text-blue-800 disabled:opacity-40"
+                          title="Editar desconto"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemove(d.id)}
+                          disabled={busy}
+                          className="text-red-600 hover:text-red-800 disabled:opacity-40"
+                          title="Remover desconto"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </div>
                   {(proofs.length > 0 || videoPath) && (
@@ -417,14 +454,31 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleAdd}
-              disabled={busy}
-              className="w-full sm:w-auto px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium inline-flex items-center justify-center gap-2 min-h-[40px] disabled:opacity-50"
-            >
-              <Plus className="w-4 h-4" /> Lançar desconto
-            </button>
+            {editingId && (
+              <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-md px-3 py-2">
+                Editando um desconto lançado — as fotos/vídeo não mudam aqui (remova e lance de novo se precisar trocar as provas).
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleAdd}
+                disabled={busy}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium inline-flex items-center justify-center gap-2 min-h-[40px] disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" /> {editingId ? 'Salvar edição' : 'Lançar desconto'}
+              </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={busy}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium min-h-[40px]"
+                >
+                  Cancelar edição
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -919,6 +919,26 @@ export interface DiscountSearchRow {
  * dizer se o desconto ja foi efetivado (periodo concluido) e quando. Sem codigo,
  * lista os descontos mais recentes da empresa (limite 200).
  */
+/** Edita um desconto ja lancado (valor, codigo, observacao, marca PNR/LOST). */
+export const updateDiscount = async (
+  id: string,
+  companyId: string,
+  paymentId: string,
+  userId: string,
+  data: { amount?: number; packageCode?: string | null; observation?: string | null; packageStatus?: 'PNR' | 'LOST' | null },
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.manageDiscount');
+  const upd: Record<string, unknown> = {};
+  if (data.amount !== undefined) upd.amount = data.amount;
+  if (data.packageCode !== undefined) upd.package_code = data.packageCode;
+  if (data.observation !== undefined) upd.observation = data.observation;
+  if (data.packageStatus !== undefined) upd.package_status = data.packageStatus;
+  if (Object.keys(upd).length === 0) return;
+  const { error } = await supabase.from('driverpay_discounts').update(upd).eq('id', id).eq('company_id', companyId);
+  if (error) throw error;
+  await recomputePaymentTotals(paymentId);
+};
+
 export const searchDiscounts = async (companyId: string, code: string): Promise<DiscountSearchRow[]> => {
   const q = code.trim();
   let query = supabase
@@ -971,6 +991,25 @@ export const addVale = async (
 export const removeVale = async (id: string, paymentId: string, userId: string): Promise<void> => {
   await ensurePerm(userId, 'driverpay.manageVale');
   const { error } = await supabase.from('driverpay_vales').delete().eq('id', id);
+  if (error) throw error;
+  await recomputePaymentTotals(paymentId);
+};
+
+/** Edita um vale ja lancado (valor, data, observacao). */
+export const updateVale = async (
+  id: string,
+  companyId: string,
+  paymentId: string,
+  userId: string,
+  data: { amount?: number; valeDate?: string | null; observation?: string | null },
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.manageVale');
+  const upd: Record<string, unknown> = {};
+  if (data.amount !== undefined) upd.amount = data.amount;
+  if (data.valeDate !== undefined) upd.vale_date = data.valeDate;
+  if (data.observation !== undefined) upd.observation = data.observation;
+  if (Object.keys(upd).length === 0) return;
+  const { error } = await supabase.from('driverpay_vales').update(upd).eq('id', id).eq('company_id', companyId);
   if (error) throw error;
   await recomputePaymentTotals(paymentId);
 };
