@@ -363,6 +363,32 @@ export const getDriverRates = async (driverId: string): Promise<DriverPlatformRa
   return (data || []).map((r) => ({ ...(r as unknown as DriverPlatformRate), rate: num((r as Record<string, unknown>).rate) }));
 };
 
+/**
+ * Config de valor/pacote de TODOS os drivers (driverpay_platform_rates), como mapa
+ * driverId -> { plataforma: taxa }. A grade usa isto para, em periodo ABERTO, a taxa
+ * padrao de cada driver seguir a config do perfil dele (nao o default da plataforma).
+ */
+export const getAllDriverRates = async (
+  companyId: string,
+): Promise<Record<string, Record<string, number>>> => {
+  const { data, error } = await supabase
+    .from('driverpay_platform_rates')
+    .select('driver_id, rate, platform:driverpay_platforms(name)')
+    .eq('company_id', companyId);
+  if (error) throw error;
+  const map: Record<string, Record<string, number>> = {};
+  (data ?? []).forEach((r) => {
+    const row = r as Record<string, unknown>;
+    const driverId = row.driver_id as string;
+    const plat = row.platform as { name?: string } | null;
+    const rate = num(row.rate);
+    if (driverId && plat?.name) {
+      (map[driverId] ??= {})[plat.name] = rate;
+    }
+  });
+  return map;
+};
+
 export const upsertDriverRate = async (
   companyId: string,
   driverId: string,

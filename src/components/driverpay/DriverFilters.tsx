@@ -31,14 +31,14 @@ export const DriverFilters: React.FC<DriverFiltersProps> = ({
   return (
     <div className="p-3 sm:p-4 border-b border-gray-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
       <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">Pesquisar por nome</label>
+        <label className="text-sm font-medium text-gray-700">Pesquisar (nome, rota ou grupo)</label>
         <div className="relative">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={search}
             onChange={(e) => onSearch(e.target.value)}
-            placeholder="Digite o nome do driver…"
+            placeholder="Nome do driver, rota ou grupo…"
             className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
           />
         </div>

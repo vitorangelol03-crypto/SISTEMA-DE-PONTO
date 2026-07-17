@@ -203,6 +203,10 @@ export function buildRows(
   drivers: Driver[],
   platforms: DriverPlatform[],
   groupMap: Record<string, string>,
+  /** Config de valor/pacote por driver (driverId -> plataforma -> taxa). */
+  driverRates: Record<string, Record<string, number>> = {},
+  /** Periodo concluido: taxa congelada (rate_snapshot). Aberto: segue a config. */
+  frozen = false,
 ): DriverRowData[] {
   const driverById = new Map(drivers.map((d) => [d.id, d]));
 
@@ -233,12 +237,19 @@ export function buildRows(
       ids[pk.platform_name] = pk.id;
       // Taxa POR ROTA: cada rota guarda o proprio rate_snapshot por plataforma.
       rt[pk.platform_name] = pk.rate_snapshot;
-      // Default por plataforma do driver (fallback p/ rota nova): ultimo rate visto.
-      rateByPlatform[pk.platform_name] = pk.rate_snapshot;
+      // Congelado (periodo concluido): a taxa padrao do driver e o rate_snapshot.
+      if (frozen) rateByPlatform[pk.platform_name] = pk.rate_snapshot;
     }
 
+    const cfg = driverRates[p.driver_id] ?? {};
     for (const pl of platforms) {
-      if (rateByPlatform[pl.name] == null) rateByPlatform[pl.name] = pl.default_rate;
+      if (frozen) {
+        // Periodo concluido: mantem o rate_snapshot congelado; fallback default.
+        if (rateByPlatform[pl.name] == null) rateByPlatform[pl.name] = pl.default_rate;
+      } else {
+        // Periodo ABERTO: a taxa padrao do driver SEGUE a config do perfil dele.
+        rateByPlatform[pl.name] = cfg[pl.name] ?? pl.default_rate;
+      }
     }
 
     const routes: RouteLine[] =

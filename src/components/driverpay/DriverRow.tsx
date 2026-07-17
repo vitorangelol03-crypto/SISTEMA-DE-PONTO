@@ -80,18 +80,18 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   // para permitir digitar decimais com virgula sem o valor "colapsar" a cada tecla.
   const [rateDrafts, setRateDrafts] = useState<Record<string, string>>({});
 
-  // Zebra striping: linhas alternadas (branca / cinza bem claro) para não perder a
-  // linha ao ler a tabela larga. Cores OPACAS porque a 1ª coluna é sticky (precisa
-  // cobrir as demais ao rolar na horizontal). Hover realça a linha; foco em qualquer
-  // input dela (editando) destaca mais forte via focus-within.
-  const zebra = index % 2 === 1 ? 'bg-gray-50' : 'bg-white';
+  // Zebra striping: linhas alternadas (branca / cinza) para não perder a linha ao ler
+  // a tabela larga. Cores OPACAS porque a 1ª coluna é sticky (precisa cobrir as demais
+  // ao rolar na horizontal). Hover acende a linha inteira; foco em qualquer input dela
+  // (editando) destaca mais forte via focus-within.
+  const zebra = index % 2 === 1 ? 'bg-slate-200' : 'bg-white';
 
   return (
     <>
-      <tr className={`group ${zebra} transition-colors hover:bg-blue-50 focus-within:bg-blue-100`}>
+      <tr className={`group ${zebra} transition-colors hover:bg-sky-100 focus-within:bg-sky-200`}>
         {/* Driver / Rota — coluna "grudada" (sticky) ao rolar na horizontal */}
         <td
-          className={`sticky left-0 z-10 border-r border-gray-200 px-4 py-3 align-middle ${zebra} group-hover:bg-blue-50 group-focus-within:bg-blue-100`}
+          className={`sticky left-0 z-10 border-r border-gray-200 px-4 py-3 align-middle ${zebra} group-hover:bg-sky-100 group-focus-within:bg-sky-200`}
         >
           <div className="flex flex-col gap-1">
             <span className="font-semibold text-gray-900 flex items-center gap-2">

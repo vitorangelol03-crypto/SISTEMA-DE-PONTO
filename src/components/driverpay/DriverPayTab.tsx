@@ -22,6 +22,7 @@ import {
   DriverPaymentPeriod,
   getPeriods,
   getDrivers,
+  getAllDriverRates,
   getPlatforms,
   getGroups,
   getDriverGroupMap,
@@ -132,6 +133,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // Refs para leitura estavel em callbacks assincronos
   const driversRef = useRef<Driver[]>([]);
   const platformsRef = useRef<DriverPlatform[]>([]);
+  const driverRatesRef = useRef<Record<string, Record<string, number>>>({});
+  const periodsRef = useRef<DriverPaymentPeriod[]>([]);
   const rowsRef = useRef<DriverRowData[]>([]);
   const selectedPeriodIdRef = useRef<string | null>(null);
   const isReadOnlyRef = useRef(false);
@@ -158,6 +161,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     isReadOnlyRef.current = isReadOnly;
   }, [isReadOnly]);
 
+  useEffect(() => {
+    periodsRef.current = periods;
+  }, [periods]);
+
   // ── Carregamento ───────────────────────────────────────────────────────────
 
   const rebuildFromServer = useCallback(
@@ -167,7 +174,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         return;
       }
       const [pays, gmap] = await Promise.all([getPayments(periodId, company.id), getDriverGroupMap(company.id)]);
-      setRows(buildRows(pays, driversRef.current, platformsRef.current, gmap));
+      const frozen = periodsRef.current.find((p) => p.id === periodId)?.status === 'concluido';
+      setRows(buildRows(pays, driversRef.current, platformsRef.current, gmap, driverRatesRef.current, frozen));
     },
     [company?.id],
   );
@@ -176,11 +184,12 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     if (!company?.id) return;
     setLoading(true);
     try {
-      const [per, drv, plat, grp] = await Promise.all([
+      const [per, drv, plat, grp, dRates] = await Promise.all([
         getPeriods(company.id),
         getDrivers(company.id),
         getPlatforms(company.id),
         getGroups(company.id),
+        getAllDriverRates(company.id),
       ]);
       setPeriods(per);
       setDrivers(drv);
@@ -188,6 +197,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       setGroups(grp);
       driversRef.current = drv;
       platformsRef.current = plat;
+      driverRatesRef.current = dRates;
+      periodsRef.current = per;
 
       const prev = selectedPeriodIdRef.current;
       const chosen =
@@ -199,7 +210,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
       if (chosen) {
         const [pays, gmap] = await Promise.all([getPayments(chosen, company.id), getDriverGroupMap(company.id)]);
-        setRows(buildRows(pays, drv, plat, gmap));
+        const frozen = per.find((p) => p.id === chosen)?.status === 'concluido';
+        setRows(buildRows(pays, drv, plat, gmap, dRates, frozen));
       } else {
         setRows([]);
       }
@@ -598,7 +610,15 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const filteredRows = useMemo(
     () =>
       rows.filter((r) => {
-        if (search.trim() && !r.name.toLowerCase().includes(search.trim().toLowerCase())) return false;
+        if (search.trim()) {
+          const q = search.trim().toLowerCase();
+          const inName = r.name.toLowerCase().includes(q);
+          const inRoute =
+            (r.route ?? '').toLowerCase().includes(q) ||
+            r.routes.some((rl) => (rl.route ?? '').toLowerCase().includes(q));
+          const inGroup = (r.groupName ?? '').toLowerCase().includes(q);
+          if (!inName && !inRoute && !inGroup) return false;
+        }
         if (routeFilter) {
           const match = (r.route ?? '') === routeFilter || r.routes.some((rl) => rl.route === routeFilter);
           if (!match) return false;
