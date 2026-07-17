@@ -1,0 +1,68 @@
+# CHECKPOINT — Importação automática de planilhas (iMile / Shopee / Anjun)
+
+> Sessão 2026-07-17. Feature nova na aba **Pagamentos Driver** (branch `feature/pagamentos-driver`).
+> Estado: **descoberta + plano fechados e validados com dados reais**. Implementação a seguir, por sub-fases.
+> Fonte da verdade das decisões desta feature.
+
+## 🎯 Objetivo (critério de sucesso combinado)
+Victor sobe a planilha **crua** de qualquer plataforma (iMile, Shopee ou Anjun). O sistema:
+1. **identifica sozinho** de qual plataforma é (pelo cabeçalho);
+2. **conta os pacotes** por entregador e por cidade;
+3. **aplica a taxa já cadastrada** (sem digitar valor);
+4. mostra **prévia de conferência**; entregador não reconhecido → **popup** (criar novo, ou vincular a driver/grupo/rota existente) e o sistema **guarda o apelido** (aprende);
+5. ao confirmar, os pacotes caem lançados no período escolhido.
+E dá pra ter **mais de um período aberto ao mesmo tempo**.
+
+## 📄 Formato das 3 planilhas (colunas-chave, 1 linha = 1 pacote)
+
+### iMile — "Delivered (N).xlsx" (aba `sheet1`, ~32 col)
+- Entregador: **`DA`** (col 6) — nome completo (com sujeira: `:VANILDO...`)
+- Cidade/rota: **`Recipient City`** (col 12)
+- Pacote: `Waybill No.` (col 1) · data `Delivered time`
+- **Assinatura de detecção:** header contém `DA` + `Waybill No.` + `Recipient City`
+- 1 plataforma → **eMile** (todos `Order Type = LM`)
+
+### Shopee — "CLAYTONBDOSSANTOS (...).xlsx" (aba `Sheet1`, 53 col, ~132 mil linhas)
+- **`Tipo do Serviço`** (col 0) = **ENTREGA** ou **COLETA**
+- Entregador: **`Driver Name`** (col 52) — formato `108810-WINGLISON DE PAIVA` / `87191-XPT (DUTRA) GERSON...`
+- Cidade/rota: **`Cidade Entrega`** (col 17)
+- Pacote: `3PL Tracking Number` (col 6) · `Rota` (col 4)
+- **Assinatura:** header contém `Tipo do Serviço` + `Driver Name` + `Cidade Entrega`
+- **2 plataformas:** ENTREGA → **SHOPEE**; COLETA → **Coleta Shopee** (nova)
+- Contagem real: 131.696 ENTREGA + 1.227 COLETA
+
+### Anjun — "Taxas a Pagar (N).xlsx" (aba `sheet1`, 27 col, ~8,8 mil linhas)
+- Entregador: **`operador de despacho`** (col 8) — formato login `RomarioAlvesD101` / `LUANKALLEBD101`
+- Cidade/rota: **`Cidade destinatária`** (col 9)
+- Pacote: `número do negócio` (col 0)
+- **IGNORAR** `agente de cobrança` (col 7 — é outra coisa: Paloma, Ricardo) e `Valor a receber` (col 2)
+- **Assinatura:** header contém `número do negócio` + `operador de despacho` + `Ponto a Pagar`
+- 1 plataforma → **ANJUN**
+
+## ✅ Decisões travadas com o Victor (2026-07-17)
+1. **Vários períodos abertos ao mesmo tempo** — remover a trava `uq_driverpay_one_open_period` (migration). Na importação/lançamento, escolher o período de destino.
+2. **Auto-detecção da plataforma pelo cabeçalho** — usuário só sobe o arquivo; se não reconhecer, avisa (não grava).
+3. **Valor por pacote** — NÃO vem da planilha. Usa a taxa do driver/rota já cadastrada (`getDriverDefaultRates`); se não houver, o `default_rate` da plataforma.
+4. **Entregador não reconhecido** — popup interativo: **criar novo driver**, ou **vincular** a driver/grupo/rota que já existe. O vínculo fica **salvo** (caderneta de apelidos → tabela nova `driverpay_driver_aliases`). Nas próximas importações reconhece automático.
+5. **Shopee** — ENTREGA vira plataforma `SHOPEE`; COLETA vira plataforma nova **`Coleta Shopee`**.
+6. **Anjun** — entregador = `operador de despacho`; paga **pacotes × taxa fixa** do sistema (ignora o "Valor a receber" da planilha).
+
+## 🔬 Validação real do reconhecimento (protótipo sobre dados reais, 2026-07-17)
+Limpeza (tira `12345-`, `D101`/`101`, `XPT (DUTRA)`, `( )`, acentos) + casamento com os 57 cadastrados:
+- **iMile:** 51/59 automático (86%); 8 no popup (gente realmente nova).
+- **Shopee:** 42/89 automático (~47%); a Shopee tem 89 entregadores (equipe maior que o cadastro) — muitos genuinamente novos + alguns com grafia diferente (SOUSA/SOUZA, JUNIO/JUNIOR) que o matcher de produção deve tolerar.
+- **Anjun:** 28/48 automático (58%); 4 ambíguos + 16 no popup. Apelidos grudados em MAIÚSCULA (`LUANKALLEBD101`) só resolvem por vínculo manual 1× — e ficam salvos.
+Conclusão: a limpeza automática resolve a maioria; o popup + caderneta fecha o resto e **aprende** — como o Victor quer.
+
+## 🧱 Plano de implementação (sub-fases, uma por vez)
+- **SF1 — Banco (migration):** tabela `driverpay_driver_aliases` (aditivo); plataforma `Coleta Shopee` (aditivo); remover `uq_driverpay_one_open_period`; ajustar `getOpenPeriod` (não usar `.maybeSingle()`) e a seleção de período p/ vários abertos.
+- **SF2 — Leitor (puro, testável):** parsers das 3 planilhas + auto-detecção por cabeçalho + normalização de nomes + matching com a caderneta. Testes unit com amostras reais.
+- **SF3 — Distribuição no período:** agrupar (driver, cidade, plataforma) → pacotes; resolver taxa; gravar em `driverpay_payment_packages`; criar drivers novos; registrar aliases.
+- **SF4 — Frontend:** tela "Importar planilha" com auto-detecção + prévia + popup de conferência/vínculo (criar/vincular/aprende) + escolha do período.
+- **SF5 — Testes E2E** reais com as 3 planilhas.
+
+## ⚠️ Riscos/atenções
+- **Volume:** Shopee ~132 mil linhas — o parse roda no navegador; agregar em memória e gravar só os **totais por (driver, cidade, plataforma)**, nunca 132 mil linhas.
+- **Matching de produção** deve tolerar grafia (SOUSA/SOUZA) e ser bidirecional (planilha com mais/menos sobrenomes que o cadastro).
+- **Apelidos ALL-CAPS grudados** (`LUANKALLEBD101`) → só vínculo manual (aprende depois).
+- Arquivos-fonte de referência (fora do repo): `Delivered (9).xlsx` (na pasta do projeto), `CLAYTONBDOSSANTOS ( 2026 06 02 85).xlsx` e `Taxas a Pagar (29).xlsx` (em Downloads).
