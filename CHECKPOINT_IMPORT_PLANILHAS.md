@@ -1,8 +1,8 @@
 # CHECKPOINT — Importação automática de planilhas (iMile / Shopee / Anjun)
 
 > Sessão 2026-07-17. Feature nova na aba **Pagamentos Driver** (branch `feature/pagamentos-driver`).
-> Estado: **descoberta + plano fechados e validados com dados reais**. Implementação a seguir, por sub-fases.
-> Fonte da verdade das decisões desta feature.
+> Estado: **CONCLUÍDA (SF1–SF5)** — implementada, commitada e pushada; validada com clique real
+> nas 3 plataformas; produção íntegra. Fonte da verdade das decisões desta feature.
 
 ## 🎯 Objetivo (critério de sucesso combinado)
 Victor sobe a planilha **crua** de qualquer plataforma (iMile, Shopee ou Anjun). O sistema:
@@ -54,12 +54,20 @@ Limpeza (tira `12345-`, `D101`/`101`, `XPT (DUTRA)`, `( )`, acentos) + casamento
 - **Anjun:** 28/48 automático (58%); 4 ambíguos + 16 no popup. Apelidos grudados em MAIÚSCULA (`LUANKALLEBD101`) só resolvem por vínculo manual 1× — e ficam salvos.
 Conclusão: a limpeza automática resolve a maioria; o popup + caderneta fecha o resto e **aprende** — como o Victor quer.
 
-## 🧱 Plano de implementação (sub-fases, uma por vez)
-- **SF1 — Banco (migration):** tabela `driverpay_driver_aliases` (aditivo); plataforma `Coleta Shopee` (aditivo); remover `uq_driverpay_one_open_period`; ajustar `getOpenPeriod` (não usar `.maybeSingle()`) e a seleção de período p/ vários abertos.
-- **SF2 — Leitor (puro, testável):** parsers das 3 planilhas + auto-detecção por cabeçalho + normalização de nomes + matching com a caderneta. Testes unit com amostras reais.
-- **SF3 — Distribuição no período:** agrupar (driver, cidade, plataforma) → pacotes; resolver taxa; gravar em `driverpay_payment_packages`; criar drivers novos; registrar aliases.
-- **SF4 — Frontend:** tela "Importar planilha" com auto-detecção + prévia + popup de conferência/vínculo (criar/vincular/aprende) + escolha do período.
-- **SF5 — Testes E2E** reais com as 3 planilhas.
+## 🧱 Implementação — CONCLUÍDA (SF1–SF5), todas pushadas
+- ✅ **SF1 — Banco** (commit `4fbd34b` + migration `20260717120000`): tabela `driverpay_driver_aliases` + RLS; trava `uq_driverpay_one_open_period` removida; plataforma `Coleta Shopee`; `getOpenPeriod` seguro p/ vários abertos. Validado: criar 2º período aberto funciona.
+- ✅ **SF2 — Leitor** (`5fcf399`): detecção por cabeçalho + agregação + matching. Validado com as **3 planilhas reais** (iMile 59/13.447/85% auto; Shopee 89/132.923/SHOPEE+Coleta/47%; Anjun 48/8.844/56%).
+- ✅ **SF3 — Distribuição** (`fa2f922`): `applyDriverImport` (cria driver, aprende apelido, lança pacotes por rota com a taxa). Modelo no banco validado (R$ 307,50).
+- ✅ **SF4 — Tela** (`f831005`): `PlatformImportModal` + botão "Importar planilha". E2E clique real (iMile) com gravação verificada no banco.
+- ✅ **SF5 — Regressão** (`1595b23`): fixtures + testes unit das 3 plataformas; E2E clique real das 3 na tela (4 plataformas distribuídas, incl. Coleta Shopee). 496 unit passando.
+
+## ⚠️ Validado × o que ainda FALTA validar (honesto)
+**Validado:** leitor com as 3 planilhas REAIS; tela com clique real usando **fixtures pequenas**; banco/migração; 496 unit; tsc 0 novos; build; produção íntegra em todos os testes.
+**NÃO validado ainda:**
+- **Tela com as planilhas REAIS grandes** — performance da Shopee (132 mil linhas / 29 MB) no navegador não foi testada (maior incógnita).
+- Popup de conferência com muitos não-reconhecidos reais (ex.: 47 na Shopee) não exercitado na tela.
+- Taxa real da **Coleta Shopee** (2,00 é placeholder).
+- Só Chromium; o E2E da tela foi temporário — a regressão permanente é via os testes unit do leitor.
 
 ## ⚠️ Riscos/atenções
 - **Volume:** Shopee ~132 mil linhas — o parse roda no navegador; agregar em memória e gravar só os **totais por (driver, cidade, plataforma)**, nunca 132 mil linhas.
