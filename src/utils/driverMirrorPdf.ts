@@ -342,12 +342,12 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
     const body: RowInput[] = discounts.map((d) => [
       d.packageId || '—',
       d.description || '—',
-      `− ${fmtBRL(d.value)}`,
+      `- ${fmtBRL(d.value)}`,
     ]);
     const foot: RowInput[] = [
       [
         { content: 'Subtotal de descontos', colSpan: 2, styles: { halign: 'left' } },
-        { content: `− ${fmtBRL(totals.discountsValue)}`, styles: { halign: 'right' } },
+        { content: `- ${fmtBRL(totals.discountsValue)}`, styles: { halign: 'right' } },
       ],
     ];
 
@@ -384,12 +384,12 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
     const body: RowInput[] = vales.map((v) => [
       v.date ? formatDateBR(v.date) : '—',
       v.note || '—',
-      `− ${fmtBRL(v.value)}`,
+      `- ${fmtBRL(v.value)}`,
     ]);
     const foot: RowInput[] = [
       [
         { content: 'Subtotal de vales', colSpan: 2, styles: { halign: 'left' } },
-        { content: `− ${fmtBRL(totals.valesValue)}`, styles: { halign: 'right' } },
+        { content: `- ${fmtBRL(totals.valesValue)}`, styles: { halign: 'right' } },
       ],
     ];
 
@@ -421,8 +421,8 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   y = ensureSpace(doc, y, 120);
   const resumoBody: RowInput[] = [
     ['Total de pacotes', `+ ${fmtBRL(totals.packagesValue)}`],
-    ['Descontos', `− ${fmtBRL(totals.discountsValue)}`],
-    ['Vales / adiantamentos', `− ${fmtBRL(totals.valesValue)}`],
+    ['Descontos', `- ${fmtBRL(totals.discountsValue)}`],
+    ['Vales / adiantamentos', `- ${fmtBRL(totals.valesValue)}`],
   ];
 
   autoTable(doc, {
@@ -525,8 +525,8 @@ function drawGroupSummaryPage(
       joinRouteCities(d.driver.routes) || '—',
       ...platCols,
       ...zapexCol,
-      d.totals.discountsValue > 0 ? `− ${fmtBRL(d.totals.discountsValue)}` : '—',
-      d.totals.valesValue > 0 ? `− ${fmtBRL(d.totals.valesValue)}` : '—',
+      d.totals.discountsValue > 0 ? `- ${fmtBRL(d.totals.discountsValue)}` : '—',
+      d.totals.valesValue > 0 ? `- ${fmtBRL(d.totals.valesValue)}` : '—',
       fmtBRL(d.totals.toReceive),
     ];
   });
@@ -538,8 +538,8 @@ function drawGroupSummaryPage(
       { content: `SUBTOTAL — ${fmtQty(groupTotals.driverCount)} driver(s)`, colSpan: 2 },
       ...footPlatSums.map((v) => ({ content: v })),
       ...(hasZapex ? [{ content: `+ ${fmtBRL(zapexTotal)}` }] : []),
-      { content: `− ${fmtBRL(groupTotals.discountsValue)}` },
-      { content: `− ${fmtBRL(groupTotals.valesValue)}` },
+      { content: `- ${fmtBRL(groupTotals.discountsValue)}` },
+      { content: `- ${fmtBRL(groupTotals.valesValue)}` },
       { content: fmtBRL(groupTotals.toReceive) },
     ],
   ];
