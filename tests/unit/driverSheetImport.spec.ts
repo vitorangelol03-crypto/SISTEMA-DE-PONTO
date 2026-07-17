@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
+import * as XLSX from 'xlsx';
+import path from 'path';
 import { parseDriverSheetData, detectPlatform } from '../../src/utils/driverSheetImport';
 import { matchDriver, driverTokens, normalizeDriverName } from '../../src/utils/driverNameMatch';
+
+function readFixture(name: string): unknown[][] {
+  const wb = XLSX.readFile(path.join(process.cwd(), 'tests/fixtures', name));
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null });
+}
 
 describe('driverSheetImport — deteccao de plataforma pelo cabecalho', () => {
   it('reconhece iMile, Shopee e Anjun; rejeita desconhecido', () => {
@@ -99,5 +107,28 @@ describe('driverNameMatch — normalizacao e casamento', () => {
     expect(m.status).toBe('matched');
     expect(m.driverId).toBe('luan');
     expect(m.fromAlias).toBe(true);
+  });
+});
+
+describe('driverSheetImport — fixtures .xlsx das 3 plataformas (regressao do leitor real)', () => {
+  it('iMile: le o arquivo e agrega (2 entregadores, 3 pacotes)', () => {
+    const r = parseDriverSheetData(readFixture('imile-teste.xlsx'));
+    expect(r.platform).toBe('imile');
+    expect(r.totalDrivers).toBe(2);
+    expect(r.totalPackages).toBe(3);
+  });
+
+  it('Shopee: separa ENTREGA (2) de COLETA (1)', () => {
+    const r = parseDriverSheetData(readFixture('shopee-teste.xlsx'));
+    expect(r.platform).toBe('shopee');
+    expect(r.rows.find((x) => x.platform === 'SHOPEE')?.packages).toBe(2);
+    expect(r.rows.find((x) => x.platform === 'Coleta Shopee')?.packages).toBe(1);
+  });
+
+  it('Anjun: le o login do operador de despacho (2 pacotes, ANJUN)', () => {
+    const r = parseDriverSheetData(readFixture('anjun-teste.xlsx'));
+    expect(r.platform).toBe('anjun');
+    expect(r.rows[0].platform).toBe('ANJUN');
+    expect(r.rows[0].packages).toBe(2);
   });
 });
