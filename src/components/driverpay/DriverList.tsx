@@ -11,6 +11,8 @@ import {
   Tag,
   CheckCircle2,
   Circle,
+  ClipboardCheck,
+  Clipboard,
 } from 'lucide-react';
 import type { DriverPlatform } from '../../services/driverPay';
 import { DriverRow } from './DriverRow';
@@ -83,6 +85,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   const renderTable = (subset: DriverRowData[], withFooter: boolean, footerLabel = 'TOTAL GERAL') => {
     const totals = withFooter ? sumTotals(subset) : null;
     const nfCount = subset.filter((r) => r.notaFiscal).length;
+    const espelhoCount = subset.filter((r) => r.espelhoConferido).length;
     return (
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse">
@@ -119,6 +122,9 @@ export const DriverList: React.FC<DriverListProps> = ({
               </th>
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 NF
+              </th>
+              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Espelho
               </th>
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Ações
@@ -164,6 +170,9 @@ export const DriverList: React.FC<DriverListProps> = ({
                 <td className="px-3 py-3.5 text-center text-xs font-bold text-gray-700 whitespace-nowrap">
                   NF {nfCount}/{totals.drivers}
                 </td>
+                <td className="px-3 py-3.5 text-center text-xs font-bold text-green-700 whitespace-nowrap">
+                  Espelho {espelhoCount}/{totals.drivers}
+                </td>
                 <td />
               </tr>
             </tfoot>
@@ -177,7 +186,10 @@ export const DriverList: React.FC<DriverListProps> = ({
     const t = computeRowTotals(row);
     const multi = row.routes.length > 1;
     return (
-      <div key={row.paymentId} className="p-4 hover:bg-gray-50">
+      <div
+        key={row.paymentId}
+        className={`p-4 ${row.espelhoConferido ? 'bg-green-300 hover:bg-green-400' : 'hover:bg-gray-50'}`}
+      >
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0">
             <div className="text-sm font-semibold text-gray-900 break-words">{row.name}</div>
@@ -247,6 +259,22 @@ export const DriverList: React.FC<DriverListProps> = ({
             <Circle className="w-5 h-5" />
           )}
           {row.notaFiscal ? 'Nota fiscal recebida' : 'Marcar nota fiscal'}
+        </button>
+
+        {/* Espelho conferido — deixa o card inteiro verde */}
+        <button
+          type="button"
+          onClick={() => handlers.onToggleEspelho(row.paymentId, row.espelhoConferido)}
+          disabled={readOnly || !canEdit}
+          aria-pressed={row.espelhoConferido}
+          className={`w-full mb-2 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium min-h-[40px] border ${
+            row.espelhoConferido
+              ? 'bg-green-600 border-green-700 text-white'
+              : 'bg-gray-50 border-gray-200 text-gray-500'
+          } disabled:opacity-50 disabled:cursor-not-allowed`}
+        >
+          {row.espelhoConferido ? <ClipboardCheck className="w-5 h-5" /> : <Clipboard className="w-5 h-5" />}
+          {row.espelhoConferido ? 'Espelho conferido' : 'Marcar espelho conferido'}
         </button>
 
         <div className="flex items-center justify-between text-sm mb-2">

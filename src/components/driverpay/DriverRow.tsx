@@ -12,6 +12,8 @@ import {
   FileText,
   CheckCircle2,
   Circle,
+  ClipboardCheck,
+  Clipboard,
 } from 'lucide-react';
 import type { DriverPlatform } from '../../services/driverPay';
 import {
@@ -69,8 +71,8 @@ export const DriverRow: React.FC<DriverRowProps> = ({
 }) => {
   const multi = isMultiRoute(row);
   const totals = computeRowTotals(row);
-  // driver+grupo (2) + plataformas + 5 totais (pacotes, ZAPEX, desconto, vale, receber) + NF (1) + acoes (1)
-  const totalCols = 2 + platforms.length + 5 + 1 + 1;
+  // driver+grupo (2) + plataformas + 5 totais (pacotes, ZAPEX, desconto, vale, receber) + NF (1) + Espelho (1) + acoes (1)
+  const totalCols = 2 + platforms.length + 5 + 1 + 1 + 1;
   const inputsDisabled = readOnly || !canEdit;
   // Ganho Zapex do driver: qtd de itens x valor unitario individual (soma no total a receber).
   const zapexCount = row.zapex.length;
@@ -84,14 +86,24 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   // a tabela larga. Cores OPACAS porque a 1ª coluna é sticky (precisa cobrir as demais
   // ao rolar na horizontal). Hover acende a linha inteira; foco em qualquer input dela
   // (editando) destaca mais forte via focus-within.
+  // "Espelho conferido" pinta a linha INTEIRA de verde (sobrepõe a zebra) — fácil de
+  // bater o olho e ver quem já foi conferido.
+  const confirmed = row.espelhoConferido;
   const zebra = index % 2 === 1 ? 'bg-slate-200' : 'bg-white';
+  const rowBg = confirmed ? 'bg-green-300' : zebra;
+  const rowHover = confirmed
+    ? 'hover:bg-green-400 focus-within:bg-green-400'
+    : 'hover:bg-sky-100 focus-within:bg-sky-200';
+  const stickyHover = confirmed
+    ? 'group-hover:bg-green-400 group-focus-within:bg-green-400'
+    : 'group-hover:bg-sky-100 group-focus-within:bg-sky-200';
 
   return (
     <>
-      <tr className={`group ${zebra} transition-colors hover:bg-sky-100 focus-within:bg-sky-200`}>
+      <tr className={`group ${rowBg} transition-colors ${rowHover}`}>
         {/* Driver / Rota — coluna "grudada" (sticky) ao rolar na horizontal */}
         <td
-          className={`sticky left-0 z-10 border-r border-gray-200 px-4 py-3 align-middle ${zebra} group-hover:bg-sky-100 group-focus-within:bg-sky-200`}
+          className={`sticky left-0 z-10 border-r border-gray-200 px-4 py-3 align-middle ${rowBg} ${stickyHover}`}
         >
           <div className="flex flex-col gap-1">
             <span className="font-semibold text-gray-900 flex items-center gap-2">
@@ -260,6 +272,24 @@ export const DriverRow: React.FC<DriverRowProps> = ({
           </button>
         </td>
 
+        {/* Espelho conferido — quando marcado, a linha inteira do driver fica verde */}
+        <td className="px-3 py-3 text-center align-middle">
+          <button
+            type="button"
+            onClick={() => handlers.onToggleEspelho(row.paymentId, row.espelhoConferido)}
+            disabled={inputsDisabled}
+            title={row.espelhoConferido ? 'Espelho conferido (bate com a planilha)' : 'Marcar espelho conferido'}
+            aria-pressed={row.espelhoConferido}
+            className="inline-flex items-center justify-center rounded-full hover:bg-white/50 p-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            {row.espelhoConferido ? (
+              <ClipboardCheck className="w-6 h-6 text-green-700" />
+            ) : (
+              <Clipboard className="w-6 h-6 text-gray-300" />
+            )}
+          </button>
+        </td>
+
         {/* Acoes */}
         <td className="px-3 py-3 text-center align-middle">
           <div className="inline-flex gap-2.5 justify-end">
@@ -408,8 +438,8 @@ export const DriverRow: React.FC<DriverRowProps> = ({
             <td className="px-3 py-2 text-right text-xs text-gray-400 align-middle">
               {formatInt(Object.values(rl.packages).reduce((s, n) => s + n, 0))} pct
             </td>
-            {/* ZAPEX + Desconto + Vale + Total a receber + NF + Ações (Zapex é por driver, não por rota) */}
-            <td colSpan={6} />
+            {/* ZAPEX + Desconto + Vale + Total a receber + NF + Espelho + Ações (Zapex é por driver, não por rota) */}
+            <td colSpan={7} />
           </tr>
         ))}
 

@@ -73,6 +73,8 @@ export interface DriverRowData {
   active: boolean;
   /** true quando o operador confirmou que o driver ja enviou as notas fiscais deste pagamento. */
   notaFiscal: boolean;
+  /** true quando o operador conferiu o espelho do driver e a quantidade bate com a planilha. */
+  espelhoConferido: boolean;
   /**
    * Itens Zapex lancados neste pagamento (1 item = 1 entrega). Cada item so tem
    * codigo + data; o VALOR vem do zapexRate individual do driver. Total Zapex do
@@ -107,6 +109,8 @@ export interface RowHandlers {
   onRateBlur: (paymentId: string, routeIndex: number, platformName: string) => void;
   /** Alterna o check de nota fiscal recebida deste pagamento (current = valor atual). */
   onToggleNota: (paymentId: string, current: boolean) => void;
+  /** Alterna o check de "espelho conferido" deste pagamento (current = valor atual). */
+  onToggleEspelho: (paymentId: string, current: boolean) => void;
   onConfigDriver: (row: DriverRowData) => void;
   onDiscount: (row: DriverRowData) => void;
   onVale: (row: DriverRowData) => void;
@@ -277,6 +281,7 @@ export function buildRows(
       phone: driver?.phone ?? null,
       active: driver?.active ?? true,
       notaFiscal: Boolean(p.nota_fiscal_recebida),
+      espelhoConferido: Boolean(p.espelho_conferido),
       zapex: p.zapex ?? [],
       zapexRate: Number(p.zapex_rate ?? 0),
     };

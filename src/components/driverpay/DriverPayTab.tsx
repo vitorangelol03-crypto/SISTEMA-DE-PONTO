@@ -32,6 +32,7 @@ import {
   deletePackagesByRoute,
   renameRoutePackages,
   setNotaFiscal,
+  setEspelhoConferido,
 } from '../../services/driverPay';
 import { exportDriverGeneralReportExcel } from '../../utils/driverReport';
 import {
@@ -455,6 +456,23 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     [company?.id, hasPermission, userId, reloadPayments],
   );
 
+  const onToggleEspelho = useCallback(
+    async (paymentId: string, current: boolean) => {
+      if (!company?.id || !hasPermission('driverpay.editDriver')) return;
+      // Atualiza otimista (linha fica verde na hora) e persiste; em erro, recarrega e reverte.
+      setRows((prev) => prev.map((r) => (r.paymentId === paymentId ? { ...r, espelhoConferido: !current } : r)));
+      try {
+        await setEspelhoConferido(company.id, paymentId, !current, userId);
+        await reloadPayments();
+      } catch (e) {
+        console.error('Erro ao atualizar espelho conferido:', e);
+        toast.error('Erro ao atualizar espelho conferido');
+        reloadPayments();
+      }
+    },
+    [company?.id, hasPermission, userId, reloadPayments],
+  );
+
   const onToggleExpand = useCallback((paymentId: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -506,6 +524,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onRateChange,
       onRateBlur,
       onToggleNota,
+      onToggleEspelho,
       onConfigDriver,
       onDiscount,
       onVale,
@@ -523,6 +542,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onRateChange,
       onRateBlur,
       onToggleNota,
+      onToggleEspelho,
       onConfigDriver,
       onDiscount,
       onVale,

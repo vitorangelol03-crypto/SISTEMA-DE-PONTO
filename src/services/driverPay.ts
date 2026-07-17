@@ -142,6 +142,7 @@ export interface DriverPayment {
   zapex_rate: number;
   total_zapex: number;
   nota_fiscal_recebida: boolean;
+  espelho_conferido: boolean;
   created_at: string;
   updated_at: string;
   // joins opcionais (embutidos via select aninhado)
@@ -204,6 +205,7 @@ function mapPayment(r: Record<string, unknown>): DriverPayment {
     zapex_rate: num(p.zapex_rate),
     total_zapex: num(p.total_zapex),
     nota_fiscal_recebida: Boolean(p.nota_fiscal_recebida),
+    espelho_conferido: Boolean(p.espelho_conferido),
     packages: Array.isArray(p.packages) ? (p.packages as Record<string, unknown>[]).map(mapPackage) : undefined,
     discounts: Array.isArray(p.discounts) ? (p.discounts as Record<string, unknown>[]).map(mapDiscount) : undefined,
     vales: Array.isArray(p.vales) ? (p.vales as Record<string, unknown>[]).map(mapVale) : undefined,
@@ -796,6 +798,31 @@ export const setNotaFiscal = async (
       nota_fiscal_recebida: received,
       nota_fiscal_at: received ? new Date().toISOString() : null,
       nota_fiscal_by: userId,
+    })
+    .eq('id', paymentId)
+    .eq('company_id', companyId);
+  if (error) throw error;
+};
+
+/**
+ * Marca/desmarca o "espelho conferido" deste pagamento — o operador confirmou que o
+ * driver enviou o espelho e a quantidade bate com a planilha. Mesmo padrao da Nota
+ * Fiscal: registra quem marcou (espelho_conferido_by) e o timestamp (espelho_conferido_at,
+ * limpo ao desmarcar). Nao mexe nos totais. Pode ser marcado inclusive apos a conclusao.
+ */
+export const setEspelhoConferido = async (
+  companyId: string,
+  paymentId: string,
+  confirmed: boolean,
+  userId: string
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase
+    .from('driverpay_payments')
+    .update({
+      espelho_conferido: confirmed,
+      espelho_conferido_at: confirmed ? new Date().toISOString() : null,
+      espelho_conferido_by: userId,
     })
     .eq('id', paymentId)
     .eq('company_id', companyId);
