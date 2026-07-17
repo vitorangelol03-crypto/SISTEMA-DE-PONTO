@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ModalShell } from './ModalShell';
+import { DriverResolutionPicker } from './DriverResolutionPicker';
 import { parseDriverSheetFileInWorker, type DriverSheetResult } from '../../utils/driverSheetImport';
 import {
   matchDriver,
@@ -136,23 +137,6 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
   const setResolution = (driverRaw: string, res: ImportResolution) =>
     setResolutions((prev) => ({ ...prev, [driverRaw]: res }));
 
-  /** Valor do <select> de conferencia: 'create' | 'ignore' | driverId. */
-  const selectValue = (driverRaw: string, match: DriverMatch): string => {
-    const res = resolutionFor(driverRaw, match);
-    if (res.kind === 'create') return 'create';
-    if (res.kind === 'ignore') return 'ignore';
-    return res.driverId;
-  };
-
-  const onSelectChange = (driverRaw: string, value: string) => {
-    if (value === 'create') setResolution(driverRaw, { kind: 'create', name: suggestName(driverRaw) });
-    else if (value === 'ignore') setResolution(driverRaw, { kind: 'ignore' });
-    else {
-      const d = drivers.find((x) => x.id === value);
-      setResolution(driverRaw, { kind: 'existing', driverId: value, driverName: d?.name ?? '', learnAlias: true });
-    }
-  };
-
   const handleApply = async () => {
     if (!result || !periodId) {
       toast.error('Selecione o período de destino.');
@@ -273,7 +257,6 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
               </div>
               <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
                 {needsReview.map((d) => {
-                  const val = selectValue(d.driverRaw, d.match);
                   const res = resolutionFor(d.driverRaw, d.match);
                   return (
                     <div key={d.driverRaw} className="px-3 py-2 flex flex-col sm:flex-row sm:items-center gap-2">
@@ -283,21 +266,12 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
                           {formatInt(d.packages)} pct{d.match.status === 'ambiguous' ? ' · homônimo' : ''}
                         </div>
                       </div>
-                      <select
-                        value={val}
-                        onChange={(e) => onSelectChange(d.driverRaw, e.target.value)}
-                        className="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 rounded-md text-sm min-h-[36px]"
-                      >
-                        <option value="create">➕ Criar como novo driver</option>
-                        <option value="ignore">🚫 Ignorar</option>
-                        <optgroup label="Vincular a um driver existente">
-                          {drivers.map((dr) => (
-                            <option key={dr.id} value={dr.id}>
-                              {dr.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      </select>
+                      <DriverResolutionPicker
+                        drivers={drivers}
+                        resolution={res}
+                        suggestedName={suggestName(d.driverRaw)}
+                        onChange={(r) => setResolution(d.driverRaw, r)}
+                      />
                       {res.kind === 'create' && (
                         <input
                           type="text"
