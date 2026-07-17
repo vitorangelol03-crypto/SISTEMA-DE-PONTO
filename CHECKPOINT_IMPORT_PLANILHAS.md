@@ -1,8 +1,9 @@
 # CHECKPOINT — Importação automática de planilhas (iMile / Shopee / Anjun)
 
 > Sessão 2026-07-17. Feature nova na aba **Pagamentos Driver** (branch `feature/pagamentos-driver`).
-> Estado: **CONCLUÍDA (SF1–SF5)** — implementada, commitada e pushada; validada com clique real
-> nas 3 plataformas; produção íntegra. Fonte da verdade das decisões desta feature.
+> Estado: **CONCLUÍDA (SF1–SF6)** — implementada e pushada; validada com clique real nas 3
+> plataformas + Shopee real (parse em Web Worker, sem congelar a tela); produção íntegra.
+> Fonte da verdade das decisões desta feature.
 
 ## 🎯 Objetivo (critério de sucesso combinado)
 Victor sobe a planilha **crua** de qualquer plataforma (iMile, Shopee ou Anjun). O sistema:
@@ -60,14 +61,16 @@ Conclusão: a limpeza automática resolve a maioria; o popup + caderneta fecha o
 - ✅ **SF3 — Distribuição** (`fa2f922`): `applyDriverImport` (cria driver, aprende apelido, lança pacotes por rota com a taxa). Modelo no banco validado (R$ 307,50).
 - ✅ **SF4 — Tela** (`f831005`): `PlatformImportModal` + botão "Importar planilha". E2E clique real (iMile) com gravação verificada no banco.
 - ✅ **SF5 — Regressão** (`1595b23`): fixtures + testes unit das 3 plataformas; E2E clique real das 3 na tela (4 plataformas distribuídas, incl. Coleta Shopee). 496 unit passando.
+- ✅ **SF6 — Otimização** (`fbd2b58`): parse em Web Worker (`driverSheetImport.worker.ts`) — a tela não congela. Validado na Shopee real: parse 30,7s (era 54s), UI respondeu ≤322ms durante todo o parse. + aviso de progresso.
 
-## ⚠️ Validado × o que ainda FALTA validar (honesto)
-**Validado:** leitor com as 3 planilhas REAIS; tela com clique real usando **fixtures pequenas**; banco/migração; 496 unit; tsc 0 novos; build; produção íntegra em todos os testes.
-**NÃO validado ainda:**
-- **Tela com as planilhas REAIS grandes** — performance da Shopee (132 mil linhas / 29 MB) no navegador não foi testada (maior incógnita).
-- Popup de conferência com muitos não-reconhecidos reais (ex.: 47 na Shopee) não exercitado na tela.
-- Taxa real da **Coleta Shopee** (2,00 é placeholder).
-- Só Chromium; o E2E da tela foi temporário — a regressão permanente é via os testes unit do leitor.
+## ⚠️ Validado COM CLIQUE REAL × o que ainda FALTA (honesto)
+**Validado com clique real (navegador):** importar iMile/Shopee/Anjun com **fixtures pequenas** (detecta→prévia→importa→grava 4 plataformas incl. Coleta Shopee, no banco); **Shopee real de 29 MB até a prévia** (detecta 89/132.923, sem congelar via Web Worker, UI ≤322ms). Produção limpa depois de cada teste.
+**Validado por outra via (não é clique):** leitor com as 3 planilhas REAIS (unit/script); distribuição (modelo no banco R$ 307,50 + 496 unit); migração (SQL: criar 2º período funciona).
+**NÃO validado com clique real ainda:**
+- **Importar a Shopee real DE VERDADE** (clicar Importar com as 132k) — só cheguei à prévia; não cliquei Importar (evitava criar ~47 drivers reais). O Victor roda com os dados reais, conferindo os 47 no popup.
+- **iMile real (13k) e Anjun real (8k) na tela** — só a Shopee real foi subida; as outras duas só com fixtures pequenas.
+- **Criar 2 períodos abertos pela TELA** (clicar "Novo período" 2×) — validado por SQL, não por clique.
+- Popup de conferência com muitos nomes reais não exercitado; taxa real da Coleta Shopee (2,00 placeholder); só Chromium; 2 botões de importar (decidir).
 
 ## ⚠️ Riscos/atenções
 - **Volume:** Shopee ~132 mil linhas — o parse roda no navegador; agregar em memória e gravar só os **totais por (driver, cidade, plataforma)**, nunca 132 mil linhas.
