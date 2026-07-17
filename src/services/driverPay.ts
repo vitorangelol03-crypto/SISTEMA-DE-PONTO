@@ -13,6 +13,7 @@
 import { supabase } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
 import { isMaster, isDriverpayPermission, canAccessDriverpay } from '../config/masters';
+import type { ImportResolvedItem, ImportApplyResult } from '../utils/driverImportApply';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -1062,4 +1063,139 @@ export const bulkImportDrivers = async (
     }
   }
   return { driversCreated: created, errors };
+};
+
+// ─── Import de planilha de plataforma: contexto de matching + aplicacao ───────
+
+/** Drivers ativos + apelidos aprendidos, para casar os nomes vindos da planilha. */
+export const getDriverMatchContext = async (
+  companyId: string,
+): Promise<{ drivers: { id: string; name: string }[]; aliases: { alias_norm: string; driver_id: string }[] }> => {
+  const [dRes, aRes] = await Promise.all([
+    supabase.from('driverpay_drivers').select('id, name').eq('company_id', companyId).eq('active', true),
+    supabase.from('driverpay_driver_aliases').select('alias_norm, driver_id').eq('company_id', companyId),
+  ]);
+  if (dRes.error) throw dRes.error;
+  if (aRes.error) throw aRes.error;
+  return {
+    drivers: (dRes.data ?? []) as { id: string; name: string }[],
+    aliases: (aRes.data ?? []) as { alias_norm: string; driver_id: string }[],
+  };
+};
+
+/** Grava (aprende) um apelido -> driver. Idempotente por (company_id, alias_norm). */
+export const upsertDriverAlias = async (
+  companyId: string,
+  driverId: string,
+  aliasRaw: string,
+  aliasNorm: string,
+  source: string | null,
+  userId: string,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.createDriver');
+  const { error } = await supabase.from('driverpay_driver_aliases').upsert(
+    [{ company_id: companyId, driver_id: driverId, alias_raw: aliasRaw, alias_norm: aliasNorm, source, created_by: userId }],
+    { onConflict: 'company_id,alias_norm' },
+  );
+  if (error) throw error;
+};
+
+/** Acha o pagamento do driver no periodo; cria se faltar (driver novo no periodo). */
+const ensurePaymentForDriver = async (
+  companyId: string,
+  periodId: string,
+  driverId: string,
+  driverName: string,
+  route: string | null,
+): Promise<string> => {
+  const { data: existing, error: e1 } = await supabase
+    .from('driverpay_payments')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('period_id', periodId)
+    .eq('driver_id', driverId)
+    .maybeSingle();
+  if (e1) throw e1;
+  if (existing) return (existing as { id: string }).id;
+  const { data: created, error: e2 } = await supabase
+    .from('driverpay_payments')
+    .insert([
+      { company_id: companyId, period_id: periodId, driver_id: driverId, driver_name_snapshot: driverName, route_snapshot: route },
+    ])
+    .select('id')
+    .single();
+  if (e2) throw e2;
+  return (created as { id: string }).id;
+};
+
+/**
+ * Aplica um import ja resolvido a um periodo: cria os drivers novos, aprende os
+ * apelidos e lanca os pacotes por (plataforma, rota) com a taxa ja cadastrada do
+ * driver (fallback: default_rate da plataforma). Nao apaga nada — soma via upsert.
+ */
+export const applyDriverImport = async (
+  companyId: string,
+  userId: string,
+  periodId: string,
+  source: string,
+  items: ImportResolvedItem[],
+): Promise<ImportApplyResult> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+
+  const platforms = await getPlatforms(companyId, false);
+  const defaultByPlatform = new Map(platforms.map((p) => [p.name, p.default_rate]));
+  const ratesByDriver = new Map<string, Record<string, number>>();
+  const createdByRaw = new Map<string, string>();
+
+  let driversCreated = 0;
+  let aliasesLearned = 0;
+  let packagesApplied = 0;
+  let ignored = 0;
+  const affected = new Set<string>();
+
+  for (const it of items) {
+    if (it.resolution.kind === 'ignore') {
+      ignored += 1;
+      continue;
+    }
+
+    let driverId: string;
+    let driverName: string;
+    if (it.resolution.kind === 'create') {
+      const cached = createdByRaw.get(it.driverRaw);
+      if (cached) {
+        driverId = cached;
+      } else {
+        const d = await createDriver(companyId, userId, { name: it.resolution.name, route: it.city || null });
+        driverId = d.id;
+        createdByRaw.set(it.driverRaw, driverId);
+        driversCreated += 1;
+        await upsertDriverAlias(companyId, driverId, it.driverRaw, it.aliasNorm, source, userId);
+        aliasesLearned += 1;
+      }
+      driverName = it.resolution.name;
+    } else {
+      driverId = it.resolution.driverId;
+      driverName = it.resolution.driverName;
+      if (it.resolution.learnAlias) {
+        await upsertDriverAlias(companyId, driverId, it.driverRaw, it.aliasNorm, source, userId);
+        aliasesLearned += 1;
+      }
+    }
+
+    let rates = ratesByDriver.get(driverId);
+    if (!rates) {
+      rates = await getDriverDefaultRates(companyId, driverId);
+      ratesByDriver.set(driverId, rates);
+    }
+    const rate = rates[it.platform] ?? defaultByPlatform.get(it.platform) ?? 0;
+
+    const paymentId = await ensurePaymentForDriver(companyId, periodId, driverId, driverName, it.city || null);
+    await upsertPackage(companyId, paymentId, it.platform, it.city, it.packages, rate, userId);
+
+    packagesApplied += it.packages;
+    affected.add(driverId);
+  }
+
+  return { driversCreated, aliasesLearned, packagesApplied, driversAffected: affected.size, ignored };
 };
