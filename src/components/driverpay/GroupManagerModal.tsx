@@ -187,7 +187,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
     <ModalShell
       icon={<Tag className="w-5 h-5" />}
       title="Gerenciar grupos"
-      subtitle="Criar/editar grupos, definir o valor por pacote e vincular drivers"
+      subtitle="Criar/editar grupos, definir o valor por pacote (opcional) e vincular drivers"
       onClose={onClose}
       maxWidth="sm:max-w-2xl"
       footer={
@@ -350,7 +350,9 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
           <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
           <span>
             Ao aplicar o <b>valor/pacote do grupo</b>, ele é gravado em todos os membros (cada driver ainda pode ter valor
-            próprio depois, no cadastro dele). O valor do período já lançado é atualizado ao reabrir a grade.
+            próprio depois, no cadastro dele). Se criar o grupo <b>sem valor</b>, ele serve só para organizar os drivers —
+            cada um continua usando a config individual dele por pacote. O valor do período já lançado é atualizado ao
+            reabrir a grade.
           </span>
         </div>
 
@@ -371,7 +373,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
                 inputMode="decimal"
                 value={newRate}
                 onChange={(e) => setNewRate(e.target.value)}
-                placeholder="valor/pacote"
+                placeholder="opcional"
                 className="w-full sm:w-32 pl-7 pr-2 py-2 border border-gray-300 rounded-md text-sm tabular-nums min-h-[40px]"
               />
             </div>
@@ -384,6 +386,10 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
               <Plus className="w-4 h-4" /> Criar
             </button>
           </div>
+          <p className="text-xs text-gray-500 mt-1.5">
+            O valor por pacote é <b>opcional</b>. Deixe em branco para o grupo só organizar os drivers — cada um usa a
+            config individual dele por pacote.
+          </p>
         </div>
       </div>
     </ModalShell>
