@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Check, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { DriverPaymentPeriod, concludePeriod } from '../../services/driverPay';
+import { DriverPaymentPeriod, concludePeriod, concludePeriodOnly } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
 import { formatBRL } from './driverPayShared';
 
@@ -13,6 +13,7 @@ interface PeriodConcludeModalProps {
   driverCount: number;
   onClose: () => void;
   onConcluded: (nextPeriodId: string) => void | Promise<void>;
+  onConcludedOnly: () => void | Promise<void>;
 }
 
 export const PeriodConcludeModal: React.FC<PeriodConcludeModalProps> = ({
@@ -23,6 +24,7 @@ export const PeriodConcludeModal: React.FC<PeriodConcludeModalProps> = ({
   driverCount,
   onClose,
   onConcluded,
+  onConcludedOnly,
 }) => {
   const [nextLabel, setNextLabel] = useState('');
   const [nextStart, setNextStart] = useState('');
@@ -59,6 +61,21 @@ export const PeriodConcludeModal: React.FC<PeriodConcludeModalProps> = ({
     }
   };
 
+  const handleConcludeOnly = async () => {
+    setSaving(true);
+    try {
+      await concludePeriodOnly(period.id, companyId, userId);
+      toast.success('Quinzena concluída (sem abrir a próxima)');
+      await onConcludedOnly();
+      onClose();
+    } catch (e) {
+      console.error('Erro ao concluir período:', e);
+      toast.error(e instanceof Error ? e.message : 'Erro ao concluir período');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <ModalShell
       icon={<Check className="w-5 h-5" />}
@@ -73,6 +90,15 @@ export const PeriodConcludeModal: React.FC<PeriodConcludeModalProps> = ({
             className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium min-h-[40px]"
           >
             Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleConcludeOnly}
+            disabled={saving}
+            className="px-4 py-2 border border-green-600 text-green-700 rounded-md hover:bg-green-50 text-sm font-medium inline-flex items-center gap-2 min-h-[40px] disabled:opacity-50"
+          >
+            <Check className="w-4 h-4" />
+            Concluir sem abrir próxima
           </button>
           <button
             type="button"

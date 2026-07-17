@@ -947,6 +947,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           driverCount={allTotals.count}
           onClose={() => setShowConclude(false)}
           onConcluded={handleConcluded}
+          onConcludedOnly={refresh}
         />
       )}
 

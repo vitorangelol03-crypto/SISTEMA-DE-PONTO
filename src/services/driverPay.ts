@@ -629,6 +629,17 @@ export const concludePeriod = async (
   return data as string;
 };
 
+/** Conclui a quinzena SEM abrir a proxima (congela os totais + marca 'concluido'). */
+export const concludePeriodOnly = async (periodId: string, companyId: string, userId: string): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.complete');
+  const { error } = await supabase.rpc('driverpay_conclude_period_only', {
+    p_period_id: periodId,
+    p_company_id: companyId,
+    p_user_id: userId,
+  });
+  if (error) throw error;
+};
+
 /** Reabre uma quinzena concluida (volta para 'aberto' e libera a edicao). So 2626. */
 export const reopenPeriod = async (periodId: string, companyId: string, userId: string): Promise<void> => {
   await ensurePerm(userId, 'driverpay.managePeriods');
