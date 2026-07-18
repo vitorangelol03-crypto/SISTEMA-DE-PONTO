@@ -89,7 +89,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   // "Espelho conferido" pinta a linha INTEIRA de verde (sobrepõe a zebra) — fácil de
   // bater o olho e ver quem já foi conferido.
   const confirmed = row.espelhoConferido;
-  const zebra = index % 2 === 1 ? 'bg-slate-200' : 'bg-white';
+  const zebra = index % 2 === 1 ? 'bg-slate-300' : 'bg-white';
   const rowBg = confirmed ? 'bg-green-300' : zebra;
   const rowHover = confirmed
     ? 'hover:bg-green-400 focus-within:bg-green-400'
@@ -267,7 +267,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
             {row.notaFiscal ? (
               <CheckCircle2 className="w-6 h-6 text-green-600 fill-green-100" />
             ) : (
-              <Circle className="w-6 h-6 text-gray-300" />
+              <Circle className="w-6 h-6 text-gray-500" />
             )}
           </button>
         </td>
@@ -285,7 +285,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
             {row.espelhoConferido ? (
               <ClipboardCheck className="w-6 h-6 text-green-700" />
             ) : (
-              <Clipboard className="w-6 h-6 text-gray-300" />
+              <Clipboard className="w-6 h-6 text-gray-500" />
             )}
           </button>
         </td>
