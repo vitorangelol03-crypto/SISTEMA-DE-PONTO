@@ -85,14 +85,18 @@ export const DriverList: React.FC<DriverListProps> = ({
   handlers,
   onGroupMirror,
 }) => {
-  // Ordenacao pelo cabecalho: 1 clique ordena (direcao natural da coluna), outro
-  // clique desfaz (volta a ordem original). Texto = A-Z; numeros/checks = maior/marcado
-  // primeiro. So reordena (mostra todos), nao esconde ninguem.
+  // Ordenacao pelo cabecalho: 1 clique = maior→menor (desc), 2 cliques = menor→maior
+  // (asc), 3 cliques = desativa. So reordena (mostra todos), nao esconde ninguem.
   type SortDir = 'asc' | 'desc';
   const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
 
-  const toggleSort = (key: string, defaultDir: SortDir) =>
-    setSort((cur) => (cur?.key === key ? null : { key, dir: defaultDir }));
+  // 1 clique: maior→menor (desc). 2 cliques: menor→maior (asc). 3 cliques: desativa.
+  const toggleSort = (key: string) =>
+    setSort((cur) => {
+      if (cur?.key !== key) return { key, dir: 'desc' };
+      if (cur.dir === 'desc') return { key, dir: 'asc' };
+      return null;
+    });
 
   const sortValue = (row: DriverRowData, key: string): number | string => {
     if (key === 'name') return row.name.toLowerCase();
@@ -137,13 +141,13 @@ export const DriverList: React.FC<DriverListProps> = ({
   };
 
   /** Conteudo clicavel de um cabecalho: label + seta (↑/↓ quando ativo, ↕ quando nao). */
-  const sortBtn = (key: string, label: string, defaultDir: SortDir, color?: string | null) => {
+  const sortBtn = (key: string, label: string, color?: string | null) => {
     const activeDir = sort && sort.key === key ? sort.dir : null;
     return (
       <button
         type="button"
-        onClick={() => toggleSort(key, defaultDir)}
-        title="Ordenar por esta coluna (clique de novo para desfazer)"
+        onClick={() => toggleSort(key)}
+        title="Ordenar: 1x maior→menor · 2x menor→maior · 3x desativa"
         className={`group/sort inline-flex items-center gap-1 hover:text-gray-800 ${activeDir ? 'text-blue-600' : ''}`}
       >
         <span className={color ? 'font-bold' : ''} style={color ? { color } : undefined}>
@@ -170,39 +174,39 @@ export const DriverList: React.FC<DriverListProps> = ({
           <thead className="bg-gray-50">
             <tr>
               <th className="sticky left-0 z-20 bg-gray-50 border-r border-gray-200 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {sortBtn('name', 'Driver / Rota', 'asc')}
+                {sortBtn('name', 'Driver / Rota')}
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {sortBtn('group', 'Grupo', 'asc')}
+                {sortBtn('group', 'Grupo')}
               </th>
               {platforms.map((pl) => (
                 <th
                   key={pl.id}
                   className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
                 >
-                  {sortBtn(`pl:${pl.name}`, pl.name, 'desc', pl.color)}
+                  {sortBtn(`pl:${pl.name}`, pl.name, pl.color)}
                 </th>
               ))}
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {sortBtn('packages', 'Total pacotes', 'desc')}
+                {sortBtn('packages', 'Total pacotes')}
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {sortBtn('zapex', 'Zapex', 'desc', '#9333ea')}
+                {sortBtn('zapex', 'Zapex', '#9333ea')}
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {sortBtn('discount', 'Desconto', 'desc')}
+                {sortBtn('discount', 'Desconto')}
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {sortBtn('vale', 'Vale', 'desc')}
+                {sortBtn('vale', 'Vale')}
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                {sortBtn('net', 'Total a receber', 'desc')}
+                {sortBtn('net', 'Total a receber')}
               </th>
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {sortBtn('nf', 'NF', 'desc')}
+                {sortBtn('nf', 'NF')}
               </th>
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {sortBtn('espelho', 'Espelho', 'desc')}
+                {sortBtn('espelho', 'Espelho')}
               </th>
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Ações
