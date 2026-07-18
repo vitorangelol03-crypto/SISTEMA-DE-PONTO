@@ -124,6 +124,16 @@ test.describe('Pagamentos Driver — Aplicar do grupo reflete na grade lançada'
     await expect(driverRow(page)).toContainText('R$ 30,00', { timeout: 15_000 });
     await expect(driverRow(page).locator('td').nth(platIdx)).toContainText('R$ 3,00', { timeout: 10_000 });
 
+    // E o ESPELHO também (o relato citava "no espelho, no PDF"): abre a prévia
+    // do espelho individual e confere o valor novo lá dentro.
+    await driverRow(page).getByTitle('Ver / gerar espelho').click();
+    await expect(modal(page).getByText('Espelho individual')).toBeVisible({ timeout: 10_000 });
+    await expect(modal(page).getByText('TOTAL A RECEBER', { exact: true })).toBeVisible();
+    await expect(modal(page).getByText('R$ 30,00').first()).toBeVisible({ timeout: 10_000 });
+    await expect(modal(page).getByText('R$ 3,00').first()).toBeVisible();
+    await modal(page).getByRole('button', { name: /Fechar/ }).click();
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 5_000 });
+
     // limpeza: grupo e quinzena de teste (driver/plataforma varridos via SQL depois)
     await page.getByRole('button', { name: /Gerenciar grupos/ }).first().click();
     const delCard = modal(page).locator('div.border.rounded-lg.overflow-hidden').filter({ hasText: GROUP }).first();
