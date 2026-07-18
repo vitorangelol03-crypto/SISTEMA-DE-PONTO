@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   MapPin,
   Settings,
@@ -13,6 +13,9 @@ import {
   Circle,
   ClipboardCheck,
   Clipboard,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import type { DriverPlatform } from '../../services/driverPay';
 import { DriverRow } from './DriverRow';
@@ -82,6 +85,79 @@ export const DriverList: React.FC<DriverListProps> = ({
   handlers,
   onGroupMirror,
 }) => {
+  // Ordenacao pelo cabecalho: 1 clique ordena (direcao natural da coluna), outro
+  // clique desfaz (volta a ordem original). Texto = A-Z; numeros/checks = maior/marcado
+  // primeiro. So reordena (mostra todos), nao esconde ninguem.
+  type SortDir = 'asc' | 'desc';
+  const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
+
+  const toggleSort = (key: string, defaultDir: SortDir) =>
+    setSort((cur) => (cur?.key === key ? null : { key, dir: defaultDir }));
+
+  const sortValue = (row: DriverRowData, key: string): number | string => {
+    if (key === 'name') return row.name.toLowerCase();
+    if (key === 'group') return (row.groupName ?? '').toLowerCase();
+    if (key.startsWith('pl:')) return platformPackages(row, key.slice(3));
+    const t = computeRowTotals(row);
+    switch (key) {
+      case 'packages':
+        return t.totalPackages;
+      case 'zapex':
+        return t.zapex;
+      case 'discount':
+        return t.discounts;
+      case 'vale':
+        return t.vales;
+      case 'net':
+        return t.net;
+      case 'nf':
+        return row.notaFiscal ? 1 : 0;
+      case 'espelho':
+        return row.espelhoConferido ? 1 : 0;
+      default:
+        return 0;
+    }
+  };
+
+  const sortRows = (list: DriverRowData[]): DriverRowData[] => {
+    if (!sort) return list;
+    const mul = sort.dir === 'asc' ? 1 : -1;
+    return list
+      .map((row, i) => ({ row, i }))
+      .sort((a, b) => {
+        const va = sortValue(a.row, sort.key);
+        const vb = sortValue(b.row, sort.key);
+        const cmp =
+          typeof va === 'string' || typeof vb === 'string'
+            ? String(va).localeCompare(String(vb), 'pt-BR')
+            : (va as number) - (vb as number);
+        return cmp !== 0 ? cmp * mul : a.i - b.i; // desempate estavel = ordem original
+      })
+      .map((x) => x.row);
+  };
+
+  /** Conteudo clicavel de um cabecalho: label + seta (↑/↓ quando ativo, ↕ quando nao). */
+  const sortBtn = (key: string, label: string, defaultDir: SortDir) => {
+    const activeDir = sort && sort.key === key ? sort.dir : null;
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(key, defaultDir)}
+        title="Ordenar por esta coluna (clique de novo para desfazer)"
+        className={`group/sort inline-flex items-center gap-1 hover:text-gray-800 ${activeDir ? 'text-blue-600' : ''}`}
+      >
+        <span>{label}</span>
+        {activeDir === 'asc' ? (
+          <ArrowUp className="w-3.5 h-3.5" />
+        ) : activeDir === 'desc' ? (
+          <ArrowDown className="w-3.5 h-3.5" />
+        ) : (
+          <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/sort:opacity-70" />
+        )}
+      </button>
+    );
+  };
+
   const renderTable = (subset: DriverRowData[], withFooter: boolean, footerLabel = 'TOTAL GERAL') => {
     const totals = withFooter ? sumTotals(subset) : null;
     const nfCount = subset.filter((r) => r.notaFiscal).length;
@@ -92,39 +168,39 @@ export const DriverList: React.FC<DriverListProps> = ({
           <thead className="bg-gray-50">
             <tr>
               <th className="sticky left-0 z-20 bg-gray-50 border-r border-gray-200 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Driver / Rota
+                {sortBtn('name', 'Driver / Rota', 'asc')}
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Grupo
+                {sortBtn('group', 'Grupo', 'asc')}
               </th>
               {platforms.map((pl) => (
                 <th
                   key={pl.id}
                   className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
                 >
-                  {pl.name}
+                  {sortBtn(`pl:${pl.name}`, pl.name, 'desc')}
                 </th>
               ))}
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Total pacotes
+                {sortBtn('packages', 'Total pacotes', 'desc')}
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Zapex
+                {sortBtn('zapex', 'Zapex', 'desc')}
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Desconto
+                {sortBtn('discount', 'Desconto', 'desc')}
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Vale
+                {sortBtn('vale', 'Vale', 'desc')}
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                Total a receber
+                {sortBtn('net', 'Total a receber', 'desc')}
               </th>
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                NF
+                {sortBtn('nf', 'NF', 'desc')}
               </th>
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Espelho
+                {sortBtn('espelho', 'Espelho', 'desc')}
               </th>
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Ações
@@ -132,7 +208,7 @@ export const DriverList: React.FC<DriverListProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {subset.map((row, index) => (
+            {sortRows(subset).map((row, index) => (
               <DriverRow
                 key={row.paymentId}
                 row={row}
