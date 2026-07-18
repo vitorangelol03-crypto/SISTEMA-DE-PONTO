@@ -101,4 +101,45 @@ sensibilidade a acento/caixa ("sao sebastiao" acha "São Sebastião do Anta").
 - Higiene: `*.tsbuildinfo` fora do `.gitignore`; `Delivered (9).xlsx` solto na raiz.
 - CLAUDE.md do projeto com ESCOPO desatualizado (fala da sub-fase 1.11 multi-empresa).
 
-*Sessão 2026-07-18. Claude (Fable 5 a partir do meio da sessão). Push pendente do Victor.*
+---
+
+## E. Tarde (18/07) — deploy, Dependabot e o bug da sessão expirada
+
+### Deploys (autorizados pelo Victor nesta sessão)
+- `feature/pagamentos-driver` **mergeada na `main` (fast-forward, árvore idêntica à validada)** e pushada
+  → **aba Pagamentos Driver entrou em produção** (Vercel). Victor começou a usar NA HORA
+  (importou a Shopee real: 89 drivers / 132.923 pacotes / R$ 279.842,50 na "Quinzena Junho").
+- Branch local `chore/deps-minor-patch` = Dependabot (20 pacotes minor/patch) **validada e APROVADA**
+  (lock veio quebrado → regenerado; tsc 0 novos; build; unit 496/0; E2E 52/55/56 verdes).
+  **Aguardando OK do Victor para mergear na main** (o botão do GitHub aceitaria o lock quebrado — NÃO usar).
+  ⚠️ Deps novas pedem Node ≥22 (máquina tem 20.20 — só warning; atualizar o Node do WSL um dia).
+
+### 🐛 Bug de prod (relatado com print): "Erro ao renomear grupo" ×5
+- **Causa raiz (provada pelos logs do Supabase):** token JWT vale 24h (`auth-login` v9); a aba ficou
+  aberta além disso → todo PATCH voltava **401** e a tela só mostrava toast genérico (o erro do
+  PostgREST não é `instanceof Error` → os catch caíam no fallback). Nada foi corrompido.
+- **Fix (commit `6f94d1e`, na main, deployado):** `throwDbError` no `driverPay.ts` — 62 pontos de
+  `throw error` cru convertidos. JWT vencido → **"Sessão expirada — saia e faça login novamente"**;
+  nome duplicado → mensagem própria; resto → mensagem real do banco. + 8 unit + spec 57.
+- **Ação imediata do usuário quando acontecer:** sair e logar de novo (o token renova).
+
+### 🧪 Spec 57 — E2E de TODAS as edições (pedido do Victor)
+`tests/57-driverpay-edits-roundtrip.spec.ts`: numa **quinzena de teste descartável** (nomes
+`PW Test … <sufixo-único-por-rodada>`): plataforma criar/editar · driver criar/editar · pacotes
+na grade (valida R$) · desconto **PNR → editar → LOST → remover** · vale criar/editar/remover ·
+Zapex (lançar → valor unitário → editar no blur → excluir) · NF e Espelho (toggles) · grupo
+criar/**renomear**/excluir · rotas adicionar/renomear/remover · quinzena concluir sem abrir
+próxima/renomear/reabrir/excluir · **regressão da sessão expirada** (token inválido → mensagem
+clara). **2× sem flake.** Descoberta de produto documentada: Editar/Excluir/Reabrir da quinzena
+só aparecem com ela CONCLUÍDA (design de ontem, não é bug).
+Depois do spec: varredura SQL `PW Test%` (0 sobras) + Quinzena Junho conferida intacta.
+
+### 📌 Aprendizados de infra dos testes
+- `.env` não existia mais → suíte E2E completa (250+) estava **inrodável** desde então (specs 08/09/10/14
+  chamam `getClient()` no load). Criado `.env` com as VITE_* + linha da SERVICE_ROLE_KEY **comentada**
+  (placeholder ativo fazia os testes service-role desskiparem e falharem). **Victor ainda precisa colar a
+  chave** (Dashboard → Settings → API → service_role) para a bateria completa rodar.
+- Edge fn `auth-login` tem cold start >10s (esm.sh bcryptjs) → flake de login no 1º run após ociosidade.
+
+*Sessão 2026-07-18 (dia todo). Claude Fable 5. Estado do git: main = `6f94d1e` (pushada/deployada);
+`chore/deps-minor-patch` aguardando OK; `feature/pagamentos-driver` totalmente incorporada à main.*

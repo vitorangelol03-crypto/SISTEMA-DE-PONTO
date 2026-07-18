@@ -6,10 +6,11 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-Trabalho ativo na aba **Pagamentos Driver** (branch `feature/pagamentos-driver`, tudo
-commitado local, **push pendente do Victor**, deploy/merge pra `main` depois). Sistema de
-Ponto multi-empresa em produção (Vercel + Supabase `flcncdidxmmornkgkfbb`), release
-v2.0.0-multi-tenant. Último checkpoint de sessão: `CHECKPOINT_SESSAO_2026-07-18.md`.
+**Aba Pagamentos Driver EM PRODUÇÃO desde 18/07** (feature mergeada na `main`, deploy Vercel;
+Victor já operando com dados reais — Quinzena Junho: 89 drivers, R$ 279.842,50). `main` =
+`6f94d1e` (inclui fix da sessão expirada). Pendentes: merge da branch `chore/deps-minor-patch`
+(Dependabot validado, falta OK do Victor) e Victor colar a SERVICE_ROLE_KEY no `.env` (religa a
+bateria E2E completa). Último checkpoint de sessão: `CHECKPOINT_SESSAO_2026-07-18.md`.
 
 ## 📚 Mapa dos checkpoints
 
