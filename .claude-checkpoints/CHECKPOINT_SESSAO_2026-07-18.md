@@ -181,7 +181,30 @@ candidato a melhoria (avisar "já existe parecido" antes de criar). Anotado, nã
 R$/pacote sob os campos de pacotes da grade (e card mobile) estava cinza-claro → agora
 `text-gray-700 font-semibold` (idem "vários" do multi-rota). tsc 0 novos + build ok.
 
-**Obs.:** existe um período "teste" ABERTO criado pelo Victor (vazio) — avisado, não mexi.
+**Obs.:** período de teste vazio do Victor ("dvsdvsvssvs", ex-"teste") excluído a pedido
+dele (com trava: só apagaria se 0 lançamentos). Sobrou apenas a "2 Quinzena Junho".
+
+---
+
+## H. Noite (18/07) — BUG das taxas do import ("2,15 no perfil × 2,00 no painel")
+
+Victor reportou como "bug visual"/"demora de save". **Não era nenhum dos dois** — evidência:
+- Config individual do João V. Cassimiro: eMile **2,15** (desde 04:20). Pacotes eMile
+  gravados pelo import iMile às **16:43 com snapshot 2,00** → total R$ 4.975,75 (batia com
+  a tela). **Afetava cálculo E espelho** (não era só visual); save é imediato (gravava rápido,
+  porém com taxa errada).
+- **Causa raiz** (`getDriverDefaultRates`): retornava CEDO com qualquer `rate_snapshot` do
+  pagamento mais recente. Driver com pacotes em SÓ uma plataforma (SHOPEE) importava as
+  demais (eMile/ANJUN) pelo **default da plataforma (2,00)**, ignorando a config individual.
+  Por isso o import Shopee de 17/07 saiu certo (driver sem pagamento anterior → caía na
+  config) e os de 18/07 saíram errados.
+- **Estrago:** 33 lançamentos, ~19 drivers, **R$ 1.186,70** a menos.
+- **Fix de dados** (SQL, service role): snapshots divergentes → taxa da config; totais
+  recalculados pela view `driverpay_payment_computed` (fonte única); divergências = 0;
+  João conferido: R$ 4.975,75 → **R$ 5.015,95**.
+- **Fix de código** (commit `e26f343`, deployado): hierarquia por plataforma =
+  **config individual > última taxa usada > default** (`mergeDriverRatePriority` pura +
+  5 unit de regressão). unit 517/0.
 
 *Sessão 2026-07-18 (dia todo). Claude Fable 5. Estado do git: main = `af62879`
 (pushada/deployada — fix sessão expirada + Espelhos da seleção + nitidez);
