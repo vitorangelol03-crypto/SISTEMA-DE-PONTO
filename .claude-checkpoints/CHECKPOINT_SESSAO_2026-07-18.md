@@ -160,7 +160,30 @@ zera ao trocar período):
   descartável) · varredura SQL sem resíduo (Junho cresceu 89→99 pagamentos = uso REAL do
   Victor durante a sessão, não é teste).
 
-*Sessão 2026-07-18 (dia todo). Claude Fable 5. Estado do git: main = `4405854`
-(pushada/deployada — fix sessão expirada + Espelhos da seleção no ar);
+---
+
+## G. Noite (18/07) — merge do Igor duplicado + nitidez do R$/pacote
+
+### Conserto de dado em PROD (sem código): driver duplicado do import Anjun
+Victor marcou "criar novo" no popup do import Anjun para um entregador que já existia →
+nasceu "Igor Patrocínio" duplicando o "IGOR GOMES SANTOS". Conserto por transação SQL
+(service role, com trava que abortaria se o duplicado tivesse desconto/vale/zapex):
+1. alias anjun `IgorPatrocinioD101` reapontado pro IGOR GOMES SANTOS (próximos imports
+   reconhecem sozinho);
+2. 104 pacotes ANJUN movidos pro payment do GOMES na 2ª Quinzena Junho
+   (R$ 861,50 → **R$ 1.069,50**, verificado);
+3. totais gravados recalculados na mesma transação (não há trigger de recomputo);
+4. duplicado e seus payments vazios apagados.
+**Lição/pendência de produto:** o popup do import deixa criar duplicado fácil demais —
+candidato a melhoria (avisar "já existe parecido" antes de criar). Anotado, não feito.
+
+### Ajuste visual (commit `af62879`, deployado)
+R$/pacote sob os campos de pacotes da grade (e card mobile) estava cinza-claro → agora
+`text-gray-700 font-semibold` (idem "vários" do multi-rota). tsc 0 novos + build ok.
+
+**Obs.:** existe um período "teste" ABERTO criado pelo Victor (vazio) — avisado, não mexi.
+
+*Sessão 2026-07-18 (dia todo). Claude Fable 5. Estado do git: main = `af62879`
+(pushada/deployada — fix sessão expirada + Espelhos da seleção + nitidez);
 `chore/deps-minor-patch` (Dependabot validado) aguardando OK; hook de lembrete de
 checkpoint CONFIRMADO funcionando nesta sessão.*
