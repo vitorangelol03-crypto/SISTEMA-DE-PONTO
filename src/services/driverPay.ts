@@ -638,6 +638,13 @@ export const removeDriverFromGroup = async (groupId: string, driverId: string, u
 };
 
 /** Aplica o valor/pacote do grupo a todos os membros (para a plataforma dada). */
+/**
+ * Aplica o valor/pacote do grupo a todos os membros E reflete nos pacotes já
+ * lançados das quinzenas ABERTAS (fix 2026-07-18 — relato de usuário por áudio:
+ * mudava o preço, a config ficava certa, mas painel/espelho continuavam no valor
+ * velho). Mesma regra do planRateReapply (decisão de 04/07): só atualiza as rotas
+ * que ainda usavam a taxa efetiva ANTIGA — rota com valor próprio é preservada.
+ */
 export const applyGroupRate = async (
   companyId: string,
   groupId: string,
@@ -648,10 +655,56 @@ export const applyGroupRate = async (
   await ensurePerm(userId, 'driverpay.manageGroups');
   const memberIds = await getGroupMembers(groupId);
   if (memberIds.length === 0) return 0;
+
+  // Taxa efetiva ANTIGA de cada membro (config individual ?? default da plataforma).
+  const { data: platRow, error: platErr } = await supabase
+    .from('driverpay_platforms')
+    .select('name, default_rate')
+    .eq('id', platformId)
+    .single();
+  if (platErr) throwDbError(platErr);
+  const platformName = (platRow as { name: string }).name;
+  const platformDefault = num((platRow as { default_rate: unknown }).default_rate);
+  const { data: oldRows, error: oldErr } = await supabase
+    .from('driverpay_platform_rates')
+    .select('driver_id, rate')
+    .eq('company_id', companyId)
+    .eq('platform_id', platformId)
+    .in('driver_id', memberIds);
+  if (oldErr) throwDbError(oldErr);
+  const oldByDriver = new Map<string, number>(
+    (oldRows || []).map((r: Record<string, unknown>) => [r.driver_id as string, num(r.rate)])
+  );
+
+  // Grava a config nova de todos os membros + o default do grupo.
   const rows = memberIds.map((driverId) => ({ company_id: companyId, driver_id: driverId, platform_id: platformId, rate, updated_by: userId }));
   const { error } = await supabase.from('driverpay_platform_rates').upsert(rows, { onConflict: 'driver_id,platform_id' });
   if (error) throwDbError(error);
   await updateGroup(groupId, userId, { default_rate: rate });
+
+  // Reflete nos pacotes já lançados das quinzenas abertas (rotas na taxa antiga).
+  for (const driverId of memberIds) {
+    const oldRate = oldByDriver.get(driverId) ?? platformDefault;
+    if (oldRate === rate) continue;
+    const { data: pays, error: payErr } = await supabase
+      .from('driverpay_payments')
+      .select('id, driverpay_periods!inner(status)')
+      .eq('company_id', companyId)
+      .eq('driver_id', driverId)
+      .eq('driverpay_periods.status', 'aberto');
+    if (payErr) throwDbError(payErr);
+    for (const pay of pays || []) {
+      const paymentId = (pay as { id: string }).id;
+      const { error: pkErr } = await supabase
+        .from('driverpay_payment_packages')
+        .update({ rate_snapshot: rate })
+        .eq('payment_id', paymentId)
+        .eq('platform_name', platformName)
+        .eq('rate_snapshot', oldRate);
+      if (pkErr) throwDbError(pkErr);
+      await recomputePaymentTotals(paymentId);
+    }
+  }
   return rows.length;
 };
 

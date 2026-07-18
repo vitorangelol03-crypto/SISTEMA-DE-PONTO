@@ -374,10 +374,10 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
         <div className="flex items-start gap-2 text-sm text-gray-700 bg-blue-50 border border-blue-100 rounded-md p-3">
           <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
           <span>
-            Ao aplicar o <b>valor/pacote do grupo</b>, ele é gravado em todos os membros (cada driver ainda pode ter valor
-            próprio depois, no cadastro dele). Se criar o grupo <b>sem valor</b>, ele serve só para organizar os drivers —
-            cada um continua usando a config individual dele por pacote. O valor do período já lançado é atualizado ao
-            reabrir a grade.
+            Ao aplicar o <b>valor/pacote do grupo</b>, ele é gravado em todos os membros e{' '}
+            <b>já atualiza os pacotes lançados nas quinzenas abertas</b> (rotas com valor próprio são preservadas).
+            Se criar o grupo <b>sem valor</b>, ele serve só para organizar os drivers — cada um continua usando a
+            config individual dele por pacote.
           </span>
         </div>
 
