@@ -16,6 +16,7 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  ChevronsUpDown,
 } from 'lucide-react';
 import type { DriverPlatform } from '../../services/driverPay';
 import { DriverRow } from './DriverRow';
@@ -89,6 +90,16 @@ export const DriverList: React.FC<DriverListProps> = ({
   // (asc), 3 cliques = desativa. So reordena (mostra todos), nao esconde ninguem.
   type SortDir = 'asc' | 'desc';
   const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
+
+  // Visao "Grupos": as gavetas abrem FECHADAS; o botao "Abrir/Fechar todas" alterna todas.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const onToggleGroup = (name: string, isOpen: boolean) =>
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (isOpen) next.add(name);
+      else next.delete(name);
+      return next;
+    });
 
   // 1 clique: maior→menor (desc). 2 cliques: menor→maior (asc). 3 cliques: desativa.
   const toggleSort = (key: string) =>
@@ -463,15 +474,35 @@ export const DriverList: React.FC<DriverListProps> = ({
   }
 
   if (view === 'groups') {
+    const groups = groupsOrdered();
+    const allNames = groups.map((g) => g.name);
+    const allOpen = allNames.length > 0 && allNames.every((n) => openGroups.has(n));
     return (
       <div className="p-2 sm:p-3 space-y-3">
-        {groupsOrdered().map(({ name, rows: groupRows }) => {
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setOpenGroups(allOpen ? new Set() : new Set(allNames))}
+            className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+          >
+            <ChevronsUpDown className="w-4 h-4" />
+            {allOpen ? 'Fechar todas' : 'Abrir todas'}
+          </button>
+        </div>
+        {groups.map(({ name, rows: groupRows }) => {
           const t = sumTotals(groupRows);
           const packages = groupRows.reduce((s, r) => s + computeRowTotals(r).totalPackages, 0);
           return (
-            <details key={name} open={name !== NO_GROUP} className="border border-gray-200 rounded-lg overflow-hidden">
+            <details
+              key={name}
+              open={openGroups.has(name)}
+              onToggle={(e) => onToggleGroup(name, e.currentTarget.open)}
+              className="border border-gray-200 rounded-lg overflow-hidden"
+            >
               <summary className="list-none cursor-pointer px-4 py-3 bg-gray-50 flex items-center gap-3">
-                <ChevronRight className="w-4 h-4 text-gray-400" />
+                <ChevronRight
+                  className={`w-4 h-4 text-gray-400 transition-transform ${openGroups.has(name) ? 'rotate-90' : ''}`}
+                />
                 <span className="font-semibold text-gray-900 flex items-center gap-2">
                   {name === NO_GROUP ? <Users className="w-4 h-4 text-gray-400" /> : <Tag className="w-4 h-4 text-blue-600" />}
                   {name}
