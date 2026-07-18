@@ -225,7 +225,10 @@ lançados (o texto do modal prometia "atualiza ao reabrir a grade" — falso).
 **Fix:** Aplicar do grupo agora atualiza os snapshots das quinzenas ABERTAS (só rotas
 na taxa efetiva antiga — override por rota PRESERVADO, regra de 04/07) + recomputa
 totais pela view. Texto do modal corrigido. **Spec 59** (clique real): lança a 2,00 →
-aplica 3,00 → grade vira R$ 3,00/R$ 30,00 na hora. Specs 55/56/58/59 + unit 517/0 + build.
+aplica 3,00 → grade vira R$ 3,00/R$ 30,00 na hora **e o ESPELHO aberto em seguida mostra
+os valores novos** (lacuna apontada pelo Victor — o relato citava "no espelho, no PDF" —
+fechada em `5e90d75`, 2× sem flake). Specs 55/56/58/59 + unit 517/0 + build.
+main = `5e90d75`.
 
 ### Nuance importante registrada
 Divergência snapshot × config **não é sempre bug**: taxa por rota intencional diverge
