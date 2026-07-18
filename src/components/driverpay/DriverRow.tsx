@@ -175,8 +175,8 @@ export const DriverRow: React.FC<DriverRowProps> = ({
               {/* Mini-cabecalho: nome da plataforma acima do quadradinho, aparece ao passar
                   o mouse na linha (util quando a pessoa esta longe do cabecalho da tabela). */}
               <span
-                className="pointer-events-none absolute left-1/2 top-0.5 z-10 -translate-x-1/2 rounded px-1.5 text-[11px] font-bold whitespace-nowrap bg-white shadow-sm ring-1 ring-gray-200 opacity-0 transition-opacity group-hover:opacity-100"
-                style={{ color: plColor ?? '#374151' }}
+                className="pointer-events-none absolute left-1/2 top-0.5 z-10 -translate-x-1/2 rounded px-1.5 py-0.5 text-[11px] font-bold text-white whitespace-nowrap shadow-sm opacity-0 transition-opacity group-hover:opacity-100"
+                style={{ backgroundColor: plColor ?? '#374151' }}
               >
                 {pl.name}
               </span>
