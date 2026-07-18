@@ -177,10 +177,28 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
     }
   };
 
-  const filteredDrivers = (): Driver[] => {
-    const q = memberSearch.trim().toLowerCase();
-    if (!q) return drivers;
-    return drivers.filter((d) => d.name.toLowerCase().includes(q));
+  // Normaliza para busca sem acento e sem caixa (ex.: "Sao" encontra "São").
+  const normalizeSearch = (s: string): string =>
+    s
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  const filteredDrivers = (group: DriverGroup, members: string[]): Driver[] => {
+    // Driver ja vinculado a OUTRO grupo nao aparece aqui (evita vinculo duplo);
+    // quem ja e membro DESTE grupo continua na lista para poder ser desmarcado.
+    const inOtherGroup = new Set<string>();
+    for (const [gid, ids] of Object.entries(membersByGroup)) {
+      if (gid === group.id) continue;
+      for (const id of ids) inOtherGroup.add(id);
+    }
+    const available = drivers.filter((d) => members.includes(d.id) || !inOtherGroup.has(d.id));
+    const q = normalizeSearch(memberSearch.trim());
+    if (!q) return available;
+    // Busca por nome do driver OU por nome da rota.
+    return available.filter(
+      (d) => normalizeSearch(d.name).includes(q) || (d.route ? normalizeSearch(d.route).includes(q) : false)
+    );
   };
 
   return (
@@ -209,6 +227,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
               const members = membersByGroup[group.id] ?? [];
               const isExpanded = expandedGroupId === group.id;
               const isEditing = editingGroupId === group.id;
+              const visibleDrivers = isExpanded ? filteredDrivers(group, members) : [];
               return (
                 <div key={group.id} className="border border-gray-200 rounded-lg overflow-hidden">
                   <div className="px-3 py-3 bg-gray-50 flex flex-wrap items-center gap-2">
@@ -309,11 +328,11 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
                         type="text"
                         value={memberSearch}
                         onChange={(e) => setMemberSearch(e.target.value)}
-                        placeholder="Buscar driver…"
+                        placeholder="Buscar driver ou rota…"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                       <div className="max-h-56 overflow-y-auto border border-gray-100 rounded-md divide-y divide-gray-100">
-                        {filteredDrivers().map((d) => {
+                        {visibleDrivers.map((d) => {
                           const isMember = members.includes(d.id);
                           return (
                             <label
@@ -334,8 +353,14 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
                             </label>
                           );
                         })}
-                        {filteredDrivers().length === 0 && (
-                          <p className="text-center text-sm text-gray-500 py-4">Nenhum driver encontrado.</p>
+                        {visibleDrivers.length === 0 && (
+                          <p className="text-center text-sm text-gray-500 py-4">
+                            {memberSearch.trim()
+                              ? 'Nenhum driver encontrado.'
+                              : drivers.length > 0
+                                ? 'Nenhum driver disponível — os demais já estão vinculados a outros grupos.'
+                                : 'Nenhum driver cadastrado.'}
+                          </p>
                         )}
                       </div>
                     </div>
