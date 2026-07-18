@@ -6,11 +6,12 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Aba Pagamentos Driver EM PRODUÇÃO desde 18/07** (feature mergeada na `main`, deploy Vercel;
-Victor já operando com dados reais — Quinzena Junho: 89 drivers, R$ 279.842,50). `main` =
-`6f94d1e` (inclui fix da sessão expirada). Pendentes: merge da branch `chore/deps-minor-patch`
-(Dependabot validado, falta OK do Victor) e Victor colar a SERVICE_ROLE_KEY no `.env` (religa a
-bateria E2E completa). Último checkpoint de sessão: `CHECKPOINT_SESSAO_2026-07-18.md`.
+**Aba Pagamentos Driver EM PRODUÇÃO desde 18/07** (deploy Vercel; Victor operando com dados
+reais — Quinzena Junho em uso ativo). `main` = `4405854`: fix da sessão expirada (mensagem
+clara no lugar do toast genérico) + feature **Espelhos da seleção** (marcar grupos/drivers e
+gerar só eles). Pendentes: merge da branch `chore/deps-minor-patch` (Dependabot validado,
+falta OK do Victor) e Victor colar a SERVICE_ROLE_KEY no `.env` (religa a bateria E2E
+completa). Último checkpoint de sessão: `CHECKPOINT_SESSAO_2026-07-18.md`.
 
 ## 📚 Mapa dos checkpoints
 

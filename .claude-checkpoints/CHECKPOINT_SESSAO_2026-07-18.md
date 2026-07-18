@@ -141,5 +141,26 @@ Depois do spec: varredura SQL `PW Test%` (0 sobras) + Quinzena Junho conferida i
   chave** (Dashboard → Settings → API → service_role) para a bateria completa rodar.
 - Edge fn `auth-login` tem cold start >10s (esm.sh bcryptjs) → flake de login no 1º run após ociosidade.
 
-*Sessão 2026-07-18 (dia todo). Claude Fable 5. Estado do git: main = `6f94d1e` (pushada/deployada);
-`chore/deps-minor-patch` aguardando OK; `feature/pagamentos-driver` totalmente incorporada à main.*
+---
+
+## F. Fim de tarde (18/07) — feature "Espelhos da seleção" (commit `4405854`, deployada)
+
+Pedido do Victor com print; decisões dele: **1A** (grupo marcado sai como espelho-de-grupo,
+driver avulso como página individual, tudo num PDF só) e **2A** (checkbox nas DUAS visões,
+seleção compartilhada). Implementação 100% frontend (zero migration; seleção só de tela,
+zera ao trocar período):
+- `buildSelectionMirrorData` (função pura em `driverPayShared`, 8 unit): dedup de driver
+  cujo grupo está marcado; balde "Sem grupo" selecionável; ordem alfabética pt-BR.
+- `buildDriverSelectionMirrorDoc` (`driverMirrorPdf`): compõe grupos + avulsos num jsPDF.
+- Dialog modo `selection` (prévia + "incluir recibo"); checkboxes em DriverRow/DriverList
+  (grupo no `<summary>` com preventDefault pra não abrir a gaveta; driver travado quando o
+  grupo dele está marcado); botões "Espelhos da seleção (N)" + "Limpar" na barra.
+- **Validação:** tsc 0 novos · build · unit **512/0** · E2E specs **52–58 todos verdes**
+  (spec 58 novo: clique real com DOWNLOAD REAL de `espelhos-selecao-*.pdf` em quinzena
+  descartável) · varredura SQL sem resíduo (Junho cresceu 89→99 pagamentos = uso REAL do
+  Victor durante a sessão, não é teste).
+
+*Sessão 2026-07-18 (dia todo). Claude Fable 5. Estado do git: main = `4405854`
+(pushada/deployada — fix sessão expirada + Espelhos da seleção no ar);
+`chore/deps-minor-patch` (Dependabot validado) aguardando OK; hook de lembrete de
+checkpoint CONFIRMADO funcionando nesta sessão.*
