@@ -512,7 +512,7 @@ Regras canônicas que guiam toda mudança técnica. Quebrar = incidente.
 7. **Padrão idiomático** — ID numérico+senha, company_id param, useEffect/useCallback corretos
 8. **Qualidade > velocidade** — nunca economizar pre-check; defensa contra "atalho que vira bug latente"
 
-Detalhes em [`CHECKPOINT.md`](CHECKPOINT.md).
+Detalhes em [`CHECKPOINT.md`](.claude-checkpoints/CHECKPOINT.md).
 
 ---
 
@@ -520,7 +520,7 @@ Detalhes em [`CHECKPOINT.md`](CHECKPOINT.md).
 
 | Arquivo | Conteúdo |
 |---|---|
-| [`CHECKPOINT.md`](CHECKPOINT.md) | Estado de retomada, 8 regras, fases concluídas, fluxo de auth detalhado |
+| [`CHECKPOINT.md`](.claude-checkpoints/CHECKPOINT.md) | Estado de retomada, 8 regras, fases concluídas, fluxo de auth detalhado |
 | [`TECH_DEBT.md`](TECH_DEBT.md) | Bugs ativos + características aceitas + histórico de resoluções |
 | [`PRE-LAUNCH-CHECKLIST.md`](PRE-LAUNCH-CHECKLIST.md) | Checklist pré go-live (sub-fase 13) |
 | [`docs/edge-functions.md`](docs/edge-functions.md) | Referência canônica das 3 edge fns |
