@@ -57,6 +57,22 @@ export interface C6PaymentPermissions extends TabPermissions {
   delete: boolean;
 }
 
+export interface DriverPayPermissions extends TabPermissions {
+  createDriver: boolean;
+  editDriver: boolean;
+  deleteDriver: boolean;
+  configRate: boolean;
+  manageDiscount: boolean;
+  manageVale: boolean;
+  manageGroups: boolean;
+  managePlatforms: boolean;
+  generateMirror: boolean;
+  managePeriods: boolean;
+  complete: boolean;
+  viewHistory: boolean;
+  exportReport: boolean;
+}
+
 export interface ErrorsPermissions extends TabPermissions {
   create: boolean;
   createByValue: boolean;
@@ -92,6 +108,7 @@ export interface UserPermissions {
   reports: ReportsPermissions;
   financial: FinancialPermissions;
   c6payment: C6PaymentPermissions;
+  driverpay: DriverPayPermissions;
   errors: ErrorsPermissions;
   settings: SettingsPermissions;
   users: UsersPermissions;
@@ -104,6 +121,7 @@ export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: true, editBonus: true, delete: true, clear: true, applyBonus: true, applyBonusB: true, applyBonusC1: true, applyBonusC2: true, removeBonus: true, removeBonusByType: true, removeBonusBulk: true, applyDiscount: true, viewHistory: true },
   c6payment: { view: true, generate: true, export: true, import: true, edit: true, bulkEdit: true, delete: true },
+  driverpay: { view: true, createDriver: true, editDriver: true, deleteDriver: true, configRate: true, manageDiscount: true, manageVale: true, manageGroups: true, managePlatforms: true, generateMirror: true, managePeriods: true, complete: true, viewHistory: true, exportReport: true },
   errors: { view: true, create: true, createByValue: true, edit: true, delete: true, viewStats: true, viewTriage: true, createTriage: true, distributeTriage: true },
   settings: { view: true, editDailyRate: true, editOther: true },
   users: { view: true, create: true, delete: true, managePermissions: true },
@@ -120,6 +138,9 @@ export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
   // aplicar nenhum bônus B/C1/C2. Alinhado agora pra true (mantém UX esperada).
   financial: { view: true, viewPayments: true, editRate: false, editBonus: true, delete: false, clear: false, applyBonus: true, applyBonusB: true, applyBonusC1: true, applyBonusC2: true, removeBonus: true, removeBonusByType: false, removeBonusBulk: false, applyDiscount: false, viewHistory: false },
   c6payment: { view: true, generate: true, export: true, import: true, edit: true, bulkEdit: false, delete: false },
+  // Sub-fase Pgto Driver: supervisor NAO ve a aba por padrao (decisao Victor: admin/mestre por ora).
+  // Liberavel por usuario via PermissionsModal. Mestres 9999/2626 tem acesso via isMaster.
+  driverpay: { view: false, createDriver: false, editDriver: false, deleteDriver: false, configRate: false, manageDiscount: false, manageVale: false, manageGroups: false, managePlatforms: false, generateMirror: false, managePeriods: false, complete: false, viewHistory: false, exportReport: false },
   errors: { view: true, create: true, createByValue: false, edit: true, delete: false, viewStats: true, viewTriage: true, createTriage: true, distributeTriage: true },
   settings: { view: false, editDailyRate: false, editOther: false },
   users: { view: false, create: false, delete: false, managePermissions: false },
@@ -132,6 +153,7 @@ export const DEFAULT_READONLY_PERMISSIONS: UserPermissions = {
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: false, editBonus: false, delete: false, clear: false, applyBonus: false, applyBonusB: false, applyBonusC1: false, applyBonusC2: false, removeBonus: false, removeBonusByType: false, removeBonusBulk: false, applyDiscount: false, viewHistory: false },
   c6payment: { view: true, generate: false, export: false, import: false, edit: false, bulkEdit: false, delete: false },
+  driverpay: { view: false, createDriver: false, editDriver: false, deleteDriver: false, configRate: false, manageDiscount: false, manageVale: false, manageGroups: false, managePlatforms: false, generateMirror: false, managePeriods: false, complete: false, viewHistory: false, exportReport: false },
   errors: { view: true, create: false, createByValue: false, edit: false, delete: false, viewStats: true, viewTriage: false, createTriage: false, distributeTriage: false },
   settings: { view: false, editDailyRate: false, editOther: false },
   users: { view: false, create: false, delete: false, managePermissions: false },
@@ -215,6 +237,23 @@ export const PERMISSION_LABELS = {
     edit: 'Editar linhas de pagamento',
     bulkEdit: 'Editar datas em lote',
     delete: 'Excluir linhas de pagamento'
+  },
+  driverpay: {
+    title: 'Pagamentos Driver',
+    view: 'Ver aba',
+    createDriver: 'Cadastrar driver',
+    editDriver: 'Editar driver',
+    deleteDriver: 'Excluir driver',
+    configRate: 'Configurar valor por pacote',
+    manageDiscount: 'Lançar/remover desconto',
+    manageVale: 'Lançar/remover vale',
+    manageGroups: 'Gerenciar grupos',
+    managePlatforms: 'Gerenciar plataformas',
+    generateMirror: 'Gerar espelho (PDF)',
+    managePeriods: 'Criar/gerenciar quinzena',
+    complete: 'Concluir pagamento (imutável)',
+    viewHistory: 'Ver histórico',
+    exportReport: 'Baixar relatório geral'
   },
   errors: {
     title: 'Erros',

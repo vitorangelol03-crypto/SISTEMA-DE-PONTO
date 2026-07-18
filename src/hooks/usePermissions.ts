@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UserPermissions, DEFAULT_ADMIN_PERMISSIONS } from '../types/permissions';
 import { getUserPermissions, hasPermission as checkPermission } from '../services/permissions';
-import { isMaster, isPontoEditPermission, canEditPonto } from '../config/masters';
+import { isMaster, isPontoEditPermission, canEditPonto, isDriverpayPermission, canAccessDriverpay } from '../config/masters';
 
 export function usePermissions(userId: string | null) {
   const [permissions, setPermissions] = useState<UserPermissions | null>(null);
@@ -41,6 +41,11 @@ export function usePermissions(userId: string | null) {
       // acima de qualquer bypass de mestre — nem o 9999 pode. Espelha o trigger no banco.
       if (isPontoEditPermission(permission)) {
         return canEditPonto(userId);
+      }
+
+      // Pagamentos Driver: módulo inteiro EXCLUSIVO do 2626 (nem 9999 vê a aba). Acima do bypass.
+      if (isDriverpayPermission(permission)) {
+        return canAccessDriverpay(userId);
       }
 
       if (isMaster(userId)) {

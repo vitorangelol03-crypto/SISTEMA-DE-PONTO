@@ -21,10 +21,20 @@ NÃO sugerir mudanças arquiteturais não solicitadas.
 
 ## 📋 ESCOPO ATUAL
 
-Refatoração multi-empresa em sub-fases:
-- ✅ 1.1 a 1.10 concluídas
-- 🎯 1.11 em andamento (botão trocar empresa no header)
-- ⏳ 1.12 em diante: continuar
+- ✅ Refatoração multi-empresa CONCLUÍDA (v2.0.0-multi-tenant em produção)
+- 🎯 Aba **Pagamentos Driver** (branch `feature/pagamentos-driver`) — em evolução
+- Estado detalhado: ler `.claude-checkpoints/00-INDEX.md` PRIMEIRO ao abrir o projeto
+
+## 🧭 CHECKPOINTS (regra deste projeto, desde 2026-07-18)
+
+1. Todos os checkpoints vivem em `.claude-checkpoints/` — NUNCA na raiz.
+2. Ao abrir o projeto: ler `00-INDEX.md` + o último `CHECKPOINT_SESSAO_*.md`. Só.
+3. Ao fim de cada leva de trabalho (e SEMPRE antes de encerrar a sessão):
+   criar/atualizar o `CHECKPOINT_SESSAO_<data>.md` da sessão E atualizar o `00-INDEX.md`
+   (estado atual + tabela + decisões novas). Um hook pós-commit lembra disso.
+4. Checkpoint de sessão é CURTO: o que mudou, por quê, como foi validado, pendências.
+   Não re-listar o que o git já conta (`git log` é a fonte dos detalhes).
+5. Checkpoint nunca é apagado — vira "superseded" na tabela do índice.
 
 ## 🚫 PROIBIDO NESTE PROJETO
 

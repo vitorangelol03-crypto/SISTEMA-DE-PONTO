@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // \"\"' | grep -q 'git commit' && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"LEMBRETE (hook do projeto): acabou de haver um git commit. Antes de encerrar a sessao, crie/atualize o CHECKPOINT_SESSAO_<data>.md em .claude-checkpoints/ e atualize o 00-INDEX.md (estado atual + tabela + decisoes). Nao acumule commits sem checkpoint.\"}}' || true",
+            "timeout": 10,
+            "statusMessage": "Conferindo lembrete de checkpoint…"
+          }
+        ]
+      }
+    ]
+  }
+}

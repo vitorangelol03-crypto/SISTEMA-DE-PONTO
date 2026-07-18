@@ -1,6 +1,6 @@
 import { supabase, setAuthToken, getAuthToken } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
-import { isMaster, isPontoEditPermission, canEditPonto } from '../config/masters';
+import { isMaster, isPontoEditPermission, canEditPonto, canAccessDriverpay } from '../config/masters';
 import {
   computeWorkedMinutes,
   computeIntervalMinutes,
@@ -365,6 +365,13 @@ async function validatePermission(
     return canEditPonto(userId)
       ? { allowed: true }
       : { allowed: false, error: 'Apenas o usuário mestre (2626) pode alterar registros de ponto' };
+  }
+
+  // Pagamentos Driver: módulo EXCLUSIVO do 2626 (nem 9999), acima do bypass de mestre.
+  if (permission.startsWith('driverpay.')) {
+    return canAccessDriverpay(userId)
+      ? { allowed: true }
+      : { allowed: false, error: 'Apenas o usuário mestre (2626) pode acessar Pagamentos Driver' };
   }
 
   // Mestres (9999 / 2626) têm todas as demais permissões.

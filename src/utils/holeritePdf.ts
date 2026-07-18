@@ -163,8 +163,8 @@ function buildPdf(data: HoleriteData): jsPDF {
   if (data.totalBonusC2 > 0) proventos.push([`Bonificação C2 (${bonusCounts.c2}×)`, '+', fmtBRL(data.totalBonusC2)]);
 
   const descontos: Array<[string, string, string]> = [];
-  if (data.errorDiscount > 0) descontos.push(['Desconto de Erros', '−', fmtBRL(data.errorDiscount)]);
-  if (data.triageDiscount > 0) descontos.push(['Desconto de Triagem', '−', fmtBRL(data.triageDiscount)]);
+  if (data.errorDiscount > 0) descontos.push(['Desconto de Erros', '-', fmtBRL(data.errorDiscount)]);
+  if (data.triageDiscount > 0) descontos.push(['Desconto de Triagem', '-', fmtBRL(data.triageDiscount)]);
 
   autoTable(doc, {
     startY: compY + 6,
@@ -179,8 +179,8 @@ function buildPdf(data: HoleriteData): jsPDF {
       2: { cellWidth: 145, halign: 'right' },
     },
     didParseCell: (cell) => {
-      // Tipo "−" pintado vermelho
-      if (cell.section === 'body' && cell.column.index === 1 && cell.cell.text[0] === '−') {
+      // Tipo "-" pintado vermelho
+      if (cell.section === 'body' && cell.column.index === 1 && cell.cell.text[0] === '-') {
         cell.cell.styles.textColor = [COLOR_DANGER[0], COLOR_DANGER[1], COLOR_DANGER[2]];
       }
     },
@@ -198,7 +198,7 @@ function buildPdf(data: HoleriteData): jsPDF {
     startY: afterComp + 12,
     body: [
       ['TOTAL DE PROVENTOS', fmtBRL(totalProventos)],
-      ['TOTAL DE DESCONTOS', `−${fmtBRL(totalDescontos)}`],
+      ['TOTAL DE DESCONTOS', `-${fmtBRL(totalDescontos)}`],
     ],
     foot: [['VALOR LÍQUIDO A RECEBER', fmtBRL(data.totalNet)]],
     theme: 'plain',

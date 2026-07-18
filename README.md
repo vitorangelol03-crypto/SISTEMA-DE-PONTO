@@ -135,7 +135,7 @@ supabase/
 
 tests/                  # Playwright specs E2E + unit
 docs/                   # security baselines pre/post RLS
-CHECKPOINT.md           # estado de retomada de sessão (regras + fases)
+.claude-checkpoints/    # checkpoints de sessão (ler 00-INDEX.md primeiro)
 TECH_DEBT.md            # bugs + histórico de resoluções
 ```
 
