@@ -207,6 +207,31 @@ Victor reportou como "bug visual"/"demora de save". **Não era nenhum dos dois**
   **config individual > última taxa usada > default** (`mergeDriverRatePriority` pura +
   5 unit de regressão). unit 517/0.
 
+---
+
+## I. Noite (18/07) — relato por ÁUDIO + fix do "Aplicar" do grupo (commit `aa2c04b`)
+
+### Transcritor de áudio instalado na máquina
+Victor mandou um .ogg de WhatsApp (relato de usuário). Instalado **faster-whisper**
+(modelo small, pt) sem sudo: pip via get-pip bootstrap (`--user --break-system-packages`)
++ `pip install faster-whisper` (o `av` embutido dispensa ffmpeg). Script de uso:
+`python3 <script> "<arquivo>"` com `WhisperModel('small', cpu, int8)`. Reutilizável.
+
+### O relato (16:33, ANTES dos fixes da tarde) e o fix
+Usuário: mudava o preço, a config ficava certa, mas "página inicial e espelho/PDF"
+continuavam errados — mesmo relogando. Além do bug do import (§H), havia uma 2ª porta:
+**`applyGroupRate` só gravava a config** e não tocava o `rate_snapshot` dos pacotes
+lançados (o texto do modal prometia "atualiza ao reabrir a grade" — falso).
+**Fix:** Aplicar do grupo agora atualiza os snapshots das quinzenas ABERTAS (só rotas
+na taxa efetiva antiga — override por rota PRESERVADO, regra de 04/07) + recomputa
+totais pela view. Texto do modal corrigido. **Spec 59** (clique real): lança a 2,00 →
+aplica 3,00 → grade vira R$ 3,00/R$ 30,00 na hora. Specs 55/56/58/59 + unit 517/0 + build.
+
+### Nuance importante registrada
+Divergência snapshot × config **não é sempre bug**: taxa por rota intencional diverge
+por design (ex.: Victor lançou rota "COLETA" SHOPEE a 1,00 com config 2,00 às 20:37 —
+mantida). A query de divergência é diagnóstico, nunca correção automática.
+
 *Sessão 2026-07-18 (dia todo). Claude Fable 5. Estado do git: main = `af62879`
 (pushada/deployada — fix sessão expirada + Espelhos da seleção + nitidez);
 `chore/deps-minor-patch` (Dependabot validado) aguardando OK; hook de lembrete de
