@@ -493,13 +493,23 @@ export const upsertDriverRate = async (
  * pagamento mais recente ja reflete "a ultima taxa usada". Fallback: taxas fixas
  * configuradas em driverpay_platform_rates; se nao houver nada, retorna {}.
  */
+/**
+ * PRIORIDADE por plataforma (fix do bug das taxas do import, 2026-07-18):
+ *   1) taxa individual CONFIGURADA no cadastro (driverpay_platform_rates) — o que
+ *      o usuário definiu é a verdade;
+ *   2) "última taxa usada" (rate_snapshot do pagamento mais recente) — cobre
+ *      driver sem config naquela plataforma;
+ *   3) (no chamador) default da plataforma.
+ * A versão anterior retornava CEDO com qualquer snapshot achado: driver com só a
+ * SHOPEE lançada importava eMile/ANJUN pelo default da plataforma, IGNORANDO a
+ * config individual (33 lançamentos errados em 18/07 — R$ 1.186,70 a menos).
+ */
 export const getDriverDefaultRates = async (
   companyId: string,
   driverId: string
 ): Promise<Record<string, number>> => {
-  const rates: Record<string, number> = {};
-
-  // 1) Pagamento mais recente do driver, com seus pacotes (join com os pacotes filhos).
+  // "Última taxa usada": pacotes do pagamento mais recente do driver.
+  const lastUsed: Record<string, number> = {};
   const { data: payRows, error: payErr } = await supabase
     .from('driverpay_payments')
     .select('id, packages:driverpay_payment_packages(platform_name, rate_snapshot, created_at)')
@@ -519,12 +529,12 @@ export const getDriverDefaultRates = async (
     for (const row of ordered) {
       const name = typeof row.platform_name === 'string' ? row.platform_name : '';
       const rate = num(row.rate_snapshot);
-      if (name && rate > 0) rates[name] = rate;
+      if (name && rate > 0) lastUsed[name] = rate;
     }
   }
-  if (Object.keys(rates).length > 0) return rates;
 
-  // 2) Fallback: taxas fixas do driver por plataforma (driverpay_platform_rates).
+  // Config individual explícita do cadastro (SEMPRE consultada — sem early-return).
+  const config: Record<string, number> = {};
   const { data: rateRows, error: rateErr } = await supabase
     .from('driverpay_platform_rates')
     .select('rate, platform:driverpay_platforms(name)')
@@ -534,11 +544,20 @@ export const getDriverDefaultRates = async (
   (rateRows || []).forEach((r: Record<string, unknown>) => {
     const plat = r.platform as { name?: string } | null;
     const rate = num(r.rate);
-    if (plat?.name && rate > 0) rates[plat.name] = rate;
+    if (plat?.name && rate > 0) config[plat.name] = rate;
   });
 
-  return rates;
+  return mergeDriverRatePriority(config, lastUsed);
 };
+
+/**
+ * Config individual explícita GANHA da última taxa usada, plataforma a plataforma
+ * (função pura — regressão em tests/unit/driverPayImportRates.spec.ts).
+ */
+export const mergeDriverRatePriority = (
+  config: Record<string, number>,
+  lastUsed: Record<string, number>
+): Record<string, number> => ({ ...lastUsed, ...config });
 
 // ─── Grupos ──────────────────────────────────────────────────────────────────
 
