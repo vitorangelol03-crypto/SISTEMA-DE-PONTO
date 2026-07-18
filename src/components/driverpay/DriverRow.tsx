@@ -169,8 +169,17 @@ export const DriverRow: React.FC<DriverRowProps> = ({
             (rl) => rl.rates[pl.name] ?? row.ratesByPlatform[pl.name] ?? pl.default_rate,
           );
           const allSameRate = routeRates.every((r) => r === routeRates[0]);
+          const plColor = pl.color;
           return (
-            <td key={pl.id} className="px-3 py-3 text-center align-middle">
+            <td key={pl.id} className="px-3 py-3 text-center align-middle relative">
+              {/* Mini-cabecalho: nome da plataforma acima do quadradinho, aparece ao passar
+                  o mouse na linha (util quando a pessoa esta longe do cabecalho da tabela). */}
+              <span
+                className="pointer-events-none absolute left-1/2 top-0.5 z-10 -translate-x-1/2 rounded px-1.5 text-[11px] font-bold whitespace-nowrap bg-white shadow-sm ring-1 ring-gray-200 opacity-0 transition-opacity group-hover:opacity-100"
+                style={{ color: plColor ?? '#374151' }}
+              >
+                {pl.name}
+              </span>
               <div className="inline-flex flex-col items-center gap-0.5">
                 {multi ? (
                   <span className="min-w-[40px] text-right font-bold text-gray-700 tabular-nums" title="soma das rotas">
@@ -186,7 +195,10 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                       handlers.onPackageChange(row.paymentId, 0, pl.name, parsePackages(e.target.value))
                     }
                     onBlur={() => handlers.onPackageBlur(row.paymentId, 0, pl.name)}
-                    className="w-14 text-right border border-gray-300 rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                    style={plColor ? ({ borderColor: plColor, ['--tw-ring-color']: plColor } as React.CSSProperties) : undefined}
+                    className={`w-14 text-right rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 disabled:bg-gray-50 disabled:text-gray-500 ${
+                      plColor ? 'border-2' : 'border border-gray-300 focus:ring-blue-500/30 focus:border-blue-500'
+                    }`}
                   />
                 )}
                 {multi && !allSameRate ? (

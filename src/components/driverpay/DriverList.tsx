@@ -187,7 +187,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                 {sortBtn('packages', 'Total pacotes', 'desc')}
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {sortBtn('zapex', 'Zapex', 'desc')}
+                {sortBtn('zapex', 'Zapex', 'desc', '#9333ea')}
               </th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('discount', 'Desconto', 'desc')}
@@ -310,7 +310,10 @@ export const DriverList: React.FC<DriverListProps> = ({
                       handlers.onPackageChange(row.paymentId, 0, pl.name, Number(e.target.value.replace(/\D/g, '') || 0))
                     }
                     onBlur={() => handlers.onPackageBlur(row.paymentId, 0, pl.name)}
-                    className="w-16 text-right border border-gray-300 rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums disabled:bg-gray-100 disabled:text-gray-500"
+                    style={pl.color ? { borderColor: pl.color } : undefined}
+                    className={`w-16 text-right rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums disabled:bg-gray-100 disabled:text-gray-500 ${
+                      pl.color ? 'border-2' : 'border border-gray-300'
+                    }`}
                   />
                 )}
               </div>
