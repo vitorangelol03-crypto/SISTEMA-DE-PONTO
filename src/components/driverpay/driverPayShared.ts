@@ -213,6 +213,9 @@ export function buildRows(
   frozen = false,
 ): DriverRowData[] {
   const driverById = new Map(drivers.map((d) => [d.id, d]));
+  // Periodo ABERTO: pacotes de plataforma arquivada (fora de `platforms`, que so traz
+  // ativas) saem da soma. Periodo concluido (frozen): mantem tudo congelado.
+  const activeNames = new Set(platforms.map((pl) => pl.name));
 
   return payments.map((p) => {
     const driver = driverById.get(p.driver_id);
@@ -225,6 +228,9 @@ export function buildRows(
     const rateByPlatform: Record<string, number> = {};
 
     for (const pk of pkgs) {
+      // Plataforma arquivada num periodo aberto: ignora (sai da soma). Reversivel:
+      // reativar a plataforma faz o pacote voltar. NAO deleta nada.
+      if (!frozen && !activeNames.has(pk.platform_name)) continue;
       let rp = byRoute.get(pk.route);
       let ids = idsByRoute.get(pk.route);
       let rt = ratesByRoute.get(pk.route);

@@ -41,6 +41,8 @@ export interface DriverPlatform {
   default_rate: number;
   sort_order: number;
   active: boolean;
+  /** Cor (HEX) do nome no cabecalho da grade; null = cor padrao (cinza). */
+  color: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -180,7 +182,12 @@ function mapDriver(r: Record<string, unknown>): Driver {
   return { ...(r as unknown as Driver) };
 }
 function mapPlatform(r: Record<string, unknown>): DriverPlatform {
-  return { ...(r as unknown as DriverPlatform), default_rate: num(r.default_rate), sort_order: num(r.sort_order) };
+  return {
+    ...(r as unknown as DriverPlatform),
+    default_rate: num(r.default_rate),
+    sort_order: num(r.sort_order),
+    color: (r.color as string | null) ?? null,
+  };
 }
 function mapPackage(r: Record<string, unknown>): DriverPaymentPackage {
   return { ...(r as unknown as DriverPaymentPackage), packages: num(r.packages), rate_snapshot: num(r.rate_snapshot) };
@@ -302,7 +309,7 @@ export const getPlatforms = async (companyId: string, onlyActive = true): Promis
 export const createPlatform = async (
   companyId: string,
   userId: string,
-  data: { name: string; default_rate?: number; sort_order?: number }
+  data: { name: string; default_rate?: number; sort_order?: number; color?: string | null }
 ): Promise<DriverPlatform> => {
   await ensurePerm(userId, 'driverpay.managePlatforms');
   const { data: row, error } = await supabase
@@ -312,6 +319,7 @@ export const createPlatform = async (
       name: data.name.trim(),
       default_rate: data.default_rate ?? 2.0,
       sort_order: data.sort_order ?? 0,
+      color: data.color ?? null,
       created_by: userId,
     }])
     .select()
@@ -323,10 +331,60 @@ export const createPlatform = async (
 export const updatePlatform = async (
   id: string,
   userId: string,
-  updates: Partial<Pick<DriverPlatform, 'name' | 'default_rate' | 'sort_order' | 'active'>>
+  updates: Partial<Pick<DriverPlatform, 'name' | 'default_rate' | 'sort_order' | 'active' | 'color'>>
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.managePlatforms');
   const { error } = await supabase.from('driverpay_platforms').update(updates).eq('id', id);
+  if (error) throw error;
+};
+
+/**
+ * Renomeia a plataforma E reconecta os pacotes (driverpay_payment_packages guarda o
+ * NOME da plataforma, nao o id). Sem isso, renomear deixaria os pacotes orfaos e eles
+ * sairiam da soma (o calculo casa por nome ativo). No-op se o nome nao mudou.
+ */
+export const renamePlatform = async (
+  companyId: string,
+  platformId: string,
+  newName: string,
+  userId: string
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.managePlatforms');
+  const trimmed = newName.trim();
+  const { data: cur, error: selErr } = await supabase
+    .from('driverpay_platforms')
+    .select('name')
+    .eq('id', platformId)
+    .eq('company_id', companyId)
+    .single();
+  if (selErr) throw selErr;
+  const oldName = (cur as { name: string } | null)?.name;
+  if (!oldName || oldName === trimmed) {
+    if (oldName !== trimmed) {
+      const { error } = await supabase.from('driverpay_platforms').update({ name: trimmed }).eq('id', platformId);
+      if (error) throw error;
+    }
+    return;
+  }
+  const { error: pErr } = await supabase.from('driverpay_platforms').update({ name: trimmed }).eq('id', platformId);
+  if (pErr) throw pErr;
+  const { error: pkErr } = await supabase
+    .from('driverpay_payment_packages')
+    .update({ platform_name: trimmed })
+    .eq('company_id', companyId)
+    .eq('platform_name', oldName);
+  if (pkErr) throw pkErr;
+};
+
+/** Arquiva/reativa varias plataformas (active=false/true). Nao apaga nada. */
+export const setPlatformsActive = async (
+  ids: string[],
+  active: boolean,
+  userId: string
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.managePlatforms');
+  if (ids.length === 0) return;
+  const { error } = await supabase.from('driverpay_platforms').update({ active }).in('id', ids);
   if (error) throw error;
 };
 

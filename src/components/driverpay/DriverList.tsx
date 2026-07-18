@@ -137,7 +137,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   };
 
   /** Conteudo clicavel de um cabecalho: label + seta (↑/↓ quando ativo, ↕ quando nao). */
-  const sortBtn = (key: string, label: string, defaultDir: SortDir) => {
+  const sortBtn = (key: string, label: string, defaultDir: SortDir, color?: string | null) => {
     const activeDir = sort && sort.key === key ? sort.dir : null;
     return (
       <button
@@ -146,7 +146,9 @@ export const DriverList: React.FC<DriverListProps> = ({
         title="Ordenar por esta coluna (clique de novo para desfazer)"
         className={`group/sort inline-flex items-center gap-1 hover:text-gray-800 ${activeDir ? 'text-blue-600' : ''}`}
       >
-        <span>{label}</span>
+        <span className={color ? 'font-bold' : ''} style={color ? { color } : undefined}>
+          {label}
+        </span>
         {activeDir === 'asc' ? (
           <ArrowUp className="w-3.5 h-3.5" />
         ) : activeDir === 'desc' ? (
@@ -178,7 +180,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                   key={pl.id}
                   className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
                 >
-                  {sortBtn(`pl:${pl.name}`, pl.name, 'desc')}
+                  {sortBtn(`pl:${pl.name}`, pl.name, 'desc', pl.color)}
                 </th>
               ))}
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -288,7 +290,12 @@ export const DriverList: React.FC<DriverListProps> = ({
             return (
               <div key={pl.id} className="bg-gray-50 rounded p-2 flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <span className="text-[11px] text-gray-500 block truncate">{pl.name}</span>
+                  <span
+                    className={`text-[11px] block truncate ${pl.color ? 'font-bold' : 'text-gray-500'}`}
+                    style={pl.color ? { color: pl.color } : undefined}
+                  >
+                    {pl.name}
+                  </span>
                   <span className="text-[10px] text-gray-400">{formatBRL(rate)}/pc</span>
                 </div>
                 {multi ? (

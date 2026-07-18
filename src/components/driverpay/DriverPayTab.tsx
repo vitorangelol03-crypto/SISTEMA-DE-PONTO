@@ -944,6 +944,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           companyId={company.id}
           userId={userId}
           drivers={drivers}
+          platforms={platforms}
           onClose={() => setShowPlatform(false)}
           onSaved={refresh}
         />
