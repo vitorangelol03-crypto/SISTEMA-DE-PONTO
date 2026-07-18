@@ -94,7 +94,7 @@ const KpiCard: React.FC<{ color: KpiColor; icon: React.ReactNode; label: string;
   label,
   value,
 }) => (
-  <div className={`relative rounded-lg border p-4 ${KPI_STYLES[color]}`}>
+  <div className={`relative flex flex-col justify-between rounded-xl border shadow-sm p-4 min-h-[92px] ${KPI_STYLES[color]}`}>
     <span className={`absolute top-3 right-3 ${KPI_ICON_COLOR[color]}`}>{icon}</span>
     <div className="text-sm font-medium">{label}</div>
     <div className={`text-2xl font-bold mt-1.5 tabular-nums ${KPI_ICON_COLOR[color]}`}>{value}</div>
@@ -764,7 +764,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       </div>
 
       {/* Painel */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <DriverFilters
           search={search}
           onSearch={setSearch}
@@ -778,7 +778,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           onView={setView}
         />
 
-        <div className="px-3 sm:px-4 py-3 border-b border-gray-200 flex flex-wrap items-center gap-2 bg-gray-50/60">
+        <div className="px-3 sm:px-4 py-3 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2 bg-gray-50/60">
+          <div className="flex flex-wrap items-center gap-2">
           {hasPermission('driverpay.manageGroups') && (
             <button
               type="button"
@@ -823,8 +824,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             </>
           )}
 
-          <span className="flex-1" />
+          </div>
 
+          <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setShowDiscountSearch(true)}
@@ -850,6 +852,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               <Download className="w-4 h-4" /> Relatório geral
             </button>
           )}
+          </div>
         </div>
 
         {loading ? (

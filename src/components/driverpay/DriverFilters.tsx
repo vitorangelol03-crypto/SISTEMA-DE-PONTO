@@ -77,25 +77,27 @@ export const DriverFilters: React.FC<DriverFiltersProps> = ({
         </select>
       </div>
 
-      <div className="flex gap-2 items-end">
-        <button
-          type="button"
-          onClick={() => onView('list')}
-          className={`flex-1 px-3 py-2 rounded-md text-sm font-medium inline-flex items-center justify-center gap-1.5 min-h-[40px] ${
-            view === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          <List className="w-4 h-4" /> Lista
-        </button>
-        <button
-          type="button"
-          onClick={() => onView('groups')}
-          className={`flex-1 px-3 py-2 rounded-md text-sm font-medium inline-flex items-center justify-center gap-1.5 min-h-[40px] ${
-            view === 'groups' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          <Grid3x3 className="w-4 h-4" /> Grupos
-        </button>
+      <div className="flex items-end">
+        <div className="flex w-full gap-1 rounded-lg bg-gray-100 p-1">
+          <button
+            type="button"
+            onClick={() => onView('list')}
+            className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium inline-flex items-center justify-center gap-1.5 min-h-[36px] transition-colors ${
+              view === 'list' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <List className="w-4 h-4" /> Lista
+          </button>
+          <button
+            type="button"
+            onClick={() => onView('groups')}
+            className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium inline-flex items-center justify-center gap-1.5 min-h-[36px] transition-colors ${
+              view === 'groups' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <Grid3x3 className="w-4 h-4" /> Grupos
+          </button>
+        </div>
       </div>
     </div>
   );
