@@ -338,7 +338,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                   >
                     {pl.name}
                   </span>
-                  <span className="text-[10px] text-gray-400">{formatBRL(rate)}/pc</span>
+                  <span className="text-[11px] text-gray-700 font-semibold">{formatBRL(rate)}/pc</span>
                 </div>
                 {multi ? (
                   <span className="text-sm font-bold text-gray-700 tabular-nums">{formatInt(sum)}</span>

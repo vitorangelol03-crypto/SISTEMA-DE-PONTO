@@ -221,13 +221,15 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 )}
                 {multi && !allSameRate ? (
                   <span
-                    className="text-gray-400 text-xs whitespace-nowrap"
+                    className="text-gray-700 text-xs font-semibold whitespace-nowrap"
                     title="taxas diferentes por rota — abra as rotas para editar"
                   >
                     vários
                   </span>
                 ) : (
-                  <span className="text-gray-400 text-xs whitespace-nowrap">{formatBRL(routeRates[0] ?? 0)}</span>
+                  <span className="text-gray-700 text-xs font-semibold whitespace-nowrap">
+                    {formatBRL(routeRates[0] ?? 0)}
+                  </span>
                 )}
               </div>
             </td>
