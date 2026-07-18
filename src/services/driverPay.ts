@@ -164,6 +164,24 @@ export interface DriverPaymentRow extends DriverPayment {
 
 const num = (v: unknown): number => Number(v ?? 0);
 
+/**
+ * Converte o erro cru do PostgREST em um Error legivel (os catch das telas mostram
+ * e.message no toast). O objeto de erro do supabase-js NAO e instanceof Error no
+ * bundle, entao sem esta conversao os catch caiam na mensagem generica e escondiam
+ * a causa real — ex.: sessao expirada (JWT vencido, HTTP 401) aparecia so como
+ * "Erro ao renomear grupo" (bug real em prod, 2026-07-18).
+ */
+export const throwDbError = (error: { message?: string; code?: string }): never => {
+  const msg = error.message ?? '';
+  if (error.code === 'PGRST301' || (/jwt/i.test(msg) && /expired|invalid/i.test(msg))) {
+    throw new Error('Sessão expirada — saia e faça login novamente para continuar.');
+  }
+  if (error.code === '23505' || /duplicate key/i.test(msg)) {
+    throw new Error('Já existe um registro com esse nome.');
+  }
+  throw new Error(msg || 'Erro de comunicação com o banco de dados.');
+};
+
 /** Espelha validatePermission (privado no database.ts) com os helpers exportados. */
 async function ensurePerm(userId: string, permission: string): Promise<void> {
   // Modulo Pagamentos Driver e EXCLUSIVO do 2626 (nem 9999). Acima do bypass de mestre.
@@ -231,7 +249,7 @@ export const getDrivers = async (
   if (opts?.route) query = query.eq('route', opts.route);
   if (opts?.search) query = query.ilike('name', `%${opts.search}%`);
   const { data, error } = await query.order('name', { ascending: true });
-  if (error) throw error;
+  if (error) throwDbError(error);
   return (data || []).map(mapDriver);
 };
 
@@ -241,7 +259,7 @@ export const getDriverRoutes = async (companyId: string): Promise<string[]> => {
     .select('route')
     .eq('company_id', companyId)
     .not('route', 'is', null);
-  if (error) throw error;
+  if (error) throwDbError(error);
   const set = new Set<string>();
   (data || []).forEach((r: Record<string, unknown>) => {
     const route = (r.route as string | null)?.trim();
@@ -270,7 +288,7 @@ export const createDriver = async (
     }])
     .select()
     .single();
-  if (error) throw error;
+  if (error) throwDbError(error);
   return mapDriver(row);
 };
 
@@ -284,7 +302,7 @@ export const updateDriver = async (
     .from('driverpay_drivers')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id);
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 export const setDriverActive = async (id: string, active: boolean, userId: string): Promise<void> => {
@@ -293,7 +311,7 @@ export const setDriverActive = async (id: string, active: boolean, userId: strin
     .from('driverpay_drivers')
     .update({ active, updated_at: new Date().toISOString() })
     .eq('id', id);
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 // ─── Plataformas (eMile/ANJUN + custom) ──────────────────────────────────────
@@ -302,7 +320,7 @@ export const getPlatforms = async (companyId: string, onlyActive = true): Promis
   let query = supabase.from('driverpay_platforms').select('*').eq('company_id', companyId);
   if (onlyActive) query = query.eq('active', true);
   const { data, error } = await query.order('sort_order', { ascending: true }).order('name', { ascending: true });
-  if (error) throw error;
+  if (error) throwDbError(error);
   return (data || []).map(mapPlatform);
 };
 
@@ -324,7 +342,7 @@ export const createPlatform = async (
     }])
     .select()
     .single();
-  if (error) throw error;
+  if (error) throwDbError(error);
   return mapPlatform(row);
 };
 
@@ -335,7 +353,7 @@ export const updatePlatform = async (
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.managePlatforms');
   const { error } = await supabase.from('driverpay_platforms').update(updates).eq('id', id);
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 /**
@@ -357,23 +375,23 @@ export const renamePlatform = async (
     .eq('id', platformId)
     .eq('company_id', companyId)
     .single();
-  if (selErr) throw selErr;
+  if (selErr) throwDbError(selErr);
   const oldName = (cur as { name: string } | null)?.name;
   if (!oldName || oldName === trimmed) {
     if (oldName !== trimmed) {
       const { error } = await supabase.from('driverpay_platforms').update({ name: trimmed }).eq('id', platformId);
-      if (error) throw error;
+      if (error) throwDbError(error);
     }
     return;
   }
   const { error: pErr } = await supabase.from('driverpay_platforms').update({ name: trimmed }).eq('id', platformId);
-  if (pErr) throw pErr;
+  if (pErr) throwDbError(pErr);
   const { error: pkErr } = await supabase
     .from('driverpay_payment_packages')
     .update({ platform_name: trimmed })
     .eq('company_id', companyId)
     .eq('platform_name', oldName);
-  if (pkErr) throw pkErr;
+  if (pkErr) throwDbError(pkErr);
 };
 
 /** Arquiva/reativa varias plataformas (active=false/true). Nao apaga nada. */
@@ -385,7 +403,7 @@ export const setPlatformsActive = async (
   await ensurePerm(userId, 'driverpay.managePlatforms');
   if (ids.length === 0) return;
   const { error } = await supabase.from('driverpay_platforms').update({ active }).in('id', ids);
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 /** Adiciona a plataforma "em massa" a todos os drivers ativos (cria rate = default). */
@@ -408,7 +426,7 @@ export const applyPlatformToAllDrivers = async (
   const { error } = await supabase
     .from('driverpay_platform_rates')
     .upsert(rows, { onConflict: 'driver_id,platform_id' });
-  if (error) throw error;
+  if (error) throwDbError(error);
   return rows.length;
 };
 
@@ -419,7 +437,7 @@ export const getDriverRates = async (driverId: string): Promise<DriverPlatformRa
     .from('driverpay_platform_rates')
     .select('*')
     .eq('driver_id', driverId);
-  if (error) throw error;
+  if (error) throwDbError(error);
   return (data || []).map((r) => ({ ...(r as unknown as DriverPlatformRate), rate: num((r as Record<string, unknown>).rate) }));
 };
 
@@ -435,7 +453,7 @@ export const getAllDriverRates = async (
     .from('driverpay_platform_rates')
     .select('driver_id, rate, platform:driverpay_platforms(name)')
     .eq('company_id', companyId);
-  if (error) throw error;
+  if (error) throwDbError(error);
   const map: Record<string, Record<string, number>> = {};
   (data ?? []).forEach((r) => {
     const row = r as Record<string, unknown>;
@@ -463,7 +481,7 @@ export const upsertDriverRate = async (
       [{ company_id: companyId, driver_id: driverId, platform_id: platformId, rate, updated_by: userId, updated_at: new Date().toISOString() }],
       { onConflict: 'driver_id,platform_id' }
     );
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 /**
@@ -489,7 +507,7 @@ export const getDriverDefaultRates = async (
     .eq('driver_id', driverId)
     .order('created_at', { ascending: false })
     .limit(1);
-  if (payErr) throw payErr;
+  if (payErr) throwDbError(payErr);
 
   const latest = (payRows || [])[0] as { packages?: Record<string, unknown>[] } | undefined;
   const pkgs = latest?.packages;
@@ -512,7 +530,7 @@ export const getDriverDefaultRates = async (
     .select('rate, platform:driverpay_platforms(name)')
     .eq('company_id', companyId)
     .eq('driver_id', driverId);
-  if (rateErr) throw rateErr;
+  if (rateErr) throwDbError(rateErr);
   (rateRows || []).forEach((r: Record<string, unknown>) => {
     const plat = r.platform as { name?: string } | null;
     const rate = num(r.rate);
@@ -530,7 +548,7 @@ export const getGroups = async (companyId: string): Promise<DriverGroup[]> => {
     .select('*')
     .eq('company_id', companyId)
     .order('name', { ascending: true });
-  if (error) throw error;
+  if (error) throwDbError(error);
   return (data || []).map((r) => ({ ...(r as unknown as DriverGroup), default_rate: r.default_rate == null ? null : num(r.default_rate) }));
 };
 
@@ -545,7 +563,7 @@ export const createGroup = async (
     .insert([{ company_id: companyId, name: data.name.trim(), description: data.description ?? null, default_rate: data.default_rate ?? null, created_by: userId }])
     .select()
     .single();
-  if (error) throw error;
+  if (error) throwDbError(error);
   return { ...(row as unknown as DriverGroup), default_rate: row.default_rate == null ? null : num(row.default_rate) };
 };
 
@@ -556,18 +574,18 @@ export const updateGroup = async (
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.manageGroups');
   const { error } = await supabase.from('driverpay_groups').update(updates).eq('id', id);
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 export const deleteGroup = async (id: string, userId: string): Promise<void> => {
   await ensurePerm(userId, 'driverpay.manageGroups');
   const { error } = await supabase.from('driverpay_groups').delete().eq('id', id);
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 export const getGroupMembers = async (groupId: string): Promise<string[]> => {
   const { data, error } = await supabase.from('driverpay_group_members').select('driver_id').eq('group_id', groupId);
-  if (error) throw error;
+  if (error) throwDbError(error);
   return (data || []).map((r: Record<string, unknown>) => r.driver_id as string);
 };
 
@@ -577,7 +595,7 @@ export const getDriverGroupMap = async (companyId: string): Promise<Record<strin
     .from('driverpay_group_members')
     .select('driver_id, driverpay_groups(name)')
     .eq('company_id', companyId);
-  if (error) throw error;
+  if (error) throwDbError(error);
   const map: Record<string, string> = {};
   (data || []).forEach((r: Record<string, unknown>) => {
     const g = r.driverpay_groups as { name?: string } | null;
@@ -591,13 +609,13 @@ export const addDriverToGroup = async (companyId: string, groupId: string, drive
   const { error } = await supabase
     .from('driverpay_group_members')
     .upsert([{ company_id: companyId, group_id: groupId, driver_id: driverId }], { onConflict: 'group_id,driver_id' });
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 export const removeDriverFromGroup = async (groupId: string, driverId: string, userId: string): Promise<void> => {
   await ensurePerm(userId, 'driverpay.manageGroups');
   const { error } = await supabase.from('driverpay_group_members').delete().eq('group_id', groupId).eq('driver_id', driverId);
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 /** Aplica o valor/pacote do grupo a todos os membros (para a plataforma dada). */
@@ -613,7 +631,7 @@ export const applyGroupRate = async (
   if (memberIds.length === 0) return 0;
   const rows = memberIds.map((driverId) => ({ company_id: companyId, driver_id: driverId, platform_id: platformId, rate, updated_by: userId }));
   const { error } = await supabase.from('driverpay_platform_rates').upsert(rows, { onConflict: 'driver_id,platform_id' });
-  if (error) throw error;
+  if (error) throwDbError(error);
   await updateGroup(groupId, userId, { default_rate: rate });
   return rows.length;
 };
@@ -626,7 +644,7 @@ export const getPeriods = async (companyId: string): Promise<DriverPaymentPeriod
     .select('*')
     .eq('company_id', companyId)
     .order('created_at', { ascending: false });
-  if (error) throw error;
+  if (error) throwDbError(error);
   return (data || []) as DriverPaymentPeriod[];
 };
 
@@ -641,7 +659,7 @@ export const getOpenPeriod = async (companyId: string): Promise<DriverPaymentPer
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (error) throw error;
+  if (error) throwDbError(error);
   return (data as DriverPaymentPeriod) ?? null;
 };
 
@@ -663,7 +681,7 @@ export const createPeriod = async (
     p_end: endDate,
     p_preload: preload,
   });
-  if (error) throw error;
+  if (error) throwDbError(error);
   return data as string;
 };
 
@@ -685,7 +703,7 @@ export const concludePeriod = async (
     p_next_start: nextStart,
     p_next_end: nextEnd,
   });
-  if (error) throw error;
+  if (error) throwDbError(error);
   return data as string;
 };
 
@@ -697,7 +715,7 @@ export const concludePeriodOnly = async (periodId: string, companyId: string, us
     p_company_id: companyId,
     p_user_id: userId,
   });
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 /** Reabre uma quinzena concluida (volta para 'aberto' e libera a edicao). So 2626. */
@@ -708,7 +726,7 @@ export const reopenPeriod = async (periodId: string, companyId: string, userId: 
     .update({ status: 'aberto', concluded_at: null, concluded_by: null })
     .eq('id', periodId)
     .eq('company_id', companyId);
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 /** Edita rotulo e datas de uma quinzena (aberta ou concluida). So 2626. */
@@ -725,7 +743,7 @@ export const updatePeriod = async (
   if (data.end !== undefined) upd.end_date = data.end;
   if (Object.keys(upd).length === 0) return;
   const { error } = await supabase.from('driverpay_periods').update(upd).eq('id', periodId).eq('company_id', companyId);
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 /** Exclui uma quinzena inteira (pagamentos + pacotes/descontos/vales via cascade + o periodo). So 2626. */
@@ -736,9 +754,9 @@ export const deletePeriod = async (periodId: string, companyId: string, userId: 
     .delete()
     .eq('period_id', periodId)
     .eq('company_id', companyId);
-  if (e1) throw e1;
+  if (e1) throwDbError(e1);
   const { error: e2 } = await supabase.from('driverpay_periods').delete().eq('id', periodId).eq('company_id', companyId);
-  if (e2) throw e2;
+  if (e2) throwDbError(e2);
 };
 
 // ─── Pagamentos do periodo (grade) ───────────────────────────────────────────
@@ -753,7 +771,7 @@ export const getPayments = async (
     .eq('period_id', periodId)
     .eq('company_id', companyId)
     .order('driver_name_snapshot', { ascending: true });
-  if (error) throw error;
+  if (error) throwDbError(error);
   return (data || []).map(mapPayment);
 };
 
@@ -774,14 +792,14 @@ export const upsertPackage = async (
       [{ company_id: companyId, payment_id: paymentId, platform_name: platformName, route, packages, rate_snapshot: rateSnapshot }],
       { onConflict: 'payment_id,platform_name,route' }
     );
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
 export const deletePackage = async (id: string, paymentId: string, userId: string): Promise<void> => {
   await ensurePerm(userId, 'driverpay.editDriver');
   const { error } = await supabase.from('driverpay_payment_packages').delete().eq('id', id);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
@@ -805,7 +823,7 @@ export const deletePackagesByRoute = async (
     .eq('company_id', companyId)
     .eq('payment_id', paymentId)
     .eq('route', route);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
@@ -831,7 +849,7 @@ export const renameRoutePackages = async (
     .eq('company_id', companyId)
     .eq('payment_id', paymentId)
     .eq('route', fromRoute);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
@@ -859,7 +877,7 @@ export const setNotaFiscal = async (
     })
     .eq('id', paymentId)
     .eq('company_id', companyId);
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 /**
@@ -884,7 +902,7 @@ export const setEspelhoConferido = async (
     })
     .eq('id', paymentId)
     .eq('company_id', companyId);
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 // ─── Descontos e Vales ───────────────────────────────────────────────────────
@@ -935,7 +953,7 @@ export const addDiscount = async (
     .insert([{ company_id: companyId, payment_id: paymentId, amount, package_code: packageCode, observation, package_status: packageStatus, created_by: userId }])
     .select('id')
     .single();
-  if (error) throw error;
+  if (error) throwDbError(error);
 
   const discountId = (inserted as { id: string }).id;
   const paths: (string | null)[] = [null, null];
@@ -988,7 +1006,7 @@ export const removeDiscount = async (id: string, paymentId: string, userId: stri
     if (rmErr) console.warn('Nao foi possivel remover as provas do Storage:', rmErr.message);
   }
   const { error } = await supabase.from('driverpay_discounts').delete().eq('id', id);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
@@ -1031,7 +1049,7 @@ export const updateDiscount = async (
   if (data.packageStatus !== undefined) upd.package_status = data.packageStatus;
   if (Object.keys(upd).length === 0) return;
   const { error } = await supabase.from('driverpay_discounts').update(upd).eq('id', id).eq('company_id', companyId);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
@@ -1045,7 +1063,7 @@ export const searchDiscounts = async (companyId: string, code: string): Promise<
     .eq('company_id', companyId);
   if (q) query = query.ilike('package_code', `%${q}%`);
   const { data, error } = await query.order('created_at', { ascending: false }).limit(200);
-  if (error) throw error;
+  if (error) throwDbError(error);
   return (data ?? []).map((r) => {
     const rec = r as Record<string, unknown>;
     const payment = rec.payment as Record<string, unknown> | null;
@@ -1080,14 +1098,14 @@ export const addVale = async (
   const { error } = await supabase
     .from('driverpay_vales')
     .insert([{ company_id: companyId, payment_id: paymentId, amount, vale_date: valeDate, observation, created_by: userId }]);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
 export const removeVale = async (id: string, paymentId: string, userId: string): Promise<void> => {
   await ensurePerm(userId, 'driverpay.manageVale');
   const { error } = await supabase.from('driverpay_vales').delete().eq('id', id);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
@@ -1106,7 +1124,7 @@ export const updateVale = async (
   if (data.observation !== undefined) upd.observation = data.observation;
   if (Object.keys(upd).length === 0) return;
   const { error } = await supabase.from('driverpay_vales').update(upd).eq('id', id).eq('company_id', companyId);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
@@ -1128,7 +1146,7 @@ export const addZapex = async (
   const { error } = await supabase
     .from('driverpay_zapex')
     .insert([{ company_id: companyId, payment_id: paymentId, code, delivery_date: deliveryDate, created_by: userId }]);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
@@ -1144,14 +1162,14 @@ export const updateZapex = async (
     .from('driverpay_zapex')
     .update({ code, delivery_date: deliveryDate })
     .eq('id', id);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
 export const removeZapex = async (id: string, paymentId: string, userId: string): Promise<void> => {
   await ensurePerm(userId, 'driverpay.editDriver');
   const { error } = await supabase.from('driverpay_zapex').delete().eq('id', id);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
@@ -1172,7 +1190,7 @@ export const setZapexRate = async (
     .update({ zapex_rate: rate })
     .eq('id', paymentId)
     .eq('company_id', companyId);
-  if (error) throw error;
+  if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };
 
@@ -1189,7 +1207,7 @@ export const recomputePaymentTotals = async (paymentId: string): Promise<void> =
     .select('calc_packages, calc_discounts, calc_vales, calc_zapex, calc_net')
     .eq('payment_id', paymentId)
     .maybeSingle();
-  if (error) throw error;
+  if (error) throwDbError(error);
   if (!data) return;
   const { error: upErr } = await supabase
     .from('driverpay_payments')
@@ -1202,7 +1220,7 @@ export const recomputePaymentTotals = async (paymentId: string): Promise<void> =
       updated_at: new Date().toISOString(),
     })
     .eq('id', paymentId);
-  if (upErr) throw upErr;
+  if (upErr) throwDbError(upErr);
 };
 
 // ─── Import em massa (seed dos drivers da planilha) ──────────────────────────
@@ -1277,8 +1295,8 @@ export const getDriverMatchContext = async (
     supabase.from('driverpay_drivers').select('id, name').eq('company_id', companyId).eq('active', true),
     supabase.from('driverpay_driver_aliases').select('alias_norm, driver_id').eq('company_id', companyId),
   ]);
-  if (dRes.error) throw dRes.error;
-  if (aRes.error) throw aRes.error;
+  if (dRes.error) throwDbError(dRes.error);
+  if (aRes.error) throwDbError(aRes.error);
   return {
     drivers: (dRes.data ?? []) as { id: string; name: string }[],
     aliases: (aRes.data ?? []) as { alias_norm: string; driver_id: string }[],
@@ -1299,7 +1317,7 @@ export const upsertDriverAlias = async (
     [{ company_id: companyId, driver_id: driverId, alias_raw: aliasRaw, alias_norm: aliasNorm, source, created_by: userId }],
     { onConflict: 'company_id,alias_norm' },
   );
-  if (error) throw error;
+  if (error) throwDbError(error);
 };
 
 /** Acha o pagamento do driver no periodo; cria se faltar (driver novo no periodo). */
@@ -1317,7 +1335,7 @@ const ensurePaymentForDriver = async (
     .eq('period_id', periodId)
     .eq('driver_id', driverId)
     .maybeSingle();
-  if (e1) throw e1;
+  if (e1) throwDbError(e1);
   if (existing) return (existing as { id: string }).id;
   const { data: created, error: e2 } = await supabase
     .from('driverpay_payments')
@@ -1326,7 +1344,7 @@ const ensurePaymentForDriver = async (
     ])
     .select('id')
     .single();
-  if (e2) throw e2;
+  if (e2) throwDbError(e2);
   return (created as { id: string }).id;
 };
 
