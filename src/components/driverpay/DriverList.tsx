@@ -492,6 +492,8 @@ export const DriverList: React.FC<DriverListProps> = ({
         {groups.map(({ name, rows: groupRows }) => {
           const t = sumTotals(groupRows);
           const packages = groupRows.reduce((s, r) => s + computeRowTotals(r).totalPackages, 0);
+          // Cabecalho do grupo fica verde quando TODOS os drivers dele ja tem o espelho conferido.
+          const allEspelho = groupRows.length > 0 && groupRows.every((r) => r.espelhoConferido);
           return (
             <details
               key={name}
@@ -499,7 +501,9 @@ export const DriverList: React.FC<DriverListProps> = ({
               onToggle={(e) => onToggleGroup(name, e.currentTarget.open)}
               className="border border-gray-200 rounded-lg overflow-hidden"
             >
-              <summary className="list-none cursor-pointer px-4 py-3 bg-gray-50 flex items-center gap-3">
+              <summary
+                className={`list-none cursor-pointer px-4 py-3 flex items-center gap-3 ${allEspelho ? 'bg-green-200' : 'bg-gray-50'}`}
+              >
                 <ChevronRight
                   className={`w-4 h-4 text-gray-400 transition-transform ${openGroups.has(name) ? 'rotate-90' : ''}`}
                 />
