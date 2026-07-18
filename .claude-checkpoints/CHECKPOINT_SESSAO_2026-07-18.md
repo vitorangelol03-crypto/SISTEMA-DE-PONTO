@@ -235,6 +235,34 @@ Divergência snapshot × config **não é sempre bug**: taxa por rota intenciona
 por design (ex.: Victor lançou rota "COLETA" SHOPEE a 1,00 com config 2,00 às 20:37 —
 mantida). A query de divergência é diagnóstico, nunca correção automática.
 
+---
+
+## J. Madrugada (18→19/07) — chave restaurada, Node 22, BATERIA COMPLETA (1ª vez desde maio)
+
+- **SERVICE_ROLE_KEY restaurada no `.env`** (Victor colou; chmod 600; git ignora). Validada
+  com leitura de teste. Os 18 unit adormecidos acordaram: **suite unit 534/0**.
+- **Node 20 → 22.23.1** via nvm (nível usuário, default). Motivo: supabase-js 2.110 exige
+  WebSocket nativo no lado Node — a 1ª bateria falhou nos mesmos 4 specs por isso.
+  pip + faster-whisper também instalados hoje (transcrição de áudio).
+- **Bateria E2E completa (1h06, Node 22): 359 ✅ · 25 ❌ · 22 pulados · 3 não rodaram.**
+  Limpeza automática (globalSetup/teardown) rodou SEM erro pela 1ª vez desde maio.
+- **Classificação das 25 falhas (nada consertado — regra: mostrar antes):**
+  1. `101-supremo-pn` (8+3): massa "Demo PN" (30 funcionários) NÃO EXISTE mais no banco —
+     pré-condição sumida, não é bug. Fix futuro: recriar massa ou skip-sem-massa.
+  2. `53-driverpay-zebra` (1): 1ªs linhas da grade real estão VERDES de espelho-conferido
+     (uso real do Victor) → zebra não aparece. Fragilidade do teste, não bug.
+  3. Restantes (~16: 04×2, 09×1, 20×1, 22×1, 26×1, 29×2, 34×1, 37×2, +cortados do log):
+     specs de maio; suspeitos: uso simultâneo do Victor durante a 1h de bateria (lançou
+     descontos 20:59/21:01), drift de UI desde maio, flake. **Próximo passo proposto:
+     re-rodar SÓ os falhados com o sistema quieto e investigar um a um.**
+- **Limpeza pós-bateria (ordem explícita do Victor):** colunas "PW Test PlatGR" que ele viu
+  na grade eram resíduo dos specs 57-59 (limpeza global não cobre driverpay_*) → varridas;
+  user `7770` (spec 47) removido; **resíduo total = 0**; Junho intacta (98 pagamentos,
+  R$ 327.631,66 = tela dele); descontos reais do Cicero (R$ 7,79) preservados.
+- **Pendência nova de teste:** cleanup.ts não conhece as tabelas driverpay_* — adicionar
+  varredura driverpay na limpeza global (por ora, varredura manual via MCP a cada rodada).
+- Log completo: `~/.claude/jobs/0f32650a/tmp/bateria-node22.log`.
+
 *Sessão 2026-07-18 (dia todo). Claude Fable 5. Estado do git: main = `af62879`
 (pushada/deployada — fix sessão expirada + Espelhos da seleção + nitidez);
 `chore/deps-minor-patch` (Dependabot validado) aguardando OK; hook de lembrete de
