@@ -644,6 +644,41 @@ function buildDriverMirrorsBatchDoc(list: DriverMirrorData[]): jsPDF {
   return doc;
 }
 
+/**
+ * Espelhos da SELEÇÃO (2026-07-18): grupos marcados saem no formato "espelho de
+ * grupo" (resumo + recibos, como o botão azul) e drivers avulsos como página
+ * individual — tudo num único PDF, na ordem grupos → avulsos.
+ */
+function buildDriverSelectionMirrorDoc(
+  groups: DriverGroupMirrorData[],
+  singles: DriverMirrorData[],
+  opts?: DriverGroupMirrorOptions,
+): jsPDF {
+  if (groups.length === 0 && singles.length === 0) throw new Error('Seleção de espelhos vazia');
+  const includeIndividuals = !opts?.compact;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+  let firstPage = true;
+  const newPage = () => {
+    if (!firstPage) doc.addPage('a4', 'portrait');
+    firstPage = false;
+  };
+  for (const g of groups) {
+    newPage();
+    drawGroupSummaryPage(doc, g, includeIndividuals);
+    if (includeIndividuals) {
+      for (const d of g.drivers) {
+        newPage();
+        drawDriverMirrorPage(doc, d);
+      }
+    }
+  }
+  for (const s of singles) {
+    newPage();
+    drawDriverMirrorPage(doc, s);
+  }
+  return doc;
+}
+
 // ─── API pública ──────────────────────────────────────────────────────────────
 
 export async function generateDriverMirrorPdf(data: DriverMirrorData): Promise<Blob> {
@@ -682,6 +717,25 @@ export async function downloadDriverGroupMirrorPdf(
 
 export async function generateDriverMirrorsBatchPdf(list: DriverMirrorData[]): Promise<Blob> {
   return buildDriverMirrorsBatchDoc(list).output('blob');
+}
+
+export async function generateDriverSelectionMirrorPdf(
+  groups: DriverGroupMirrorData[],
+  singles: DriverMirrorData[],
+  opts?: DriverGroupMirrorOptions,
+): Promise<Blob> {
+  return buildDriverSelectionMirrorDoc(groups, singles, opts).output('blob');
+}
+
+export async function downloadDriverSelectionMirrorPdf(
+  groups: DriverGroupMirrorData[],
+  singles: DriverMirrorData[],
+  filename?: string,
+  opts?: DriverGroupMirrorOptions,
+): Promise<void> {
+  const doc = buildDriverSelectionMirrorDoc(groups, singles, opts);
+  const period = groups[0]?.period.label ?? singles[0]?.period.label ?? '';
+  doc.save(filename || `espelhos-selecao-${sanitizeFilenamePart(period)}.pdf`);
 }
 
 export async function downloadDriverMirrorsBatchPdf(

@@ -5,6 +5,7 @@ import {
   downloadDriverMirrorPdf,
   downloadDriverGroupMirrorPdf,
   downloadDriverMirrorsBatchPdf,
+  downloadDriverSelectionMirrorPdf,
   type DriverMirrorData,
   type DriverGroupMirrorData,
 } from '../../utils/driverMirrorPdf';
@@ -14,7 +15,8 @@ import { formatBRL, formatInt, sanitizeFile } from './driverPayShared';
 export type MirrorRequest =
   | { mode: 'individual'; data: DriverMirrorData }
   | { mode: 'group'; data: DriverGroupMirrorData }
-  | { mode: 'mass'; list: DriverMirrorData[] };
+  | { mode: 'mass'; list: DriverMirrorData[] }
+  | { mode: 'selection'; groups: DriverGroupMirrorData[]; singles: DriverMirrorData[] };
 
 interface DriverMirrorPreviewDialogProps {
   request: MirrorRequest;
@@ -189,6 +191,18 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       } else if (request.mode === 'group') {
         const file = `espelho-grupo-${sanitizeFile(request.data.groupName)}-${sanitizeFile(request.data.period.label)}.pdf`;
         await downloadDriverGroupMirrorPdf(request.data, file, { compact: !includeReceipts });
+      } else if (request.mode === 'selection') {
+        if (request.groups.length === 0 && request.singles.length === 0) {
+          toast.error('Nada selecionado para gerar espelho');
+          return;
+        }
+        const period = request.groups[0]?.period.label ?? request.singles[0]?.period.label ?? '';
+        await downloadDriverSelectionMirrorPdf(
+          request.groups,
+          request.singles,
+          `espelhos-selecao-${sanitizeFile(period)}.pdf`,
+          { compact: !includeReceipts },
+        );
       } else {
         if (request.list.length === 0) {
           toast.error('Nenhum driver para gerar espelho');
@@ -212,6 +226,8 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       ? 'Espelho individual'
       : request.mode === 'group'
       ? `Espelho do grupo — ${request.data.groupName}`
+      : request.mode === 'selection'
+      ? 'Espelhos da seleção'
       : 'Espelhos em massa';
 
   return (
@@ -223,7 +239,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       maxWidth="sm:max-w-3xl"
       footer={
         <>
-          {request.mode === 'group' && (
+          {(request.mode === 'group' || (request.mode === 'selection' && request.groups.length > 0)) && (
             <label className="flex items-center gap-2 text-xs text-gray-600 mr-auto">
               <input
                 type="checkbox"
@@ -317,6 +333,44 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                 ? 'O PDF terá o resumo acima + o recibo individual de cada driver.'
                 : 'O PDF terá apenas o resumo do grupo.'}
             </p>
+          </div>
+        )}
+
+        {request.mode === 'selection' && (
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm max-w-[720px] mx-auto p-6">
+            <p className="text-sm text-gray-700 mb-3">
+              Um único PDF com{' '}
+              {request.groups.length > 0 && (
+                <>
+                  <b>{request.groups.length}</b> espelho(s) de grupo
+                  {includeReceipts ? ' (resumo + recibos)' : ' (só o resumo)'}
+                </>
+              )}
+              {request.groups.length > 0 && request.singles.length > 0 && ' e '}
+              {request.singles.length > 0 && (
+                <>
+                  <b>{request.singles.length}</b> espelho(s) individual(is)
+                </>
+              )}
+              .
+            </p>
+            <div className="border border-gray-200 rounded-md max-h-72 overflow-y-auto divide-y divide-gray-100">
+              {request.groups.map((g, i) => (
+                <div key={`g-${i}`} className="flex items-center justify-between px-3 py-2 text-sm bg-blue-50/50">
+                  <span className="text-gray-900 truncate font-medium">
+                    📋 {g.groupName}{' '}
+                    <span className="text-gray-500 font-normal">· {g.groupTotals.driverCount} driver(s)</span>
+                  </span>
+                  <span className="font-semibold text-green-700 tabular-nums">{formatBRL(g.groupTotals.toReceive)}</span>
+                </div>
+              ))}
+              {request.singles.map((d, i) => (
+                <div key={`s-${i}`} className="flex items-center justify-between px-3 py-2 text-sm">
+                  <span className="text-gray-900 truncate">{d.driver.name}</span>
+                  <span className="font-semibold text-green-700 tabular-nums">{formatBRL(d.totals.toReceive)}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

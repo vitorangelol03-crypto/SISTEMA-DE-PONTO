@@ -408,6 +408,37 @@ export function buildGroupMirrorData(
   };
 }
 
+/** Nome do balde dos drivers sem grupo (mesmo rotulo usado na visao Grupos). */
+export const NO_GROUP_LABEL = 'Sem grupo';
+
+/**
+ * Monta os dados dos "Espelhos da seleção" (2026-07-18): grupos MARCADOS viram
+ * espelho de grupo; drivers marcados avulsos viram espelho individual. Driver
+ * cujo grupo esta marcado NAO entra de novo como avulso (a UI ja trava, mas a
+ * regra vale aqui tambem — funcao pura, coberta por unit).
+ */
+export function buildSelectionMirrorData(
+  rows: DriverRowData[],
+  selectedGroups: ReadonlySet<string>,
+  selectedDrivers: ReadonlySet<string>,
+  platforms: DriverPlatform[],
+  company: Company,
+  period: DriverPaymentPeriod,
+): { groups: DriverGroupMirrorData[]; singles: DriverMirrorData[] } {
+  const groupOf = (r: DriverRowData): string => r.groupName ?? NO_GROUP_LABEL;
+  const groups = Array.from(selectedGroups)
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    .map((name) => {
+      const groupRows = rows.filter((r) => groupOf(r) === name);
+      return groupRows.length > 0 ? buildGroupMirrorData(name, groupRows, platforms, company, period) : null;
+    })
+    .filter((g): g is DriverGroupMirrorData => g !== null);
+  const singles = rows
+    .filter((r) => selectedDrivers.has(r.paymentId) && !selectedGroups.has(groupOf(r)))
+    .map((r) => buildDriverMirrorData(r, platforms, company, period));
+  return { groups, singles };
+}
+
 /** Deriva as linhas do relatorio geral (plataformas dinamicas + totais). */
 export function buildReportRows(rows: DriverRowData[], platforms: DriverPlatform[]): DriverReportRow[] {
   return rows.map((row) => {

@@ -39,6 +39,11 @@ interface DriverRowProps {
   canVale: boolean;
   canMirror: boolean;
   handlers: RowHandlers;
+  /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkbox. */
+  selected?: boolean;
+  /** Driver já coberto por um GRUPO selecionado: checkbox marcado e travado. */
+  selectionLocked?: boolean;
+  onToggleSelect?: (paymentId: string) => void;
 }
 
 const parsePackages = (raw: string): number => {
@@ -68,6 +73,9 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   canVale,
   canMirror,
   handlers,
+  selected,
+  selectionLocked,
+  onToggleSelect,
 }) => {
   const multi = isMultiRoute(row);
   const totals = computeRowTotals(row);
@@ -107,6 +115,16 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         >
           <div className="flex flex-col gap-1">
             <span className="font-semibold text-gray-900 flex items-center gap-2">
+              {onToggleSelect && (
+                <input
+                  type="checkbox"
+                  checked={!!selected || !!selectionLocked}
+                  disabled={!!selectionLocked}
+                  onChange={() => onToggleSelect(row.paymentId)}
+                  title={selectionLocked ? 'Já incluído pelo grupo selecionado' : 'Selecionar para espelho'}
+                  className="w-4 h-4 text-blue-600 rounded border-gray-300 flex-shrink-0 disabled:opacity-60"
+                />
+              )}
               {multi && (
                 <button
                   type="button"

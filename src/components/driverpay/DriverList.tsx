@@ -42,6 +42,11 @@ interface DriverListProps {
   canMirror: boolean;
   handlers: RowHandlers;
   onGroupMirror: (groupName: string, rows: DriverRowData[]) => void;
+  /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkboxes. */
+  selGroups?: ReadonlySet<string>;
+  selDrivers?: ReadonlySet<string>;
+  onToggleSelGroup?: (name: string) => void;
+  onToggleSelDriver?: (paymentId: string) => void;
 }
 
 const NO_GROUP = 'Sem grupo';
@@ -85,7 +90,14 @@ export const DriverList: React.FC<DriverListProps> = ({
   canMirror,
   handlers,
   onGroupMirror,
+  selGroups,
+  selDrivers,
+  onToggleSelGroup,
+  onToggleSelDriver,
 }) => {
+  /** O grupo do driver está selecionado? (checkbox dele fica marcado e travado) */
+  const rowGroupSelected = (row: DriverRowData): boolean =>
+    !!selGroups?.has(row.groupName ?? NO_GROUP);
   // Ordenacao pelo cabecalho: 1 clique = maior→menor (desc), 2 cliques = menor→maior
   // (asc), 3 cliques = desativa. So reordena (mostra todos), nao esconde ninguem.
   type SortDir = 'asc' | 'desc';
@@ -239,6 +251,9 @@ export const DriverList: React.FC<DriverListProps> = ({
                 canVale={canVale}
                 canMirror={canMirror}
                 handlers={handlers}
+                selected={selDrivers?.has(row.paymentId)}
+                selectionLocked={rowGroupSelected(row)}
+                onToggleSelect={onToggleSelDriver}
               />
             ))}
           </tbody>
@@ -284,11 +299,23 @@ export const DriverList: React.FC<DriverListProps> = ({
         className={`p-4 ${row.espelhoConferido ? 'bg-green-300 hover:bg-green-400' : 'hover:bg-gray-50'}`}
       >
         <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-gray-900 break-words">{row.name}</div>
-            <div className="text-xs text-gray-600 flex items-center gap-1 mt-0.5 flex-wrap">
-              <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
-              {multi ? `${row.routes[0]?.route || '—'} · ${row.routes.length} rotas` : row.routes[0]?.route || row.route || '—'}
+          <div className="min-w-0 flex items-start gap-2">
+            {onToggleSelDriver && (
+              <input
+                type="checkbox"
+                checked={selDrivers?.has(row.paymentId) || rowGroupSelected(row)}
+                disabled={rowGroupSelected(row)}
+                onChange={() => onToggleSelDriver(row.paymentId)}
+                title={rowGroupSelected(row) ? 'Já incluído pelo grupo selecionado' : 'Selecionar para espelho'}
+                className="w-4 h-4 mt-0.5 text-blue-600 rounded border-gray-300 flex-shrink-0 disabled:opacity-60"
+              />
+            )}
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-gray-900 break-words">{row.name}</div>
+              <div className="text-xs text-gray-600 flex items-center gap-1 mt-0.5 flex-wrap">
+                <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                {multi ? `${row.routes[0]?.route || '—'} · ${row.routes.length} rotas` : row.routes[0]?.route || row.route || '—'}
+              </div>
             </div>
           </div>
           {row.groupName ? (
@@ -504,6 +531,22 @@ export const DriverList: React.FC<DriverListProps> = ({
               <summary
                 className={`list-none cursor-pointer px-4 py-3 flex items-center gap-3 ${allEspelho ? 'bg-green-200' : 'bg-gray-50'}`}
               >
+                {onToggleSelGroup && (
+                  <input
+                    type="checkbox"
+                    checked={!!selGroups?.has(name)}
+                    readOnly
+                    onClick={(e) => {
+                      // preventDefault: não abre/fecha a gaveta nem deixa o browser
+                      // flipar o checkbox — o estado controlado (React) decide.
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onToggleSelGroup(name);
+                    }}
+                    title="Selecionar o grupo inteiro para espelho"
+                    className="w-4 h-4 text-blue-600 rounded border-gray-300 flex-shrink-0"
+                  />
+                )}
                 <ChevronRight
                   className={`w-4 h-4 text-gray-400 transition-transform ${openGroups.has(name) ? 'rotate-90' : ''}`}
                 />

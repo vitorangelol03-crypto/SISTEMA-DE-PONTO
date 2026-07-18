@@ -12,6 +12,7 @@ import {
   Upload,
   Loader2,
   Search,
+  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCompany } from '../../contexts/CompanyContext';
@@ -42,6 +43,7 @@ import {
   computeRowTotals,
   buildDriverMirrorData,
   buildGroupMirrorData,
+  buildSelectionMirrorData,
   buildReportRows,
   planRateReapply,
   formatBRL,
@@ -117,6 +119,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [groupFilter, setGroupFilter] = useState('');
   const [view, setView] = useState<'list' | 'groups'>('list');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Seleção para "Espelhos da seleção" (grupos marcados + drivers avulsos).
+  // Vive só na tela; zera ao trocar de período (useEffect abaixo).
+  const [selGroups, setSelGroups] = useState<Set<string>>(new Set());
+  const [selDrivers, setSelDrivers] = useState<Set<string>>(new Set());
 
   // Modais
   const [formModal, setFormModal] = useState<{ mode: 'create' | 'edit'; driver: Driver | null } | null>(null);
@@ -590,6 +596,50 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     setMirror({ mode: 'mass', list });
   };
 
+  // ── Espelhos da seleção (grupos e/ou drivers marcados) ────────────────────
+  const toggleSelGroup = useCallback((name: string) => {
+    setSelGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
+  const toggleSelDriver = useCallback((paymentId: string) => {
+    setSelDrivers((prev) => {
+      const next = new Set(prev);
+      if (next.has(paymentId)) next.delete(paymentId);
+      else next.add(paymentId);
+      return next;
+    });
+  }, []);
+  const clearMirrorSelection = () => {
+    setSelGroups(new Set());
+    setSelDrivers(new Set());
+  };
+  // Zera a seleção ao trocar de período (os paymentIds são de outro período).
+  useEffect(() => {
+    setSelGroups(new Set());
+    setSelDrivers(new Set());
+  }, [selectedPeriodId]);
+
+  const handleSelectionMirror = () => {
+    if (!company || !selectedPeriod) return;
+    const { groups, singles } = buildSelectionMirrorData(
+      filteredRows,
+      selGroups,
+      selDrivers,
+      platforms,
+      company,
+      selectedPeriod,
+    );
+    if (groups.length === 0 && singles.length === 0) {
+      toast.error('Marque pelo menos um grupo ou driver para gerar os espelhos');
+      return;
+    }
+    setMirror({ mode: 'selection', groups, singles });
+  };
+
   const handleReport = async () => {
     if (!hasPermission('driverpay.exportReport')) {
       toast.error('Você não tem permissão para exportar o relatório');
@@ -659,6 +709,15 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       }),
     [rows, search, routeFilter, groupFilter],
   );
+
+  // Contagem do botão "Espelhos da seleção": grupos marcados + drivers avulsos
+  // que NÃO estão em grupo marcado (esses já entram pelo grupo).
+  const selCount = useMemo(() => {
+    const singles = filteredRows.filter(
+      (r) => selDrivers.has(r.paymentId) && !selGroups.has(r.groupName ?? 'Sem grupo'),
+    ).length;
+    return selGroups.size + singles;
+  }, [filteredRows, selGroups, selDrivers]);
 
   const routeOptions = useMemo(() => {
     const set = new Set<string>();
@@ -835,13 +894,38 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             <Search className="w-4 h-4" /> Pacotes descontados
           </button>
           {canMirror && (
-            <button
-              type="button"
-              onClick={handleMassMirror}
-              className="px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 inline-flex items-center gap-1.5 min-h-[40px]"
-            >
-              <FileText className="w-4 h-4" /> Espelhos (em massa)
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={handleSelectionMirror}
+                disabled={selCount === 0}
+                title={
+                  selCount === 0
+                    ? 'Marque grupos ou drivers (caixinhas na lista) para gerar só os espelhos deles'
+                    : 'Gerar um PDF só com os grupos/drivers marcados'
+                }
+                className="px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 inline-flex items-center gap-1.5 min-h-[40px] disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
+              >
+                <FileText className="w-4 h-4" /> Espelhos da seleção{selCount > 0 ? ` (${selCount})` : ''}
+              </button>
+              {selCount > 0 && (
+                <button
+                  type="button"
+                  onClick={clearMirrorSelection}
+                  title="Desmarcar tudo"
+                  className="px-2.5 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-500 rounded-md hover:bg-gray-50 inline-flex items-center gap-1 min-h-[40px]"
+                >
+                  <X className="w-4 h-4" /> Limpar
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleMassMirror}
+                className="px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 inline-flex items-center gap-1.5 min-h-[40px]"
+              >
+                <FileText className="w-4 h-4" /> Espelhos (em massa)
+              </button>
+            </>
           )}
           {hasPermission('driverpay.exportReport') && (
             <button
@@ -873,6 +957,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             canMirror={canMirror}
             handlers={handlers}
             onGroupMirror={onGroupMirror}
+            selGroups={canMirror ? selGroups : undefined}
+            selDrivers={canMirror ? selDrivers : undefined}
+            onToggleSelGroup={canMirror ? toggleSelGroup : undefined}
+            onToggleSelDriver={canMirror ? toggleSelDriver : undefined}
           />
         )}
       </div>
