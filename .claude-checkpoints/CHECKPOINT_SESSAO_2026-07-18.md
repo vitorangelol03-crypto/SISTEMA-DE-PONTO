@@ -109,9 +109,10 @@ sensibilidade a acento/caixa ("sao sebastiao" acha "São Sebastião do Anta").
 - `feature/pagamentos-driver` **mergeada na `main` (fast-forward, árvore idêntica à validada)** e pushada
   → **aba Pagamentos Driver entrou em produção** (Vercel). Victor começou a usar NA HORA
   (importou a Shopee real: 89 drivers / 132.923 pacotes / R$ 279.842,50 na "Quinzena Junho").
-- Branch local `chore/deps-minor-patch` = Dependabot (20 pacotes minor/patch) **validada e APROVADA**
-  (lock veio quebrado → regenerado; tsc 0 novos; build; unit 496/0; E2E 52/55/56 verdes).
-  **Aguardando OK do Victor para mergear na main** (o botão do GitHub aceitaria o lock quebrado — NÃO usar).
+- Dependabot (20 pacotes minor/patch): validado à tarde (lock veio quebrado → regenerado) e
+  **MERGEADO na main à noite** (commit `10b9a39`, "pode seguir" do Victor) com npm ci do zero +
+  tsc + unit 517/0 + build no estado mergeado. Branch local apagada. NÃO aceitar o PR original
+  do GitHub (lock de lá dessincronizado) — deve fechar sozinho com o merge.
   ⚠️ Deps novas pedem Node ≥22 (máquina tem 20.20 — só warning; atualizar o Node do WSL um dia).
 
 ### 🐛 Bug de prod (relatado com print): "Erro ao renomear grupo" ×5

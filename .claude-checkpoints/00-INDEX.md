@@ -7,10 +7,9 @@
 ## 🎯 Estado atual (1 parágrafo)
 
 **Aba Pagamentos Driver EM PRODUÇÃO desde 18/07** (deploy Vercel; Victor operando com dados
-reais — Quinzena Junho em uso ativo). `main` = `e26f343`: fix da sessão expirada (mensagem
+reais — Quinzena Junho em uso ativo). `main` = `10b9a39` (deps Dependabot mergeadas): fix da sessão expirada (mensagem
 clara no lugar do toast genérico) + feature **Espelhos da seleção** (marcar grupos/drivers e
-gerar só eles). Pendentes: merge da branch `chore/deps-minor-patch` (Dependabot validado,
-falta OK do Victor) e Victor colar a SERVICE_ROLE_KEY no `.env` (religa a bateria E2E
+gerar só eles). Pendente: Victor colar a SERVICE_ROLE_KEY no `.env` (religa a bateria E2E
 completa). Último checkpoint de sessão: `CHECKPOINT_SESSAO_2026-07-18.md`.
 
 ## 📚 Mapa dos checkpoints
