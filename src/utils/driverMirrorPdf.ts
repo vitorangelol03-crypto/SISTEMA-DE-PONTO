@@ -24,6 +24,7 @@ import autoTable, { type RowInput, type Styles } from 'jspdf-autotable';
 import {
   type DriverMirrorData,
   type DriverGroupMirrorData,
+  type MirrorCutoffLine,
   fmtBRL,
   fmtQty,
   formatDateBR,
@@ -44,6 +45,7 @@ export type {
   DriverMirrorTotals,
   DriverMirrorCompany,
   DriverMirrorPeriod,
+  MirrorCutoffLine,
 } from './driverMirrorGenerator';
 
 /** Opções do espelho de grupo. `compact`: só a página-resumo (sem espelhos individuais). */
@@ -72,6 +74,12 @@ const COLOR_INK: [number, number, number] = [17, 24, 39]; // gray-900
 const COLOR_SECTION: [number, number, number] = [75, 85, 99]; // gray-600
 const COLOR_BAND_SUB: [number, number, number] = [219, 234, 254]; // blue-100
 const COLOR_FOOT_BG: [number, number, number] = [238, 242, 247]; // gray-100 azulado
+// 2026-07-19 — destaque/avisos dos espelhos (pedido do Victor):
+const COLOR_HL_YELLOW: [number, number, number] = [254, 240, 138]; // yellow-200 (célula destacada)
+const COLOR_NOTICE_BG: [number, number, number] = [254, 249, 195]; // yellow-100 (faixas de aviso)
+const COLOR_NOTICE_BORDER: [number, number, number] = [234, 179, 8]; // yellow-500 (borda/setas)
+const COLOR_PNR: [number, number, number] = [126, 34, 206]; // purple-700 (pill PNR da tela)
+const COLOR_LOST: [number, number, number] = [194, 65, 12]; // orange-700 (pill LOST da tela)
 const WHITE: [number, number, number] = [255, 255, 255];
 
 // Estilos base compartilhados pelas tabelas autoTable.
@@ -197,6 +205,137 @@ function drawStackedField(
   return keyY + 11;
 }
 
+// ─── Avisos dos espelhos (2026-07-19) ────────────────────────────────────────
+
+interface MirrorSegment {
+  text: string;
+  bold?: boolean;
+  color?: [number, number, number];
+  size: number;
+}
+
+/** Escreve segmentos com estilos mistos numa linha única centralizada. */
+function drawSegmentsCentered(doc: jsPDF, segments: MirrorSegment[], y: number): void {
+  const widths = segments.map((s) => {
+    doc.setFont('helvetica', s.bold ? 'bold' : 'normal').setFontSize(s.size);
+    return doc.getTextWidth(s.text);
+  });
+  let x = PAGE_W / 2 - widths.reduce((a, b) => a + b, 0) / 2;
+  segments.forEach((s, i) => {
+    doc
+      .setFont('helvetica', s.bold ? 'bold' : 'normal')
+      .setFontSize(s.size)
+      .setTextColor(...(s.color ?? COLOR_INK));
+    doc.text(s.text, x, y);
+    x += widths[i];
+  });
+  doc.setTextColor(0);
+}
+
+/**
+ * Faixa amarela do CORTE DAS NOTAS (presente em todo espelho quando configurada):
+ * hora/data em vermelho grande; 2ª linha com a data de pagamento tardio.
+ */
+function drawCutoffBand(doc: jsPDF, cutoff: MirrorCutoffLine, y: number): number {
+  const h = 42;
+  doc.setFillColor(...COLOR_NOTICE_BG);
+  doc.rect(X_LEFT, y, CONTENT_W, h, 'F');
+  doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1);
+  doc.rect(X_LEFT, y, CONTENT_W, h, 'S');
+
+  drawSegmentsCentered(
+    doc,
+    [
+      { text: 'as notas deverão ser enviadas até as ', bold: true, size: 9.5 },
+      { text: `${cutoff.time}H do dia ${cutoff.date}`, bold: true, color: COLOR_DANGER, size: 12 },
+      { text: ' , fiquem atentos para que não ocorra atrasos no pagamento!', bold: true, size: 9.5 },
+    ],
+    y + 17,
+  );
+  drawSegmentsCentered(
+    doc,
+    [
+      { text: 'Caso exceda o horário de corte seu pagamento vai ocorrer dia ', size: 8.5 },
+      { text: cutoff.lateDate, bold: true, color: COLOR_DANGER, size: 9.5 },
+    ],
+    y + 33,
+  );
+  return y + h + 8;
+}
+
+interface NoticeBandAnchor {
+  platform: string;
+  bottomY: number;
+  page: number;
+}
+
+/**
+ * Faixas de AVISO POR PLATAFORMA (grandes/chamativas; nome da plataforma em
+ * destaque). Retorna o novo y + âncoras para as setas de ligação.
+ */
+function drawPlatformNoticeBands(
+  doc: jsPDF,
+  notices: Array<{ platform: string; text: string }>,
+  y: number,
+): { y: number; anchors: NoticeBandAnchor[] } {
+  const anchors: NoticeBandAnchor[] = [];
+  for (const n of notices) {
+    doc.setFont('helvetica', 'bold').setFontSize(10.5);
+    const prefix = `AVISO ${n.platform.toUpperCase()} — `;
+    const lines = doc.splitTextToSize(prefix + n.text, CONTENT_W - 28) as string[];
+    const h = 16 + lines.length * 13;
+    y = ensureSpace(doc, y, h + 10);
+
+    doc.setFillColor(...COLOR_NOTICE_BG);
+    doc.rect(X_LEFT, y, CONTENT_W, h, 'F');
+    doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1.2);
+    doc.rect(X_LEFT, y, CONTENT_W, h, 'S');
+
+    // Prefixo vermelho (AVISO + plataforma) e o texto em tinta forte, com quebra.
+    let ty = y + 15;
+    lines.forEach((line, i) => {
+      if (i === 0 && line.startsWith(prefix)) {
+        doc.setFont('helvetica', 'bold').setFontSize(10.5).setTextColor(...COLOR_DANGER);
+        const pw = doc.getTextWidth(prefix);
+        doc.text(prefix, X_LEFT + 14, ty);
+        doc.setTextColor(...COLOR_INK);
+        doc.text(line.slice(prefix.length), X_LEFT + 14 + pw, ty);
+      } else {
+        doc.setFont('helvetica', 'bold').setFontSize(10.5).setTextColor(...COLOR_INK);
+        doc.text(line, X_LEFT + 14, ty);
+      }
+      ty += 13;
+    });
+    doc.setTextColor(0);
+
+    anchors.push({ platform: n.platform, bottomY: y + h, page: doc.getCurrentPageInfo().pageNumber });
+    y += h + 8;
+  }
+  return { y, anchors };
+}
+
+/** Seta aviso→LINHA destacada (espelho individual): desce pela margem e aponta ➜ pra linha. */
+function drawConnectorToRow(doc: jsPDF, fromY: number, rowY: number): void {
+  const x = X_LEFT - 10;
+  doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1.4);
+  doc.line(X_LEFT, fromY - 2, x, fromY - 2);
+  doc.line(x, fromY - 2, x, rowY);
+  doc.setFillColor(...COLOR_NOTICE_BORDER);
+  doc.triangle(x - 3, rowY - 4.5, x - 3, rowY + 4.5, x + 6, rowY, 'F');
+}
+
+/** Seta aviso→COLUNA destacada (espelho de grupo): margem → topo da tabela → ponta ↓ na coluna. */
+function drawConnectorToColumn(doc: jsPDF, fromY: number, headTopY: number, centerX: number): void {
+  const x = X_LEFT - 10;
+  const overY = headTopY - 6;
+  doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1.4);
+  doc.line(X_LEFT, fromY - 2, x, fromY - 2);
+  doc.line(x, fromY - 2, x, overY);
+  doc.line(x, overY, centerX, overY);
+  doc.setFillColor(...COLOR_NOTICE_BORDER);
+  doc.triangle(centerX - 4.5, overY, centerX + 4.5, overY, centerX, headTopY - 0.5, 'F');
+}
+
 /** Faixa verde de resumo (idioma mockup `.esp-resumo .grand`). */
 function drawGreenBanner(doc: jsPDF, label: string, value: string, y: number): number {
   const h = 34;
@@ -219,12 +358,26 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   drawCompanyHeader(doc, company);
   drawBand(doc, 'ESPELHO DE PAGAMENTO — DRIVER', period);
 
+  // ── Avisos do topo (2026-07-19): corte das notas + avisos de plataforma ──
+  // Regra de presença: `platforms` já contém só plataformas com pacotes>0 deste driver.
+  const platformNotices = platforms
+    .filter((p) => p.highlight && p.notice)
+    .map((p) => ({ platform: p.platform, text: p.notice as string }));
+  let topY = 118;
+  if (data.cutoff) topY = drawCutoffBand(doc, data.cutoff, topY);
+  let noticeAnchors: NoticeBandAnchor[] = [];
+  if (platformNotices.length > 0) {
+    const r = drawPlatformNoticeBands(doc, platformNotices, topY);
+    topY = r.y;
+    noticeAnchors = r.anchors;
+  }
+
   // ── Box "DADOS DO DRIVER" ──
   const routeText = joinRouteCities(driver.routes) || '—';
   doc.setFont('helvetica', 'normal').setFontSize(10);
   const routeLines = (doc.splitTextToSize(routeText, CONTENT_W - 24) as string[]).slice(0, 2);
 
-  const boxY = 120;
+  const boxY = topY + 2;
   const col1X = X_LEFT + 12;
   const col2X = X_LEFT + CONTENT_W / 2 + 6;
   const titleY = boxY + 15;
@@ -314,6 +467,9 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
     ],
   ];
 
+  // Destaque amarelo (2026-07-19): linha inteira da plataforma marcada + âncora
+  // da seta (capturada no didDrawCell da 1ª célula da linha).
+  const rowAnchors: Array<{ platform: string; y: number; page: number }> = [];
   autoTable(doc, {
     startY: y + 6,
     head: platHead,
@@ -329,8 +485,33 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
       2: { halign: 'right', cellWidth: 100 },
       3: { halign: 'right', cellWidth: 120 },
     },
+    didParseCell: (cell) => {
+      if (cell.section === 'body' && platforms[cell.row.index]?.highlight) {
+        cell.cell.styles.fillColor = COLOR_HL_YELLOW;
+        if (cell.column.index === 0) cell.cell.styles.fontStyle = 'bold';
+      }
+    },
+    didDrawCell: (cell) => {
+      if (cell.section === 'body' && cell.column.index === 0) {
+        const p = platforms[cell.row.index];
+        if (p?.highlight) {
+          rowAnchors.push({
+            platform: p.platform,
+            y: cell.cell.y + cell.cell.height / 2,
+            page: doc.getCurrentPageInfo().pageNumber,
+          });
+        }
+      }
+    },
     margin: AUTOTABLE_MARGIN,
   });
+  // Setas aviso→linha destacada (só quando faixa e linha estão na MESMA página).
+  for (const anchor of noticeAnchors) {
+    const row = rowAnchors.find((r) => r.platform === anchor.platform && r.page === anchor.page);
+    if (row && doc.getCurrentPageInfo().pageNumber === anchor.page) {
+      drawConnectorToRow(doc, anchor.bottomY, row.y);
+    }
+  }
   y = getFinalY(doc, y + 6) + 16;
 
   // ── Descontos (só se houver) ──
@@ -449,6 +630,12 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   });
   y = getFinalY(doc, y) + 8;
 
+  // 2ª posição dos avisos de plataforma (pedido do Victor: ≥2 lugares por espelho).
+  if (platformNotices.length > 0) {
+    const r2 = drawPlatformNoticeBands(doc, platformNotices, y);
+    y = r2.y;
+  }
+
   y = ensureSpace(doc, y, 60);
   y = drawGreenBanner(doc, 'TOTAL A RECEBER', fmtBRL(totals.toReceive), y);
 
@@ -483,8 +670,28 @@ function drawGroupSummaryPage(
   drawCompanyHeader(doc, company);
   drawBand(doc, `ESPELHO DE GRUPO — ${groupName}`, period);
 
+  // ── Avisos do topo (2026-07-19) — presença: só plataformas com pacotes no GRUPO ──
+  const noticeByPlatform = new Map<string, string>();
+  const highlightedPlatforms = new Set<string>();
+  for (const d of drivers) {
+    for (const p of d.platforms) {
+      if (p.platform === 'Zapex') continue;
+      if (p.highlight) highlightedPlatforms.add(p.platform);
+      if (p.highlight && p.notice) noticeByPlatform.set(p.platform, p.notice);
+    }
+  }
+  const platformNotices = Array.from(noticeByPlatform, ([platform, text]) => ({ platform, text }));
+  let topY = 118;
+  if (data.cutoff) topY = drawCutoffBand(doc, data.cutoff, topY);
+  let noticeAnchors: NoticeBandAnchor[] = [];
+  if (platformNotices.length > 0) {
+    const r = drawPlatformNoticeBands(doc, platformNotices, topY);
+    topY = r.y;
+    noticeAnchors = r.anchors;
+  }
+
   // Box compacto do grupo.
-  const boxY = 120;
+  const boxY = topY + 2;
   const boxH = 44;
   doc.setFillColor(...COLOR_BG_BOX);
   doc.rect(X_LEFT, boxY, CONTENT_W, boxH, 'F');
@@ -554,6 +761,13 @@ function drawGroupSummaryPage(
   columnStyles[valeIdx] = { halign: 'right' };
   columnStyles[netIdx] = { halign: 'right' };
 
+  // Índices das colunas destacadas (2026-07-19) + âncoras do cabeçalho pras setas.
+  const highlightedCols = new Set<number>();
+  platformNames.forEach((name, i) => {
+    if (highlightedPlatforms.has(name)) highlightedCols.add(2 + i);
+  });
+  const headAnchors: Array<{ platform: string; centerX: number; topY: number; page: number }> = [];
+
   autoTable(doc, {
     startY: y + 6,
     head,
@@ -565,6 +779,16 @@ function drawGroupSummaryPage(
     footStyles: { fillColor: COLOR_SUCCESS, textColor: WHITE, fontStyle: 'bold' },
     columnStyles,
     didParseCell: (cell) => {
+      // Coluna da plataforma destacada: corpo amarelo; cabeçalho amarelo com tinta forte.
+      if (highlightedCols.has(cell.column.index)) {
+        if (cell.section === 'body') {
+          cell.cell.styles.fillColor = COLOR_HL_YELLOW;
+          cell.cell.styles.fontStyle = 'bold';
+        } else if (cell.section === 'head') {
+          cell.cell.styles.fillColor = COLOR_HL_YELLOW;
+          cell.cell.styles.textColor = COLOR_INK;
+        }
+      }
       if (cell.section === 'body') {
         if (
           (cell.column.index === descIdx || cell.column.index === valeIdx) &&
@@ -582,9 +806,102 @@ function drawGroupSummaryPage(
         }
       }
     },
+    didDrawCell: (cell) => {
+      if (cell.section === 'head' && highlightedCols.has(cell.column.index)) {
+        const name = platformNames[cell.column.index - 2];
+        headAnchors.push({
+          platform: name,
+          centerX: cell.cell.x + cell.cell.width / 2,
+          topY: cell.cell.y,
+          page: doc.getCurrentPageInfo().pageNumber,
+        });
+      }
+    },
     margin: AUTOTABLE_MARGIN,
   });
+  // Setas aviso→coluna destacada (mesma página).
+  for (const anchor of noticeAnchors) {
+    const headA = headAnchors.find((h) => h.platform === anchor.platform && h.page === anchor.page);
+    if (headA && doc.getCurrentPageInfo().pageNumber === anchor.page) {
+      drawConnectorToColumn(doc, anchor.bottomY, headA.topY, headA.centerX);
+    }
+  }
   y = getFinalY(doc, y + 6) + 14;
+
+  // ── Descontos do grupo (2026-07-19): de quem, código, marca, obs e valor ──
+  const groupDiscounts = drivers.flatMap((d) =>
+    d.discounts.map((dd) => ({ driver: d.driver.name, ...dd })),
+  );
+  if (groupDiscounts.length > 0) {
+    const DISCOUNT_LIMIT = 12;
+    const shown = groupDiscounts.slice(0, DISCOUNT_LIMIT); // flatMap preserva agrupamento por driver
+    const rest = groupDiscounts.length - shown.length;
+    y = ensureSpace(doc, y, 80);
+    drawSectionTitle(doc, 'DESCONTOS DO GRUPO', y);
+
+    const dHead: RowInput[] = [['Driver', 'Código do pacote', 'Marca', 'Observação', 'Valor (R$)']];
+    const dBody: RowInput[] = shown.map((s) => [
+      s.driver,
+      s.packageId || '—',
+      s.status ?? '—',
+      s.description || '—',
+      `- ${fmtBRL(s.value)}`,
+    ]);
+    const dFoot: RowInput[] = [
+      [
+        {
+          content:
+            rest > 0
+              ? `… e mais ${rest} desconto(s) — ver o recibo individual de cada driver`
+              : 'Total de descontos do grupo',
+          colSpan: 4,
+          styles: { halign: 'left' },
+        },
+        { content: `- ${fmtBRL(groupTotals.discountsValue)}`, styles: { halign: 'right' } },
+      ],
+    ];
+
+    autoTable(doc, {
+      startY: y + 6,
+      head: dHead,
+      body: dBody,
+      foot: dFoot,
+      theme: 'grid',
+      styles: { ...BASE_TABLE_STYLES, fontSize: 8.5 },
+      headStyles: { fillColor: COLOR_PRIMARY, textColor: WHITE, fontStyle: 'bold' },
+      footStyles: { fillColor: COLOR_FOOT_BG, textColor: COLOR_DANGER, fontStyle: 'bold' },
+      columnStyles: {
+        0: { halign: 'left' },
+        1: { halign: 'left', cellWidth: 110 },
+        2: { halign: 'center', cellWidth: 48 },
+        3: { halign: 'left' },
+        4: { halign: 'right', cellWidth: 80 },
+      },
+      didParseCell: (cell) => {
+        if (cell.section === 'body') {
+          if (cell.column.index === 2) {
+            const mark = cell.cell.text[0];
+            if (mark === 'PNR') {
+              cell.cell.styles.textColor = COLOR_PNR;
+              cell.cell.styles.fontStyle = 'bold';
+            } else if (mark === 'LOST') {
+              cell.cell.styles.textColor = COLOR_LOST;
+              cell.cell.styles.fontStyle = 'bold';
+            }
+          }
+          if (cell.column.index === 4) cell.cell.styles.textColor = COLOR_DANGER;
+        }
+      },
+      margin: AUTOTABLE_MARGIN,
+    });
+    y = getFinalY(doc, y + 6) + 14;
+  }
+
+  // 2ª posição dos avisos de plataforma (≥2 lugares por espelho).
+  if (platformNotices.length > 0) {
+    const r2 = drawPlatformNoticeBands(doc, platformNotices, y);
+    y = r2.y;
+  }
 
   y = ensureSpace(doc, y, 50);
   y = drawGreenBanner(

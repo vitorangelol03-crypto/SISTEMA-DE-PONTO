@@ -81,6 +81,9 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
   const [editName, setEditName] = useState('');
   const [editRate, setEditRate] = useState('');
   const [editColor, setEditColor] = useState<string | null>(null);
+  // Espelhos (2026-07-19): destaque amarelo + aviso da plataforma.
+  const [editHighlight, setEditHighlight] = useState(false);
+  const [editNotice, setEditNotice] = useState('');
   // arquivar em massa
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -125,6 +128,8 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
     setEditName(pl.name);
     setEditRate(formatRate(pl.default_rate));
     setEditColor(pl.color);
+    setEditHighlight(pl.highlight_mirror);
+    setEditNotice(pl.mirror_notice ?? '');
   };
 
   const handleSaveEdit = async (pl: DriverPlatform) => {
@@ -143,7 +148,12 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
         // renomeia a plataforma E reconecta os pacotes (guardam o nome, não o id).
         await renamePlatform(companyId, pl.id, editName.trim(), userId);
       }
-      await updatePlatform(pl.id, userId, { default_rate: rateValue, color: editColor });
+      await updatePlatform(pl.id, userId, {
+        default_rate: rateValue,
+        color: editColor,
+        highlight_mirror: editHighlight,
+        mirror_notice: editNotice.trim() || null,
+      });
       toast.success('Plataforma atualizada');
       setEditingId(null);
       await onSaved();
@@ -238,6 +248,33 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
                       </div>
                     </div>
                     <ColorPalette value={editColor} onPick={setEditColor} />
+                    {/* Espelhos (2026-07-19): destaque amarelo + aviso da plataforma */}
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={editHighlight}
+                        onChange={(e) => setEditHighlight(e.target.checked)}
+                        className="w-4 h-4 text-yellow-500 rounded border-gray-300"
+                      />
+                      <span>
+                        Destacar no espelho <span aria-hidden>🟡</span>
+                        <span className="block text-[11px] text-gray-500">
+                          A coluna/linha desta plataforma sai em amarelo — só nos espelhos que têm pacotes dela.
+                        </span>
+                      </span>
+                    </label>
+                    {editHighlight && (
+                      <label className="block text-sm text-gray-700">
+                        Aviso da plataforma (opcional — sai grande nos espelhos, com seta)
+                        <input
+                          type="text"
+                          value={editNotice}
+                          onChange={(e) => setEditNotice(e.target.value)}
+                          placeholder="Ex.: Conferir os pacotes da SHOPEE antes de assinar"
+                          className="mt-1 w-full px-3 py-2 border border-yellow-300 bg-yellow-50 rounded-md text-sm min-h-[40px]"
+                        />
+                      </label>
+                    )}
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -270,6 +307,14 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
                       style={pl.color ? { color: pl.color } : undefined}
                     >
                       {pl.name}
+                      {pl.highlight_mirror && (
+                        <span
+                          className="ml-1.5 text-[11px] font-medium text-yellow-700 bg-yellow-100 border border-yellow-300 rounded-full px-1.5 py-0.5"
+                          title={pl.mirror_notice ? `Destacada no espelho — aviso: ${pl.mirror_notice}` : 'Destacada no espelho'}
+                        >
+                          🟡 espelho
+                        </span>
+                      )}
                     </span>
                     <span className="text-xs text-gray-500 tabular-nums">R$ {formatRate(pl.default_rate)}/pc</span>
                     <button

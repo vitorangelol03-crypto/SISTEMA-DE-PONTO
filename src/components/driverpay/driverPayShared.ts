@@ -352,7 +352,11 @@ export function buildDriverMirrorData(
           }
           // Media ponderada -> mantem a identidade subtotal = packages × unitValue.
           const unitValue = packages > 0 ? subtotal / packages : (row.ratesByPlatform[pl.name] ?? pl.default_rate);
-          return { platform: pl.name, packages, unitValue, subtotal };
+          // Destaque/aviso do espelho (2026-07-19): so plataforma ATIVA destaca/avisa;
+          // o .filter(packages > 0) abaixo garante a regra de presenca do Victor.
+          const highlight = pl.active && pl.highlight_mirror;
+          const notice = highlight && pl.mirror_notice?.trim() ? pl.mirror_notice.trim() : null;
+          return { platform: pl.name, packages, unitValue, subtotal, highlight, notice };
         })
         .filter((p) => p.packages > 0),
       // Zapex como linha propria: pacotes = qtd de itens, valor unit = zapexRate do driver.
@@ -364,6 +368,7 @@ export function buildDriverMirrorData(
       packageId: d.package_code ?? '',
       value: d.amount,
       description: d.observation,
+      status: d.package_status ?? null,
     })),
     vales: row.vales.map((v) => ({
       date: v.vale_date ?? '',

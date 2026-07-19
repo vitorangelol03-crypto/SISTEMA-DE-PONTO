@@ -54,6 +54,14 @@ export interface DriverPlatformLine {
   packages: number;
   unitValue: number;
   subtotal: number;
+  /**
+   * Espelhos (2026-07-19): coluna/linha destacada em amarelo. Como o array
+   * `platforms` só contém plataformas com pacotes>0, a regra de presença do
+   * Victor (não destacar onde a plataforma não existe) sai de graça.
+   */
+  highlight?: boolean;
+  /** Aviso grande/chamativo da plataforma (acoplado ao destaque; com setas). */
+  notice?: string | null;
 }
 
 /** Desconto: valor + ID do pacote (coluna "ID PACOTE" da planilha) + motivo opcional. */
@@ -61,6 +69,8 @@ export interface DriverDiscountLine {
   packageId: string;
   value: number;
   description?: string | null;
+  /** Marca do pacote (2026-07-19): 'PNR' | 'LOST' | null — usada na seção de descontos do espelho de grupo. */
+  status?: 'PNR' | 'LOST' | null;
 }
 
 /** Vale/adiantamento: valor + data + observação. */
@@ -94,9 +104,22 @@ export interface DriverMirrorPeriod {
   status?: DriverPeriodStatus;
 }
 
+/**
+ * Aviso de corte das notas (2026-07-19): faixa amarela presente em TODO espelho.
+ * "as notas deverão ser enviadas até as {time}H do dia {date}…
+ *  Caso exceda o horário de corte seu pagamento vai ocorrer dia {lateDate}"
+ */
+export interface MirrorCutoffLine {
+  time: string;
+  date: string;
+  lateDate: string;
+}
+
 export interface DriverMirrorData {
   company: DriverMirrorCompany;
   period: DriverMirrorPeriod;
+  /** Aviso de corte (injetado pelo diálogo na geração; null/ausente = sem faixa). */
+  cutoff?: MirrorCutoffLine | null;
   driver: {
     name: string;
     routes: DriverRoute[];
@@ -123,6 +146,8 @@ export interface DriverGroupMirrorTotals {
 export interface DriverGroupMirrorData {
   company: DriverMirrorCompany;
   period: DriverMirrorPeriod;
+  /** Aviso de corte (injetado pelo diálogo na geração; null/ausente = sem faixa). */
+  cutoff?: MirrorCutoffLine | null;
   groupName: string;
   drivers: DriverMirrorData[];
   groupTotals: DriverGroupMirrorTotals;

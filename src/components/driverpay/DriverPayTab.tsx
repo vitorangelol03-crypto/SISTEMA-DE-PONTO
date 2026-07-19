@@ -1108,7 +1108,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       )}
 
       {mirror && (
-        <DriverMirrorPreviewDialog request={mirror} canGenerate={canMirror} onClose={() => setMirror(null)} />
+        <DriverMirrorPreviewDialog
+          request={mirror}
+          canGenerate={canMirror}
+          onClose={() => setMirror(null)}
+          companyId={company?.id}
+          userId={userId}
+        />
       )}
     </div>
   );

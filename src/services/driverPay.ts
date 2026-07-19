@@ -43,8 +43,19 @@ export interface DriverPlatform {
   active: boolean;
   /** Cor (HEX) do nome no cabecalho da grade; null = cor padrao (cinza). */
   color: string | null;
+  /** Espelhos: coluna/linha da plataforma destacada em amarelo (so onde ha pacotes). */
+  highlight_mirror: boolean;
+  /** Espelhos: aviso grande da plataforma (acoplado ao destaque; so onde ha pacotes). */
+  mirror_notice: string | null;
   created_by: string | null;
   created_at: string;
+}
+
+/** Aviso de corte das notas (faixa amarela dos espelhos) — 1 por empresa. */
+export interface MirrorCutoffNotice {
+  cutoff_time: string;
+  cutoff_date: string;
+  late_payment_date: string;
 }
 
 export interface DriverPlatformRate {
@@ -205,6 +216,8 @@ function mapPlatform(r: Record<string, unknown>): DriverPlatform {
     default_rate: num(r.default_rate),
     sort_order: num(r.sort_order),
     color: (r.color as string | null) ?? null,
+    highlight_mirror: Boolean(r.highlight_mirror),
+    mirror_notice: (r.mirror_notice as string | null) ?? null,
   };
 }
 function mapPackage(r: Record<string, unknown>): DriverPaymentPackage {
@@ -349,10 +362,39 @@ export const createPlatform = async (
 export const updatePlatform = async (
   id: string,
   userId: string,
-  updates: Partial<Pick<DriverPlatform, 'name' | 'default_rate' | 'sort_order' | 'active' | 'color'>>
+  updates: Partial<
+    Pick<DriverPlatform, 'name' | 'default_rate' | 'sort_order' | 'active' | 'color' | 'highlight_mirror' | 'mirror_notice'>
+  >
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.managePlatforms');
   const { error } = await supabase.from('driverpay_platforms').update(updates).eq('id', id);
+  if (error) throwDbError(error);
+};
+
+// ─── Aviso de corte das notas (faixa dos espelhos; 1 linha por empresa) ──────
+
+export const getMirrorCutoffNotice = async (companyId: string): Promise<MirrorCutoffNotice | null> => {
+  const { data, error } = await supabase
+    .from('driverpay_mirror_notice')
+    .select('cutoff_time, cutoff_date, late_payment_date')
+    .eq('company_id', companyId)
+    .maybeSingle();
+  if (error) throwDbError(error);
+  return (data as MirrorCutoffNotice | null) ?? null;
+};
+
+/** Salva/atualiza o aviso de corte — chamado automaticamente ao gerar espelho. */
+export const saveMirrorCutoffNotice = async (
+  companyId: string,
+  notice: MirrorCutoffNotice,
+  userId: string
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.generateMirror');
+  const { error } = await supabase
+    .from('driverpay_mirror_notice')
+    .upsert([{ company_id: companyId, ...notice, updated_by: userId, updated_at: new Date().toISOString() }], {
+      onConflict: 'company_id',
+    });
   if (error) throwDbError(error);
 };
 

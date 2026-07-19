@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { FileText, Eye, Download, Printer, Loader2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { FileText, Eye, Download, Printer, Loader2, AlarmClock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   downloadDriverMirrorPdf,
@@ -8,7 +8,9 @@ import {
   downloadDriverSelectionMirrorPdf,
   type DriverMirrorData,
   type DriverGroupMirrorData,
+  type MirrorCutoffLine,
 } from '../../utils/driverMirrorPdf';
+import { getMirrorCutoffNotice, saveMirrorCutoffNotice } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
 import { formatBRL, formatInt, sanitizeFile } from './driverPayShared';
 
@@ -22,7 +24,43 @@ interface DriverMirrorPreviewDialogProps {
   request: MirrorRequest;
   canGenerate: boolean;
   onClose: () => void;
+  /** Aviso de corte (2026-07-19): empresa + usuário p/ carregar/salvar as datas. */
+  companyId?: string;
+  userId?: string;
 }
+
+/** Faixa amarela do corte — mesma cara do PDF (prévia fiel). */
+const CutoffBandPreview: React.FC<{ cutoff: MirrorCutoffLine }> = ({ cutoff }) => (
+  <div className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2 text-center">
+    <p className="text-[13px] font-bold text-gray-900">
+      as notas deverão ser enviadas até as{' '}
+      <span className="text-red-700 text-[15px]">{cutoff.time}H do dia {cutoff.date}</span>
+      {' '}, fiquem atentos para que não ocorra atrasos no pagamento!
+    </p>
+    <p className="text-[11px] text-gray-800">
+      Caso exceda o horário de corte seu pagamento vai ocorrer dia{' '}
+      <span className="font-bold text-red-700">{cutoff.lateDate}</span>
+    </p>
+  </div>
+);
+
+/** Faixas de aviso por plataforma — mesma cara do PDF. */
+const PlatformNoticeBandsPreview: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
+  const notices = data.platforms.filter((p) => p.highlight && p.notice);
+  if (notices.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      {notices.map((p, i) => (
+        <div key={i} className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2">
+          <p className="text-[13px] font-bold">
+            <span className="text-red-700">AVISO {p.platform.toUpperCase()} — </span>
+            <span className="text-gray-900">{p.notice}</span>
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 /** Ganho Zapex (R$) de um espelho: a Zapex e modelada como uma "plataforma". */
 const zapexValueOf = (d: DriverMirrorData): number =>
@@ -41,6 +79,15 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => (
       <div className="mt-4 bg-blue-600 text-white rounded-lg px-4 py-2.5 flex items-center justify-between flex-wrap gap-2">
         <span className="font-bold text-sm">ESPELHO DE PAGAMENTO — DRIVER</span>
         <span className="text-xs text-blue-100">{data.period.label}</span>
+      </div>
+
+      {data.cutoff && (
+        <div className="mt-3">
+          <CutoffBandPreview cutoff={data.cutoff} />
+        </div>
+      )}
+      <div className="mt-3">
+        <PlatformNoticeBandsPreview data={data} />
       </div>
 
       <div className="mt-4 border border-gray-200 bg-gray-50 rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -83,8 +130,8 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => (
           </thead>
           <tbody>
             {data.platforms.map((p, i) => (
-              <tr key={i} className="border-t border-gray-100">
-                <td className="py-1">{p.platform}</td>
+              <tr key={i} className={`border-t border-gray-100 ${p.highlight ? 'bg-yellow-200 font-semibold' : ''}`}>
+                <td className="py-1">{p.highlight ? '➜ ' : ''}{p.platform}</td>
                 <td className="py-1 text-right tabular-nums">{formatInt(p.packages)}</td>
                 <td className="py-1 text-right tabular-nums">{formatBRL(p.unitValue)}</td>
                 <td className="py-1 text-right tabular-nums">{formatBRL(p.subtotal)}</td>
@@ -134,6 +181,11 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => (
         </Section>
       )}
 
+      {/* 2ª posição dos avisos de plataforma (paridade com o PDF) */}
+      <div className="mt-4">
+        <PlatformNoticeBandsPreview data={data} />
+      </div>
+
       <div className="mt-5 border border-gray-200 rounded-lg overflow-hidden">
         <Row k="Total de pacotes" v={`+ ${formatBRL(data.totals.packagesValue)}`} />
         <Row k="Descontos" v={`− ${formatBRL(data.totals.discountsValue)}`} danger={data.totals.discountsValue > 0} />
@@ -172,9 +224,52 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   request,
   canGenerate,
   onClose,
+  companyId,
+  userId,
 }) => {
   const [generating, setGenerating] = useState(false);
   const [includeReceipts, setIncludeReceipts] = useState(true);
+  // Aviso de corte (2026-07-19): pré-carrega o último salvo; salva automático ao gerar.
+  const [cutoffTime, setCutoffTime] = useState('');
+  const [cutoffDate, setCutoffDate] = useState('');
+  const [lateDate, setLateDate] = useState('');
+  useEffect(() => {
+    if (!companyId) return;
+    getMirrorCutoffNotice(companyId)
+      .then((n) => {
+        if (n) {
+          setCutoffTime(n.cutoff_time);
+          setCutoffDate(n.cutoff_date);
+          setLateDate(n.late_payment_date);
+        }
+      })
+      .catch((e) => console.error('Erro ao carregar aviso de corte:', e));
+  }, [companyId]);
+
+  const cutoff: MirrorCutoffLine | null =
+    cutoffTime.trim() && cutoffDate.trim() && lateDate.trim()
+      ? { time: cutoffTime.trim(), date: cutoffDate.trim(), lateDate: lateDate.trim() }
+      : null;
+
+  /** Injeta o aviso de corte em TODOS os dados do request (todos os modos). */
+  const withCutoff = (): MirrorRequest => {
+    if (!cutoff) return request;
+    switch (request.mode) {
+      case 'individual':
+        return { ...request, data: { ...request.data, cutoff } };
+      case 'group':
+        return { ...request, data: { ...request.data, cutoff } };
+      case 'mass':
+        return { ...request, list: request.list.map((d) => ({ ...d, cutoff })) };
+      case 'selection':
+        return {
+          ...request,
+          groups: request.groups.map((g) => ({ ...g, cutoff })),
+          singles: request.singles.map((d) => ({ ...d, cutoff })),
+        };
+    }
+  };
+
   const groupHasZapex =
     request.mode === 'group' && request.data.drivers.some((d) => zapexValueOf(d) > 0);
 
@@ -185,31 +280,40 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     }
     setGenerating(true);
     try {
-      if (request.mode === 'individual') {
-        const file = `espelho-driver-${sanitizeFile(request.data.driver.name)}-${sanitizeFile(request.data.period.label)}.pdf`;
-        await downloadDriverMirrorPdf(request.data, file);
-      } else if (request.mode === 'group') {
-        const file = `espelho-grupo-${sanitizeFile(request.data.groupName)}-${sanitizeFile(request.data.period.label)}.pdf`;
-        await downloadDriverGroupMirrorPdf(request.data, file, { compact: !includeReceipts });
-      } else if (request.mode === 'selection') {
-        if (request.groups.length === 0 && request.singles.length === 0) {
+      // Salva o aviso de corte como novo padrão (pedido do Victor: fica salvo até alterar).
+      if (cutoff && companyId && userId) {
+        await saveMirrorCutoffNotice(companyId, {
+          cutoff_time: cutoff.time,
+          cutoff_date: cutoff.date,
+          late_payment_date: cutoff.lateDate,
+        }, userId).catch((e) => console.error('Erro ao salvar aviso de corte:', e));
+      }
+      const req = withCutoff();
+      if (req.mode === 'individual') {
+        const file = `espelho-driver-${sanitizeFile(req.data.driver.name)}-${sanitizeFile(req.data.period.label)}.pdf`;
+        await downloadDriverMirrorPdf(req.data, file);
+      } else if (req.mode === 'group') {
+        const file = `espelho-grupo-${sanitizeFile(req.data.groupName)}-${sanitizeFile(req.data.period.label)}.pdf`;
+        await downloadDriverGroupMirrorPdf(req.data, file, { compact: !includeReceipts });
+      } else if (req.mode === 'selection') {
+        if (req.groups.length === 0 && req.singles.length === 0) {
           toast.error('Nada selecionado para gerar espelho');
           return;
         }
-        const period = request.groups[0]?.period.label ?? request.singles[0]?.period.label ?? '';
+        const period = req.groups[0]?.period.label ?? req.singles[0]?.period.label ?? '';
         await downloadDriverSelectionMirrorPdf(
-          request.groups,
-          request.singles,
+          req.groups,
+          req.singles,
           `espelhos-selecao-${sanitizeFile(period)}.pdf`,
           { compact: !includeReceipts },
         );
       } else {
-        if (request.list.length === 0) {
+        if (req.list.length === 0) {
           toast.error('Nenhum driver para gerar espelho');
           return;
         }
-        const period = request.list[0]?.period.label ?? '';
-        await downloadDriverMirrorsBatchPdf(request.list, `espelhos-driver-EM-MASSA-${sanitizeFile(period)}.pdf`);
+        const period = req.list[0]?.period.label ?? '';
+        await downloadDriverMirrorsBatchPdf(req.list, `espelhos-driver-EM-MASSA-${sanitizeFile(period)}.pdf`);
       }
       toast.success('PDF gerado');
       onClose();
@@ -270,12 +374,54 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       }
     >
       <div className="space-y-4">
+        {/* ── Aviso de corte das notas (sai em TODOS os espelhos; salva ao gerar) ── */}
+        <div className="border border-yellow-300 bg-yellow-50 rounded-md p-3">
+          <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5 mb-2">
+            <AlarmClock className="w-4 h-4 text-yellow-600" />
+            Aviso de corte das notas — sai em todos os espelhos (a data usada fica salva até você alterar)
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <label className="text-xs text-gray-600">
+              Hora do corte
+              <input
+                type="text"
+                value={cutoffTime}
+                onChange={(e) => setCutoffTime(e.target.value)}
+                placeholder="14:00"
+                className="mt-0.5 w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
+              />
+            </label>
+            <label className="text-xs text-gray-600">
+              Data do corte
+              <input
+                type="text"
+                value={cutoffDate}
+                onChange={(e) => setCutoffDate(e.target.value)}
+                placeholder="20/07"
+                className="mt-0.5 w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
+              />
+            </label>
+            <label className="text-xs text-gray-600">
+              Pagamento se exceder
+              <input
+                type="text"
+                value={lateDate}
+                onChange={(e) => setLateDate(e.target.value)}
+                placeholder="27/07"
+                className="mt-0.5 w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
+              />
+            </label>
+          </div>
+        </div>
+
         <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-md px-3 py-2 text-sm text-blue-700">
           <Eye className="w-4 h-4" />
           Pré-visualização
         </div>
 
-        {request.mode === 'individual' && <PaperMirror data={request.data} />}
+        {request.mode === 'individual' && (
+          <PaperMirror data={cutoff ? { ...request.data, cutoff } : request.data} />
+        )}
 
         {request.mode === 'group' && (
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm max-w-[720px] mx-auto p-6">
@@ -284,6 +430,30 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
               <span className="font-bold text-sm">ESPELHO DE GRUPO — {request.data.groupName}</span>
               <span className="text-xs text-blue-100">{request.data.period.label}</span>
             </div>
+            {cutoff && (
+              <div className="mt-3">
+                <CutoffBandPreview cutoff={cutoff} />
+              </div>
+            )}
+            {/* Avisos de plataforma do grupo (presença: só plataformas com pacotes no grupo) */}
+            {(() => {
+              const seen = new Map<string, string>();
+              for (const d of request.data.drivers)
+                for (const p of d.platforms)
+                  if (p.platform !== 'Zapex' && p.highlight && p.notice) seen.set(p.platform, p.notice);
+              return seen.size > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {Array.from(seen, ([platform, text]) => (
+                    <div key={platform} className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2">
+                      <p className="text-[13px] font-bold">
+                        <span className="text-red-700">AVISO {platform.toUpperCase()} — </span>
+                        <span className="text-gray-900">{text}</span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : null;
+            })()}
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -322,6 +492,66 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                 </tbody>
               </table>
             </div>
+            {/* Descontos do grupo (2026-07-19): de quem, código, marca, obs, valor — máx 12 */}
+            {(() => {
+              const all = request.data.drivers.flatMap((d) =>
+                d.discounts.map((dd) => ({ driver: d.driver.name, ...dd })),
+              );
+              if (all.length === 0) return null;
+              const shown = all.slice(0, 12);
+              const rest = all.length - shown.length;
+              return (
+                <div className="mt-4">
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">
+                    Descontos do grupo
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-gray-500">
+                          <th className="text-left py-1">Driver</th>
+                          <th className="text-left py-1">Código</th>
+                          <th className="text-center py-1">Marca</th>
+                          <th className="text-left py-1">Obs</th>
+                          <th className="text-right py-1">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shown.map((s, i) => (
+                          <tr key={i} className="border-t border-gray-100">
+                            <td className="py-1">{s.driver}</td>
+                            <td className="py-1">{s.packageId || '—'}</td>
+                            <td className="py-1 text-center">
+                              {s.status ? (
+                                <span
+                                  className={`font-bold ${s.status === 'PNR' ? 'text-purple-700' : 'text-orange-700'}`}
+                                >
+                                  {s.status}
+                                </span>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                            <td className="py-1 text-gray-500">{s.description || '—'}</td>
+                            <td className="py-1 text-right text-red-600 tabular-nums">− {formatBRL(s.value)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      {rest > 0 && (
+                        <tfoot>
+                          <tr className="border-t border-gray-200">
+                            <td colSpan={5} className="py-1.5 text-gray-500 italic">
+                              … e mais {rest} desconto(s) — ver o recibo individual de cada driver
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="mt-4 flex items-center justify-between px-4 py-3 bg-green-700 text-white rounded-lg">
               <span className="font-bold text-sm">
                 TOTAL — {request.data.groupTotals.driverCount} driver(s)

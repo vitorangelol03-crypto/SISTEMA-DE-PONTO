@@ -26,7 +26,7 @@ const period = {
   created_at: '',
 } as DriverPaymentPeriod;
 const platforms = [
-  { id: 'p1', company_id: 'c1', name: 'eMile', default_rate: 2, sort_order: 0, active: true, color: null, created_by: null, created_at: '' },
+  { id: 'p1', company_id: 'c1', name: 'eMile', default_rate: 2, sort_order: 0, active: true, color: null, highlight_mirror: false, mirror_notice: null, created_by: null, created_at: '' },
 ] as DriverPlatform[];
 
 /** Linha mínima de driver: 1 rota com N pacotes na eMile @ 2,00. */
