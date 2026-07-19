@@ -119,6 +119,10 @@ test.describe('CompanySettings (sub-fase 10.4)', () => {
     await s.from('companies').update({ bank_hours_enabled: false }).eq('id', CARATINGA_ID);
 
     try {
+      // 2026-07-19: o login do beforeEach carrega o contexto ANTES do update acima —
+      // reload re-busca a empresa e a tela reflete enabled=false (era sorte de config
+      // em maio: só passava quando o valor real já era false).
+      await page.reload();
       await unlockAdmin(page);
       const applyToggle = page.locator('#bh-toggle-master');
       await expect(applyToggle).toBeVisible({ timeout: 15_000 });
