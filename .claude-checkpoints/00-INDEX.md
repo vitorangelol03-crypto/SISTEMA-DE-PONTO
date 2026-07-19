@@ -6,16 +6,18 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Aba Pagamentos Driver EM PRODUÇÃO desde 18/07** (deploy Vercel; Victor operando com dados
-reais — Quinzena Junho em uso ativo). `main` = `aa2c04b` (deps mergeadas + fixes de taxa import/grupo): fix da sessão expirada (mensagem
-clara no lugar do toast genérico) + feature **Espelhos da seleção** (marcar grupos/drivers e
-gerar só eles). Bateria E2E completa RELIGADA (chave no .env + Node 22). Último checkpoint de sessão: `CHECKPOINT_SESSAO_2026-07-18.md`.
+**Aba Pagamentos Driver EM PRODUÇÃO** (Vercel). `main` = `3a3f741`: 4 features dos espelhos
+(destaque amarelo, aviso de corte auto-salvo, descontos no grupo, aviso por plataforma com
+setas) + bateria de 409 testes modernizada (F1-F8: 384 ✅ / 3 flakes de carga documentados) +
+retry 1× local + Node 22 (nvm). Aguardando Victor: aprovação VISUAL dos prints em
+`test-results/prints-espelhos/`. Último checkpoint: `CHECKPOINT_SESSAO_2026-07-19.md`.
 
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
 | `CHECKPOINT_SESSAO_2026-07-18.md` | **Mais recente.** Grupos: vínculo exclusivo + busca por rota; retroativo dos 17 commits de melhorias do painel (17-18/07) | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-19.md` | **Mais recente.** Madrugada autônoma: F8 concluída, 4 features dos espelhos entregues, aprendizados de infra (Vite WSL!) | 🟢 ATIVO |
 | `PLANO_ESPELHOS_2026-07-19.md` | Plano completo das 4 implementações dos espelhos (riscos, mitigação, ordem) | 🟢 ATIVO (fila aprovada) |
 | `CHECKPOINT_IMPORT_PLANILHAS.md` | Importação automática iMile/Shopee/Anjun (SF1-SF6): formatos, decisões, o que falta validar com clique real | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-04_fix-bug1-multirota.md` | Auditoria 7 dimensões do driverpay + fix Bug #1 (rota-fantasma) e #2 (taxa por rota) + pendências de segurança | 🟢 ATIVO (pendências valem) |
@@ -37,6 +39,8 @@ gerar só eles). Bateria E2E completa RELIGADA (chave no .env + Node 22). Últim
 - **Ponto:** editar/excluir ponto é SÓ do mestre **2626** (nem 9999); travado em frontend + RLS + trigger.
 - **Driverpay:** namespace `driverpay_*`; 100% aditivo ao sistema de ponto; vários períodos abertos permitidos; import auto-detecta plataforma pelo cabeçalho; valor/pacote vem da taxa cadastrada (nunca da planilha); apelidos de entregador aprendidos em `driverpay_driver_aliases`; Shopee COLETA = plataforma "Coleta Shopee"; plataforma arquivada sai da soma; driver só pode estar em 1 grupo (vínculo exclusivo, 18/07).
 - **Git:** commit local sempre; **push é do Victor, na mão**; Conventional Commits.
+- **Espelhos (19/07):** destaque+aviso por plataforma com REGRA DE PRESENÇA (só onde há pacotes); aviso acoplado ao destaque; corte auto-salvo por empresa; descontos no grupo limite 12.
+- **Testes (19/07):** retry 1× local (flake de carga vira 'flaky' visível); Vite WSL exige RESTART após editar código; hooks lentos precisam test.setTimeout interno.
 - **Checkpoints (18/07):** todos vivem em `.claude-checkpoints/`; 1 checkpoint por sessão; atualizar este índice junto; hook pós-commit lembra a sessão de manter isso em dia.
 
 ## ⚠️ Áreas frágeis / pendências abertas
