@@ -263,6 +263,18 @@ mantida). A query de divergência é diagnóstico, nunca correção automática.
   varredura driverpay na limpeza global (por ora, varredura manual via MCP a cada rodada).
 - Log completo: `~/.claude/jobs/0f32650a/tmp/bateria-node22.log`.
 
+### Re-rodada isolada dos 16 (madrugada, sistema quieto): 43 ✅ / 16 ❌ — REPRODUZÍVEL
+Não era flake nem uso simultâneo. Diagnóstico (print + greps): os textos esperados EXISTEM
+no código; o que mudou foi a REALIDADE — specs de maio assumem base controlada/regras antigas:
+- 03/04/09/22: base de produção viva (87 funcionários, 33 presenças reais) + possível colisão
+  com a regra de junho (ponto travado pro 2626; specs agem como 9999). Reconciliar teste × regra.
+- 20/26: massa sumida (Ponte Nova vazia sem Demo PN; C6 sem pagamentos do fluxo antigo).
+- 29/34: config real da empresa difere do estado de maio que os specs esperam.
+- 37: criação de supervisor não completou (investigar fluxo/tempo da edge fn).
+**Nada indica bug de produção** (equipe usou ponto/bônus o dia todo). Próxima sessão dedicada:
+modernizar essas famílias no molde dos specs 57-59 (massa própria descartável / rodar como 2626).
+Log: `~/.claude/jobs/0f32650a/tmp/rerun-16.log`.
+
 *Sessão 2026-07-18 (dia todo). Claude Fable 5. Estado do git: main = `af62879`
 (pushada/deployada — fix sessão expirada + Espelhos da seleção + nitidez);
 `chore/deps-minor-patch` (Dependabot validado) aguardando OK; hook de lembrete de
