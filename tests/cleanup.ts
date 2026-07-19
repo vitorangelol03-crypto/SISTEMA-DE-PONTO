@@ -301,9 +301,41 @@ export async function cleanupTodaySince(sinceIso: string): Promise<{
  * Faz limpeza completa: testes removidos + remove dados de hoje criados
  * a partir de `sinceIso`. Use em globalTeardown e em afterAll por spec.
  */
+/**
+ * Varre artefatos de teste do módulo Pagamentos Driver (prefixo 'PW Test').
+ * (2026-07-19 — antes a limpeza global não conhecia as tabelas driverpay_* e
+ * plataformas/drivers de teste sobravam como colunas na grade real.)
+ * Ordem respeita as FKs: períodos primeiro (cascade limpa payments/packages),
+ * depois vínculos, e por fim drivers/plataformas/grupos.
+ */
+export async function deleteDriverpayTestArtifacts(): Promise<void> {
+  const supabase = getClient();
+  const like = `${TEST_EMPLOYEE_NAME_PREFIX}%`;
+
+  await supabase.from('driverpay_periods').delete().like('label', like);
+
+  const { data: drivers } = await supabase.from('driverpay_drivers').select('id').like('name', like);
+  const { data: plats } = await supabase.from('driverpay_platforms').select('id').like('name', like);
+  const driverIds = (drivers || []).map((d: { id: string }) => d.id);
+  const platIds = (plats || []).map((p: { id: string }) => p.id);
+
+  if (driverIds.length > 0) {
+    await supabase.from('driverpay_platform_rates').delete().in('driver_id', driverIds);
+    await supabase.from('driverpay_group_members').delete().in('driver_id', driverIds);
+    await supabase.from('driverpay_payments').delete().in('driver_id', driverIds);
+    await supabase.from('driverpay_drivers').delete().in('id', driverIds);
+  }
+  if (platIds.length > 0) {
+    await supabase.from('driverpay_platform_rates').delete().in('platform_id', platIds);
+    await supabase.from('driverpay_platforms').delete().in('id', platIds);
+  }
+  await supabase.from('driverpay_groups').delete().like('name', like);
+}
+
 export async function cleanupAllTestArtifacts(sinceIso: string): Promise<void> {
   await deleteTestBonusRemovals();
   await deleteTestEmployees();
+  await deleteDriverpayTestArtifacts();
   await cleanupTodaySince(sinceIso);
 }
 

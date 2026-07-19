@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { test, expect, Page } from '@playwright/test';
 import { MASTER_2626, loginAs, goToTab } from './helpers';
 import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
@@ -124,7 +125,19 @@ async function cleanupDb(): Promise<void> {
   await s.from('driverpay_platforms').delete().like('name', `${PREFIX}%`);
 }
 
-test.describe.skip('Pagamentos Driver — config individual intacta [requer service role]', () => {
+// 2026-07-19: ACORDADO — a SERVICE_ROLE_KEY voltou ao .env; o skip condicional
+// abaixo mantém a suíte verde em máquinas sem a chave (ex.: CI restrito).
+const hasServiceKey = ((): boolean => {
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) return true;
+  try {
+    return /^SUPABASE_SERVICE_ROLE_KEY=.+/m.test(readFileSync('.env', 'utf8'));
+  } catch {
+    return false;
+  }
+})();
+
+test.describe('Pagamentos Driver — config individual intacta [requer service role]', () => {
+  test.skip(!hasServiceKey, 'sem SUPABASE_SERVICE_ROLE_KEY no .env');
   test.beforeAll(cleanupDb);
   test.afterAll(cleanupDb);
 
@@ -162,7 +175,8 @@ test.describe.skip('Pagamentos Driver — config individual intacta [requer serv
     await card.getByTitle('Membros').click();
     await page.getByPlaceholder(/Buscar driver/).fill(driverName);
     const driverLabel = page.locator('label', { hasText: driverName }).first();
-    await driverLabel.locator('input[type="checkbox"]').check();
+    // click() (nao check()): checkbox controlado so marca apos o banco confirmar.
+    await driverLabel.locator('input[type="checkbox"]').click();
     await expect(driverLabel.locator('input[type="checkbox"]')).toBeChecked({ timeout: 10_000 });
 
     // Prova de verdade: o platform_rate individual continua 5,00 (não sobrescrito).

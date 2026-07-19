@@ -194,7 +194,11 @@ async function cleanupDriverPay(): Promise<void> {
 //      de RLS — ver cleanup.ts).
 //   3. O seed cria período NOVO 'PW Test Quinzena'; o componente precisa deixar
 //      selecionar o período aberto de teste (ou o teste seleciona pelo label).
-test.describe.skip('Pagamentos Driver — grade e recálculo [aguarda UI da grade]', () => {
+// 2026-07-19: skip MANTIDO de propósito — a grade/recálculo é coberta com
+// cliques reais pelos specs 57 (todas as edições), 58 (espelhos da seleção) e
+// 59 (taxa do grupo reflete na grade), em quinzena descartável. Acordar este
+// describe duplicaria cobertura sobre a grade REAL (arriscado).
+test.describe.skip('Pagamentos Driver — grade e recálculo [coberto pelos specs 57-59]', () => {
   test.beforeAll(cleanupDriverPay);
   test.afterAll(cleanupDriverPay);
 
