@@ -96,6 +96,55 @@ function yesterdayIso(): string {
 }
 
 /**
+ * Garante um funcionário de TESTE (prefixo PW Test) na empresa cuja cidade/nome
+ * contém `companyMatch`. Retorna o id. Idempotente: reusa se já existir pelo CPF.
+ * (2026-07-19 — modernização da bateria: specs criam a própria massa.)
+ */
+export async function ensureTestEmployee(
+  name: string,
+  cpf: string,
+  companyMatch = 'caratinga',
+): Promise<string> {
+  const supabase = getClient();
+  const { data: comps, error: cErr } = await supabase
+    .from('companies')
+    .select('id, display_name, legal_name, city')
+    .limit(100);
+  if (cErr) throw cErr;
+  const comp = (comps || []).find((c: Record<string, unknown>) =>
+    [c.display_name, c.legal_name, c.city]
+      .filter(Boolean)
+      .some(v => String(v).toLowerCase().includes(companyMatch.toLowerCase())),
+  );
+  if (!comp) throw new Error(`ensureTestEmployee: empresa "${companyMatch}" não encontrada`);
+
+  const { data: existing, error: eErr } = await supabase
+    .from('employees')
+    .select('id')
+    .eq('cpf', cpf)
+    .maybeSingle();
+  if (eErr) throw eErr;
+  if (existing) return (existing as { id: string }).id;
+
+  const { data, error } = await supabase
+    .from('employees')
+    .insert([{ name, cpf, company_id: (comp as { id: string }).id }])
+    .select('id')
+    .single();
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
+/** Apaga o ponto (attendance) de um funcionário — todo, ou só de uma data. */
+export async function deleteAttendanceForEmployee(employeeId: string, date?: string): Promise<void> {
+  const supabase = getClient();
+  let q = supabase.from('attendance').delete().eq('employee_id', employeeId);
+  if (date) q = q.eq('date', date);
+  const { error } = await q;
+  if (error) throw error;
+}
+
+/**
  * Remove todas as linhas de auditoria (`bonus_removals`) que foram geradas
  * pelos testes, identificadas pelo texto fixo em `observation`.
  */

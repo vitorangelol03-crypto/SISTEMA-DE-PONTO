@@ -35,18 +35,27 @@ test.describe('Permissions — Admin (9999) acesso total', () => {
     await expect(page.getByRole('button', { name: /^Relatórios$/ }).first()).toBeVisible();
   });
 
-  test('admin vê botão Reset Geral em Ponto (quando há attendance)', async ({ page }) => {
-    // Reset Geral é condicional a attendances.length > 0 — cria um attendance primeiro
+  test('REGRA de junho: 9999 NÃO vê Reset Geral; 2626 vê (quando há attendance)', async ({ page }) => {
+    // MODERNIZADO 2026-07-19: attendance.reset é EXCLUSIVO do 2626 desde junho
+    // (masters.ts). A premissa antiga ("admin vê Reset Geral") virou o contrário.
     const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}PermResetView `;
     await cleanupByPrefix(PREFIX);
     const empId = await createTestEmployee({ name: `${PREFIX}Emp` });
     await insertAttendance(empId, todayBR(), { status: 'present' });
 
+    // 9999: botão NÃO aparece (regra).
     await loginAs(page, ADMIN);
     await goToTab(page, 'Ponto');
     await page.waitForLoadState('networkidle');
-    const resetBtns = page.getByRole('button', { name: /Reset Geral/i });
-    expect(await resetBtns.count()).toBeGreaterThan(0);
+    expect(await page.getByRole('button', { name: /Reset Geral/i }).count()).toBe(0);
+
+    // 2626: botão aparece (dono da regra).
+    await page.getByRole('button', { name: /Sair/ }).first().click();
+    await expect(page.locator('#id')).toBeVisible({ timeout: 10_000 });
+    await loginAs(page, { id: '2626', password: 'cdlogistica26' });
+    await goToTab(page, 'Ponto');
+    await page.waitForLoadState('networkidle');
+    expect(await page.getByRole('button', { name: /Reset Geral/i }).count()).toBeGreaterThan(0);
 
     // Cleanup pós-teste
     await cleanupByPrefix(PREFIX);
