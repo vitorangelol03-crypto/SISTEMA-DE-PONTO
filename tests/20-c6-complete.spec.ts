@@ -34,6 +34,11 @@ async function importC6(page: Page, date: string) {
   await dateInputs.nth(0).blur();
   await dateInputs.nth(1).fill(date);
   await dateInputs.nth(1).blur();
+  // 2026-07-19: sob carga (bateria de 1h) o fill/estado corria com o Importar —
+  // isolado 8/8, na bateria 3 falhas intermitentes. Garante o valor COMMITADO
+  // nos dois inputs antes de importar.
+  await expect(dateInputs.nth(0)).toHaveValue(date);
+  await expect(dateInputs.nth(1)).toHaveValue(date);
   await page.locator('body').click({ position: { x: 5, y: 5 } });
   await page.getByRole('button', { name: /Importar Dados/ }).click();
   // Sub-fase 14.28 (TECH_DEBT 6.1): aguarda estado PERSISTENTE (tfoot Total)
@@ -41,7 +46,15 @@ async function importC6(page: Page, date: string) {
   // dataImported=true a tabela renderiza tfoot "Total: N pagamento(s)" que
   // persiste enquanto a importação está visível (sem timeout, sem race).
   // .first() porque o texto aparece em desktop tfoot + mobile cards.
-  await expect(page.getByText(/^Total:\s*\d+\s*pagamento/).first()).toBeVisible({ timeout: 15_000 });
+  const total = page.getByText(/^Total:\s*\d+\s*pagamento/).first();
+  try {
+    await expect(total).toBeVisible({ timeout: 15_000 });
+  } catch {
+    // Retry ÚNICO para absorver latência de pico (Supabase + dev server sob
+    // bateria longa). Se falhar de novo, o erro sobe — não mascara problema real.
+    await page.getByRole('button', { name: /Importar Dados/ }).click();
+    await expect(total).toBeVisible({ timeout: 20_000 });
+  }
 }
 
 test.describe('C6 — completo', () => {

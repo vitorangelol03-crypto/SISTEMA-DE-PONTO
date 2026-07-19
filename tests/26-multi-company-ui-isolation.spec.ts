@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { ADMIN, loginAs, goToTab, switchCompany } from './helpers';
-import { getClient } from './cleanup';
+import { getClient, ensureTestEmployee } from './cleanup';
 
 const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 const PONTE_NOVA_ID = '2b2abc4b-084c-4cf0-b5f1-02792513241d';
@@ -332,53 +332,27 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
   });
 
   test('8. Financeiro: tabela populada em ambas empresas com employees próprios (isolamento real)', async ({ page }) => {
-    // Sub-fase 14.24 — refatorado pra realidade pós-14.16 (30 Demo PN).
-    // FinancialTab processFinancialData mapeia 1 entry POR EMPLOYEE.
-    // Como ambas empresas têm employees agora, ambas mostram tabela.
-    // Isolamento garantido pegando 1 nome PROVA de cada empresa e
-    // validando ausência cross-empresa.
+    // MODERNIZADO 2026-07-19: a versão antiga dependia do que EXISTISSE no banco
+    // (ramos condicionais → indeterminismo quando a massa Demo PN sumiu). Agora o
+    // teste cria o PRÓPRIO funcionário em cada empresa — sem ramos, determinístico.
+    const ctName = 'PW Test Iso CT 26';
+    const pnName = 'PW Test Iso PN 26';
+    await ensureTestEmployee(ctName, '99926000126', 'caratinga');
+    await ensureTestEmployee(pnName, '99926000226', 'ponte');
 
-    const s = getClient();
-    const { data: ctEmps } = await s
-      .from('employees').select('name')
-      .eq('company_id', CARATINGA_ID).limit(1);
-    const { data: pnEmps } = await s
-      .from('employees').select('name')
-      .eq('company_id', PONTE_NOVA_ID).limit(1);
-
-    const ctName = ctEmps?.[0]?.name;
-    const pnName = pnEmps?.[0]?.name;
-
-    // 1. Caratinga (default): tabela populada
+    // 1. Caratinga (default): tabela populada com o employee CT; o de PN NÃO vaza.
     await goToTab(page, 'Financeiro');
-    await expect(
-      page.locator('tbody tr').first()
-    ).toBeAttached({ timeout: 15_000 });
-
-    // Se Caratinga tem employees, nome aparece. PN nome NÃO deve aparecer.
-    if (ctName) {
-      await expect(page.getByText(ctName).first()).toBeVisible({ timeout: 10_000 });
-    }
-    if (pnName && ctName !== pnName) {
-      await expect(page.getByText(pnName)).toHaveCount(0, { timeout: 5_000 });
-    }
+    await expect(page.locator('tbody tr').first()).toBeAttached({ timeout: 15_000 });
+    await expect(page.getByText(ctName).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(pnName)).toHaveCount(0, { timeout: 5_000 });
 
     // 2. Trocar empresa + re-navegar
     await switchCompany(page, 'Ponte Nova');
     await goToTab(page, 'Financeiro');
 
-    // 3. PN: ou tabela populada (com pnName), ou estado vazio se 0 employees.
-    //    Isolamento: ctName NÃO deve aparecer em PN.
-    if (pnName) {
-      await expect(page.getByText(pnName).first()).toBeVisible({ timeout: 10_000 });
-      if (ctName !== pnName) {
-        await expect(page.getByText(ctName!)).toHaveCount(0, { timeout: 5_000 });
-      }
-    } else {
-      await expect(
-        page.getByText(/Nenhum dado financeiro encontrado/i)
-      ).toBeVisible({ timeout: 10_000 });
-    }
+    // 3. PN: employee de PN visível; o de CT NÃO vaza.
+    await expect(page.getByText(pnName).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(ctName)).toHaveCount(0, { timeout: 5_000 });
   });
 
   test('9. Admin: Caratinga sections com dados; Ponte Nova vazias (Geo, Face, Suspeitas)', async ({ page }) => {
