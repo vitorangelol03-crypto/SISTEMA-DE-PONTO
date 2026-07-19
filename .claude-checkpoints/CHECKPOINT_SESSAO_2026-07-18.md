@@ -293,10 +293,17 @@ Princípio: molde dos specs 57-59 — teste cria a própria massa descartável e
 | F7 limpeza global | deleteDriverpayTestArtifacts no cleanupAllTestArtifacts — nunca mais coluna PW Test na grade real |
 | Pulados (inventário) | 22 skips classificados: ~9 acordados (horário manual, reset, service-role do 55 com skip condicional sem chave, etc.); 52-grade documentado como coberto por 57-59; resto é by-design (webcam, mobile, CI-flaky) |
 
-Commits: F1, F2, F3, F5, F6+F7 (5 commits de teste). **F8 em curso**: rodada 1 rodando;
-parcial ~313 testes com 8 falhas de um conjunto DIFERENTE do modernizado (flake rotativo
-de carga — nenhum spec modernizado falhou). Decisão do Victor: **retry 1× local** aplicado
-(passa-no-retry = "flaky" visível; falha dupla = real) → rodada 2 com retry fecha o placar.
+**F8 CONCLUÍDA (madrugada 19/07):**
+- Rodada 1 (sem retry): **379 ✅ / 8 ❌ / 21 pulados** (53,8m) — os 25 modernizados: TODOS verdes;
+  as 8 falhas eram flake rotativo de outro conjunto (05/100×2/18/24/32×2/37).
+- Retry 1× aplicado (decisão do Victor) → Rodada 2: **384 ✅ / 3 duras / 21 pulados** (55,5m).
+- Triagem das 3 duras: 05 e 14 passam isolados (flake de carga documentado);
+  **37 = RAIZ CENTENÁRIA ACHADA E MORTA**: timeout de hook (30s global; o
+  describe.configure NÃO cobre hooks) × cold start da edge fn (~150s) →
+  test.setTimeout(240s) DENTRO do beforeAll; provado com a fn fria: 5/5.
+- Resíduo pós-2-rodadas: só o user 7770 (spec 47 recria e o cleanup dele flakeia —
+  anotado hardening futuro) → removido; **resíduo 0**; Junho intacta (98 pagamentos,
+  R$ 327.631,66).
 
 **FILA APROVADA (executar após F8, mandato completo do Victor):** 4 implementações dos
 espelhos — plano completo com riscos e mitigações em `PLANO_ESPELHOS_2026-07-19.md`
