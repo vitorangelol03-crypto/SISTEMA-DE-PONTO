@@ -110,6 +110,10 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
   test.describe.configure({ timeout: 240_000 });
 
   test.beforeAll(async () => {
+    // 2026-07-19 — RAIZ do flake histórico deste spec: o timeout do describe.configure
+    // vale pros TESTES, não pros hooks; o beforeAll morria em 30s quando a edge fn
+    // create-user estava fria (cold start ~150s documentado) → testes falhavam com 0ms.
+    test.setTimeout(240_000);
     await cleanupTestUsers();
     // Força cold-start ANTES dos tests reais (ver warmupCreateUserEdgeFn doc).
     await warmupCreateUserEdgeFn();
