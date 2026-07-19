@@ -293,7 +293,16 @@ Princípio: molde dos specs 57-59 — teste cria a própria massa descartável e
 | F7 limpeza global | deleteDriverpayTestArtifacts no cleanupAllTestArtifacts — nunca mais coluna PW Test na grade real |
 | Pulados (inventário) | 22 skips classificados: ~9 acordados (horário manual, reset, service-role do 55 com skip condicional sem chave, etc.); 52-grade documentado como coberto por 57-59; resto é by-design (webcam, mobile, CI-flaky) |
 
-Commits: F1 `…`, F2, F3, F5, F6+F7 (5 commits de teste). **F8 pendente: bateria completa 2× → 0 falhas.**
+Commits: F1, F2, F3, F5, F6+F7 (5 commits de teste). **F8 em curso**: rodada 1 rodando;
+parcial ~313 testes com 8 falhas de um conjunto DIFERENTE do modernizado (flake rotativo
+de carga — nenhum spec modernizado falhou). Decisão do Victor: **retry 1× local** aplicado
+(passa-no-retry = "flaky" visível; falha dupla = real) → rodada 2 com retry fecha o placar.
+
+**FILA APROVADA (executar após F8, mandato completo do Victor):** 4 implementações dos
+espelhos — plano completo com riscos e mitigações em `PLANO_ESPELHOS_2026-07-19.md`
+(destaque amarelo por plataforma + aviso por plataforma com setas [regra de presença],
+aviso de corte com datas auto-salvas [snapshot/restore nos E2E!], descontos no espelho de
+grupo). Migrations autorizadas. Victor entra só em: aprovar prints do visual + deploy.
 
 *Sessão 2026-07-18 (dia todo). Claude Fable 5. Estado do git: main = `af62879`
 (pushada/deployada — fix sessão expirada + Espelhos da seleção + nitidez);
