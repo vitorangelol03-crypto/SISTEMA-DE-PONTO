@@ -19,7 +19,11 @@ export default defineConfig({
   fullyParallel: false,              // testes mexem no mesmo DB — serializar
   workers: 1,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // 2026-07-19: retry 1x local — bateria de 1h+ no WSL tem flake rotativo de
+  // carga (subconjunto diferente tropeça a cada rodada; todos passam isolados).
+  // Teste que passa no retry vira "flaky" no relatório (VISÍVEL, nada escondido);
+  // falha dupla = falha real. CI mantém 2.
+  retries: process.env.CI ? 2 : 1,
   globalSetup: './tests/global-setup.ts',
   globalTeardown: './tests/global-teardown.ts',
   reporter: [
