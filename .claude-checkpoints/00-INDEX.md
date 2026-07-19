@@ -2,15 +2,16 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-07-18**.
+> Última atualização: **2026-07-19**.
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Aba Pagamentos Driver EM PRODUÇÃO** (Vercel). `main` = `3a3f741`: 4 features dos espelhos
-(destaque amarelo, aviso de corte auto-salvo, descontos no grupo, aviso por plataforma com
-setas) + bateria de 409 testes modernizada (F1-F8: 384 ✅ / 3 flakes de carga documentados) +
-retry 1× local + Node 22 (nvm). Aguardando Victor: aprovação VISUAL dos prints em
-`test-results/prints-espelhos/`. Último checkpoint: `CHECKPOINT_SESSAO_2026-07-19.md`.
+**Aba Pagamentos Driver EM PRODUÇÃO** (Vercel). `main` = `3571009`: 4 features dos espelhos
+(destaque amarelo, aviso de corte auto-salvo, descontos no grupo, aviso por plataforma) +
+**passe de design nos PDFs** (auto-fit, gaps por posição, setas limpas coladas no alvo) +
+bateria de 409 testes modernizada (F1-F8) + retry 1× local + Node 22 (nvm). Aguardando
+Victor: aprovação VISUAL dos prints novos (enviados no chat; cópia em `prints-espelhos/`
+na raiz). Último checkpoint: `CHECKPOINT_SESSAO_2026-07-19.md`.
 
 ## 📚 Mapa dos checkpoints
 
@@ -40,7 +41,8 @@ retry 1× local + Node 22 (nvm). Aguardando Victor: aprovação VISUAL dos print
 - **Driverpay:** namespace `driverpay_*`; 100% aditivo ao sistema de ponto; vários períodos abertos permitidos; import auto-detecta plataforma pelo cabeçalho; valor/pacote vem da taxa cadastrada (nunca da planilha); apelidos de entregador aprendidos em `driverpay_driver_aliases`; Shopee COLETA = plataforma "Coleta Shopee"; plataforma arquivada sai da soma; driver só pode estar em 1 grupo (vínculo exclusivo, 18/07).
 - **Git:** commit local sempre; **push é do Victor, na mão**; Conventional Commits.
 - **Espelhos (19/07):** destaque+aviso por plataforma com REGRA DE PRESENÇA (só onde há pacotes); aviso acoplado ao destaque; corte auto-salvo por empresa; descontos no grupo limite 12.
-- **Testes (19/07):** retry 1× local (flake de carga vira 'flaky' visível); Vite WSL exige RESTART após editar código; hooks lentos precisam test.setTimeout interno.
+- **Testes (19/07):** retry 1× local (flake de carga vira 'flaky' visível); Vite WSL exige RESTART após editar código; hooks lentos precisam test.setTimeout interno; specs driverpay rodam com `--project=chromium` (firefox/webkit sem binário e mobile não serve pra tabela desktop).
+- **PDF (19/07):** separação entre trechos de texto com estilos diferentes é por GAP DE POSIÇÃO (`padLeft`), nunca espaço-caractere — o visualizador engole o espaço ao substituir a Helvetica; prints de aprovação ficam em `prints-espelhos/` na raiz (gitignored).
 - **Checkpoints (18/07):** todos vivem em `.claude-checkpoints/`; 1 checkpoint por sessão; atualizar este índice junto; hook pós-commit lembra a sessão de manter isso em dia.
 
 ## ⚠️ Áreas frágeis / pendências abertas

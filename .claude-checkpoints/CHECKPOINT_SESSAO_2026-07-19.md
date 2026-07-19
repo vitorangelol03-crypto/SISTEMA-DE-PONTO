@@ -38,11 +38,37 @@ Plano: `PLANO_ESPELHOS_2026-07-19.md`. Migrations aplicadas (platform_mirror + m
 - `driverMirrorGenerator.buildDriverMirrorData` é código MORTO (sem consumidor; o vivo é o do
   `driverPayShared`) — tipos vivem no generator, lógica no shared.
 
-## 4. Pendências que sobraram (nenhuma urgente)
+## 4. Passe de design nos PDFs (manhã 19/07, commit `3571009` — pushado)
+Victor viu os prints e reprovou o visual ("tortos e feios, deixe profissionais e simétricos").
+Diagnóstico com zoom nos PNGs + inspeção dos operadores `Tj` do PDF real:
+1. Texto do corte VAZAVA da faixa → `fitSegments` (auto-fit ×0.93 até caber, mín 6.5pt).
+2. " , fiquem" e "dia05/01"/"—Conferir" grudados → **causa raiz**: espaço-caractere entre
+   segmentos é ENGOLIDO pelo visualizador (fonte substituta desenha o trecho longo anterior
+   ~2pt mais largo que a medida do jsPDF; o espaço estava no PDF — provado com PDF mínimo).
+   Fix: gap de POSIÇÃO (`padLeft` no MirrorSegment), nunca espaço-caractere.
+3. Aviso: prefixo virou `AVISO PLATAFORMA:` com gap explícito; mensagem longa quebra em
+   linha própria.
+4. Conector em L (atravessava o box do grupo) → triângulo pequeno colado no alvo
+   (▶ na linha destacada, ▼ sobre a coluna); a ligação aviso↔plataforma é pelo nome.
+5. Prévia do diálogo em paridade; assert do spec 60 do corte agora case-insensitive
+   ("As" maiúsculo foi mudança proposital).
+Validação: tsc 0, build, unit 14/14, spec 60 chromium (retry pegou cold start do Vite
+recém-reiniciado — ambiental), inspeção visual página a página, prints reenviados.
+**Prints agora vivem em `prints-espelhos/` na raiz (gitignored)** — `test-results/` é
+apagada pelo Playwright a cada rodada.
+
+### Armadilha nova de infra
+- `npx playwright test` SEM `--project` roda os 4 projetos: firefox/webkit estão sem
+  binário (Playwright atualizado pelo Dependabot; compat roda só sob demanda) e o
+  mobile-pixel5 não serve pros specs driverpay (tabela desktop oculta no viewport 393px).
+  **Bateria/spec driverpay = `--project=chromium`.**
+
+## 5. Pendências que sobraram (nenhuma urgente)
 - Spec 47: cleanup do user `7770` flakeia sob carga (removido 2× via MCP) — hardening futuro.
 - Flake rotativo de carga em bateria longa: mitigado por retry 1× (visível como "flaky") —
   causa de fundo é o ambiente WSL/dev server; aceito e documentado.
-- Aprovação VISUAL do Victor nos prints (pasta acima) — ajustes finos se ele pedir.
+- Aprovação VISUAL do Victor nos prints novos (enviados no chat + `prints-espelhos/`).
+- Se firefox/webkit compat voltarem à rotina: `npx playwright install firefox webkit`.
 
 *Madrugada 19/07, Claude Fable 5, sozinho. main = `3a3f741` (pushado/deployado).
 Total do dia 18→19: ~20 commits, 2 features de produto grandes + 4 dos espelhos,
