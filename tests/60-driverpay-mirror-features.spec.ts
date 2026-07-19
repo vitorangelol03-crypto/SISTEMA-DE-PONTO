@@ -168,7 +168,7 @@ test.describe('Pagamentos Driver — 4 features dos espelhos', () => {
     await modal(page).getByPlaceholder('20/07').fill('31/12');
     await modal(page).getByPlaceholder('27/07').fill('05/01');
     // prévia ao vivo: faixa de corte + aviso da plataforma + linha destacada
-    await expect(modal(page).getByText(/as notas deverão ser enviadas até as/).first()).toBeVisible({ timeout: 10_000 });
+    await expect(modal(page).getByText(/as notas deverão ser enviadas até as/i).first()).toBeVisible({ timeout: 10_000 });
     await expect(modal(page).getByText(/23:59H do dia 31\/12/).first()).toBeVisible();
     await expect(modal(page).getByText(new RegExp(`AVISO ${TEST_EMPLOYEE_NAME_PREFIX.trim().toUpperCase()}`, 'i')).first())
       .toBeVisible();

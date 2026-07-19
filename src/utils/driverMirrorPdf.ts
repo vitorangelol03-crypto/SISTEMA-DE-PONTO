@@ -212,13 +212,19 @@ interface MirrorSegment {
   bold?: boolean;
   color?: [number, number, number];
   size: number;
+  /**
+   * Gap em pt ANTES do segmento. Espaço-caractere entre segmentos é engolido
+   * pelos visualizadores (a fonte substituta desenha o trecho longo anterior
+   * um pouco mais largo que a medida do jsPDF) — gap de posição não é.
+   */
+  padLeft?: number;
 }
 
 /** Escreve segmentos com estilos mistos numa linha única centralizada. */
 function drawSegmentsCentered(doc: jsPDF, segments: MirrorSegment[], y: number): void {
   const widths = segments.map((s) => {
     doc.setFont('helvetica', s.bold ? 'bold' : 'normal').setFontSize(s.size);
-    return doc.getTextWidth(s.text);
+    return doc.getTextWidth(s.text) + (s.padLeft ?? 0);
   });
   let x = PAGE_W / 2 - widths.reduce((a, b) => a + b, 0) / 2;
   segments.forEach((s, i) => {
@@ -226,41 +232,65 @@ function drawSegmentsCentered(doc: jsPDF, segments: MirrorSegment[], y: number):
       .setFont('helvetica', s.bold ? 'bold' : 'normal')
       .setFontSize(s.size)
       .setTextColor(...(s.color ?? COLOR_INK));
-    doc.text(s.text, x, y);
+    doc.text(s.text, x + (s.padLeft ?? 0), y);
     x += widths[i];
   });
   doc.setTextColor(0);
 }
 
+/** Largura total de uma linha de segmentos (para auto-ajuste de fonte). */
+function segmentsWidth(doc: jsPDF, segments: MirrorSegment[]): number {
+  return segments.reduce((sum, s) => {
+    doc.setFont('helvetica', s.bold ? 'bold' : 'normal').setFontSize(s.size);
+    return sum + doc.getTextWidth(s.text) + (s.padLeft ?? 0);
+  }, 0);
+}
+
+/** Reduz proporcionalmente as fontes até a linha caber na largura útil da faixa. */
+function fitSegments(doc: jsPDF, segments: MirrorSegment[], maxWidth: number): MirrorSegment[] {
+  let scaled = segments;
+  for (let i = 0; i < 6 && segmentsWidth(doc, scaled) > maxWidth; i++) {
+    scaled = scaled.map((s) => ({ ...s, size: Math.max(6.5, s.size * 0.93) }));
+  }
+  return scaled;
+}
+
 /**
  * Faixa amarela do CORTE DAS NOTAS (presente em todo espelho quando configurada):
  * hora/data em vermelho grande; 2ª linha com a data de pagamento tardio.
+ * Auto-ajusta a fonte para o texto NUNCA vazar da faixa (simetria garantida).
  */
 function drawCutoffBand(doc: jsPDF, cutoff: MirrorCutoffLine, y: number): number {
   const h = 42;
+  const usable = CONTENT_W - 24;
   doc.setFillColor(...COLOR_NOTICE_BG);
   doc.rect(X_LEFT, y, CONTENT_W, h, 'F');
   doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1);
   doc.rect(X_LEFT, y, CONTENT_W, h, 'S');
 
-  drawSegmentsCentered(
+  // Separação entre segmentos via padLeft (gap de posição) — nunca por
+  // espaço-caractere, que os visualizadores engolem (ver MirrorSegment).
+  const line1 = fitSegments(
     doc,
     [
-      { text: 'as notas deverão ser enviadas até as ', bold: true, size: 9.5 },
-      { text: `${cutoff.time}H do dia ${cutoff.date}`, bold: true, color: COLOR_DANGER, size: 12 },
-      { text: ' , fiquem atentos para que não ocorra atrasos no pagamento!', bold: true, size: 9.5 },
+      { text: 'As notas deverão ser enviadas até as', bold: true, size: 9.5 },
+      { text: `${cutoff.time}H do dia ${cutoff.date}`, bold: true, color: COLOR_DANGER, size: 11.5, padLeft: 4 },
+      { text: ', fiquem atentos para que não ocorra atrasos no pagamento!', bold: true, size: 9.5 },
     ],
-    y + 17,
+    usable,
   );
-  drawSegmentsCentered(
+  drawSegmentsCentered(doc, line1, y + 17);
+
+  const line2 = fitSegments(
     doc,
     [
-      { text: 'Caso exceda o horário de corte seu pagamento vai ocorrer dia ', size: 8.5 },
-      { text: cutoff.lateDate, bold: true, color: COLOR_DANGER, size: 9.5 },
+      { text: 'Caso exceda o horário de corte seu pagamento vai ocorrer dia', size: 8.5 },
+      { text: cutoff.lateDate, bold: true, color: COLOR_DANGER, size: 9.5, padLeft: 4 },
     ],
-    y + 33,
+    usable,
   );
-  return y + h + 8;
+  drawSegmentsCentered(doc, line2, y + 33);
+  return y + h + 10;
 }
 
 interface NoticeBandAnchor {
@@ -280,10 +310,14 @@ function drawPlatformNoticeBands(
 ): { y: number; anchors: NoticeBandAnchor[] } {
   const anchors: NoticeBandAnchor[] = [];
   for (const n of notices) {
+    // Prefixo em linha própria quando a mensagem quebra — nada de texto grudado.
+    const prefix = `AVISO ${n.platform.toUpperCase()}`;
     doc.setFont('helvetica', 'bold').setFontSize(10.5);
-    const prefix = `AVISO ${n.platform.toUpperCase()} — `;
-    const lines = doc.splitTextToSize(prefix + n.text, CONTENT_W - 28) as string[];
-    const h = 16 + lines.length * 13;
+    const prefixW = doc.getTextWidth(`${prefix}:`);
+    const msgLines = doc.splitTextToSize(n.text, CONTENT_W - 32 - prefixW - 8) as string[];
+    const singleLine = msgLines.length === 1;
+    const bodyLines = singleLine ? [] : (doc.splitTextToSize(n.text, CONTENT_W - 32) as string[]);
+    const h = singleLine ? 26 : 24 + bodyLines.length * 13;
     y = ensureSpace(doc, y, h + 10);
 
     doc.setFillColor(...COLOR_NOTICE_BG);
@@ -291,21 +325,18 @@ function drawPlatformNoticeBands(
     doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1.2);
     doc.rect(X_LEFT, y, CONTENT_W, h, 'S');
 
-    // Prefixo vermelho (AVISO + plataforma) e o texto em tinta forte, com quebra.
-    let ty = y + 15;
-    lines.forEach((line, i) => {
-      if (i === 0 && line.startsWith(prefix)) {
-        doc.setFont('helvetica', 'bold').setFontSize(10.5).setTextColor(...COLOR_DANGER);
-        const pw = doc.getTextWidth(prefix);
-        doc.text(prefix, X_LEFT + 14, ty);
-        doc.setTextColor(...COLOR_INK);
-        doc.text(line.slice(prefix.length), X_LEFT + 14 + pw, ty);
-      } else {
-        doc.setFont('helvetica', 'bold').setFontSize(10.5).setTextColor(...COLOR_INK);
-        doc.text(line, X_LEFT + 14, ty);
+    doc.setFont('helvetica', 'bold').setFontSize(10.5).setTextColor(...COLOR_DANGER);
+    doc.text(`${prefix}:`, X_LEFT + 16, y + 17);
+    doc.setTextColor(...COLOR_INK);
+    if (singleLine) {
+      doc.text(n.text, X_LEFT + 16 + prefixW + 6, y + 17);
+    } else {
+      let ty = y + 31;
+      for (const line of bodyLines) {
+        doc.text(line, X_LEFT + 16, ty);
+        ty += 13;
       }
-      ty += 13;
-    });
+    }
     doc.setTextColor(0);
 
     anchors.push({ platform: n.platform, bottomY: y + h, page: doc.getCurrentPageInfo().pageNumber });
@@ -314,26 +345,20 @@ function drawPlatformNoticeBands(
   return { y, anchors };
 }
 
-/** Seta aviso→LINHA destacada (espelho individual): desce pela margem e aponta ➜ pra linha. */
-function drawConnectorToRow(doc: jsPDF, fromY: number, rowY: number): void {
-  const x = X_LEFT - 10;
-  doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1.4);
-  doc.line(X_LEFT, fromY - 2, x, fromY - 2);
-  doc.line(x, fromY - 2, x, rowY);
+/**
+ * Marcadores de seta LIMPOS (design 19/07 v2 — a linha comprida atravessava o
+ * layout): triângulo ▶ colado à esquerda da LINHA destacada (individual) e
+ * triângulo ▼ logo acima da COLUNA destacada (grupo). A ligação com a faixa de
+ * aviso é feita pelo NOME da plataforma no próprio aviso.
+ */
+function drawRowArrow(doc: jsPDF, rowCenterY: number): void {
   doc.setFillColor(...COLOR_NOTICE_BORDER);
-  doc.triangle(x - 3, rowY - 4.5, x - 3, rowY + 4.5, x + 6, rowY, 'F');
+  doc.triangle(X_LEFT - 12, rowCenterY - 4.5, X_LEFT - 12, rowCenterY + 4.5, X_LEFT - 3, rowCenterY, 'F');
 }
 
-/** Seta aviso→COLUNA destacada (espelho de grupo): margem → topo da tabela → ponta ↓ na coluna. */
-function drawConnectorToColumn(doc: jsPDF, fromY: number, headTopY: number, centerX: number): void {
-  const x = X_LEFT - 10;
-  const overY = headTopY - 6;
-  doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1.4);
-  doc.line(X_LEFT, fromY - 2, x, fromY - 2);
-  doc.line(x, fromY - 2, x, overY);
-  doc.line(x, overY, centerX, overY);
+function drawColumnArrow(doc: jsPDF, centerX: number, headTopY: number): void {
   doc.setFillColor(...COLOR_NOTICE_BORDER);
-  doc.triangle(centerX - 4.5, overY, centerX + 4.5, overY, centerX, headTopY - 0.5, 'F');
+  doc.triangle(centerX - 5, headTopY - 7, centerX + 5, headTopY - 7, centerX, headTopY - 1, 'F');
 }
 
 /** Faixa verde de resumo (idioma mockup `.esp-resumo .grand`). */
@@ -365,11 +390,8 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
     .map((p) => ({ platform: p.platform, text: p.notice as string }));
   let topY = 118;
   if (data.cutoff) topY = drawCutoffBand(doc, data.cutoff, topY);
-  let noticeAnchors: NoticeBandAnchor[] = [];
   if (platformNotices.length > 0) {
-    const r = drawPlatformNoticeBands(doc, platformNotices, topY);
-    topY = r.y;
-    noticeAnchors = r.anchors;
+    topY = drawPlatformNoticeBands(doc, platformNotices, topY).y;
   }
 
   // ── Box "DADOS DO DRIVER" ──
@@ -467,9 +489,8 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
     ],
   ];
 
-  // Destaque amarelo (2026-07-19): linha inteira da plataforma marcada + âncora
-  // da seta (capturada no didDrawCell da 1ª célula da linha).
-  const rowAnchors: Array<{ platform: string; y: number; page: number }> = [];
+  // Destaque amarelo (2026-07-19): linha inteira da plataforma marcada; a seta ▶
+  // é desenhada direto no didDrawCell (design v2, sem linha atravessando o layout).
   autoTable(doc, {
     startY: y + 6,
     head: platHead,
@@ -494,24 +515,13 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
     didDrawCell: (cell) => {
       if (cell.section === 'body' && cell.column.index === 0) {
         const p = platforms[cell.row.index];
-        if (p?.highlight) {
-          rowAnchors.push({
-            platform: p.platform,
-            y: cell.cell.y + cell.cell.height / 2,
-            page: doc.getCurrentPageInfo().pageNumber,
-          });
+        if (p?.highlight && p?.notice) {
+          drawRowArrow(doc, cell.cell.y + cell.cell.height / 2);
         }
       }
     },
     margin: AUTOTABLE_MARGIN,
   });
-  // Setas aviso→linha destacada (só quando faixa e linha estão na MESMA página).
-  for (const anchor of noticeAnchors) {
-    const row = rowAnchors.find((r) => r.platform === anchor.platform && r.page === anchor.page);
-    if (row && doc.getCurrentPageInfo().pageNumber === anchor.page) {
-      drawConnectorToRow(doc, anchor.bottomY, row.y);
-    }
-  }
   y = getFinalY(doc, y + 6) + 16;
 
   // ── Descontos (só se houver) ──
@@ -683,11 +693,8 @@ function drawGroupSummaryPage(
   const platformNotices = Array.from(noticeByPlatform, ([platform, text]) => ({ platform, text }));
   let topY = 118;
   if (data.cutoff) topY = drawCutoffBand(doc, data.cutoff, topY);
-  let noticeAnchors: NoticeBandAnchor[] = [];
   if (platformNotices.length > 0) {
-    const r = drawPlatformNoticeBands(doc, platformNotices, topY);
-    topY = r.y;
-    noticeAnchors = r.anchors;
+    topY = drawPlatformNoticeBands(doc, platformNotices, topY).y;
   }
 
   // Box compacto do grupo.
@@ -761,12 +768,13 @@ function drawGroupSummaryPage(
   columnStyles[valeIdx] = { halign: 'right' };
   columnStyles[netIdx] = { halign: 'right' };
 
-  // Índices das colunas destacadas (2026-07-19) + âncoras do cabeçalho pras setas.
+  // Índices das colunas destacadas (2026-07-19); a seta ▼ é desenhada direto no
+  // didDrawCell do cabeçalho (design v2, sem linha atravessando o layout).
   const highlightedCols = new Set<number>();
   platformNames.forEach((name, i) => {
     if (highlightedPlatforms.has(name)) highlightedCols.add(2 + i);
   });
-  const headAnchors: Array<{ platform: string; centerX: number; topY: number; page: number }> = [];
+  const noticedPlatforms = new Set(platformNotices.map((n) => n.platform));
 
   autoTable(doc, {
     startY: y + 6,
@@ -809,23 +817,13 @@ function drawGroupSummaryPage(
     didDrawCell: (cell) => {
       if (cell.section === 'head' && highlightedCols.has(cell.column.index)) {
         const name = platformNames[cell.column.index - 2];
-        headAnchors.push({
-          platform: name,
-          centerX: cell.cell.x + cell.cell.width / 2,
-          topY: cell.cell.y,
-          page: doc.getCurrentPageInfo().pageNumber,
-        });
+        if (noticedPlatforms.has(name)) {
+          drawColumnArrow(doc, cell.cell.x + cell.cell.width / 2, cell.cell.y);
+        }
       }
     },
     margin: AUTOTABLE_MARGIN,
   });
-  // Setas aviso→coluna destacada (mesma página).
-  for (const anchor of noticeAnchors) {
-    const headA = headAnchors.find((h) => h.platform === anchor.platform && h.page === anchor.page);
-    if (headA && doc.getCurrentPageInfo().pageNumber === anchor.page) {
-      drawConnectorToColumn(doc, anchor.bottomY, headA.topY, headA.centerX);
-    }
-  }
   y = getFinalY(doc, y + 6) + 14;
 
   // ── Descontos do grupo (2026-07-19): de quem, código, marca, obs e valor ──

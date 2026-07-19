@@ -33,9 +33,9 @@ interface DriverMirrorPreviewDialogProps {
 const CutoffBandPreview: React.FC<{ cutoff: MirrorCutoffLine }> = ({ cutoff }) => (
   <div className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2 text-center">
     <p className="text-[13px] font-bold text-gray-900">
-      as notas deverão ser enviadas até as{' '}
+      As notas deverão ser enviadas até as{' '}
       <span className="text-red-700 text-[15px]">{cutoff.time}H do dia {cutoff.date}</span>
-      {' '}, fiquem atentos para que não ocorra atrasos no pagamento!
+      , fiquem atentos para que não ocorra atrasos no pagamento!
     </p>
     <p className="text-[11px] text-gray-800">
       Caso exceda o horário de corte seu pagamento vai ocorrer dia{' '}
@@ -53,7 +53,7 @@ const PlatformNoticeBandsPreview: React.FC<{ data: DriverMirrorData }> = ({ data
       {notices.map((p, i) => (
         <div key={i} className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2">
           <p className="text-[13px] font-bold">
-            <span className="text-red-700">AVISO {p.platform.toUpperCase()} — </span>
+            <span className="text-red-700">AVISO {p.platform.toUpperCase()}: </span>
             <span className="text-gray-900">{p.notice}</span>
           </p>
         </div>
@@ -446,7 +446,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                   {Array.from(seen, ([platform, text]) => (
                     <div key={platform} className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2">
                       <p className="text-[13px] font-bold">
-                        <span className="text-red-700">AVISO {platform.toUpperCase()} — </span>
+                        <span className="text-red-700">AVISO {platform.toUpperCase()}: </span>
                         <span className="text-gray-900">{text}</span>
                       </p>
                     </div>
