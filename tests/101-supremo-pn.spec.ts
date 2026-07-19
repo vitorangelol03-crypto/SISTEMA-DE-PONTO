@@ -24,6 +24,7 @@
  *   K. Configurações empresa PN
  *   L. Permissões admin local 8888
  */
+import { execSync } from 'node:child_process';
 import { test, expect, Page, ConsoleMessage } from '@playwright/test';
 import { ADMIN, loginAs, goToTab, logout } from './helpers';
 import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
@@ -87,8 +88,28 @@ async function switchToPN(page: Page): Promise<void> {
 test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
   test.describe.configure({ timeout: 180_000 });
 
+  // 2026-07-19 (decisão A do Victor): o spec é AUTO-SUFICIENTE — cria os 30
+  // Demo PN no início (mesmo seed original, idempotente, PINs bcrypt) e REMOVE
+  // no fim. A suíte quebrou quando a massa fixa foi removida do banco; agora
+  // Ponte Nova volta a ficar vazia depois de cada rodada.
+  test.beforeAll(() => {
+    execSync('node scripts/seed-pn-fake.mjs', { stdio: 'pipe', timeout: 300_000 });
+  });
+
   test.afterAll(async () => {
     await cleanupByPrefix(TEST_PREFIX, [todayBR()]);
+    const s = getClient();
+    const { data: demos } = await s
+      .from('employees')
+      .select('id')
+      .eq('company_id', PN_ID)
+      .like('name', 'Demo PN%');
+    const ids = (demos || []).map((e: { id: string }) => e.id);
+    if (ids.length > 0) {
+      await s.from('attendance').delete().in('employee_id', ids);
+      await s.from('payments').delete().in('employee_id', ids);
+      await s.from('employees').delete().in('id', ids);
+    }
   });
 
   // ============================================================================
@@ -345,22 +366,20 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
     });
 
     test('D3. Edge fn verify-pin com bcrypt: PIN correto → valid=true', async () => {
-      // Pega 1 Demo PN e seu PIN derivado
+      // 2026-07-19: o seed insere em LOTE (created_at igual pra todos; desempate
+      // por uuid aleatório) — ordenar por created_at NÃO reproduz a ordem do seed.
+      // O NOME é determinístico por índice (listas fixas do seed): idx 0 =
+      // "Demo PN Ana Carolina da Silva" → PIN 1234 (1234 + idx*7).
       const s = getClient();
-      const { data: emps } = await s
+      const { data: target } = await s
         .from('employees')
-        .select('id, name, pin_hash, created_at')
+        .select('id, name')
         .eq('company_id', PN_ID)
-        .like('name', 'Demo PN%')
-        .order('created_at', { ascending: true })
-        .order('id', { ascending: true });
+        .eq('name', 'Demo PN Ana Carolina da Silva')
+        .single();
 
-      if (!emps || emps.length === 0) throw new Error('Sem Demo PN');
-
-      // Primeiro: pin = 1234 (idx 0); pin = 1234 + idx*7
-      const targetIdx = 0;
-      const target = emps[targetIdx];
-      const expectedPin = String(1234 + targetIdx * 7).padStart(4, '0').slice(0, 4);
+      if (!target) throw new Error('Demo PN idx 0 não encontrado — seed rodou?');
+      const expectedPin = '1234';
 
       // Chama edge fn verify-pin direto
       const url = process.env.VITE_SUPABASE_URL || (await import('node:fs')).readFileSync('.env', 'utf8').match(/VITE_SUPABASE_URL=(.+)/)![1].trim();
