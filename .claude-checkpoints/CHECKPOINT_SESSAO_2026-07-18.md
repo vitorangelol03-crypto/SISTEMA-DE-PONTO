@@ -275,6 +275,26 @@ no código; o que mudou foi a REALIDADE — specs de maio assumem base controlad
 modernizar essas famílias no molde dos specs 57-59 (massa própria descartável / rodar como 2626).
 Log: `~/.claude/jobs/0f32650a/tmp/rerun-16.log`.
 
+---
+
+## K. Madrugada 19/07 — MODERNIZAÇÃO DA BATERIA (F1-F7 concluídas; F8 = prova final rodando)
+
+Plano aprovado pelo Victor ("vamos começar agora + validar os pulados com cliques reais").
+Princípio: molde dos specs 57-59 — teste cria a própria massa descartável e valida a REGRA ATUAL.
+
+| Frente | Resultado |
+|---|---|
+| F1 ponto/bônus/permissões (03/04/09/22) | 03 reescrito (funcionário próprio + regra 2626 dos 2 lados + 2 skips acordados) 7/7 · 04 REESCRITO em Ponte Nova (bonuses é por empresa+dia — a versão velha mexia no bônus REAL da Caratinga!) 6/6 · 22 premissa invertida (Reset Geral: 9999 não vê / 2626 vê) · 09 era contaminação do 04. Família: 23 passed |
+| F2 C6 (20) + multi-empresa (26) | 20 = flake de carga provado (isolado 8/8) → importC6 com datas garantidas + retry único · 26 teste 8 determinístico com massa própria (1 PW employee por empresa). 17 passed |
+| F3 banco de horas (29/34) | 34 = login carregava contexto antes da precondição → page.reload() após setar. 8/8 · 29 = flake de carga (isolado passa), vigiado na F8 |
+| F4 criar-usuário (37) | **SEM bug de produto** — 5/5 isolado (timeouts de 240s já existiam; falha era contexto de bateria). Nada mudado |
+| F5 Ponte Nova (101) | Auto-suficiente: beforeAll roda o seed original (bcryptjs virou devDep — usava sem declarar), afterAll remove os 30 Demo PN · D3 por NOME determinístico (idx 0 = "Demo PN Ana Carolina da Silva"/PIN 1234; created_at em lote não preserva ordem). **25/25** (eram 8 falhas + 3 não-rodavam) |
+| F6 zebra (53) | Quinzena descartável (a real tinha linhas verdes de conferido). 1/1 |
+| F7 limpeza global | deleteDriverpayTestArtifacts no cleanupAllTestArtifacts — nunca mais coluna PW Test na grade real |
+| Pulados (inventário) | 22 skips classificados: ~9 acordados (horário manual, reset, service-role do 55 com skip condicional sem chave, etc.); 52-grade documentado como coberto por 57-59; resto é by-design (webcam, mobile, CI-flaky) |
+
+Commits: F1 `…`, F2, F3, F5, F6+F7 (5 commits de teste). **F8 pendente: bateria completa 2× → 0 falhas.**
+
 *Sessão 2026-07-18 (dia todo). Claude Fable 5. Estado do git: main = `af62879`
 (pushada/deployada — fix sessão expirada + Espelhos da seleção + nitidez);
 `chore/deps-minor-patch` (Dependabot validado) aguardando OK; hook de lembrete de
