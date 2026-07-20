@@ -73,6 +73,20 @@ também estava exposto.
   dentro de `has` não funciona; pegar os `tr` na ordem e usar `.nth()` no nível de fora.
 - Badge no span do nome quebra `getByText(exact: true)` → usar `hasText` (substring).
 
+## 4b. Operações de DADO em produção (pedidos do Victor, pós-push)
+
+- **eMile Caratinga:** `mirror_separate_value = true` (junto do destaque + aviso CNPJ
+  que já existiam). Espelhos reais gerados como prova (driver de Inhapim LUAN FIALHO
+  e grupo "Inhapim, MG") — prints em `prints-espelhos/real-inhapim*` e
+  `real-grupo-inhapim*`.
+- **Unificação dos 2 cadastros do Tales (Inhapim), com OK do Victor:** os 241 pacotes
+  eMile do duplicado "Tales Alexandre de Souza" (criado 18/07 por import) foram movidos
+  pro pagamento do "TALES ALEXANDRE DE SOUSA" (id `3c3489b2…`), pagamento vazio
+  apagado, alias reapontado (imports futuros caem no certo), taxas/membership do
+  duplicado limpos e o cadastro duplicado DESATIVADO (não apagado — reversível; nota
+  no perfil). Só a quinzena aberta existia — sem histórico tocado. Verificado:
+  pagamento unificado = 2.342 pacotes = R$ 5.152,40; totais do grupo inalterados.
+
 ## 5. Fechamento
 
 - Prints aprovados pelo Victor ("ficou top") e push autorizado e feito:
