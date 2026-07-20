@@ -87,6 +87,17 @@ também estava exposto.
   no perfil). Só a quinzena aberta existia — sem histórico tocado. Verificado:
   pagamento unificado = 2.342 pacotes = R$ 5.152,40; totais do grupo inalterados.
 
+## 4c. Ajuste de layout por áudio do Victor (transcrito com faster-whisper local)
+
+Pedido: agrupar tudo da plataforma separada num bloco só no fim do espelho. Novo
+ordenamento: verde TOTAL A RECEBER → faixa TOTAL {PLAT} (separado) → AVISO da
+plataforma (CNPJ) COLADO nela. A 2ª posição solta do aviso só permanece para
+plataforma destacada SEM separação; o aviso do topo continua para todas.
+PDF + prévia, individual e grupo. Validação: tsc/units/build + specs 60 e 61 verdes,
+espelho real do LUAN regenerado e aprovado.
+Infra: transcrição de áudio EXISTE na máquina — `faster-whisper` 1.2.1 via pip
+(biblioteca python, sem CLI no PATH; modelo `small` no cache HF).
+
 ## 5. Fechamento
 
 - Prints aprovados pelo Victor ("ficou top") e push autorizado e feito:

@@ -722,8 +722,13 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   y = getFinalY(doc, y) + 8;
 
   // 2ª posição dos avisos de plataforma (pedido do Victor: ≥2 lugares por espelho).
-  if (platformNotices.length > 0) {
-    const r2 = drawPlatformNoticeBands(doc, platformNotices, y);
+  // Plataforma com VALOR SEPARADO (áudio do Victor, 20/07): o aviso dela desce pra
+  // COLADO na faixa do total separado, agrupando tudo da plataforma num bloco só —
+  // aqui ficam só os avisos das plataformas sem separação.
+  const sepSet = new Set(sep.map((s) => s.platform));
+  const noticesLoose = platformNotices.filter((n) => !sepSet.has(n.platform));
+  if (noticesLoose.length > 0) {
+    const r2 = drawPlatformNoticeBands(doc, noticesLoose, y);
     y = r2.y;
   }
 
@@ -731,7 +736,8 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   y = drawGreenBanner(doc, 'TOTAL A RECEBER', fmtBRL(totals.toReceive - sepTotal), y);
 
   // Valor separado (2026-07-20): faixa amarela POR plataforma marcada, colada no
-  // total verde, com aviso explícito de que o valor é pago à parte.
+  // total verde, com aviso explícito de que o valor é pago à parte — e o aviso da
+  // plataforma (ex.: CNPJ da nota) logo embaixo, no mesmo bloco.
   for (const s of sep) {
     y = ensureSpace(doc, y + 8, 54);
     y = drawSeparatedValueBanner(
@@ -740,6 +746,10 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
       s,
       y,
     );
+    const noticeText = noticeMap.get(s.platform);
+    if (noticeText) {
+      y = drawPlatformNoticeBands(doc, [{ platform: s.platform, text: noticeText }], y + 4).y;
+    }
   }
 
   // ── Assinaturas + rodapé ──
@@ -1009,9 +1019,12 @@ function drawGroupSummaryPage(
     y = getFinalY(doc, y + 6) + 14;
   }
 
-  // 2ª posição dos avisos de plataforma (≥2 lugares por espelho).
-  if (platformNotices.length > 0) {
-    const r2 = drawPlatformNoticeBands(doc, platformNotices, y);
+  // 2ª posição dos avisos de plataforma (≥2 lugares por espelho). Plataforma com
+  // valor separado: o aviso desce pra junto da faixa do total dela (bloco único).
+  const groupSepSet = new Set(groupSep.map((s) => s.platform));
+  const groupNoticesLoose = platformNotices.filter((n) => !groupSepSet.has(n.platform));
+  if (groupNoticesLoose.length > 0) {
+    const r2 = drawPlatformNoticeBands(doc, groupNoticesLoose, y);
     y = r2.y;
   }
 
@@ -1023,7 +1036,8 @@ function drawGroupSummaryPage(
     y,
   );
 
-  // Valor separado (2026-07-20): faixa amarela com a soma da plataforma no grupo.
+  // Valor separado (2026-07-20): faixa amarela com a soma da plataforma no grupo,
+  // com o aviso da plataforma (ex.: CNPJ da nota) colado logo embaixo.
   for (const s of groupSep) {
     y = ensureSpace(doc, y + 8, 54);
     y = drawSeparatedValueBanner(
@@ -1032,6 +1046,10 @@ function drawGroupSummaryPage(
       s,
       y,
     );
+    const noticeText = noticeByPlatform.get(s.platform);
+    if (noticeText) {
+      y = drawPlatformNoticeBands(doc, [{ platform: s.platform, text: noticeText }], y + 4).y;
+    }
   }
 
   const footY = ensureSpace(doc, y + 22, 20);

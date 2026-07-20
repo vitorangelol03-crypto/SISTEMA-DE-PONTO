@@ -50,11 +50,18 @@ const CutoffBandPreview: React.FC<{ cutoff: MirrorCutoffLine }> = ({ cutoff }) =
   </div>
 );
 
-/** Faixas de aviso por plataforma — mesma cara do PDF (dedup: multi-rota gera 1 linha por rota). */
-const PlatformNoticeBandsPreview: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
+/**
+ * Faixas de aviso por plataforma — mesma cara do PDF (dedup: multi-rota gera 1 linha
+ * por rota). `exclude`: plataformas com valor separado saem daqui na 2ª posição — o
+ * aviso delas desce pra junto da faixa do total separado (pedido do Victor, 20/07).
+ */
+const PlatformNoticeBandsPreview: React.FC<{ data: DriverMirrorData; exclude?: Set<string> }> = ({
+  data,
+  exclude,
+}) => {
   const seen = new Map<string, string>();
   for (const p of data.platforms) {
-    if (p.highlight && p.notice) seen.set(p.platform, p.notice);
+    if (p.highlight && p.notice && !exclude?.has(p.platform)) seen.set(p.platform, p.notice);
   }
   if (seen.size === 0) return null;
   return (
@@ -238,9 +245,10 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
         </Section>
       )}
 
-      {/* 2ª posição dos avisos de plataforma (paridade com o PDF) */}
+      {/* 2ª posição dos avisos de plataforma (paridade com o PDF) — sem as separadas,
+          cujo aviso desce pro bloco do total separado */}
       <div className="mt-4">
-        <PlatformNoticeBandsPreview data={data} />
+        <PlatformNoticeBandsPreview data={data} exclude={new Set(sep.map((s) => s.platform))} />
       </div>
 
       <div className="mt-5 border border-gray-200 rounded-lg overflow-hidden">
@@ -256,16 +264,29 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
         </div>
       </div>
 
-      {/* Valor separado (2026-07-20): faixa amarela por plataforma, colada no total */}
+      {/* Valor separado (2026-07-20): faixa amarela por plataforma, colada no total,
+          com o aviso da plataforma (ex.: CNPJ da nota) logo embaixo — bloco único */}
       {sep.length > 0 && (
         <div className="mt-3 space-y-2">
-          {sep.map((s) => (
-            <SeparatedValueBannerPreview
-              key={s.platform}
-              label={`TOTAL ${s.platform.toUpperCase()} (${formatInt(s.packages)} pacotes)`}
-              amount={s.amount}
-            />
-          ))}
+          {sep.map((s) => {
+            const noticeText = data.platforms.find((p) => p.platform === s.platform && p.notice)?.notice;
+            return (
+              <React.Fragment key={s.platform}>
+                <SeparatedValueBannerPreview
+                  label={`TOTAL ${s.platform.toUpperCase()} (${formatInt(s.packages)} pacotes)`}
+                  amount={s.amount}
+                />
+                {noticeText && (
+                  <div className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2">
+                    <p className="text-[13px] font-bold">
+                      <span className="text-red-700">AVISO {s.platform.toUpperCase()}: </span>
+                      <span className="text-gray-900">{noticeText}</span>
+                    </p>
+                  </div>
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
       )}
     </div>
@@ -642,13 +663,32 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                   </div>
                   {gSep.length > 0 && (
                     <div className="mt-2 space-y-2">
-                      {gSep.map((s) => (
-                        <SeparatedValueBannerPreview
-                          key={s.platform}
-                          label={`TOTAL ${s.platform.toUpperCase()} DO GRUPO (${formatInt(s.packages)} pacotes)`}
-                          amount={s.amount}
-                        />
-                      ))}
+                      {gSep.map((s) => {
+                        let noticeText: string | null = null;
+                        for (const d of request.data.drivers) {
+                          const hit = d.platforms.find((p) => p.platform === s.platform && p.notice);
+                          if (hit?.notice) {
+                            noticeText = hit.notice;
+                            break;
+                          }
+                        }
+                        return (
+                          <React.Fragment key={s.platform}>
+                            <SeparatedValueBannerPreview
+                              label={`TOTAL ${s.platform.toUpperCase()} DO GRUPO (${formatInt(s.packages)} pacotes)`}
+                              amount={s.amount}
+                            />
+                            {noticeText && (
+                              <div className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2">
+                                <p className="text-[13px] font-bold">
+                                  <span className="text-red-700">AVISO {s.platform.toUpperCase()}: </span>
+                                  <span className="text-gray-900">{noticeText}</span>
+                                </p>
+                              </div>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
                     </div>
                   )}
                 </>
