@@ -6,20 +6,22 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Aba Pagamentos Driver EM PRODUÇÃO** (Vercel). `main` = `3571009`: 4 features dos espelhos
-(destaque amarelo, aviso de corte auto-salvo, descontos no grupo, aviso por plataforma) +
-**passe de design nos PDFs** (auto-fit, gaps por posição, setas limpas coladas no alvo) +
-bateria de 409 testes modernizada (F1-F8) + retry 1× local + Node 22 (nvm). Design dos
-espelhos **APROVADO pelo Victor** (19/07 tarde); plataforma eMile configurada em produção
-com destaque + aviso de CNPJ da nota fiscal (dado, não código). Nada aguardando aprovação.
-Último checkpoint: `CHECKPOINT_SESSAO_2026-07-19.md`.
+**Aba Pagamentos Driver EM PRODUÇÃO** (Vercel). Sessão 20/07 (commit local, PUSH PENDENTE
+do Victor): **valor separado por plataforma** (fora do total exibido nos espelhos, faixa
+amarela explícita; coluna `mirror_separate_value` + caixinha no modal, acoplada ao
+destaque) + **multi-rota sem taxa média** (uma linha POR ROTA no espelho, caso Fabricio)
++ fix de race no aviso de corte (fetch lento não apaga mais o que foi digitado).
+Validado: tsc 0, build, 482 units, spec 61 novo 3× verde, regressão 54/57/58/59/60.
+**Aguardando: aprovação visual do Victor nos prints** (`prints-espelhos/pdf-*-separado-*.png`)
+e o push. Último checkpoint: `CHECKPOINT_SESSAO_2026-07-20.md`.
 
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-18.md` | **Mais recente.** Grupos: vínculo exclusivo + busca por rota; retroativo dos 17 commits de melhorias do painel (17-18/07) | 🟢 ATIVO |
-| `CHECKPOINT_SESSAO_2026-07-19.md` | **Mais recente.** Madrugada autônoma: F8 concluída, 4 features dos espelhos entregues, aprendizados de infra (Vite WSL!) | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-20.md` | **Mais recente.** Valor separado por plataforma + multi-rota sem taxa média + fix race do corte; specs 61/unit novos | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-18.md` | Grupos: vínculo exclusivo + busca por rota; retroativo dos 17 commits de melhorias do painel (17-18/07) | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-19.md` | Madrugada autônoma: F8 concluída, 4 features dos espelhos entregues, aprendizados de infra (Vite WSL!) | 🟢 ATIVO |
 | `PLANO_ESPELHOS_2026-07-19.md` | Plano completo das 4 implementações dos espelhos (riscos, mitigação, ordem) | 🟢 ATIVO (fila aprovada) |
 | `CHECKPOINT_IMPORT_PLANILHAS.md` | Importação automática iMile/Shopee/Anjun (SF1-SF6): formatos, decisões, o que falta validar com clique real | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-04_fix-bug1-multirota.md` | Auditoria 7 dimensões do driverpay + fix Bug #1 (rota-fantasma) e #2 (taxa por rota) + pendências de segurança | 🟢 ATIVO (pendências valem) |
@@ -42,6 +44,8 @@ com destaque + aviso de CNPJ da nota fiscal (dado, não código). Nada aguardand
 - **Driverpay:** namespace `driverpay_*`; 100% aditivo ao sistema de ponto; vários períodos abertos permitidos; import auto-detecta plataforma pelo cabeçalho; valor/pacote vem da taxa cadastrada (nunca da planilha); apelidos de entregador aprendidos em `driverpay_driver_aliases`; Shopee COLETA = plataforma "Coleta Shopee"; plataforma arquivada sai da soma; driver só pode estar em 1 grupo (vínculo exclusivo, 18/07).
 - **Git:** commit local sempre; **push é do Victor, na mão**; Conventional Commits.
 - **Espelhos (19/07):** destaque+aviso por plataforma com REGRA DE PRESENÇA (só onde há pacotes); aviso acoplado ao destaque; corte auto-salvo por empresa; descontos no grupo limite 12.
+- **Espelhos (20/07):** valor separado por plataforma FORA do total exibido (acoplado ao destaque; texto explícito pro driver leigo; a TELA do painel segue com total cheio — decisão do Victor); multi-rota = uma linha POR ROTA com a taxa real, NUNCA média; `packagesForPlatform` soma linhas.
+- **E2E (20/07):** nunca rodar tsc/vitest/build em paralelo com bateria Playwright (carga WSL = flake); aquecer o Vite (curl / + /src/main.tsx) antes de spec com server frio.
 - **Testes (19/07):** retry 1× local (flake de carga vira 'flaky' visível); Vite WSL exige RESTART após editar código; hooks lentos precisam test.setTimeout interno; specs driverpay rodam com `--project=chromium` (firefox/webkit sem binário e mobile não serve pra tabela desktop).
 - **PDF (19/07):** separação entre trechos de texto com estilos diferentes é por GAP DE POSIÇÃO (`padLeft`), nunca espaço-caractere — o visualizador engole o espaço ao substituir a Helvetica; prints de aprovação ficam em `prints-espelhos/` na raiz (gitignored).
 - **Checkpoints (18/07):** todos vivem em `.claude-checkpoints/`; 1 checkpoint por sessão; atualizar este índice junto; hook pós-commit lembra a sessão de manter isso em dia.

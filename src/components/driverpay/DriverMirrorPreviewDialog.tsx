@@ -11,6 +11,12 @@ import {
   type MirrorCutoffLine,
 } from '../../utils/driverMirrorPdf';
 import { getMirrorCutoffNotice, saveMirrorCutoffNotice } from '../../services/driverPay';
+import {
+  platformLineLabel,
+  separatedPlatformTotals,
+  separatedAmount,
+  type SeparatedPlatformTotal,
+} from '../../utils/driverMirrorGenerator';
 import { ModalShell } from './ModalShell';
 import { formatBRL, formatInt, sanitizeFile } from './driverPayShared';
 
@@ -44,17 +50,20 @@ const CutoffBandPreview: React.FC<{ cutoff: MirrorCutoffLine }> = ({ cutoff }) =
   </div>
 );
 
-/** Faixas de aviso por plataforma — mesma cara do PDF. */
+/** Faixas de aviso por plataforma — mesma cara do PDF (dedup: multi-rota gera 1 linha por rota). */
 const PlatformNoticeBandsPreview: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
-  const notices = data.platforms.filter((p) => p.highlight && p.notice);
-  if (notices.length === 0) return null;
+  const seen = new Map<string, string>();
+  for (const p of data.platforms) {
+    if (p.highlight && p.notice) seen.set(p.platform, p.notice);
+  }
+  if (seen.size === 0) return null;
   return (
     <div className="space-y-2">
-      {notices.map((p, i) => (
-        <div key={i} className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2">
+      {Array.from(seen, ([platform, text]) => (
+        <div key={platform} className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2">
           <p className="text-[13px] font-bold">
-            <span className="text-red-700">AVISO {p.platform.toUpperCase()}: </span>
-            <span className="text-gray-900">{p.notice}</span>
+            <span className="text-red-700">AVISO {platform.toUpperCase()}: </span>
+            <span className="text-gray-900">{text}</span>
           </p>
         </div>
       ))}
@@ -62,11 +71,51 @@ const PlatformNoticeBandsPreview: React.FC<{ data: DriverMirrorData }> = ({ data
   );
 };
 
+/** Faixa amarela do valor separado — mesma cara do PDF (texto explícito pro driver leigo). */
+const SeparatedValueBannerPreview: React.FC<{ label: string; amount: number }> = ({ label, amount }) => (
+  <div className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-4 py-2.5">
+    <div className="flex items-center justify-between gap-2">
+      <span className="font-bold text-sm text-gray-900">{label}</span>
+      <span className="font-extrabold text-lg tabular-nums text-gray-900">{formatBRL(amount)}</span>
+    </div>
+    <p className="text-[11px] font-bold text-red-700 mt-0.5">
+      ESTE VALOR É PAGO SEPARADO — ELE NÃO ESTÁ SOMADO NO "TOTAL A RECEBER" ACIMA.
+    </p>
+  </div>
+);
+
 /** Ganho Zapex (R$) de um espelho: a Zapex e modelada como uma "plataforma". */
 const zapexValueOf = (d: DriverMirrorData): number =>
   d.platforms.find((p) => p.platform === 'Zapex')?.subtotal ?? 0;
 
-const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => (
+/** Valor separado (R$) de um espelho — fica fora do total exibido (2026-07-20). */
+const sepValueOf = (d: DriverMirrorData): number => separatedAmount(d.platforms);
+
+/** Totais separados por plataforma de um GRUPO inteiro (soma dos drivers). */
+const groupSeparated = (g: DriverGroupMirrorData): SeparatedPlatformTotal[] => {
+  const map = new Map<string, SeparatedPlatformTotal>();
+  const order: string[] = [];
+  for (const d of g.drivers) {
+    for (const s of separatedPlatformTotals(d.platforms)) {
+      let entry = map.get(s.platform);
+      if (!entry) {
+        entry = { platform: s.platform, packages: 0, amount: 0 };
+        map.set(s.platform, entry);
+        order.push(s.platform);
+      }
+      entry.packages += s.packages;
+      entry.amount += s.amount;
+    }
+  }
+  return order.map((name) => map.get(name)!);
+};
+
+const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
+  // Valor separado (2026-07-20): plataformas marcadas saem do total exibido.
+  const sep = separatedPlatformTotals(data.platforms);
+  const sepTotal = sep.reduce((s, x) => s + x.amount, 0);
+  const sepNames = sep.map((s) => s.platform.toUpperCase()).join(' + ');
+  return (
   <div className="bg-white border border-gray-200 rounded-lg shadow-sm max-w-[720px] mx-auto overflow-hidden">
     <div className="p-6 sm:p-8">
       <div className="text-center">
@@ -131,7 +180,7 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => (
           <tbody>
             {data.platforms.map((p, i) => (
               <tr key={i} className={`border-t border-gray-100 ${p.highlight ? 'bg-yellow-200 font-semibold' : ''}`}>
-                <td className="py-1">{p.highlight ? '➜ ' : ''}{p.platform}</td>
+                <td className="py-1">{p.highlight ? '➜ ' : ''}{platformLineLabel(p)}</td>
                 <td className="py-1 text-right tabular-nums">{formatInt(p.packages)}</td>
                 <td className="py-1 text-right tabular-nums">{formatBRL(p.unitValue)}</td>
                 <td className="py-1 text-right tabular-nums">{formatBRL(p.subtotal)}</td>
@@ -139,11 +188,19 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => (
             ))}
           </tbody>
           <tfoot>
+            {sep.map((s) => (
+              <tr key={s.platform} className="border-t-2 border-gray-200 font-semibold bg-yellow-200">
+                <td colSpan={3} className="py-1.5">
+                  TOTAL {s.platform.toUpperCase()} — PAGO SEPARADO, FORA DO TOTAL ABAIXO
+                </td>
+                <td className="py-1.5 text-right tabular-nums">{formatBRL(s.amount)}</td>
+              </tr>
+            ))}
             <tr className="border-t-2 border-gray-200 font-semibold">
               <td colSpan={3} className="py-1.5">
-                TOTAL A RECEBER DE PACOTES
+                TOTAL A RECEBER DE PACOTES{sep.length > 0 ? ` (sem ${sepNames})` : ''}
               </td>
-              <td className="py-1.5 text-right tabular-nums">{formatBRL(data.totals.packagesValue)}</td>
+              <td className="py-1.5 text-right tabular-nums">{formatBRL(data.totals.packagesValue - sepTotal)}</td>
             </tr>
           </tfoot>
         </table>
@@ -187,17 +244,34 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => (
       </div>
 
       <div className="mt-5 border border-gray-200 rounded-lg overflow-hidden">
-        <Row k="Total de pacotes" v={`+ ${formatBRL(data.totals.packagesValue)}`} />
+        <Row
+          k={sep.length > 0 ? `Total de pacotes (sem ${sepNames})` : 'Total de pacotes'}
+          v={`+ ${formatBRL(data.totals.packagesValue - sepTotal)}`}
+        />
         <Row k="Descontos" v={`− ${formatBRL(data.totals.discountsValue)}`} danger={data.totals.discountsValue > 0} />
         <Row k="Vales / adiantamentos" v={`− ${formatBRL(data.totals.valesValue)}`} danger={data.totals.valesValue > 0} />
         <div className="flex items-center justify-between px-4 py-3 bg-green-700 text-white">
           <span className="font-bold text-sm">TOTAL A RECEBER</span>
-          <span className="font-extrabold text-lg tabular-nums">{formatBRL(data.totals.toReceive)}</span>
+          <span className="font-extrabold text-lg tabular-nums">{formatBRL(data.totals.toReceive - sepTotal)}</span>
         </div>
       </div>
+
+      {/* Valor separado (2026-07-20): faixa amarela por plataforma, colada no total */}
+      {sep.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {sep.map((s) => (
+            <SeparatedValueBannerPreview
+              key={s.platform}
+              label={`TOTAL ${s.platform.toUpperCase()} (${formatInt(s.packages)} pacotes)`}
+              amount={s.amount}
+            />
+          ))}
+        </div>
+      )}
     </div>
   </div>
-);
+  );
+};
 
 const Field: React.FC<{ k: string; v: string }> = ({ k, v }) => (
   <div className="flex flex-col">
@@ -237,11 +311,12 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     if (!companyId) return;
     getMirrorCutoffNotice(companyId)
       .then((n) => {
-        if (n) {
-          setCutoffTime(n.cutoff_time);
-          setCutoffDate(n.cutoff_date);
-          setLateDate(n.late_payment_date);
-        }
+        if (!n) return;
+        // Fetch lento não pode APAGAR o que o usuário já digitou enquanto ele
+        // estava no ar — só preenche campo que ainda está vazio.
+        setCutoffTime((cur) => (cur.trim() ? cur : n.cutoff_time));
+        setCutoffDate((cur) => (cur.trim() ? cur : n.cutoff_date));
+        setLateDate((cur) => (cur.trim() ? cur : n.late_payment_date));
       })
       .catch((e) => console.error('Erro ao carregar aviso de corte:', e));
   }, [companyId]);
@@ -471,7 +546,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                     <tr key={i} className="border-t border-gray-100">
                       <td className="py-1.5 break-words">{d.driver.name}</td>
                       <td className="py-1.5 text-right tabular-nums">
-                        {formatBRL(d.totals.packagesValue - zapexValueOf(d))}
+                        {formatBRL(d.totals.packagesValue - zapexValueOf(d) - sepValueOf(d))}
                       </td>
                       {groupHasZapex && (
                         <td className="py-1.5 text-right tabular-nums font-semibold text-green-700">
@@ -485,7 +560,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                         {d.totals.valesValue > 0 ? `− ${formatBRL(d.totals.valesValue)}` : '—'}
                       </td>
                       <td className="py-1.5 text-right tabular-nums font-semibold text-green-700">
-                        {formatBRL(d.totals.toReceive)}
+                        {formatBRL(d.totals.toReceive - sepValueOf(d))}
                       </td>
                     </tr>
                   ))}
@@ -552,12 +627,33 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
               );
             })()}
 
-            <div className="mt-4 flex items-center justify-between px-4 py-3 bg-green-700 text-white rounded-lg">
-              <span className="font-bold text-sm">
-                TOTAL — {request.data.groupTotals.driverCount} driver(s)
-              </span>
-              <span className="font-extrabold text-lg tabular-nums">{formatBRL(request.data.groupTotals.toReceive)}</span>
-            </div>
+            {(() => {
+              const gSep = groupSeparated(request.data);
+              const gSepTotal = gSep.reduce((s, x) => s + x.amount, 0);
+              return (
+                <>
+                  <div className="mt-4 flex items-center justify-between px-4 py-3 bg-green-700 text-white rounded-lg">
+                    <span className="font-bold text-sm">
+                      TOTAL — {request.data.groupTotals.driverCount} driver(s)
+                    </span>
+                    <span className="font-extrabold text-lg tabular-nums">
+                      {formatBRL(request.data.groupTotals.toReceive - gSepTotal)}
+                    </span>
+                  </div>
+                  {gSep.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      {gSep.map((s) => (
+                        <SeparatedValueBannerPreview
+                          key={s.platform}
+                          label={`TOTAL ${s.platform.toUpperCase()} DO GRUPO (${formatInt(s.packages)} pacotes)`}
+                          amount={s.amount}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             <p className="text-xs text-gray-500 mt-3">
               {includeReceipts
                 ? 'O PDF terá o resumo acima + o recibo individual de cada driver.'
@@ -591,13 +687,17 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                     📋 {g.groupName}{' '}
                     <span className="text-gray-500 font-normal">· {g.groupTotals.driverCount} driver(s)</span>
                   </span>
-                  <span className="font-semibold text-green-700 tabular-nums">{formatBRL(g.groupTotals.toReceive)}</span>
+                  <span className="font-semibold text-green-700 tabular-nums">
+                    {formatBRL(g.groupTotals.toReceive - groupSeparated(g).reduce((s, x) => s + x.amount, 0))}
+                  </span>
                 </div>
               ))}
               {request.singles.map((d, i) => (
                 <div key={`s-${i}`} className="flex items-center justify-between px-3 py-2 text-sm">
                   <span className="text-gray-900 truncate">{d.driver.name}</span>
-                  <span className="font-semibold text-green-700 tabular-nums">{formatBRL(d.totals.toReceive)}</span>
+                  <span className="font-semibold text-green-700 tabular-nums">
+                    {formatBRL(d.totals.toReceive - sepValueOf(d))}
+                  </span>
                 </div>
               ))}
             </div>
@@ -613,7 +713,9 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
               {request.list.map((d, i) => (
                 <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
                   <span className="text-gray-900 truncate">{d.driver.name}</span>
-                  <span className="font-semibold text-green-700 tabular-nums">{formatBRL(d.totals.toReceive)}</span>
+                  <span className="font-semibold text-green-700 tabular-nums">
+                    {formatBRL(d.totals.toReceive - sepValueOf(d))}
+                  </span>
                 </div>
               ))}
             </div>

@@ -338,27 +338,49 @@ export function buildDriverMirrorData(
       group: row.groupName,
     },
     platforms: [
-      ...platforms
-        .map((pl) => {
-          // Taxa POR ROTA: subtotal = Σ_rotas (pacotes da rota × taxa da rota).
-          let packages = 0;
-          let subtotal = 0;
-          for (const rl of row.routes) {
-            const pkgs = rl.packages[pl.name] ?? 0;
-            if (pkgs === 0) continue;
-            const rate = rl.rates[pl.name] ?? row.ratesByPlatform[pl.name] ?? pl.default_rate;
-            packages += pkgs;
-            subtotal += pkgs * rate;
-          }
-          // Media ponderada -> mantem a identidade subtotal = packages × unitValue.
-          const unitValue = packages > 0 ? subtotal / packages : (row.ratesByPlatform[pl.name] ?? pl.default_rate);
-          // Destaque/aviso do espelho (2026-07-19): so plataforma ATIVA destaca/avisa;
-          // o .filter(packages > 0) abaixo garante a regra de presenca do Victor.
-          const highlight = pl.active && pl.highlight_mirror;
-          const notice = highlight && pl.mirror_notice?.trim() ? pl.mirror_notice.trim() : null;
-          return { platform: pl.name, packages, unitValue, subtotal, highlight, notice };
-        })
-        .filter((p) => p.packages > 0),
+      ...platforms.flatMap((pl) => {
+        // Destaque/aviso/valor separado (2026-07-19/20): so plataforma ATIVA; o filtro
+        // de pacotes>0 abaixo garante a regra de presenca do Victor.
+        const highlight = pl.active && pl.highlight_mirror;
+        const notice = highlight && pl.mirror_notice?.trim() ? pl.mirror_notice.trim() : null;
+        const separateValue = highlight && pl.mirror_separate_value;
+        // Taxa POR ROTA (2026-07-20): mais de uma rota com pacotes na plataforma gera
+        // uma linha POR ROTA, cada uma com a taxa real daquela rota — NUNCA taxa media
+        // (rota a R$2,00 e rota a R$1,50 nao podem virar "R$1,83").
+        const perRoute = row.routes
+          .map((rl) => ({
+            route: rl.route,
+            packages: rl.packages[pl.name] ?? 0,
+            unitValue: rl.rates[pl.name] ?? row.ratesByPlatform[pl.name] ?? pl.default_rate,
+          }))
+          .filter((r) => r.packages > 0)
+          .map((r) => ({ ...r, subtotal: r.packages * r.unitValue }));
+        if (perRoute.length === 0) return [];
+        if (perRoute.length === 1) {
+          const only = perRoute[0];
+          return [
+            {
+              platform: pl.name,
+              packages: only.packages,
+              unitValue: only.unitValue,
+              subtotal: only.subtotal,
+              highlight,
+              notice,
+              separateValue,
+            },
+          ];
+        }
+        return perRoute.map((r) => ({
+          platform: pl.name,
+          route: r.route || '—',
+          packages: r.packages,
+          unitValue: r.unitValue,
+          subtotal: r.subtotal,
+          highlight,
+          notice,
+          separateValue,
+        }));
+      }),
       // Zapex como linha propria: pacotes = qtd de itens, valor unit = zapexRate do driver.
       ...(row.zapex.length > 0
         ? [{ platform: 'Zapex', packages: row.zapex.length, unitValue: row.zapexRate, subtotal: zapexAmount }]

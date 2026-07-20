@@ -84,6 +84,8 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
   // Espelhos (2026-07-19): destaque amarelo + aviso da plataforma.
   const [editHighlight, setEditHighlight] = useState(false);
   const [editNotice, setEditNotice] = useState('');
+  // Espelhos (2026-07-20): valor da plataforma separado do total (acoplado ao destaque).
+  const [editSeparate, setEditSeparate] = useState(false);
   // arquivar em massa
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -130,6 +132,7 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
     setEditColor(pl.color);
     setEditHighlight(pl.highlight_mirror);
     setEditNotice(pl.mirror_notice ?? '');
+    setEditSeparate(pl.mirror_separate_value);
   };
 
   const handleSaveEdit = async (pl: DriverPlatform) => {
@@ -153,6 +156,8 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
         color: editColor,
         highlight_mirror: editHighlight,
         mirror_notice: editNotice.trim() || null,
+        // Acoplado ao destaque: desligar o destaque desliga o valor separado junto.
+        mirror_separate_value: editHighlight && editSeparate,
       });
       toast.success('Plataforma atualizada');
       setEditingId(null);
@@ -275,6 +280,24 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
                         />
                       </label>
                     )}
+                    {/* Espelhos (2026-07-20): valor separado do total (acoplado ao destaque) */}
+                    {editHighlight && (
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={editSeparate}
+                          onChange={(e) => setEditSeparate(e.target.checked)}
+                          className="w-4 h-4 text-yellow-500 rounded border-gray-300"
+                        />
+                        <span>
+                          Separar o valor do total no espelho <span aria-hidden>💰</span>
+                          <span className="block text-[11px] text-gray-500">
+                            O valor desta plataforma sai numa faixa própria e NÃO entra no TOTAL A RECEBER do
+                            espelho (individual e de grupo). A tela aqui do painel continua somando tudo.
+                          </span>
+                        </span>
+                      </label>
+                    )}
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -313,6 +336,14 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
                           title={pl.mirror_notice ? `Destacada no espelho — aviso: ${pl.mirror_notice}` : 'Destacada no espelho'}
                         >
                           🟡 espelho
+                        </span>
+                      )}
+                      {pl.highlight_mirror && pl.mirror_separate_value && (
+                        <span
+                          className="ml-1 text-[11px] font-medium text-amber-800 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5"
+                          title="Valor desta plataforma sai separado (fora do total) nos espelhos"
+                        >
+                          💰 à parte
                         </span>
                       )}
                     </span>

@@ -55,6 +55,13 @@ export interface DriverPlatformLine {
   unitValue: number;
   subtotal: number;
   /**
+   * Espelhos (2026-07-20): driver com MAIS DE UMA rota com pacotes na plataforma
+   * gera uma linha POR ROTA (cada uma com a taxa real daquela rota) — nunca uma
+   * linha única com taxa média. `route` identifica a rota da linha; ausente/null
+   * quando a plataforma tem uma rota só (linha agregada, como sempre foi).
+   */
+  route?: string | null;
+  /**
    * Espelhos (2026-07-19): coluna/linha destacada em amarelo. Como o array
    * `platforms` só contém plataformas com pacotes>0, a regra de presença do
    * Victor (não destacar onde a plataforma não existe) sai de graça.
@@ -62,6 +69,12 @@ export interface DriverPlatformLine {
   highlight?: boolean;
   /** Aviso grande/chamativo da plataforma (acoplado ao destaque; com setas). */
   notice?: string | null;
+  /**
+   * Espelhos (2026-07-20): valor da plataforma sai numa faixa separada e FORA do
+   * TOTAL A RECEBER exibido (acoplado ao destaque). Só afeta a APRESENTAÇÃO dos
+   * espelhos — os totais persistidos continuam cheios.
+   */
+  separateValue?: boolean;
 }
 
 /** Desconto: valor + ID do pacote (coluna "ID PACOTE" da planilha) + motivo opcional. */
@@ -331,9 +344,51 @@ export function joinRouteCities(routes: DriverRoute[]): string {
     .join(', ');
 }
 
-/** Pacotes de um driver numa plataforma específica (0 se ausente). */
+/**
+ * Pacotes de um driver numa plataforma específica (0 se ausente).
+ * SOMA todas as linhas da plataforma — multi-rota (2026-07-20) pode gerar uma
+ * linha por rota para a mesma plataforma.
+ */
 export function packagesForPlatform(data: DriverMirrorData, platform: string): number {
-  return data.platforms.find((p) => p.platform === platform)?.packages ?? 0;
+  return data.platforms.reduce((s, p) => (p.platform === platform ? s + p.packages : s), 0);
+}
+
+/** Rótulo da linha de plataforma: "SHOPEE — COLETA" quando a linha é de uma rota. */
+export function platformLineLabel(p: DriverPlatformLine): string {
+  return p.route ? `${p.platform} — ${p.route}` : p.platform;
+}
+
+/** Total de uma plataforma com "valor separado" (soma por nome; 2026-07-20). */
+export interface SeparatedPlatformTotal {
+  platform: string;
+  packages: number;
+  amount: number;
+}
+
+/**
+ * Totais das plataformas com `separateValue` num conjunto de linhas (ordem de
+ * primeira aparição). Multi-rota soma as linhas da mesma plataforma.
+ */
+export function separatedPlatformTotals(platforms: DriverPlatformLine[]): SeparatedPlatformTotal[] {
+  const acc = new Map<string, SeparatedPlatformTotal>();
+  const order: string[] = [];
+  for (const p of platforms) {
+    if (!p.separateValue) continue;
+    let entry = acc.get(p.platform);
+    if (!entry) {
+      entry = { platform: p.platform, packages: 0, amount: 0 };
+      acc.set(p.platform, entry);
+      order.push(p.platform);
+    }
+    entry.packages += p.packages;
+    entry.amount += p.subtotal;
+  }
+  return order.map((name) => acc.get(name)!);
+}
+
+/** Soma (R$) de tudo que sai separado do total exibido nos espelhos. */
+export function separatedAmount(platforms: DriverPlatformLine[]): number {
+  return platforms.reduce((s, p) => (p.separateValue ? s + p.subtotal : s), 0);
 }
 
 /** União ordenada dos nomes de plataforma presentes num conjunto de espelhos. */

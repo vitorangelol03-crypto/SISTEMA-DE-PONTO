@@ -25,6 +25,7 @@ import {
   type DriverMirrorData,
   type DriverGroupMirrorData,
   type MirrorCutoffLine,
+  type SeparatedPlatformTotal,
   fmtBRL,
   fmtQty,
   formatDateBR,
@@ -32,6 +33,9 @@ import {
   joinRouteCities,
   packagesForPlatform,
   collectPlatformNames,
+  platformLineLabel,
+  separatedPlatformTotals,
+  separatedAmount,
 } from './driverMirrorGenerator';
 
 // Reexporta os tipos para que consumidores possam importar tudo deste módulo.
@@ -361,6 +365,51 @@ function drawColumnArrow(doc: jsPDF, centerX: number, headTopY: number): void {
   doc.triangle(centerX - 5, headTopY - 7, centerX + 5, headTopY - 7, centerX, headTopY - 1, 'F');
 }
 
+/**
+ * Faixa amarela do VALOR SEPARADO (2026-07-20): o valor da plataforma marcada
+ * sai FORA do TOTAL A RECEBER. O texto é explícito de propósito — os drivers
+ * são leigos e não podem achar que vão receber o valor duas vezes (nem que
+ * ele "sumiu" do total).
+ */
+function drawSeparatedValueBanner(
+  doc: jsPDF,
+  label: string,
+  sepItem: SeparatedPlatformTotal,
+  y: number,
+): number {
+  const h = 44;
+  doc.setFillColor(...COLOR_NOTICE_BG);
+  doc.rect(X_LEFT, y, CONTENT_W, h, 'F');
+  doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1.2);
+  doc.rect(X_LEFT, y, CONTENT_W, h, 'S');
+
+  // Auto-fit (aprendizado 19/07): rótulo e aviso NUNCA vazam da faixa nem
+  // encostam no valor — reduz a fonte até caber (simetria garantida).
+  doc.setFont('helvetica', 'bold').setFontSize(14);
+  const valueW = doc.getTextWidth(fmtBRL(sepItem.amount));
+  const maxLabelW = CONTENT_W - 28 - valueW - 12;
+  let labelSize = 11;
+  doc.setFontSize(labelSize).setTextColor(...COLOR_INK);
+  for (let i = 0; i < 6 && doc.getTextWidth(label) > maxLabelW; i++) {
+    labelSize = Math.max(6.5, labelSize * 0.93);
+    doc.setFontSize(labelSize);
+  }
+  doc.text(label, X_LEFT + 14, y + 18);
+  doc.setFontSize(14);
+  doc.text(fmtBRL(sepItem.amount), X_RIGHT - 14, y + 19, { align: 'right' });
+
+  const warn = 'ESTE VALOR É PAGO SEPARADO — ELE NÃO ESTÁ SOMADO NO "TOTAL A RECEBER" ACIMA.';
+  let warnSize = 8.5;
+  doc.setFont('helvetica', 'bold').setFontSize(warnSize).setTextColor(...COLOR_DANGER);
+  for (let i = 0; i < 6 && doc.getTextWidth(warn) > CONTENT_W - 28; i++) {
+    warnSize = Math.max(6.5, warnSize * 0.93);
+    doc.setFontSize(warnSize);
+  }
+  doc.text(warn, X_LEFT + 14, y + 34);
+  doc.setTextColor(0);
+  return y + h;
+}
+
 /** Faixa verde de resumo (idioma mockup `.esp-resumo .grand`). */
 function drawGreenBanner(doc: jsPDF, label: string, value: string, y: number): number {
   const h = 34;
@@ -385,9 +434,13 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
 
   // ── Avisos do topo (2026-07-19): corte das notas + avisos de plataforma ──
   // Regra de presença: `platforms` já contém só plataformas com pacotes>0 deste driver.
-  const platformNotices = platforms
-    .filter((p) => p.highlight && p.notice)
-    .map((p) => ({ platform: p.platform, text: p.notice as string }));
+  // Dedup por plataforma: multi-rota (2026-07-20) gera uma linha POR ROTA — o aviso
+  // continua saindo UMA vez por plataforma.
+  const noticeMap = new Map<string, string>();
+  for (const p of platforms) {
+    if (p.highlight && p.notice) noticeMap.set(p.platform, p.notice);
+  }
+  const platformNotices = Array.from(noticeMap, ([platform, text]) => ({ platform, text }));
   let topY = 118;
   if (data.cutoff) topY = drawCutoffBand(doc, data.cutoff, topY);
   if (platformNotices.length > 0) {
@@ -475,17 +528,37 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   y = ensureSpace(doc, y, 80);
   drawSectionTitle(doc, 'VALORES POR PLATAFORMA', y);
 
+  // Valor separado (2026-07-20): plataformas marcadas saem do total exibido e
+  // ganham linha própria no rodapé + faixa amarela junto do TOTAL A RECEBER.
+  const sep = separatedPlatformTotals(platforms);
+  const sepTotal = sep.reduce((s, x) => s + x.amount, 0);
+  const sepNames = sep.map((s) => s.platform.toUpperCase()).join(' + ');
+
   const platHead: RowInput[] = [['Plataforma', 'Pacotes', 'Valor/Pacote', 'Subtotal (R$)']];
+  // Multi-rota (2026-07-20): pode haver mais de uma linha da mesma plataforma
+  // ("SHOPEE — Caratinga", "SHOPEE — COLETA"), cada uma com a taxa real da rota.
   const platBody: RowInput[] = platforms.map((p) => [
-    p.platform,
+    platformLineLabel(p),
     fmtQty(p.packages),
     fmtBRL(p.unitValue),
     fmtBRL(p.subtotal),
   ]);
   const platFoot: RowInput[] = [
+    ...sep.map((s): RowInput => [
+      {
+        content: `TOTAL ${s.platform.toUpperCase()} — PAGO SEPARADO, FORA DO TOTAL ABAIXO`,
+        colSpan: 3,
+        styles: { halign: 'left' },
+      },
+      { content: fmtBRL(s.amount), styles: { halign: 'right' } },
+    ]),
     [
-      { content: 'TOTAL A RECEBER DE PACOTES', colSpan: 3, styles: { halign: 'left' } },
-      { content: fmtBRL(totals.packagesValue), styles: { halign: 'right' } },
+      {
+        content: sep.length > 0 ? `TOTAL A RECEBER DE PACOTES (sem ${sepNames})` : 'TOTAL A RECEBER DE PACOTES',
+        colSpan: 3,
+        styles: { halign: 'left' },
+      },
+      { content: fmtBRL(totals.packagesValue - sepTotal), styles: { halign: 'right' } },
     ],
   ];
 
@@ -510,6 +583,11 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
       if (cell.section === 'body' && platforms[cell.row.index]?.highlight) {
         cell.cell.styles.fillColor = COLOR_HL_YELLOW;
         if (cell.column.index === 0) cell.cell.styles.fontStyle = 'bold';
+      }
+      // Rodapé: as linhas de valor separado (antes do total) saem em amarelo.
+      if (cell.section === 'foot' && cell.row.index < sep.length) {
+        cell.cell.styles.fillColor = COLOR_HL_YELLOW;
+        cell.cell.styles.textColor = COLOR_INK;
       }
     },
     didDrawCell: (cell) => {
@@ -611,7 +689,10 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   // ── Resumo (theme plain) — idioma holeritePdf ──
   y = ensureSpace(doc, y, 120);
   const resumoBody: RowInput[] = [
-    ['Total de pacotes', `+ ${fmtBRL(totals.packagesValue)}`],
+    [
+      sep.length > 0 ? `Total de pacotes (sem ${sepNames})` : 'Total de pacotes',
+      `+ ${fmtBRL(totals.packagesValue - sepTotal)}`,
+    ],
     ['Descontos', `- ${fmtBRL(totals.discountsValue)}`],
     ['Vales / adiantamentos', `- ${fmtBRL(totals.valesValue)}`],
   ];
@@ -647,7 +728,19 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   }
 
   y = ensureSpace(doc, y, 60);
-  y = drawGreenBanner(doc, 'TOTAL A RECEBER', fmtBRL(totals.toReceive), y);
+  y = drawGreenBanner(doc, 'TOTAL A RECEBER', fmtBRL(totals.toReceive - sepTotal), y);
+
+  // Valor separado (2026-07-20): faixa amarela POR plataforma marcada, colada no
+  // total verde, com aviso explícito de que o valor é pago à parte.
+  for (const s of sep) {
+    y = ensureSpace(doc, y + 8, 54);
+    y = drawSeparatedValueBanner(
+      doc,
+      `TOTAL ${s.platform.toUpperCase()} (${fmtQty(s.packages)} pacotes)`,
+      s,
+      y,
+    );
+  }
 
   // ── Assinaturas + rodapé ──
   y = ensureSpace(doc, y, 96);
@@ -697,6 +790,26 @@ function drawGroupSummaryPage(
     topY = drawPlatformNoticeBands(doc, platformNotices, topY).y;
   }
 
+  // Valor separado (2026-07-20): soma por plataforma marcada em TODO o grupo.
+  // O "A Receber" de cada driver e o total verde saem SEM esse valor; ele ganha
+  // faixa amarela própria junto do total do grupo.
+  const groupSepMap = new Map<string, SeparatedPlatformTotal>();
+  const groupSepOrder: string[] = [];
+  for (const d of drivers) {
+    for (const s of separatedPlatformTotals(d.platforms)) {
+      let entry = groupSepMap.get(s.platform);
+      if (!entry) {
+        entry = { platform: s.platform, packages: 0, amount: 0 };
+        groupSepMap.set(s.platform, entry);
+        groupSepOrder.push(s.platform);
+      }
+      entry.packages += s.packages;
+      entry.amount += s.amount;
+    }
+  }
+  const groupSep = groupSepOrder.map((name) => groupSepMap.get(name)!);
+  const groupSepTotal = groupSep.reduce((s, x) => s + x.amount, 0);
+
   // Box compacto do grupo.
   const boxY = topY + 2;
   const boxH = 44;
@@ -741,7 +854,8 @@ function drawGroupSummaryPage(
       ...zapexCol,
       d.totals.discountsValue > 0 ? `- ${fmtBRL(d.totals.discountsValue)}` : '—',
       d.totals.valesValue > 0 ? `- ${fmtBRL(d.totals.valesValue)}` : '—',
-      fmtBRL(d.totals.toReceive),
+      // Valor separado fica FORA do "A Receber" exibido (sai na faixa amarela).
+      fmtBRL(d.totals.toReceive - separatedAmount(d.platforms)),
     ];
   });
   const footPlatSums = platformNames.map((name) =>
@@ -754,7 +868,7 @@ function drawGroupSummaryPage(
       ...(hasZapex ? [{ content: `+ ${fmtBRL(zapexTotal)}` }] : []),
       { content: `- ${fmtBRL(groupTotals.discountsValue)}` },
       { content: `- ${fmtBRL(groupTotals.valesValue)}` },
-      { content: fmtBRL(groupTotals.toReceive) },
+      { content: fmtBRL(groupTotals.toReceive - groupSepTotal) },
     ],
   ];
 
@@ -905,9 +1019,20 @@ function drawGroupSummaryPage(
   y = drawGreenBanner(
     doc,
     `TOTAL A RECEBER — ${groupName.toUpperCase()}`,
-    fmtBRL(groupTotals.toReceive),
+    fmtBRL(groupTotals.toReceive - groupSepTotal),
     y,
   );
+
+  // Valor separado (2026-07-20): faixa amarela com a soma da plataforma no grupo.
+  for (const s of groupSep) {
+    y = ensureSpace(doc, y + 8, 54);
+    y = drawSeparatedValueBanner(
+      doc,
+      `TOTAL ${s.platform.toUpperCase()} DO GRUPO (${fmtQty(s.packages)} pacotes)`,
+      s,
+      y,
+    );
+  }
 
   const footY = ensureSpace(doc, y + 22, 20);
   const generatedAt = data.generatedAt || new Date().toLocaleString('pt-BR');

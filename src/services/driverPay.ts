@@ -47,6 +47,8 @@ export interface DriverPlatform {
   highlight_mirror: boolean;
   /** Espelhos: aviso grande da plataforma (acoplado ao destaque; so onde ha pacotes). */
   mirror_notice: string | null;
+  /** Espelhos: valor da plataforma sai numa faixa separada, FORA do total exibido (acoplado ao destaque). */
+  mirror_separate_value: boolean;
   created_by: string | null;
   created_at: string;
 }
@@ -218,6 +220,7 @@ function mapPlatform(r: Record<string, unknown>): DriverPlatform {
     color: (r.color as string | null) ?? null,
     highlight_mirror: Boolean(r.highlight_mirror),
     mirror_notice: (r.mirror_notice as string | null) ?? null,
+    mirror_separate_value: Boolean(r.mirror_separate_value),
   };
 }
 function mapPackage(r: Record<string, unknown>): DriverPaymentPackage {
@@ -363,7 +366,10 @@ export const updatePlatform = async (
   id: string,
   userId: string,
   updates: Partial<
-    Pick<DriverPlatform, 'name' | 'default_rate' | 'sort_order' | 'active' | 'color' | 'highlight_mirror' | 'mirror_notice'>
+    Pick<
+      DriverPlatform,
+      'name' | 'default_rate' | 'sort_order' | 'active' | 'color' | 'highlight_mirror' | 'mirror_notice' | 'mirror_separate_value'
+    >
   >
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.managePlatforms');
