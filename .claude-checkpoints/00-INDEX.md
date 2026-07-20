@@ -6,13 +6,14 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Aba Pagamentos Driver EM PRODUÇÃO** (Vercel). `main` = `3024092` (pushado 20/07,
-aprovado pelo Victor: "ficou top"): **valor separado por plataforma** (fora do total
-exibido nos espelhos, faixa amarela explícita; coluna `mirror_separate_value` +
-caixinha no modal, acoplada ao destaque) + **multi-rota sem taxa média** (uma linha
-POR ROTA no espelho, caso Fabricio) + fix de race no aviso de corte (fetch lento não
-apaga mais o que foi digitado). Validado: tsc 0, build, 482 units, spec 61 novo 3×
-verde, regressão 54/57/58/59/60. Nada aguardando aprovação.
+**Aba Pagamentos Driver EM PRODUÇÃO** (Vercel). `main` = `c0b4ba2` (pushado 20/07,
+tudo aprovado pelo Victor): **valor separado por plataforma** (fora do total exibido
+nos espelhos; `mirror_separate_value`, acoplado ao destaque; aviso da plataforma
+COLADO na faixa do total separado — bloco único, pedido por áudio) + **multi-rota sem
+taxa média** (uma linha POR ROTA, caso Fabricio) + fix de race no aviso de corte.
+Em prod: eMile Caratinga com separação LIGADA; Tales (Inhapim) unificado. Validado:
+tsc 0, build, 482 units, spec 61 novo, regressão 54/57/58/59/60, espelhos reais
+gerados e aprovados. Nada aguardando aprovação.
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-20.md`.
 
 ## 📚 Mapa dos checkpoints
