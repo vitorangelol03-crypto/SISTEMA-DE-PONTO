@@ -73,7 +73,8 @@ também estava exposto.
   dentro de `has` não funciona; pegar os `tr` na ordem e usar `.nth()` no nível de fora.
 - Badge no span do nome quebra `getByText(exact: true)` → usar `hasText` (substring).
 
-## 5. Pendências
+## 5. Fechamento
 
-- Aprovação visual do Victor nos prints novos (03/04 + pdf-*-separado-*.png).
-- Restante das pendências antigas do índice (segurança driverpay etc.) — sem mudança.
+- Prints aprovados pelo Victor ("ficou top") e push autorizado e feito:
+  `main` = `3024092` no origin (Vercel publica sozinha).
+- Pendências antigas do índice (segurança driverpay etc.) — sem mudança.

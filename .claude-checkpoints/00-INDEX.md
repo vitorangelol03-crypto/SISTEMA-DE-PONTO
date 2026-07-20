@@ -6,14 +6,14 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Aba Pagamentos Driver EM PRODUÇÃO** (Vercel). Sessão 20/07 (commit local, PUSH PENDENTE
-do Victor): **valor separado por plataforma** (fora do total exibido nos espelhos, faixa
-amarela explícita; coluna `mirror_separate_value` + caixinha no modal, acoplada ao
-destaque) + **multi-rota sem taxa média** (uma linha POR ROTA no espelho, caso Fabricio)
-+ fix de race no aviso de corte (fetch lento não apaga mais o que foi digitado).
-Validado: tsc 0, build, 482 units, spec 61 novo 3× verde, regressão 54/57/58/59/60.
-**Aguardando: aprovação visual do Victor nos prints** (`prints-espelhos/pdf-*-separado-*.png`)
-e o push. Último checkpoint: `CHECKPOINT_SESSAO_2026-07-20.md`.
+**Aba Pagamentos Driver EM PRODUÇÃO** (Vercel). `main` = `3024092` (pushado 20/07,
+aprovado pelo Victor: "ficou top"): **valor separado por plataforma** (fora do total
+exibido nos espelhos, faixa amarela explícita; coluna `mirror_separate_value` +
+caixinha no modal, acoplada ao destaque) + **multi-rota sem taxa média** (uma linha
+POR ROTA no espelho, caso Fabricio) + fix de race no aviso de corte (fetch lento não
+apaga mais o que foi digitado). Validado: tsc 0, build, 482 units, spec 61 novo 3×
+verde, regressão 54/57/58/59/60. Nada aguardando aprovação.
+Último checkpoint: `CHECKPOINT_SESSAO_2026-07-20.md`.
 
 ## 📚 Mapa dos checkpoints
 
