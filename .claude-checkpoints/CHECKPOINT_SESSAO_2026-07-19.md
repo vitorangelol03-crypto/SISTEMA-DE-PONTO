@@ -63,7 +63,19 @@ apagada pelo Playwright a cada rodada.
   mobile-pixel5 não serve pros specs driverpay (tabela desktop oculta no viewport 393px).
   **Bateria/spec driverpay = `--project=chromium`.**
 
-## 5. Pendências que sobraram (nenhuma urgente)
+## 5. Tarde 19/07 — design APROVADO pelo Victor + aviso eMile configurado
+- Victor aprovou os PDFs novos pelo celular ("ficou top" / "ficou perfeito").
+- **Config de produção a pedido dele (dado, não código):** plataforma **eMile** (Caratinga)
+  com `highlight_mirror = true` e `mirror_notice = 'A NOTA FISCAL DEVE SER GERADA NO
+  CNPJ 53.824.315/0001-10'` (maiúsculo a pedido; CNPJ validado por dígito verificador).
+  Mesmo efeito de: Plataformas → editar eMile → "Destacar no espelho" + aviso.
+- Prova real: espelho da quinzena aberta (driver com 1.275 pacotes eMile) gerado por
+  cliques reais via spec descartável (apagado após uso); prints enviados e aprovados.
+  SHOPEE saiu sem destaque no mesmo espelho = regra de presença/acoplamento confirmada
+  em produção.
+- `Delivered (9).xlsx` (planilha solta na raiz) apagado a pedido do Victor.
+
+## 6. Pendências que sobraram (nenhuma urgente)
 - Spec 47: cleanup do user `7770` flakeia sob carga (removido 2× via MCP) — hardening futuro.
 - Flake rotativo de carga em bateria longa: mitigado por retry 1× (visível como "flaky") —
   causa de fundo é o ambiente WSL/dev server; aceito e documentado.

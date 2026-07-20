@@ -9,9 +9,10 @@
 **Aba Pagamentos Driver EM PRODUÇÃO** (Vercel). `main` = `3571009`: 4 features dos espelhos
 (destaque amarelo, aviso de corte auto-salvo, descontos no grupo, aviso por plataforma) +
 **passe de design nos PDFs** (auto-fit, gaps por posição, setas limpas coladas no alvo) +
-bateria de 409 testes modernizada (F1-F8) + retry 1× local + Node 22 (nvm). Aguardando
-Victor: aprovação VISUAL dos prints novos (enviados no chat; cópia em `prints-espelhos/`
-na raiz). Último checkpoint: `CHECKPOINT_SESSAO_2026-07-19.md`.
+bateria de 409 testes modernizada (F1-F8) + retry 1× local + Node 22 (nvm). Design dos
+espelhos **APROVADO pelo Victor** (19/07 tarde); plataforma eMile configurada em produção
+com destaque + aviso de CNPJ da nota fiscal (dado, não código). Nada aguardando aprovação.
+Último checkpoint: `CHECKPOINT_SESSAO_2026-07-19.md`.
 
 ## 📚 Mapa dos checkpoints
 
