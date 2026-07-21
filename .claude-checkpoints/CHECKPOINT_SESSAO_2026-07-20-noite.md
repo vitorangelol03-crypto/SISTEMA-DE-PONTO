@@ -60,14 +60,31 @@ Backups + `restore.sql` em `backups/2026-07-20-correcoes/` (gitignored, local).
   vários funcionários com coords null ou fora do raio (accuracy 2000m ignorada
   na validação de distância — melhoria futura).
 
-## 5. Pendências / decisões em aberto (Victor)
+## 5. Features de proteção ENTREGUES (commit `3603c96`, decisões do Victor)
 
-- **Feature anti-"saída fantasma"**: confirmação quando saída < N min após
-  entrada (+ opcional: voltar pra tela de CPF após bater, padrão quiosque).
-  AGUARDANDO decisões do Victor (plano curto apresentado na conversa).
-- **Feature GPS (ideia do Victor)**: checar permissão de localização ANTES de
-  bater; se negada, instruir como liberar (sem gastar tentativa/bonus_block).
-  AGUARDANDO OK do plano.
+Victor decidiu: (1) confirmação de saída = 10 min; (2) mantém bloqueio de bônus
+pra tentativa sem GPS; (3) auto-retorno = 35 segundos.
+- **Trava anti-saída-fantasma**: saída < 10 min da marcação anterior abre
+  confirmação ("Não! Foi engano" em destaque, saída real em botão secundário).
+  2 marcações: saída × entrada; 4 marcações: saída almoço × entrada e saída
+  final × volta almoço. Lógica pura em `clockGuards.ts` (13 units).
+- **Auto-retorno 35s**: após registrar ponto, a tela volta pro CPF sozinha
+  (aparelho compartilhado); mensagem de sucesso avisa. Timer limpo em
+  logout/nova batida/unmount.
+- **GPS bloqueado**: `performClock` checa `navigator.permissions` ANTES de
+  bater; se denied → overlay ensina a liberar (cadeado → Permissões →
+  Localização), SEM chamar o servidor (não gasta tentativa nem cria
+  bonus_block). Permissão 'prompt' → navegador pergunta na hora (fluxo normal).
+  Navegador sem permissions API → fluxo antigo.
+- Validação: tsc 0; suite completa **36/36 arquivos, 569 ✅ / 1 skip / 0
+  falhas em rodada única**; build ✓.
+
+## 6. Pendências
+
 - Saídas reais de Diendrel e João Pedro: lançar via mestre 2626 (manual).
-- Avisar operação: Pablo liberar GPS; aparelhos compartilhados com GPS de torre.
-- E2E specs 23+24 em janela segura (dia útil, fora de pico de batidas).
+- Avisar operação: Pablo liberar GPS; aparelhos compartilhados com GPS de torre
+  (accuracy 2000m rejeitada por distância — melhoria futura: considerar accuracy).
+- E2E specs 23+24 em janela segura (dia útil, fora de pico de batidas) — as
+  features novas mudam o fluxo da tela de ponto; specs 23/26 podem precisar de
+  ajuste (confirmação nova + auto-logout podem interferir em asserts antigos).
+- Push é do Victor (commits locais: `793cdd3`, `e5732f5`, `3603c96`).

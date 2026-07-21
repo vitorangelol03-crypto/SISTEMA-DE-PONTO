@@ -8,11 +8,13 @@
 
 **Sessão noite 20/07 (bugs de produção do ponto):** facial da Caratinga estava
 DESLIGADA desde 19/07 02:24 (spec 24 interrompido) → religada + spec blindado;
-Pablo sem GPS no celular (regra antifraude ok, mas a tela mostrava erro genérico
-— bug `error` vs `message` CORRIGIDO); "saída sozinha" 12-13s = defeito de UX
-histórico (10-15s, ocorre até com facial) — 2 registros limpos com backup
-(Diendrel + João Pedro), feature de proteção AGUARDANDO decisões do Victor.
-`main` local = `793cdd3` (não pushado); E2E pendente em janela segura.
+Pablo sem GPS (bug `error` vs `message` corrigido); "saída sozinha" 12-13s =
+defeito de UX histórico — 2 registros limpos com backup (Diendrel + João Pedro)
+e **features de proteção ENTREGUES** (decisões do Victor): confirmação de saída
+< 10 min, auto-retorno ao CPF em 35s, overlay de GPS bloqueado sem gastar
+tentativa. `main` local = `3603c96` (3 commits não pushados). Validação: tsc 0,
+suite 36/36 arquivos 569 ✅, build ✓. E2E pendente em janela segura (specs 23/26
+podem precisar de ajuste pro fluxo novo).
 Driverpay em produção segue como na sessão da manhã (espelhos com valor separado
 + multi-rota; eMile ligada; Tales unificado).
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-20-noite.md`.
@@ -54,6 +56,7 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 - **Dados de prod (20/07):** eMile Caratinga com valor separado LIGADO (destaque + aviso CNPJ + separação); cadastros duplicados do Tales (Inhapim) UNIFICADOS no "TALES ALEXANDRE DE SOUSA" — duplicado desativado com nota, alias reapontado. Não recriar o duplicado.
 - **Checkpoints (18/07):** todos vivem em `.claude-checkpoints/`; 1 checkpoint por sessão; atualizar este índice junto; hook pós-commit lembra a sessão de manter isso em dia.
 - **Ponto/testes (20/07 noite):** spec que toca config REAL de prod (ex.: toggle facial) tem que restaurar em `finally`; bateria E2E só em janela segura (nunca de noite — turno da madrugada bate ~02:00); recusa de ponto da edge fn vem em `message` (não `error`); correção de registro de ponto = sempre backup antes (`backups/`).
+- **Tela de ponto (20/07 noite, decisões do Victor):** saída < 10 min da marcação anterior = confirmação obrigatória; tela volta ao CPF 35s após registrar; GPS bloqueado = instruir sem chamar servidor; tentativa sem GPS que CHEGA no servidor continua criando bonus_block (regra mantida).
 
 ## ⚠️ Áreas frágeis / pendências abertas
 
