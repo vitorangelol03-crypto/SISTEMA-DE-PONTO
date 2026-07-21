@@ -6,21 +6,23 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Aba Pagamentos Driver EM PRODUÇÃO** (Vercel). `main` = `c0b4ba2` (pushado 20/07,
-tudo aprovado pelo Victor): **valor separado por plataforma** (fora do total exibido
-nos espelhos; `mirror_separate_value`, acoplado ao destaque; aviso da plataforma
-COLADO na faixa do total separado — bloco único, pedido por áudio) + **multi-rota sem
-taxa média** (uma linha POR ROTA, caso Fabricio) + fix de race no aviso de corte.
-Em prod: eMile Caratinga com separação LIGADA; Tales (Inhapim) unificado. Validado:
-tsc 0, build, 482 units, spec 61 novo, regressão 54/57/58/59/60, espelhos reais
-gerados e aprovados. Nada aguardando aprovação.
-Último checkpoint: `CHECKPOINT_SESSAO_2026-07-20.md`.
+**Sessão noite 20/07 (bugs de produção do ponto):** facial da Caratinga estava
+DESLIGADA desde 19/07 02:24 (spec 24 interrompido) → religada + spec blindado;
+Pablo sem GPS no celular (regra antifraude ok, mas a tela mostrava erro genérico
+— bug `error` vs `message` CORRIGIDO); "saída sozinha" 12-13s = defeito de UX
+histórico (10-15s, ocorre até com facial) — 2 registros limpos com backup
+(Diendrel + João Pedro), feature de proteção AGUARDANDO decisões do Victor.
+`main` local = `793cdd3` (não pushado); E2E pendente em janela segura.
+Driverpay em produção segue como na sessão da manhã (espelhos com valor separado
++ multi-rota; eMile ligada; Tales unificado).
+Último checkpoint: `CHECKPOINT_SESSAO_2026-07-20-noite.md`.
 
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-20.md` | **Mais recente.** Valor separado por plataforma + multi-rota sem taxa média + fix race do corte; specs 61/unit novos | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-20-noite.md` | **Mais recente.** Bugs de prod do ponto: facial desligada por spec (religada+blindada), Pablo sem GPS (fix msg), saída fantasma 12s = UX (2 registros limpos c/ backup); pendências de feature | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-20.md` | Valor separado por plataforma + multi-rota sem taxa média + fix race do corte; specs 61/unit novos | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-18.md` | Grupos: vínculo exclusivo + busca por rota; retroativo dos 17 commits de melhorias do painel (17-18/07) | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-19.md` | Madrugada autônoma: F8 concluída, 4 features dos espelhos entregues, aprendizados de infra (Vite WSL!) | 🟢 ATIVO |
 | `PLANO_ESPELHOS_2026-07-19.md` | Plano completo das 4 implementações dos espelhos (riscos, mitigação, ordem) | 🟢 ATIVO (fila aprovada) |
@@ -51,6 +53,7 @@ gerados e aprovados. Nada aguardando aprovação.
 - **PDF (19/07):** separação entre trechos de texto com estilos diferentes é por GAP DE POSIÇÃO (`padLeft`), nunca espaço-caractere — o visualizador engole o espaço ao substituir a Helvetica; prints de aprovação ficam em `prints-espelhos/` na raiz (gitignored).
 - **Dados de prod (20/07):** eMile Caratinga com valor separado LIGADO (destaque + aviso CNPJ + separação); cadastros duplicados do Tales (Inhapim) UNIFICADOS no "TALES ALEXANDRE DE SOUSA" — duplicado desativado com nota, alias reapontado. Não recriar o duplicado.
 - **Checkpoints (18/07):** todos vivem em `.claude-checkpoints/`; 1 checkpoint por sessão; atualizar este índice junto; hook pós-commit lembra a sessão de manter isso em dia.
+- **Ponto/testes (20/07 noite):** spec que toca config REAL de prod (ex.: toggle facial) tem que restaurar em `finally`; bateria E2E só em janela segura (nunca de noite — turno da madrugada bate ~02:00); recusa de ponto da edge fn vem em `message` (não `error`); correção de registro de ponto = sempre backup antes (`backups/`).
 
 ## ⚠️ Áreas frágeis / pendências abertas
 
