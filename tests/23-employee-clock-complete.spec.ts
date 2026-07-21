@@ -150,6 +150,10 @@ test.describe('EmployeeClockIn — completo', () => {
   test('logout volta para tela CPF', async ({ page }) => {
     const empId = await createTestEmployee({ name: `${PREFIX}Logout`, pin: '1111' });
     const s = getClient();
+    // Facial OFF ANTES da tela carregar o funcionário (objeto fica em memória):
+    // com a facial global LIGADA (estado real de prod), desligar depois não
+    // adianta — o gate manda pro cadastro facial e o teste morre sem câmera.
+    await s.from('employees').update({ face_recognition_enabled: false }).eq('id', empId);
     const { data: emp } = await s.from('employees').select('cpf').eq('id', empId).single();
     const cpf = emp?.cpf as string;
     const cpfMasked = `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
@@ -157,7 +161,6 @@ test.describe('EmployeeClockIn — completo', () => {
     await page.locator('input').first().fill(cpfMasked);
     await page.getByRole('button', { name: /Continuar/i }).click();
     await expect(page.getByRole('button', { name: '1', exact: true })).toBeVisible({ timeout: 10_000 });
-    await s.from('employees').update({ face_recognition_enabled: false }).eq('id', empId);
     for (const d of ['1', '1', '1', '1']) {
       await page.getByRole('button', { name: d, exact: true }).click();
     }

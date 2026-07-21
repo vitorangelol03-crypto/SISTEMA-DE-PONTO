@@ -100,7 +100,11 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     }
   });
 
-  test('3. Relatórios em Ponte Nova mostra "Nenhum registro encontrado"; Caratinga mostra lista de registros', async ({ page }) => {
+  // TECH_DEBT 2026-07-21: premissa "PN vazia" MORREU — Ponte Nova está em uso
+  // real desde maio/2026 (Ronaldo/Euder/Leticia/Amanda batem ponto lá; 518
+  // attendance até 20/07). Reescrever o assert de isolamento por COMPARAÇÃO
+  // (nome de CT não aparece em PN e vice-versa), não por estado vazio.
+  test.skip('3. Relatórios em Ponte Nova mostra "Nenhum registro encontrado"; Caratinga mostra lista de registros', async ({ page }) => {
     // 1. Caratinga: aba Relatórios com listagem (DOM count > 0).
     await goToTab(page, 'Relatórios');
     await expect(
@@ -355,7 +359,9 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     await expect(page.getByText(ctName)).toHaveCount(0, { timeout: 5_000 });
   });
 
-  test('9. Admin: Caratinga sections com dados; Ponte Nova vazias (Geo, Face, Suspeitas)', async ({ page }) => {
+  // TECH_DEBT 2026-07-21: mesma premissa morta do teste 3 — PN tem geo (18),
+  // face_attempts (359) e attendance reais. Reescrever por comparação.
+  test.skip('9. Admin: Caratinga sections com dados; Ponte Nova vazias (Geo, Face, Suspeitas)', async ({ page }) => {
     // Componente: AdminTab. Página única protegida por senha
     // 'Clayton2024' (literal, confirmada em specs 12/24/27).
     //

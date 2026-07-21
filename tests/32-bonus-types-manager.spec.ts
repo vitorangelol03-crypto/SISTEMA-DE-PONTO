@@ -108,8 +108,15 @@ test.describe('BonusTypesManager (sub-fase 10.2)', () => {
 
     await page.getByPlaceholder('Ex.: Bônus B').fill('Tipo Teste');
     await page.getByPlaceholder('Ex.: B', { exact: true }).fill('PWT3');
-    // 1º input number = default_value, 2º = order_index. Identifico via label sibling.
-    const valueInput = page.locator('input[type="number"]').nth(0);
+    // 1º input number DO MODAL = default_value (2º = order_index). Escopar no
+    // modal é obrigatório: com a facial LIGADA (estado real de prod), o painel
+    // admin tem inputs number ANTES do modal (máx. tentativas/janela) e o
+    // nth(0) da página cai neles — o teste só passava com a facial desligada.
+    const createModal = page.locator('div')
+      .filter({ has: page.getByRole('heading', { name: /Novo Tipo de Bonificação/i }) })
+      .filter({ has: page.locator('input[type="number"]') })
+      .last();
+    const valueInput = createModal.locator('input[type="number"]').nth(0);
     await valueInput.fill('99.99');
     await page.getByRole('button', { name: /^Criar tipo$/ }).click();
 
@@ -188,7 +195,12 @@ test.describe('BonusTypesManager (sub-fase 10.2)', () => {
     await expect(page.getByRole('heading', { name: /Editar Tipo/i })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByPlaceholder('Ex.: Bônus B')).toHaveValue('Inicial');
     await expect(page.getByPlaceholder('Ex.: B', { exact: true })).toHaveValue('PWT5');
-    await expect(page.locator('input[type="number"]').nth(0)).toHaveValue('25');
+    // Escopo no modal (ver teste 4): nth(0) da página pega o input da facial.
+    const editModal = page.locator('div')
+      .filter({ has: page.getByRole('heading', { name: /Editar Tipo/i }) })
+      .filter({ has: page.locator('input[type="number"]') })
+      .last();
+    await expect(editModal.locator('input[type="number"]').nth(0)).toHaveValue('25');
   });
 
   test('8. Editar salva → lista mostra novo nome', async ({ page }) => {
