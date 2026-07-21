@@ -100,6 +100,11 @@ test.describe('EmployeeClockIn — completo', () => {
   test('PIN correto → dashboard', async ({ page }) => {
     const empId = await createTestEmployee({ name: `${PREFIX}DashOK`, pin: '5678' });
     const s = getClient();
+    // Facial OFF só NESTE funcionário, ANTES da tela carregá-lo em memória.
+    // NUNCA desligar face_recognition_config global: é a config REAL de
+    // produção e não era restaurada — deixou a Caratinga 2 dias sem facial
+    // (19-20/07). O flag do funcionário basta pro gate (continueAfterPin).
+    await s.from('employees').update({ face_recognition_enabled: false }).eq('id', empId);
     const { data: emp } = await s.from('employees').select('cpf').eq('id', empId).single();
     const cpf = emp?.cpf as string;
     const cpfMasked = `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
@@ -107,10 +112,6 @@ test.describe('EmployeeClockIn — completo', () => {
     await page.locator('input').first().fill(cpfMasked);
     await page.getByRole('button', { name: /Continuar/i }).click();
     await expect(page.getByRole('button', { name: '5', exact: true })).toBeVisible({ timeout: 10_000 });
-
-    // Garante que face recognition está OFF para esse teste (evita gating)
-    await s.from('employees').update({ face_recognition_enabled: false }).eq('id', empId);
-    await s.from('face_recognition_config').update({ enabled: false }).neq('id', '00000000-0000-0000-0000-000000000000');
 
     for (const d of ['5', '6', '7', '8']) {
       await page.getByRole('button', { name: d, exact: true }).click();
