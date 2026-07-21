@@ -14,9 +14,11 @@ e **features de proteção ENTREGUES** (decisões do Victor): confirmação de s
 < 10 min, auto-retorno ao CPF em 35s, overlay de GPS bloqueado sem gastar
 tentativa — **validadas com CLIQUES REAIS** (spec 62 novo, 3/3 chromium).
 CAUSA RAIZ verdadeira da facial desligada era o spec 23 (update global sem
-restauração) — corrigido; facial conferida ENABLED pós-baterias. `main` local =
-`cf2636e` (5 commits não pushados). Validação: tsc 0, suite 36/36 arquivos
-569 ✅, build ✓, specs 23 e 62 verdes.
+restauração) — corrigido; facial conferida ENABLED pós-baterias. Spec 08 tinha
+bomba igual na config de GEO (`.limit(1)` sem empresa) — corrigido e verde
+(4/4), config restaurada conferida. `main` local = `e3cc459` (7 commits não
+pushados). Validação: tsc 0, suite 36/36 arquivos 569 ✅, build ✓, specs
+08/23/62 verdes com o fluxo novo.
 Driverpay em produção segue como na sessão da manhã (espelhos com valor separado
 + multi-rota; eMile ligada; Tales unificado).
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-20-noite.md`.

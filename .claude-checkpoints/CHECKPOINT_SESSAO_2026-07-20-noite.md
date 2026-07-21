@@ -99,14 +99,28 @@ corrigido na hora (madrugada 21/07, com funcionários PW Test — aditivo):
   repetir clique até o diálogo abrir (`toPass`, condição, não sleep); estado
   'denied' de permissão não é alcançável pela API do Playwright.
 
-## 7. Pendências
+## 7. Preparação da regressão (madrugada 21/07, commit `e3cc459`)
+
+Auditoria dos specs que usam o fluxo de bater ponto (08, 23, 62 — grep):
+- **Spec 08 tinha o MESMO tipo de bomba da facial:** `.limit(1)` sem filtro em
+  `geolocation_config` — podia escrever as coords de Caratinga na config de
+  PONTE NOVA; e bateria morta no meio deixaria a config real suja (raio 200 em
+  vez de 150). Fix: select/upsert sempre com company_id da Caratinga.
+- Asserts do 08 atualizados pras mensagens reais de recusa (fix de 20/07):
+  "Localização não fornecida" em vez do genérico. Assert mais forte.
+- Rodado com cliques reais: **spec 08 4/4 ✅**; config de geo de prod conferida
+  RESTAURADA após a bateria (Caratinga 150m / PN intocada).
+- Spec 48 auditado (leitura): salva estado e restaura em afterAll; direção
+  segura (liga a facial). Sem mudança.
+- Auto-logout de 35s não interfere nos specs existentes (asserts pós-batida são
+  imediatos; specs 08/23/62 verdes provam).
+
+## 8. Pendências
 
 - Saídas reais de Diendrel e João Pedro: lançar via mestre 2626 (manual).
 - Avisar operação: Pablo liberar GPS; aparelhos compartilhados com GPS de torre
   (accuracy 2000m rejeitada por distância — melhoria futura: considerar accuracy).
-- Bateria E2E completa de regressão em janela segura (specs antigos da tela de
-  ponto podem precisar de ajuste pro fluxo novo — 23 e 62 já estão verdes).
-- Spec 48 mexe na config da facial via upsert enabled=true (direção segura) —
-  conferir restauração dele na próxima janela.
+- Bateria E2E COMPLETA de regressão em janela segura (specs do fluxo de ponto
+  08/23/62 já verdes com o fluxo novo; falta o resto da suite).
 - Push é do Victor (commits locais: `793cdd3`, `e5732f5`, `3603c96`, `0a4a53c`,
-  `cf2636e`).
+  `cf2636e`, `505e4f2`, `e3cc459`).
