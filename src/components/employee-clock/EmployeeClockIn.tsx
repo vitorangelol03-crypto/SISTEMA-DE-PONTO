@@ -16,6 +16,7 @@ import { useCompany } from '../../contexts/CompanyContext';
 import { FaceRegistration } from './FaceRegistration';
 import { FaceVerification } from './FaceVerification';
 import { clockFailureMessage } from './clockMessages';
+import { QUICK_EXIT_CONFIRM_MINUTES, AUTO_LOGOUT_SECONDS, quickExitMinutes } from './clockGuards';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,27 @@ function getNextMarkingPosition(att: Attendance | null): MarkingPosition | null 
   return null;
 }
 
+/** Timestamp da marcação ANTERIOR a uma saída (pra trava de saída rápida):
+ *  saída almoço (2) confere contra a entrada (1); saída final (4) contra a
+ *  volta do almoço (3); saída simples (2 marcações) contra a entrada. */
+function getPrevMarkingForExit(att: Attendance | null, pos?: MarkingPosition): string | null {
+  if (pos === 2) return getTimestampForPosition(att, 1);
+  if (pos === 4) return getTimestampForPosition(att, 3);
+  return att?.entry_time ?? null;
+}
+
+/** Permissão de localização BLOQUEADA no navegador? (bloqueada ≠ nunca pedida:
+ *  quando nunca foi pedida, o próprio navegador pergunta na hora da batida.) */
+async function isGeoPermissionDenied(): Promise<boolean> {
+  try {
+    if (!navigator.permissions?.query) return false; // navegador antigo: segue o fluxo normal
+    const status = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+    return status.state === 'denied';
+  } catch {
+    return false;
+  }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const EmployeeClockIn: React.FC = () => {
@@ -116,6 +138,13 @@ export const EmployeeClockIn: React.FC = () => {
   // Facial: se ativo, verifica rosto ao clicar em Registrar Entrada/Saída
   const [faceGateActive, setFaceGateActive] = useState(false);
   const [pendingClockType, setPendingClockType] = useState<'entry' | 'exit' | null>(null);
+
+  // Trava de saída rápida (< QUICK_EXIT_CONFIRM_MINUTES da marcação anterior)
+  const [confirmExit, setConfirmExit] = useState<{ markingPosition?: MarkingPosition; minutesAgo: number } | null>(null);
+  // Overlay de instrução quando a permissão de localização está bloqueada
+  const [geoBlocked, setGeoBlocked] = useState(false);
+  // Volta pro início (CPF) sozinho após registrar ponto (aparelho compartilhado)
+  const autoLogoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Guards anti-duplo-clique e watchdog do botão de ponto
   const inFlightClockRef = useRef(false);
@@ -155,9 +184,10 @@ export const EmployeeClockIn: React.FC = () => {
     return () => clearInterval(interval);
   }, [step, employee, loadDashboard]);
 
-  // Limpa watchdog ao desmontar
+  // Limpa watchdog e auto-logout ao desmontar
   useEffect(() => () => {
     if (clockWatchdogRef.current) clearTimeout(clockWatchdogRef.current);
+    if (autoLogoutRef.current) clearTimeout(autoLogoutRef.current);
   }, []);
 
   // ─── Face recognition gate ────────────────────────────────────────────────
@@ -407,17 +437,25 @@ export const EmployeeClockIn: React.FC = () => {
       // 2) Recarrega dados (loadDashboard também reseta clockMsg)
       await loadDashboard(employee, true);
       // 3) Define a mensagem de sucesso como estado final, após o reload
+      const autoNote = ` · a tela volta ao início em ${AUTO_LOGOUT_SECONDS}s`;
       if (markingPosition) {
         const label = MARKING_LABELS[markingPosition];
         const extra = markingPosition === 4 && att?.hours_worked != null
           ? ` — ${formatHours(att.hours_worked)}`
           : '';
-        setClockMsg(`✅ ${label} registrada às ${now()}${extra}`);
+        setClockMsg(`✅ ${label} registrada às ${now()}${extra}${autoNote}`);
       } else if (type === 'entry') {
-        setClockMsg(`✅ Entrada registrada às ${now()}`);
+        setClockMsg(`✅ Entrada registrada às ${now()}${autoNote}`);
       } else {
-        setClockMsg(`✅ Saída registrada às ${now()}${att ? ` — ${formatHours(att.hours_worked)}` : ''}`);
+        setClockMsg(`✅ Saída registrada às ${now()}${att ? ` — ${formatHours(att.hours_worked)}` : ''}${autoNote}`);
       }
+      // Aparelho compartilhado: a tela volta ao início sozinha pra sessão
+      // deste funcionário não sobrar logada pro próximo da fila.
+      if (autoLogoutRef.current) clearTimeout(autoLogoutRef.current);
+      autoLogoutRef.current = setTimeout(() => {
+        autoLogoutRef.current = null;
+        handleLogout();
+      }, AUTO_LOGOUT_SECONDS * 1000);
     };
 
     try {
@@ -470,13 +508,8 @@ export const EmployeeClockIn: React.FC = () => {
     }
   };
 
-  // Entrada principal do botão de ponto:
-  // - se facial está ativo → abre overlay de verificação; ao acertar, chama executeClock
-  // - se não está ativo → executa direto
-  const performClock = (type: 'entry' | 'exit', markingPosition?: MarkingPosition) => {
-    if (!employee) return;
-    if (inFlightClockRef.current || pendingClockType) return;
-    setClockMsg(null);
+  // Continuação da batida depois das travas (facial → executa, ou direto).
+  const proceedClock = (type: 'entry' | 'exit', markingPosition?: MarkingPosition) => {
     if (faceGateActive) {
       setPendingClockType(type);
       // Posição é passada via ref para o callback do face gate.
@@ -484,6 +517,35 @@ export const EmployeeClockIn: React.FC = () => {
       return;
     }
     executeClock(type, markingPosition);
+  };
+
+  // Entrada principal do botão de ponto, na ordem:
+  // 1. localização BLOQUEADA no navegador → instrui como liberar (não gasta
+  //    tentativa nem gera bloqueio de bônus); se nunca foi pedida, o próprio
+  //    navegador pergunta na hora da batida (fluxo normal)
+  // 2. saída < QUICK_EXIT_CONFIRM_MINUTES da marcação anterior → confirmação
+  //    (saídas fantasma de 10-15s: funcionário achava que era "confirmar entrada")
+  // 3. facial ativa → overlay de verificação; senão → executa direto
+  const performClock = async (type: 'entry' | 'exit', markingPosition?: MarkingPosition) => {
+    if (!employee) return;
+    if (inFlightClockRef.current || pendingClockType || confirmExit) return;
+    setClockMsg(null);
+    if (autoLogoutRef.current) { clearTimeout(autoLogoutRef.current); autoLogoutRef.current = null; }
+
+    if (await isGeoPermissionDenied()) {
+      setGeoBlocked(true);
+      return;
+    }
+
+    if (type === 'exit') {
+      const minutesAgo = quickExitMinutes(getPrevMarkingForExit(todayRecord, markingPosition));
+      if (minutesAgo != null) {
+        setConfirmExit({ markingPosition, minutesAgo });
+        return;
+      }
+    }
+
+    proceedClock(type, markingPosition);
   };
 
   const handleClockIn = () => performClock('entry');
@@ -524,6 +586,7 @@ export const EmployeeClockIn: React.FC = () => {
   };
 
   const handleLogout = () => {
+    if (autoLogoutRef.current) { clearTimeout(autoLogoutRef.current); autoLogoutRef.current = null; }
     setStep('cpf');
     setCpfInput('');
     setPin('');
@@ -537,6 +600,8 @@ export const EmployeeClockIn: React.FC = () => {
     setClockMsg(null);
     setFaceGateActive(false);
     setPendingClockType(null);
+    setConfirmExit(null);
+    setGeoBlocked(false);
   };
 
   // ─── Resume do mês ────────────────────────────────────────────────────────
@@ -1044,6 +1109,66 @@ export const EmployeeClockIn: React.FC = () => {
           onFail={handleFaceClockVerifyFail}
           clockType={pendingClockType}
         />
+      )}
+
+      {/* ── CONFIRMAÇÃO DE SAÍDA RÁPIDA (trava anti-saída-fantasma) ── */}
+      {step === 'dashboard' && confirmExit && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4 text-center">
+            <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto" />
+            <h2 className="text-lg font-bold text-gray-900">Registrar SAÍDA agora?</h2>
+            <p className="text-gray-600 text-sm">
+              Sua {confirmExit.markingPosition === 2 ? 'entrada' : confirmExit.markingPosition === 4 ? 'volta do almoço' : 'entrada'} foi registrada{' '}
+              <strong>
+                {confirmExit.minutesAgo === 0 ? 'agora mesmo' : `há ${confirmExit.minutesAgo} minuto${confirmExit.minutesAgo === 1 ? '' : 's'}`}
+              </strong>.
+              Se você acabou de bater a entrada, <strong>não precisa confirmar nada</strong> — ela já está registrada.
+            </p>
+            <button
+              onClick={() => setConfirmExit(null)}
+              className="w-full py-4 bg-blue-600 text-white text-base font-bold rounded-xl hover:bg-blue-700 transition-colors"
+            >
+              Não! Foi engano
+            </button>
+            <button
+              onClick={() => {
+                const pos = confirmExit.markingPosition;
+                setConfirmExit(null);
+                proceedClock('exit', pos);
+              }}
+              className="w-full py-3 bg-white text-orange-600 text-sm font-semibold rounded-xl border-2 border-orange-300 hover:bg-orange-50 transition-colors"
+            >
+              Sim, quero registrar SAÍDA mesmo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── LOCALIZAÇÃO BLOQUEADA (instrução pra liberar o GPS) ── */}
+      {step === 'dashboard' && geoBlocked && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+            <h2 className="text-lg font-bold text-gray-900 text-center">📍 Localização bloqueada</h2>
+            <p className="text-gray-600 text-sm">
+              Para bater o ponto, o sistema precisa da sua localização — e ela está{' '}
+              <strong>bloqueada no navegador</strong>. Libere assim:
+            </p>
+            <ol className="text-gray-700 text-sm space-y-2 list-decimal list-inside bg-gray-50 rounded-xl p-3">
+              <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
+              <li>Toque em <strong>Permissões</strong></li>
+              <li>Em <strong>Localização</strong>, escolha <strong>Permitir</strong></li>
+            </ol>
+            <p className="text-gray-500 text-xs">
+              Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Localização → Permitir.
+            </p>
+            <button
+              onClick={() => setGeoBlocked(false)}
+              className="w-full py-4 bg-blue-600 text-white text-base font-bold rounded-xl hover:bg-blue-700 transition-colors"
+            >
+              Já liberei — vou tentar de novo
+            </button>
+          </div>
+        </div>
       )}
 
     </div>
