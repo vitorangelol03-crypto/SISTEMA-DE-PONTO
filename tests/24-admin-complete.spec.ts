@@ -70,20 +70,25 @@ test.describe('Admin — completo', () => {
       .maybeSingle();
     const before = !!cfgBefore?.enabled;
 
-    const toggle = page.getByTestId('facial-global-toggle');
-    await expect(toggle).toBeVisible({ timeout: 10_000 });
-    await toggle.click();
-    await page.waitForTimeout(1000);
+    // O toggle mexe na config REAL de produção. A restauração fica num
+    // finally: se o expect falhar ou o teste for interrompido, a facial
+    // NÃO pode ficar desligada (aconteceu em 19/07 — empresa inteira sem
+    // facial por 2 dias).
+    try {
+      const toggle = page.getByTestId('facial-global-toggle');
+      await expect(toggle).toBeVisible({ timeout: 10_000 });
+      await toggle.click();
+      await page.waitForTimeout(1000);
 
-    const { data: cfgAfter } = await s
-      .from('face_recognition_config')
-      .select('enabled')
-      .eq('company_id', CARATINGA_ID)
-      .maybeSingle();
-    expect(!!cfgAfter?.enabled).not.toBe(before);
-
-    // Restaura
-    await s.from('face_recognition_config').update({ enabled: before }).eq('company_id', CARATINGA_ID);
+      const { data: cfgAfter } = await s
+        .from('face_recognition_config')
+        .select('enabled')
+        .eq('company_id', CARATINGA_ID)
+        .maybeSingle();
+      expect(!!cfgAfter?.enabled).not.toBe(before);
+    } finally {
+      await s.from('face_recognition_config').update({ enabled: before }).eq('company_id', CARATINGA_ID);
+    }
   });
 
   test('reset facial individual de um funcionário (PW Test)', async ({ page }) => {

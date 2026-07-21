@@ -15,6 +15,7 @@ import {
 import { useCompany } from '../../contexts/CompanyContext';
 import { FaceRegistration } from './FaceRegistration';
 import { FaceVerification } from './FaceVerification';
+import { clockFailureMessage } from './clockMessages';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -310,7 +311,7 @@ export const EmployeeClockIn: React.FC = () => {
     clockType: 'entry' | 'exit',
     signal?: AbortSignal,
     markingPosition?: MarkingPosition,
-  ): Promise<{ success: boolean; fraud: boolean; geo_warning?: boolean; distance_meters: number | null; attendance?: Attendance; error?: string }> => {
+  ): Promise<{ success: boolean; fraud: boolean; geo_warning?: boolean; distance_meters: number | null; attendance?: Attendance; error?: string; message?: string }> => {
     if (!employee) throw new Error('Funcionário não carregado');
 
     let latitude: number | null = null;
@@ -427,7 +428,7 @@ export const EmployeeClockIn: React.FC = () => {
           await setSuccessMsg(result.attendance);
           return;
         }
-        setClockMsg(result.error ? `❌ ${result.error}` : '❌ Erro ao registrar ponto. Tente novamente.');
+        setClockMsg(clockFailureMessage(result));
         return;
       }
       await setSuccessMsg(result.attendance);
