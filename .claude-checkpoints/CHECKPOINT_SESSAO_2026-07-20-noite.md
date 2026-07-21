@@ -79,12 +79,34 @@ pra tentativa sem GPS; (3) auto-retorno = 35 segundos.
 - Validação: tsc 0; suite completa **36/36 arquivos, 569 ✅ / 1 skip / 0
   falhas em rodada única**; build ✓.
 
-## 6. Pendências
+## 6. E2E com cliques reais RODADO + causa raiz VERDADEIRA da facial (commit `cf2636e`)
+
+Victor perguntou "está testando com cliques reais?" — resposta honesta era NÃO;
+corrigido na hora (madrugada 21/07, com funcionários PW Test — aditivo):
+- **Spec 62 novo, 3/3 verdes (chromium, cliques reais):** confirmação de saída
+  rápida ("Não! Foi engano" não grava, confirmar grava — conferido no banco),
+  auto-retorno ao CPF em ~35s, overlay de GPS bloqueado sem chamar o servidor
+  (0 geo_fraud, 0 bonus_block, 0 attendance). Único mock: o ESTADO 'denied' da
+  permissão via init script — Playwright só sabe CONCEDER permissão.
+- **CAUSA RAIZ REAL da facial desligada era o spec 23, não o 24:** linha
+  `update face_recognition_config set enabled=false` SEM filtro de empresa e
+  SEM restauração — qualquer bateria desligava a facial de TODAS as empresas.
+  (O spec 24 restaura ao fim; só falharia se interrompido.) Fix: flag
+  `face_recognition_enabled=false` no próprio funcionário de teste, setado
+  ANTES da tela carregá-lo; linha global REMOVIDA. Spec 23 rerodado: 7 ✅/2 skip.
+- Config de prod conferida ENABLED após as duas baterias (a prova do conserto).
+- Aprendizados: guard anti-toque-duplo de 3s engole clique imediato do teste →
+  repetir clique até o diálogo abrir (`toPass`, condição, não sleep); estado
+  'denied' de permissão não é alcançável pela API do Playwright.
+
+## 7. Pendências
 
 - Saídas reais de Diendrel e João Pedro: lançar via mestre 2626 (manual).
 - Avisar operação: Pablo liberar GPS; aparelhos compartilhados com GPS de torre
   (accuracy 2000m rejeitada por distância — melhoria futura: considerar accuracy).
-- E2E specs 23+24 em janela segura (dia útil, fora de pico de batidas) — as
-  features novas mudam o fluxo da tela de ponto; specs 23/26 podem precisar de
-  ajuste (confirmação nova + auto-logout podem interferir em asserts antigos).
-- Push é do Victor (commits locais: `793cdd3`, `e5732f5`, `3603c96`).
+- Bateria E2E completa de regressão em janela segura (specs antigos da tela de
+  ponto podem precisar de ajuste pro fluxo novo — 23 e 62 já estão verdes).
+- Spec 48 mexe na config da facial via upsert enabled=true (direção segura) —
+  conferir restauração dele na próxima janela.
+- Push é do Victor (commits locais: `793cdd3`, `e5732f5`, `3603c96`, `0a4a53c`,
+  `cf2636e`).

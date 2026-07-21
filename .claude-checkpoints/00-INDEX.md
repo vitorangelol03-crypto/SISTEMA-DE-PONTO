@@ -12,9 +12,11 @@ Pablo sem GPS (bug `error` vs `message` corrigido); "saída sozinha" 12-13s =
 defeito de UX histórico — 2 registros limpos com backup (Diendrel + João Pedro)
 e **features de proteção ENTREGUES** (decisões do Victor): confirmação de saída
 < 10 min, auto-retorno ao CPF em 35s, overlay de GPS bloqueado sem gastar
-tentativa. `main` local = `3603c96` (3 commits não pushados). Validação: tsc 0,
-suite 36/36 arquivos 569 ✅, build ✓. E2E pendente em janela segura (specs 23/26
-podem precisar de ajuste pro fluxo novo).
+tentativa — **validadas com CLIQUES REAIS** (spec 62 novo, 3/3 chromium).
+CAUSA RAIZ verdadeira da facial desligada era o spec 23 (update global sem
+restauração) — corrigido; facial conferida ENABLED pós-baterias. `main` local =
+`cf2636e` (5 commits não pushados). Validação: tsc 0, suite 36/36 arquivos
+569 ✅, build ✓, specs 23 e 62 verdes.
 Driverpay em produção segue como na sessão da manhã (espelhos com valor separado
 + multi-rota; eMile ligada; Tales unificado).
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-20-noite.md`.
