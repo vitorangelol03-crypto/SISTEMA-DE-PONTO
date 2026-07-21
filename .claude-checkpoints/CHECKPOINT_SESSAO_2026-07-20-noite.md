@@ -115,7 +115,31 @@ Auditoria dos specs que usam o fluxo de bater ponto (08, 23, 62 — grep):
 - Auto-logout de 35s não interfere nos specs existentes (asserts pós-batida são
   imediatos; specs 08/23/62 verdes provam).
 
-## 8. Pendências
+## 8. PUSH + DEPLOY + bateria completa + auditoria ao vivo (madrugada 21/07)
+
+- **Push autorizado EXPLICITAMENTE pelo Victor** ("faz o push e roda a bateria")
+  — exceção pontual à regra "push é do Victor na mão". `218e130..a89a6e0`
+  (+ `b25137a` local depois). Deploy Vercel conferido no ar (bundle
+  `index-BXgLwNfR.js` = build validado localmente).
+- **Bateria E2E completa (1h12): 384 ✅ / 5 flaky (retry ok) / 6 falhas**, todas
+  investigadas e resolvidas (commit `b25137a`):
+  spec 23 logout (ordem stale, corrigido), spec 32 ×2 (nth(0) da página pegava
+  input da facial agora que ela fica LIGADA — escopado no modal), spec 26 ×2
+  (premissa "PN vazia" morta → skip + TECH_DEBT reescrever por comparação),
+  spec 57 (flake de carga, verde isolado). Confirmação: 27 ✅ / 4 skip.
+- **DESCOBERTA: Ponte Nova está em USO REAL desde maio/2026** — Ronaldo (210
+  registros), Euder, Leticia Evelyn, Amanda, João Henrique batem ponto lá
+  (518 attendance, 359 face_attempts). Vários specs/premissas antigas assumiam
+  PN vazia — atenção ao mexer.
+- **Auditoria de produção ao vivo (turno 02:00-02:18 de 21/07): 17 entradas,
+  ZERO travados, ZERO saída fantasma, 16/17 com facial validada** (primeiras
+  validações desde 18/07). Gerson: facial desligada INDIVIDUALMENTE no cadastro
+  (pré-existente; Victor decide se religa). João Pedro (fantasma de ontem) e
+  Vitoria (3 falhas de GPS ontem) hoje bateram limpo de primeira. Marcos,
+  Washington e Julia entraram com geo sinalizado (celulares com GPS de
+  torre/impreciso — olhar os aparelhos).
+
+## 9. Pendências
 
 - Saídas reais de Diendrel e João Pedro: lançar via mestre 2626 (manual).
 - Avisar operação: Pablo liberar GPS; aparelhos compartilhados com GPS de torre
