@@ -9,6 +9,11 @@ const VALID_LAT = -19.803105;
 const VALID_LON = -42.136271;
 const OUTSIDE_LAT = -19.900000;
 const OUTSIDE_LON = -42.200000;
+// Config REAL de produção: mexer SÓ na linha da Caratinga (o .limit(1) antigo
+// pegava uma linha arbitrária — podia escrever coords de Caratinga na config
+// de Ponte Nova). Restauração fica no afterAll; se uma bateria for morta no
+// meio, conferir/restaurar a config manualmente (raio real: 150m).
+const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
 async function loginEmployee(page: Page) {
   await page.goto('/clock');
@@ -46,17 +51,18 @@ test.describe('Geolocalização (/clock)', () => {
       await supabase.from('employees').delete().eq('id', existing.id);
     }
 
-    // Save original config and set test config
+    // Save original config and set test config — SEMPRE a linha da Caratinga
     const { data: geoConfig } = await supabase
       .from('geolocation_config')
       .select('*')
-      .limit(1)
+      .eq('company_id', CARATINGA_ID)
       .maybeSingle();
 
     originalConfig = geoConfig;
 
     await supabase.from('geolocation_config').upsert([{
       id: geoConfig?.id ?? 'default',
+      company_id: CARATINGA_ID,
       latitude: VALID_LAT,
       longitude: VALID_LON,
       allowed_radius_meters: 200,
@@ -185,9 +191,10 @@ test.describe('Geolocalização (/clock)', () => {
     await loginEmployee(page);
     await page.getByRole('button', { name: /REGISTRAR ENTRADA/ }).click();
 
-    // No red modal — no mention of Clayton or bonificação retida
+    // Sem modal vermelho/Clayton; desde o fix de 20/07 a tela mostra o MOTIVO
+    // real da recusa (antes era "Erro ao registrar" genérico)
     await expect(page.getByText(/Clayton/i)).not.toBeVisible();
-    await expect(page.getByText(/Entrada registrada|Erro ao registrar/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/Localização não fornecida/)).toBeVisible({ timeout: 15_000 });
   });
 
   test('erro técnico GPS: envia ao servidor com coords null, sem modal', async ({ page }) => {
@@ -210,9 +217,9 @@ test.describe('Geolocalização (/clock)', () => {
     await loginEmployee(page);
     await page.getByRole('button', { name: /REGISTRAR ENTRADA/ }).click();
 
-    // No geo modal at all — only generic message
+    // Sem modal de geo; desde o fix de 20/07 a tela mostra o MOTIVO real
     await expect(page.getByText(/Localização indisponível/i)).not.toBeVisible();
     await expect(page.getByText(/Clayton/i)).not.toBeVisible();
-    await expect(page.getByText(/Entrada registrada|Erro ao registrar/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/Localização não fornecida/)).toBeVisible({ timeout: 15_000 });
   });
 });
