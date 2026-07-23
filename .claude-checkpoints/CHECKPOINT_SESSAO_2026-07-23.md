@@ -74,10 +74,16 @@ a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
     obrigatória), change-password (proíbe 1234, lockout 5 erros/15min), my-mirrors, my-mirror-url
     (link assinado + marca visto). Token HS256 com **`DRIVER_JWT_SECRET` dedicado** (não autentica
     no banco). driver_id sempre do token verificado. Deno não instalado local → valida no deploy.
-- **FREIO / próximo:** pra TESTAR o login de verdade preciso: aplicar a migration + criar bucket
-  + `supabase functions deploy driver-public-api --no-verify-jwt` + setar `DRIVER_JWT_SECRET` —
-  **tudo só com OK do Victor** (backup antes). Em paralelo dá pra seguir escrevendo Fase 1
-  (painel "Publicar no app" + filtro) como arquivos, sem tocar em prod.
+- **Fase 0 APLICADA E VALIDADA EM PROD (2026-07-23, com OK do Victor):** migration aplicada
+  (via MCP apply_migration; tabelas + bucket privado `driverpay-mirrors` conferidos), edge fn
+  `driver-public-api` deployada (v2, ACTIVE, verify_jwt=false), `DRIVER_JWT_SECRET` setado pelo
+  Victor no painel. **Login testado ponta-a-ponta com driver REAL** (Romário Alves Dornelas,
+  CPF + 1234): **8/8 cenários OK** — login com "troca obrigatória", troca de senha, "1234" barrado
+  como nova senha, senha errada e token falso recusados, my-mirrors vazio. Registro de teste do
+  Romário APAGADO (cadastro pristino p/ 1o login real). CLI supabase NÃO existe no shell → secret
+  setado só via painel; deploy/migration foram via MCP.
+- **Próximo:** Fase 1 (painel "Publicar no app" + filtro D3 + destinatários) e Fase 2 (app `/driver`:
+  login/troca de senha/ver espelho por link assinado) — frontend, validável com tsc/build local.
 
 ## 5. Validação desta sessão
 CPF import: 1 UPDATE de dado em prod, verificado e reversível (`backups/2026-07-23-cpf-import/`).

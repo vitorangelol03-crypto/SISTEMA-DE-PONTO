@@ -19,10 +19,10 @@ sem bundle, commit inexistente, GitHub ao vivo inalterado, arquivos ausentes). C
 a ser **LOCAL** na branch `feature/app-entregador` (de `main`). **D3 FEITO** (espelho aceita filtro
 por plataforma; commit `1f3805b`; validado tsc 0 / build ok / 111 unit). Próximo: Fase 0 (migrations
 + edge fn `driver-public-api` como ARQUIVOS; aplicar migration/bucket/deploy/push só com OK do Victor).
-**Fase 0 ESCRITA** (commit `433932c`, NÃO aplicada): migration `20260723120000` (tabelas
-`driverpay_driver_auth` deny-all + `driverpay_mirror_publications` + bucket privado) + edge fn
-`driver-public-api` (login CPF/1234, troca senha, ver espelho por link assinado; secret dedicado).
-FREIO: aplicar migration/bucket/deploy/secret = só com OK. Depois: Fase 1 (painel publica) → Fase 2 (app).
+**Fase 0 APLICADA + VALIDADA em PROD** (commit `433932c`; migration+bucket via MCP, edge fn
+`driver-public-api` v2 ACTIVE, `DRIVER_JWT_SECRET` setado pelo Victor): **login testado com driver
+real (Romário) 8/8 cenários OK** (login/troca senha/bloqueios); registro de teste apagado. Próximo:
+Fase 1 (painel "Publicar no app" + filtro) → Fase 2 (app `/driver`).
 Plano local: `~/.claude/plans/vamos-precisar-fazer-um-tranquil-hopper.md`.
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-23.md`.
 
