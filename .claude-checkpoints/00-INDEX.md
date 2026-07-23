@@ -14,9 +14,12 @@ configuráveis, driver nunca fala com o banco (edge fn `driver-public-api` + sec
 ZERO mudança na RLS/tabelas do 2626. **Operação em prod feita:** backfill de CPF — 97 drivers
 ativos tinham 0 CPF; importados **91/97** da planilha iMile (`br_driver_2026-07-22`) por nome
 exato, guardado (`cpf is null`) e reversível (`backups/2026-07-23-cpf-import/`); **6 sem CPF**
-aguardam 2ª fonte. Base do login (migration + edge fn) **em standby**: Victor optou por esperar
-o plano refinado da nuvem (Ultraplan) antes de construir. Plano local:
-`~/.claude/plans/vamos-precisar-fazer-um-tranquil-hopper.md`.
+aguardam 2ª fonte. **Ultraplan (nuvem) FALHOU** (não entregou nada — verificado por 4 fontes:
+sem bundle, commit inexistente, GitHub ao vivo inalterado, arquivos ausentes). Construção passou
+a ser **LOCAL** na branch `feature/app-entregador` (de `main`). **D3 FEITO** (espelho aceita filtro
+por plataforma; commit `1f3805b`; validado tsc 0 / build ok / 111 unit). Próximo: Fase 0 (migrations
++ edge fn `driver-public-api` como ARQUIVOS; aplicar migration/bucket/deploy/push só com OK do Victor).
+Plano local: `~/.claude/plans/vamos-precisar-fazer-um-tranquil-hopper.md`.
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-23.md`.
 
 **Sessão noite 20/07 (bugs de produção do ponto):** facial da Caratinga estava

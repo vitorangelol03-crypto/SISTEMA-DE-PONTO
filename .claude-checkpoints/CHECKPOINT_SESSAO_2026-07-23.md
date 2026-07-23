@@ -46,13 +46,28 @@ Cicero Junior de Sousa da Silva · Henrique Pereira de Freitas · Irineu (suiço
 Luiz Augusto da Silva · Mikael Barbosa Do Carmo · Wender Vieira. → Victor manda o CPF
 deles de 2ª fonte quando puder; importa igual. (Telefones da planilha disponíveis se quiser.)
 
-## 3. Próximo passo (bloqueado por escolha do Victor)
+## 3. Ultraplan (nuvem) FALHOU — construção passou a ser LOCAL
 
-Base do login (tabela `driverpay_driver_auth` + edge fn `driver-public-api`) = **precisa de
-migration → só aplico com OK do Victor**. Decisão do Victor: **ESPERAR o plano refinado da
-nuvem** antes de construir a fundação (evitar retrabalho se a estrutura mudar).
-Status: em standby aguardando o plano da nuvem voltar.
+A sessão Ultraplan **não completou** (aviso do sistema: container remoto não subiu em 90min).
+Um resumo dela dizia "tudo pronto: Fases 0-4, migrations, edge fn, app /driver, 569 testes,
+entregue por bundle" — **NADA disso era real**. Verificado por 4 fontes independentes: sem
+bundle no PC; commit `7d8415c` inexistente no git local; GitHub ao vivo com `feature/pagamentos-driver`
+em `ac0c045` e `main` em `b43b31d`, sem PR; e os arquivos (migrations `2026072310*`, edge fn
+`driver-public-api`, rota `/driver`, `allowedPlatformNames`) **não existem**. Nada foi perdido —
+a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
 
-## 4. Validação
-Nenhuma mudança de código (só 1 UPDATE de dado em prod, verificado e reversível). tsc/build/
-testes não se aplicam a esta sessão. Nada commitado, nada pushado.
+## 4. Construção local iniciada — branch `feature/app-entregador` (de `main` b43b31d)
+
+- **D3 FEITO e validado** (commit `1f3805b`): `computeRowTotals` + builders
+  (`buildDriverMirrorData`/`buildGroupMirrorData`/`buildSelectionMirrorData`) aceitam
+  `allowedPlatformNames?` opcional — filtra LINHAS e TOTAL juntos; sem o param = idêntico ao
+  atual; Zapex conta como plataforma; descontos/vales seguem abatidos (decisão de exibição na Fase 1).
+  8 testes novos (`tests/unit/driverPayPlatformFilter.spec.ts`). **Validação: tsc 0, build ok,
+  111 unit verdes** (novos + regressão de espelho). Commit de docs: `1c3734c`.
+- **Próximo:** Fase 0 — escrever migrations (tabelas novas) + edge fn `driver-public-api` como
+  ARQUIVOS. **Aplicar migration/criar bucket/deploy/push = só com OK do Victor** (nada em prod ainda).
+
+## 5. Validação desta sessão
+CPF import: 1 UPDATE de dado em prod, verificado e reversível (`backups/2026-07-23-cpf-import/`).
+D3: tsc 0 + build ok + 111 unit verdes. Commits locais em `feature/app-entregador`: `1c3734c`, `1f3805b`.
+**Nada pushado. Nada aplicado em produção além do backfill de CPF.**
