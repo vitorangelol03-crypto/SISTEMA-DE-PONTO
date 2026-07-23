@@ -25,7 +25,11 @@ real (Romário) 8/8 cenários OK** (login/troca senha/bloqueios); registro de te
 **Fase 2 FEITA** (app `/driver`: login/troca/ver espelho — commit `6408062`), **smoke no navegador OK**,
 e **visual ajustado p/ AZUL + ícone $** (commit `81a953b`). **Fase 1a FEITA** (commit `a67d870`):
 botão "Publicar no app" → `publishDriverMirror` (1 PDF/driver → bucket → publicação); tsc/build ok.
-Próximo: E2E ciclo completo (ou deploy p/ Victor testar) → Fase 1b (filtro de plataforma no diálogo) → Fase 3 (NF) → Fase 4 (líder).
+**Fase 3 (NF) migration APLICADA em prod** (emitentes + arquivos NF + coluna platforms + bucket privado
+`driverpay-nota-fiscais`, verificado). **Fase 3b FEITO** (commit `5f73235`): cadastro de CNPJs + vínculo
+plataforma→CNPJ no painel (`EmittersModal` + botão "CNPJs / Notas"). Próximo: 3c edge fn (nf-slots/upload/list)
+→ 3d tela "Anexar nota" no app → 3e "Notas recebidas" + baixar (.zip nomeado) → Fase 1b (filtro no envio) → Fase 4 (líder).
+Ciclo publicar→app ainda não testado ao vivo (precisa deploy Vercel ou login 2626 do Victor).
 Plano local: `~/.claude/plans/vamos-precisar-fazer-um-tranquil-hopper.md`.
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-23.md`.
 
