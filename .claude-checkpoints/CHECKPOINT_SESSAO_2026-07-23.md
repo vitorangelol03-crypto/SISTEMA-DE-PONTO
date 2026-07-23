@@ -82,8 +82,12 @@ a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
   como nova senha, senha errada e token falso recusados, my-mirrors vazio. Registro de teste do
   Romário APAGADO (cadastro pristino p/ 1o login real). CLI supabase NÃO existe no shell → secret
   setado só via painel; deploy/migration foram via MCP.
-- **Próximo:** Fase 1 (painel "Publicar no app" + filtro D3 + destinatários) e Fase 2 (app `/driver`:
-  login/troca de senha/ver espelho por link assinado) — frontend, validável com tsc/build local.
+- **Fase 2 FEITA (app /driver, commit `6408062`; tsc 0 + build ok):** rota pública `/driver` em
+  `App.tsx` (molde /clock); `src/services/driverApp.ts` (cliente da edge fn + sessão localStorage);
+  `src/components/driver-app/DriverApp.tsx` (login CPF+senha → troca obrigatória → lista de espelhos
+  por quinzena → abrir PDF via link assinado; estados carregando/vazio/erro; 401 derruba sessão).
+- **Próximo:** smoke no navegador de `/driver` + Fase 1 (painel "Publicar no app" + filtro D3 +
+  destinatários → gera PDF no cliente, sobe no bucket privado, insere publicação). Fase 3 (NF) e 4 (líder) depois.
 
 ## 5. Validação desta sessão
 CPF import: 1 UPDATE de dado em prod, verificado e reversível (`backups/2026-07-23-cpf-import/`).
