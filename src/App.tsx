@@ -17,6 +17,11 @@ const EmployeeErrorsPage = lazy(() =>
   import('./components/employee-clock/EmployeeErrorsPage').then(m => ({ default: m.EmployeeErrorsPage })),
 );
 
+// App do entregador (rota publica /driver) — login CPF, ver espelhos por quinzena.
+const DriverApp = lazy(() =>
+  import('./components/driver-app/DriverApp').then(m => ({ default: m.DriverApp })),
+);
+
 const AttendanceTab = lazy(() => import('./components/attendance/AttendanceTab').then(m => ({ default: m.AttendanceTab })));
 const EmployeesTab = lazy(() => import('./components/employees/EmployeesTab').then(m => ({ default: m.EmployeesTab })));
 const ReportsTab = lazy(() => import('./components/reports/ReportsTab').then(m => ({ default: m.ReportsTab })));
@@ -65,6 +70,11 @@ function App() {
     window.location.pathname === '/erros' ||
     new URLSearchParams(window.location.search).get('mode') === 'erros';
 
+  // App do entregador (espelhos + notas) — não exige login de painel
+  const isDriverMode =
+    window.location.pathname === '/driver' ||
+    new URLSearchParams(window.location.search).get('mode') === 'driver';
+
   useEffect(() => {
     if (!company?.id) return;
     autoCreateWeeklyPeriod(company.id).catch(err => console.error('autoCreateWeeklyPeriod falhou:', err));
@@ -90,6 +100,22 @@ function App() {
           </div>
         }>
           <EmployeeErrorsPage />
+        </Suspense>
+        <Toaster position="top-right" />
+      </>
+    );
+  }
+
+  // App do entregador — tela pública própria (auth por CPF na edge fn driver-public-api)
+  if (isDriverMode) {
+    return (
+      <>
+        <Suspense fallback={
+          <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+          </div>
+        }>
+          <DriverApp />
         </Suspense>
         <Toaster position="top-right" />
       </>
