@@ -104,9 +104,11 @@ a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
   getNotaEmitters/createNotaEmitter/updateNotaEmitter/setPlatformNotaEmitter; `DriverPlatform` ganhou
   `nota_emitter_id`) + `EmittersModal.tsx` (cadastra CNPJs + vincula cada plataforma a um CNPJ) +
   botão "CNPJs / Notas" na toolbar do `DriverPayTab`.
-- **Fila Fase 3:** (3c) edge fn nf-slots/nf-upload/nf-list; (3d) tela "Anexar nota" no app (por CNPJ,
-  câmera, compressão); (3e) "Notas recebidas" no painel + **baixar (individual + .zip nomeado
-  driver+CNPJ+quinzena)**. Depois Fase 1b (filtro de plataforma no envio) + Fase 4 (líder).
+- **3c FEITO** (edge fn v4 ACTIVE, commit da fn): `nf-slots`/`nf-upload`(base64→bucket privado→
+  registra+marca check antigo)/`nf-list` + `periodId` no `my-mirrors`. **Regressão login 8/8 na v4** (não quebrou Fase 0).
+- **Fila Fase 3:** (3d) tela "Anexar nota" no app (card por CNPJ via nf-slots, câmera+compressão, nf-upload);
+  (3e) "Notas recebidas" no painel + **baixar (individual + .zip nomeado driver+CNPJ+quinzena)**.
+  Depois Fase 1b (filtro no envio) + Fase 4 (líder). NF live E2E (driver sobe foto real) fica p/ deploy do Victor.
 
 ## 5. Validação desta sessão
 CPF import: 1 UPDATE de dado em prod, verificado e reversível (`backups/2026-07-23-cpf-import/`).
