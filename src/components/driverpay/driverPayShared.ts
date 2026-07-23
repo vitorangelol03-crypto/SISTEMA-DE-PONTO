@@ -125,12 +125,26 @@ export function platformPackages(row: DriverRowData, platformName: string): numb
   return row.routes.reduce((sum, rl) => sum + (rl.packages[platformName] ?? 0), 0);
 }
 
-/** Formula do pagamento (net pode ser negativo). */
-export function computeRowTotals(row: DriverRowData): RowTotals {
+/**
+ * Formula do pagamento (net pode ser negativo).
+ *
+ * D3 — espelho por plataforma: quando `allowedPlatformNames` e informado, SO conta os
+ * pacotes das plataformas desse conjunto (e o Zapex so se 'Zapex' estiver nele), pra que o
+ * TOTAL do espelho filtrado bata com as linhas exibidas. Quando ausente (todos os callers
+ * atuais), comporta-se EXATAMENTE como antes — soma todas as plataformas do row.
+ * Descontos e vales sao do driver (nao de uma plataforma) e NAO sao filtrados aqui: a
+ * decisao de exibi-los/abate-los num espelho filtrado fica na camada de UI (Fase 1).
+ */
+export function computeRowTotals(
+  row: DriverRowData,
+  allowedPlatformNames?: ReadonlySet<string>,
+): RowTotals {
+  const isAllowed = (name: string) => !allowedPlatformNames || allowedPlatformNames.has(name);
   let packagesAmount = 0;
   let totalPackages = 0;
   for (const rl of row.routes) {
     for (const platformName of Object.keys(rl.packages)) {
+      if (!isAllowed(platformName)) continue;
       const pkgs = rl.packages[platformName] ?? 0;
       // Taxa POR ROTA: usa o rate desta rota; fallback no default por plataforma do driver.
       const rate = rl.rates[platformName] ?? row.ratesByPlatform[platformName] ?? 0;
@@ -138,8 +152,8 @@ export function computeRowTotals(row: DriverRowData): RowTotals {
       totalPackages += pkgs;
     }
   }
-  // Ganho Zapex: cada item vale zapexRate; soma no total a receber.
-  const zapexAmount = row.zapex.length * row.zapexRate;
+  // Ganho Zapex: cada item vale zapexRate; Zapex conta como uma "plataforma" pro filtro.
+  const zapexAmount = isAllowed('Zapex') ? row.zapex.length * row.zapexRate : 0;
   const discounts = row.discounts.reduce((sum, d) => sum + d.amount, 0);
   const vales = row.vales.reduce((sum, v) => sum + v.amount, 0);
   return {
@@ -316,16 +330,23 @@ function periodInfo(period: DriverPaymentPeriod): DriverMirrorData['period'] {
   };
 }
 
-/** Monta o espelho individual (dados prontos; o PDF nao recalcula dinheiro). */
+/**
+ * Monta o espelho individual (dados prontos; o PDF nao recalcula dinheiro).
+ * D3: `allowedPlatformNames` (opcional) filtra as LINHAS e o TOTAL pras plataformas escolhidas.
+ * Ausente = todas (comportamento atual). Descontos/vales seguem exibidos (decisao de UI na Fase 1).
+ */
 export function buildDriverMirrorData(
   row: DriverRowData,
   platforms: DriverPlatform[],
   company: Company,
   period: DriverPaymentPeriod,
+  allowedPlatformNames?: ReadonlySet<string>,
 ): DriverMirrorData {
-  const totals = computeRowTotals(row);
+  const isAllowed = (name: string) => !allowedPlatformNames || allowedPlatformNames.has(name);
+  const totals = computeRowTotals(row, allowedPlatformNames);
   // Ganho Zapex (R$) do driver: entra como uma "plataforma" no espelho e soma no packagesValue.
-  const zapexAmount = row.zapex.length * row.zapexRate;
+  const includeZapex = isAllowed('Zapex');
+  const zapexAmount = includeZapex ? row.zapex.length * row.zapexRate : 0;
   return {
     company: companyInfo(company),
     period: periodInfo(period),
@@ -333,12 +354,18 @@ export function buildDriverMirrorData(
       name: row.name,
       routes: row.routes.map((rl) => ({
         city: rl.route,
-        totalPackages: Object.values(rl.packages).reduce((s, n) => s + n, 0),
+        // Filtrado (D3): so os pacotes das plataformas permitidas entram na contagem da cidade.
+        totalPackages: Object.entries(rl.packages).reduce(
+          (s, [name, n]) => s + (isAllowed(name) ? n : 0),
+          0,
+        ),
       })),
       group: row.groupName,
     },
     platforms: [
       ...platforms.flatMap((pl) => {
+        // D3: fora do filtro de plataformas -> nao gera linha.
+        if (!isAllowed(pl.name)) return [];
         // Destaque/aviso/valor separado (2026-07-19/20): so plataforma ATIVA; o filtro
         // de pacotes>0 abaixo garante a regra de presenca do Victor.
         const highlight = pl.active && pl.highlight_mirror;
@@ -382,7 +409,7 @@ export function buildDriverMirrorData(
         }));
       }),
       // Zapex como linha propria: pacotes = qtd de itens, valor unit = zapexRate do driver.
-      ...(row.zapex.length > 0
+      ...(includeZapex && row.zapex.length > 0
         ? [{ platform: 'Zapex', packages: row.zapex.length, unitValue: row.zapexRate, subtotal: zapexAmount }]
         : []),
     ],
@@ -414,8 +441,9 @@ export function buildGroupMirrorData(
   platforms: DriverPlatform[],
   company: Company,
   period: DriverPaymentPeriod,
+  allowedPlatformNames?: ReadonlySet<string>,
 ): DriverGroupMirrorData {
-  const drivers = rows.map((r) => buildDriverMirrorData(r, platforms, company, period));
+  const drivers = rows.map((r) => buildDriverMirrorData(r, platforms, company, period, allowedPlatformNames));
   const groupTotals = drivers.reduce(
     (acc, d) => ({
       driverCount: acc.driverCount + 1,
@@ -451,18 +479,21 @@ export function buildSelectionMirrorData(
   platforms: DriverPlatform[],
   company: Company,
   period: DriverPaymentPeriod,
+  allowedPlatformNames?: ReadonlySet<string>,
 ): { groups: DriverGroupMirrorData[]; singles: DriverMirrorData[] } {
   const groupOf = (r: DriverRowData): string => r.groupName ?? NO_GROUP_LABEL;
   const groups = Array.from(selectedGroups)
     .sort((a, b) => a.localeCompare(b, 'pt-BR'))
     .map((name) => {
       const groupRows = rows.filter((r) => groupOf(r) === name);
-      return groupRows.length > 0 ? buildGroupMirrorData(name, groupRows, platforms, company, period) : null;
+      return groupRows.length > 0
+        ? buildGroupMirrorData(name, groupRows, platforms, company, period, allowedPlatformNames)
+        : null;
     })
     .filter((g): g is DriverGroupMirrorData => g !== null);
   const singles = rows
     .filter((r) => selectedDrivers.has(r.paymentId) && !selectedGroups.has(groupOf(r)))
-    .map((r) => buildDriverMirrorData(r, platforms, company, period));
+    .map((r) => buildDriverMirrorData(r, platforms, company, period, allowedPlatformNames));
   return { groups, singles };
 }
 
