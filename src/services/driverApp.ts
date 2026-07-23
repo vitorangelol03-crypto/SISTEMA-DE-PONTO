@@ -74,11 +74,29 @@ export interface DriverLoginResult {
 }
 export interface DriverMirror {
   id: string;
+  periodId: string;
   periodLabel: string;
   scope: 'individual' | 'group' | 'selection';
   platformFilter: string[] | null;
   deliveredAt: string;
   viewedAt: string | null;
+}
+
+/** Um "lugar de anexo" (CNPJ) que o driver deve enviar nota no período. */
+export interface NfSlot {
+  emitterId: string;
+  cnpj: string;
+  label: string;
+  sent: number;
+}
+export interface NfFile {
+  id: string;
+  emitterId: string;
+  emitterLabel: string;
+  cnpj: string;
+  filename: string | null;
+  status: string;
+  uploadedAt: string;
 }
 
 export function driverLogin(cpf: string, password: string): Promise<DriverLoginResult> {
@@ -92,4 +110,18 @@ export function driverMyMirrors(token: string): Promise<{ mirrors: DriverMirror[
 }
 export function driverMirrorUrl(publicationId: string, token: string): Promise<{ url: string }> {
   return callDriverApi<{ url: string }>('my-mirror-url', { publicationId }, token);
+}
+
+// ─── Nota Fiscal (Fase 3) ────────────────────────────────────────────────────
+export function driverNfSlots(periodId: string, token: string): Promise<{ slots: NfSlot[] }> {
+  return callDriverApi<{ slots: NfSlot[] }>('nf-slots', { periodId }, token);
+}
+export function driverNfList(periodId: string, token: string): Promise<{ files: NfFile[] }> {
+  return callDriverApi<{ files: NfFile[] }>('nf-list', { periodId }, token);
+}
+export function driverNfUpload(
+  input: { periodId: string; emitterId: string; contentType: string; fileBase64: string; filename?: string },
+  token: string,
+): Promise<{ ok: boolean }> {
+  return callDriverApi<{ ok: boolean }>('nf-upload', input, token);
 }

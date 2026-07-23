@@ -6,14 +6,15 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { CircleDollarSign, LogOut, Eye, FileText, KeyRound } from 'lucide-react';
+import { CircleDollarSign, LogOut, Eye, FileText, KeyRound, Upload, ChevronLeft, CheckCircle2 } from 'lucide-react';
 import {
   driverLogin, driverChangePassword, driverMyMirrors, driverMirrorUrl,
+  driverNfSlots, driverNfList, driverNfUpload,
   getDriverToken, getDriverName, setDriverSession, clearDriverSession,
-  DriverApiError, type DriverMirror,
+  DriverApiError, type DriverMirror, type NfSlot, type NfFile,
 } from '../../services/driverApp';
 
-type Screen = 'login' | 'change' | 'mirrors';
+type Screen = 'login' | 'change' | 'mirrors' | 'nf';
 
 const Spinner = ({ light = false }: { light?: boolean }) => (
   <div className={`animate-spin rounded-full h-5 w-5 border-b-2 ${light ? 'border-white' : 'border-blue-600'}`} />
@@ -31,6 +32,47 @@ function errMsg(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
 }
 
+const readAsDataUrl = (file: File): Promise<string> =>
+  new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result));
+    r.onerror = () => rej(new Error('Não consegui ler o arquivo'));
+    r.readAsDataURL(file);
+  });
+
+/** Prepara o arquivo pra subir: foto vira JPEG reduzido (máx 1600px, q0.7); PDF vai como está. */
+async function fileToUpload(file: File): Promise<{ base64: string; contentType: string; filename: string }> {
+  if (!file.type.startsWith('image/')) {
+    return { base64: await readAsDataUrl(file), contentType: file.type || 'application/pdf', filename: file.name };
+  }
+  const dataUrl = await readAsDataUrl(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error('img'));
+      i.src = dataUrl;
+    });
+    const maxDim = 1600;
+    let { width, height } = img;
+    if (width > maxDim || height > maxDim) {
+      const scale = maxDim / Math.max(width, height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return { base64: dataUrl, contentType: file.type, filename: file.name };
+    ctx.drawImage(img, 0, 0, width, height);
+    const out = canvas.toDataURL('image/jpeg', 0.7);
+    return { base64: out, contentType: 'image/jpeg', filename: file.name.replace(/\.[^.]+$/, '') + '.jpg' };
+  } catch {
+    return { base64: dataUrl, contentType: file.type || 'image/jpeg', filename: file.name };
+  }
+}
+
 export function DriverApp() {
   const [screen, setScreen] = useState<Screen>('login');
   const [token, setToken] = useState<string | null>(() => getDriverToken());
@@ -44,6 +86,12 @@ export function DriverApp() {
 
   const [mirrors, setMirrors] = useState<DriverMirror[] | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+
+  // Anexar nota (Fase 3)
+  const [nfCtx, setNfCtx] = useState<{ periodId: string; periodLabel: string } | null>(null);
+  const [nfSlots, setNfSlots] = useState<NfSlot[] | null>(null);
+  const [nfFiles, setNfFiles] = useState<NfFile[]>([]);
+  const [nfUploading, setNfUploading] = useState<string | null>(null);
 
   const logout = useCallback(() => {
     clearDriverSession();
@@ -116,6 +164,38 @@ export function DriverApp() {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else toast.error(errMsg(e, 'Nao consegui abrir o espelho.'));
     } finally { setOpening(null); }
+  }
+
+  async function loadNf(periodId: string) {
+    if (!token) { logout(); return; }
+    setNfSlots(null); setNfFiles([]);
+    try {
+      const [slotsRes, filesRes] = await Promise.all([driverNfSlots(periodId, token), driverNfList(periodId, token)]);
+      setNfSlots(slotsRes.slots); setNfFiles(filesRes.files);
+    } catch (e) {
+      if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
+      else { setNfSlots([]); toast.error(errMsg(e, 'Nao consegui carregar os CNPJs.')); }
+    }
+  }
+
+  function openNf(m: DriverMirror) {
+    setNfCtx({ periodId: m.periodId, periodLabel: m.periodLabel });
+    setScreen('nf');
+    loadNf(m.periodId);
+  }
+
+  async function handleNfFile(emitterId: string, file: File | null | undefined) {
+    if (!file || !token || !nfCtx) return;
+    setNfUploading(emitterId);
+    try {
+      const { base64, contentType, filename } = await fileToUpload(file);
+      await driverNfUpload({ periodId: nfCtx.periodId, emitterId, contentType, fileBase64: base64, filename }, token);
+      toast.success('Nota enviada!');
+      await loadNf(nfCtx.periodId);
+    } catch (e) {
+      if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
+      else toast.error(errMsg(e, 'Nao consegui enviar a nota.'));
+    } finally { setNfUploading(null); }
   }
 
   // ─── LOGIN ──────────────────────────────────────────────────────────────────
@@ -192,6 +272,70 @@ export function DriverApp() {
     );
   }
 
+  // ─── ANEXAR NOTA (por CNPJ) ──────────────────────────────────────────────────
+  if (screen === 'nf') {
+    return (
+      <div className="min-h-screen bg-gray-100">
+        <header className="bg-blue-600 text-white px-4 py-3 flex items-center gap-2 sticky top-0 z-10">
+          <button onClick={() => { setScreen('mirrors'); setNfCtx(null); }} className="p-1 -ml-1 rounded hover:bg-blue-700/60">
+            <ChevronLeft size={22} />
+          </button>
+          <div className="leading-tight">
+            <div className="font-semibold text-sm">Anexar nota</div>
+            {nfCtx && <div className="text-blue-100 text-xs">{nfCtx.periodLabel}</div>}
+          </div>
+        </header>
+
+        <main className="max-w-md mx-auto p-4 space-y-3">
+          {nfSlots === null && <div className="flex items-center justify-center py-16"><Spinner /></div>}
+
+          {nfSlots !== null && nfSlots.length === 0 && (
+            <div className="text-center py-16 text-gray-500">
+              <FileText size={40} className="mx-auto mb-3 text-gray-300" />
+              <p className="font-medium">Nenhuma nota a enviar aqui.</p>
+              <p className="text-sm">Não há CNPJ com entregas suas nesta quinzena.</p>
+            </div>
+          )}
+
+          {nfSlots?.map((s) => (
+            <div key={s.emitterId} className="bg-white rounded-xl shadow-sm p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-semibold text-gray-800">{s.label}</div>
+                  <div className="text-xs text-gray-500">CNPJ {s.cnpj}</div>
+                </div>
+                {s.sent > 0 && (
+                  <span className="shrink-0 inline-flex items-center gap-1 text-green-600 text-xs font-medium">
+                    <CheckCircle2 size={14} /> {s.sent} enviada{s.sent > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+              <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === s.emitterId ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
+                {nfUploading === s.emitterId ? <Spinner /> : <><Upload size={16} /> {s.sent > 0 ? 'Enviar outra nota' : 'Enviar foto da nota'}</>}
+                <input
+                  type="file" accept="image/*,application/pdf" capture="environment" className="hidden"
+                  disabled={nfUploading === s.emitterId}
+                  onChange={(e) => { handleNfFile(s.emitterId, e.target.files?.[0]); e.currentTarget.value = ''; }}
+                />
+              </label>
+            </div>
+          ))}
+
+          {nfFiles.length > 0 && (
+            <div className="pt-2">
+              <div className="text-xs font-semibold text-gray-500 mb-1">Notas enviadas</div>
+              {nfFiles.map((f) => (
+                <div key={f.id} className="text-xs text-gray-600 flex items-center gap-1.5 py-0.5">
+                  <CheckCircle2 size={12} className="text-green-600" /> {f.emitterLabel} · {fmtDate(f.uploadedAt)}
+                </div>
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   // ─── LISTA DE ESPELHOS ───────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-100">
@@ -222,21 +366,27 @@ export function DriverApp() {
         )}
 
         {mirrors?.map((m) => (
-          <div key={m.id} className="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between gap-3">
+          <div key={m.id} className="bg-white rounded-xl shadow-sm p-4 space-y-3">
             <div className="min-w-0">
-              <div className="font-semibold text-gray-800 truncate">{m.periodLabel || 'Espelho'}</div>
+              <div className="font-semibold text-gray-800">{m.periodLabel || 'Espelho'}</div>
               <div className="text-xs text-gray-500 mt-0.5">
                 Enviado em {fmtDate(m.deliveredAt)}
                 {m.platformFilter && m.platformFilter.length > 0 && (
                   <> · {m.platformFilter.join(', ')}</>
                 )}
               </div>
-              {m.viewedAt && <div className="text-[11px] text-green-600 mt-0.5">Ja visualizado</div>}
+              {m.viewedAt && <div className="text-[11px] text-green-600 mt-0.5">Já visualizado</div>}
             </div>
-            <button onClick={() => handleView(m.id)} disabled={opening === m.id}
-              className="shrink-0 flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg px-3 py-2">
-              {opening === m.id ? <Spinner light /> : <><Eye size={16} /> Ver</>}
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => handleView(m.id)} disabled={opening === m.id}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg px-3 py-2">
+                {opening === m.id ? <Spinner light /> : <><Eye size={16} /> Ver espelho</>}
+              </button>
+              <button onClick={() => openNf(m)}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-blue-600 text-blue-700 hover:bg-blue-50 text-sm font-medium rounded-lg px-3 py-2">
+                <Upload size={16} /> Anexar nota
+              </button>
+            </div>
           </div>
         ))}
       </main>
