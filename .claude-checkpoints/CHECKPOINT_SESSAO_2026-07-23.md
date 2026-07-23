@@ -106,9 +106,12 @@ a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
   botão "CNPJs / Notas" na toolbar do `DriverPayTab`.
 - **3c FEITO** (edge fn v4 ACTIVE, commit da fn): `nf-slots`/`nf-upload`(base64→bucket privado→
   registra+marca check antigo)/`nf-list` + `periodId` no `my-mirrors`. **Regressão login 8/8 na v4** (não quebrou Fase 0).
-- **Fila Fase 3:** (3d) tela "Anexar nota" no app (card por CNPJ via nf-slots, câmera+compressão, nf-upload);
-  (3e) "Notas recebidas" no painel + **baixar (individual + .zip nomeado driver+CNPJ+quinzena)**.
-  Depois Fase 1b (filtro no envio) + Fase 4 (líder). NF live E2E (driver sobe foto real) fica p/ deploy do Victor.
+- **3d FEITO (commit; tsc/build ok):** no app, cada espelho tem "Anexar nota" → tela por CNPJ (nf-slots),
+  foto pela câmera comprimida (canvas jpeg 1600px/q0.7) → nf-upload → lista de enviadas. Lado do DRIVER da NF completo.
+- **Fila Fase 3:** (3e) painel "Notas recebidas" (matriz driver×CNPJ) + **baixar (individual + .zip nomeado
+  driver+CNPJ+quinzena)** — precisa de `jszip` (NÃO instalado; adicionar). Depois Fase 1b (filtro no envio) + Fase 4 (líder).
+- **Testes LIVE que dependem do deploy do Victor:** ciclo publicar→app (espelho aparecer no app) e NF (driver
+  sobe foto real → some no painel). Backend validado por regressão 8/8; UI por tsc/build/smoke.
 
 ## 5. Validação desta sessão
 CPF import: 1 UPDATE de dado em prod, verificado e reversível (`backups/2026-07-23-cpf-import/`).
