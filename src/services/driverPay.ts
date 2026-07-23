@@ -1130,6 +1130,60 @@ export const removeDiscount = async (id: string, paymentId: string, userId: stri
   await recomputePaymentTotals(paymentId);
 };
 
+// ─── Publicacao de espelho pro app do entregador (Fase 1) ────────────────────
+
+/** Bucket PRIVADO dos espelhos publicados (driver le so por signed URL da edge fn). */
+export const DRIVER_MIRRORS_BUCKET = 'driverpay-mirrors';
+
+export interface PublishMirrorInput {
+  companyId: string;
+  periodId: string;
+  driverId: string;
+  scope: 'individual' | 'group' | 'selection';
+  /** array de nomes de plataforma incluidos; null = todas (filtro D3). */
+  platformFilter: string[] | null;
+  pdf: Blob;
+  userId: string;
+  groupId?: string | null;
+}
+
+/**
+ * Publica UM espelho (PDF ja gerado) pro app do driver: sobe o PDF no bucket privado
+ * e registra a publicacao. Re-publicar substitui a anterior do mesmo (periodo, driver):
+ * o arquivo e sobrescrito (upsert) e a linha antiga e trocada — o driver ve sempre 1
+ * espelho atual por quinzena, nao uma pilha de duplicatas.
+ */
+export const publishDriverMirror = async (i: PublishMirrorInput): Promise<void> => {
+  await ensurePerm(i.userId, 'driverpay.generateMirror');
+  const path = `${i.companyId}/${i.periodId}/${i.driverId}.pdf`;
+
+  const { error: upErr } = await supabase.storage
+    .from(DRIVER_MIRRORS_BUCKET)
+    .upload(path, i.pdf, { contentType: 'application/pdf', upsert: true });
+  if (upErr) throw new Error(`Falha ao subir o PDF do espelho: ${upErr.message}`);
+
+  // Troca a publicacao anterior do mesmo periodo+driver (arquivo ja foi sobrescrito).
+  const { error: delErr } = await supabase
+    .from('driverpay_mirror_publications')
+    .delete()
+    .eq('company_id', i.companyId)
+    .eq('period_id', i.periodId)
+    .eq('driver_id', i.driverId);
+  if (delErr) throwDbError(delErr);
+
+  const { error } = await supabase.from('driverpay_mirror_publications').insert([{
+    company_id: i.companyId,
+    period_id: i.periodId,
+    driver_id: i.driverId,
+    scope: i.scope,
+    group_id: i.groupId ?? null,
+    platform_filter: i.platformFilter,
+    pdf_path: path,
+    delivered_by: i.userId,
+  }]);
+  if (error) throwDbError(error);
+};
+
 /** Uma linha da busca de pacotes descontados (desconto + driver + status do periodo). */
 export interface DiscountSearchRow {
   id: string;

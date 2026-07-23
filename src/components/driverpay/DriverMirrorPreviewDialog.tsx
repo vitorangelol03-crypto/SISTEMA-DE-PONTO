@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, Eye, Download, Printer, Loader2, AlarmClock } from 'lucide-react';
+import { FileText, Eye, Download, Printer, Loader2, AlarmClock, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   downloadDriverMirrorPdf,
@@ -33,6 +33,8 @@ interface DriverMirrorPreviewDialogProps {
   /** Aviso de corte (2026-07-19): empresa + usuário p/ carregar/salvar as datas. */
   companyId?: string;
   userId?: string;
+  /** Publicar no app do entregador (1 PDF por driver). `allowed`=plataformas incluídas; null=todas. */
+  onPublish?: (allowed: string[] | null) => Promise<void>;
 }
 
 /** Faixa amarela do corte — mesma cara do PDF (prévia fiel). */
@@ -321,8 +323,10 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   onClose,
   companyId,
   userId,
+  onPublish,
 }) => {
   const [generating, setGenerating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [includeReceipts, setIncludeReceipts] = useState(true);
   // Aviso de corte (2026-07-19): pré-carrega o último salvo; salva automático ao gerar.
   const [cutoffTime, setCutoffTime] = useState('');
@@ -421,6 +425,18 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     }
   };
 
+  const handlePublish = async () => {
+    if (!onPublish) return;
+    setPublishing(true);
+    try {
+      await onPublish(null); // Fase 1a: publica TODAS as plataformas (filtro por plataforma vem depois)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao publicar no app');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const title =
     request.mode === 'individual'
       ? 'Espelho individual'
@@ -466,6 +482,17 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
             {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             Gerar PDF
           </button>
+          {onPublish && (
+            <button
+              type="button"
+              onClick={handlePublish}
+              disabled={publishing || generating || !canGenerate}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium inline-flex items-center gap-2 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              Publicar no app
+            </button>
+          )}
         </>
       }
     >

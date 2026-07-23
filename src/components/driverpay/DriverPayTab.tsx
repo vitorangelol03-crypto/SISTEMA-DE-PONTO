@@ -34,8 +34,10 @@ import {
   renameRoutePackages,
   setNotaFiscal,
   setEspelhoConferido,
+  publishDriverMirror,
 } from '../../services/driverPay';
 import { exportDriverGeneralReportExcel } from '../../utils/driverReport';
+import { generateDriverMirrorPdf } from '../../utils/driverMirrorPdf';
 import {
   DriverRowData,
   RowHandlers,
@@ -141,6 +143,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [showPlatformImport, setShowPlatformImport] = useState(false);
   const [showDiscountSearch, setShowDiscountSearch] = useState(false);
   const [mirror, setMirror] = useState<MirrorRequest | null>(null);
+  // Drivers cobertos pelo espelho aberto — usados pra PUBLICAR no app (1 PDF por driver).
+  const [publishRows, setPublishRows] = useState<DriverRowData[]>([]);
+  const [publishScope, setPublishScope] = useState<'individual' | 'group' | 'selection'>('individual');
 
   // Refs para leitura estavel em callbacks assincronos
   const driversRef = useRef<Driver[]>([]);
@@ -505,6 +510,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     (row: DriverRowData) => {
       if (!company || !selectedPeriod) return;
       const data = buildDriverMirrorData(row, platformsRef.current, company, selectedPeriod);
+      setPublishRows([row]);
+      setPublishScope('individual');
       setMirror({ mode: 'individual', data });
     },
     [company, selectedPeriod],
@@ -514,6 +521,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     (groupName: string, groupRows: DriverRowData[]) => {
       if (!company || !selectedPeriod) return;
       const data = buildGroupMirrorData(groupName, groupRows, platformsRef.current, company, selectedPeriod);
+      setPublishRows(groupRows);
+      setPublishScope('group');
       setMirror({ mode: 'group', data });
     },
     [company, selectedPeriod],
@@ -593,6 +602,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       return;
     }
     const list = filteredRows.map((r) => buildDriverMirrorData(r, platforms, company, selectedPeriod));
+    setPublishRows(filteredRows);
+    setPublishScope('individual');
     setMirror({ mode: 'mass', list });
   };
 
@@ -637,8 +648,54 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       toast.error('Marque pelo menos um grupo ou driver para gerar os espelhos');
       return;
     }
+    // Publicar = 1 espelho individual por driver coberto (membros de grupos marcados + avulsos).
+    const covered = filteredRows.filter(
+      (r) => selDrivers.has(r.paymentId) || selGroups.has(r.groupName ?? 'Sem grupo'),
+    );
+    setPublishRows(covered);
+    setPublishScope('selection');
     setMirror({ mode: 'selection', groups, singles });
   };
+
+  // Publica no app do driver: 1 PDF INDIVIDUAL por driver coberto (cada um ve o seu).
+  // `allowed` = plataformas incluidas (filtro D3); null/vazio = todas.
+  const onPublish = useCallback(
+    async (allowed: string[] | null) => {
+      if (!company || !selectedPeriod) return;
+      const targets = publishRows;
+      if (targets.length === 0) {
+        toast.error('Nada para publicar');
+        return;
+      }
+      const allowedSet = allowed && allowed.length > 0 ? new Set(allowed) : undefined;
+      const filter = allowed && allowed.length > 0 ? allowed : null;
+      let ok = 0;
+      let fail = 0;
+      for (const row of targets) {
+        try {
+          const data = buildDriverMirrorData(row, platformsRef.current, company, selectedPeriod, allowedSet);
+          const blob = await generateDriverMirrorPdf(data);
+          await publishDriverMirror({
+            companyId: company.id,
+            periodId: selectedPeriod.id,
+            driverId: row.driverId,
+            scope: publishScope,
+            platformFilter: filter,
+            pdf: blob,
+            userId,
+          });
+          ok++;
+        } catch (e) {
+          fail++;
+          console.error('Falha ao publicar espelho de', row.name, e);
+        }
+      }
+      if (ok > 0) toast.success(`${ok} espelho(s) publicado(s) no app${fail ? ` (${fail} falharam)` : ''}`);
+      else toast.error('Não consegui publicar. Tente de novo.');
+      if (fail === 0) setMirror(null);
+    },
+    [company, selectedPeriod, publishRows, publishScope, userId],
+  );
 
   const handleReport = async () => {
     if (!hasPermission('driverpay.exportReport')) {
@@ -1114,6 +1171,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           onClose={() => setMirror(null)}
           companyId={company?.id}
           userId={userId}
+          onPublish={canMirror ? onPublish : undefined}
         />
       )}
     </div>
