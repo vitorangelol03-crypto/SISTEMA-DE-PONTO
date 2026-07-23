@@ -86,8 +86,14 @@ a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
   `App.tsx` (molde /clock); `src/services/driverApp.ts` (cliente da edge fn + sessão localStorage);
   `src/components/driver-app/DriverApp.tsx` (login CPF+senha → troca obrigatória → lista de espelhos
   por quinzena → abrir PDF via link assinado; estados carregando/vazio/erro; 401 derruba sessão).
-- **Próximo:** smoke no navegador de `/driver` + Fase 1 (painel "Publicar no app" + filtro D3 +
-  destinatários → gera PDF no cliente, sobe no bucket privado, insere publicação). Fase 3 (NF) e 4 (líder) depois.
+- **Smoke de `/driver` no navegador OK** (Playwright, viewport celular): login renderiza, login com
+  CPF real + 1234 → tela "criar senha"; sem erro de runtime. Registro de teste do Romário apagado.
+- **Ajuste visual pedido pelo Victor (commit `81a953b`):** cor dominante AZUL (era laranja) + ícone
+  de dinheiro `CircleDollarSign` no lugar do caminhão, na tela `/driver`. tsc 0 + build ok + print conferido.
+- **Próximo — Fase 1 (painel publica espelho):** botão "Publicar no app" no `DriverMirrorPreviewDialog`
+  + multi-seleção de plataforma (filtro D3, montado no `DriverPayTab` que tem rows+platforms) →
+  `publishMirror` novo no `driverPay.ts` (gera PDF Blob via generate*Pdf → upload no bucket privado
+  `driverpay-mirrors` → insert em `driverpay_mirror_publications`). Depois: Fase 3 (NF) e Fase 4 (líder).
 
 ## 5. Validação desta sessão
 CPF import: 1 UPDATE de dado em prod, verificado e reversível (`backups/2026-07-23-cpf-import/`).

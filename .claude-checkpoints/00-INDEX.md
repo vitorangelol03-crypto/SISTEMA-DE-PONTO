@@ -22,8 +22,9 @@ por plataforma; commit `1f3805b`; validado tsc 0 / build ok / 111 unit). Próxim
 **Fase 0 APLICADA + VALIDADA em PROD** (commit `433932c`; migration+bucket via MCP, edge fn
 `driver-public-api` v2 ACTIVE, `DRIVER_JWT_SECRET` setado pelo Victor): **login testado com driver
 real (Romário) 8/8 cenários OK** (login/troca senha/bloqueios); registro de teste apagado.
-**Fase 2 FEITA** (app `/driver`: login/troca/ver espelho — commit `6408062`, tsc/build ok).
-Próximo: smoke no navegador + Fase 1 (painel "Publicar no app" + filtro D3) → Fase 3 (NF) → Fase 4 (líder).
+**Fase 2 FEITA** (app `/driver`: login/troca/ver espelho — commit `6408062`), **smoke no navegador OK**,
+e **visual ajustado p/ AZUL + ícone $** (commit `81a953b`, pedido do Victor). Próximo: **Fase 1**
+(painel "Publicar no app" + filtro D3 — via `publishMirror` novo, gera Blob→bucket→publicação) → Fase 3 (NF) → Fase 4 (líder).
 Plano local: `~/.claude/plans/vamos-precisar-fazer-um-tranquil-hopper.md`.
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-23.md`.
 
