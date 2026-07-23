@@ -212,6 +212,7 @@ async function myMirrors(req: Request, body: Body): Promise<Response> {
     const per = Array.isArray(m.driverpay_periods) ? m.driverpay_periods[0] : m.driverpay_periods;
     return {
       id: m.id,
+      periodId: m.period_id,
       periodLabel: per?.label ?? '',
       scope: m.scope,
       platformFilter: m.platform_filter ?? null,
@@ -249,6 +250,121 @@ async function myMirrorUrl(req: Request, body: Body): Promise<Response> {
   return json({ url: signed.signedUrl });
 }
 
+// ─── Nota Fiscal (Fase 3) ───────────────────────────────────────────────────
+const NF_BUCKET = 'driverpay-nota-fiscais';
+const MAX_NF_BYTES = 8 * 1024 * 1024; // 8 MB (app comprime a foto antes)
+
+function extFromType(t: string): string {
+  const s = (t || '').toLowerCase();
+  if (s.includes('png')) return 'png';
+  if (s.includes('pdf')) return 'pdf';
+  if (s.includes('webp')) return 'webp';
+  return 'jpg';
+}
+
+// Lugares de anexo do driver no periodo: 1 por CNPJ que fatura alguma plataforma
+// com pacotes>0 dele naquele periodo. `sent` = quantas notas ele ja mandou naquele CNPJ.
+async function nfSlots(req: Request, body: Body): Promise<Response> {
+  const claims = await claimsFromRequest(req, body);
+  if (!claims) return json({ error: 'Sessao invalida' }, 401);
+  const periodId = String(body.periodId ?? '').trim();
+  if (!periodId) return json({ error: 'periodId ausente' }, 400);
+
+  const { data: pay } = await supabase.from('driverpay_payments')
+    .select('id').eq('period_id', periodId).eq('driver_id', claims.driver_id).maybeSingle();
+
+  let platformNames: string[] = [];
+  if (pay?.id) {
+    const { data: pks } = await supabase.from('driverpay_payment_packages')
+      .select('platform_name, packages').eq('payment_id', pay.id);
+    platformNames = [...new Set((pks ?? []).filter((p) => (p.packages ?? 0) > 0).map((p) => p.platform_name))];
+  }
+
+  let emitterIds: string[] = [];
+  if (platformNames.length) {
+    const { data: plats } = await supabase.from('driverpay_platforms')
+      .select('name, nota_emitter_id').eq('company_id', claims.company_id).in('name', platformNames);
+    emitterIds = [...new Set((plats ?? []).map((p) => p.nota_emitter_id).filter(Boolean))] as string[];
+  }
+  if (emitterIds.length === 0) return json({ slots: [] });
+
+  const { data: emitters } = await supabase.from('driverpay_nota_emitters')
+    .select('id, cnpj, label').in('id', emitterIds).eq('active', true).order('sort_order', { ascending: true });
+
+  const { data: files } = await supabase.from('driverpay_nota_fiscal_files')
+    .select('nota_emitter_id').eq('driver_id', claims.driver_id).eq('period_id', periodId);
+  const sent: Record<string, number> = {};
+  for (const f of files ?? []) sent[f.nota_emitter_id] = (sent[f.nota_emitter_id] ?? 0) + 1;
+
+  const slots = (emitters ?? []).map((e) => ({ emitterId: e.id, cnpj: e.cnpj, label: e.label, sent: sent[e.id] ?? 0 }));
+  return json({ slots });
+}
+
+// Recebe a nota (base64), sobe no bucket privado, registra e marca o "check" antigo.
+async function nfUpload(req: Request, body: Body): Promise<Response> {
+  const claims = await claimsFromRequest(req, body);
+  if (!claims) return json({ error: 'Sessao invalida' }, 401);
+  const periodId = String(body.periodId ?? '').trim();
+  const emitterId = String(body.emitterId ?? '').trim();
+  const contentType = String(body.contentType ?? 'image/jpeg');
+  const filename = body.filename ? String(body.filename) : null;
+  const b64raw = String(body.fileBase64 ?? '');
+  if (!periodId || !emitterId || !b64raw) return json({ error: 'Dados incompletos' }, 400);
+
+  const { data: em } = await supabase.from('driverpay_nota_emitters')
+    .select('id').eq('id', emitterId).eq('company_id', claims.company_id).maybeSingle();
+  if (!em) return json({ error: 'CNPJ invalido' }, 400);
+
+  const pure = b64raw.includes(',') ? b64raw.slice(b64raw.indexOf(',') + 1) : b64raw;
+  let bytes: Uint8Array;
+  try { bytes = Uint8Array.from(atob(pure), (c) => c.charCodeAt(0)); }
+  catch { return json({ error: 'Arquivo invalido' }, 400); }
+  if (bytes.length === 0) return json({ error: 'Arquivo vazio' }, 400);
+  if (bytes.length > MAX_NF_BYTES) return json({ error: 'Arquivo muito grande (max 8MB)' }, 413);
+
+  const path = `${claims.company_id}/${periodId}/${claims.driver_id}/${emitterId}/${crypto.randomUUID()}.${extFromType(contentType)}`;
+  const { error: upErr } = await supabase.storage.from(NF_BUCKET).upload(path, bytes, { contentType, upsert: false });
+  if (upErr) return json({ error: 'Falha ao subir a nota', details: upErr.message }, 500);
+
+  const { data: pay } = await supabase.from('driverpay_payments')
+    .select('id').eq('period_id', periodId).eq('driver_id', claims.driver_id).maybeSingle();
+
+  const { error: insErr } = await supabase.from('driverpay_nota_fiscal_files').insert([{
+    company_id: claims.company_id, driver_id: claims.driver_id, period_id: periodId,
+    payment_id: pay?.id ?? null, nota_emitter_id: emitterId, file_path: path,
+    file_type: contentType, original_filename: filename, uploaded_by: claims.driver_id,
+  }]);
+  if (insErr) return json({ error: 'Falha ao registrar a nota', details: insErr.message }, 500);
+
+  // Marca o resumo antigo "nota recebida" (nota_fiscal_by fica null: driver nao e users).
+  if (pay?.id) {
+    await supabase.from('driverpay_payments')
+      .update({ nota_fiscal_recebida: true, nota_fiscal_at: new Date().toISOString() })
+      .eq('id', pay.id);
+  }
+  return json({ ok: true });
+}
+
+// Lista as notas que o proprio driver ja enviou no periodo.
+async function nfListFn(req: Request, body: Body): Promise<Response> {
+  const claims = await claimsFromRequest(req, body);
+  if (!claims) return json({ error: 'Sessao invalida' }, 401);
+  const periodId = String(body.periodId ?? '').trim();
+  if (!periodId) return json({ error: 'periodId ausente' }, 400);
+  const { data } = await supabase.from('driverpay_nota_fiscal_files')
+    .select('id, nota_emitter_id, original_filename, status, uploaded_at, driverpay_nota_emitters(label, cnpj)')
+    .eq('driver_id', claims.driver_id).eq('period_id', periodId)
+    .order('uploaded_at', { ascending: false });
+  const files = (data ?? []).map((f) => {
+    const em = Array.isArray(f.driverpay_nota_emitters) ? f.driverpay_nota_emitters[0] : f.driverpay_nota_emitters;
+    return {
+      id: f.id, emitterId: f.nota_emitter_id, emitterLabel: em?.label ?? '', cnpj: em?.cnpj ?? '',
+      filename: f.original_filename, status: f.status, uploadedAt: f.uploaded_at,
+    };
+  });
+  return json({ files });
+}
+
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
@@ -266,6 +382,9 @@ Deno.serve(async (req) => {
       case 'change-password': return await changePassword(req, body);
       case 'my-mirrors': return await myMirrors(req, body);
       case 'my-mirror-url': return await myMirrorUrl(req, body);
+      case 'nf-slots': return await nfSlots(req, body);
+      case 'nf-upload': return await nfUpload(req, body);
+      case 'nf-list': return await nfListFn(req, body);
       default: return json({ error: `Unknown action: ${body.action}` }, 400);
     }
   } catch (err) {
