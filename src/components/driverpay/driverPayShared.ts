@@ -38,6 +38,26 @@ export const formatInt = (n: number): string =>
 export const sanitizeFile = (s: string): string =>
   (s || 'arquivo').replace(/\s+/g, '_').replace(/[^\w\-.]/g, '');
 
+/**
+ * Nome do arquivo de NOTA FISCAL pro download (Fase 3): "Driver - CNPJ - Quinzena[ (n)].ext".
+ * Diferente de sanitizeFile: MANTÉM acentos e espaços (nome legível pra contabilidade do Victor);
+ * remove só os caracteres proibidos em Windows/Android (/ \ : * ? " < > |) e colapsa espaços.
+ * `index` (0-based): quando o mesmo driver mandou mais de uma nota do mesmo CNPJ, numera a partir da 2ª.
+ */
+export function notaFiscalFileName(
+  driverName: string,
+  emitterLabel: string,
+  periodLabel: string,
+  index = 0,
+  ext = 'jpg',
+): string {
+  const clean = (s: string) =>
+    (s || '').normalize('NFC').replace(/[/\\:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim() || 'sem-nome';
+  const cleanExt = (ext || 'jpg').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'jpg';
+  const suffix = index > 0 ? ` (${index + 1})` : '';
+  return `${clean(driverName)} - ${clean(emitterLabel)} - ${clean(periodLabel)}${suffix}.${cleanExt}`;
+}
+
 // ─── Modelo de linha editavel da grade ───────────────────────────────────────
 
 /** Uma rota/cidade do driver, com os pacotes por plataforma daquela rota. */

@@ -450,6 +450,60 @@ export const setPlatformNotaEmitter = async (
   if (error) throwDbError(error);
 };
 
+// ─── Notas fiscais recebidas (painel) — Fase 3e ──────────────────────────────
+
+/** Uma nota recebida (arquivo) com o driver e o CNPJ resolvidos, pro painel. */
+export interface NotaFiscalFileRow {
+  id: string;
+  driverId: string;
+  driverName: string;
+  emitterId: string;
+  emitterLabel: string;
+  emitterCnpj: string;
+  filePath: string;
+  fileType: string | null;
+  originalFilename: string | null;
+  status: string;
+  uploadedAt: string;
+}
+
+export const listNotaFiscalFiles = async (companyId: string, periodId: string): Promise<NotaFiscalFileRow[]> => {
+  const { data, error } = await supabase
+    .from('driverpay_nota_fiscal_files')
+    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, uploaded_at, driverpay_drivers(name), driverpay_nota_emitters(label, cnpj)')
+    .eq('company_id', companyId)
+    .eq('period_id', periodId)
+    .order('uploaded_at', { ascending: true });
+  if (error) throwDbError(error);
+  return (data ?? []).map((row) => {
+    const r = row as Record<string, unknown>;
+    const drvRaw = r.driverpay_drivers;
+    const emRaw = r.driverpay_nota_emitters;
+    const drv = (Array.isArray(drvRaw) ? drvRaw[0] : drvRaw) as { name?: string } | null;
+    const em = (Array.isArray(emRaw) ? emRaw[0] : emRaw) as { label?: string; cnpj?: string } | null;
+    return {
+      id: String(r.id),
+      driverId: String(r.driver_id),
+      driverName: drv?.name ?? '(sem nome)',
+      emitterId: String(r.nota_emitter_id),
+      emitterLabel: em?.label ?? '',
+      emitterCnpj: em?.cnpj ?? '',
+      filePath: String(r.file_path),
+      fileType: (r.file_type as string | null) ?? null,
+      originalFilename: (r.original_filename as string | null) ?? null,
+      status: (r.status as string) ?? 'recebida',
+      uploadedAt: String(r.uploaded_at),
+    };
+  });
+};
+
+/** Link assinado (bucket privado) pra ver/baixar uma nota. TTL curto. */
+export const notaFiscalFileUrl = async (path: string, expiresSec = 300): Promise<string> => {
+  const { data, error } = await supabase.storage.from('driverpay-nota-fiscais').createSignedUrl(path, expiresSec);
+  if (error || !data?.signedUrl) throw new Error(`Falha ao gerar link da nota${error ? ': ' + error.message : ''}`);
+  return data.signedUrl;
+};
+
 // ─── Aviso de corte das notas (faixa dos espelhos; 1 linha por empresa) ──────
 
 export const getMirrorCutoffNotice = async (companyId: string): Promise<MirrorCutoffNotice | null> => {

@@ -63,6 +63,7 @@ import { ZapexModal } from './ZapexModal';
 import { GroupManagerModal } from './GroupManagerModal';
 import { PlatformModal } from './PlatformModal';
 import { EmittersModal } from './EmittersModal';
+import { NotasRecebidasModal } from './NotasRecebidasModal';
 import { PeriodCreateModal } from './PeriodCreateModal';
 import { PeriodConcludeModal } from './PeriodConcludeModal';
 import { PeriodEditModal } from './PeriodEditModal';
@@ -135,6 +136,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [showGroups, setShowGroups] = useState(false);
   const [showPlatform, setShowPlatform] = useState(false);
   const [showEmitters, setShowEmitters] = useState(false);
+  const [showNotas, setShowNotas] = useState(false);
   const [showCreatePeriod, setShowCreatePeriod] = useState(false);
   const [showConclude, setShowConclude] = useState(false);
   const [editPeriodModal, setEditPeriodModal] = useState<{ period: DriverPaymentPeriod; confirmDelete: boolean } | null>(
@@ -925,6 +927,15 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               CNPJs / Notas
             </button>
           )}
+          {selectedPeriod && canMirror && (
+            <button
+              type="button"
+              onClick={() => setShowNotas(true)}
+              className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+            >
+              Notas recebidas
+            </button>
+          )}
           {hasPermission('driverpay.createDriver') && (
             <>
               <button
@@ -1116,6 +1127,15 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           platforms={platforms}
           onClose={() => setShowEmitters(false)}
           onSaved={refresh}
+        />
+      )}
+
+      {showNotas && selectedPeriod && (
+        <NotasRecebidasModal
+          companyId={company.id}
+          periodId={selectedPeriod.id}
+          periodLabel={selectedPeriod.label}
+          onClose={() => setShowNotas(false)}
         />
       )}
 
