@@ -2,9 +2,22 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-07-19**.
+> Última atualização: **2026-07-23**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 23/07 (kickoff App do Entregador):** começou a feature do app onde o driver
+loga, vê espelhos por quinzena e anexa NF por CNPJ (+ painel publica espelho, filtra por
+plataforma, baixa NFs em massa). Decisões travadas: login por CPF, web primeiro (APK depois
+via Capacitor já instalado), espelho filtrado mostra só o valor da plataforma, CNPJs
+configuráveis, driver nunca fala com o banco (edge fn `driver-public-api` + secret dedicado),
+ZERO mudança na RLS/tabelas do 2626. **Operação em prod feita:** backfill de CPF — 97 drivers
+ativos tinham 0 CPF; importados **91/97** da planilha iMile (`br_driver_2026-07-22`) por nome
+exato, guardado (`cpf is null`) e reversível (`backups/2026-07-23-cpf-import/`); **6 sem CPF**
+aguardam 2ª fonte. Base do login (migration + edge fn) **em standby**: Victor optou por esperar
+o plano refinado da nuvem (Ultraplan) antes de construir. Plano local:
+`~/.claude/plans/vamos-precisar-fazer-um-tranquil-hopper.md`.
+Último checkpoint: `CHECKPOINT_SESSAO_2026-07-23.md`.
 
 **Sessão noite 20/07 (bugs de produção do ponto):** facial da Caratinga estava
 DESLIGADA desde 19/07 02:24 (spec 24 interrompido) → religada + spec blindado;
@@ -29,7 +42,8 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-20-noite.md` | **Mais recente.** Bugs de prod do ponto: facial desligada por spec (religada+blindada), Pablo sem GPS (fix msg), saída fantasma 12s = UX (2 registros limpos c/ backup); pendências de feature | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-23.md` | **Mais recente.** Kickoff App do Entregador: decisões (login CPF, web-first, filtro por plataforma, CNPJs configuráveis) + backfill de CPF em prod (91/97, reversível); base do login em standby aguardando plano da nuvem | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-20-noite.md` | Bugs de prod do ponto: facial desligada por spec (religada+blindada), Pablo sem GPS (fix msg), saída fantasma 12s = UX (2 registros limpos c/ backup); pendências de feature | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-20.md` | Valor separado por plataforma + multi-rota sem taxa média + fix race do corte; specs 61/unit novos | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-18.md` | Grupos: vínculo exclusivo + busca por rota; retroativo dos 17 commits de melhorias do painel (17-18/07) | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-19.md` | Madrugada autônoma: F8 concluída, 4 features dos espelhos entregues, aprendizados de infra (Vite WSL!) | 🟢 ATIVO |
