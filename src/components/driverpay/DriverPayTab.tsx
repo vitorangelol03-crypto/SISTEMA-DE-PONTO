@@ -62,6 +62,7 @@ import { ValeModal } from './ValeModal';
 import { ZapexModal } from './ZapexModal';
 import { GroupManagerModal } from './GroupManagerModal';
 import { PlatformModal } from './PlatformModal';
+import { EmittersModal } from './EmittersModal';
 import { PeriodCreateModal } from './PeriodCreateModal';
 import { PeriodConcludeModal } from './PeriodConcludeModal';
 import { PeriodEditModal } from './PeriodEditModal';
@@ -133,6 +134,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [zapexRowId, setZapexRowId] = useState<string | null>(null);
   const [showGroups, setShowGroups] = useState(false);
   const [showPlatform, setShowPlatform] = useState(false);
+  const [showEmitters, setShowEmitters] = useState(false);
   const [showCreatePeriod, setShowCreatePeriod] = useState(false);
   const [showConclude, setShowConclude] = useState(false);
   const [editPeriodModal, setEditPeriodModal] = useState<{ period: DriverPaymentPeriod; confirmDelete: boolean } | null>(
@@ -914,6 +916,15 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               <Plus className="w-4 h-4" /> Adicionar plataforma
             </button>
           )}
+          {hasPermission('driverpay.managePlatforms') && (
+            <button
+              type="button"
+              onClick={() => setShowEmitters(true)}
+              className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+            >
+              CNPJs / Notas
+            </button>
+          )}
           {hasPermission('driverpay.createDriver') && (
             <>
               <button
@@ -1094,6 +1105,16 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           drivers={drivers}
           platforms={platforms}
           onClose={() => setShowPlatform(false)}
+          onSaved={refresh}
+        />
+      )}
+
+      {showEmitters && (
+        <EmittersModal
+          companyId={company.id}
+          userId={userId}
+          platforms={platforms}
+          onClose={() => setShowEmitters(false)}
           onSaved={refresh}
         />
       )}

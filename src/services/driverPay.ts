@@ -49,6 +49,8 @@ export interface DriverPlatform {
   mirror_notice: string | null;
   /** Espelhos: valor da plataforma sai numa faixa separada, FORA do total exibido (acoplado ao destaque). */
   mirror_separate_value: boolean;
+  /** Nota Fiscal (Fase 3): CNPJ/emitente que fatura esta plataforma (null = nao vinculada). */
+  nota_emitter_id: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -221,6 +223,7 @@ function mapPlatform(r: Record<string, unknown>): DriverPlatform {
     highlight_mirror: Boolean(r.highlight_mirror),
     mirror_notice: (r.mirror_notice as string | null) ?? null,
     mirror_separate_value: Boolean(r.mirror_separate_value),
+    nota_emitter_id: (r.nota_emitter_id as string | null) ?? null,
   };
 }
 function mapPackage(r: Record<string, unknown>): DriverPaymentPackage {
@@ -374,6 +377,76 @@ export const updatePlatform = async (
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.managePlatforms');
   const { error } = await supabase.from('driverpay_platforms').update(updates).eq('id', id);
+  if (error) throwDbError(error);
+};
+
+// ─── Emitentes (CNPJs) de nota fiscal — Fase 3 ───────────────────────────────
+
+/** Um CNPJ para o qual o driver emite nota (ex.: "iMile", "Shopee/Anjun/Loggi"). */
+export interface DriverNotaEmitter {
+  id: string;
+  company_id: string;
+  cnpj: string;
+  label: string;
+  sort_order: number;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export const getNotaEmitters = async (companyId: string, onlyActive = true): Promise<DriverNotaEmitter[]> => {
+  let query = supabase.from('driverpay_nota_emitters').select('*').eq('company_id', companyId);
+  if (onlyActive) query = query.eq('active', true);
+  const { data, error } = await query.order('sort_order', { ascending: true }).order('label', { ascending: true });
+  if (error) throwDbError(error);
+  return (data ?? []) as DriverNotaEmitter[];
+};
+
+export const createNotaEmitter = async (
+  companyId: string,
+  userId: string,
+  data: { cnpj: string; label: string; sort_order?: number },
+): Promise<DriverNotaEmitter> => {
+  await ensurePerm(userId, 'driverpay.managePlatforms');
+  const { data: row, error } = await supabase
+    .from('driverpay_nota_emitters')
+    .insert([{
+      company_id: companyId,
+      cnpj: data.cnpj.trim(),
+      label: data.label.trim(),
+      sort_order: data.sort_order ?? 0,
+      created_by: userId,
+    }])
+    .select()
+    .single();
+  if (error) throwDbError(error);
+  return row as DriverNotaEmitter;
+};
+
+export const updateNotaEmitter = async (
+  id: string,
+  userId: string,
+  updates: Partial<Pick<DriverNotaEmitter, 'cnpj' | 'label' | 'sort_order' | 'active'>>,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.managePlatforms');
+  const clean = { ...updates };
+  if (typeof clean.cnpj === 'string') clean.cnpj = clean.cnpj.trim();
+  if (typeof clean.label === 'string') clean.label = clean.label.trim();
+  const { error } = await supabase.from('driverpay_nota_emitters').update(clean).eq('id', id);
+  if (error) throwDbError(error);
+};
+
+/** Vincula (ou desvincula, com null) uma plataforma a um emitente/CNPJ. */
+export const setPlatformNotaEmitter = async (
+  platformId: string,
+  userId: string,
+  emitterId: string | null,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.managePlatforms');
+  const { error } = await supabase
+    .from('driverpay_platforms')
+    .update({ nota_emitter_id: emitterId })
+    .eq('id', platformId);
   if (error) throwDbError(error);
 };
 

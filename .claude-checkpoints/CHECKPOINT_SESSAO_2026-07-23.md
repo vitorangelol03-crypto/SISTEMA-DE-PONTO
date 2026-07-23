@@ -98,10 +98,15 @@ a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
 - **Fase 3 (Nota Fiscal) iniciada — Victor escolheu.** Migration `20260723130000_driverpay_nota_fiscal.sql`
   ESCRITA (arquivo, NÃO aplicada): tabelas `driverpay_nota_emitters` (CNPJs) + `driverpay_nota_fiscal_files`
   + coluna `driverpay_platforms.nota_emitter_id` + bucket privado `driverpay-nota-fiscais`. RLS empresa+2626;
-  idempotente. **Aguardando OK do Victor pra APLICAR** (como na Fase 0).
-- **Fila Fase 3 (depois de aplicar):** (3b) emitentes CRUD + vínculo plataforma→CNPJ no painel;
-  (3c) edge fn nf-slots/nf-upload/nf-list; (3d) tela "Anexar nota" no app (por CNPJ, câmera, compressão);
-  (3e) "Notas recebidas" + **baixar (individual + .zip nomeado driver+CNPJ+quinzena)**. Depois Fase 1b + Fase 4.
+  idempotente. **APLICADA + verificada em prod (2026-07-23, OK do Victor):** 2 tabelas + coluna + bucket
+  privado + 2 RLS + storage policy conferidos; nada existente tocado.
+- **3b FEITO (tsc/build ok):** serviço de emitentes em `driverPay.ts` (`DriverNotaEmitter`,
+  getNotaEmitters/createNotaEmitter/updateNotaEmitter/setPlatformNotaEmitter; `DriverPlatform` ganhou
+  `nota_emitter_id`) + `EmittersModal.tsx` (cadastra CNPJs + vincula cada plataforma a um CNPJ) +
+  botão "CNPJs / Notas" na toolbar do `DriverPayTab`.
+- **Fila Fase 3:** (3c) edge fn nf-slots/nf-upload/nf-list; (3d) tela "Anexar nota" no app (por CNPJ,
+  câmera, compressão); (3e) "Notas recebidas" no painel + **baixar (individual + .zip nomeado
+  driver+CNPJ+quinzena)**. Depois Fase 1b (filtro de plataforma no envio) + Fase 4 (líder).
 
 ## 5. Validação desta sessão
 CPF import: 1 UPDATE de dado em prod, verificado e reversível (`backups/2026-07-23-cpf-import/`).
