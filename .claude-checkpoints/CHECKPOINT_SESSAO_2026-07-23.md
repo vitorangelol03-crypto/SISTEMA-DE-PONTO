@@ -108,10 +108,14 @@ a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
   registra+marca check antigo)/`nf-list` + `periodId` no `my-mirrors`. **Regressão login 8/8 na v4** (não quebrou Fase 0).
 - **3d FEITO (commit; tsc/build ok):** no app, cada espelho tem "Anexar nota" → tela por CNPJ (nf-slots),
   foto pela câmera comprimida (canvas jpeg 1600px/q0.7) → nf-upload → lista de enviadas. Lado do DRIVER da NF completo.
-- **Fila Fase 3:** (3e) painel "Notas recebidas" (matriz driver×CNPJ) + **baixar (individual + .zip nomeado
-  driver+CNPJ+quinzena)** — precisa de `jszip` (NÃO instalado; adicionar). Depois Fase 1b (filtro no envio) + Fase 4 (líder).
-- **Testes LIVE que dependem do deploy do Victor:** ciclo publicar→app (espelho aparecer no app) e NF (driver
-  sobe foto real → some no painel). Backend validado por regressão 8/8; UI por tsc/build/smoke.
+- **3e FEITO → FASE 3 COMPLETA (commit; tsc/build ok, 13 unit):** `notaFiscalFileName` (puro, 6 testes) +
+  `listNotaFiscalFiles`/`notaFiscalFileUrl` (signed URL) + `NotasRecebidasModal` (lista, ver, baixar 1 a 1
+  nomeado, baixar todas `.zip` via **jszip 3.10.1** — dep nova) + botão "Notas recebidas" no `DriverPayTab`.
+- **Restante da feature:** Fase 1b (multi-seleção de plataforma no diálogo, usa `allowedPlatformNames` já pronto)
+  + Fase 4 (líder de grupo: campo em `driverpay_groups` + envio de grupo só pro líder). São refinamentos.
+- **PENDENTE DO VICTOR:** (1) `git push` + deploy Vercel pra testar o app no celular (login/ver espelho/anexar
+  nota) e o ciclo publicar→app AO VIVO; (2) cadastrar os CNPJs no painel ("CNPJs / Notas") + vincular
+  plataformas; (3) os 6 CPFs que faltam (export `br_driver_2026-07-24`). Backend validado por regressão 8/8; UI por tsc/build/smoke.
 
 ## 5. Validação desta sessão
 CPF import: 1 UPDATE de dado em prod, verificado e reversível (`backups/2026-07-23-cpf-import/`).

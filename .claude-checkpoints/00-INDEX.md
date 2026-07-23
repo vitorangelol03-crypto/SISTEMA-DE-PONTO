@@ -28,9 +28,11 @@ botão "Publicar no app" → `publishDriverMirror` (1 PDF/driver → bucket → 
 **Fase 3 (NF) migration APLICADA em prod** (emitentes + arquivos NF + coluna platforms + bucket privado
 `driverpay-nota-fiscais`, verificado). **Fase 3b FEITO** (commit `5f73235`): cadastro de CNPJs + vínculo
 plataforma→CNPJ no painel (`EmittersModal`). **3c FEITO** (edge fn v4: nf-slots/upload/list + periodId no my-mirrors;
-regressão login 8/8). **3d FEITO** (app: "Anexar nota" por CNPJ, câmera+compressão → nf-upload). Próximo:
-3e "Notas recebidas" no painel + baixar (.zip — precisa jszip) → Fase 1b (filtro no envio) → Fase 4 (líder).
-Live E2E (publicar→app; NF foto real) pendente de deploy Vercel do Victor.
+regressão login 8/8). **FASE 3 COMPLETA** (3d app "Anexar nota" + 3e painel "Notas recebidas" + baixar
+individual/.zip nomeado via jszip). App do entregador (login/ver espelho/anexar nota) + publicar espelho +
+notas recebidas: TUDO construído e validado (tsc/build/unit/regressão). Restam refinamentos: Fase 1b (filtro
+de plataforma no envio) e Fase 4 (líder de grupo). PENDENTE DO VICTOR: push+deploy Vercel p/ testar ao vivo no
+celular; cadastrar CNPJs no painel; 6 CPFs faltantes. `feature/app-entregador` (20 commits, nada pushado).
 Ciclo publicar→app ainda não testado ao vivo (precisa deploy Vercel ou login 2626 do Victor).
 Plano local: `~/.claude/plans/vamos-precisar-fazer-um-tranquil-hopper.md`.
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-23.md`.
