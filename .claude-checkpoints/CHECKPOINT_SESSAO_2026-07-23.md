@@ -90,10 +90,15 @@ a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
   CPF real + 1234 → tela "criar senha"; sem erro de runtime. Registro de teste do Romário apagado.
 - **Ajuste visual pedido pelo Victor (commit `81a953b`):** cor dominante AZUL (era laranja) + ícone
   de dinheiro `CircleDollarSign` no lugar do caminhão, na tela `/driver`. tsc 0 + build ok + print conferido.
-- **Próximo — Fase 1 (painel publica espelho):** botão "Publicar no app" no `DriverMirrorPreviewDialog`
-  + multi-seleção de plataforma (filtro D3, montado no `DriverPayTab` que tem rows+platforms) →
-  `publishMirror` novo no `driverPay.ts` (gera PDF Blob via generate*Pdf → upload no bucket privado
-  `driverpay-mirrors` → insert em `driverpay_mirror_publications`). Depois: Fase 3 (NF) e Fase 4 (líder).
+- **Fase 1a FEITA (commit `a67d870`; tsc 0 + build ok):** `publishDriverMirror` em `driverPay.ts`
+  (gera Blob → upload no bucket privado `driverpay-mirrors` → troca/insere publicação, 1 por
+  período+driver). `DriverPayTab` guarda os drivers cobertos (individual/grupo/massa/seleção) e
+  `onPublish` gera **1 PDF individual por driver** e publica (erro por-driver + resumo). Botão verde
+  **"Publicar no app"** no `DriverMirrorPreviewDialog`. Fluxo de download atual intacto.
+- **Próximo:** (a) E2E do ciclo completo publicar→app (precisa login 2626 no painel, escreve
+  publicação de teste em prod — limpar depois) OU Victor testa após deploy Vercel; (b) **Fase 1b**:
+  multi-seleção de plataforma no diálogo (usa `allowedPlatformNames`, já pronto nos builders);
+  (c) Fase 3 (NF: anexar + baixar) e Fase 4 (líder de grupo).
 
 ## 5. Validação desta sessão
 CPF import: 1 UPDATE de dado em prod, verificado e reversível (`backups/2026-07-23-cpf-import/`).

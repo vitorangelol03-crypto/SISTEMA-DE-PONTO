@@ -23,8 +23,9 @@ por plataforma; commit `1f3805b`; validado tsc 0 / build ok / 111 unit). Próxim
 `driver-public-api` v2 ACTIVE, `DRIVER_JWT_SECRET` setado pelo Victor): **login testado com driver
 real (Romário) 8/8 cenários OK** (login/troca senha/bloqueios); registro de teste apagado.
 **Fase 2 FEITA** (app `/driver`: login/troca/ver espelho — commit `6408062`), **smoke no navegador OK**,
-e **visual ajustado p/ AZUL + ícone $** (commit `81a953b`, pedido do Victor). Próximo: **Fase 1**
-(painel "Publicar no app" + filtro D3 — via `publishMirror` novo, gera Blob→bucket→publicação) → Fase 3 (NF) → Fase 4 (líder).
+e **visual ajustado p/ AZUL + ícone $** (commit `81a953b`). **Fase 1a FEITA** (commit `a67d870`):
+botão "Publicar no app" → `publishDriverMirror` (1 PDF/driver → bucket → publicação); tsc/build ok.
+Próximo: E2E ciclo completo (ou deploy p/ Victor testar) → Fase 1b (filtro de plataforma no diálogo) → Fase 3 (NF) → Fase 4 (líder).
 Plano local: `~/.claude/plans/vamos-precisar-fazer-um-tranquil-hopper.md`.
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-23.md`.
 
