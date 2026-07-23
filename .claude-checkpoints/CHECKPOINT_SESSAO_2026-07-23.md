@@ -64,8 +64,20 @@ a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
   atual; Zapex conta como plataforma; descontos/vales seguem abatidos (decisão de exibição na Fase 1).
   8 testes novos (`tests/unit/driverPayPlatformFilter.spec.ts`). **Validação: tsc 0, build ok,
   111 unit verdes** (novos + regressão de espelho). Commit de docs: `1c3734c`.
-- **Próximo:** Fase 0 — escrever migrations (tabelas novas) + edge fn `driver-public-api` como
-  ARQUIVOS. **Aplicar migration/criar bucket/deploy/push = só com OK do Victor** (nada em prod ainda).
+- **Fase 0 ESCRITA** (arquivos, NÃO aplicados — commit `433932c`):
+  - Migration `supabase/migrations/20260723120000_driverpay_app_foundation.sql`: tabela
+    `driverpay_driver_auth` (senha bcrypt do driver; RLS **deny-all** a authenticated — só
+    service_role) + `driverpay_mirror_publications` (RLS empresa+2626) + bucket privado
+    `driverpay-mirrors` (policy só 9999/2626; driver lê por signed URL). Padrão copiado da
+    migration de referência (header aditivo, índices, comments, rollback).
+  - Edge fn `supabase/functions/driver-public-api/index.ts`: login CPF+senha (1234 lazy + troca
+    obrigatória), change-password (proíbe 1234, lockout 5 erros/15min), my-mirrors, my-mirror-url
+    (link assinado + marca visto). Token HS256 com **`DRIVER_JWT_SECRET` dedicado** (não autentica
+    no banco). driver_id sempre do token verificado. Deno não instalado local → valida no deploy.
+- **FREIO / próximo:** pra TESTAR o login de verdade preciso: aplicar a migration + criar bucket
+  + `supabase functions deploy driver-public-api --no-verify-jwt` + setar `DRIVER_JWT_SECRET` —
+  **tudo só com OK do Victor** (backup antes). Em paralelo dá pra seguir escrevendo Fase 1
+  (painel "Publicar no app" + filtro) como arquivos, sem tocar em prod.
 
 ## 5. Validação desta sessão
 CPF import: 1 UPDATE de dado em prod, verificado e reversível (`backups/2026-07-23-cpf-import/`).
