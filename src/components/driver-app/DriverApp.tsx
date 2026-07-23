@@ -6,7 +6,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { Truck, LogOut, Eye, FileText, KeyRound } from 'lucide-react';
+import { CircleDollarSign, LogOut, Eye, FileText, KeyRound } from 'lucide-react';
 import {
   driverLogin, driverChangePassword, driverMyMirrors, driverMirrorUrl,
   getDriverToken, getDriverName, setDriverSession, clearDriverSession,
@@ -16,7 +16,7 @@ import {
 type Screen = 'login' | 'change' | 'mirrors';
 
 const Spinner = ({ light = false }: { light?: boolean }) => (
-  <div className={`animate-spin rounded-full h-5 w-5 border-b-2 ${light ? 'border-white' : 'border-orange-600'}`} />
+  <div className={`animate-spin rounded-full h-5 w-5 border-b-2 ${light ? 'border-white' : 'border-blue-600'}`} />
 );
 
 function fmtDate(iso: string | null): string {
@@ -121,11 +121,11 @@ export function DriverApp() {
   // ─── LOGIN ──────────────────────────────────────────────────────────────────
   if (screen === 'login') {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-orange-50 to-gray-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-100 flex items-center justify-center p-4">
         <form onSubmit={handleLogin} className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-6 space-y-5">
           <div className="text-center space-y-1">
-            <div className="mx-auto w-14 h-14 rounded-2xl bg-orange-600 flex items-center justify-center">
-              <Truck className="text-white" size={30} />
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center">
+              <CircleDollarSign className="text-white" size={30} />
             </div>
             <h1 className="text-xl font-bold text-gray-800">Meus Pagamentos</h1>
             <p className="text-sm text-gray-500">Entre com seu CPF para ver seus espelhos.</p>
@@ -136,7 +136,7 @@ export function DriverApp() {
               value={cpf} onChange={(e) => setCpf(e.target.value)}
               inputMode="numeric" autoComplete="username" maxLength={14}
               placeholder="Somente numeros"
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             />
           </div>
           <div>
@@ -144,11 +144,11 @@ export function DriverApp() {
             <input
               type="password" value={password} onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password" placeholder="Sua senha (primeira vez: 1234)"
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             />
           </div>
           <button type="submit" disabled={busy}
-            className="w-full py-3 rounded-lg bg-orange-600 text-white font-semibold hover:bg-orange-700 disabled:opacity-60 flex items-center justify-center gap-2">
+            className="w-full py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-60 flex items-center justify-center gap-2">
             {busy ? <Spinner light /> : 'Entrar'}
           </button>
           <p className="text-xs text-center text-gray-400">No primeiro acesso a senha e 1234 e voce troca em seguida.</p>
@@ -160,10 +160,10 @@ export function DriverApp() {
   // ─── TROCAR SENHA (obrigatoria no 1o acesso) ─────────────────────────────────
   if (screen === 'change') {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-orange-50 to-gray-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-100 flex items-center justify-center p-4">
         <form onSubmit={handleChange} className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-6 space-y-5">
           <div className="text-center space-y-1">
-            <div className="mx-auto w-14 h-14 rounded-2xl bg-orange-600 flex items-center justify-center">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center">
               <KeyRound className="text-white" size={28} />
             </div>
             <h1 className="text-xl font-bold text-gray-800">Crie sua senha</h1>
@@ -175,16 +175,16 @@ export function DriverApp() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Nova senha</label>
             <input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)}
               autoComplete="new-password" placeholder="Ao menos 4 caracteres"
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none" />
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Repita a senha</label>
             <input type="password" value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)}
               autoComplete="new-password" placeholder="Digite de novo"
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none" />
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
           </div>
           <button type="submit" disabled={busy}
-            className="w-full py-3 rounded-lg bg-orange-600 text-white font-semibold hover:bg-orange-700 disabled:opacity-60 flex items-center justify-center gap-2">
+            className="w-full py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-60 flex items-center justify-center gap-2">
             {busy ? <Spinner light /> : 'Salvar senha'}
           </button>
         </form>
@@ -195,15 +195,15 @@ export function DriverApp() {
   // ─── LISTA DE ESPELHOS ───────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-orange-600 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+      <header className="bg-blue-600 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2">
-          <Truck size={22} />
+          <CircleDollarSign size={22} />
           <div className="leading-tight">
             <div className="font-semibold text-sm">Meus Pagamentos</div>
-            {driverName && <div className="text-orange-100 text-xs">{driverName}</div>}
+            {driverName && <div className="text-blue-100 text-xs">{driverName}</div>}
           </div>
         </div>
-        <button onClick={logout} className="flex items-center gap-1 text-sm bg-orange-700/60 hover:bg-orange-700 rounded-lg px-3 py-1.5">
+        <button onClick={logout} className="flex items-center gap-1 text-sm bg-blue-700/60 hover:bg-blue-700 rounded-lg px-3 py-1.5">
           <LogOut size={16} /> Sair
         </button>
       </header>
@@ -234,7 +234,7 @@ export function DriverApp() {
               {m.viewedAt && <div className="text-[11px] text-green-600 mt-0.5">Ja visualizado</div>}
             </div>
             <button onClick={() => handleView(m.id)} disabled={opening === m.id}
-              className="shrink-0 flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg px-3 py-2">
+              className="shrink-0 flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg px-3 py-2">
               {opening === m.id ? <Spinner light /> : <><Eye size={16} /> Ver</>}
             </button>
           </div>
