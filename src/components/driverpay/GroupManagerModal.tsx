@@ -12,6 +12,7 @@ import {
   addDriverToGroup,
   removeDriverFromGroup,
   applyGroupRate,
+  setGroupLeader,
 } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
 
@@ -150,6 +151,18 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
     } catch (e) {
       console.error('Erro ao aplicar valor do grupo:', e);
       toast.error(e instanceof Error ? e.message : 'Erro ao aplicar valor do grupo');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSetLeader = async (group: DriverGroup, driverId: string | null) => {
+    setBusy(true);
+    try {
+      await setGroupLeader(group.id, userId, driverId);
+      await onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não consegui definir o líder');
     } finally {
       setBusy(false);
     }
@@ -324,6 +337,21 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
 
                   {isExpanded && (
                     <div className="p-3 space-y-2">
+                      <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-md p-2">
+                        <span className="text-xs font-medium text-gray-700 whitespace-nowrap">Líder (recebe o PDF do grupo no app):</span>
+                        <select
+                          value={group.leader_driver_id ?? ''}
+                          disabled={busy}
+                          onChange={(e) => handleSetLeader(group, e.target.value || null)}
+                          className="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 rounded-md text-sm"
+                        >
+                          <option value="">— sem líder —</option>
+                          {members.map((id) => {
+                            const d = drivers.find((dr) => dr.id === id);
+                            return <option key={id} value={id}>{d?.name ?? id}</option>;
+                          })}
+                        </select>
+                      </div>
                       <input
                         type="text"
                         value={memberSearch}

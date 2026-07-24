@@ -78,6 +78,8 @@ export interface DriverGroup {
   name: string;
   description: string | null;
   default_rate: number | null;
+  /** Fase 4: líder do grupo — só ele recebe o PDF do grupo publicado no app (null = sem líder). */
+  leader_driver_id: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -774,6 +776,13 @@ export const updateGroup = async (
 export const deleteGroup = async (id: string, userId: string): Promise<void> => {
   await ensurePerm(userId, 'driverpay.manageGroups');
   const { error } = await supabase.from('driverpay_groups').delete().eq('id', id);
+  if (error) throwDbError(error);
+};
+
+/** Define (ou remove, com null) o líder do grupo — quem recebe o PDF do grupo no app (Fase 4). */
+export const setGroupLeader = async (groupId: string, userId: string, driverId: string | null): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.manageGroups');
+  const { error } = await supabase.from('driverpay_groups').update({ leader_driver_id: driverId }).eq('id', groupId);
   if (error) throwDbError(error);
 };
 

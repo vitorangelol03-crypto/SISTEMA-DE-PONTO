@@ -37,7 +37,7 @@ import {
   publishDriverMirror,
 } from '../../services/driverPay';
 import { exportDriverGeneralReportExcel } from '../../utils/driverReport';
-import { generateDriverMirrorPdf } from '../../utils/driverMirrorPdf';
+import { generateDriverMirrorPdf, generateDriverGroupMirrorPdf } from '../../utils/driverMirrorPdf';
 import {
   DriverRowData,
   RowHandlers,
@@ -150,6 +150,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // Drivers cobertos pelo espelho aberto — usados pra PUBLICAR no app (1 PDF por driver).
   const [publishRows, setPublishRows] = useState<DriverRowData[]>([]);
   const [publishScope, setPublishScope] = useState<'individual' | 'group' | 'selection'>('individual');
+  // Fase 4: contexto do grupo aberto (nome/id/líder) — envio de grupo vai só pro líder.
+  const [publishGroupInfo, setPublishGroupInfo] = useState<{ groupName: string; groupId: string | null; leaderId: string | null } | null>(null);
 
   // Refs para leitura estavel em callbacks assincronos
   const driversRef = useRef<Driver[]>([]);
@@ -525,11 +527,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     (groupName: string, groupRows: DriverRowData[]) => {
       if (!company || !selectedPeriod) return;
       const data = buildGroupMirrorData(groupName, groupRows, platformsRef.current, company, selectedPeriod);
+      const grp = groups.find((g) => g.name === groupName);
       setPublishRows(groupRows);
       setPublishScope('group');
+      setPublishGroupInfo({ groupName, groupId: grp?.id ?? null, leaderId: grp?.leader_driver_id ?? null });
       setMirror({ mode: 'group', data });
     },
-    [company, selectedPeriod],
+    [company, selectedPeriod, groups],
   );
 
   const handlers: RowHandlers = useMemo(
@@ -673,6 +677,30 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       }
       const allowedSet = allowed && allowed.length > 0 ? new Set(allowed) : undefined;
       const filter = allowed && allowed.length > 0 ? allowed : null;
+
+      // Fase 4: envio de GRUPO = 1 PDF do grupo, só pro LÍDER (regra do Victor).
+      if (publishScope === 'group') {
+        const info = publishGroupInfo;
+        if (!info?.leaderId) {
+          toast.error('Defina o líder do grupo em "Gerenciar grupos" antes de publicar no app.');
+          return;
+        }
+        try {
+          const data = buildGroupMirrorData(info.groupName, targets, platformsRef.current, company, selectedPeriod, allowedSet);
+          const blob = await generateDriverGroupMirrorPdf(data, { compact: false });
+          await publishDriverMirror({
+            companyId: company.id, periodId: selectedPeriod.id, driverId: info.leaderId,
+            scope: 'group', groupId: info.groupId, platformFilter: filter, pdf: blob, userId,
+          });
+          toast.success('Espelho do grupo publicado para o líder.');
+          setMirror(null);
+        } catch (e) {
+          console.error('Falha ao publicar espelho de grupo', e);
+          toast.error('Não consegui publicar o espelho do grupo.');
+        }
+        return;
+      }
+
       let ok = 0;
       let fail = 0;
       for (const row of targets) {
@@ -698,7 +726,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       else toast.error('Não consegui publicar. Tente de novo.');
       if (fail === 0) setMirror(null);
     },
-    [company, selectedPeriod, publishRows, publishScope, userId],
+    [company, selectedPeriod, publishRows, publishScope, publishGroupInfo, userId],
   );
 
   const handleReport = async () => {
