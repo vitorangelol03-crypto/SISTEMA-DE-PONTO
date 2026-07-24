@@ -247,3 +247,13 @@ painel; **Validar/Recusar(motivo)/Excluir** cada nota; a coluna NF vira **"valid
   import (que também usa createDriver, linha ~1850). **E2E real:** criei "ZZZ TESTE FIX BUG" pelo painel → apareceu
   na hora → limpei. tsc 0 + build.
 - **Vanusa:** desbloqueada por dado (INSERT do pagamento dela no período aberto 58e39a99). Confirmado 1 pagamento.
+
+## 10. Prévia/PDF do espelho seguem os chips de plataforma (24/07, em PROD)
+
+Pedido do Victor: ao gerar espelho, a prévia mostra o total conforme as plataformas MARCADAS
+(antes os chips só filtravam o envio ao app; prévia/PDF mostravam sempre todas). Commit `ac740f9`.
+- Aba: `rebuildMirror(allowed)` reconstrói o espelho aberto com `allowedPlatformNames` (mesmos builders
+  D3, todos os modos: individual/grupo/seleção/massa). Diálogo: `activeRequest` (reconstruído pela seleção)
+  na prévia E no "Gerar PDF"; publish já usava. Chips seguem listando TODAS (platformNamesOf do request orig).
+- E2E real: Adriano todas=R$2.787 → sem SHOPEE=R$216 (LOGGI+ANJUN), linha SHOPEE some + "pacotes por rota" cai.
+- tsc 0, build ok. Coerente: prévia = PDF = app.
