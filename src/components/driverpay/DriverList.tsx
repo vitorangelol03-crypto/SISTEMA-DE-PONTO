@@ -207,6 +207,13 @@ export const DriverList: React.FC<DriverListProps> = ({
   const groupMetric = (list: DriverRowData[], key: string): number => {
     if (key.startsWith('pl:')) return list.reduce((s, r) => s + platformPackages(r, key.slice(3)), 0);
     if (key === 'packages') return list.reduce((s, r) => s + computeRowTotals(r).totalPackages, 0);
+    if (key === 'nf') {
+      // Status da NF do grupo: 2 = tudo validado (ou sem nota esperada), 1 = parcial, 0 = nada validado.
+      // desc = validados primeiro; asc = quem falta validar primeiro. (todos os membros compartilham o progresso)
+      const nf = nfProgressByPayment?.get(list[0]?.paymentId);
+      if (!nf || nf.expected === 0) return 2;
+      return nf.complete ? 2 : nf.validated > 0 ? 1 : 0;
+    }
     const t = sumTotals(list);
     if (key === 'net') return t.net;
     if (key === 'zapex') return t.zapex;
@@ -593,6 +600,7 @@ export const DriverList: React.FC<DriverListProps> = ({
               <React.Fragment key={pl.id}>{groupSortBtn(`pl:${pl.name}`, pl.name, pl.color)}</React.Fragment>
             ))}
             {groupSortBtn('net', 'Total a receber')}
+            {groupSortBtn('nf', 'NF validada')}
           </div>
           <button
             type="button"
