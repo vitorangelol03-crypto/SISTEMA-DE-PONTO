@@ -213,5 +213,7 @@ painel; **Validar/Recusar(motivo)/Excluir** cada nota; a coluna NF vira **"valid
   - Puros/testáveis em `driverPayShared`: `groupReportUnits`, `buildLeaderReportRows`, `buildSimpleReportRows`,
     `stripAccents`. `driverReport`: `buildSimpleSheet` + `exportDriverSimpleReportExcel` + opção sem aba "Por
     Grupo" + rótulo "recebedor(es)". Substituiu o `buildReportRows` per-driver no `handleReport`.
-  - Validado: tsc 0, build ok, **600 unit** (7 novos). Falta: E2E baixando o .xlsx real (em seguida) + push/deploy.
+  - Validado: tsc 0, build ok, **600 unit** (7 novos) + **E2E real em PROD** (baixou geral+simples, abriu os .xlsx:
+    geral "52 recebedor(es)", dividido por rota; simples A=nome sem acento / B=net / C=nome da quinzena). Em PROD.
+  - Fix cosmético: nas linhas de continuação do bloco, a coluna GRUPO repete o grupo (era "Sem grupo").
 - **PENDENTE (fila):** painel responsivo (adiado); 6 CPFs; validar visualmente os relatórios amanhã.

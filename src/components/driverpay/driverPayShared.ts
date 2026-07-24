@@ -753,7 +753,8 @@ export function buildLeaderReportRows(
       out.push({
         name: first ? unit.recipient : '',
         route: rname,
-        group: first ? unit.group : '',
+        // Grupo repetido em todas as rotas do bloco (avulso = '' -> "Sem grupo"); nome só na 1ª.
+        group: unit.group,
         platforms: platformsRec,
         totalPackages: routeGross,
         discount: first ? discount : 0,
