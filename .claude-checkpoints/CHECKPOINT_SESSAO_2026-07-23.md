@@ -222,4 +222,9 @@ painel; **Validar/Recusar(motivo)/Excluir** cada nota; a coluna NF vira **"valid
   pra dentro sem encolher fonte. Simetria conferida (KPIs 5, filtros 3×2). Caber 100% as 14 colunas em ~1408px
   exigiria encolher fonte (perde legibilidade) OU esconder colunas (ex.: Zapex quando vazio) — deixei como opção
   pro Victor decidir.
-- **PENDENTE (fila):** 6 CPFs faltantes; validar visualmente relatórios/telas amanhã; (opcional) esconder Zapex vazio.
+- **Config de dado em PROD (24/07, OK do Victor):** todo grupo com **1 driver** → esse driver vira **líder**.
+  UPDATE em `driverpay_groups.leader_driver_id` p/ os **22 grupos de 1 membro** (todos estavam null; multi-driver
+  NÃO tocados). Verificado 22/22 líder=membro, 0 sem líder. Reversível (voltar os 22 p/ null). Afeta: espelho de
+  grupo→líder, anexo de nota do grupo, e recebedor no relatório.
+- **PENDENTE (fila):** líderes dos **22 grupos multi-driver** (decisão do Victor, "Gerenciar grupos"); 6 CPFs
+  faltantes; validar visualmente relatórios/telas amanhã; (opcional) esconder Zapex vazio na tabela.
