@@ -154,4 +154,45 @@ D3: tsc 0 + build ok + 111 unit verdes. Commits locais em `feature/app-entregado
   pushada; (b) 6 CPFs faltantes; (c) recursos ainda não feitos: painel responsivo + "pedir nota de novo"
   (rejeitar NF) + print da nota anexada no painel (Notas recebidas com uma nota).
 - **State:** `main` = `9c31db4` (origin, em produção). `feature/app-entregador` = `1dd484a` (local, 1 commit
-  à frente do main, NÃO pushado).
+  à frente do main, NÃO pushado). → SUPERSEDED pela §7.
+
+## 7. Madrugada 24/07 — validar/recusar/excluir nota + coluna NF por contagem (EM PROD)
+
+Pedido do Victor (com regras adicionadas ao longo): conectar as notas do app com a coluna NF do
+painel; **Validar/Recusar(motivo)/Excluir** cada nota; a coluna NF vira **"validadas/esperadas"**
+(verde só quando todas as CNPJs esperadas estão VALIDADAS). Commit `de630f5`, **em produção**
+(`main` = `de630f5`, Vercel bundle `index-DOEJvmp3.js`).
+
+- **Regras (travadas):** esperadas = nº de CNPJs distintos com pacote — **iMile(eMile)=1 CNPJ,
+  Shopee/Anjun/Loggi=outro** → 1 ou 2 notas (conferido no banco: eMile→53.824.315, resto→11.802.464).
+  **Ciente de GRUPO: só o líder anexa; as notas do grupo validam o grupo TODO** (grupo de 6 com 2
+  CNPJs → 2 validadas = os 6 verdes). Manual coexiste (clicar o selo marca "na mão" p/ quem manda
+  por fora). Recusar guarda motivo que o driver vê; Excluir apaga o registro (arquivo órfão no bucket).
+- **Banco:** migration `20260723160000` APLICADA (OK do Victor) — status ganha `validada` + `validated_at/by`
+  + `reject_reason` (aditivo, amplia o CHECK). RLS já permitia painel editar/apagar nota (policy ALL).
+- **Edge fn v5 (deployed, ACTIVE):** `nf-slots` ciente de grupo (líder vê CNPJs do grupo via
+  `driverpay_group_members`) + não conta 'rejeitada' como enviada + devolve `rejected`/`rejectReason`;
+  `nf-upload` NÃO marca mais `nota_fiscal_recebida` sozinho (quem deixa verde é a validação); `nf-list`
+  devolve `reject_reason`. Compatível com o app do Iago (campos novos, ignorados pelo antigo).
+- **Cálculo puro** em `driverPayShared.ts`: `expectedEmitterIds`, `computeNfProgress`,
+  `computeNfProgressByPayment` (group-aware, chave=grupo|paymentId). 11 unit novos.
+- **UI:** `NotasRecebidasModal` reescrito (agrupa por driver, status colorido, Validar/Recusar/Excluir);
+  coluna NF (`DriverRow` tabela + `DriverList` card + subtotal do grupo) = selo "validadas/esperadas";
+  app do driver (`DriverApp`) mostra "recusada: <motivo>, envie outra" e reabre o CNPJ.
+- **Validação:** tsc 0, build ok, **593 unit** (incl. os 11 do cálculo grupo/1-ou-2-CNPJ), edge fn HTTP
+  (Adriano = 2 slots pq tem iMile+outras), **E2E real com cliques**: subir nota → NF "0/2" → validar →
+  "1/2" → recusar c/ motivo → driver vê "recusada" e slot reabre (`sent:0, rejected:1, motivo`). Dado de
+  teste do Adriano limpo; **nota + auth REAIS do Iago preservados**.
+- **Também nesta madrugada:** despublicar espelho + resetar senha (§6) foram pra PROD (`main`=`48cee06`
+  antes desta). App do entregador em uso real (Iago logou/trocou senha).
+- **Status do grupo no cabeçalho (visão Grupos) + FILTROS + polish** (pedidos do Victor em seguida):
+  - Cabeçalho de cada grupo mostra sem abrir: **pacotes por plataforma** (chips coloridos), **NF do grupo**
+    (validadas/esperadas — "NF ok" verde ou "NF x/y — falta N" âmbar) e **espelho no app / não publicado**.
+  - **3 filtros novos** na aba (`DriverFilters` + `filteredRows` ciente de grupo): por **status de NF**
+    (falta/ok), por **espelho publicado** (sim/não), por **plataforma** (tem pacote). E2E real: filtro NF
+    "falta" reduz a lista (96/97). Barra de filtros reorganizada **simétrica** (6 filtros num grid 3×2 +
+    toggle Lista/Grupos à direita) a pedido do Victor ("simétrico e bonito").
+  - Validado: tsc 0, build ok, 593 unit, E2E real (grupos com status + os 3 filtros clicados).
+- **PENDENTE:** painel responsivo à resolução (adiado pelo Victor p/ depois); 6 CPFs faltantes.
+- **State final:** `main` publicado em produção; `feature/app-entregador` local. Edge fn `driver-public-api` v5.
+  (Commits desta madrugada: `1dd484a` despublicar/reset, `de630f5` validar/recusar NF, + status-grupo/filtros.)
