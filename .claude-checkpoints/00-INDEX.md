@@ -15,8 +15,10 @@ driver individual → membros receberam; aplicada a Opção A (só o LÍDER rece
 (3) **FEATURE recebedor diferente** (commit `3820842` + migration `20260724190000` em prod): cadastro
 do driver ganhou "Recebedor diferente" (nome+PIX); relatório GERAL ganhou coluna CHAVE PIX (última) e
 sai o nome do recebedor; SIMPLES virou A NOME|B VALOR|C CHAVE PIX|D OBS; espelho não muda. Validado
-tsc 0/build/571 unit/E2E real (downloads conferidos). **Pendente do Victor:** ditar os 6 recebedores
-da planilha; 2ª etapa (nota no nome do recebedor). Ver `CHECKPOINT_SESSAO_2026-07-24.md`.
+tsc 0/build/571 unit/E2E real (downloads conferidos). **Fechamento:** 5 recebedores configurados pelo
+painel (Greice→Mikael, Oliur→Denize, Henrique→Rosiclese, Thiago→Victoria, Willkerson→Neilizana;
+Gustavo/João Victor pendente de decisão) + **PUSH do Victor e deploy Vercel NO AR** (`main`=`f853d4f`,
+bundle `index-Dr59Z_Qi`). Pendente: 2ª etapa (nota no nome do recebedor). Ver `CHECKPOINT_SESSAO_2026-07-24.md`.
 
 **App do Entregador NO AR + várias features (madrugada 23→24/07):** app em produção
 (`sistema-ponto-zeta.vercel.app/driver`); **driver REAL (Iago) já logou e trocou a senha**. `main` em produção =

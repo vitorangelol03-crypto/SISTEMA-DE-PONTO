@@ -68,11 +68,20 @@ Caso real: líder cuja NOTA é emitida por outra pessoa (ex.: esposa) e o PIX é
 - Validação: tsc 0 · build ok · **571 unit** (7 novos) · E2E real (download dos 2 xlsx conferidos
   + foto do modal). Decisões gravadas: ordem de colunas; só nome do recebedor; NF = 2ª etapa.
 
+## (4) Fechamento — 5 recebedores configurados + PUSH/DEPLOY (fim da tarde)
+
+- **Victor decidiu**: configurar 5 recebedores, **Gustavo/João Victor fica de fora** (ele decide depois).
+  Aplicados PELO PAINEL (cliques reais, prints enviados) e conferidos no SQL + no relatório simples
+  baixado (5/5 com nome+PIX do recebedor; nome do líder não vaza):
+  Greice→Mikael (39481738000153) · Oliur→Denize (64704511000177) · Henrique→Rosiclese (52620082000170) ·
+  Thiago→Victoria Gabriella (51663165000184) · Willkerson→Neilizana (66816111000189).
+- **PUSH FEITO pelo Victor** (via `!` — o classificador do ambiente bloqueou git merge/push pro agente):
+  main `aecb2b6..f853d4f` + feature no origin. **Deploy Vercel conferido no ar** (bundle `index-Dr59Z_Qi`).
+
 ## Pendências
 
 - Apagar `backup_mirror_pub_20260724` e `backup_driver_pix_20260724` quando o Victor confirmar.
-- **Victor vai ditar quais recebedores cadastrar** (os 6 da planilha: Greice→Mikael?, Oliur→Denize?,
-  Henrique→Rosiclese?, Thiago→Victoria Gabriella, Willkerson→Neilizana, Gustavo/João Victor?) — NÃO fazer sozinho.
+- **Recebedor do grupo Mutum (Gustavo × João Victor)**: Victor decide depois — PIX 66409705000175 na mão.
 - 2ª etapa do recebedor: refletir o nome do recebedor na parte de NOTAS (aba Notas recebidas).
 - PIX pendentes: othon saraiva / Pablo Raspante (sem driver no sistema — perguntar ao Victor).
 - 6 CPFs faltantes (Cicero entre eles) — segue da sessão 23/07.
