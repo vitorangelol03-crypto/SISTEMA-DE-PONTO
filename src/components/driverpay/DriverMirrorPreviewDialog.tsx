@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileText, Eye, Download, Printer, Loader2, AlarmClock, Send } from 'lucide-react';
+import { FileText, Eye, Download, Printer, Loader2, AlarmClock, Send, Trash2, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   downloadDriverMirrorPdf,
@@ -46,6 +46,10 @@ interface DriverMirrorPreviewDialogProps {
   userId?: string;
   /** Publicar no app do entregador (1 PDF por driver). `allowed`=plataformas incluídas; null=todas. */
   onPublish?: (allowed: string[] | null) => Promise<void>;
+  /** Já existe publicação no app pro destinatário deste espelho (individual/líder do grupo). */
+  alreadyPublished?: boolean;
+  /** Despublicar (tirar do app) — só faz sentido pro destinatário único (individual/grupo). */
+  onUnpublish?: () => Promise<void>;
 }
 
 /** Faixa amarela do corte — mesma cara do PDF (prévia fiel). */
@@ -335,9 +339,12 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   companyId,
   userId,
   onPublish,
+  alreadyPublished,
+  onUnpublish,
 }) => {
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [unpublishing, setUnpublishing] = useState(false);
   // Fase 1b — filtro de plataforma no ENVIO ao app (marca quais entram).
   const availablePlatforms = useMemo(() => platformNamesOf(request), [request]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(() => new Set(availablePlatforms));
@@ -468,6 +475,19 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     }
   };
 
+  const handleUnpublish = async () => {
+    if (!onUnpublish) return;
+    if (!window.confirm('Despublicar este espelho? O driver deixa de ver ele no app. Você pode publicar de novo depois.')) return;
+    setUnpublishing(true);
+    try {
+      await onUnpublish();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao despublicar');
+    } finally {
+      setUnpublishing(false);
+    }
+  };
+
   const title =
     request.mode === 'individual'
       ? 'Espelho individual'
@@ -517,17 +537,39 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
             <button
               type="button"
               onClick={handlePublish}
-              disabled={publishing || generating || !canGenerate}
+              disabled={publishing || generating || unpublishing || !canGenerate}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium inline-flex items-center gap-2 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              Publicar no app
+              {alreadyPublished ? 'Republicar (atualiza)' : 'Publicar no app'}
+            </button>
+          )}
+          {onUnpublish && alreadyPublished && (
+            <button
+              type="button"
+              onClick={handleUnpublish}
+              disabled={unpublishing || publishing || generating}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium inline-flex items-center gap-2 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {unpublishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Despublicar
             </button>
           )}
         </>
       }
     >
       <div className="space-y-4">
+        {/* ── Já publicado no app: aviso + o que os botões fazem ── */}
+        {alreadyPublished && (
+          <div className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-md px-3 py-2 text-sm text-green-800">
+            <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span>
+              Este espelho <b>já está publicado no app</b> do driver. <b>Republicar</b> substitui o anterior (corrige);{' '}
+              <b>Despublicar</b> tira do app (o driver deixa de ver).
+            </span>
+          </div>
+        )}
+
         {/* ── Fase 1b: filtro de plataforma no ENVIO ao app (chips) ── */}
         {onPublish && availablePlatforms.length > 1 && (
           <div className="border border-blue-200 bg-blue-50 rounded-md p-3">

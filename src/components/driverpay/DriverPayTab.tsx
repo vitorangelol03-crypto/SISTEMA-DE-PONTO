@@ -13,6 +13,7 @@ import {
   Loader2,
   Search,
   X,
+  Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCompany } from '../../contexts/CompanyContext';
@@ -35,6 +36,9 @@ import {
   setNotaFiscal,
   setEspelhoConferido,
   publishDriverMirror,
+  listPublishedDriverIds,
+  unpublishDriverMirror,
+  unpublishAllMirrorsForPeriod,
 } from '../../services/driverPay';
 import { exportDriverGeneralReportExcel } from '../../utils/driverReport';
 import { generateDriverMirrorPdf, generateDriverGroupMirrorPdf } from '../../utils/driverMirrorPdf';
@@ -152,6 +156,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [publishScope, setPublishScope] = useState<'individual' | 'group' | 'selection'>('individual');
   // Fase 4: contexto do grupo aberto (nome/id/líder) — envio de grupo vai só pro líder.
   const [publishGroupInfo, setPublishGroupInfo] = useState<{ groupName: string; groupId: string | null; leaderId: string | null } | null>(null);
+  // driver_ids que já têm espelho publicado no app neste período (selo "no app" + "já publicado").
+  const [publishedDriverIds, setPublishedDriverIds] = useState<Set<string>>(new Set());
 
   // Refs para leitura estavel em callbacks assincronos
   const driversRef = useRef<Driver[]>([]);
@@ -253,6 +259,28 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       console.error('Erro ao recarregar pagamentos:', e);
     }
   }, [rebuildFromServer]);
+
+  // Carrega quem já tem espelho publicado no app neste período (selo "no app").
+  const reloadPublished = useCallback(
+    async (periodId: string | null) => {
+      if (!company?.id || !periodId) {
+        setPublishedDriverIds(new Set());
+        return;
+      }
+      try {
+        const ids = await listPublishedDriverIds(company.id, periodId);
+        setPublishedDriverIds(new Set(ids));
+      } catch (e) {
+        console.error('Erro ao carregar publicações do app:', e);
+      }
+    },
+    [company?.id],
+  );
+
+  // Recarrega o "publicado no app" ao trocar de período (e ao trocar de empresa via dep).
+  useEffect(() => {
+    reloadPublished(selectedPeriodId);
+  }, [selectedPeriodId, reloadPublished]);
 
   // Reset total + recarga ao trocar de empresa (evita vazamento cross-empresa).
   useEffect(() => {
@@ -693,6 +721,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             scope: 'group', groupId: info.groupId, platformFilter: filter, pdf: blob, userId,
           });
           toast.success('Espelho do grupo publicado para o líder.');
+          await reloadPublished(selectedPeriod.id);
           setMirror(null);
         } catch (e) {
           console.error('Falha ao publicar espelho de grupo', e);
@@ -724,10 +753,45 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       }
       if (ok > 0) toast.success(`${ok} espelho(s) publicado(s) no app${fail ? ` (${fail} falharam)` : ''}`);
       else toast.error('Não consegui publicar. Tente de novo.');
+      if (ok > 0) await reloadPublished(selectedPeriod.id);
       if (fail === 0) setMirror(null);
     },
-    [company, selectedPeriod, publishRows, publishScope, publishGroupInfo, userId],
+    [company, selectedPeriod, publishRows, publishScope, publishGroupInfo, userId, reloadPublished],
   );
+
+  // Despublica o espelho ABERTO no diálogo (individual = o driver; grupo = o líder).
+  const onUnpublishCurrent = useCallback(async () => {
+    if (!company || !selectedPeriod) return;
+    const driverId =
+      publishScope === 'group' ? publishGroupInfo?.leaderId ?? null : publishRows[0]?.driverId ?? null;
+    if (!driverId) {
+      toast.error('Não encontrei o destinatário deste espelho.');
+      return;
+    }
+    await unpublishDriverMirror(company.id, selectedPeriod.id, driverId, userId);
+    await reloadPublished(selectedPeriod.id);
+    toast.success('Espelho despublicado — o driver não vê mais no app.');
+    setMirror(null);
+  }, [company, selectedPeriod, publishScope, publishGroupInfo, publishRows, userId, reloadPublished]);
+
+  // Despublica TODOS os espelhos do período (limpeza em massa).
+  const handleUnpublishAll = useCallback(async () => {
+    if (!company || !selectedPeriod) return;
+    if (
+      !window.confirm(
+        `Despublicar TODOS os espelhos do período "${selectedPeriod.label}"? ` +
+          'Todos os drivers deixam de ver o espelho no app. Você pode publicar de novo depois.',
+      )
+    )
+      return;
+    try {
+      const n = await unpublishAllMirrorsForPeriod(company.id, selectedPeriod.id, userId);
+      await reloadPublished(selectedPeriod.id);
+      toast.success(n > 0 ? `${n} espelho(s) despublicado(s) do app.` : 'Nada estava publicado.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao despublicar todos.');
+    }
+  }, [company, selectedPeriod, userId, reloadPublished]);
 
   const handleReport = async () => {
     if (!hasPermission('driverpay.exportReport')) {
@@ -964,6 +1028,16 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               Notas recebidas
             </button>
           )}
+          {selectedPeriod && canMirror && publishedDriverIds.size > 0 && (
+            <button
+              type="button"
+              onClick={handleUnpublishAll}
+              title="Tira do app o espelho de TODOS os drivers deste período (dá pra publicar de novo depois)"
+              className="px-3 py-2 text-sm font-medium bg-red-50 text-red-700 rounded-md hover:bg-red-100 inline-flex items-center gap-1.5 min-h-[40px]"
+            >
+              <Trash2 className="w-4 h-4" /> Despublicar todos ({publishedDriverIds.size})
+            </button>
+          )}
           {hasPermission('driverpay.createDriver') && (
             <>
               <button
@@ -1064,6 +1138,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             canMirror={canMirror}
             handlers={handlers}
             onGroupMirror={onGroupMirror}
+            publishedDriverIds={publishedDriverIds}
             selGroups={canMirror ? selGroups : undefined}
             selDrivers={canMirror ? selDrivers : undefined}
             onToggleSelGroup={canMirror ? toggleSelGroup : undefined}
@@ -1233,16 +1308,29 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         />
       )}
 
-      {mirror && (
-        <DriverMirrorPreviewDialog
-          request={mirror}
-          canGenerate={canMirror}
-          onClose={() => setMirror(null)}
-          companyId={company?.id}
-          userId={userId}
-          onPublish={canMirror ? onPublish : undefined}
-        />
-      )}
+      {mirror && (() => {
+        // Despublicar só faz sentido pra destinatário único: individual (o driver) ou
+        // grupo (o líder). Massa/seleção usam o botão "Despublicar todos do período".
+        const recipientId =
+          mirror.mode === 'group'
+            ? publishGroupInfo?.leaderId ?? null
+            : mirror.mode === 'individual'
+            ? publishRows[0]?.driverId ?? null
+            : null;
+        const singleRecipient = mirror.mode === 'individual' || mirror.mode === 'group';
+        return (
+          <DriverMirrorPreviewDialog
+            request={mirror}
+            canGenerate={canMirror}
+            onClose={() => setMirror(null)}
+            companyId={company?.id}
+            userId={userId}
+            onPublish={canMirror ? onPublish : undefined}
+            alreadyPublished={!!recipientId && publishedDriverIds.has(recipientId)}
+            onUnpublish={canMirror && singleRecipient ? onUnpublishCurrent : undefined}
+          />
+        );
+      })()}
     </div>
   );
 };

@@ -14,6 +14,7 @@ import {
   Circle,
   ClipboardCheck,
   Clipboard,
+  Smartphone,
 } from 'lucide-react';
 import type { DriverPlatform } from '../../services/driverPay';
 import {
@@ -39,6 +40,8 @@ interface DriverRowProps {
   canVale: boolean;
   canMirror: boolean;
   handlers: RowHandlers;
+  /** Espelho já publicado no app do driver (selo "no app"). */
+  publishedInApp?: boolean;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkbox. */
   selected?: boolean;
   /** Driver já coberto por um GRUPO selecionado: checkbox marcado e travado. */
@@ -73,6 +76,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   canVale,
   canMirror,
   handlers,
+  publishedInApp,
   selected,
   selectionLocked,
   onToggleSelect,
@@ -304,22 +308,33 @@ export const DriverRow: React.FC<DriverRowProps> = ({
           </button>
         </td>
 
-        {/* Espelho conferido — quando marcado, a linha inteira do driver fica verde */}
+        {/* Espelho conferido — quando marcado, a linha inteira do driver fica verde.
+            Abaixo, o selo "no app" quando o espelho já foi publicado pro app do driver. */}
         <td className="px-3 py-3 text-center align-middle">
-          <button
-            type="button"
-            onClick={() => handlers.onToggleEspelho(row.paymentId, row.espelhoConferido)}
-            disabled={inputsDisabled}
-            title={row.espelhoConferido ? 'Espelho conferido (bate com a planilha)' : 'Marcar espelho conferido'}
-            aria-pressed={row.espelhoConferido}
-            className="inline-flex items-center justify-center rounded-full hover:bg-white/50 p-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          >
-            {row.espelhoConferido ? (
-              <ClipboardCheck className="w-6 h-6 text-green-700" />
-            ) : (
-              <Clipboard className="w-6 h-6 text-gray-500" />
+          <div className="inline-flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={() => handlers.onToggleEspelho(row.paymentId, row.espelhoConferido)}
+              disabled={inputsDisabled}
+              title={row.espelhoConferido ? 'Espelho conferido (bate com a planilha)' : 'Marcar espelho conferido'}
+              aria-pressed={row.espelhoConferido}
+              className="inline-flex items-center justify-center rounded-full hover:bg-white/50 p-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            >
+              {row.espelhoConferido ? (
+                <ClipboardCheck className="w-6 h-6 text-green-700" />
+              ) : (
+                <Clipboard className="w-6 h-6 text-gray-500" />
+              )}
+            </button>
+            {publishedInApp && (
+              <span
+                title="Espelho publicado no app do driver"
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap inline-flex items-center gap-0.5"
+              >
+                <Smartphone className="w-3 h-3" /> no app
+              </span>
             )}
-          </button>
+          </div>
         </td>
 
         {/* Acoes */}

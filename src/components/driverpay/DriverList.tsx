@@ -17,6 +17,7 @@ import {
   ArrowDown,
   ArrowUpDown,
   ChevronsUpDown,
+  Smartphone,
 } from 'lucide-react';
 import type { DriverPlatform } from '../../services/driverPay';
 import { DriverRow } from './DriverRow';
@@ -42,6 +43,8 @@ interface DriverListProps {
   canMirror: boolean;
   handlers: RowHandlers;
   onGroupMirror: (groupName: string, rows: DriverRowData[]) => void;
+  /** driver_ids com espelho já publicado no app (alimenta o selo "no app"). */
+  publishedDriverIds?: ReadonlySet<string>;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkboxes. */
   selGroups?: ReadonlySet<string>;
   selDrivers?: ReadonlySet<string>;
@@ -90,6 +93,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   canMirror,
   handlers,
   onGroupMirror,
+  publishedDriverIds,
   selGroups,
   selDrivers,
   onToggleSelGroup,
@@ -251,6 +255,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                 canVale={canVale}
                 canMirror={canMirror}
                 handlers={handlers}
+                publishedInApp={publishedDriverIds?.has(row.driverId)}
                 selected={selDrivers?.has(row.paymentId)}
                 selectionLocked={rowGroupSelected(row)}
                 onToggleSelect={onToggleSelDriver}
@@ -318,11 +323,18 @@ export const DriverList: React.FC<DriverListProps> = ({
               </div>
             </div>
           </div>
-          {row.groupName ? (
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 whitespace-nowrap flex-shrink-0">
-              {row.groupName}
-            </span>
-          ) : null}
+          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+            {row.groupName ? (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 whitespace-nowrap">
+                {row.groupName}
+              </span>
+            ) : null}
+            {publishedDriverIds?.has(row.driverId) && (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap inline-flex items-center gap-1">
+                <Smartphone className="w-3 h-3" /> no app
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2 mb-2">

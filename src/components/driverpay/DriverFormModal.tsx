@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Truck } from 'lucide-react';
+import { Truck, KeyRound, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   Driver,
@@ -8,6 +8,7 @@ import {
   updateDriver,
   upsertDriverRate,
   getDriverRates,
+  resetDriverPassword,
 } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
 
@@ -67,8 +68,30 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
     Object.fromEntries(platforms.map((pl) => [pl.id, pl.default_rate])),
   );
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const canConfigRate = hasPermission('driverpay.configRate');
+
+  // Reset de senha do app: apaga a auth -> volta pro 1234 (troca no próximo acesso) e destrava.
+  const handleResetPassword = async () => {
+    if (!driver) return;
+    if (
+      !window.confirm(
+        `Resetar a senha do app de ${driver.name}?\n\n` +
+          'A senha volta a ser 1234 e o driver cria uma nova no próximo acesso. Também destrava se estiver bloqueado por tentativas.',
+      )
+    )
+      return;
+    setResetting(true);
+    try {
+      await resetDriverPassword(driver.id, userId);
+      toast.success('Senha resetada — o driver entra com 1234 e cria uma nova.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao resetar a senha');
+    } finally {
+      setResetting(false);
+    }
+  };
 
   // Em edicao, carrega as taxas atuais do driver por plataforma.
   useEffect(() => {
@@ -156,6 +179,18 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
       onClose={onClose}
       footer={
         <>
+          {mode === 'edit' && driver && (
+            <button
+              type="button"
+              onClick={handleResetPassword}
+              disabled={resetting || saving}
+              title="Volta a senha do app pro 1234 (o driver cria uma nova no próximo acesso)"
+              className="mr-auto px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 text-sm font-medium min-h-[40px] inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+              Resetar senha
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}

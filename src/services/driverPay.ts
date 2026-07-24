@@ -1320,6 +1320,76 @@ export const publishDriverMirror = async (i: PublishMirrorInput): Promise<void> 
   if (error) throwDbError(error);
 };
 
+/**
+ * driver_ids que JA tem espelho publicado no app neste periodo (alimenta o selo "no app"
+ * na lista e o "ja publicado" no dialogo). Escopado por empresa+periodo (RLS confirma).
+ */
+export const listPublishedDriverIds = async (companyId: string, periodId: string): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from('driverpay_mirror_publications')
+    .select('driver_id')
+    .eq('company_id', companyId)
+    .eq('period_id', periodId);
+  if (error) throwDbError(error);
+  return (data ?? []).map((r) => (r as { driver_id: string }).driver_id);
+};
+
+/**
+ * Despublica (tira do app) o espelho de UM driver neste periodo — apaga a linha da
+ * publicacao. O driver deixa de ver o espelho na hora. O PDF continua no bucket privado
+ * (trava do storage nao deixa apagar arquivo), mas some da vista do driver do mesmo jeito.
+ * Re-publicar depois recria normalmente (sobrescreve o arquivo).
+ */
+export const unpublishDriverMirror = async (
+  companyId: string,
+  periodId: string,
+  driverId: string,
+  userId: string,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.generateMirror');
+  const { error } = await supabase
+    .from('driverpay_mirror_publications')
+    .delete()
+    .eq('company_id', companyId)
+    .eq('period_id', periodId)
+    .eq('driver_id', driverId);
+  if (error) throwDbError(error);
+};
+
+/**
+ * Despublica TODOS os espelhos do periodo (limpeza em massa — ex.: publicou errado pra
+ * muita gente). Retorna quantos sairam. Os PDFs ficam orfaos no bucket privado (inofensivo).
+ */
+export const unpublishAllMirrorsForPeriod = async (
+  companyId: string,
+  periodId: string,
+  userId: string,
+): Promise<number> => {
+  await ensurePerm(userId, 'driverpay.generateMirror');
+  const { data, error } = await supabase
+    .from('driverpay_mirror_publications')
+    .delete()
+    .eq('company_id', companyId)
+    .eq('period_id', periodId)
+    .select('id');
+  if (error) throwDbError(error);
+  return (data ?? []).length;
+};
+
+/**
+ * Reseta a senha do driver no app: apaga a linha de auth -> no proximo login ele volta
+ * pra senha inicial 1234 (troca obrigatoria) e o lockout por tentativas e destravado.
+ * Exige a policy de DELETE em driverpay_driver_auth (migration 20260723150000).
+ */
+export const resetDriverPassword = async (driverId: string, userId: string): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase
+    .from('driverpay_driver_auth')
+    .delete()
+    .eq('driver_id', driverId);
+  if (error) throwDbError(error);
+};
+
 /** Uma linha da busca de pacotes descontados (desconto + driver + status do periodo). */
 export interface DiscountSearchRow {
   id: string;
