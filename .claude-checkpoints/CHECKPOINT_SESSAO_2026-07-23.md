@@ -194,5 +194,24 @@ painel; **Validar/Recusar(motivo)/Excluir** cada nota; a coluna NF vira **"valid
     toggle Lista/Grupos à direita) a pedido do Victor ("simétrico e bonito").
   - Validado: tsc 0, build ok, 593 unit, E2E real (grupos com status + os 3 filtros clicados).
 - **PENDENTE:** painel responsivo à resolução (adiado pelo Victor p/ depois); 6 CPFs faltantes.
-- **State final:** `main` publicado em produção; `feature/app-entregador` local. Edge fn `driver-public-api` v5.
-  (Commits desta madrugada: `1dd484a` despublicar/reset, `de630f5` validar/recusar NF, + status-grupo/filtros.)
+- **State (após esta parte):** `main` publicado; `feature/app-entregador` local. Edge fn `driver-public-api` v5.
+
+## 8. Madrugada 24/07 (cont.) — ordenar grupos + RELATÓRIO (líder-recebedor + simples)
+
+- **Ordenar grupos** (commit `308d2a4`): barra "Ordenar grupos por" na visão Grupos — botões (3 cliques:
+  maior→menor / menor→maior / desativa) por Total de pacotes, por cada plataforma e por Total a receber,
+  SEM abrir as gavetas. Métrica = agregado do grupo. tsc 0 + build.
+- **RELATÓRIO reformulado** (commit `f5a4e4a`) — decisões do Victor (todas travadas):
+  1. **Escopo por seleção:** marcar grupos/drivers → botão vira "Relatório da seleção (N)" (só eles); sem
+     seleção = todos do filtro.
+  2. **Líder-recebedor:** cada grupo vira o LÍDER recebendo o total do grupo; membros não viram linha; avulso
+     = ele mesmo. (mesma lógica da NF; `leaderNameByGroup` do `driverpay_groups.leader_driver_id`, fallback 1º membro).
+  3. **Dividido por rota:** 1 linha por rota × plataforma; net/desconto/vale na 1ª linha da unidade (SUM fecha).
+  4. **Valor = TOTAL A RECEBER (net)**, desconto/vale ABATIDOS antes (regra do Victor: "senão dá prejuízo").
+  - **Relatório simples** (.xlsx novo): A nome do líder SEM acento · B valor total (net) · C OBS = nome da
+    quinzena (`period.label`).
+  - Puros/testáveis em `driverPayShared`: `groupReportUnits`, `buildLeaderReportRows`, `buildSimpleReportRows`,
+    `stripAccents`. `driverReport`: `buildSimpleSheet` + `exportDriverSimpleReportExcel` + opção sem aba "Por
+    Grupo" + rótulo "recebedor(es)". Substituiu o `buildReportRows` per-driver no `handleReport`.
+  - Validado: tsc 0, build ok, **600 unit** (7 novos). Falta: E2E baixando o .xlsx real (em seguida) + push/deploy.
+- **PENDENTE (fila):** painel responsivo (adiado); 6 CPFs; validar visualmente os relatórios amanhã.
