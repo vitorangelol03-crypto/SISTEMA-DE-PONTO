@@ -289,6 +289,47 @@ export const getDriverRoutes = async (companyId: string): Promise<string[]> => {
   return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 };
 
+/**
+ * Garante que o driver tenha um pagamento (zerado) em TODOS os períodos ABERTOS da empresa.
+ * A grade da aba é montada a partir dos pagamentos do período — sem isso, um driver criado
+ * DEPOIS que o período foi aberto não aparece na grade (nem o grupo dele). Idempotente:
+ * só insere onde ainda não existe pagamento (período, driver).
+ */
+async function ensureDriverInOpenPeriods(
+  companyId: string,
+  driverId: string,
+  driverName: string,
+  route: string | null,
+): Promise<void> {
+  const { data: openPeriods, error: perErr } = await supabase
+    .from('driverpay_periods')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('status', 'aberto');
+  if (perErr) throwDbError(perErr);
+  if (!openPeriods || openPeriods.length === 0) return;
+
+  const { data: existing } = await supabase
+    .from('driverpay_payments')
+    .select('period_id')
+    .eq('company_id', companyId)
+    .eq('driver_id', driverId);
+  const has = new Set((existing ?? []).map((p) => (p as { period_id: string }).period_id));
+
+  const rows = openPeriods
+    .filter((p) => !has.has(p.id as string))
+    .map((p) => ({
+      company_id: companyId,
+      period_id: p.id as string,
+      driver_id: driverId,
+      driver_name_snapshot: driverName,
+      route_snapshot: route,
+    }));
+  if (rows.length === 0) return;
+  const { error } = await supabase.from('driverpay_payments').insert(rows);
+  if (error) throwDbError(error);
+}
+
 export const createDriver = async (
   companyId: string,
   userId: string,
@@ -310,7 +351,10 @@ export const createDriver = async (
     .select()
     .single();
   if (error) throwDbError(error);
-  return mapDriver(row);
+  const driver = mapDriver(row);
+  // Entra automaticamente nos períodos abertos (pacotes zerados) pra aparecer na grade já.
+  await ensureDriverInOpenPeriods(companyId, driver.id, driver.name, driver.route);
+  return driver;
 };
 
 export const updateDriver = async (
