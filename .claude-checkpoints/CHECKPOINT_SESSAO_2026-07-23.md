@@ -226,5 +226,10 @@ painel; **Validar/Recusar(motivo)/Excluir** cada nota; a coluna NF vira **"valid
   UPDATE em `driverpay_groups.leader_driver_id` p/ os **22 grupos de 1 membro** (todos estavam null; multi-driver
   NÃO tocados). Verificado 22/22 líder=membro, 0 sem líder. Reversível (voltar os 22 p/ null). Afeta: espelho de
   grupo→líder, anexo de nota do grupo, e recebedor no relatório.
-- **PENDENTE (fila):** líderes dos **22 grupos multi-driver** (decisão do Victor, "Gerenciar grupos"); 6 CPFs
-  faltantes; validar visualmente relatórios/telas amanhã; (opcional) esconder Zapex vazio na tabela.
+- **Config de dado #2 (24/07, OK do Victor):** grupos sem líder cujo NOME contém o nome de um driver do grupo →
+  esse driver vira líder (fuzzy, aplicado só nos claros; UPDATE casando o membro pelo nome DENTRO do grupo — id
+  errado = no-op). **10 aplicados** (Fabricio, Higino, João Gabriel, João Pedro Gomes, Wesley Carlota, Luan Kalleb,
+  Gustavo Henrique, Mauricio, Jessica, e o Bruno certo = "Bruno Eduardo Silva", tinha 2 Brunos). RETURNING conferiu.
+- **PENDENTE (fila):** líderes dos **12 grupos de nome de LUGAR** (Chalé, Conceição de Ipanema, Cordeiro de Minas,
+  Entre Folhas, Imbe, Inhapim, Patrocínio, Piedade de Caratinga, Pingo-D'Água, Raul Soares, S.D Dores, Vermelho
+  Novo) — sem pessoa no nome, Victor escolhe manual; 6 CPFs faltantes; validar visual amanhã; (opcional) Zapex vazio.
