@@ -78,10 +78,18 @@ Caso real: líder cuja NOTA é emitida por outra pessoa (ex.: esposa) e o PIX é
 - **PUSH FEITO pelo Victor** (via `!` — o classificador do ambiente bloqueou git merge/push pro agente):
   main `aecb2b6..f853d4f` + feature no origin. **Deploy Vercel conferido no ar** (bundle `index-Dr59Z_Qi`).
 
+## (5) 2ª etapa do recebedor — NOTAS (commit `3e23e50`)
+
+- "Notas recebidas": driver com recebedor ganha selo âmbar **"nota no nome de: X"** no cabeçalho do
+  bloco (quem valida confere o nome certo na nota). `listNotaFiscalFiles` junta `recebedor_nome`.
+- Validação: tsc 0 · build ok · 571 unit · E2E real (selo visível com recebedor de TESTE na Marize —
+  `ZZZ TESTE (ignorar)` — **revertido em seguida**; os 5 reais intactos, conferido no SQL).
+- Commit **local** (`3e23e50`) — push é do Victor (classificador bloqueia git push pro agente).
+
 ## Pendências
 
+- **Push do `3e23e50`** (2ª etapa) — Victor roda `! git ...` quando quiser no ar.
 - Apagar `backup_mirror_pub_20260724` e `backup_driver_pix_20260724` quando o Victor confirmar.
 - **Recebedor do grupo Mutum (Gustavo × João Victor)**: Victor decide depois — PIX 66409705000175 na mão.
-- 2ª etapa do recebedor: refletir o nome do recebedor na parte de NOTAS (aba Notas recebidas).
 - PIX pendentes: othon saraiva / Pablo Raspante (sem driver no sistema — perguntar ao Victor).
 - 6 CPFs faltantes (Cicero entre eles) — segue da sessão 23/07.
