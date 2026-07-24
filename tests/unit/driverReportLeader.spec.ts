@@ -27,11 +27,14 @@ const rl = (route: string, packages: Record<string, number>, rates: Record<strin
 function row(
   paymentId: string, driverId: string, name: string, groupName: string | null,
   routes: ReturnType<typeof rl>[], discounts: { amount: number }[] = [], vales: { amount: number }[] = [],
+  extra: Partial<Pick<DriverRowData, 'pixKey' | 'recebedorNome' | 'recebedorPix'>> = {},
 ): DriverRowData {
   return {
     paymentId, driverId, name, route: null, groupName, routes,
-    ratesByPlatform: {}, discounts, vales, pixKey: null, cpf: null, phone: null,
+    ratesByPlatform: {}, discounts, vales, pixKey: null, recebedorNome: null, recebedorPix: null,
+    cpf: null, phone: null,
     active: true, notaFiscal: false, espelhoConferido: false, zapex: [], zapexRate: 0,
+    ...extra,
   } as unknown as DriverRowData;
 }
 
@@ -101,7 +104,7 @@ describe('buildLeaderReportRows — líder recebe pelo grupo, dividido por rota'
   });
 });
 
-describe('buildSimpleReportRows — A nome (sem acento) · B total (net)', () => {
+describe('buildSimpleReportRows — A nome (sem acento) · B total (net) · C chave PIX', () => {
   it('1 linha por unidade, nome sem acento, total = net do grupo', () => {
     const rows = [
       row('p1', 'd1', 'Adão Líder', 'G', [rl('C', { SHOPEE: 100 }, { SHOPEE: 2 })]),
@@ -111,5 +114,71 @@ describe('buildSimpleReportRows — A nome (sem acento) · B total (net)', () =>
     expect(out.length).toBe(1);
     expect(out[0].name).toBe('Adao Lider'); // sem acento
     expect(out[0].total).toBe(280); // 200 + (100-20)
+  });
+
+  it('sem recebedor: PIX = pix_key do próprio líder', () => {
+    const rows = [
+      row('p1', 'd1', 'Lider Um', 'G', [rl('C', { SHOPEE: 10 }, { SHOPEE: 2 })], [], [], { pixKey: '111.111' }),
+      row('p2', 'd2', 'Membro', 'G', [rl('C', { SHOPEE: 5 }, { SHOPEE: 2 })], [], [], { pixKey: '999.999' }),
+    ];
+    const out = buildSimpleReportRows(rows, new Map([['G', 'Lider Um']]));
+    expect(out[0].pix).toBe('111.111'); // do líder, NUNCA do membro
+  });
+
+  it('com recebedor no líder: nome e PIX saem do RECEBEDOR (só o nome dele)', () => {
+    const rows = [
+      row('p1', 'd1', 'Lider Um', 'G', [rl('C', { SHOPEE: 10 }, { SHOPEE: 2 })], [], [],
+        { pixKey: '111.111', recebedorNome: 'Esposa do Líder', recebedorPix: '39481738000153' }),
+      row('p2', 'd2', 'Membro', 'G', [rl('C', { SHOPEE: 5 }, { SHOPEE: 2 })]),
+    ];
+    const out = buildSimpleReportRows(rows, new Map([['G', 'Lider Um']]));
+    expect(out[0].name).toBe('Esposa do Lider'); // recebedor, sem acento, sem o nome do líder junto
+    expect(out[0].pix).toBe('39481738000153'); // PIX do recebedor, não a pix_key do líder
+    expect(out[0].total).toBe(30); // valor não muda
+  });
+
+  it('recebedor configurado num MEMBRO não muda nada (só o do líder vale)', () => {
+    const rows = [
+      row('p1', 'd1', 'Lider Um', 'G', [rl('C', { SHOPEE: 10 }, { SHOPEE: 2 })], [], [], { pixKey: '111.111' }),
+      row('p2', 'd2', 'Membro', 'G', [rl('C', { SHOPEE: 5 }, { SHOPEE: 2 })], [], [],
+        { recebedorNome: 'Outro Alguém', recebedorPix: '222.222' }),
+    ];
+    const out = buildSimpleReportRows(rows, new Map([['G', 'Lider Um']]));
+    expect(out[0].name).toBe('Lider Um');
+    expect(out[0].pix).toBe('111.111');
+  });
+
+  it('avulso com recebedor: sai o recebedor', () => {
+    const rows = [
+      row('p9', 'd9', 'Avulso Nove', null, [rl('Y', { SHOPEE: 5 }, { SHOPEE: 2 })], [], [],
+        { recebedorNome: 'Recebedora Dele', recebedorPix: 'pix@dela.com' }),
+    ];
+    const out = buildSimpleReportRows(rows, new Map());
+    expect(out[0].name).toBe('Recebedora Dele');
+    expect(out[0].pix).toBe('pix@dela.com');
+  });
+});
+
+describe('buildLeaderReportRows — nome/PIX do recebedor na 1ª linha da unidade', () => {
+  it('com recebedor: 1ª linha sai o nome do recebedor + PIX dele; demais linhas vazias', () => {
+    const rows = [
+      row('p1', 'd1', 'Lider Um', 'G', [rl('Caratinga', { SHOPEE: 10 }, { SHOPEE: 2 })], [], [],
+        { pixKey: '111.111', recebedorNome: 'Esposa', recebedorPix: 'cnpj-esposa' }),
+      row('p2', 'd2', 'Membro', 'G', [rl('Mutum', { eMile: 5 }, { eMile: 2 })]),
+    ];
+    const out = buildLeaderReportRows(rows, PLAT, new Map([['G', 'Lider Um']]));
+    expect(out[0].name).toBe('Esposa');
+    expect(out[0].pixKey).toBe('cnpj-esposa');
+    expect(out[1].name).toBe('');
+    expect(out[1].pixKey).toBeNull();
+  });
+
+  it('sem recebedor: 1ª linha sai o líder + pix_key dele', () => {
+    const rows = [
+      row('p1', 'd1', 'Lider Um', 'G', [rl('Caratinga', { SHOPEE: 10 }, { SHOPEE: 2 })], [], [], { pixKey: '111.111' }),
+    ];
+    const out = buildLeaderReportRows(rows, PLAT, new Map([['G', 'Lider Um']]));
+    expect(out[0].name).toBe('Lider Um');
+    expect(out[0].pixKey).toBe('111.111');
   });
 });

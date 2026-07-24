@@ -52,6 +52,8 @@ export interface DriverReportRow {
   vale: number;
   /** TOTAL A RECEBER (== total_net). Pode ser negativo. */
   totalToReceive: number;
+  /** Chave PIX de quem recebe (só na 1ª linha da unidade no relatório do líder). */
+  pixKey?: string | null;
 }
 
 export interface DriverReportMeta {
@@ -177,7 +179,7 @@ function computeTotals(rows: DriverReportRow[], platforms: string[]): ReportTota
 /**
  * Layout de colunas (dinâmico):
  *   0 NOME | 1 ROTA | 2 GRUPO | [por plataforma i: (3+2i) Pacotes, (3+2i+1) Valor]
- *   | TOTAL PACOTES | DESCONTO | VALE | TOTAL A RECEBER
+ *   | TOTAL PACOTES | DESCONTO | VALE | TOTAL A RECEBER | CHAVE PIX
  *
  * Cabeçalho em 2 linhas: linha de grupo (nome da plataforma mesclado sobre suas 2
  * sub-colunas; colunas fixas mescladas verticalmente) + linha de sub-rótulos.
@@ -193,7 +195,9 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
   const colDiscount = tailStart + 1;
   const colVale = tailStart + 2;
   const colToReceive = tailStart + 3;
-  const lastCol = colToReceive;
+  // CHAVE PIX por último: não desloca os pares de plataforma nem as colunas de dinheiro.
+  const colPix = tailStart + 4;
+  const lastCol = colPix;
   const totalCols = lastCol + 1;
 
   const moneyCols = new Set<number>([colTotalPackages, colDiscount, colVale, colToReceive]);
@@ -248,6 +252,7 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
   hGroup[colDiscount] = 'DESCONTO';
   hGroup[colVale] = 'VALE';
   hGroup[colToReceive] = 'TOTAL A RECEBER';
+  hGroup[colPix] = 'CHAVE PIX';
   data[R_HGROUP] = hGroup;
 
   // Cabeçalho — sub-rótulos das plataformas.
@@ -273,6 +278,7 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
     line[colDiscount] = row.discount;
     line[colVale] = row.vale;
     line[colToReceive] = row.totalToReceive;
+    line[colPix] = row.pixKey ?? '';
     data[R_DATA + j] = line;
   });
 
@@ -307,6 +313,7 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
   cols[colDiscount] = { wch: 14 };
   cols[colVale] = { wch: 14 };
   cols[colToReceive] = { wch: 18 };
+  cols[colPix] = { wch: 22 };
   ws['!cols'] = cols;
 
   // Alturas de linha (título/cabeçalho um pouco maiores).
@@ -410,7 +417,7 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
   merges.push({ s: { r: R_TITLE, c: 0 }, e: { r: R_TITLE, c: lastCol } });
   merges.push({ s: { r: R_META, c: 0 }, e: { r: R_META, c: lastCol } });
   // Colunas fixas do cabeçalho ocupam as 2 linhas (grupo + sub).
-  [0, 1, 2, colTotalPackages, colDiscount, colVale, colToReceive].forEach((c) => {
+  [0, 1, 2, colTotalPackages, colDiscount, colVale, colToReceive, colPix].forEach((c) => {
     merges.push({ s: { r: R_HGROUP, c }, e: { r: R_HSUB, c } });
   });
   // Cada plataforma mesclada sobre suas 2 sub-colunas na linha de grupo.
@@ -607,13 +614,15 @@ export async function exportDriverGeneralReportExcel(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// EXCEL — RELATÓRIO SIMPLES (A nome do líder · B valor total · C obs = quinzena)
+// EXCEL — RELATÓRIO SIMPLES (A nome · B valor total · C chave PIX · D obs = quinzena)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Uma linha do relatório simples: nome (sem acento) + total a receber. */
+/** Uma linha do relatório simples: nome (sem acento) + total a receber + chave PIX do recebedor. */
 export interface SimpleExportRow {
   name: string;
   total: number;
+  /** Chave PIX de quem recebe (recebedor configurado ou o próprio líder). */
+  pix?: string | null;
 }
 
 function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX.WorkSheet {
@@ -624,9 +633,9 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
   const R_DATA = 4;
   const n = rows.length;
   const R_TOTAL = R_DATA + n;
-  const lastCol = 2; // A NOME | B VALOR TOTAL | C OBS
+  const lastCol = 3; // A NOME | B VALOR TOTAL | C CHAVE PIX | D OBS
 
-  const blank = (): any[] => ['', '', ''];
+  const blank = (): any[] => ['', '', '', ''];
   const data: any[][] = [];
 
   const title = blank();
@@ -640,14 +649,16 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
   const head = blank();
   head[0] = 'NOME';
   head[1] = 'VALOR TOTAL';
-  head[2] = 'OBS';
+  head[2] = 'CHAVE PIX';
+  head[3] = 'OBS';
   data[R_HEAD] = head;
 
   rows.forEach((r, j) => {
     const line = blank();
     line[0] = r.name;
     line[1] = r.total;
-    line[2] = meta.periodLabel; // OBS = nome da quinzena
+    line[2] = r.pix ?? '';
+    line[3] = meta.periodLabel; // OBS = nome da quinzena
     data[R_DATA + j] = line;
   });
 
@@ -657,7 +668,7 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
   data[R_TOTAL] = totalRow;
 
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{ wch: 36 }, { wch: 18 }, { wch: 30 }];
+  ws['!cols'] = [{ wch: 36 }, { wch: 18 }, { wch: 24 }, { wch: 30 }];
   ws['!rows'] = [{ hpx: 26 }];
 
   applyCellStyle(ws[XLSX.utils.encode_cell({ r: R_TITLE, c: 0 })], {
@@ -695,7 +706,7 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
         cell.z = BRL_FMT;
         style.font = { sz: 10, bold: true, color: { rgb: rows[j].total < 0 ? XL_RED : XL_INK } };
       }
-      if (c === 2) style.font = { sz: 10, color: { rgb: XL_INK_MUTED } };
+      if (c === 3) style.font = { sz: 10, color: { rgb: XL_INK_MUTED } };
       applyCellStyle(cell, style);
     }
   }
@@ -720,11 +731,11 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
     { s: { r: R_META, c: 0 }, e: { r: R_META, c: lastCol } },
   ];
   ws['!freeze'] = { xSplit: 0, ySplit: R_DATA };
-  if (n > 0) ws['!autofilter'] = { ref: `A${R_HEAD + 1}:C${R_DATA + n}` };
+  if (n > 0) ws['!autofilter'] = { ref: `A${R_HEAD + 1}:D${R_DATA + n}` };
   return ws;
 }
 
-/** Gera e baixa o relatório SIMPLES (.xlsx): A nome (sem acento) · B valor total · C obs (quinzena). */
+/** Gera e baixa o relatório SIMPLES (.xlsx): A nome (sem acento) · B valor total · C chave PIX · D obs (quinzena). */
 export async function exportDriverSimpleReportExcel(
   rows: SimpleExportRow[],
   meta: DriverReportMeta,

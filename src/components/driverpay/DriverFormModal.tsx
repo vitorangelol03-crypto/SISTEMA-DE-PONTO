@@ -57,6 +57,9 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
   const [pix, setPix] = useState(driver?.pix_key ?? '');
   const [cpf, setCpf] = useState(driver?.cpf ?? '');
   const [phone, setPhone] = useState(driver?.phone ?? '');
+  // Recebedor separado (ex.: esposa emite a nota e recebe o PIX) — relatórios saem no nome/PIX dele.
+  const [recebedorNome, setRecebedorNome] = useState(driver?.recebedor_nome ?? '');
+  const [recebedorPix, setRecebedorPix] = useState(driver?.recebedor_pix ?? '');
   const [rates, setRates] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const pl of platforms) initial[pl.id] = String(pl.default_rate);
@@ -133,6 +136,8 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
         pix_key: pix.trim() || null,
         cpf: cpf.trim() || null,
         phone: phone.trim() || null,
+        recebedor_nome: recebedorNome.trim() || null,
+        recebedor_pix: recebedorPix.trim() || null,
       };
 
       if (mode === 'create') {
@@ -264,6 +269,38 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
               placeholder="Opcional"
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
             />
+          </div>
+        </div>
+
+        <div className="border border-amber-200 bg-amber-50 rounded-md p-3 space-y-3">
+          <div>
+            <p className="text-sm font-medium text-gray-700">Recebedor diferente (opcional)</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Preencha só se OUTRA pessoa recebe por este driver (ex.: a esposa emite a nota e o PIX é dela).
+              Os relatórios saem no nome e PIX do recebedor; o espelho continua no nome do driver.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">Nome do recebedor</label>
+              <input
+                type="text"
+                value={recebedorNome}
+                onChange={(e) => setRecebedorNome(e.target.value)}
+                placeholder="Ex.: nome de quem emite a nota"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">Chave PIX do recebedor</label>
+              <input
+                type="text"
+                value={recebedorPix}
+                onChange={(e) => setRecebedorPix(e.target.value)}
+                placeholder="CPF, CNPJ, e-mail, telefone…"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
+              />
+            </div>
           </div>
         </div>
 

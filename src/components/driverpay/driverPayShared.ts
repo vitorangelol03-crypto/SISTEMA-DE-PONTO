@@ -88,6 +88,9 @@ export interface DriverRowData {
   discounts: DriverDiscount[];
   vales: DriverVale[];
   pixKey: string | null;
+  /** Recebedor separado (ex.: esposa emite a nota): relatórios saem no nome/PIX dele. Null = o próprio driver. */
+  recebedorNome: string | null;
+  recebedorPix: string | null;
   cpf: string | null;
   phone: string | null;
   active: boolean;
@@ -419,6 +422,8 @@ export function buildRows(
       discounts: p.discounts ?? [],
       vales: p.vales ?? [],
       pixKey: driver?.pix_key ?? null,
+      recebedorNome: driver?.recebedor_nome ?? null,
+      recebedorPix: driver?.recebedor_pix ?? null,
       cpf: driver?.cpf ?? null,
       phone: driver?.phone ?? null,
       active: driver?.active ?? true,
@@ -699,6 +704,21 @@ export function groupReportUnits(
 }
 
 /**
+ * Nome + chave PIX de quem RECEBE pela unidade (decisão do Victor, 2026-07-24):
+ * se o líder tem um RECEBEDOR configurado (ex.: esposa emite a nota), os relatórios
+ * saem SÓ com o nome/PIX do recebedor; senão, nome do líder + pix_key dele.
+ * (O ESPELHO não usa isto — continua no nome do líder.)
+ */
+export function unitRecipientInfo(unit: ReportUnit): { name: string; pix: string | null } {
+  // Linha do líder dentro da unidade (avulso = a própria linha). Se o líder não tem
+  // linha no período, cai no nome do líder sem PIX — nunca no PIX de um membro.
+  const leaderRow = unit.isGroup ? unit.rows.find((r) => r.name === unit.recipient) : unit.rows[0];
+  const recebedor = leaderRow?.recebedorNome?.trim();
+  if (recebedor) return { name: recebedor, pix: leaderRow?.recebedorPix?.trim() || null };
+  return { name: unit.recipient, pix: leaderRow?.pixKey?.trim() || null };
+}
+
+/**
  * Relatório GERAL com o líder como recebedor, dividido POR ROTA (decisões do Victor):
  * cada unidade vira N linhas (1 por rota), colunas por plataforma. Desconto/vale/TOTAL A
  * RECEBER (net = já abatido) saem na 1ª linha da unidade (blank nas demais) pra o SUM do
@@ -711,6 +731,7 @@ export function buildLeaderReportRows(
 ): DriverReportRow[] {
   const out: DriverReportRow[] = [];
   for (const unit of groupReportUnits(rows, leaderNameByGroup)) {
+    const recipient = unitRecipientInfo(unit);
     let discount = 0;
     let vale = 0;
     let net = 0;
@@ -751,7 +772,7 @@ export function buildLeaderReportRows(
       }
       const first = i === 0;
       out.push({
-        name: first ? unit.recipient : '',
+        name: first ? recipient.name : '',
         route: rname,
         // Grupo repetido em todas as rotas do bloco (avulso = '' -> "Sem grupo"); nome só na 1ª.
         group: unit.group,
@@ -760,29 +781,36 @@ export function buildLeaderReportRows(
         discount: first ? discount : 0,
         vale: first ? vale : 0,
         totalToReceive: first ? net : 0,
+        pixKey: first ? recipient.pix : null,
       });
     });
   }
   return out;
 }
 
-/** Linha do relatório SIMPLES: A nome do líder (sem acento) · B total a receber · C obs (quinzena). */
+/** Linha do relatório SIMPLES: A nome (sem acento) · B total a receber · C chave PIX · D obs (quinzena). */
 export interface SimpleReportRow {
   name: string;
   total: number;
+  /** Chave PIX de quem recebe (recebedor configurado ou o próprio líder). */
+  pix: string | null;
 }
 
 /**
- * Relatório SIMPLES: 1 linha por unidade (líder/avulso) — nome SEM acento + TOTAL A RECEBER
- * (net do grupo, já com desconto/vale abatidos). A coluna OBS (nome da quinzena) é preenchida
- * no export a partir do período.
+ * Relatório SIMPLES: 1 linha por unidade (líder/avulso) — nome SEM acento (recebedor, se
+ * configurado) + TOTAL A RECEBER (net do grupo, já com desconto/vale abatidos) + chave PIX.
+ * A coluna OBS (nome da quinzena) é preenchida no export a partir do período.
  */
 export function buildSimpleReportRows(
   rows: DriverRowData[],
   leaderNameByGroup: ReadonlyMap<string, string>,
 ): SimpleReportRow[] {
-  return groupReportUnits(rows, leaderNameByGroup).map((unit) => ({
-    name: stripAccents(unit.recipient),
-    total: unit.rows.reduce((s, r) => s + computeRowTotals(r).net, 0),
-  }));
+  return groupReportUnits(rows, leaderNameByGroup).map((unit) => {
+    const recipient = unitRecipientInfo(unit);
+    return {
+      name: stripAccents(recipient.name),
+      total: unit.rows.reduce((s, r) => s + computeRowTotals(r).net, 0),
+      pix: recipient.pix,
+    };
+  });
 }

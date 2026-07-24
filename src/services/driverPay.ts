@@ -27,6 +27,10 @@ export interface Driver {
   pix_key: string | null;
   cpf: string | null;
   phone: string | null;
+  /** Quem recebe POR este driver nos relatórios (ex.: esposa emite a nota). Null = ele mesmo. */
+  recebedor_nome: string | null;
+  /** Chave PIX do recebedor. Null = usa a pix_key do próprio driver. */
+  recebedor_pix: string | null;
   active: boolean;
   notes: string | null;
   created_by: string | null;
@@ -333,7 +337,7 @@ async function ensureDriverInOpenPeriods(
 export const createDriver = async (
   companyId: string,
   userId: string,
-  data: { name: string; route?: string | null; pix_key?: string | null; cpf?: string | null; phone?: string | null; notes?: string | null }
+  data: { name: string; route?: string | null; pix_key?: string | null; cpf?: string | null; phone?: string | null; notes?: string | null; recebedor_nome?: string | null; recebedor_pix?: string | null }
 ): Promise<Driver> => {
   await ensurePerm(userId, 'driverpay.createDriver');
   const { data: row, error } = await supabase
@@ -345,6 +349,8 @@ export const createDriver = async (
       pix_key: data.pix_key ?? null,
       cpf: data.cpf ?? null,
       phone: data.phone ?? null,
+      recebedor_nome: data.recebedor_nome ?? null,
+      recebedor_pix: data.recebedor_pix ?? null,
       notes: data.notes ?? null,
       created_by: userId,
     }])
@@ -360,7 +366,7 @@ export const createDriver = async (
 export const updateDriver = async (
   id: string,
   userId: string,
-  updates: Partial<Pick<Driver, 'name' | 'route' | 'pix_key' | 'cpf' | 'phone' | 'active' | 'notes'>>
+  updates: Partial<Pick<Driver, 'name' | 'route' | 'pix_key' | 'cpf' | 'phone' | 'active' | 'notes' | 'recebedor_nome' | 'recebedor_pix'>>
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.editDriver');
   const { error } = await supabase
