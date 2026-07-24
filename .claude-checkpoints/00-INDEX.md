@@ -2,9 +2,21 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-07-24** (madrugada).
+> Última atualização: **2026-07-24** (tarde).
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 24/07 (tarde) — 3 frentes:** (1) **Leva LOGGI corrigida** (dados): espelhos tinham ido por
+driver individual → membros receberam; aplicada a Opção A (só o LÍDER recebe, agregando o grupo):
+3 líderes republicados em modo grupo (Luan Kalleb/Greice/Mário; Andrea depois igualada ao só-LOGGI),
+25 espelhos de membro despublicados → 27 espelhos LOGGI 100% de líder (backup `backup_mirror_pub_20260724`).
+(2) **PIX em massa** (dados): 39 chaves da planilha C6 preenchidas em `driverpay_drivers.pix_key`
+(match por nome; 9 ambíguos/sem-match ficaram de fora; backup `backup_driver_pix_20260724`).
+(3) **FEATURE recebedor diferente** (commit `3820842` + migration `20260724190000` em prod): cadastro
+do driver ganhou "Recebedor diferente" (nome+PIX); relatório GERAL ganhou coluna CHAVE PIX (última) e
+sai o nome do recebedor; SIMPLES virou A NOME|B VALOR|C CHAVE PIX|D OBS; espelho não muda. Validado
+tsc 0/build/571 unit/E2E real (downloads conferidos). **Pendente do Victor:** ditar os 6 recebedores
+da planilha; 2ª etapa (nota no nome do recebedor). Ver `CHECKPOINT_SESSAO_2026-07-24.md`.
 
 **App do Entregador NO AR + várias features (madrugada 23→24/07):** app em produção
 (`sistema-ponto-zeta.vercel.app/driver`); **driver REAL (Iago) já logou e trocou a senha**. `main` em produção =
@@ -75,7 +87,8 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-23.md` | **Mais recente.** App do Entregador completo + **GO-LIVE em prod** (merge main + Vercel; driver real Iago já usando) + feature despublicar espelho/resetar senha (§6). Decisões (login CPF, web-first, filtro plataforma, CNPJs) + backfill CPF 91/97 reversível | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-24.md` | **Mais recente.** Leva LOGGI só-líder (3 republicados + 25 membros despublicados) · 39 PIX da planilha C6 · FEATURE recebedor diferente (commit `3820842`, migration em prod, relatórios com CHAVE PIX) · backups `backup_mirror_pub_20260724`/`backup_driver_pix_20260724` | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-23.md` | App do Entregador completo + **GO-LIVE em prod** (merge main + Vercel; driver real Iago já usando) + feature despublicar espelho/resetar senha (§6). Decisões (login CPF, web-first, filtro plataforma, CNPJs) + backfill CPF 91/97 reversível | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-20-noite.md` | Bugs de prod do ponto: facial desligada por spec (religada+blindada), Pablo sem GPS (fix msg), saída fantasma 12s = UX (2 registros limpos c/ backup); pendências de feature | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-20.md` | Valor separado por plataforma + multi-rota sem taxa média + fix race do corte; specs 61/unit novos | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-18.md` | Grupos: vínculo exclusivo + busca por rota; retroativo dos 17 commits de melhorias do painel (17-18/07) | 🟢 ATIVO |
@@ -106,6 +119,8 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 - **E2E (20/07):** nunca rodar tsc/vitest/build em paralelo com bateria Playwright (carga WSL = flake); aquecer o Vite (curl / + /src/main.tsx) antes de spec com server frio.
 - **Testes (19/07):** retry 1× local (flake de carga vira 'flaky' visível); Vite WSL exige RESTART após editar código; hooks lentos precisam test.setTimeout interno; specs driverpay rodam com `--project=chromium` (firefox/webkit sem binário e mobile não serve pra tabela desktop).
 - **PDF (19/07):** separação entre trechos de texto com estilos diferentes é por GAP DE POSIÇÃO (`padLeft`), nunca espaço-caractere — o visualizador engole o espaço ao substituir a Helvetica; prints de aprovação ficam em `prints-espelhos/` na raiz (gitignored).
+- **Espelho de grupo (24/07 — "Opção A" do Victor):** só o **LÍDER** recebe o espelho do grupo, **agregando TODOS os membros** (mesmo não-líderes). Membro de grupo **não** recebe espelho individual. Publicar em modo grupo (`publishScope='group'`) respeita o filtro de plataforma dos chips.
+- **Recebedor diferente (24/07):** driver pode ter `recebedor_nome`/`recebedor_pix` (ex.: esposa emite a nota). Relatórios (geral + simples) saem **só com o nome do recebedor** + PIX dele; sem recebedor → nome do líder + `pix_key`. **Espelho NUNCA muda** (nome do líder). Simples = `A NOME | B VALOR | C CHAVE PIX | D OBS`. NF no nome do recebedor = 2ª etapa (aprovada, não feita). Os 6 recebedores da planilha C6: **Victor dita quais cadastrar** — não fazer sozinho.
 - **Dados de prod (20/07):** eMile Caratinga com valor separado LIGADO (destaque + aviso CNPJ + separação); cadastros duplicados do Tales (Inhapim) UNIFICADOS no "TALES ALEXANDRE DE SOUSA" — duplicado desativado com nota, alias reapontado. Não recriar o duplicado.
 - **Checkpoints (18/07):** todos vivem em `.claude-checkpoints/`; 1 checkpoint por sessão; atualizar este índice junto; hook pós-commit lembra a sessão de manter isso em dia.
 - **Ponto/testes (20/07 noite):** spec que toca config REAL de prod (ex.: toggle facial) tem que restaurar em `finally`; bateria E2E só em janela segura (nunca de noite — turno da madrugada bate ~02:00); recusa de ponto da edge fn vem em `message` (não `error`); correção de registro de ponto = sempre backup antes (`backups/`).
