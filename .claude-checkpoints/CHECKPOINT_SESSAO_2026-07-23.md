@@ -111,8 +111,10 @@ a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
 - **3e FEITO → FASE 3 COMPLETA (commit; tsc/build ok, 13 unit):** `notaFiscalFileName` (puro, 6 testes) +
   `listNotaFiscalFiles`/`notaFiscalFileUrl` (signed URL) + `NotasRecebidasModal` (lista, ver, baixar 1 a 1
   nomeado, baixar todas `.zip` via **jszip 3.10.1** — dep nova) + botão "Notas recebidas" no `DriverPayTab`.
-- **Restante da feature:** Fase 1b (multi-seleção de plataforma no diálogo, usa `allowedPlatformNames` já pronto)
-  + Fase 4 (líder de grupo: campo em `driverpay_groups` + envio de grupo só pro líder). São refinamentos.
+- **Fase 1b FEITA (commit):** chips de plataforma no diálogo → envio ao app filtrado por plataforma (D3).
+- **Fase 4 FEITA (commit):** migration `leader_driver_id` (aplicada) + `setGroupLeader` + seletor de líder no
+  `GroupManagerModal` + publicar grupo gera o PDF do grupo e publica **só pro líder** (sem líder = bloqueia).
+- **TODAS AS FASES CONCLUÍDAS** (D3, 0, 1a, 1b, 2, 3, 4). tsc 0 + build ok + **204 unit verdes** (regressão).
 - **PENDENTE DO VICTOR:** (1) `git push` + deploy Vercel pra testar o app no celular (login/ver espelho/anexar
   nota) e o ciclo publicar→app AO VIVO; (2) cadastrar os CNPJs no painel ("CNPJs / Notas") + vincular
   plataformas; (3) os 6 CPFs que faltam (export `br_driver_2026-07-24`). Backend validado por regressão 8/8; UI por tsc/build/smoke.

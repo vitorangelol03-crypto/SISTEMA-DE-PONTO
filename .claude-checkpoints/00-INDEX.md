@@ -30,9 +30,10 @@ botão "Publicar no app" → `publishDriverMirror` (1 PDF/driver → bucket → 
 plataforma→CNPJ no painel (`EmittersModal`). **3c FEITO** (edge fn v4: nf-slots/upload/list + periodId no my-mirrors;
 regressão login 8/8). **FASE 3 COMPLETA** (3d app "Anexar nota" + 3e painel "Notas recebidas" + baixar
 individual/.zip nomeado via jszip). App do entregador (login/ver espelho/anexar nota) + publicar espelho +
-notas recebidas: TUDO construído e validado (tsc/build/unit/regressão). Restam refinamentos: Fase 1b (filtro
-de plataforma no envio) e Fase 4 (líder de grupo). PENDENTE DO VICTOR: push+deploy Vercel p/ testar ao vivo no
-celular; cadastrar CNPJs no painel; 6 CPFs faltantes. `feature/app-entregador` (20 commits, nada pushado).
+notas recebidas: TUDO construído e validado (tsc/build/unit/regressão). **TODAS AS FASES CONCLUÍDAS**
+(D3, 0, 1a, 1b filtro-plataforma-no-envio, 2, 3, 4 líder-de-grupo). PENDENTE DO VICTOR: push+deploy Vercel
+p/ testar ao vivo no celular; cadastrar CNPJs + líderes no painel; 6 CPFs faltantes. `feature/app-entregador`
+(23 commits, nada pushado; 4 migrations aplicadas em prod + edge fn driver-public-api v4 deployada).
 Ciclo publicar→app ainda não testado ao vivo (precisa deploy Vercel ou login 2626 do Victor).
 Plano local: `~/.claude/plans/vamos-precisar-fazer-um-tranquil-hopper.md`.
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-23.md`.
