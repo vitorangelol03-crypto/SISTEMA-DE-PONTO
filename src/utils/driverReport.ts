@@ -63,6 +63,8 @@ export interface DriverReportMeta {
   platforms: string[];
   /** Data/hora de geração (default: agora, fuso America/Sao_Paulo). */
   generatedAt?: string;
+  /** Rótulo da entidade no rodapé/meta (default 'driver'; ex.: 'recebedor(es)' no relatório do líder). */
+  entityLabel?: string;
 }
 
 // ─── Constantes de estilo (Excel) ─────────────────────────────────────────────
@@ -208,6 +210,12 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
   const R_HSUB = 4; // linha de cabeçalho: Pacotes / Valor
   const R_DATA = 5; // primeira linha de dados
   const n = rows.length;
+  // Contagem "de recebedores": no relatório do líder só a 1ª linha da unidade tem nome,
+  // então contar linhas com nome dá o nº de recebedores; no per-driver, == nº de drivers.
+  const entityCount = rows.filter((r) => (r.name || '').trim() !== '').length;
+  const entityText = meta.entityLabel
+    ? `${entityCount} ${meta.entityLabel}`
+    : `${entityCount} driver${entityCount !== 1 ? 's' : ''}`;
   const R_TOTAL = R_DATA + n;
 
   const blankRow = (): any[] => new Array(totalCols).fill('');
@@ -220,7 +228,7 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
 
   // Meta.
   const metaRow = blankRow();
-  metaRow[0] = `Gerado em ${generatedAt}  ·  ${n} driver${n !== 1 ? 's' : ''}  ·  Plataformas: ${
+  metaRow[0] = `Gerado em ${generatedAt}  ·  ${entityText}  ·  Plataformas: ${
     platforms.join(' / ') || '—'
   }`;
   data[R_META] = metaRow;
@@ -270,7 +278,7 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
 
   // Linha TOTAL GERAL (SUM por coluna; se não há dados, cai pra 0).
   const totalRow = blankRow();
-  totalRow[0] = `TOTAL GERAL — ${n} driver${n !== 1 ? 's' : ''}`;
+  totalRow[0] = `TOTAL GERAL — ${entityText}`;
   const firstDataExcel = R_DATA + 1; // 1-based
   const lastDataExcel = R_DATA + n; // 1-based
   for (let c = 3; c <= lastCol; c++) {
@@ -579,19 +587,151 @@ function buildGroupSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLSX.
 export async function exportDriverGeneralReportExcel(
   rows: DriverReportRow[],
   meta: DriverReportMeta,
+  opts?: { includeGroupSheet?: boolean },
 ): Promise<void> {
   const workbook = XLSX.utils.book_new();
 
   const generalSheet = buildGeneralSheet(rows, meta);
   XLSX.utils.book_append_sheet(workbook, generalSheet, 'Relatório Geral');
 
+  // No relatório do líder-recebedor, o "GRUPO" só aparece na 1ª linha da unidade e a
+  // própria planilha já é agrupada por recebedor — a aba "Por Grupo" não faz sentido.
   const hasNamedGroup = rows.some((r) => (r.group || '').trim() !== '');
-  if (hasNamedGroup) {
+  if ((opts?.includeGroupSheet ?? true) && hasNamedGroup) {
     const groupSheet = buildGroupSheet(rows, meta);
     XLSX.utils.book_append_sheet(workbook, groupSheet, 'Por Grupo');
   }
 
   const filename = `Relatorio_Geral_Driver_${sanitizeForFile(meta.periodLabel)}.xlsx`;
+  XLSX.writeFile(workbook, filename, { bookType: 'xlsx', type: 'binary', cellStyles: true });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EXCEL — RELATÓRIO SIMPLES (A nome do líder · B valor total · C obs = quinzena)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Uma linha do relatório simples: nome (sem acento) + total a receber. */
+export interface SimpleExportRow {
+  name: string;
+  total: number;
+}
+
+function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX.WorkSheet {
+  const generatedAt = meta.generatedAt || nowBR();
+  const R_TITLE = 0;
+  const R_META = 1;
+  const R_HEAD = 3;
+  const R_DATA = 4;
+  const n = rows.length;
+  const R_TOTAL = R_DATA + n;
+  const lastCol = 2; // A NOME | B VALOR TOTAL | C OBS
+
+  const blank = (): any[] => ['', '', ''];
+  const data: any[][] = [];
+
+  const title = blank();
+  title[0] = `RELATÓRIO SIMPLES — ${meta.companyName} — ${meta.periodLabel}`;
+  data[R_TITLE] = title;
+  const metaRow = blank();
+  metaRow[0] = `Gerado em ${generatedAt}  ·  ${n} recebedor${n !== 1 ? 'es' : ''}`;
+  data[R_META] = metaRow;
+  data[2] = blank();
+
+  const head = blank();
+  head[0] = 'NOME';
+  head[1] = 'VALOR TOTAL';
+  head[2] = 'OBS';
+  data[R_HEAD] = head;
+
+  rows.forEach((r, j) => {
+    const line = blank();
+    line[0] = r.name;
+    line[1] = r.total;
+    line[2] = meta.periodLabel; // OBS = nome da quinzena
+    data[R_DATA + j] = line;
+  });
+
+  const totalRow = blank();
+  totalRow[0] = 'TOTAL GERAL';
+  totalRow[1] = n > 0 ? { f: `SUM(B${R_DATA + 1}:B${R_DATA + n})` } : 0;
+  data[R_TOTAL] = totalRow;
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{ wch: 36 }, { wch: 18 }, { wch: 30 }];
+  ws['!rows'] = [{ hpx: 26 }];
+
+  applyCellStyle(ws[XLSX.utils.encode_cell({ r: R_TITLE, c: 0 })], {
+    font: { bold: true, sz: 14, color: { rgb: XL_TEXT_LIGHT } },
+    fill: { fgColor: { rgb: XL_TITLE_FILL } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    border: applyBorder('medium'),
+  });
+  applyCellStyle(ws[XLSX.utils.encode_cell({ r: R_META, c: 0 })], {
+    font: { italic: true, sz: 10, color: { rgb: XL_INK_MUTED } },
+    alignment: { horizontal: 'left', vertical: 'center' },
+  });
+  for (let c = 0; c <= lastCol; c++) {
+    applyCellStyle(ws[XLSX.utils.encode_cell({ r: R_HEAD, c })], {
+      font: { bold: true, sz: 11, color: { rgb: XL_TEXT_LIGHT } },
+      fill: { fgColor: { rgb: XL_HEADER_FILL } },
+      alignment: { horizontal: c === 1 ? 'right' : 'left', vertical: 'center' },
+      border: applyBorder('medium'),
+    });
+  }
+  for (let j = 0; j < n; j++) {
+    const r = R_DATA + j;
+    const bg = j % 2 === 0 ? XL_ZEBRA_A : XL_ZEBRA_B;
+    for (let c = 0; c <= lastCol; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (!cell) continue;
+      const style: any = {
+        fill: { fgColor: { rgb: bg } },
+        border: applyBorder(),
+        alignment: { vertical: 'center', horizontal: c === 1 ? 'right' : 'left' },
+        font: { sz: 10, color: { rgb: XL_INK } },
+      };
+      if (c === 0) style.font = { sz: 10, bold: true, color: { rgb: XL_INK } };
+      if (c === 1) {
+        cell.z = BRL_FMT;
+        style.font = { sz: 10, bold: true, color: { rgb: rows[j].total < 0 ? XL_RED : XL_INK } };
+      }
+      if (c === 2) style.font = { sz: 10, color: { rgb: XL_INK_MUTED } };
+      applyCellStyle(cell, style);
+    }
+  }
+  for (let c = 0; c <= lastCol; c++) {
+    const cell = ws[XLSX.utils.encode_cell({ r: R_TOTAL, c })];
+    if (!cell) continue;
+    const style: any = {
+      font: { bold: true, sz: 11, color: { rgb: XL_INK } },
+      fill: { fgColor: { rgb: XL_TOTAL_FILL } },
+      border: applyBorder('medium'),
+      alignment: { vertical: 'center', horizontal: c === 1 ? 'right' : 'left' },
+    };
+    if (c === 1) {
+      cell.z = BRL_FMT;
+      style.font = { bold: true, sz: 12, color: { rgb: XL_GREEN } };
+    }
+    applyCellStyle(cell, style);
+  }
+
+  ws['!merges'] = [
+    { s: { r: R_TITLE, c: 0 }, e: { r: R_TITLE, c: lastCol } },
+    { s: { r: R_META, c: 0 }, e: { r: R_META, c: lastCol } },
+  ];
+  ws['!freeze'] = { xSplit: 0, ySplit: R_DATA };
+  if (n > 0) ws['!autofilter'] = { ref: `A${R_HEAD + 1}:C${R_DATA + n}` };
+  return ws;
+}
+
+/** Gera e baixa o relatório SIMPLES (.xlsx): A nome (sem acento) · B valor total · C obs (quinzena). */
+export async function exportDriverSimpleReportExcel(
+  rows: SimpleExportRow[],
+  meta: DriverReportMeta,
+): Promise<void> {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, buildSimpleSheet(rows, meta), 'Relatório Simples');
+  const filename = `Relatorio_Simples_Driver_${sanitizeForFile(meta.periodLabel)}.xlsx`;
   XLSX.writeFile(workbook, filename, { bookType: 'xlsx', type: 'binary', cellStyles: true });
 }
 

@@ -655,3 +655,133 @@ export function buildReportRows(rows: DriverRowData[], platforms: DriverPlatform
     };
   });
 }
+
+/** Remove acentos (coluna A do relatório simples pede nome do líder SEM acento). */
+export function stripAccents(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/** Uma unidade de recebimento do relatório: grupo (recebedor = líder) ou avulso (ele mesmo). */
+export interface ReportUnit {
+  recipient: string;
+  group: string;
+  isGroup: boolean;
+  rows: DriverRowData[];
+}
+
+/**
+ * Agrupa os rows em UNIDADES DE RECEBIMENTO (regra da NF): cada grupo é uma unidade cujo
+ * recebedor é o LÍDER; cada avulso é uma unidade dele mesmo. `leaderNameByGroup` mapeia
+ * nome do grupo -> nome do líder (fallback: 1º membro se o grupo não tem líder definido).
+ */
+export function groupReportUnits(
+  rows: DriverRowData[],
+  leaderNameByGroup: ReadonlyMap<string, string>,
+): ReportUnit[] {
+  const buckets = new Map<string, DriverRowData[]>();
+  const order: string[] = [];
+  for (const row of rows) {
+    const key = row.groupName ? `g:${row.groupName}` : `s:${row.paymentId}`;
+    const b = buckets.get(key);
+    if (b) b.push(row);
+    else {
+      buckets.set(key, [row]);
+      order.push(key);
+    }
+  }
+  return order.map((key) => {
+    const unitRows = buckets.get(key)!;
+    const isGroup = key.startsWith('g:');
+    const group = isGroup ? unitRows[0].groupName ?? '' : '';
+    const recipient = isGroup ? leaderNameByGroup.get(group) || unitRows[0].name : unitRows[0].name;
+    return { recipient, group, isGroup, rows: unitRows };
+  });
+}
+
+/**
+ * Relatório GERAL com o líder como recebedor, dividido POR ROTA (decisões do Victor):
+ * cada unidade vira N linhas (1 por rota), colunas por plataforma. Desconto/vale/TOTAL A
+ * RECEBER (net = já abatido) saem na 1ª linha da unidade (blank nas demais) pra o SUM do
+ * rodapé fechar certo. `name` só na 1ª linha (bloco do recebedor). Membros não viram linha.
+ */
+export function buildLeaderReportRows(
+  rows: DriverRowData[],
+  platforms: DriverPlatform[],
+  leaderNameByGroup: ReadonlyMap<string, string>,
+): DriverReportRow[] {
+  const out: DriverReportRow[] = [];
+  for (const unit of groupReportUnits(rows, leaderNameByGroup)) {
+    let discount = 0;
+    let vale = 0;
+    let net = 0;
+    const routeMap = new Map<string, Record<string, { packages: number; value: number }>>();
+    const routeOrder: string[] = [];
+    for (const row of unit.rows) {
+      const t = computeRowTotals(row);
+      discount += t.discounts;
+      vale += t.vales;
+      net += t.net;
+      for (const rl of row.routes) {
+        const rname = (rl.route || '').trim() || '(sem rota)';
+        let rec = routeMap.get(rname);
+        if (!rec) {
+          rec = {};
+          routeMap.set(rname, rec);
+          routeOrder.push(rname);
+        }
+        for (const pl of platforms) {
+          const pkgs = rl.packages[pl.name] ?? 0;
+          if (pkgs === 0) continue;
+          const rate = rl.rates[pl.name] ?? row.ratesByPlatform[pl.name] ?? pl.default_rate ?? 0;
+          const cell = rec[pl.name] ?? (rec[pl.name] = { packages: 0, value: 0 });
+          cell.packages += pkgs;
+          cell.value += pkgs * rate;
+        }
+      }
+    }
+    const routeNames = routeOrder.length ? routeOrder : ['(sem rota)'];
+    routeNames.forEach((rname, i) => {
+      const rec = routeMap.get(rname) ?? {};
+      const platformsRec: Record<string, { packages: number; value: number }> = {};
+      let routeGross = 0;
+      for (const pl of platforms) {
+        const c = rec[pl.name] ?? { packages: 0, value: 0 };
+        platformsRec[pl.name] = c;
+        routeGross += c.value;
+      }
+      const first = i === 0;
+      out.push({
+        name: first ? unit.recipient : '',
+        route: rname,
+        group: first ? unit.group : '',
+        platforms: platformsRec,
+        totalPackages: routeGross,
+        discount: first ? discount : 0,
+        vale: first ? vale : 0,
+        totalToReceive: first ? net : 0,
+      });
+    });
+  }
+  return out;
+}
+
+/** Linha do relatório SIMPLES: A nome do líder (sem acento) · B total a receber · C obs (quinzena). */
+export interface SimpleReportRow {
+  name: string;
+  total: number;
+}
+
+/**
+ * Relatório SIMPLES: 1 linha por unidade (líder/avulso) — nome SEM acento + TOTAL A RECEBER
+ * (net do grupo, já com desconto/vale abatidos). A coluna OBS (nome da quinzena) é preenchida
+ * no export a partir do período.
+ */
+export function buildSimpleReportRows(
+  rows: DriverRowData[],
+  leaderNameByGroup: ReadonlyMap<string, string>,
+): SimpleReportRow[] {
+  return groupReportUnits(rows, leaderNameByGroup).map((unit) => ({
+    name: stripAccents(unit.recipient),
+    total: unit.rows.reduce((s, r) => s + computeRowTotals(r).net, 0),
+  }));
+}

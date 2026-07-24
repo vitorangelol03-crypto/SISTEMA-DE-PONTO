@@ -41,7 +41,7 @@ import {
   unpublishAllMirrorsForPeriod,
   listNotaFiscalFiles,
 } from '../../services/driverPay';
-import { exportDriverGeneralReportExcel } from '../../utils/driverReport';
+import { exportDriverGeneralReportExcel, exportDriverSimpleReportExcel } from '../../utils/driverReport';
 import { generateDriverMirrorPdf, generateDriverGroupMirrorPdf } from '../../utils/driverMirrorPdf';
 import {
   DriverRowData,
@@ -51,7 +51,8 @@ import {
   buildDriverMirrorData,
   buildGroupMirrorData,
   buildSelectionMirrorData,
-  buildReportRows,
+  buildLeaderReportRows,
+  buildSimpleReportRows,
   planRateReapply,
   computeNfProgressByPayment,
   platformPackages,
@@ -838,31 +839,60 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     }
   }, [company, selectedPeriod, userId, reloadPublished]);
 
+  // Escopo do relatório: se há grupos/drivers marcados (seleção), só eles; senão, o filtro atual.
+  const reportScopeRows = (): DriverRowData[] =>
+    selCount === 0
+      ? filteredRows
+      : filteredRows.filter((r) => selDrivers.has(r.paymentId) || selGroups.has(r.groupName ?? 'Sem grupo'));
+  const reportMeta = () => ({
+    companyName: `${MIRROR_COMPANY_NAME}${company?.city ? ` — ${company.city}` : ''}`,
+    periodLabel: selectedPeriod?.label ?? '',
+  });
+
+  // Relatório geral DETALHADO: líder como recebedor do grupo (regra da NF), dividido por rota
+  // e plataforma. Membros não viram linha; avulso = ele mesmo. Escopo = seleção (se houver) ou filtro.
   const handleReport = async () => {
     if (!hasPermission('driverpay.exportReport')) {
       toast.error('Você não tem permissão para exportar o relatório');
       return;
     }
-    if (filteredRows.length === 0) {
+    const scoped = reportScopeRows();
+    if (scoped.length === 0) {
       toast.error('Nenhum dado para exportar');
       return;
     }
     try {
-      const reportRows = buildReportRows(filteredRows, platforms);
-      await exportDriverGeneralReportExcel(reportRows, {
-        companyName: `${MIRROR_COMPANY_NAME}${company?.city ? ` — ${company.city}` : ''}`,
-        periodLabel: selectedPeriod?.label ?? '',
-        // Zapex vira coluna do relatório só quando algum driver do filtro tem Zapex
-        // (buildReportRows preenche row.platforms['Zapex']; TOTAL PACOTES a inclui, como as demais).
-        platforms: [
-          ...platforms.map((p) => p.name),
-          ...(filteredRows.some((r) => r.zapex.length > 0) ? ['Zapex'] : []),
-        ],
-      });
+      const reportRows = buildLeaderReportRows(scoped, platforms, leaderNameByGroup);
+      await exportDriverGeneralReportExcel(
+        reportRows,
+        { ...reportMeta(), platforms: platforms.map((p) => p.name), entityLabel: 'recebedor(es)' },
+        { includeGroupSheet: false },
+      );
       toast.success('Relatório gerado');
     } catch (e) {
       console.error('Erro ao gerar relatório:', e);
       toast.error('Erro ao gerar relatório');
+    }
+  };
+
+  // Relatório SIMPLES: A nome do líder (sem acento) · B valor total (net) · C obs = nome da quinzena.
+  const handleSimpleReport = async () => {
+    if (!hasPermission('driverpay.exportReport')) {
+      toast.error('Você não tem permissão para exportar o relatório');
+      return;
+    }
+    const scoped = reportScopeRows();
+    if (scoped.length === 0) {
+      toast.error('Nenhum dado para exportar');
+      return;
+    }
+    try {
+      const rows = buildSimpleReportRows(scoped, leaderNameByGroup);
+      await exportDriverSimpleReportExcel(rows, { ...reportMeta(), platforms: [] });
+      toast.success('Relatório simples gerado');
+    } catch (e) {
+      console.error('Erro ao gerar relatório simples:', e);
+      toast.error('Erro ao gerar relatório simples');
     }
   };
 
@@ -961,6 +991,17 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     () => groups.map((g) => g.name).sort((a, b) => a.localeCompare(b, 'pt-BR')),
     [groups],
   );
+
+  // Nome do LÍDER por grupo (recebedor no relatório). Sem líder definido -> o builder cai no 1º membro.
+  const leaderNameByGroup = useMemo(() => {
+    const nameById = new Map(drivers.map((d) => [d.id, d.name]));
+    const m = new Map<string, string>();
+    for (const g of groups) {
+      const nm = g.leader_driver_id ? nameById.get(g.leader_driver_id) : undefined;
+      if (nm) m.set(g.name, nm);
+    }
+    return m;
+  }, [groups, drivers]);
 
   const kpis = useMemo(() => {
     let driverCount = 0;
@@ -1192,13 +1233,28 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             </>
           )}
           {hasPermission('driverpay.exportReport') && (
-            <button
-              type="button"
-              onClick={handleReport}
-              className="px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 inline-flex items-center gap-1.5 min-h-[40px]"
-            >
-              <Download className="w-4 h-4" /> Relatório geral
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={handleReport}
+                title={
+                  selCount > 0
+                    ? 'Relatório detalhado só dos grupos/drivers marcados (líder recebe pelo grupo, dividido por rota)'
+                    : 'Relatório detalhado de todos (líder recebe pelo grupo, dividido por rota)'
+                }
+                className="px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 inline-flex items-center gap-1.5 min-h-[40px]"
+              >
+                <Download className="w-4 h-4" /> {selCount > 0 ? `Relatório da seleção (${selCount})` : 'Relatório geral'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSimpleReport}
+                title="Relatório simples: nome do líder (sem acento) · valor total · obs (nome da quinzena)"
+                className="px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 inline-flex items-center gap-1.5 min-h-[40px]"
+              >
+                <Download className="w-4 h-4" /> Relatório simples
+              </button>
+            </>
           )}
           </div>
         </div>
