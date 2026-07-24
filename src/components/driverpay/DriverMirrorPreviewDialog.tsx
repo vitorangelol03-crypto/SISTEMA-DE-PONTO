@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FileText, Eye, Download, Printer, Loader2, AlarmClock, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -25,6 +25,17 @@ export type MirrorRequest =
   | { mode: 'group'; data: DriverGroupMirrorData }
   | { mode: 'mass'; list: DriverMirrorData[] }
   | { mode: 'selection'; groups: DriverGroupMirrorData[]; singles: DriverMirrorData[] };
+
+/** Nomes de plataforma presentes no espelho (pro filtro de envio da Fase 1b). */
+function platformNamesOf(req: MirrorRequest): string[] {
+  const set = new Set<string>();
+  const add = (d: DriverMirrorData) => d.platforms.forEach((p) => set.add(p.platform));
+  if (req.mode === 'individual') add(req.data);
+  else if (req.mode === 'group') req.data.drivers.forEach(add);
+  else if (req.mode === 'mass') req.list.forEach(add);
+  else { req.groups.forEach((g) => g.drivers.forEach(add)); req.singles.forEach(add); }
+  return [...set];
+}
 
 interface DriverMirrorPreviewDialogProps {
   request: MirrorRequest;
@@ -327,6 +338,9 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
 }) => {
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  // Fase 1b — filtro de plataforma no ENVIO ao app (marca quais entram).
+  const availablePlatforms = useMemo(() => platformNamesOf(request), [request]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(() => new Set(availablePlatforms));
   const [includeReceipts, setIncludeReceipts] = useState(true);
   // Aviso de corte (2026-07-19): pré-carrega o último salvo; salva automático ao gerar.
   const [cutoffTime, setCutoffTime] = useState('');
@@ -425,11 +439,28 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     }
   };
 
+  const togglePlatform = (name: string) =>
+    setSelectedPlatforms((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+
   const handlePublish = async () => {
     if (!onPublish) return;
+    // Todas marcadas => null (todas); subconjunto => só as marcadas (D3 filtra linhas E total).
+    const allowed =
+      selectedPlatforms.size >= availablePlatforms.length
+        ? null
+        : availablePlatforms.filter((p) => selectedPlatforms.has(p));
+    if (allowed && allowed.length === 0) {
+      toast.error('Marque ao menos uma plataforma para enviar');
+      return;
+    }
     setPublishing(true);
     try {
-      await onPublish(null); // Fase 1a: publica TODAS as plataformas (filtro por plataforma vem depois)
+      await onPublish(allowed);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao publicar no app');
     } finally {
@@ -497,6 +528,32 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       }
     >
       <div className="space-y-4">
+        {/* ── Fase 1b: filtro de plataforma no ENVIO ao app (chips) ── */}
+        {onPublish && availablePlatforms.length > 1 && (
+          <div className="border border-blue-200 bg-blue-50 rounded-md p-3">
+            <p className="text-xs font-semibold text-gray-700 mb-2">
+              Enviar ao app apenas estas plataformas <span className="font-normal text-gray-500">(o “Gerar PDF” e a prévia mostram todas)</span>:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {availablePlatforms.map((name) => {
+                const on = selectedPlatforms.has(name);
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => togglePlatform(name)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      on ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {on ? '✓ ' : ''}{name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── Aviso de corte das notas (sai em TODOS os espelhos; salva ao gerar) ── */}
         <div className="border border-yellow-300 bg-yellow-50 rounded-md p-3">
           <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5 mb-2">
