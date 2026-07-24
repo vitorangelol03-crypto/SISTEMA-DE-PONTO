@@ -119,7 +119,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
       <tr className={`group ${rowBg} transition-colors ${rowHover}`}>
         {/* Driver / Rota — coluna "grudada" (sticky) ao rolar na horizontal */}
         <td
-          className={`sticky left-0 z-10 border-r border-gray-200 px-4 py-3 align-middle ${rowBg} ${stickyHover}`}
+          className={`sticky left-0 z-10 border-r border-gray-200 px-3 py-3 align-middle ${rowBg} ${stickyHover}`}
         >
           <div className="flex flex-col gap-1">
             <span className="font-semibold text-gray-900 flex items-center gap-2">
@@ -175,7 +175,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         </td>
 
         {/* Grupo */}
-        <td className="px-4 py-3 align-middle">
+        <td className="px-3 py-3 align-middle">
           {row.groupName ? (
             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 whitespace-nowrap">
               {row.groupName}
@@ -197,7 +197,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
           const allSameRate = routeRates.every((r) => r === routeRates[0]);
           const plColor = pl.color;
           return (
-            <td key={pl.id} className="px-3 py-3 text-center align-middle relative">
+            <td key={pl.id} className="px-2 py-3 text-center align-middle relative">
               {/* Mini-cabecalho: nome da plataforma acima do quadradinho, aparece ao passar
                   o mouse na linha (util quando a pessoa esta longe do cabecalho da tabela). */}
               <span
@@ -222,7 +222,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                     }
                     onBlur={() => handlers.onPackageBlur(row.paymentId, 0, pl.name)}
                     style={plColor ? ({ borderColor: plColor, ['--tw-ring-color']: plColor } as React.CSSProperties) : undefined}
-                    className={`w-14 text-right rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 disabled:bg-gray-50 disabled:text-gray-500 ${
+                    className={`w-12 text-right rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 disabled:bg-gray-50 disabled:text-gray-500 ${
                       plColor ? 'border-2' : 'border border-gray-300 focus:ring-blue-500/30 focus:border-blue-500'
                     }`}
                   />
@@ -245,12 +245,12 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         })}
 
         {/* Total pacotes (R$) */}
-        <td className="px-3 py-3 text-right align-middle tabular-nums text-gray-900">
+        <td className="px-2 py-3 text-right align-middle tabular-nums text-gray-900">
           {formatBRL(totals.packagesAmount)}
         </td>
 
         {/* Zapex (ganho por item = qtd x valor unitario do driver) */}
-        <td className="px-3 py-3 text-right align-middle">
+        <td className="px-2 py-3 text-right align-middle">
           {zapexCount > 0 ? (
             <div className="inline-flex flex-col items-end leading-tight">
               <span className="font-semibold text-green-600 whitespace-nowrap tabular-nums">
@@ -266,7 +266,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         </td>
 
         {/* Desconto */}
-        <td className="px-3 py-3 text-right align-middle">
+        <td className="px-2 py-3 text-right align-middle">
           {totals.discounts > 0 ? (
             <span className="font-semibold text-red-600 whitespace-nowrap">− {formatBRL(totals.discounts)}</span>
           ) : (
@@ -275,7 +275,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         </td>
 
         {/* Vale */}
-        <td className="px-3 py-3 text-right align-middle">
+        <td className="px-2 py-3 text-right align-middle">
           {totals.vales > 0 ? (
             <span className="font-semibold text-amber-600 whitespace-nowrap">− {formatBRL(totals.vales)}</span>
           ) : (
@@ -284,7 +284,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         </td>
 
         {/* Total a receber */}
-        <td className="px-3 py-3 text-right align-middle">
+        <td className="px-2 py-3 text-right align-middle">
           <span
             className={`font-bold tabular-nums whitespace-nowrap ${
               totals.net < 0 ? 'text-red-600' : 'text-green-600'
@@ -297,7 +297,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         {/* Nota Fiscal: progresso "validadas/esperadas" (ciente de grupo — só o líder anexa).
             Verde = todas validadas OU marcado na mão. Clique marca/desmarca na mão;
             validar cada nota é no botão "Notas recebidas". Sem CNPJ esperado = círculo manual. */}
-        <td className="px-3 py-3 text-center align-middle">
+        <td className="px-2 py-3 text-center align-middle">
           {nfProgress && nfProgress.expected > 0 ? (
             <button
               type="button"
@@ -336,7 +336,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
 
         {/* Espelho conferido — quando marcado, a linha inteira do driver fica verde.
             Abaixo, o selo "no app" quando o espelho já foi publicado pro app do driver. */}
-        <td className="px-3 py-3 text-center align-middle">
+        <td className="px-2 py-3 text-center align-middle">
           <div className="inline-flex flex-col items-center gap-1">
             <button
               type="button"
@@ -364,8 +364,8 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         </td>
 
         {/* Acoes */}
-        <td className="px-3 py-3 text-center align-middle">
-          <div className="inline-flex gap-2.5 justify-end">
+        <td className="px-2 py-3 text-center align-middle">
+          <div className="inline-flex gap-2 justify-end">
             {canConfig && (
               <button
                 type="button"
@@ -471,7 +471,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                         handlers.onPackageChange(row.paymentId, ri, pl.name, parsePackages(e.target.value))
                       }
                       onBlur={() => handlers.onPackageBlur(row.paymentId, ri, pl.name)}
-                      className="w-14 text-right border border-gray-300 rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                      className="w-12 text-right border border-gray-300 rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                     />
                     {/* Taxa (R$/pacote) DESTA rota — editavel por rota */}
                     <div className="relative">

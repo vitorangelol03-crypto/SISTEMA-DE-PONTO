@@ -257,42 +257,42 @@ export const DriverList: React.FC<DriverListProps> = ({
         <table className="min-w-full border-collapse">
           <thead className="bg-gray-50">
             <tr>
-              <th className="sticky left-0 z-20 bg-gray-50 border-r border-gray-200 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="sticky left-0 z-20 bg-gray-50 border-r border-gray-200 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('name', 'Driver / Rota')}
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('group', 'Grupo')}
               </th>
               {platforms.map((pl) => (
                 <th
                   key={pl.id}
-                  className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                  className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
                 >
                   {sortBtn(`pl:${pl.name}`, pl.name, pl.color)}
                 </th>
               ))}
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('packages', 'Total pacotes')}
               </th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('zapex', 'Zapex', '#9333ea')}
               </th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('discount', 'Desconto')}
               </th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('vale', 'Vale')}
               </th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+              <th className="px-2 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                 {sortBtn('net', 'Total a receber')}
               </th>
-              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('nf', 'NF')}
               </th>
-              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('espelho', 'Espelho')}
               </th>
-              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Ações
               </th>
             </tr>
@@ -323,25 +323,25 @@ export const DriverList: React.FC<DriverListProps> = ({
           {totals && (
             <tfoot className="bg-gray-50">
               <tr className="border-t-2 border-gray-300">
-                <td colSpan={3 + platforms.length} className="px-4 py-3.5 text-sm font-bold text-gray-900">
+                <td colSpan={3 + platforms.length} className="px-3 py-3.5 text-sm font-bold text-gray-900">
                   {footerLabel} — {totals.drivers} driver(s)
                 </td>
-                <td className="px-3 py-3.5 text-right text-sm font-bold text-green-600 whitespace-nowrap">
+                <td className="px-2 py-3.5 text-right text-sm font-bold text-green-600 whitespace-nowrap">
                   {totals.zapex > 0 ? formatBRL(totals.zapex) : '—'}
                 </td>
-                <td className="px-3 py-3.5 text-right text-sm font-bold text-red-600 whitespace-nowrap">
+                <td className="px-2 py-3.5 text-right text-sm font-bold text-red-600 whitespace-nowrap">
                   {totals.discounts > 0 ? `− ${formatBRL(totals.discounts)}` : '—'}
                 </td>
-                <td className="px-3 py-3.5 text-right text-sm font-bold text-amber-600 whitespace-nowrap">
+                <td className="px-2 py-3.5 text-right text-sm font-bold text-amber-600 whitespace-nowrap">
                   {totals.vales > 0 ? `− ${formatBRL(totals.vales)}` : '—'}
                 </td>
-                <td className="px-3 py-3.5 text-right text-base font-bold text-green-600 whitespace-nowrap">
+                <td className="px-2 py-3.5 text-right text-base font-bold text-green-600 whitespace-nowrap">
                   {formatBRL(totals.net)}
                 </td>
-                <td className="px-3 py-3.5 text-center text-xs font-bold text-gray-700 whitespace-nowrap">
+                <td className="px-2 py-3.5 text-center text-xs font-bold text-gray-700 whitespace-nowrap">
                   NF {nfCount}/{totals.drivers}
                 </td>
-                <td className="px-3 py-3.5 text-center text-xs font-bold text-green-700 whitespace-nowrap">
+                <td className="px-2 py-3.5 text-center text-xs font-bold text-green-700 whitespace-nowrap">
                   Espelho {espelhoCount}/{totals.drivers}
                 </td>
                 <td />
@@ -624,7 +624,7 @@ export const DriverList: React.FC<DriverListProps> = ({
               className="border border-gray-200 rounded-lg overflow-hidden"
             >
               <summary
-                className={`list-none cursor-pointer px-4 py-3 flex items-center gap-3 ${allEspelho ? 'bg-green-200' : 'bg-gray-50'}`}
+                className={`list-none cursor-pointer px-3 py-3 flex items-center gap-3 ${allEspelho ? 'bg-green-200' : 'bg-gray-50'}`}
               >
                 {onToggleSelGroup && (
                   <input
