@@ -252,7 +252,7 @@ async function myMirrorUrl(req: Request, body: Body): Promise<Response> {
 
 // ─── Nota Fiscal (Fase 3) ───────────────────────────────────────────────────
 const NF_BUCKET = 'driverpay-nota-fiscais';
-const MAX_NF_BYTES = 8 * 1024 * 1024; // 8 MB (app comprime a foto antes)
+const MAX_NF_BYTES = 8 * 1024 * 1024; // 8 MB (nota em PDF; somente PDF desde 2026-07-24)
 
 function extFromType(t: string): string {
   const s = (t || '').toLowerCase();
@@ -348,6 +348,12 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   catch { return json({ error: 'Arquivo invalido' }, 400); }
   if (bytes.length === 0) return json({ error: 'Arquivo vazio' }, 400);
   if (bytes.length > MAX_NF_BYTES) return json({ error: 'Arquivo muito grande (max 8MB)' }, 413);
+
+  // Somente PDF (decisao do Victor, 2026-07-24): foto confundia os drivers. Valida o TIPO
+  // declarado E a assinatura real do arquivo (%PDF) — cliente antigo em cache nao fura a regra.
+  const isPdfType = contentType.toLowerCase().includes('pdf');
+  const isPdfMagic = bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
+  if (!isPdfType || !isPdfMagic) return json({ error: 'A nota deve ser um arquivo PDF (foto nao e aceita)' }, 400);
 
   const path = `${claims.company_id}/${periodId}/${claims.driver_id}/${emitterId}/${crypto.randomUUID()}.${extFromType(contentType)}`;
   const { error: upErr } = await supabase.storage.from(NF_BUCKET).upload(path, bytes, { contentType, upsert: false });

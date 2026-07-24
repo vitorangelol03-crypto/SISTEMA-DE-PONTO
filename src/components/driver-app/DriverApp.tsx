@@ -186,6 +186,13 @@ export function DriverApp() {
 
   async function handleNfFile(emitterId: string, file: File | null | undefined) {
     if (!file || !token || !nfCtx) return;
+    // Somente PDF (decisão do Victor, 2026-07-24): foto confundia os drivers.
+    // A edge fn também recusa não-PDF (valida a assinatura %PDF) — aqui é só o aviso amigável.
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (!isPdf) {
+      toast.error('Envie a nota em PDF — foto não é aceita.');
+      return;
+    }
     setNfUploading(emitterId);
     try {
       const { base64, contentType, filename } = await fileToUpload(file);
@@ -316,13 +323,14 @@ export function DriverApp() {
                 </div>
               )}
               <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === s.emitterId ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
-                {nfUploading === s.emitterId ? <Spinner /> : <><Upload size={16} /> {s.sent === 0 && s.rejected > 0 ? 'Reenviar nota' : s.sent > 0 ? 'Enviar outra nota' : 'Enviar foto da nota'}</>}
+                {nfUploading === s.emitterId ? <Spinner /> : <><Upload size={16} /> {s.sent === 0 && s.rejected > 0 ? 'Reenviar nota (PDF)' : s.sent > 0 ? 'Enviar outro PDF' : 'Enviar PDF da nota'}</>}
                 <input
-                  type="file" accept="image/*,application/pdf" capture="environment" className="hidden"
+                  type="file" accept="application/pdf" className="hidden"
                   disabled={nfUploading === s.emitterId}
                   onChange={(e) => { handleNfFile(s.emitterId, e.target.files?.[0]); e.currentTarget.value = ''; }}
                 />
               </label>
+              <p className="mt-1.5 text-[11px] text-gray-400 text-center">Somente arquivo PDF — foto não é aceita.</p>
             </div>
           ))}
 
