@@ -6,6 +6,16 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
+**GO-LIVE App do Entregador (23/07 noite):** app **NO AR em produção** (`sistema-ponto-zeta.vercel.app/driver`)
+— `feature/app-entregador` mergeado em `main` (`9c31db4`) + push + Vercel (autorizado pelo Victor). Ciclo
+publicar→app validado E2E (PDF real 9KB baixado pelo app); **driver REAL (Iago Nascimento) já logou e trocou a
+senha** — app em uso de verdade. **Feature nova entregue (commit `1dd484a`, local, NÃO pushado):** despublicar
+espelho (individual + "Despublicar todos do período" + selo "no app" na lista; "Republicar"=editar, já substituía)
++ **resetar senha do driver** (volta pro 1234 e destrava; migration `20260723150000` APLICADA = policy de DELETE
+em `driverpay_driver_auth` só do mestre, **sem SELECT** → hash protegido). Validado tsc 0 / build / **582 unit** /
+**E2E real com cliques** (preview do build novo → banco prod). **Faltam:** decidir subir essa leva pra Vercel; 6
+CPFs; painel responsivo; "pedir nota de novo" (rejeitar NF); print da nota anexada no painel (Notas recebidas).
+
 **Sessão 23/07 (kickoff App do Entregador):** começou a feature do app onde o driver
 loga, vê espelhos por quinzena e anexa NF por CNPJ (+ painel publica espelho, filtra por
 plataforma, baixa NFs em massa). Decisões travadas: login por CPF, web primeiro (APK depois
@@ -61,7 +71,7 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-23.md` | **Mais recente.** Kickoff App do Entregador: decisões (login CPF, web-first, filtro por plataforma, CNPJs configuráveis) + backfill de CPF em prod (91/97, reversível); base do login em standby aguardando plano da nuvem | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-23.md` | **Mais recente.** App do Entregador completo + **GO-LIVE em prod** (merge main + Vercel; driver real Iago já usando) + feature despublicar espelho/resetar senha (§6). Decisões (login CPF, web-first, filtro plataforma, CNPJs) + backfill CPF 91/97 reversível | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-20-noite.md` | Bugs de prod do ponto: facial desligada por spec (religada+blindada), Pablo sem GPS (fix msg), saída fantasma 12s = UX (2 registros limpos c/ backup); pendências de feature | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-20.md` | Valor separado por plataforma + multi-rota sem taxa média + fix race do corte; specs 61/unit novos | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-18.md` | Grupos: vínculo exclusivo + busca por rota; retroativo dos 17 commits de melhorias do painel (17-18/07) | 🟢 ATIVO |

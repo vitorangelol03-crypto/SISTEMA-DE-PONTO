@@ -123,3 +123,35 @@ a feature nunca chegou a ser escrita. Victor mandou construir **aqui, local**.
 CPF import: 1 UPDATE de dado em prod, verificado e reversível (`backups/2026-07-23-cpf-import/`).
 D3: tsc 0 + build ok + 111 unit verdes. Commits locais em `feature/app-entregador`: `1c3734c`, `1f3805b`.
 **Nada pushado. Nada aplicado em produção além do backfill de CPF.**
+
+## 6. Continuação noite 23/07 — GO-LIVE + despublicar/reset (com OK do Victor)
+
+- **PUSH + PRODUÇÃO (autorizado: "faz o push … coloque atualizado a vercel").** `feature/app-entregador`
+  (24 commits) → **merge fast-forward em `main`** (`b43b31d`→`9c31db4`) → push. Vercel publicou produção.
+  Verificado objetivo: `sistema-ponto-zeta.vercel.app/` HTTP 200 e o `index.html` de prod aponta pro
+  bundle do build novo (`index-B_yLOdLg.js`, hasheado por conteúdo) → app do entregador no ar em `/driver`.
+- **CICLO COMPLETO validado E2E (dado real):** painel (2626) publicou espelho do Adao → app (login Adao
+  CPF+1234) listou → `my-mirror-url` → **baixei o PDF real (HTTP 200, 9.283 bytes, começa com %PDF)**.
+  Depois LIMPO (publicação + auth de teste apagados).
+- **🎉 APP EM USO REAL:** driver **Iago Nascimento de Oliveira** logou sozinho e **JÁ TROCOU a senha**
+  (auth `must_change=false`, senha setada, ~23:28 de 23/07). O link foi divulgado pelo Victor. Registro
+  PRESERVADO (não é teste). **App do entregador validado em produção com usuário real.**
+- **Feature nova ENTREGADA (commit `1dd484a`): despublicar espelho + resetar senha** (pedidos do Victor,
+  decisões travadas: despublicar no diálogo + selo "no app"; individual **e** "despublicar todos do período").
+  - Editar espelho = **republicar** (já substituía; confirmado no código). Novo só o "excluir".
+  - `driverPay.ts`: `listPublishedDriverIds`, `unpublishDriverMirror`, `unpublishAllMirrorsForPeriod`,
+    `resetDriverPassword`. Diálogo do espelho: aviso "já publicado" + botão vira "Republicar (atualiza)" +
+    "Despublicar" (vermelho). Selo "no app" na lista (tabela+card). Barra: "Despublicar todos do período".
+    Form editar driver: botão "Resetar senha" (apaga a auth → volta 1234 + destrava lockout).
+  - **Migration `20260723150000` APLICADA em prod (OK do Victor):** policy de **DELETE** em
+    `driverpay_driver_auth` só pro mestre (9999/2626). **Sem SELECT/UPDATE** → hash das senhas segue
+    protegido. Despublicar reusa a policy FOR ALL já existente em `driverpay_mirror_publications`.
+  - **Validação:** tsc 0, build ok, **582 unit** verdes, **E2E real com cliques** (preview local do build
+    novo → banco prod): publicar→selo "no app"→despublicar individual→despublicar todos→form "Resetar senha".
+    Banco conferido limpo (0 publicações; o único auth é o REAL do Iago). PDFs despublicados ficam órfãos no
+    bucket privado (trava do storage; inofensivo).
+- **PENDENTE:** (a) decidir se sobe ESSA leva (despublicar/reset) pra Vercel — commitada local, ainda não
+  pushada; (b) 6 CPFs faltantes; (c) recursos ainda não feitos: painel responsivo + "pedir nota de novo"
+  (rejeitar NF) + print da nota anexada no painel (Notas recebidas com uma nota).
+- **State:** `main` = `9c31db4` (origin, em produção). `feature/app-entregador` = `1dd484a` (local, 1 commit
+  à frente do main, NÃO pushado).
