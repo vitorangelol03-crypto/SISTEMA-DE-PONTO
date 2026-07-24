@@ -2,19 +2,23 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-07-23**.
+> Última atualização: **2026-07-24** (madrugada).
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**GO-LIVE App do Entregador (23/07 noite):** app **NO AR em produção** (`sistema-ponto-zeta.vercel.app/driver`)
-— `feature/app-entregador` mergeado em `main` (`9c31db4`) + push + Vercel (autorizado pelo Victor). Ciclo
-publicar→app validado E2E (PDF real 9KB baixado pelo app); **driver REAL (Iago Nascimento) já logou e trocou a
-senha** — app em uso de verdade. **Feature nova entregue (commit `1dd484a`, local, NÃO pushado):** despublicar
-espelho (individual + "Despublicar todos do período" + selo "no app" na lista; "Republicar"=editar, já substituía)
-+ **resetar senha do driver** (volta pro 1234 e destrava; migration `20260723150000` APLICADA = policy de DELETE
-em `driverpay_driver_auth` só do mestre, **sem SELECT** → hash protegido). Validado tsc 0 / build / **582 unit** /
-**E2E real com cliques** (preview do build novo → banco prod). **Faltam:** decidir subir essa leva pra Vercel; 6
-CPFs; painel responsivo; "pedir nota de novo" (rejeitar NF); print da nota anexada no painel (Notas recebidas).
+**App do Entregador NO AR + várias features (madrugada 23→24/07):** app em produção
+(`sistema-ponto-zeta.vercel.app/driver`); **driver REAL (Iago) já logou e trocou a senha**. `main` em produção =
+**`c72b3ae`**; edge fn `driver-public-api` **v5**. Tudo validado (tsc 0 / build / **600 unit** / E2E real com cliques)
+e no ar. Entregue nesta madrugada (todas com decisões do Victor gravadas na §6/§7/§8 do checkpoint 23/07):
+(1) **despublicar espelho** (individual + "todos do período" + selo "no app"; "Republicar"=editar) + **resetar senha**
+(volta 1234; migration `20260723150000` = policy DELETE só do mestre, sem SELECT→hash protegido);
+(2) **validar/recusar(motivo)/excluir nota** + coluna **NF "validadas/esperadas"** (verde só com todas validadas;
+ciente de GRUPO — só o líder anexa, as notas validam o grupo todo; 1-ou-2 CNPJs por iMile/Shopee-Anjun-Loggi;
+migration `20260723160000` status 'validada'; edge fn v5 nf-slots ciente de grupo + reabre CNPJ recusado);
+(3) **status do grupo** no cabeçalho (pacotes/plataforma + NF + espelho) + **3 filtros** (NF/espelho/plataforma) +
+barra simétrica + **ordenar grupos** por métrica; (4) **relatório**: líder-recebedor dividido por rota, escopo por
+seleção, e **relatório simples** (nome sem acento | total net | OBS=nome da quinzena). **Faltam:** painel responsivo
+(Victor adiou); 6 CPFs faltantes; validar visualmente os relatórios/telas amanhã de manhã.
 
 **Sessão 23/07 (kickoff App do Entregador):** começou a feature do app onde o driver
 loga, vê espelhos por quinzena e anexa NF por CNPJ (+ painel publica espelho, filtra por
