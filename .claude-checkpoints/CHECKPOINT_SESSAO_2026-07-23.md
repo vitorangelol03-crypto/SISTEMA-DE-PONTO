@@ -216,4 +216,10 @@ painel; **Validar/Recusar(motivo)/Excluir** cada nota; a coluna NF vira **"valid
   - Validado: tsc 0, build ok, **600 unit** (7 novos) + **E2E real em PROD** (baixou geral+simples, abriu os .xlsx:
     geral "52 recebedor(es)", dividido por rota; simples A=nome sem acento / B=net / C=nome da quinzena). Em PROD.
   - Fix cosmético: nas linhas de continuação do bloco, a coluna GRUPO repete o grupo (era "Sem grupo").
-- **PENDENTE (fila):** painel responsivo (adiado); 6 CPFs; validar visualmente os relatórios amanhã.
+- **Responsivo (commit `4dbc95a`):** medido com Playwright em 1440/1280/1024/768/414 — body NUNCA rola na
+  horizontal (Layout sem max-w = full width; card view no mobile). A tabela tem ~1662px (14 colunas), então
+  em telas < isso rola lateral (1ª coluna sticky). Compactei (padding/inputs/ações) → empurra ~1 coluna a mais
+  pra dentro sem encolher fonte. Simetria conferida (KPIs 5, filtros 3×2). Caber 100% as 14 colunas em ~1408px
+  exigiria encolher fonte (perde legibilidade) OU esconder colunas (ex.: Zapex quando vazio) — deixei como opção
+  pro Victor decidir.
+- **PENDENTE (fila):** 6 CPFs faltantes; validar visualmente relatórios/telas amanhã; (opcional) esconder Zapex vazio.
