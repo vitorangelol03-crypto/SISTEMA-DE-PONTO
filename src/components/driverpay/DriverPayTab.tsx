@@ -1026,6 +1026,34 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     return { net, count: rows.length };
   }, [rows]);
 
+  // Reconstrói o espelho ABERTO aplicando o filtro de plataforma (chips) — usado pela prévia
+  // e pelo "Gerar PDF" pra mostrarem os valores só das plataformas marcadas (mesma regra do envio ao app).
+  const rebuildMirror = useCallback(
+    (allowed: string[] | null): MirrorRequest | null => {
+      if (!company || !selectedPeriod || !mirror) return null;
+      const allowedSet = allowed && allowed.length > 0 ? new Set(allowed) : undefined;
+      const plats = platformsRef.current;
+      if (mirror.mode === 'individual') {
+        const row = publishRows[0];
+        if (!row) return null;
+        return { mode: 'individual', data: buildDriverMirrorData(row, plats, company, selectedPeriod, allowedSet) };
+      }
+      if (mirror.mode === 'group') {
+        if (!publishGroupInfo) return null;
+        return {
+          mode: 'group',
+          data: buildGroupMirrorData(publishGroupInfo.groupName, publishRows, plats, company, selectedPeriod, allowedSet),
+        };
+      }
+      if (mirror.mode === 'mass') {
+        return { mode: 'mass', list: publishRows.map((r) => buildDriverMirrorData(r, plats, company, selectedPeriod, allowedSet)) };
+      }
+      const sel = buildSelectionMirrorData(filteredRows, selGroups, selDrivers, plats, company, selectedPeriod, allowedSet);
+      return { mode: 'selection', groups: sel.groups, singles: sel.singles };
+    },
+    [company, selectedPeriod, mirror, publishRows, publishGroupInfo, filteredRows, selGroups, selDrivers],
+  );
+
   const discountRow = discountRowId ? rows.find((r) => r.paymentId === discountRowId) ?? null : null;
   const valeRow = valeRowId ? rows.find((r) => r.paymentId === valeRowId) ?? null : null;
   const zapexRow = zapexRowId ? rows.find((r) => r.paymentId === zapexRowId) ?? null : null;
@@ -1470,6 +1498,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             onPublish={canMirror ? onPublish : undefined}
             alreadyPublished={!!recipientId && publishedDriverIds.has(recipientId)}
             onUnpublish={canMirror && singleRecipient ? onUnpublishCurrent : undefined}
+            onRebuild={rebuildMirror}
           />
         );
       })()}

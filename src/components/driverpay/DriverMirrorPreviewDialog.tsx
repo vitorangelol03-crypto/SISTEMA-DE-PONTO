@@ -50,6 +50,8 @@ interface DriverMirrorPreviewDialogProps {
   alreadyPublished?: boolean;
   /** Despublicar (tirar do app) — só faz sentido pro destinatário único (individual/grupo). */
   onUnpublish?: () => Promise<void>;
+  /** Reconstrói o espelho com o filtro de plataforma (chips) — a prévia e o PDF seguem a seleção. */
+  onRebuild?: (allowed: string[] | null) => MirrorRequest | null;
 }
 
 /** Faixa amarela do corte — mesma cara do PDF (prévia fiel). */
@@ -341,6 +343,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   onPublish,
   alreadyPublished,
   onUnpublish,
+  onRebuild,
 }) => {
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -348,6 +351,17 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   // Fase 1b — filtro de plataforma no ENVIO ao app (marca quais entram).
   const availablePlatforms = useMemo(() => platformNamesOf(request), [request]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(() => new Set(availablePlatforms));
+  // Plataformas marcadas => null quando todas (sem filtro); subconjunto => só essas.
+  const allowedFromSelection = useMemo<string[] | null>(
+    () => (selectedPlatforms.size >= availablePlatforms.length ? null : availablePlatforms.filter((p) => selectedPlatforms.has(p))),
+    [selectedPlatforms, availablePlatforms],
+  );
+  // Prévia + "Gerar PDF" seguem os chips: reconstrói o espelho só com as plataformas marcadas
+  // (mesma regra do envio ao app). Todas marcadas => request original.
+  const activeRequest = useMemo<MirrorRequest>(
+    () => (onRebuild && allowedFromSelection !== null ? onRebuild(allowedFromSelection) ?? request : request),
+    [onRebuild, allowedFromSelection, request],
+  );
   const [includeReceipts, setIncludeReceipts] = useState(true);
   // Aviso de corte (2026-07-19): pré-carrega o último salvo; salva automático ao gerar.
   const [cutoffTime, setCutoffTime] = useState('');
@@ -372,27 +386,27 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       ? { time: cutoffTime.trim(), date: cutoffDate.trim(), lateDate: lateDate.trim() }
       : null;
 
-  /** Injeta o aviso de corte em TODOS os dados do request (todos os modos). */
+  /** Injeta o aviso de corte no espelho ATIVO (já filtrado pelos chips), todos os modos. */
   const withCutoff = (): MirrorRequest => {
-    if (!cutoff) return request;
-    switch (request.mode) {
+    if (!cutoff) return activeRequest;
+    switch (activeRequest.mode) {
       case 'individual':
-        return { ...request, data: { ...request.data, cutoff } };
+        return { ...activeRequest, data: { ...activeRequest.data, cutoff } };
       case 'group':
-        return { ...request, data: { ...request.data, cutoff } };
+        return { ...activeRequest, data: { ...activeRequest.data, cutoff } };
       case 'mass':
-        return { ...request, list: request.list.map((d) => ({ ...d, cutoff })) };
+        return { ...activeRequest, list: activeRequest.list.map((d) => ({ ...d, cutoff })) };
       case 'selection':
         return {
-          ...request,
-          groups: request.groups.map((g) => ({ ...g, cutoff })),
-          singles: request.singles.map((d) => ({ ...d, cutoff })),
+          ...activeRequest,
+          groups: activeRequest.groups.map((g) => ({ ...g, cutoff })),
+          singles: activeRequest.singles.map((d) => ({ ...d, cutoff })),
         };
     }
   };
 
   const groupHasZapex =
-    request.mode === 'group' && request.data.drivers.some((d) => zapexValueOf(d) > 0);
+    activeRequest.mode === 'group' && activeRequest.data.drivers.some((d) => zapexValueOf(d) > 0);
 
   const handleGenerate = async () => {
     if (!canGenerate) {
@@ -489,11 +503,11 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   };
 
   const title =
-    request.mode === 'individual'
+    activeRequest.mode === 'individual'
       ? 'Espelho individual'
-      : request.mode === 'group'
-      ? `Espelho do grupo — ${request.data.groupName}`
-      : request.mode === 'selection'
+      : activeRequest.mode === 'group'
+      ? `Espelho do grupo — ${activeRequest.data.groupName}`
+      : activeRequest.mode === 'selection'
       ? 'Espelhos da seleção'
       : 'Espelhos em massa';
 
@@ -506,7 +520,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       maxWidth="sm:max-w-3xl"
       footer={
         <>
-          {(request.mode === 'group' || (request.mode === 'selection' && request.groups.length > 0)) && (
+          {(activeRequest.mode === 'group' || (activeRequest.mode === 'selection' && activeRequest.groups.length > 0)) && (
             <label className="flex items-center gap-2 text-xs text-gray-600 mr-auto">
               <input
                 type="checkbox"
@@ -574,7 +588,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
         {onPublish && availablePlatforms.length > 1 && (
           <div className="border border-blue-200 bg-blue-50 rounded-md p-3">
             <p className="text-xs font-semibold text-gray-700 mb-2">
-              Enviar ao app apenas estas plataformas <span className="font-normal text-gray-500">(o “Gerar PDF” e a prévia mostram todas)</span>:
+              Plataformas deste espelho <span className="font-normal text-gray-500">(a prévia, o “Gerar PDF” e o envio ao app seguem o que estiver marcado)</span>:
             </p>
             <div className="flex flex-wrap gap-2">
               {availablePlatforms.map((name) => {
@@ -641,16 +655,16 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
           Pré-visualização
         </div>
 
-        {request.mode === 'individual' && (
-          <PaperMirror data={cutoff ? { ...request.data, cutoff } : request.data} />
+        {activeRequest.mode === 'individual' && (
+          <PaperMirror data={cutoff ? { ...activeRequest.data, cutoff } : activeRequest.data} />
         )}
 
-        {request.mode === 'group' && (
+        {activeRequest.mode === 'group' && (
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm max-w-[720px] mx-auto p-6">
-            <div className="text-center text-xl font-extrabold text-gray-900">{request.data.company.name}</div>
+            <div className="text-center text-xl font-extrabold text-gray-900">{activeRequest.data.company.name}</div>
             <div className="mt-4 bg-blue-600 text-white rounded-lg px-4 py-2.5 flex items-center justify-between flex-wrap gap-2">
-              <span className="font-bold text-sm">ESPELHO DE GRUPO — {request.data.groupName}</span>
-              <span className="text-xs text-blue-100">{request.data.period.label}</span>
+              <span className="font-bold text-sm">ESPELHO DE GRUPO — {activeRequest.data.groupName}</span>
+              <span className="text-xs text-blue-100">{activeRequest.data.period.label}</span>
             </div>
             {cutoff && (
               <div className="mt-3">
@@ -660,7 +674,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
             {/* Avisos de plataforma do grupo (presença: só plataformas com pacotes no grupo) */}
             {(() => {
               const seen = new Map<string, string>();
-              for (const d of request.data.drivers)
+              for (const d of activeRequest.data.drivers)
                 for (const p of d.platforms)
                   if (p.platform !== 'Zapex' && p.highlight && p.notice) seen.set(p.platform, p.notice);
               return seen.size > 0 ? (
@@ -689,7 +703,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                   </tr>
                 </thead>
                 <tbody>
-                  {request.data.drivers.map((d, i) => (
+                  {activeRequest.data.drivers.map((d, i) => (
                     <tr key={i} className="border-t border-gray-100">
                       <td className="py-1.5 break-words">{d.driver.name}</td>
                       <td className="py-1.5 text-right tabular-nums">
@@ -716,7 +730,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
             </div>
             {/* Descontos do grupo (2026-07-19): de quem, código, marca, obs, valor — máx 12 */}
             {(() => {
-              const all = request.data.drivers.flatMap((d) =>
+              const all = activeRequest.data.drivers.flatMap((d) =>
                 d.discounts.map((dd) => ({ driver: d.driver.name, ...dd })),
               );
               if (all.length === 0) return null;
@@ -775,23 +789,23 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
             })()}
 
             {(() => {
-              const gSep = groupSeparated(request.data);
+              const gSep = groupSeparated(activeRequest.data);
               const gSepTotal = gSep.reduce((s, x) => s + x.amount, 0);
               return (
                 <>
                   <div className="mt-4 flex items-center justify-between px-4 py-3 bg-green-700 text-white rounded-lg">
                     <span className="font-bold text-sm">
-                      TOTAL — {request.data.groupTotals.driverCount} driver(s)
+                      TOTAL — {activeRequest.data.groupTotals.driverCount} driver(s)
                     </span>
                     <span className="font-extrabold text-lg tabular-nums">
-                      {formatBRL(request.data.groupTotals.toReceive - gSepTotal)}
+                      {formatBRL(activeRequest.data.groupTotals.toReceive - gSepTotal)}
                     </span>
                   </div>
                   {gSep.length > 0 && (
                     <div className="mt-2 space-y-2">
                       {gSep.map((s) => {
                         let noticeText: string | null = null;
-                        for (const d of request.data.drivers) {
+                        for (const d of activeRequest.data.drivers) {
                           const hit = d.platforms.find((p) => p.platform === s.platform && p.notice);
                           if (hit?.notice) {
                             noticeText = hit.notice;
@@ -828,26 +842,26 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
           </div>
         )}
 
-        {request.mode === 'selection' && (
+        {activeRequest.mode === 'selection' && (
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm max-w-[720px] mx-auto p-6">
             <p className="text-sm text-gray-700 mb-3">
               Um único PDF com{' '}
-              {request.groups.length > 0 && (
+              {activeRequest.groups.length > 0 && (
                 <>
-                  <b>{request.groups.length}</b> espelho(s) de grupo
+                  <b>{activeRequest.groups.length}</b> espelho(s) de grupo
                   {includeReceipts ? ' (resumo + recibos)' : ' (só o resumo)'}
                 </>
               )}
-              {request.groups.length > 0 && request.singles.length > 0 && ' e '}
-              {request.singles.length > 0 && (
+              {activeRequest.groups.length > 0 && activeRequest.singles.length > 0 && ' e '}
+              {activeRequest.singles.length > 0 && (
                 <>
-                  <b>{request.singles.length}</b> espelho(s) individual(is)
+                  <b>{activeRequest.singles.length}</b> espelho(s) individual(is)
                 </>
               )}
               .
             </p>
             <div className="border border-gray-200 rounded-md max-h-72 overflow-y-auto divide-y divide-gray-100">
-              {request.groups.map((g, i) => (
+              {activeRequest.groups.map((g, i) => (
                 <div key={`g-${i}`} className="flex items-center justify-between px-3 py-2 text-sm bg-blue-50/50">
                   <span className="text-gray-900 truncate font-medium">
                     📋 {g.groupName}{' '}
@@ -858,7 +872,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                   </span>
                 </div>
               ))}
-              {request.singles.map((d, i) => (
+              {activeRequest.singles.map((d, i) => (
                 <div key={`s-${i}`} className="flex items-center justify-between px-3 py-2 text-sm">
                   <span className="text-gray-900 truncate">{d.driver.name}</span>
                   <span className="font-semibold text-green-700 tabular-nums">
@@ -870,13 +884,13 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
           </div>
         )}
 
-        {request.mode === 'mass' && (
+        {activeRequest.mode === 'mass' && (
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm max-w-[720px] mx-auto p-6">
             <p className="text-sm text-gray-700 mb-3">
-              Serão gerados <b>{request.list.length}</b> espelho(s) num único PDF (1 página por driver).
+              Serão gerados <b>{activeRequest.list.length}</b> espelho(s) num único PDF (1 página por driver).
             </p>
             <div className="border border-gray-200 rounded-md max-h-72 overflow-y-auto divide-y divide-gray-100">
-              {request.list.map((d, i) => (
+              {activeRequest.list.map((d, i) => (
                 <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
                   <span className="text-gray-900 truncate">{d.driver.name}</span>
                   <span className="font-semibold text-green-700 tabular-nums">
