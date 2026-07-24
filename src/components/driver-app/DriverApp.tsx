@@ -310,8 +310,13 @@ export function DriverApp() {
                   </span>
                 )}
               </div>
+              {s.sent === 0 && s.rejected > 0 && (
+                <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  <b>Nota recusada.</b>{s.rejectReason ? ` Motivo: ${s.rejectReason}.` : ''} Envie outra, por favor.
+                </div>
+              )}
               <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === s.emitterId ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
-                {nfUploading === s.emitterId ? <Spinner /> : <><Upload size={16} /> {s.sent > 0 ? 'Enviar outra nota' : 'Enviar foto da nota'}</>}
+                {nfUploading === s.emitterId ? <Spinner /> : <><Upload size={16} /> {s.sent === 0 && s.rejected > 0 ? 'Reenviar nota' : s.sent > 0 ? 'Enviar outra nota' : 'Enviar foto da nota'}</>}
                 <input
                   type="file" accept="image/*,application/pdf" capture="environment" className="hidden"
                   disabled={nfUploading === s.emitterId}

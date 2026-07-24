@@ -87,7 +87,12 @@ export interface NfSlot {
   emitterId: string;
   cnpj: string;
   label: string;
+  /** notas NÃO rejeitadas enviadas neste CNPJ (pendentes/validadas). */
   sent: number;
+  /** notas rejeitadas (pediram outra). */
+  rejected: number;
+  /** motivo da última recusa (mostra "recusada: <motivo>, envie outra"). */
+  rejectReason: string | null;
 }
 export interface NfFile {
   id: string;

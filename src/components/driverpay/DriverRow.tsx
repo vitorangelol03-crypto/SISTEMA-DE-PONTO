@@ -25,6 +25,7 @@ import {
   isMultiRoute,
   formatBRL,
   formatInt,
+  type NfProgress,
 } from './driverPayShared';
 
 interface DriverRowProps {
@@ -42,6 +43,8 @@ interface DriverRowProps {
   handlers: RowHandlers;
   /** Espelho já publicado no app do driver (selo "no app"). */
   publishedInApp?: boolean;
+  /** Progresso da NF (validadas/esperadas, ciente de grupo). Ausente = sem dado. */
+  nfProgress?: NfProgress;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkbox. */
   selected?: boolean;
   /** Driver já coberto por um GRUPO selecionado: checkbox marcado e travado. */
@@ -77,6 +80,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   canMirror,
   handlers,
   publishedInApp,
+  nfProgress,
   selected,
   selectionLocked,
   onToggleSelect,
@@ -290,22 +294,44 @@ export const DriverRow: React.FC<DriverRowProps> = ({
           </span>
         </td>
 
-        {/* Nota Fiscal (check grande e obvio) */}
+        {/* Nota Fiscal: progresso "validadas/esperadas" (ciente de grupo — só o líder anexa).
+            Verde = todas validadas OU marcado na mão. Clique marca/desmarca na mão;
+            validar cada nota é no botão "Notas recebidas". Sem CNPJ esperado = círculo manual. */}
         <td className="px-3 py-3 text-center align-middle">
-          <button
-            type="button"
-            onClick={() => handlers.onToggleNota(row.paymentId, row.notaFiscal)}
-            disabled={inputsDisabled}
-            title={row.notaFiscal ? 'Nota fiscal recebida' : 'Marcar nota fiscal recebida'}
-            aria-pressed={row.notaFiscal}
-            className="inline-flex items-center justify-center rounded-full hover:bg-gray-100 p-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          >
-            {row.notaFiscal ? (
-              <CheckCircle2 className="w-6 h-6 text-green-600 fill-green-100" />
-            ) : (
-              <Circle className="w-6 h-6 text-gray-500" />
-            )}
-          </button>
+          {nfProgress && nfProgress.expected > 0 ? (
+            <button
+              type="button"
+              onClick={() => handlers.onToggleNota(row.paymentId, row.notaFiscal)}
+              disabled={inputsDisabled}
+              aria-pressed={nfProgress.complete}
+              title="NF: notas validadas / esperadas (CNPJs). Verde = todas validadas. Clique marca/desmarca na mão; valide cada nota em 'Notas recebidas'."
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-bold tabular-nums border disabled:opacity-40 disabled:cursor-not-allowed ${
+                nfProgress.complete
+                  ? 'bg-green-100 text-green-700 border-green-300'
+                  : nfProgress.pending > 0
+                  ? 'bg-amber-100 text-amber-700 border-amber-300'
+                  : 'bg-gray-100 text-gray-500 border-gray-300'
+              }`}
+            >
+              {nfProgress.complete ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
+              {nfProgress.manual && nfProgress.complete ? 'na mão' : `${nfProgress.validated}/${nfProgress.expected}`}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handlers.onToggleNota(row.paymentId, row.notaFiscal)}
+              disabled={inputsDisabled}
+              title={row.notaFiscal ? 'Nota fiscal recebida (na mão)' : 'Sem CNPJ esperado — clique p/ marcar recebida na mão'}
+              aria-pressed={row.notaFiscal}
+              className="inline-flex items-center justify-center rounded-full hover:bg-gray-100 p-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            >
+              {row.notaFiscal ? (
+                <CheckCircle2 className="w-6 h-6 text-green-600 fill-green-100" />
+              ) : (
+                <Circle className="w-6 h-6 text-gray-500" />
+              )}
+            </button>
+          )}
         </td>
 
         {/* Espelho conferido — quando marcado, a linha inteira do driver fica verde.

@@ -270,13 +270,25 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
   const periodId = String(body.periodId ?? '').trim();
   if (!periodId) return json({ error: 'periodId ausente' }, 400);
 
-  const { data: pay } = await supabase.from('driverpay_payments')
-    .select('id').eq('period_id', periodId).eq('driver_id', claims.driver_id).maybeSingle();
+  // Grupo: se este driver e LIDER de um grupo, ele anexa as notas do GRUPO inteiro — entao
+  // os CNPJs esperados vem dos pacotes de TODOS os membros (nao so dele). Senao, so dele.
+  const { data: ledGroup } = await supabase.from('driverpay_groups')
+    .select('id').eq('leader_driver_id', claims.driver_id).eq('company_id', claims.company_id).maybeSingle();
+  let driverIds = [claims.driver_id];
+  if (ledGroup?.id) {
+    const { data: members } = await supabase.from('driverpay_group_members')
+      .select('driver_id').eq('group_id', ledGroup.id);
+    driverIds = [...new Set([claims.driver_id, ...(members ?? []).map((m) => m.driver_id as string)])];
+  }
+
+  const { data: pays } = await supabase.from('driverpay_payments')
+    .select('id').eq('period_id', periodId).in('driver_id', driverIds);
+  const payIds = (pays ?? []).map((p) => p.id);
 
   let platformNames: string[] = [];
-  if (pay?.id) {
+  if (payIds.length) {
     const { data: pks } = await supabase.from('driverpay_payment_packages')
-      .select('platform_name, packages').eq('payment_id', pay.id);
+      .select('platform_name, packages').in('payment_id', payIds);
     platformNames = [...new Set((pks ?? []).filter((p) => (p.packages ?? 0) > 0).map((p) => p.platform_name))];
   }
 
@@ -292,11 +304,26 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
     .select('id, cnpj, label').in('id', emitterIds).eq('active', true).order('sort_order', { ascending: true });
 
   const { data: files } = await supabase.from('driverpay_nota_fiscal_files')
-    .select('nota_emitter_id').eq('driver_id', claims.driver_id).eq('period_id', periodId);
+    .select('nota_emitter_id, status, reject_reason, uploaded_at')
+    .eq('driver_id', claims.driver_id).eq('period_id', periodId)
+    .order('uploaded_at', { ascending: true });
+  // sent = notas NAO rejeitadas. Rejeitada nao conta (reabre o slot pro driver reenviar);
+  // guarda o motivo da ultima rejeicao pra mostrar "recusada: <motivo>, envie outra".
   const sent: Record<string, number> = {};
-  for (const f of files ?? []) sent[f.nota_emitter_id] = (sent[f.nota_emitter_id] ?? 0) + 1;
-
-  const slots = (emitters ?? []).map((e) => ({ emitterId: e.id, cnpj: e.cnpj, label: e.label, sent: sent[e.id] ?? 0 }));
+  const rejected: Record<string, number> = {};
+  const rejectReason: Record<string, string | null> = {};
+  for (const f of files ?? []) {
+    if (f.status === 'rejeitada') {
+      rejected[f.nota_emitter_id] = (rejected[f.nota_emitter_id] ?? 0) + 1;
+      rejectReason[f.nota_emitter_id] = f.reject_reason ?? null; // ordem asc -> fica a mais recente
+    } else {
+      sent[f.nota_emitter_id] = (sent[f.nota_emitter_id] ?? 0) + 1;
+    }
+  }
+  const slots = (emitters ?? []).map((e) => ({
+    emitterId: e.id, cnpj: e.cnpj, label: e.label,
+    sent: sent[e.id] ?? 0, rejected: rejected[e.id] ?? 0, rejectReason: rejectReason[e.id] ?? null,
+  }));
   return json({ slots });
 }
 
@@ -336,12 +363,8 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   }]);
   if (insErr) return json({ error: 'Falha ao registrar a nota', details: insErr.message }, 500);
 
-  // Marca o resumo antigo "nota recebida" (nota_fiscal_by fica null: driver nao e users).
-  if (pay?.id) {
-    await supabase.from('driverpay_payments')
-      .update({ nota_fiscal_recebida: true, nota_fiscal_at: new Date().toISOString() })
-      .eq('id', pay.id);
-  }
+  // NAO marca mais o "nota recebida" antigo automaticamente: agora quem deixa a NF verde
+  // no painel e a VALIDACAO da nota pelo mestre (status 'validada'), nao o simples upload.
   return json({ ok: true });
 }
 
@@ -352,14 +375,14 @@ async function nfListFn(req: Request, body: Body): Promise<Response> {
   const periodId = String(body.periodId ?? '').trim();
   if (!periodId) return json({ error: 'periodId ausente' }, 400);
   const { data } = await supabase.from('driverpay_nota_fiscal_files')
-    .select('id, nota_emitter_id, original_filename, status, uploaded_at, driverpay_nota_emitters(label, cnpj)')
+    .select('id, nota_emitter_id, original_filename, status, reject_reason, uploaded_at, driverpay_nota_emitters(label, cnpj)')
     .eq('driver_id', claims.driver_id).eq('period_id', periodId)
     .order('uploaded_at', { ascending: false });
   const files = (data ?? []).map((f) => {
     const em = Array.isArray(f.driverpay_nota_emitters) ? f.driverpay_nota_emitters[0] : f.driverpay_nota_emitters;
     return {
       id: f.id, emitterId: f.nota_emitter_id, emitterLabel: em?.label ?? '', cnpj: em?.cnpj ?? '',
-      filename: f.original_filename, status: f.status, uploadedAt: f.uploaded_at,
+      filename: f.original_filename, status: f.status, rejectReason: f.reject_reason ?? null, uploadedAt: f.uploaded_at,
     };
   });
   return json({ files });

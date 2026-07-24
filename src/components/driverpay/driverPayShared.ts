@@ -145,6 +145,108 @@ export function platformPackages(row: DriverRowData, platformName: string): numb
   return row.routes.reduce((sum, rl) => sum + (rl.packages[platformName] ?? 0), 0);
 }
 
+/** Plataforma (subset) usado no cálculo de notas esperadas: nome + CNPJ vinculado. */
+export interface EmitterPlatform {
+  name: string;
+  nota_emitter_id: string | null;
+}
+
+/**
+ * CNPJs (emitentes) que o driver PRECISA mandar nota neste período: 1 por CNPJ distinto
+ * das plataformas em que ele tem pacote (>0). Mesma regra dos "slots" do app do entregador.
+ * Ex.: só Shopee → [CNPJ da Shopee]; Shopee + iMile → [CNPJ Shopee, CNPJ iMile].
+ */
+export function expectedEmitterIds(row: DriverRowData, platforms: EmitterPlatform[]): string[] {
+  const ids = new Set<string>();
+  for (const pl of platforms) {
+    if (pl.nota_emitter_id && platformPackages(row, pl.name) > 0) ids.add(pl.nota_emitter_id);
+  }
+  return [...ids];
+}
+
+/** Progresso da NF de um driver: quantas das CNPJs esperadas já têm nota VALIDADA. */
+export interface NfProgress {
+  /** nº de CNPJs que o driver precisa mandar nota. */
+  expected: number;
+  /** nº de CNPJs esperados com nota já validada. */
+  validated: number;
+  /** nº de CNPJs esperados com nota recebida mas ainda NÃO validada (pendente). */
+  pending: number;
+  /** verde: manual ligado OU todas as esperadas validadas. */
+  complete: boolean;
+  /** foi marcado "na mão" (nota_fiscal_recebida) — override manual. */
+  manual: boolean;
+}
+
+/**
+ * Calcula o progresso da NF (validadas/esperadas). `validatedEmitters`/`receivedEmitters`
+ * são os CNPJs desse driver com nota validada / recebida-não-rejeitada. `manual` =
+ * nota_fiscal_recebida (marca na mão, p/ quem manda por fora do app). Puro/testável.
+ */
+export function computeNfProgress(
+  row: DriverRowData,
+  platforms: EmitterPlatform[],
+  validatedEmitters: ReadonlySet<string> | undefined,
+  receivedEmitters: ReadonlySet<string> | undefined,
+  manual: boolean,
+): NfProgress {
+  const expectedIds = expectedEmitterIds(row, platforms);
+  const expected = expectedIds.length;
+  const validated = expectedIds.filter((id) => validatedEmitters?.has(id)).length;
+  const pending = expectedIds.filter((id) => !validatedEmitters?.has(id) && receivedEmitters?.has(id)).length;
+  const complete = manual || (expected > 0 && validated >= expected);
+  return { expected, validated, pending, complete, manual };
+}
+
+/**
+ * Progresso da NF por PAGAMENTO, ciente de GRUPO. Regra do Victor: num grupo, só o líder
+ * anexa as notas — então o grupo inteiro é validado pelas notas do grupo (ex.: grupo de 6
+ * com 2 CNPJs → 2 notas validadas deixam os 6 verdes). Driver avulso = unidade própria.
+ *
+ * Agrega por grupo (chave = groupName; avulso = paymentId): esperadas = união dos CNPJs
+ * dos membros; validadas/recebidas = união das notas dos membros (o líder é membro, então
+ * as notas dele entram). Todos os membros recebem o MESMO progresso. `manual` = qualquer
+ * membro marcado na mão (nota_fiscal_recebida). Puro/testável.
+ */
+export function computeNfProgressByPayment(
+  rows: DriverRowData[],
+  platforms: EmitterPlatform[],
+  notesByDriver: ReadonlyMap<string, { validated: ReadonlySet<string>; received: ReadonlySet<string> }>,
+): Map<string, NfProgress> {
+  const units = new Map<string, DriverRowData[]>();
+  for (const row of rows) {
+    const key = row.groupName ? `g:${row.groupName}` : `s:${row.paymentId}`;
+    const bucket = units.get(key);
+    if (bucket) bucket.push(row);
+    else units.set(key, [row]);
+  }
+
+  const out = new Map<string, NfProgress>();
+  for (const unitRows of units.values()) {
+    const expectedIds = new Set<string>();
+    const validatedIds = new Set<string>();
+    const receivedIds = new Set<string>();
+    let manual = false;
+    for (const row of unitRows) {
+      for (const id of expectedEmitterIds(row, platforms)) expectedIds.add(id);
+      const nf = notesByDriver.get(row.driverId);
+      if (nf) {
+        for (const id of nf.validated) validatedIds.add(id);
+        for (const id of nf.received) receivedIds.add(id);
+      }
+      if (row.notaFiscal) manual = true;
+    }
+    const expectedArr = [...expectedIds];
+    const expected = expectedArr.length;
+    const validated = expectedArr.filter((id) => validatedIds.has(id)).length;
+    const pending = expectedArr.filter((id) => !validatedIds.has(id) && receivedIds.has(id)).length;
+    const complete = manual || (expected > 0 && validated >= expected);
+    const progress: NfProgress = { expected, validated, pending, complete, manual };
+    for (const row of unitRows) out.set(row.paymentId, progress);
+  }
+  return out;
+}
+
 /**
  * Formula do pagamento (net pode ser negativo).
  *

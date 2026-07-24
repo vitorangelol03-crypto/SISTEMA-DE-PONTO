@@ -465,14 +465,17 @@ export interface NotaFiscalFileRow {
   filePath: string;
   fileType: string | null;
   originalFilename: string | null;
+  /** 'recebida' (pendente) | 'validada' (conferida OK) | 'rejeitada' (errada, driver reenvia). */
   status: string;
+  /** Motivo da recusa (só quando status='rejeitada') — mostrado pro driver no app. */
+  rejectReason: string | null;
   uploadedAt: string;
 }
 
 export const listNotaFiscalFiles = async (companyId: string, periodId: string): Promise<NotaFiscalFileRow[]> => {
   const { data, error } = await supabase
     .from('driverpay_nota_fiscal_files')
-    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, uploaded_at, driverpay_drivers(name), driverpay_nota_emitters(label, cnpj)')
+    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, reject_reason, uploaded_at, driverpay_drivers(name), driverpay_nota_emitters(label, cnpj)')
     .eq('company_id', companyId)
     .eq('period_id', periodId)
     .order('uploaded_at', { ascending: true });
@@ -494,9 +497,43 @@ export const listNotaFiscalFiles = async (companyId: string, periodId: string): 
       fileType: (r.file_type as string | null) ?? null,
       originalFilename: (r.original_filename as string | null) ?? null,
       status: (r.status as string) ?? 'recebida',
+      rejectReason: (r.reject_reason as string | null) ?? null,
       uploadedAt: String(r.uploaded_at),
     };
   });
+};
+
+/**
+ * Valida / recusa / reabre uma nota anexada pelo driver. 'validada' conta pra NF ficar
+ * verde; 'rejeitada' (com motivo opcional) faz o driver reenviar (o slot reabre no app).
+ * Só o mestre (RLS FOR ALL + ensurePerm) mexe. Não apaga o arquivo — muda o status.
+ */
+export const setNotaFiscalStatus = async (
+  fileId: string,
+  status: 'recebida' | 'validada' | 'rejeitada',
+  userId: string,
+  reason?: string | null,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const patch: Record<string, unknown> = {
+    status,
+    validated_at: status === 'validada' ? new Date().toISOString() : null,
+    validated_by: status === 'validada' ? userId : null,
+    reject_reason: status === 'rejeitada' ? (reason?.trim() || null) : null,
+  };
+  const { error } = await supabase.from('driverpay_nota_fiscal_files').update(patch).eq('id', fileId);
+  if (error) throwDbError(error);
+};
+
+/**
+ * Exclui de vez uma nota anexada (ex.: nota errada). Apaga o registro; o arquivo fica
+ * órfão no bucket privado (trava do storage não deixa apagar arquivo — inofensivo). O
+ * CNPJ volta a aparecer como "faltando" no app pro driver reenviar.
+ */
+export const deleteNotaFiscalFile = async (fileId: string, userId: string): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase.from('driverpay_nota_fiscal_files').delete().eq('id', fileId);
+  if (error) throwDbError(error);
 };
 
 /** Link assinado (bucket privado) pra ver/baixar uma nota. TTL curto. */

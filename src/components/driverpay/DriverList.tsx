@@ -28,6 +28,7 @@ import {
   platformPackages,
   formatBRL,
   formatInt,
+  type NfProgress,
 } from './driverPayShared';
 
 interface DriverListProps {
@@ -45,6 +46,8 @@ interface DriverListProps {
   onGroupMirror: (groupName: string, rows: DriverRowData[]) => void;
   /** driver_ids com espelho já publicado no app (alimenta o selo "no app"). */
   publishedDriverIds?: ReadonlySet<string>;
+  /** Progresso da NF (validadas/esperadas) por paymentId — ciente de grupo. */
+  nfProgressByPayment?: ReadonlyMap<string, NfProgress>;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkboxes. */
   selGroups?: ReadonlySet<string>;
   selDrivers?: ReadonlySet<string>;
@@ -94,6 +97,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   handlers,
   onGroupMirror,
   publishedDriverIds,
+  nfProgressByPayment,
   selGroups,
   selDrivers,
   onToggleSelGroup,
@@ -193,7 +197,8 @@ export const DriverList: React.FC<DriverListProps> = ({
 
   const renderTable = (subset: DriverRowData[], withFooter: boolean, footerLabel = 'TOTAL GERAL') => {
     const totals = withFooter ? sumTotals(subset) : null;
-    const nfCount = subset.filter((r) => r.notaFiscal).length;
+    // NF "completa" = todas as CNPJs esperadas validadas (ciente de grupo) OU marcada na mão.
+    const nfCount = subset.filter((r) => nfProgressByPayment?.get(r.paymentId)?.complete).length;
     const espelhoCount = subset.filter((r) => r.espelhoConferido).length;
     return (
       <div className="overflow-x-auto">
@@ -256,6 +261,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                 canMirror={canMirror}
                 handlers={handlers}
                 publishedInApp={publishedDriverIds?.has(row.driverId)}
+                nfProgress={nfProgressByPayment?.get(row.paymentId)}
                 selected={selDrivers?.has(row.paymentId)}
                 selectionLocked={rowGroupSelected(row)}
                 onToggleSelect={onToggleSelDriver}
@@ -298,6 +304,8 @@ export const DriverList: React.FC<DriverListProps> = ({
   const renderMobileCard = (row: DriverRowData) => {
     const t = computeRowTotals(row);
     const multi = row.routes.length > 1;
+    const nf = nfProgressByPayment?.get(row.paymentId);
+    const nfComplete = nf?.complete ?? row.notaFiscal;
     return (
       <div
         key={row.paymentId}
@@ -381,24 +389,30 @@ export const DriverList: React.FC<DriverListProps> = ({
           </p>
         )}
 
-        {/* Nota fiscal — check grande e obvio */}
+        {/* Nota fiscal — progresso validadas/esperadas (verde quando completo);
+            clique marca/desmarca "na mão". Validar cada nota é em "Notas recebidas". */}
         <button
           type="button"
           onClick={() => handlers.onToggleNota(row.paymentId, row.notaFiscal)}
           disabled={readOnly || !canEdit}
-          aria-pressed={row.notaFiscal}
+          aria-pressed={nfComplete}
+          title="Clique = marcar/desmarcar recebida na mão. Validar cada nota: botão 'Notas recebidas'."
           className={`w-full mb-2 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium min-h-[40px] border ${
-            row.notaFiscal
+            nfComplete
               ? 'bg-green-50 border-green-200 text-green-700'
+              : nf && nf.pending > 0
+              ? 'bg-amber-50 border-amber-200 text-amber-700'
               : 'bg-gray-50 border-gray-200 text-gray-500'
           } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          {row.notaFiscal ? (
-            <CheckCircle2 className="w-5 h-5 fill-green-100" />
-          ) : (
-            <Circle className="w-5 h-5" />
-          )}
-          {row.notaFiscal ? 'Nota fiscal recebida' : 'Marcar nota fiscal'}
+          {nfComplete ? <CheckCircle2 className="w-5 h-5 fill-green-100" /> : <Circle className="w-5 h-5" />}
+          {nf && nf.expected > 0
+            ? nfComplete
+              ? `Nota fiscal validada${nf.manual ? ' (na mão)' : ` (${nf.validated}/${nf.expected})`}`
+              : `Notas ${nf.validated}/${nf.expected} validadas`
+            : nfComplete
+            ? 'Nota fiscal recebida'
+            : 'Sem nota esperada'}
         </button>
 
         {/* Espelho conferido — deixa o card inteiro verde */}

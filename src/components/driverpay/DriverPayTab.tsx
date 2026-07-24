@@ -39,6 +39,7 @@ import {
   listPublishedDriverIds,
   unpublishDriverMirror,
   unpublishAllMirrorsForPeriod,
+  listNotaFiscalFiles,
 } from '../../services/driverPay';
 import { exportDriverGeneralReportExcel } from '../../utils/driverReport';
 import { generateDriverMirrorPdf, generateDriverGroupMirrorPdf } from '../../utils/driverMirrorPdf';
@@ -52,6 +53,7 @@ import {
   buildSelectionMirrorData,
   buildReportRows,
   planRateReapply,
+  computeNfProgressByPayment,
   formatBRL,
   formatInt,
   MIRROR_COMPANY_NAME,
@@ -158,6 +160,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [publishGroupInfo, setPublishGroupInfo] = useState<{ groupName: string; groupId: string | null; leaderId: string | null } | null>(null);
   // driver_ids que já têm espelho publicado no app neste período (selo "no app" + "já publicado").
   const [publishedDriverIds, setPublishedDriverIds] = useState<Set<string>>(new Set());
+  // Notas do período por driver: CNPJs (emitterIds) com nota validada / recebida-não-rejeitada.
+  // Alimenta a coluna NF (validadas/esperadas). Recarrega ao validar/recusar/excluir nota.
+  const [nfByDriver, setNfByDriver] = useState<Map<string, { validated: Set<string>; received: Set<string> }>>(new Map());
 
   // Refs para leitura estavel em callbacks assincronos
   const driversRef = useRef<Driver[]>([]);
@@ -277,10 +282,43 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     [company?.id],
   );
 
-  // Recarrega o "publicado no app" ao trocar de período (e ao trocar de empresa via dep).
+  // Carrega as notas do período e monta, por driver, os CNPJs com nota validada / recebida
+  // (não rejeitada). Alimenta a coluna NF (validadas/esperadas, ciente de grupo).
+  const reloadNotes = useCallback(
+    async (periodId: string | null) => {
+      if (!company?.id || !periodId) {
+        setNfByDriver(new Map());
+        return;
+      }
+      try {
+        const files = await listNotaFiscalFiles(company.id, periodId);
+        const map = new Map<string, { validated: Set<string>; received: Set<string> }>();
+        for (const f of files) {
+          let e = map.get(f.driverId);
+          if (!e) {
+            e = { validated: new Set(), received: new Set() };
+            map.set(f.driverId, e);
+          }
+          if (f.status === 'validada') {
+            e.validated.add(f.emitterId);
+            e.received.add(f.emitterId);
+          } else if (f.status !== 'rejeitada') {
+            e.received.add(f.emitterId);
+          }
+        }
+        setNfByDriver(map);
+      } catch (e) {
+        console.error('Erro ao carregar notas do período:', e);
+      }
+    },
+    [company?.id],
+  );
+
+  // Recarrega "publicado no app" + notas ao trocar de período (e de empresa via dep).
   useEffect(() => {
     reloadPublished(selectedPeriodId);
-  }, [selectedPeriodId, reloadPublished]);
+    reloadNotes(selectedPeriodId);
+  }, [selectedPeriodId, reloadPublished, reloadNotes]);
 
   // Reset total + recarga ao trocar de empresa (evita vazamento cross-empresa).
   useEffect(() => {
@@ -909,6 +947,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     return { net, count: rows.length };
   }, [rows]);
 
+  // Progresso da NF por pagamento (validadas/esperadas, ciente de grupo — só o líder anexa).
+  // Calculado sobre TODOS os rows (não os filtrados) pra o grupo agregar certo mesmo com filtro.
+  const nfProgressByPayment = useMemo(
+    () => computeNfProgressByPayment(rows, platforms, nfByDriver),
+    [rows, platforms, nfByDriver],
+  );
+
   const discountRow = discountRowId ? rows.find((r) => r.paymentId === discountRowId) ?? null : null;
   const valeRow = valeRowId ? rows.find((r) => r.paymentId === valeRowId) ?? null : null;
   const zapexRow = zapexRowId ? rows.find((r) => r.paymentId === zapexRowId) ?? null : null;
@@ -1139,6 +1184,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             handlers={handlers}
             onGroupMirror={onGroupMirror}
             publishedDriverIds={publishedDriverIds}
+            nfProgressByPayment={nfProgressByPayment}
             selGroups={canMirror ? selGroups : undefined}
             selDrivers={canMirror ? selDrivers : undefined}
             onToggleSelGroup={canMirror ? toggleSelGroup : undefined}
@@ -1238,7 +1284,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           companyId={company.id}
           periodId={selectedPeriod.id}
           periodLabel={selectedPeriod.label}
+          userId={userId}
           onClose={() => setShowNotas(false)}
+          onChanged={() => reloadNotes(selectedPeriod.id)}
         />
       )}
 
