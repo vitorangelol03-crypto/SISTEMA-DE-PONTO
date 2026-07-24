@@ -54,6 +54,7 @@ import {
   buildReportRows,
   planRateReapply,
   computeNfProgressByPayment,
+  platformPackages,
   formatBRL,
   formatInt,
   MIRROR_COMPANY_NAME,
@@ -127,6 +128,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [search, setSearch] = useState('');
   const [routeFilter, setRouteFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
+  const [nfFilter, setNfFilter] = useState(''); // '' | 'pending' | 'ok'
+  const [espelhoFilter, setEspelhoFilter] = useState(''); // '' | 'published' | 'unpublished'
+  const [platFilter, setPlatFilter] = useState(''); // '' | nome da plataforma
   const [view, setView] = useState<'list' | 'groups'>('list');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Seleção para "Espelhos da seleção" (grupos marcados + drivers avulsos).
@@ -332,6 +336,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     setSearch('');
     setRouteFilter('');
     setGroupFilter('');
+    setNfFilter('');
+    setEspelhoFilter('');
+    setPlatFilter('');
     setView('list');
     setExpanded(new Set());
     setFormModal(null);
@@ -873,6 +880,25 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
   // ── Derivados ────────────────────────────────────────────────────────────
 
+  // Progresso da NF por pagamento (validadas/esperadas, ciente de grupo — só o líder anexa).
+  // Sobre TODOS os rows (não os filtrados) pra o grupo agregar certo mesmo com filtro.
+  const nfProgressByPayment = useMemo(
+    () => computeNfProgressByPayment(rows, platforms, nfByDriver),
+    [rows, platforms, nfByDriver],
+  );
+
+  // Grupos com espelho publicado: o espelho do grupo vai pro líder, então se qualquer membro
+  // tem publicação o grupo conta como publicado. Avulso = o próprio driver.
+  const publishedGroups = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rows) if (r.groupName && publishedDriverIds.has(r.driverId)) s.add(r.groupName);
+    return s;
+  }, [rows, publishedDriverIds]);
+  const isRowPublished = useCallback(
+    (r: DriverRowData) => (r.groupName ? publishedGroups.has(r.groupName) : publishedDriverIds.has(r.driverId)),
+    [publishedGroups, publishedDriverIds],
+  );
+
   const filteredRows = useMemo(
     () =>
       rows.filter((r) => {
@@ -896,9 +922,21 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             return false;
           }
         }
+        // Filtro por status da NF (ciente de grupo, via nfProgressByPayment).
+        if (nfFilter) {
+          const nf = nfProgressByPayment.get(r.paymentId);
+          const complete = nf?.complete ?? r.notaFiscal;
+          if (nfFilter === 'ok' && !complete) return false;
+          if (nfFilter === 'pending' && (complete || (nf?.expected ?? 0) === 0)) return false;
+        }
+        // Filtro por espelho publicado (grupo = publicado se o líder recebeu).
+        if (espelhoFilter === 'published' && !isRowPublished(r)) return false;
+        if (espelhoFilter === 'unpublished' && isRowPublished(r)) return false;
+        // Filtro por plataforma (tem pacote nela).
+        if (platFilter && platformPackages(r, platFilter) <= 0) return false;
         return true;
       }),
-    [rows, search, routeFilter, groupFilter],
+    [rows, search, routeFilter, groupFilter, nfFilter, espelhoFilter, platFilter, nfProgressByPayment, isRowPublished],
   );
 
   // Contagem do botão "Espelhos da seleção": grupos marcados + drivers avulsos
@@ -946,13 +984,6 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     for (const r of rows) net += computeRowTotals(r).net;
     return { net, count: rows.length };
   }, [rows]);
-
-  // Progresso da NF por pagamento (validadas/esperadas, ciente de grupo — só o líder anexa).
-  // Calculado sobre TODOS os rows (não os filtrados) pra o grupo agregar certo mesmo com filtro.
-  const nfProgressByPayment = useMemo(
-    () => computeNfProgressByPayment(rows, platforms, nfByDriver),
-    [rows, platforms, nfByDriver],
-  );
 
   const discountRow = discountRowId ? rows.find((r) => r.paymentId === discountRowId) ?? null : null;
   const valeRow = valeRowId ? rows.find((r) => r.paymentId === valeRowId) ?? null : null;
@@ -1031,6 +1062,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           groupFilter={groupFilter}
           onGroup={setGroupFilter}
           groupOptions={groupOptions}
+          nfFilter={nfFilter}
+          onNf={setNfFilter}
+          espelhoFilter={espelhoFilter}
+          onEspelho={setEspelhoFilter}
+          platFilter={platFilter}
+          onPlat={setPlatFilter}
+          platformOptions={platforms.map((p) => p.name)}
           view={view}
           onView={setView}
         />

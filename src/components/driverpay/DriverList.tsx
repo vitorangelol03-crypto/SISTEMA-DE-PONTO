@@ -547,6 +547,14 @@ export const DriverList: React.FC<DriverListProps> = ({
           const packages = groupRows.reduce((s, r) => s + computeRowTotals(r).totalPackages, 0);
           // Cabecalho do grupo fica verde quando TODOS os drivers dele ja tem o espelho conferido.
           const allEspelho = groupRows.length > 0 && groupRows.every((r) => r.espelhoConferido);
+          // Status do grupo no cabeçalho (sem precisar abrir): pacotes por plataforma, NF
+          // (validadas/esperadas — todos os membros compartilham o mesmo progresso, então
+          // basta o de qualquer membro) e se o espelho do grupo já foi publicado no app.
+          const groupNf = nfProgressByPayment?.get(groupRows[0]?.paymentId);
+          const groupPublished = groupRows.some((r) => publishedDriverIds?.has(r.driverId));
+          const platCounts = platforms
+            .map((pl) => ({ pl, n: groupRows.reduce((s, r) => s + platformPackages(r, pl.name), 0) }))
+            .filter((x) => x.n > 0);
           return (
             <details
               key={name}
@@ -574,19 +582,55 @@ export const DriverList: React.FC<DriverListProps> = ({
                   />
                 )}
                 <ChevronRight
-                  className={`w-4 h-4 text-gray-400 transition-transform ${openGroups.has(name) ? 'rotate-90' : ''}`}
+                  className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${openGroups.has(name) ? 'rotate-90' : ''}`}
                 />
-                <span className="font-semibold text-gray-900 flex items-center gap-2">
-                  {name === NO_GROUP ? <Users className="w-4 h-4 text-gray-400" /> : <Tag className="w-4 h-4 text-blue-600" />}
-                  {name}
-                </span>
-                <span className="text-xs text-gray-500">
-                  · {t.drivers} drivers · {formatInt(packages)} pacotes
-                  {t.zapex > 0 && (
-                    <> · <span className="font-medium text-green-600">Zapex {formatBRL(t.zapex)}</span></>
-                  )}
-                </span>
-                <span className="ml-auto flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-gray-900 flex items-center gap-2">
+                      {name === NO_GROUP ? <Users className="w-4 h-4 text-gray-400" /> : <Tag className="w-4 h-4 text-blue-600" />}
+                      {name}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      · {t.drivers} drivers · {formatInt(packages)} pacotes
+                      {t.zapex > 0 && (
+                        <> · <span className="font-medium text-green-600">Zapex {formatBRL(t.zapex)}</span></>
+                      )}
+                    </span>
+                  </div>
+                  {/* Status do grupo: pacotes por plataforma + NF (ok/faltando) + espelho no app */}
+                  <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                    {platCounts.map(({ pl, n }) => (
+                      <span
+                        key={pl.id}
+                        className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md text-white tabular-nums"
+                        style={{ backgroundColor: pl.color ?? '#6b7280' }}
+                      >
+                        {pl.name} {formatInt(n)}
+                      </span>
+                    ))}
+                    {groupNf && groupNf.expected > 0 && (
+                      <span
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                          groupNf.complete ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                        }`}
+                      >
+                        {groupNf.complete ? (
+                          <><CheckCircle2 className="w-3 h-3" /> NF ok</>
+                        ) : (
+                          `NF ${groupNf.validated}/${groupNf.expected} — falta ${groupNf.expected - groupNf.validated}`
+                        )}
+                      </span>
+                    )}
+                    <span
+                      className={`text-[11px] font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                        groupPublished ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      <Smartphone className="w-3 h-3" /> {groupPublished ? 'espelho no app' : 'espelho não publicado'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
                   {canMirror && (
                     <button
                       type="button"
@@ -600,7 +644,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                     </button>
                   )}
                   <span className={`font-bold ${t.net < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatBRL(t.net)}</span>
-                </span>
+                </div>
               </summary>
               <div className="hidden md:block">{renderTable(groupRows, true, 'SUBTOTAL DO GRUPO')}</div>
               <div className="md:hidden divide-y divide-gray-200">{groupRows.map(renderMobileCard)}</div>
