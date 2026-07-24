@@ -6,7 +6,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { CircleDollarSign, LogOut, Eye, FileText, KeyRound, Upload, ChevronLeft, CheckCircle2 } from 'lucide-react';
+import { CircleDollarSign, LogOut, Eye, FileText, KeyRound, Upload, ChevronLeft, CheckCircle2, Download } from 'lucide-react';
 import {
   driverLogin, driverChangePassword, driverMyMirrors, driverMirrorUrl,
   driverNfSlots, driverNfList, driverNfUpload,
@@ -86,6 +86,7 @@ export function DriverApp() {
 
   const [mirrors, setMirrors] = useState<DriverMirror[] | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   // Anexar nota (Fase 3)
   const [nfCtx, setNfCtx] = useState<{ periodId: string; periodLabel: string } | null>(null);
@@ -164,6 +165,31 @@ export function DriverApp() {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else toast.error(errMsg(e, 'Nao consegui abrir o espelho.'));
     } finally { setOpening(null); }
+  }
+
+  /** Baixa o PDF do espelho no aparelho (link assinado -> blob -> download nomeado). */
+  async function handleDownload(m: DriverMirror) {
+    if (!token) { logout(); return; }
+    setDownloadingId(m.id);
+    try {
+      const { url } = await driverMirrorUrl(m.id, token);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('Falha ao baixar o espelho');
+      const blob = await resp.blob();
+      const obj = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = obj;
+      a.download = `Espelho - ${(m.periodLabel || 'quinzena').replace(/[/\\:*?"<>|]+/g, '-')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(obj), 4000);
+      toast.success('Espelho baixado!');
+      loadMirrors(token); // atualiza o marcador de "visto"
+    } catch (e) {
+      if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
+      else toast.error(errMsg(e, 'Nao consegui baixar o espelho.'));
+    } finally { setDownloadingId(null); }
   }
 
   async function loadNf(periodId: string) {
@@ -381,7 +407,15 @@ export function DriverApp() {
         {mirrors?.map((m) => (
           <div key={m.id} className="bg-white rounded-xl shadow-sm p-4 space-y-3">
             <div className="min-w-0">
-              <div className="font-semibold text-gray-800">{m.periodLabel || 'Espelho'}</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="font-semibold text-gray-800">{m.periodLabel || 'Espelho'}</div>
+                {/* Tag da quinzena: ATUAL (aberta) vira FECHADA quando o painel conclui o período. */}
+                {m.periodStatus === 'concluido' ? (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">Fechada</span>
+                ) : m.periodStatus === 'aberto' ? (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Atual</span>
+                ) : null}
+              </div>
               <div className="text-xs text-gray-500 mt-0.5">
                 Enviado em {fmtDate(m.deliveredAt)}
                 {m.platformFilter && m.platformFilter.length > 0 && (
@@ -393,7 +427,11 @@ export function DriverApp() {
             <div className="flex gap-2">
               <button onClick={() => handleView(m.id)} disabled={opening === m.id}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg px-3 py-2">
-                {opening === m.id ? <Spinner light /> : <><Eye size={16} /> Ver espelho</>}
+                {opening === m.id ? <Spinner light /> : <><Eye size={16} /> Ver</>}
+              </button>
+              <button onClick={() => handleDownload(m)} disabled={downloadingId === m.id}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-60 text-sm font-medium rounded-lg px-3 py-2">
+                {downloadingId === m.id ? <Spinner /> : <><Download size={16} /> Baixar</>}
               </button>
               <button onClick={() => openNf(m)}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-blue-600 text-blue-700 hover:bg-blue-50 text-sm font-medium rounded-lg px-3 py-2">

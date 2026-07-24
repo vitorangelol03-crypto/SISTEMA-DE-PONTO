@@ -86,9 +86,28 @@ Caso real: líder cuja NOTA é emitida por outra pessoa (ex.: esposa) e o PIX é
   `ZZZ TESTE (ignorar)` — **revertido em seguida**; os 5 reais intactos, conferido no SQL).
 - Commit **local** (`3e23e50`) — push é do Victor (classificador bloqueia git push pro agente).
 
+## (6) Nota SÓ PDF no app (commit `7a08b56` + edge fn v6)
+
+- Motivo (Victor): a opção de foto/câmera confundia os drivers; a nota deve ser SEMPRE o PDF.
+- App: input `accept=application/pdf` (sem `capture`), botão "Enviar PDF da nota", aviso
+  "Somente arquivo PDF — foto não é aceita" + validação amigável.
+- **Edge fn v6 deployada**: nf-upload recusa não-PDF validando tipo declarado E assinatura `%PDF`
+  (cliente antigo em cache não fura). Validado NA DEPLOYADA: imagem→400, PDF-falso→400, PDF real→200
+  (registro/arquivo de teste apagados; teste logou Adao lazy-1234, inofensivo).
+
+## (7) Baixar espelho + tag Atual/Fechada no app (edge fn v7)
+
+- Pedido do Victor: driver poder BAIXAR o PDF do espelho + saber qual quinzena é a ATUAL.
+- **Edge fn v7 deployada**: my-mirrors devolve `periodStatus` ('aberto'/'concluido').
+- App: card do espelho ganha tag verde **"Atual"** (aberta) / cinza **"Fechada"** (concluída — muda
+  sozinho quando o painel conclui a quinzena) + botão **"Baixar"** (signed URL → blob → download
+  nomeado "Espelho - <quinzena>.pdf"); "Ver espelho" virou "Ver" (3 botões no card).
+- Validado: tsc 0 · build ok · my-mirrors REAL na v7 devolvendo status (login lazy Gessiley,
+  read-only) · UI com API simulada (tags + download com nome certo) · prints enviados.
+
 ## Pendências
 
-- **Push do `3e23e50`** (2ª etapa) — Victor roda `! git ...` quando quiser no ar.
+- **Push das features do app** (PDF-only + baixar/tag) — merge main é do Victor.
 - Apagar `backup_mirror_pub_20260724` e `backup_driver_pix_20260724` quando o Victor confirmar.
 - **Recebedor do grupo Mutum (Gustavo × João Victor)**: Victor decide depois — PIX 66409705000175 na mão.
 - PIX pendentes: othon saraiva / Pablo Raspante (sem driver no sistema — perguntar ao Victor).

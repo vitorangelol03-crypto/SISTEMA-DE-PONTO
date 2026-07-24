@@ -18,9 +18,12 @@ sai o nome do recebedor; SIMPLES virou A NOME|B VALOR|C CHAVE PIX|D OBS; espelho
 tsc 0/build/571 unit/E2E real (downloads conferidos). **Fechamento:** 5 recebedores configurados pelo
 painel (Greice→Mikael, Oliur→Denize, Henrique→Rosiclese, Thiago→Victoria, Willkerson→Neilizana;
 Gustavo/João Victor pendente de decisão) + **PUSH do Victor e deploy Vercel NO AR** (`main`=`f853d4f`,
-bundle `index-Dr59Z_Qi`). **2ª etapa FEITA** (commit `3e23e50`, local): "Notas recebidas" mostra selo
-"nota no nome de: X" pro driver com recebedor (validado tsc/build/571 unit/E2E com teste revertido) —
-falta o Victor pushar. Ver `CHECKPOINT_SESSAO_2026-07-24.md`.
+bundle `index-Dr59Z_Qi`). **2ª etapa FEITA** (commit `3e23e50`, pushado+deploy ok): "Notas recebidas" mostra selo
+"nota no nome de: X" pro driver com recebedor. **Fim da tarde:** (a) nota do app **SÓ PDF**
+(commit `7a08b56` + edge fn **v6**: recusa não-PDF por tipo+assinatura %PDF; foto confundia os drivers);
+(b) **baixar espelho + tag Atual/Fechada** no app (edge fn **v7**: my-mirrors devolve periodStatus;
+card com tag verde/cinza + botão Baixar). Tudo validado (tsc/build/unit/testes reais na edge fn
+deployada + UI simulada com prints). Ver `CHECKPOINT_SESSAO_2026-07-24.md`.
 
 **App do Entregador NO AR + várias features (madrugada 23→24/07):** app em produção
 (`sistema-ponto-zeta.vercel.app/driver`); **driver REAL (Iago) já logou e trocou a senha**. `main` em produção =

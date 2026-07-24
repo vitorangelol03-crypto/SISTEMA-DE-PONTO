@@ -76,6 +76,8 @@ export interface DriverMirror {
   id: string;
   periodId: string;
   periodLabel: string;
+  /** 'aberto' = quinzena ATUAL; 'concluido' = FECHADA (tag no card). Null = edge fn antiga. */
+  periodStatus: string | null;
   scope: 'individual' | 'group' | 'selection';
   platformFilter: string[] | null;
   deliveredAt: string;

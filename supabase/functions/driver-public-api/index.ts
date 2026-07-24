@@ -204,7 +204,7 @@ async function myMirrors(req: Request, body: Body): Promise<Response> {
   if (!claims) return json({ error: 'Sessao invalida' }, 401);
   const { data, error } = await supabase
     .from('driverpay_mirror_publications')
-    .select('id, period_id, scope, platform_filter, delivered_at, viewed_at, driverpay_periods(label, start_date, end_date)')
+    .select('id, period_id, scope, platform_filter, delivered_at, viewed_at, driverpay_periods(label, start_date, end_date, status)')
     .eq('driver_id', claims.driver_id)
     .order('delivered_at', { ascending: false });
   if (error) return json({ error: 'Database error', details: error.message }, 500);
@@ -214,6 +214,8 @@ async function myMirrors(req: Request, body: Body): Promise<Response> {
       id: m.id,
       periodId: m.period_id,
       periodLabel: per?.label ?? '',
+      // 'aberto' -> app mostra tag "Atual"; 'concluido' -> "Fechada" (driver sabe que nao e a atual).
+      periodStatus: per?.status ?? null,
       scope: m.scope,
       platformFilter: m.platform_filter ?? null,
       deliveredAt: m.delivered_at,
