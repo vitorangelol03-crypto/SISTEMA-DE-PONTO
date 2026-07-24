@@ -23,7 +23,11 @@ bundle `index-Dr59Z_Qi`). **2ª etapa FEITA** (commit `3e23e50`, pushado+deploy 
 (commit `7a08b56` + edge fn **v6**: recusa não-PDF por tipo+assinatura %PDF; foto confundia os drivers);
 (b) **baixar espelho + tag Atual/Fechada** no app (edge fn **v7**: my-mirrors devolve periodStatus;
 card com tag verde/cinza + botão Baixar). Tudo validado (tsc/build/unit/testes reais na edge fn
-deployada + UI simulada com prints). Ver `CHECKPOINT_SESSAO_2026-07-24.md`.
+deployada + UI simulada com prints) e **NO AR** (main `874c899` + Vercel conferido).
+(c) **Notas-FOTO limpas**: 6 drivers tinham mandado foto (falha antiga) — backup em
+`backups/2026-07-24-notas-imagem/` + tabela `backup_nf_imagens_20260724`, excluídas, anexo
+reaberto pros 6; comunicado de WhatsApp aprovado (Victor envia nos grupos).
+Ver `CHECKPOINT_SESSAO_2026-07-24.md`.
 
 **App do Entregador NO AR + várias features (madrugada 23→24/07):** app em produção
 (`sistema-ponto-zeta.vercel.app/driver`); **driver REAL (Iago) já logou e trocou a senha**. `main` em produção =

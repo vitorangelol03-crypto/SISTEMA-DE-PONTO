@@ -105,9 +105,21 @@ Caso real: líder cuja NOTA é emitida por outra pessoa (ex.: esposa) e o PIX é
 - Validado: tsc 0 · build ok · my-mirrors REAL na v7 devolvendo status (login lazy Gessiley,
   read-only) · UI com API simulada (tags + download com nome certo) · prints enviados.
 
+## (8) Limpeza das notas-FOTO + comunicado (fim da sessão)
+
+- **6 drivers tinham anexado FOTO** em vez de PDF (falha antiga do sistema; todas pendentes,
+  nenhuma validada): Bruno Eduardo (Caratinga), Fabricio Ferreira (Caratinga), João Pedro da
+  Silveira (Caratinga), Fernando Martins (Vermelho Novo), Filipe Augusto Pena (Ipanema),
+  Tiago André (Pocrane) — todas do CNPJ Shopee/Anjun/Loggi, 2ª quinzena junho.
+- **Backup**: fotos em `backups/2026-07-24-notas-imagem/` (gitignored) + registros na tabela
+  `backup_nf_imagens_20260724`. Depois **excluídas** (registro + arquivo do bucket) → o anexo
+  REABRIU no app dos 6 pra reenviarem em PDF. Estado final: 0 imagens, 8 notas PDF intactas.
+- **Comunicado de WhatsApp** montado e aprovado pelo Victor (aviso PDF-only + lista dos 6 +
+  como fazer + novidade do Baixar/tag) — ele envia nos grupos.
+
 ## Pendências
 
-- **Push das features do app** (PDF-only + baixar/tag) — merge main é do Victor.
+- **Push do último commit de docs** — merge main é do Victor (feature branch já no origin).
 - Apagar `backup_mirror_pub_20260724` e `backup_driver_pix_20260724` quando o Victor confirmar.
 - **Recebedor do grupo Mutum (Gustavo × João Victor)**: Victor decide depois — PIX 66409705000175 na mão.
 - PIX pendentes: othon saraiva / Pablo Raspante (sem driver no sistema — perguntar ao Victor).
