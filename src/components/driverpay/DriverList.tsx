@@ -110,6 +110,8 @@ export const DriverList: React.FC<DriverListProps> = ({
   // (asc), 3 cliques = desativa. So reordena (mostra todos), nao esconde ninguem.
   type SortDir = 'asc' | 'desc';
   const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
+  // Ordenacao dos GRUPOS (visao "Grupos") por metrica agregada do grupo (pacotes/plataforma/total).
+  const [groupSort, setGroupSort] = useState<{ key: string; dir: SortDir } | null>(null);
 
   // Visao "Grupos": as gavetas abrem FECHADAS; o botao "Abrir/Fechar todas" alterna todas.
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
@@ -190,6 +192,56 @@ export const DriverList: React.FC<DriverListProps> = ({
           <ArrowDown className="w-3.5 h-3.5" />
         ) : (
           <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover/sort:opacity-70" />
+        )}
+      </button>
+    );
+  };
+
+  // ── Ordenar GRUPOS (visao "Grupos"): mesma mecânica de 3 cliques, por métrica do grupo ──
+  const toggleGroupSort = (key: string) =>
+    setGroupSort((cur) => {
+      if (cur?.key !== key) return { key, dir: 'desc' };
+      if (cur.dir === 'desc') return { key, dir: 'asc' };
+      return null;
+    });
+  const groupMetric = (list: DriverRowData[], key: string): number => {
+    if (key.startsWith('pl:')) return list.reduce((s, r) => s + platformPackages(r, key.slice(3)), 0);
+    if (key === 'packages') return list.reduce((s, r) => s + computeRowTotals(r).totalPackages, 0);
+    const t = sumTotals(list);
+    if (key === 'net') return t.net;
+    if (key === 'zapex') return t.zapex;
+    return 0;
+  };
+  const sortGroups = (
+    list: Array<{ name: string; rows: DriverRowData[] }>,
+  ): Array<{ name: string; rows: DriverRowData[] }> => {
+    if (!groupSort) return list;
+    const mul = groupSort.dir === 'asc' ? 1 : -1;
+    return [...list].sort((a, b) => {
+      const d = (groupMetric(a.rows, groupSort.key) - groupMetric(b.rows, groupSort.key)) * mul;
+      return d !== 0 ? d : a.name.localeCompare(b.name, 'pt-BR');
+    });
+  };
+  const groupSortBtn = (key: string, label: string, color?: string | null) => {
+    const activeDir = groupSort && groupSort.key === key ? groupSort.dir : null;
+    return (
+      <button
+        type="button"
+        onClick={() => toggleGroupSort(key)}
+        title="Ordenar os grupos: 1x maior→menor · 2x menor→maior · 3x desativa"
+        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-xs font-medium transition-colors ${
+          activeDir ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+        }`}
+      >
+        <span className={color && !activeDir ? 'font-bold' : ''} style={color && !activeDir ? { color } : undefined}>
+          {label}
+        </span>
+        {activeDir === 'asc' ? (
+          <ArrowUp className="w-3.5 h-3.5" />
+        ) : activeDir === 'desc' ? (
+          <ArrowDown className="w-3.5 h-3.5" />
+        ) : (
+          <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
         )}
       </button>
     );
@@ -527,16 +579,25 @@ export const DriverList: React.FC<DriverListProps> = ({
   }
 
   if (view === 'groups') {
-    const groups = groupsOrdered();
+    const groups = sortGroups(groupsOrdered());
     const allNames = groups.map((g) => g.name);
     const allOpen = allNames.length > 0 && allNames.every((n) => openGroups.has(n));
     return (
       <div className="p-2 sm:p-3 space-y-3">
-        <div className="flex justify-end">
+        {/* Ordenar grupos sem abrir as gavetas — por total de pacotes, por plataforma, ou pelo total a receber */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mr-1">Ordenar grupos por</span>
+            {groupSortBtn('packages', 'Total pacotes')}
+            {platforms.map((pl) => (
+              <React.Fragment key={pl.id}>{groupSortBtn(`pl:${pl.name}`, pl.name, pl.color)}</React.Fragment>
+            ))}
+            {groupSortBtn('net', 'Total a receber')}
+          </div>
           <button
             type="button"
             onClick={() => setOpenGroups(allOpen ? new Set() : new Set(allNames))}
-            className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+            className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px] shrink-0"
           >
             <ChevronsUpDown className="w-4 h-4" />
             {allOpen ? 'Fechar todas' : 'Abrir todas'}
