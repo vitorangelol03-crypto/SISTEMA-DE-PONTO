@@ -234,3 +234,16 @@ painel; **Validar/Recusar(motivo)/Excluir** cada nota; a coluna NF vira **"valid
 - **PENDENTE (fila):** líderes dos **12 grupos de nome de LUGAR** (Chalé, Conceição de Ipanema, Cordeiro de Minas,
   Entre Folhas, Imbe, Inhapim, Patrocínio, Piedade de Caratinga, Pingo-D'Água, Raul Soares, S.D Dores, Vermelho
   Novo) — sem pessoa no nome, Victor escolhe manual; 6 CPFs faltantes; validar visual amanhã; (opcional) Zapex vazio.
+
+## 9. BUG de produção corrigido (24/07) — driver novo não aparecia na grade
+
+- **Sintoma (Victor):** criou driver + grupo "Vanusa Fadel Pereira" e não apareceu.
+- **Causa raiz (investigada no banco):** driver + grupo FORAM salvos (não era falha de gravar). A grade é montada
+  a partir dos `driverpay_payments` do período; os pagamentos só nascem na criação do período (RPC
+  `driverpay_create_period` com preload). Driver criado DEPOIS não ganhava pagamento → invisível na lista e o
+  grupo dele sumia da visão Grupos. **NÃO havia nenhum insert de pagamento no frontend.**
+- **Fix na RAIZ (commit `507cdd3`, em PROD):** `createDriver` agora chama `ensureDriverInOpenPeriods` → insere
+  pagamento (zerado) em cada período ABERTO onde o driver ainda não tem (idempotente). Cobre "Novo driver" E o
+  import (que também usa createDriver, linha ~1850). **E2E real:** criei "ZZZ TESTE FIX BUG" pelo painel → apareceu
+  na hora → limpei. tsc 0 + build.
+- **Vanusa:** desbloqueada por dado (INSERT do pagamento dela no período aberto 58e39a99). Confirmado 1 pagamento.
