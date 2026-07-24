@@ -200,7 +200,8 @@ painel; **Validar/Recusar(motivo)/Excluir** cada nota; a coluna NF vira **"valid
 
 - **Ordenar grupos** (commit `308d2a4`): barra "Ordenar grupos por" na visão Grupos — botões (3 cliques:
   maior→menor / menor→maior / desativa) por Total de pacotes, por cada plataforma e por Total a receber,
-  SEM abrir as gavetas. Métrica = agregado do grupo. tsc 0 + build.
+  SEM abrir as gavetas. Métrica = agregado do grupo. tsc 0 + build. **+ botão "NF validada"** (commit `9c72b02`,
+  em PROD): ordena os grupos pelo status da NF (validados primeiro / quem falta primeiro). E2E real conferido.
 - **RELATÓRIO reformulado** (commit `f5a4e4a`) — decisões do Victor (todas travadas):
   1. **Escopo por seleção:** marcar grupos/drivers → botão vira "Relatório da seleção (N)" (só eles); sem
      seleção = todos do filtro.
