@@ -509,6 +509,8 @@ export interface NotaFiscalFileRow {
   id: string;
   driverId: string;
   driverName: string;
+  /** Recebedor configurado do driver (a NOTA vem no nome dele — ex.: esposa). Null = o próprio driver. */
+  recebedorNome: string | null;
   emitterId: string;
   emitterLabel: string;
   emitterCnpj: string;
@@ -525,7 +527,7 @@ export interface NotaFiscalFileRow {
 export const listNotaFiscalFiles = async (companyId: string, periodId: string): Promise<NotaFiscalFileRow[]> => {
   const { data, error } = await supabase
     .from('driverpay_nota_fiscal_files')
-    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, reject_reason, uploaded_at, driverpay_drivers(name), driverpay_nota_emitters(label, cnpj)')
+    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, reject_reason, uploaded_at, driverpay_drivers(name, recebedor_nome), driverpay_nota_emitters(label, cnpj)')
     .eq('company_id', companyId)
     .eq('period_id', periodId)
     .order('uploaded_at', { ascending: true });
@@ -534,12 +536,13 @@ export const listNotaFiscalFiles = async (companyId: string, periodId: string): 
     const r = row as Record<string, unknown>;
     const drvRaw = r.driverpay_drivers;
     const emRaw = r.driverpay_nota_emitters;
-    const drv = (Array.isArray(drvRaw) ? drvRaw[0] : drvRaw) as { name?: string } | null;
+    const drv = (Array.isArray(drvRaw) ? drvRaw[0] : drvRaw) as { name?: string; recebedor_nome?: string | null } | null;
     const em = (Array.isArray(emRaw) ? emRaw[0] : emRaw) as { label?: string; cnpj?: string } | null;
     return {
       id: String(r.id),
       driverId: String(r.driver_id),
       driverName: drv?.name ?? '(sem nome)',
+      recebedorNome: drv?.recebedor_nome ?? null,
       emitterId: String(r.nota_emitter_id),
       emitterLabel: em?.label ?? '',
       emitterCnpj: em?.cnpj ?? '',

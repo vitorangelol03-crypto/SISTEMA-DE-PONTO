@@ -107,11 +107,11 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       seen[key] = idx + 1;
       return { row: r, filename: notaFiscalFileName(r.driverName, r.emitterLabel, periodLabel, idx, extOf(r)) };
     });
-    const byDriver = new Map<string, { driverName: string; items: typeof named }>();
+    const byDriver = new Map<string, { driverName: string; recebedorNome: string | null; items: typeof named }>();
     for (const it of named) {
       const g = byDriver.get(it.row.driverId);
       if (g) g.items.push(it);
-      else byDriver.set(it.row.driverId, { driverName: it.row.driverName, items: [it] });
+      else byDriver.set(it.row.driverId, { driverName: it.row.driverName, recebedorNome: it.row.recebedorNome, items: [it] });
     }
     return [...byDriver.values()].sort((a, b) => a.driverName.localeCompare(b.driverName, 'pt-BR'));
   }, [files, periodLabel]);
@@ -238,9 +238,18 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
           </p>
           {groups.map((g) => (
             <div key={g.driverName} className="rounded-lg border border-gray-200 overflow-hidden">
-              <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800 border-b border-gray-200">
+              <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800 border-b border-gray-200 flex items-center gap-2 flex-wrap">
                 {g.driverName}
-                <span className="ml-2 text-xs font-normal text-gray-500">{g.items.length} nota(s)</span>
+                <span className="text-xs font-normal text-gray-500">{g.items.length} nota(s)</span>
+                {/* Recebedor configurado: a NOTA deste driver vem no nome de outra pessoa (confira ao validar). */}
+                {g.recebedorNome && (
+                  <span
+                    className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 whitespace-nowrap"
+                    title="Este driver tem recebedor configurado — a nota fiscal vem no nome do recebedor, não no do driver."
+                  >
+                    nota no nome de: {g.recebedorNome}
+                  </span>
+                )}
               </div>
               <div className="divide-y divide-gray-100">
                 {g.items.map(({ row, filename }) => {
