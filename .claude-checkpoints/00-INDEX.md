@@ -15,8 +15,9 @@ com JWT simulado: sem WHERE apagaria 37, com WHERE 0). Fix `398befc` + migration
 painel diferencia "resetada" de "nunca acessou"). Testes reais na base (5 cenários) + tsc 0 +
 build + 606 unit. **Caio resetado de verdade no banco** (backup `backup_driver_auth_20260725`)
 → entra com CPF + 1234; as tentativas dele não chegavam no servidor (celular/cache — cadastro
-intocado desde 24/07 11:40, zero senhas erradas). **PENDENTE: push+deploy do Victor** (até o
-deploy, o botão do painel em prod segue chamando o DELETE morto = sem efeito).
+intocado desde 24/07 11:40, zero senhas erradas). **Push (Victor via `!`) + deploy Vercel
+FEITOS e conferidos** (main `1c12f60`; chunk `DriverPayTab-9KO0wAqe.js` no ar com RPC+toast).
+Pendente: Caio confirmar login 1234; apagar backups quando Victor liberar.
 Ver `CHECKPOINT_SESSAO_2026-07-25.md`.
 
 **Sessão 24/07 (tarde) — 3 frentes:** (1) **Leva LOGGI corrigida** (dados): espelhos tinham ido por

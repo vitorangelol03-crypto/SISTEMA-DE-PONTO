@@ -44,9 +44,9 @@ digita foi confirmado como o correto (131.688.696-43, o mesmo do cadastro).
 ## Pendências
 
 - **Caio confirmar o login** com 1234 (se falhar → problema é no aparelho; pedir print).
-- **Push + deploy Vercel** do `398befc` — do Victor (o toast novo do botão só vale após deploy;
-  a RPC já está no ar, então o botão ATUAL do painel em prod continua chamando o DELETE morto
-  até o deploy → **até lá, reset pelo painel segue sem efeito**; pedir pra mim se precisar).
+- ~~Push + deploy Vercel~~ **FEITO na própria sessão**: Victor pushou via `!` (main
+  `874c899..1c12f60`), deploy Vercel conferido no ar (chunk `DriverPayTab-9KO0wAqe.js`
+  com a RPC + toast novo; bundle principal `index-Br4-F-oD`). Botão de reset 100% no ar.
 - Apagar `backup_driver_auth_20260725` (+ `backup_mirror_pub_20260724` e
   `backup_driver_pix_20260724` da sessão anterior) quando Victor confirmar.
 - Herdadas: recebedor Mutum (Gustavo × João Victor); PIX othon/Pablo Raspante; 6 CPFs
