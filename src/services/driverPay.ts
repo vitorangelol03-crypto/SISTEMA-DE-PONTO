@@ -1469,15 +1469,19 @@ export const unpublishAllMirrorsForPeriod = async (
 /**
  * Reseta a senha do driver no app: apaga a linha de auth -> no proximo login ele volta
  * pra senha inicial 1234 (troca obrigatoria) e o lockout por tentativas e destravado.
- * Exige a policy de DELETE em driverpay_driver_auth (migration 20260723150000).
+ * Via RPC SECURITY DEFINER (migration 20260725100000): o DELETE direto do painel nunca
+ * funcionou — sem policy de SELECT na tabela (proposital, protege os hashes), um DELETE
+ * com WHERE casa 0 linhas em silencio. A RPC apaga por dentro, checa a authz do chamador
+ * (mestre 9999/2626 ou mesma empresa) e devolve quantas linhas apagou.
+ * @returns 0 = driver nunca acessou o app (nada pra apagar; ele ja entra com 1234).
  */
-export const resetDriverPassword = async (driverId: string, userId: string): Promise<void> => {
+export const resetDriverPassword = async (driverId: string, userId: string): Promise<number> => {
   await ensurePerm(userId, 'driverpay.editDriver');
-  const { error } = await supabase
-    .from('driverpay_driver_auth')
-    .delete()
-    .eq('driver_id', driverId);
+  const { data, error } = await supabase.rpc('driverpay_reset_driver_password', {
+    p_driver_id: driverId,
+  });
   if (error) throwDbError(error);
+  return typeof data === 'number' ? data : 0;
 };
 
 /** Uma linha da busca de pacotes descontados (desconto + driver + status do periodo). */

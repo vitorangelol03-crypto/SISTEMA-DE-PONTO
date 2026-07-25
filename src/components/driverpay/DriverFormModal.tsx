@@ -87,8 +87,12 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
       return;
     setResetting(true);
     try {
-      await resetDriverPassword(driver.id, userId);
-      toast.success('Senha resetada — o driver entra com 1234 e cria uma nova.');
+      const apagadas = await resetDriverPassword(driver.id, userId);
+      if (apagadas > 0) {
+        toast.success('Senha resetada — o driver entra com 1234 e cria uma nova.');
+      } else {
+        toast.success('Este driver ainda não tinha acessado o app — nada pra resetar: ele já entra com 1234.');
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao resetar a senha');
     } finally {
