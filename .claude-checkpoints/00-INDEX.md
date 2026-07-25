@@ -2,9 +2,22 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-07-24** (tarde).
+> Última atualização: **2026-07-25** (manhã).
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 25/07 (manhã) — driver sem login + fix do reset:** Caio não logava ("credenciais
+inválidas"); investigação em prod achou que o **botão "Resetar senha" do painel NUNCA
+funcionou** (DELETE com WHERE + RLS sem policy de SELECT = 0 linhas em silêncio — provado
+com JWT simulado: sem WHERE apagaria 37, com WHERE 0). Fix `398befc` + migration
+`20260725100000` **aplicada em prod**: RPC SECURITY DEFINER `driverpay_reset_driver_password`
+(authz do chamador: 2626/9999 ou mesma empresa; devolve nº de linhas; policy morta removida;
+painel diferencia "resetada" de "nunca acessou"). Testes reais na base (5 cenários) + tsc 0 +
+build + 606 unit. **Caio resetado de verdade no banco** (backup `backup_driver_auth_20260725`)
+→ entra com CPF + 1234; as tentativas dele não chegavam no servidor (celular/cache — cadastro
+intocado desde 24/07 11:40, zero senhas erradas). **PENDENTE: push+deploy do Victor** (até o
+deploy, o botão do painel em prod segue chamando o DELETE morto = sem efeito).
+Ver `CHECKPOINT_SESSAO_2026-07-25.md`.
 
 **Sessão 24/07 (tarde) — 3 frentes:** (1) **Leva LOGGI corrigida** (dados): espelhos tinham ido por
 driver individual → membros receberam; aplicada a Opção A (só o LÍDER recebe, agregando o grupo):
@@ -98,7 +111,8 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-24.md` | **Mais recente.** Leva LOGGI só-líder (3 republicados + 25 membros despublicados) · 39 PIX da planilha C6 · FEATURE recebedor diferente (commit `3820842`, migration em prod, relatórios com CHAVE PIX) · backups `backup_mirror_pub_20260724`/`backup_driver_pix_20260724` | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-25.md` | **Mais recente.** Caio sem login (causa: tentativas nem chegavam no servidor; resetado de verdade no banco c/ backup) · botão de reset NUNCA funcionou (RLS DELETE sem SELECT) → RPC `driverpay_reset_driver_password` (fix `398befc`, migration em prod) · **aguarda push+deploy** | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-24.md` | Leva LOGGI só-líder (3 republicados + 25 membros despublicados) · 39 PIX da planilha C6 · FEATURE recebedor diferente (commit `3820842`, migration em prod, relatórios com CHAVE PIX) · backups `backup_mirror_pub_20260724`/`backup_driver_pix_20260724` | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-23.md` | App do Entregador completo + **GO-LIVE em prod** (merge main + Vercel; driver real Iago já usando) + feature despublicar espelho/resetar senha (§6). Decisões (login CPF, web-first, filtro plataforma, CNPJs) + backfill CPF 91/97 reversível | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-20-noite.md` | Bugs de prod do ponto: facial desligada por spec (religada+blindada), Pablo sem GPS (fix msg), saída fantasma 12s = UX (2 registros limpos c/ backup); pendências de feature | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-20.md` | Valor separado por plataforma + multi-rota sem taxa média + fix race do corte; specs 61/unit novos | 🟢 ATIVO |
@@ -136,6 +150,7 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 - **Checkpoints (18/07):** todos vivem em `.claude-checkpoints/`; 1 checkpoint por sessão; atualizar este índice junto; hook pós-commit lembra a sessão de manter isso em dia.
 - **Ponto/testes (20/07 noite):** spec que toca config REAL de prod (ex.: toggle facial) tem que restaurar em `finally`; bateria E2E só em janela segura (nunca de noite — turno da madrugada bate ~02:00); recusa de ponto da edge fn vem em `message` (não `error`); correção de registro de ponto = sempre backup antes (`backups/`).
 - **Tela de ponto (20/07 noite, decisões do Victor):** saída < 10 min da marcação anterior = confirmação obrigatória; tela volta ao CPF 35s após registrar; GPS bloqueado = instruir sem chamar servidor; tentativa sem GPS que CHEGA no servidor continua criando bonus_block (regra mantida).
+- **RLS + DELETE (lição 25/07):** DELETE com WHERE numa tabela com RLS exige as linhas visíveis pelas policies de SELECT — tabela deny-all de leitura (ex.: `driverpay_driver_auth`) NUNCA aceita DELETE do client (0 linhas, silencioso). Operação assim = RPC SECURITY DEFINER com authz do chamador e retorno do row_count. Reset de senha do app agora é só via `driverpay_reset_driver_password`.
 
 ## ⚠️ Áreas frágeis / pendências abertas
 
