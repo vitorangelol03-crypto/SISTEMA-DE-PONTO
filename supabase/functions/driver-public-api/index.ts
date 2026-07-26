@@ -479,13 +479,16 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     file_type: contentType, original_filename: filename, uploaded_by: claims.driver_id,
     status: autoReject ? 'rejeitada' : (autoValidate ? 'validada' : 'recebida'),
     reject_reason: rejectReason,
+    // validated_by tem FK pra users(id) — validação AUTOMÁTICA fica com null e o
+    // marcador vive em check_details.autoValidated (validação manual sempre tem usuário).
     validated_at: autoValidate ? new Date().toISOString() : null,
-    validated_by: autoValidate ? 'auto' : null,
+    validated_by: null,
     check_status: check ? check.status : 'pendente',
     check_valor: check?.valorOk ?? null,
     check_cnpj: check?.cnpjOk ?? null,
     check_nome: check?.nomeOk ?? null,
     check_details: check ? {
+      autoValidated: autoValidate,
       foundValues: check.foundValues, foundCnpjs: check.foundCnpjs,
       matchedCandidates: check.matchedCandidates, candidates, reasons: check.reasons,
     } : null,

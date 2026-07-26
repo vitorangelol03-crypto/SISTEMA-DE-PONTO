@@ -530,7 +530,7 @@ export interface NotaFiscalFileRow {
   checkNome: boolean | null;
   /** JSON com valores/CNPJs achados, candidatos esperados e motivos. */
   checkDetails: Record<string, unknown> | null;
-  /** 'auto' = validada pela conferência automática no envio. */
+  /** userId da validação manual; null quando auto (marcador: checkDetails.autoValidated). */
   validatedBy: string | null;
 }
 

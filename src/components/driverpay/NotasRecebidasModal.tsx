@@ -319,7 +319,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-medium text-gray-700 truncate">{row.emitterLabel} · {row.emitterCnpj}</span>
-                          <StatusBadge status={row.status} reason={row.rejectReason} auto={row.validatedBy === 'auto'} />
+                          <StatusBadge status={row.status} reason={row.rejectReason} auto={row.checkDetails?.autoValidated === true} />
                           <CheckBadges row={row} />
                         </div>
                         <div className="text-[11px] text-gray-400 truncate" title={filename}>{filename}</div>
