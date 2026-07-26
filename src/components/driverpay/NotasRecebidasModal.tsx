@@ -16,6 +16,8 @@ import {
   notaFiscalFileUrl,
   setNotaFiscalStatus,
   deleteNotaFiscalFile,
+  getNfAutoValidate,
+  setNfAutoValidate,
   type NotaFiscalFileRow,
 } from '../../services/driverPay';
 import { notaFiscalFileName } from './driverPayShared';
@@ -91,16 +93,26 @@ const CheckBadges: React.FC<{ row: NotaFiscalFileRow }> = ({ row }) => {
         conferência pendente
       </span>
     );
+  // Passou nos 3 checks mas a auto-validação estava desligada: é só apertar Validar.
+  const skipped = details?.autoValidateSkipped === true && row.status === 'recebida';
   const item = (label: string, ok: boolean | null) => {
     const cls = ok === true ? 'bg-green-100 text-green-700' : ok === false ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500';
     const mark = ok === true ? '✓' : ok === false ? '✗' : '–';
     return <span className={`text-[11px] px-1.5 py-0.5 rounded-full whitespace-nowrap ${cls}`}>{mark} {label}</span>;
   };
   return (
-    <span className="inline-flex items-center gap-1" title={reasons || 'Conferência automática do envio.'}>
+    <span className="inline-flex items-center gap-1 flex-wrap" title={reasons || 'Conferência automática do envio.'}>
       {item('valor', row.checkValor)}
       {item('CNPJ', row.checkCnpj)}
       {item('nome', row.checkNome)}
+      {skipped && (
+        <span
+          className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 whitespace-nowrap"
+          title="Passou nos 3 checks, mas a auto-validação estava desligada — é só validar."
+        >
+          conferida, aguardando você
+        </span>
+      )}
     </span>
   );
 };
@@ -118,6 +130,9 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
   const [acting, setActing] = useState<string | null>(null); // id em validação/recusa/exclusão
   // Com a conferência automática, o que sobra pro olho humano são as não-validadas.
   const [soAtencao, setSoAtencao] = useState(false);
+  // Liga/desliga da auto-validação (null = ainda carregando).
+  const [autoValidate, setAutoValidate] = useState<boolean | null>(null);
+  const [savingAuto, setSavingAuto] = useState(false);
 
   const reload = async () => {
     try {
@@ -136,6 +151,30 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       .catch(() => { if (alive) { setFiles([]); toast.error('Não consegui carregar as notas.'); } });
     return () => { alive = false; };
   }, [companyId, periodId]);
+
+  useEffect(() => {
+    let alive = true;
+    getNfAutoValidate(companyId)
+      .then((v) => { if (alive) setAutoValidate(v); })
+      .catch(() => { if (alive) setAutoValidate(true); }); // falhou lendo: assume o padrão
+    return () => { alive = false; };
+  }, [companyId]);
+
+  const handleToggleAuto = async () => {
+    if (autoValidate === null || savingAuto) return;
+    const next = !autoValidate;
+    setSavingAuto(true);
+    try {
+      await setNfAutoValidate(companyId, next, userId);
+      setAutoValidate(next);
+      toast.success(next
+        ? 'Auto-validação LIGADA: nota com valor, CNPJ e nome certos entra validada sozinha.'
+        : 'Auto-validação DESLIGADA: o sistema continua conferindo e recusando nota errada, mas você valida as certas na mão.',
+        { duration: 7000 });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao mudar a auto-validação.');
+    } finally { setSavingAuto(false); }
+  };
 
   // Numera as notas repetidas do mesmo (driver, CNPJ) e pré-calcula o nome do arquivo
   // (numeração SEMPRE sobre a lista completa — o filtro não muda o nome), depois
@@ -291,6 +330,36 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
               Só as que precisam de atenção
             </label>
           </div>
+          {/* Liga/desliga da auto-validação. DESLIGADA, a conferência continua
+              inteira (selos + recusa de nota errada) — só a nota certa espera você. */}
+          <div className={`rounded-lg border px-3 py-2.5 flex items-start justify-between gap-3 flex-wrap ${
+            autoValidate === false ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'
+          }`}>
+            <div className="text-xs leading-relaxed">
+              <div className="font-semibold text-gray-800">
+                {autoValidate === false ? '🔒 Auto-validação DESLIGADA' : '⚡ Auto-validação LIGADA'}
+              </div>
+              <div className="text-gray-600">
+                {autoValidate === false
+                  ? 'O sistema confere tudo e recusa nota errada normalmente — a nota certa fica aqui esperando você validar.'
+                  : 'Nota com valor, CNPJ e nome certos entra validada sozinha. A conferência e a recusa não mudam.'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleAuto}
+              disabled={autoValidate === null || savingAuto}
+              className={`shrink-0 px-3 py-2 rounded-md text-xs font-semibold min-h-[40px] inline-flex items-center gap-1.5 disabled:opacity-50 ${
+                autoValidate === false
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {savingAuto && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {autoValidate === false ? 'Ligar auto-validação' : 'Desligar auto-validação'}
+            </button>
+          </div>
+
           {soAtencao && groups.length === 0 && (
             <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
               ✓ Nenhuma nota precisando de atenção — todas validadas.

@@ -573,6 +573,35 @@ export const listNotaFiscalFiles = async (companyId: string, periodId: string): 
 };
 
 /**
+ * Auto-validação da NF (liga/desliga por empresa — decisão do Victor 26/07).
+ * DESLIGADA, a conferência automática continua igual (selos + recusa de nota errada);
+ * só a nota certa deixa de entrar 'validada' sozinha e espera validação manual.
+ * Sem linha na tabela = LIGADA (padrão).
+ */
+export const getNfAutoValidate = async (companyId: string): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from('driverpay_settings')
+    .select('nf_auto_validate')
+    .eq('company_id', companyId)
+    .maybeSingle();
+  if (error) throwDbError(error);
+  return data?.nf_auto_validate !== false;
+};
+
+export const setNfAutoValidate = async (
+  companyId: string,
+  enabled: boolean,
+  userId: string,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase.from('driverpay_settings').upsert(
+    { company_id: companyId, nf_auto_validate: enabled, updated_by: userId, updated_at: new Date().toISOString() },
+    { onConflict: 'company_id' },
+  );
+  if (error) throwDbError(error);
+};
+
+/**
  * Valida / recusa / reabre uma nota anexada pelo driver. 'validada' conta pra NF ficar
  * verde; 'rejeitada' (com motivo opcional) faz o driver reenviar (o slot reabre no app).
  * Só o mestre (RLS FOR ALL + ensurePerm) mexe. Não apaga o arquivo — muda o status.

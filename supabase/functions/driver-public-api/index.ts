@@ -463,8 +463,15 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   // Auto-validação (decisão do Victor 26/07, "validar já no envio"): só quando os
   // TRÊS checks confirmaram positivo. Check null (ex.: sem espelho publicado pra
   // comparar valor) NUNCA valida sozinho — fica 'recebida' pra validação manual.
-  const autoValidate = check !== null && check.status === 'ok'
+  // O painel pode DESLIGAR a auto-validação (driverpay_settings.nf_auto_validate):
+  // a conferência e a recusa automática continuam iguais; só a nota certa passa a
+  // esperar validação manual. Sem linha na tabela = ligada (padrão).
+  const { data: settings } = await supabase.from('driverpay_settings')
+    .select('nf_auto_validate').eq('company_id', claims.company_id).maybeSingle();
+  const autoValidateEnabled = settings?.nf_auto_validate !== false;
+  const checksAllGreen = check !== null && check.status === 'ok'
     && check.valorOk === true && check.cnpjOk === true && check.nomeOk === true;
+  const autoValidate = checksAllGreen && autoValidateEnabled;
 
   const path = `${claims.company_id}/${periodId}/${claims.driver_id}/${emitterId}/${crypto.randomUUID()}.${extFromType(contentType)}`;
   const { error: upErr } = await supabase.storage.from(NF_BUCKET).upload(path, bytes, { contentType, upsert: false });
@@ -489,6 +496,9 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     check_nome: check?.nomeOk ?? null,
     check_details: check ? {
       autoValidated: autoValidate,
+      // Auto-validação estava desligada e a nota passou nos 3 checks: o painel
+      // mostra "conferida ✓ — validar" (é só apertar o botão, sem reconferir).
+      autoValidateSkipped: checksAllGreen && !autoValidateEnabled,
       foundValues: check.foundValues, foundCnpjs: check.foundCnpjs,
       matchedCandidates: check.matchedCandidates, candidates, reasons: check.reasons,
     } : null,
