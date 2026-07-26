@@ -1679,7 +1679,8 @@ export const getErrorRecords = async (
   return data || [];
 };
 
-export const upsertErrorRecord = async (
+// Vários erros por dia são permitidos (decisão 26/07) — insert puro, sem upsert.
+export const insertErrorRecord = async (
   employeeId: string,
   date: string,
   errorCount: number,
@@ -1704,7 +1705,7 @@ export const upsertErrorRecord = async (
   // Se for tipo 'value', error_count é irrelevante; se for 'quantity', error_value é.
   const { error } = await supabase
     .from('error_records')
-    .upsert([{
+    .insert([{
       employee_id: employeeId,
       date,
       error_count: errorType === 'quantity' ? errorCount : 0,
@@ -1714,9 +1715,41 @@ export const upsertErrorRecord = async (
       created_by: createdBy,
       updated_at: new Date().toISOString(),
       company_id: companyId,
-    }], {
-      onConflict: 'employee_id,date'
-    });
+    }]);
+
+  if (error) throw error;
+};
+
+export const updateErrorRecord = async (
+  id: string,
+  errorCount: number,
+  observations: string | null,
+  userId: string,
+  errorType: ErrorType,
+  errorValue: number
+): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'errors.edit');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  if (errorType === 'value') {
+    const valueCheck = await validatePermission(userId, 'errors.createByValue');
+    if (!valueCheck.allowed) {
+      throw new Error(valueCheck.error || 'Permissão negada para lançar erro por valor');
+    }
+  }
+
+  const { error } = await supabase
+    .from('error_records')
+    .update({
+      error_count: errorType === 'quantity' ? errorCount : 0,
+      error_type: errorType,
+      error_value: errorType === 'value' ? errorValue : 0,
+      observations,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
 
   if (error) throw error;
 };
@@ -2050,7 +2083,8 @@ export const getTriageErrors = async (
   return data || [];
 };
 
-export const upsertTriageError = async (
+// Vários registros de triagem por dia são permitidos (decisão 26/07) — insert puro.
+export const insertTriageError = async (
   date: string,
   errorCount: number,
   observations: string | null,
@@ -2074,7 +2108,7 @@ export const upsertTriageError = async (
 
   const { error } = await supabase
     .from('triage_errors')
-    .upsert([{
+    .insert([{
       date,
       triage_type: triageType,
       error_count: triageType === 'quantity' ? errorCount : 0,
@@ -2083,7 +2117,7 @@ export const upsertTriageError = async (
       created_by: createdBy,
       updated_at: new Date().toISOString(),
       company_id: companyId,
-    }], { onConflict: 'date,company_id' });
+    }]);
 
   if (error) throw error;
 };
@@ -2331,7 +2365,8 @@ export const computeTriageDistribution = async (
   return {
     totalErrors,
     totalDirectValue,
-    days: daysWithErrors.length,
+    // Datas distintas — pode haver mais de um registro no mesmo dia.
+    days: new Set(daysWithErrors.map(e => e.date)).size,
     perDay,
     perEmployee,
     totalEmployees: perEmployee.length,

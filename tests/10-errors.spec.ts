@@ -21,6 +21,27 @@ async function deleteTestErrorData() {
   await s.from('triage_errors').delete().eq('date', FAKE_DATE);
 }
 
+// ── Multi-erro por dia (migration 20260726120000) ────────────────────────────
+// Enquanto a migration não estiver aplicada em prod, a trava UNIQUE ainda
+// bloqueia o 2º registro do dia — os testes MULTI se auto-detectam e pulam
+// (aparecem como "skipped", sem mascarar falha real). Probe: tenta inserir
+// 2 registros de triagem na mesma data dedicada e limpa em seguida.
+const PROBE_DATE = '2026-04-30';
+
+async function multiErroPorDiaLiberado(): Promise<boolean> {
+  const s = getClient();
+  await s.from('triage_errors').delete().eq('date', PROBE_DATE);
+  const { error: first } = await s.from('triage_errors').insert([
+    { date: PROBE_DATE, error_count: 1, observations: 'PW probe multi-erro', created_by: '9999' },
+  ]);
+  if (first) throw first;
+  const { error: second } = await s.from('triage_errors').insert([
+    { date: PROBE_DATE, error_count: 1, observations: 'PW probe multi-erro', created_by: '9999' },
+  ]);
+  await s.from('triage_errors').delete().eq('date', PROBE_DATE);
+  return !second;
+}
+
 async function openErrors(page: Page) {
   await goToTab(page, 'Erros');
   await expect(page.getByRole('heading', { name: /Gestão de Erros/ })).toBeVisible();
@@ -153,5 +174,133 @@ test.describe('Erros — individuais e triagem', () => {
 
     // NÃO confirma distribuição — seria destrutivo em payments reais
     await s.from('triage_errors').delete().eq('date', safeDate);
+  });
+
+  test('MULTI: erro 📦 + erro 💰 no MESMO dia → 2 registros, aviso visível', async ({ page }) => {
+    test.skip(!(await multiErroPorDiaLiberado()), 'aguardando migration allow_multiple_errors_per_day em prod');
+
+    await openErrors(page);
+
+    // 1º lançamento: quantidade 5
+    await page.getByRole('button', { name: /Registrar Erro/ }).click();
+    let modal = page.locator('.fixed.inset-0').filter({ has: page.getByRole('heading', { name: /Registrar Erro/ }) });
+    await modal.locator('select').first().selectOption({ label: 'Victor Angelo da silva Pereira' });
+    await modal.locator('input[type="date"]').fill(FAKE_DATE);
+    await modal.getByText('📦 Por Quantidade').click();
+    await modal.locator('input[type="number"]').fill('5');
+    await modal.getByPlaceholder(/Descreva os erros/).fill('PW Test multi quantidade');
+    await modal.getByRole('button', { name: /^Registrar$/ }).click();
+    await expect(page.getByText(/registrado com sucesso/i)).toBeVisible({ timeout: 10_000 });
+
+    // 2º lançamento no MESMO dia: valor R$ 20 — aviso informativo (sem confirmação)
+    await page.getByRole('button', { name: /Registrar Erro/ }).click();
+    modal = page.locator('.fixed.inset-0').filter({ has: page.getByRole('heading', { name: /Registrar Erro/ }) });
+    await modal.locator('select').first().selectOption({ label: 'Victor Angelo da silva Pereira' });
+    await modal.locator('input[type="date"]').fill(FAKE_DATE);
+    await expect(modal.getByText(/Já registrado neste dia/)).toBeVisible({ timeout: 10_000 });
+    await expect(modal.getByText(/5 unidade/)).toBeVisible();
+    await modal.getByText('💰 Por Valor').click();
+    await modal.locator('input[type="number"]').fill('20');
+    await modal.getByPlaceholder(/Descreva os erros/).fill('PW Test multi valor');
+    await modal.getByRole('button', { name: /^Registrar$/ }).click();
+
+    // Banco: 2 linhas, uma de cada tipo — nada foi substituído
+    const s = getClient();
+    await expect.poll(async () => {
+      const { data } = await s.from('error_records').select('id').eq('date', FAKE_DATE);
+      return data?.length ?? 0;
+    }, { timeout: 10_000 }).toBe(2);
+
+    const { data } = await s
+      .from('error_records')
+      .select('error_type, error_count, error_value')
+      .eq('date', FAKE_DATE)
+      .order('error_type');
+    expect(data![0].error_type).toBe('quantity');
+    expect(data![0].error_count).toBe(5);
+    expect(data![1].error_type).toBe('value');
+    expect(Number(data![1].error_value)).toBe(20);
+  });
+
+  test('MULTI: dois erros 📦 no MESMO dia → contagens preservadas (3 e 5)', async ({ page }) => {
+    test.skip(!(await multiErroPorDiaLiberado()), 'aguardando migration allow_multiple_errors_per_day em prod');
+
+    await openErrors(page);
+
+    for (const qty of ['3', '5']) {
+      await page.getByRole('button', { name: /Registrar Erro/ }).click();
+      const modal = page.locator('.fixed.inset-0').filter({ has: page.getByRole('heading', { name: /Registrar Erro/ }) });
+      await modal.locator('select').first().selectOption({ label: 'Victor Angelo da silva Pereira' });
+      await modal.locator('input[type="date"]').fill(FAKE_DATE);
+      await modal.getByText('📦 Por Quantidade').click();
+      await modal.locator('input[type="number"]').fill(qty);
+      await modal.getByPlaceholder(/Descreva os erros/).fill(`PW Test multi qtd ${qty}`);
+      await modal.getByRole('button', { name: /^Registrar$/ }).click();
+      // Modal fecha ao salvar — espera sumir antes do próximo lançamento
+      await expect(modal).not.toBeVisible({ timeout: 10_000 });
+    }
+
+    const s = getClient();
+    await expect.poll(async () => {
+      const { data } = await s.from('error_records').select('id').eq('date', FAKE_DATE);
+      return data?.length ?? 0;
+    }, { timeout: 10_000 }).toBe(2);
+
+    const { data } = await s
+      .from('error_records')
+      .select('error_count')
+      .eq('date', FAKE_DATE)
+      .order('error_count');
+    expect(data![0].error_count).toBe(3);
+    expect(data![1].error_count).toBe(5);
+  });
+
+  test('MULTI Triagem: 📦 + 💰 no MESMO dia → 2 registros, aviso visível', async ({ page }) => {
+    test.skip(!(await multiErroPorDiaLiberado()), 'aguardando migration allow_multiple_errors_per_day em prod');
+
+    // Mesma lógica de data segura do teste "registrar erro do dia" acima
+    const today = new Date();
+    const safeDay = Math.max(1, today.getDate() - 1);
+    const d = new Date(today.getFullYear(), today.getMonth(), safeDay);
+    const iso = d.toISOString().slice(0, 10);
+    const s = getClient();
+    await s.from('triage_errors').delete().eq('date', iso);
+
+    await openErrors(page);
+    await page.getByRole('button', { name: /^Triagem$/ }).click();
+    await expect(page.getByRole('heading', { name: /Registrar Erros de Triagem/ })).toBeVisible();
+
+    // 1º: quantidade 30
+    await page.locator('input[type="date"]').first().fill(iso);
+    await page.locator('input[type="number"]').first().fill('30');
+    await page.locator('input[placeholder="Opcional"]').fill('PW Test multi triagem qtd');
+    await page.getByRole('button', { name: /^Registrar$/ }).click();
+    await expect(page.getByText(/Erro de triagem registrado/i)).toBeVisible({ timeout: 10_000 });
+
+    // 2º no MESMO dia: valor R$ 50 — aviso "Este dia já tem" aparece
+    await page.locator('input[type="date"]').first().fill(iso);
+    await expect(page.getByText(/Este dia já tem/)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: /Por Valor R\$/ }).click();
+    await page.locator('input[type="number"]').first().fill('50');
+    await page.locator('input[placeholder="Opcional"]').fill('PW Test multi triagem valor');
+    await page.getByRole('button', { name: /^Registrar$/ }).click();
+
+    await expect.poll(async () => {
+      const { data } = await s.from('triage_errors').select('id').eq('date', iso);
+      return data?.length ?? 0;
+    }, { timeout: 10_000 }).toBe(2);
+
+    const { data } = await s
+      .from('triage_errors')
+      .select('triage_type, error_count, direct_value')
+      .eq('date', iso)
+      .order('triage_type');
+    expect(data![0].triage_type).toBe('quantity');
+    expect(data![0].error_count).toBe(30);
+    expect(data![1].triage_type).toBe('value');
+    expect(Number(data![1].direct_value)).toBe(50);
+
+    // Cleanup
+    await s.from('triage_errors').delete().eq('date', iso);
   });
 });

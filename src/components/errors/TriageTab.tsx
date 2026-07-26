@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Plus, Trash2, RefreshCw, Calculator, CheckCircle2, Package, DollarSign } from 'lucide-react';
 import {
   getTriageErrors,
-  upsertTriageError,
+  insertTriageError,
   deleteTriageError,
   computeTriageDistribution,
   distributeTriageErrors,
@@ -38,6 +38,9 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
   });
   const [saving, setSaving] = useState(false);
   const [presentCount, setPresentCount] = useState<number | null>(null);
+  // Registros que JÁ existem na data escolhida (aviso informativo — vários
+  // registros por dia são permitidos, este lançamento soma, não substitui).
+  const [existingDayRecords, setExistingDayRecords] = useState<TriageError[]>([]);
 
   const [distRange, setDistRange] = useState({
     startDate: getBrazilDate(),
@@ -88,6 +91,26 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
     return () => { cancelled = true; };
   }, [formData.date, company?.id]);
 
+  // Busca o que já existe na data escolhida (a tabela abaixo só cobre o mês
+  // corrente; a data do form pode estar fora dele). `records` na dependência
+  // refaz a busca após cada registro salvo.
+  useEffect(() => {
+    if (!company?.id || !formData.date) {
+      setExistingDayRecords([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const dayRecords = await getTriageErrors(formData.date, formData.date, company.id);
+        if (!cancelled) setExistingDayRecords(dayRecords);
+      } catch {
+        if (!cancelled) setExistingDayRecords([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [formData.date, company?.id, records]);
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasPermission('errors.createTriage')) {
@@ -112,7 +135,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
     if (!company?.id) return;
     setSaving(true);
     try {
-      await upsertTriageError(
+      await insertTriageError(
         formData.date,
         count,
         formData.observations.trim() || null,
@@ -322,6 +345,18 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
             />
           </div>
 
+          {existingDayRecords.length > 0 && (
+            <div className="md:col-span-4 text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+              ℹ️ Este dia já tem:{' '}
+              {existingDayRecords.map(r =>
+                (r.triage_type ?? 'quantity') === 'value'
+                  ? `💰 R$ ${Number(r.direct_value ?? 0).toFixed(2).replace('.', ',')}`
+                  : `📦 ${r.error_count} ${r.error_count === 1 ? 'pacote' : 'pacotes'}`
+              ).join(' · ')}
+              {' — este lançamento será adicionado.'}
+            </div>
+          )}
+
           {(() => {
             const n = presentCount ?? 0;
             const qty = parseInt(formData.errorCount);
@@ -490,11 +525,12 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
             <div className="bg-white rounded-md p-3 mb-4 max-h-48 overflow-y-auto">
               <div className="text-sm font-medium mb-2">Detalhamento por dia:</div>
               <div className="space-y-1">
-                {preview.perDay.map(d => {
+                {preview.perDay.map((d, idx) => {
                   const dateBR = d.date.split('-').reverse().join('/');
                   const isValue = d.triage_type === 'value';
+                  // key com índice: a mesma data pode aparecer 2x (quantidade + valor)
                   return (
-                    <div key={d.date} className="text-sm py-1 border-b border-gray-100 last:border-b-0 flex justify-between gap-2">
+                    <div key={`${d.date}-${idx}`} className="text-sm py-1 border-b border-gray-100 last:border-b-0 flex justify-between gap-2">
                       <span className="text-gray-800 flex items-center gap-1">
                         <span className={`text-xs px-1.5 py-0.5 rounded ${isValue ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>
                           {isValue ? '💰' : '📦'}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target, Package, FileSearch } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line, Area, ComposedChart, LabelList, Cell } from 'recharts';
-import { getAllEmployees, getAttendanceHistory, getErrorRecords, upsertErrorRecord, deleteErrorRecord, getErrorStatistics, Employee, Attendance, ErrorRecord, ErrorType } from '../../services/database';
+import { getAllEmployees, getAttendanceHistory, getErrorRecords, insertErrorRecord, updateErrorRecord, deleteErrorRecord, getErrorStatistics, Employee, Attendance, ErrorRecord, ErrorType } from '../../services/database';
 import { useCompany } from '../../contexts/CompanyContext';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
@@ -46,7 +46,12 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
   });
   
   const [showErrorForm, setShowErrorForm] = useState(false);
-  const [editingError, setEditingError] = useState<{employeeId: string, date: string} | null>(null);
+  // ID do registro em edição (null = criando). Vários erros por dia são
+  // permitidos, então editar é sempre por ID — nunca por funcionário+data.
+  const [editingError, setEditingError] = useState<string | null>(null);
+  const [savingError, setSavingError] = useState(false);
+  // Erros já existentes no dia/funcionário escolhidos no modal (aviso informativo).
+  const [existingDayErrors, setExistingDayErrors] = useState<ErrorRecord[]>([]);
   const [errorFormData, setErrorFormData] = useState({
     employeeId: '',
     date: getBrazilDate(),
@@ -154,6 +159,32 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
     setActiveSubTab('individual');
   }, [company?.id]);
 
+  // Aviso informativo do modal: lista o que JÁ existe no dia escolhido pro
+  // funcionário escolhido (a lista da tela é filtrada pelo período e pode não
+  // cobrir a data do modal — por isso a busca dedicada). Não bloqueia nada.
+  useEffect(() => {
+    if (!showErrorForm || editingError || !errorFormData.employeeId || !errorFormData.date || !company?.id) {
+      setExistingDayErrors([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const dayErrors = await getErrorRecords(
+          errorFormData.date,
+          errorFormData.date,
+          errorFormData.employeeId,
+          undefined,
+          company.id
+        );
+        if (!cancelled) setExistingDayErrors(dayErrors);
+      } catch {
+        if (!cancelled) setExistingDayErrors([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showErrorForm, editingError, errorFormData.employeeId, errorFormData.date, company?.id]);
+
   useEffect(() => {
     if (!searchTerm.trim()) {
       setFilteredEmployees(employeesWithErrors);
@@ -214,29 +245,23 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
     setShowErrorForm(true);
   };
 
-  const handleEditError = (employeeId: string, date: string) => {
+  const handleEditError = (errorRecord: ErrorRecord) => {
     if (!hasPermission('errors.edit')) {
       toast.error('Você não tem permissão para editar registros de erro');
       return;
     }
 
-    const errorRecord = errorRecords.find(err =>
-      err.employee_id === employeeId && err.date === date
-    );
-
-    if (errorRecord) {
-      const type: ErrorType = (errorRecord.error_type ?? 'quantity');
-      setEditingError({ employeeId, date });
-      setErrorFormData({
-        employeeId,
-        date,
-        errorType: type,
-        errorCount: type === 'quantity' ? errorRecord.error_count.toString() : '',
-        errorValue: type === 'value' ? Number(errorRecord.error_value ?? 0).toFixed(2) : '',
-        observations: errorRecord.observations || ''
-      });
-      setShowErrorForm(true);
-    }
+    const type: ErrorType = (errorRecord.error_type ?? 'quantity');
+    setEditingError(errorRecord.id);
+    setErrorFormData({
+      employeeId: errorRecord.employee_id,
+      date: errorRecord.date,
+      errorType: type,
+      errorCount: type === 'quantity' ? errorRecord.error_count.toString() : '',
+      errorValue: type === 'value' ? Number(errorRecord.error_value ?? 0).toFixed(2) : '',
+      observations: errorRecord.observations || ''
+    });
+    setShowErrorForm(true);
   };
 
   const handleSubmitError = async (e: React.FormEvent) => {
@@ -280,17 +305,30 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
       return;
     }
 
+    if (savingError) return;
+    setSavingError(true);
     try {
-      await upsertErrorRecord(
-        errorFormData.employeeId,
-        errorFormData.date,
-        errorCount,
-        errorFormData.observations.trim(),
-        userId,
-        errorFormData.errorType,
-        errorValue,
-        company.id
-      );
+      if (editingError) {
+        await updateErrorRecord(
+          editingError,
+          errorCount,
+          errorFormData.observations.trim(),
+          userId,
+          errorFormData.errorType,
+          errorValue
+        );
+      } else {
+        await insertErrorRecord(
+          errorFormData.employeeId,
+          errorFormData.date,
+          errorCount,
+          errorFormData.observations.trim(),
+          userId,
+          errorFormData.errorType,
+          errorValue,
+          company.id
+        );
+      }
 
       toast.success(editingError ? 'Erro atualizado com sucesso!' : 'Erro registrado com sucesso!');
       resetErrorForm();
@@ -299,6 +337,8 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
       console.error('Erro ao salvar:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar registro';
       toast.error(errorMessage);
+    } finally {
+      setSavingError(false);
     }
   };
 
@@ -825,7 +865,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                                 <div className="flex space-x-1 mt-2">
                                   {hasPermission('errors.edit') && (
                                     <button
-                                      onClick={() => handleEditError(employeeData.employee.id, errorRecord.date)}
+                                      onClick={() => handleEditError(errorRecord)}
                                       className="p-1 text-blue-600 hover:bg-blue-50 rounded"
                                       title="Editar registro de erro"
                                     >
@@ -941,7 +981,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                         <div className="flex gap-2 mt-2">
                           {hasPermission('errors.edit') && (
                             <button
-                              onClick={() => handleEditError(employeeData.employee.id, errorRecord.date)}
+                              onClick={() => handleEditError(errorRecord)}
                               className="flex-1 py-2 bg-blue-50 text-blue-600 rounded text-xs font-medium min-h-[40px]"
                             >
                               <Edit2 className="w-3 h-3 inline mr-1" /> Editar
@@ -1034,6 +1074,18 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                 />
               </div>
 
+              {!editingError && existingDayErrors.length > 0 && (
+                <div className="text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+                  ℹ️ Já registrado neste dia:{' '}
+                  {existingDayErrors.map(e =>
+                    (e.error_type ?? 'quantity') === 'value'
+                      ? `💰 R$ ${Number(e.error_value ?? 0).toFixed(2).replace('.', ',')}`
+                      : `📦 ${e.error_count} unidade(s)`
+                  ).join(' · ')}
+                  {' — este lançamento será adicionado.'}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Tipo de Erro *
@@ -1120,9 +1172,10 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-3 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors min-h-[44px]"
+                  disabled={savingError}
+                  className="flex-1 px-4 py-3 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed min-h-[44px]"
                 >
-                  {editingError ? 'Atualizar' : 'Registrar'}
+                  {savingError ? 'Salvando...' : editingError ? 'Atualizar' : 'Registrar'}
                 </button>
                 <button
                   type="button"

@@ -476,20 +476,29 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         const employeeData = financialData.find(data => data.employee.id === employeeId);
         if (!employeeData) continue;
 
-        // Para cada erro, aplicar desconto em payments.total APENAS para tipo
-        // 'quantity' (valor/unidade × quantidade). Erros tipo 'value' são
-        // deduzidos automaticamente na exibição — modificar payments.total
-        // aqui causaria dupla contagem.
+        // Aplicar desconto em payments.total APENAS para tipo 'quantity'
+        // (valor/unidade × quantidade). Erros tipo 'value' são deduzidos
+        // automaticamente na exibição — modificar payments.total aqui
+        // causaria dupla contagem.
+        // Pode haver VÁRIOS erros no mesmo dia: soma as quantidades por data
+        // e aplica UM desconto por data (senão o 2º sobrescreveria o 1º).
+        const quantityByDate = new Map<string, number>();
         for (const errorRecord of employeeData.errorRecords) {
           const isValueType = (errorRecord.error_type ?? 'quantity') === 'value';
           if (isValueType) continue;
+          quantityByDate.set(
+            errorRecord.date,
+            (quantityByDate.get(errorRecord.date) || 0) + (errorRecord.error_count || 0)
+          );
+        }
 
-          const discountAmount = errorRecord.error_count * discountValue;
+        for (const [errorDate, totalCount] of quantityByDate) {
+          const discountAmount = totalCount * discountValue;
           if (discountAmount <= 0) continue;
 
           // Buscar pagamento existente
           const existingPayment = payments.find(pay =>
-            pay.employee_id === employeeId && pay.date === errorRecord.date
+            pay.employee_id === employeeId && pay.date === errorDate
           );
 
           if (existingPayment) {
@@ -500,7 +509,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
             await upsertPayment(
               employeeId,
-              errorRecord.date,
+              errorDate,
               originalDailyRate,
               originalBonus,
               userId,
@@ -512,7 +521,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               .from('payments')
               .update({ total: newTotal })
               .eq('employee_id', employeeId)
-              .eq('date', errorRecord.date);
+              .eq('date', errorDate);
 
             if (updateError) {
               console.error('Erro ao atualizar total:', updateError);
@@ -520,14 +529,14 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           } else {
             // Se não existe pagamento, criar um com desconto
             const discountedTotal = Math.max(0, -discountAmount);
-            await upsertPayment(employeeId, errorRecord.date, 0, 0, userId, companyId);
+            await upsertPayment(employeeId, errorDate, 0, 0, userId, companyId);
 
             // Atualizar o total para refletir o desconto
             const { error: updateError } = await supabase
               .from('payments')
               .update({ total: discountedTotal })
               .eq('employee_id', employeeId)
-              .eq('date', errorRecord.date);
+              .eq('date', errorDate);
 
             if (updateError) {
               console.error('Erro ao criar pagamento com desconto:', updateError);
@@ -1271,37 +1280,45 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                       );
                                     })()}
                                     {(() => {
-                                      const errorRecord = data.errorRecords.find(err => err.date === payment.date);
-                                      if (!errorRecord) return null;
-                                      const isValueType = (errorRecord.error_type ?? 'quantity') === 'value';
+                                      // Pode haver VÁRIOS erros na mesma data (quantidade e/ou valor) — soma tudo.
+                                      const errorsForDay = data.errorRecords.filter(err => err.date === payment.date);
+                                      if (errorsForDay.length === 0) return null;
+
+                                      const quantityCount = errorsForDay
+                                        .filter(e => (e.error_type ?? 'quantity') === 'quantity')
+                                        .reduce((sum, e) => sum + (e.error_count ?? 0), 0);
+                                      const valueDiscount = errorsForDay
+                                        .filter(e => e.error_type === 'value')
+                                        .reduce((sum, e) => sum + Number(e.error_value ?? 0), 0);
 
                                       // Desconto total aplicado = diária + bônus - total pago
                                       const expectedValue = (payment.daily_rate || 0) + (payment.bonus || 0);
                                       const actualValue = payment.total || 0;
                                       const totalDiscount = expectedValue - actualValue;
+                                      const valuePerError = quantityCount > 0 && totalDiscount > 0
+                                        ? totalDiscount / quantityCount
+                                        : 0;
 
-                                      if (isValueType) {
-                                        const valueDiscount = Number(errorRecord.error_value ?? 0);
-                                        if (valueDiscount <= 0) return null;
-                                        return (
-                                          <div className="text-xs text-red-600">
-                                            Desconto por erro (valor): -R$ {valueDiscount.toFixed(2)}
-                                          </div>
-                                        );
-                                      }
-
-                                      // quantity
-                                      if (errorRecord.error_count === 0) return null;
-                                      const valuePerError = totalDiscount > 0 ? totalDiscount / errorRecord.error_count : 0;
-                                      return valuePerError > 0 ? (
-                                        <div className="text-xs text-red-600">
-                                          Desconto por erro ({errorRecord.error_count} unidades): -{errorRecord.error_count} × R$ {valuePerError.toFixed(2)} = -R$ {totalDiscount.toFixed(2)}
-                                        </div>
-                                      ) : null;
+                                      return (
+                                        <>
+                                          {quantityCount > 0 && valuePerError > 0 && (
+                                            <div className="text-xs text-red-600">
+                                              Desconto por erro ({quantityCount} unidades): -{quantityCount} × R$ {valuePerError.toFixed(2)} = -R$ {totalDiscount.toFixed(2)}
+                                            </div>
+                                          )}
+                                          {valueDiscount > 0 && (
+                                            <div className="text-xs text-red-600">
+                                              Desconto por erro (valor): -R$ {valueDiscount.toFixed(2)}
+                                            </div>
+                                          )}
+                                        </>
+                                      );
                                     })()}
                                     {(() => {
-                                      const errForDay = data.errorRecords.find(err => err.date === payment.date);
-                                      const valueDiscountForDay = errForDay?.error_type === 'value' ? Number(errForDay.error_value ?? 0) : 0;
+                                      // Soma TODOS os erros tipo valor da data (pode haver mais de um).
+                                      const valueDiscountForDay = data.errorRecords
+                                        .filter(err => err.date === payment.date && err.error_type === 'value')
+                                        .reduce((sum, e) => sum + Number(e.error_value ?? 0), 0);
                                       const rawTotal = Number(payment.total ?? 0);
                                       const displayTotal = Math.max(0, rawTotal - valueDiscountForDay);
                                       return (
