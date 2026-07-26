@@ -46,23 +46,26 @@ error de infra sem detalhe capturado — **nenhum teste falhou**) · E2E chromiu
 **59 passed / 0 fail**: 10-errors (5✅ + 3 MULTI skip aguardando migration),
 18+14 (13✅), 16+20 (16✅ + 2 skips históricos declarados), 31+11+22 (25✅).
 
-## ⚠️ ORDEM DE DEPLOY (obrigatória — o passo 3 depende de OK do Victor)
+## ✅ DEPLOY COMPLETO (autorização explícita do Victor: "pode fazer deploy push e migration")
 
 1. ✅ Código validado + commit local `40e4c6b`.
-2. ⏳ **Push do Victor** → deploy Vercel → conferir no ar.
-3. ⏳ **Só depois** aplicar a migration em prod (o painel antigo usa upsert com
-   onConflict — sem as constraints ele quebra QUALQUER registro de erro, 42P10).
-4. ⏳ Rodar os 3 specs MULTI (agora rodam de verdade) + teste real na UI
-   (2 erros em data futura, conferir, excluir).
-5. ⏳ Equipe recarregar o painel (F5) — aba antiga em cache quebra ao registrar erro
-   depois da migration.
+2. ✅ **Push FEITO** (main `1c12f60..def84ab` no origin, merge ff da feature) +
+   deploy Vercel **conferido no ar** (bundle `index-Bhy_UBHh.js` + chunk
+   `FinancialTab-CbNk8YNf.js`, hashes idênticos ao build local validado).
+3. ✅ **Migration APLICADA em prod** via MCP (`allow_multiple_errors_per_day`) DEPOIS
+   do deploy; verificado no banco: só sobraram as PKs nas duas tabelas.
+4. ✅ Specs MULTI rodados DE VERDADE pós-migration: **10-errors 8/8 ✅** (📦+💰 mesmo
+   dia = 2 registros; 📦3+📦5 preservados; triagem 📦+💰 = 2 registros; avisos
+   visíveis). Dados de teste limpos pelos próprios specs.
+5. ⏳ Equipe recarregar o painel (F5) — aba aberta com código antigo (cache) dá erro
+   ao registrar erro. **Victor avisa a equipe.**
 
 Rollback da migration: recriar as constraints — só enquanto não houver 2 erros no
 mesmo dia lançados (SQL no cabeçalho da migration).
 
 ## Pendências
 
-- Passos 2-5 acima (push é do Victor; migration só com OK dele).
+- Equipe dar F5 no painel (passo 5 acima).
 - Herdadas de 25/07: Caio confirmar login 1234; apagar backups
   (`backup_driver_auth_20260725`, `backup_mirror_pub_20260724`, `backup_driver_pix_20260724`)
   quando Victor liberar; recebedor Mutum (Gustavo × João Victor); PIX Othon/Pablo

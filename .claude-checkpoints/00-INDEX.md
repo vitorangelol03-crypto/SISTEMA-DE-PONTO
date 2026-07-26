@@ -9,13 +9,15 @@
 **Sessão 26/07 — multi-erros por dia (individuais + triagem):** Victor pediu por áudio
 poder lançar 2+ erros no mesmo dia (unidade + valor juntos); o painel SUBSTITUÍA o
 anterior (upsert sobre UNIQUE employee_id+date / date+company_id — era desenho, não bug).
-Feature construída e validada (commit `40e4c6b`): criar=insert puro, editar=por ID,
-aviso "já registrado neste dia" sem confirmação, "Descontar Erros" agrupa e SOMA por
-data, exibição do Financeiro soma todos os erros da data, sem limite por dia. Migration
-`20260726120000` (dropa as 2 constraints) está NO REPO e **NÃO aplicada em prod**.
-**ORDEM OBRIGATÓRIA:** push+deploy Vercel PRIMEIRO, migration DEPOIS (painel antigo
-quebra sem as constraints), aí rodar os 3 specs MULTI (auto-detectam e hoje pulam) +
-teste real + equipe dá F5. Validado: tsc 0 · build · 602 unit · 59 E2E chromium ✅.
+Feature construída, validada e **NO AR** (commit `40e4c6b`): criar=insert puro,
+editar=por ID, aviso "já registrado neste dia" sem confirmação, "Descontar Erros"
+agrupa e SOMA por data, exibição do Financeiro soma todos os erros da data, sem limite.
+**Push+deploy+migration FEITOS na ordem certa com autorização explícita do Victor**:
+main `def84ab` no origin, Vercel conferido (`index-Bhy_UBHh.js`), migration
+`20260726120000` aplicada em prod DEPOIS do deploy (constraints removidas, só PKs).
+Validado: tsc 0 · build · 602 unit · 59 E2E ✅ e, pós-migration, **10-errors 8/8**
+com os 3 specs MULTI rodando de verdade (2 erros no mesmo dia coexistem). Pendente:
+equipe dar F5 no painel (aba antiga em cache erra ao registrar erro).
 Ver `CHECKPOINT_SESSAO_2026-07-26.md`.
 
 **Sessão 25/07 (manhã) — driver sem login + fix do reset:** Caio não logava ("credenciais
