@@ -2,9 +2,21 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-07-25** (manhã).
+> Última atualização: **2026-07-26**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 26/07 — multi-erros por dia (individuais + triagem):** Victor pediu por áudio
+poder lançar 2+ erros no mesmo dia (unidade + valor juntos); o painel SUBSTITUÍA o
+anterior (upsert sobre UNIQUE employee_id+date / date+company_id — era desenho, não bug).
+Feature construída e validada (commit `40e4c6b`): criar=insert puro, editar=por ID,
+aviso "já registrado neste dia" sem confirmação, "Descontar Erros" agrupa e SOMA por
+data, exibição do Financeiro soma todos os erros da data, sem limite por dia. Migration
+`20260726120000` (dropa as 2 constraints) está NO REPO e **NÃO aplicada em prod**.
+**ORDEM OBRIGATÓRIA:** push+deploy Vercel PRIMEIRO, migration DEPOIS (painel antigo
+quebra sem as constraints), aí rodar os 3 specs MULTI (auto-detectam e hoje pulam) +
+teste real + equipe dá F5. Validado: tsc 0 · build · 602 unit · 59 E2E chromium ✅.
+Ver `CHECKPOINT_SESSAO_2026-07-26.md`.
 
 **Sessão 25/07 (manhã) — driver sem login + fix do reset:** Caio não logava ("credenciais
 inválidas"); investigação em prod achou que o **botão "Resetar senha" do painel NUNCA
@@ -112,7 +124,8 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-25.md` | **Mais recente.** Caio sem login (causa: tentativas nem chegavam no servidor; resetado de verdade no banco c/ backup) · botão de reset NUNCA funcionou (RLS DELETE sem SELECT) → RPC `driverpay_reset_driver_password` (fix `398befc`, migration em prod) · **aguarda push+deploy** | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-26.md` | **Mais recente.** Multi-erros por dia (individuais + triagem): insert/edição por ID, aviso do dia, Descontar Erros soma por data (commit `40e4c6b`) · migration `20260726120000` NO REPO aguardando **push+deploy → migration** nessa ordem · 3 specs MULTI auto-detectam | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-25.md` | Caio sem login (causa: tentativas nem chegavam no servidor; resetado de verdade no banco c/ backup) · botão de reset NUNCA funcionou (RLS DELETE sem SELECT) → RPC `driverpay_reset_driver_password` (fix `398befc`, migration em prod) · push+deploy conferidos | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-24.md` | Leva LOGGI só-líder (3 republicados + 25 membros despublicados) · 39 PIX da planilha C6 · FEATURE recebedor diferente (commit `3820842`, migration em prod, relatórios com CHAVE PIX) · backups `backup_mirror_pub_20260724`/`backup_driver_pix_20260724` | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-23.md` | App do Entregador completo + **GO-LIVE em prod** (merge main + Vercel; driver real Iago já usando) + feature despublicar espelho/resetar senha (§6). Decisões (login CPF, web-first, filtro plataforma, CNPJs) + backfill CPF 91/97 reversível | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-20-noite.md` | Bugs de prod do ponto: facial desligada por spec (religada+blindada), Pablo sem GPS (fix msg), saída fantasma 12s = UX (2 registros limpos c/ backup); pendências de feature | 🟢 ATIVO |
@@ -152,6 +165,7 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 - **Ponto/testes (20/07 noite):** spec que toca config REAL de prod (ex.: toggle facial) tem que restaurar em `finally`; bateria E2E só em janela segura (nunca de noite — turno da madrugada bate ~02:00); recusa de ponto da edge fn vem em `message` (não `error`); correção de registro de ponto = sempre backup antes (`backups/`).
 - **Tela de ponto (20/07 noite, decisões do Victor):** saída < 10 min da marcação anterior = confirmação obrigatória; tela volta ao CPF 35s após registrar; GPS bloqueado = instruir sem chamar servidor; tentativa sem GPS que CHEGA no servidor continua criando bonus_block (regra mantida).
 - **RLS + DELETE (lição 25/07):** DELETE com WHERE numa tabela com RLS exige as linhas visíveis pelas policies de SELECT — tabela deny-all de leitura (ex.: `driverpay_driver_auth`) NUNCA aceita DELETE do client (0 linhas, silencioso). Operação assim = RPC SECURITY DEFINER com authz do chamador e retorno do row_count. Reset de senha do app agora é só via `driverpay_reset_driver_password`.
+- **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
 
