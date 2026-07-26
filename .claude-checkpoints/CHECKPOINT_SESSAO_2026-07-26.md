@@ -145,6 +145,29 @@ valide tudo com cliques reais"):**
 7. ✅ Push (main `eba872a..5142abe`) + **Vercel conferido no ar** (`index-i_jGhuT9.js`).
 Validação local: tsc 0 · build ok · 622 unit (41 files) · smoke E2E 52-driverpay.
 
+## Botão liga/desliga da auto-validação (commit `d9c7119`, NO AR)
+
+Pedido do Victor pelo print do modal: desligar SÓ a validação automática.
+**Desligada, a conferência continua idêntica** (3 selos calculados + nota ERRADA
+recusada na hora com motivo); só a nota certa deixa de validar sozinha e fica
+'recebida' com o selo azul "conferida, aguardando você".
+
+- Migration `20260726220000` (aplicada): tabela `driverpay_settings`
+  (`nf_auto_validate` por empresa, RLS igual às demais driverpay_*). **Sem linha =
+  ligada (padrão)** — nenhum dado existente tocado, tabela nova e vazia.
+- Edge fn **v10 ACTIVE**: lê a chave; grava `check_details.autoValidateSkipped`
+  quando os 3 checks passaram mas a auto-validação estava desligada.
+- Painel: banner verde (LIGADA) / âmbar (DESLIGADA) + botão, dentro do modal
+  "Notas recebidas"; selo azul nas notas conferidas que aguardam validação.
+- Validação: **teste real do toggle 6/6 ✅** (desligado: certa fica recebida com
+  3 verdes, errada CONTINUA recusada; ligado: volta a validar sozinha; chave
+  restaurada ao estado original no fim) · **cliques reais no botão 6/6 ✅** ·
+  regressões: app 6/6 · API 11/11 · painel 6/6 · tsc 0 · build · 16 unit.
+- Push + Vercel conferidos (`index-CjzSU4_2.js`).
+- Nota de teste: o script `clicks-painel.mjs` deu falso-negativo numa rodada
+  (esperava o subtítulo do modal, que aparece antes da lista carregar). Produto
+  estava certo — provado por screenshot; corrigido o wait do script, 6/6.
+
 ## Pendências
 
 - Equipe dar F5 no painel (multi-erros, seção acima; vale também pros selos novos).

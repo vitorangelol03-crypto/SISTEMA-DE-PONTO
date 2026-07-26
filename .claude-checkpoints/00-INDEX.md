@@ -34,7 +34,11 @@ achado pelo teste real na fn deployada). Release completo com backup prévio
 **cliques reais app 6/6 ✅** e **painel 6/6 ✅** (Playwright, notas verdadeiras,
 screenshots) → backfill: **16/18 auto-validadas**, só Marize (R$249×238) e Lucas
 (escaneada) pra decisão manual → push+Vercel no ar (`index-i_jGhuT9.js`).
-Ver `CHECKPOINT_SESSAO_2026-07-26.md`.
+**+ Botão liga/desliga da auto-validação** (`d9c7119`, fn **v10**, migration
+`20260726220000` = `driverpay_settings`): desligada, a conferência e a RECUSA
+continuam iguais — só a nota certa espera validação manual (selo "conferida,
+aguardando você"). Toggle testado de verdade 6/6 + cliques no botão 6/6;
+Vercel `index-CjzSU4_2.js`. Ver `CHECKPOINT_SESSAO_2026-07-26.md`.
 
 **Sessão 25/07 (manhã) — driver sem login + fix do reset:** Caio não logava ("credenciais
 inválidas"); investigação em prod achou que o **botão "Resetar senha" do painel NUNCA
@@ -182,6 +186,7 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 - **Checkpoints (18/07):** todos vivem em `.claude-checkpoints/`; 1 checkpoint por sessão; atualizar este índice junto; hook pós-commit lembra a sessão de manter isso em dia.
 - **Ponto/testes (20/07 noite):** spec que toca config REAL de prod (ex.: toggle facial) tem que restaurar em `finally`; bateria E2E só em janela segura (nunca de noite — turno da madrugada bate ~02:00); recusa de ponto da edge fn vem em `message` (não `error`); correção de registro de ponto = sempre backup antes (`backups/`).
 - **Tela de ponto (20/07 noite, decisões do Victor):** saída < 10 min da marcação anterior = confirmação obrigatória; tela volta ao CPF 35s após registrar; GPS bloqueado = instruir sem chamar servidor; tentativa sem GPS que CHEGA no servidor continua criando bonus_block (regra mantida).
+- **Conferência de NF (26/07, decisões do Victor):** a nota é conferida NO ENVIO contra o **espelho publicado** (escopo+filtro de plataforma — provado na Fase 0), CNPJ do slot e nome do driver **ou** recebedor cadastrado; valor exige **centavo exato** (±R$ 0,02 só arredondamento); nota errada ou ilegível é **RECUSADA na hora** com o motivo exato (o driver reenvia); 3 checks verdes → **validada automaticamente**, e isso pode ser **desligado** no botão do modal "Notas recebidas" (desligado, a conferência e a recusa continuam — só a validação vira manual). `validated_by` tem FK pra `users`: auto grava NULL + `check_details.autoValidated`.
 - **RLS + DELETE (lição 25/07):** DELETE com WHERE numa tabela com RLS exige as linhas visíveis pelas policies de SELECT — tabela deny-all de leitura (ex.: `driverpay_driver_auth`) NUNCA aceita DELETE do client (0 linhas, silencioso). Operação assim = RPC SECURITY DEFINER com authz do chamador e retorno do row_count. Reset de senha do app agora é só via `driverpay_reset_driver_password`.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
