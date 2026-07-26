@@ -25,13 +25,16 @@ nome/valor achados são casos reais e Victor ditou os cadastros: **Karinne = rec
 do Fernando (nome+PIX gravados)** e **Pablo Raspante = recebedor da Marize (nome gravado;
 PIX pendente — candidato CNPJ MEI 49860622000189)**. Nota da Marize divergente
 (R$ 249×238) fica pra validação manual. Leitura simples resolve sem IA.
-**Fase 1 CONSTRUÍDA (commit `ba0c348`, aguarda release):** edge fn v8 lê a nota no envio
-e confere valor (espelho publicado) + CNPJ + nome (driver/recebedor); errado → RECUSA
-na hora com o motivo exato (422, slot reabre); 3 checks verdes → VALIDADA automática
-(`auto`); painel com selos ✓/✗ + filtro "só atenção". Validado local (tsc 0 · build ·
-622 unit · smoke E2E · pipeline real com nota verdadeira). **Release pendente, ordem:
-migration `20260726200000` PRIMEIRO → deploy fn v8 + teste real → push/Vercel → backfill
-das 18 notas.** Ver `CHECKPOINT_SESSAO_2026-07-26.md`.
+**Fase 1 NO AR (commits `ba0c348`+`5142abe`):** a nota é lida NO ENVIO e conferida
+(valor do espelho publicado + CNPJ + nome do driver/recebedor); errada → RECUSADA na
+hora com o motivo exato (422, slot reabre); 3 checks verdes → VALIDADA automática
+(validated_by NULL + `check_details.autoValidated` — FK de users pegava 'auto', bug
+achado pelo teste real na fn deployada). Release completo com backup prévio
+(`backup_nf_files_20260726`): migration aplicada → **fn v9 ACTIVE** (API 11/11 ✅) →
+**cliques reais app 6/6 ✅** e **painel 6/6 ✅** (Playwright, notas verdadeiras,
+screenshots) → backfill: **16/18 auto-validadas**, só Marize (R$249×238) e Lucas
+(escaneada) pra decisão manual → push+Vercel no ar (`index-i_jGhuT9.js`).
+Ver `CHECKPOINT_SESSAO_2026-07-26.md`.
 
 **Sessão 25/07 (manhã) — driver sem login + fix do reset:** Caio não logava ("credenciais
 inválidas"); investigação em prod achou que o **botão "Resetar senha" do painel NUNCA

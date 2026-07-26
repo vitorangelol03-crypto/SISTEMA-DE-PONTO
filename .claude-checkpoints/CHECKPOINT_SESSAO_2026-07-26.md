@@ -122,18 +122,35 @@ O que foi feito:
   `backfill-checks.mjs` (18 notas antigas: preenche selos + auto-valida as 100% verdes;
   divergente/ilegível antiga NÃO recusa retroativo — fica pra decisão manual do Victor).
 
-**ORDEM DE RELEASE (diferente da feature de erros — migration PRIMEIRO):**
-1. ⏳ Migration em prod (aditiva, painel atual nem vê).
-2. ⏳ Deploy edge fn v8 (2 arquivos: index.ts + nfCheck.ts) + rodar `testar-fn-v8.mjs`.
-3. ⏳ Push + Vercel (painel novo consulta as colunas novas — por isso migration antes).
-4. ⏳ Backfill das 18 notas.
-Validação local FEITA: tsc 0 · build ok · 622 unit (41 files) · smoke E2E 52-driverpay ·
-pipeline real local (unpdf + nfCheck na nota real do Rodrigo: ok/3 checks ✓).
+**✅ RELEASE COMPLETO (autorização do Victor: "ok mas com cuidado pra não perder dado,
+valide tudo com cliques reais"):**
+1. ✅ Backup integral prévio: `backup_nf_files_20260726` (18/18 linhas).
+2. ✅ Migration `driverpay_nf_auto_check` aplicada em prod.
+3. ✅ Edge fn deployada — **v9 ACTIVE**. (v8 caiu no teste real: `validated_by` tem FK
+   pra `users(id)` e 'auto' violava; fix `5142abe` = auto grava validated_by NULL +
+   marcador `check_details.autoValidated`. **O teste real pegou o bug antes de
+   qualquer driver ver.**) Teste da API deployada: **11/11 ✅** (nota certa
+   auto-validada batendo no espelho; errada 422 com motivo exato; slot reabre;
+   regressão de login ok; driver de teste descartável 100% limpo).
+4. ✅ **CLIQUES REAIS no app** (Playwright, localhost + fn v9 + banco real): **6/6 ✅**
+   — login CPF+1234 → criar senha → Anexar nota → 01.pdf real → toast "enviada e
+   validada ✓" → 04.pdf real → toast de recusa com motivo → banco correto.
+   Screenshots em scratchpad/nf-diagnostico/shots/.
+5. ✅ **Backfill das 18 notas**: **16 auto-validadas** (Fernando validou já com a
+   Karinne cadastrada!), Marize divergente + Lucas ilegível ficam pro Victor
+   (sem recusa retroativa). Fila manual: 18 → 2.
+6. ✅ **CLIQUES REAIS no painel** (2626): **6/6 ✅** — modal com 16 selos
+   "✓ validada (auto)", ✗ valor na Marize, "não legível" no Lucas, filtro
+   "só as que precisam de atenção" deixa só as 2.
+7. ✅ Push (main `eba872a..5142abe`) + **Vercel conferido no ar** (`index-i_jGhuT9.js`).
+Validação local: tsc 0 · build ok · 622 unit (41 files) · smoke E2E 52-driverpay.
 
 ## Pendências
 
-- **Release da conferência de NF** (passos 1-4 acima — aguarda OK do Victor).
-- Equipe dar F5 no painel (multi-erros, seção acima).
+- Equipe dar F5 no painel (multi-erros, seção acima; vale também pros selos novos).
+- **Marize** (nota R$ 249×238) e **Lucas** (escaneada) — decisão manual do Victor no
+  modal (filtro "só as que precisam de atenção" mostra só elas).
+- Apagar `backup_nf_files_20260726` quando Victor liberar (junto com os backups antigos).
 - **PIX do recebedor da Marize (Pablo Raspante)** — Victor confirmar (candidato: CNPJ
   MEI 49860622000189). Liga com a pendência antiga "PIX othon/Pablo Raspante" de 25/07.
 - **Nota da Marize divergente** (R$ 249,00 × espelho LOGGI R$ 238,00) — decisão do
