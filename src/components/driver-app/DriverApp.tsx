@@ -222,11 +222,19 @@ export function DriverApp() {
     setNfUploading(emitterId);
     try {
       const { base64, contentType, filename } = await fileToUpload(file);
-      await driverNfUpload({ periodId: nfCtx.periodId, emitterId, contentType, fileBase64: base64, filename }, token);
-      toast.success('Nota enviada!');
+      const res = await driverNfUpload({ periodId: nfCtx.periodId, emitterId, contentType, fileBase64: base64, filename }, token);
+      // Conferência automática: 3 checks verdes = já validada; senão fica pra conferência manual.
+      if (res.validated) toast.success('Nota enviada e validada! ✓ Valor, CNPJ e nome conferidos.', { duration: 6000 });
+      else toast.success('Nota enviada! Ela será conferida.');
       await loadNf(nfCtx.periodId);
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
+      else if (errStatus(e) === 422) {
+        // Nota RECUSADA pela conferência automática: mostra o motivo exato e
+        // recarrega os slots (o CNPJ reabre com "recusada: <motivo>, envie outra").
+        toast.error(errMsg(e, 'Nota recusada na conferência.'), { duration: 12000 });
+        await loadNf(nfCtx.periodId);
+      }
       else toast.error(errMsg(e, 'Nao consegui enviar a nota.'));
     } finally { setNfUploading(null); }
   }

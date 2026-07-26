@@ -522,12 +522,22 @@ export interface NotaFiscalFileRow {
   /** Motivo da recusa (só quando status='rejeitada') — mostrado pro driver no app. */
   rejectReason: string | null;
   uploadedAt: string;
+  /** Conferência automática (v8): ok | divergente | ilegivel | pendente | null (anterior à feature). */
+  checkStatus: string | null;
+  /** null = não deu pra conferir aquele item (ex.: sem espelho publicado). */
+  checkValor: boolean | null;
+  checkCnpj: boolean | null;
+  checkNome: boolean | null;
+  /** JSON com valores/CNPJs achados, candidatos esperados e motivos. */
+  checkDetails: Record<string, unknown> | null;
+  /** 'auto' = validada pela conferência automática no envio. */
+  validatedBy: string | null;
 }
 
 export const listNotaFiscalFiles = async (companyId: string, periodId: string): Promise<NotaFiscalFileRow[]> => {
   const { data, error } = await supabase
     .from('driverpay_nota_fiscal_files')
-    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, reject_reason, uploaded_at, driverpay_drivers(name, recebedor_nome), driverpay_nota_emitters(label, cnpj)')
+    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, reject_reason, uploaded_at, check_status, check_valor, check_cnpj, check_nome, check_details, validated_by, driverpay_drivers(name, recebedor_nome), driverpay_nota_emitters(label, cnpj)')
     .eq('company_id', companyId)
     .eq('period_id', periodId)
     .order('uploaded_at', { ascending: true });
@@ -552,6 +562,12 @@ export const listNotaFiscalFiles = async (companyId: string, periodId: string): 
       status: (r.status as string) ?? 'recebida',
       rejectReason: (r.reject_reason as string | null) ?? null,
       uploadedAt: String(r.uploaded_at),
+      checkStatus: (r.check_status as string | null) ?? null,
+      checkValor: (r.check_valor as boolean | null) ?? null,
+      checkCnpj: (r.check_cnpj as boolean | null) ?? null,
+      checkNome: (r.check_nome as boolean | null) ?? null,
+      checkDetails: (r.check_details as Record<string, unknown> | null) ?? null,
+      validatedBy: (r.validated_by as string | null) ?? null,
     };
   });
 };

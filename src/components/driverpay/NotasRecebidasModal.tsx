@@ -55,9 +55,16 @@ function triggerDownload(blob: Blob, filename: string): void {
 }
 
 /** Selo de status da nota. */
-const StatusBadge: React.FC<{ status: string; reason: string | null }> = ({ status, reason }) => {
+const StatusBadge: React.FC<{ status: string; reason: string | null; auto?: boolean }> = ({ status, reason, auto }) => {
   if (status === 'validada')
-    return <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap">✓ validada</span>;
+    return (
+      <span
+        className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap"
+        title={auto ? 'Validada automaticamente na conferência do envio (valor + CNPJ + nome conferidos).' : undefined}
+      >
+        ✓ validada{auto ? ' (auto)' : ''}
+      </span>
+    );
   if (status === 'rejeitada')
     return (
       <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 whitespace-nowrap" title={reason ?? undefined}>
@@ -65,6 +72,37 @@ const StatusBadge: React.FC<{ status: string; reason: string | null }> = ({ stat
       </span>
     );
   return <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">• pendente</span>;
+};
+
+/** Selos da conferência automática (v8): ✓/✗/– valor · CNPJ · nome. */
+const CheckBadges: React.FC<{ row: NotaFiscalFileRow }> = ({ row }) => {
+  if (!row.checkStatus) return null; // nota anterior à feature — sem conferência
+  const details = row.checkDetails;
+  const reasons = Array.isArray(details?.reasons) ? (details.reasons as string[]).join(' ') : '';
+  if (row.checkStatus === 'ilegivel')
+    return (
+      <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 whitespace-nowrap" title={reasons || 'PDF sem texto (escaneado) — não deu pra conferir automaticamente.'}>
+        📄 não legível
+      </span>
+    );
+  if (row.checkStatus === 'pendente')
+    return (
+      <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 whitespace-nowrap" title="A conferência automática falhou por erro interno — confira manualmente.">
+        conferência pendente
+      </span>
+    );
+  const item = (label: string, ok: boolean | null) => {
+    const cls = ok === true ? 'bg-green-100 text-green-700' : ok === false ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500';
+    const mark = ok === true ? '✓' : ok === false ? '✗' : '–';
+    return <span className={`text-[11px] px-1.5 py-0.5 rounded-full whitespace-nowrap ${cls}`}>{mark} {label}</span>;
+  };
+  return (
+    <span className="inline-flex items-center gap-1" title={reasons || 'Conferência automática do envio.'}>
+      {item('valor', row.checkValor)}
+      {item('CNPJ', row.checkCnpj)}
+      {item('nome', row.checkNome)}
+    </span>
+  );
 };
 
 export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
@@ -78,6 +116,8 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
   const [files, setFiles] = useState<NotaFiscalFileRow[] | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null); // id do arquivo, ou 'ALL'
   const [acting, setActing] = useState<string | null>(null); // id em validação/recusa/exclusão
+  // Com a conferência automática, o que sobra pro olho humano são as não-validadas.
+  const [soAtencao, setSoAtencao] = useState(false);
 
   const reload = async () => {
     try {
@@ -97,9 +137,10 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
     return () => { alive = false; };
   }, [companyId, periodId]);
 
-  // Numera as notas repetidas do mesmo (driver, CNPJ) e pré-calcula o nome do arquivo,
-  // depois agrupa por driver (todas as notas de um entregador juntas).
-  const groups = useMemo(() => {
+  // Numera as notas repetidas do mesmo (driver, CNPJ) e pré-calcula o nome do arquivo
+  // (numeração SEMPRE sobre a lista completa — o filtro não muda o nome), depois
+  // agrupa por driver (todas as notas de um entregador juntas).
+  const { groups, allNamed } = useMemo(() => {
     const seen: Record<string, number> = {};
     const named = (files ?? []).map((r) => {
       const key = `${r.driverId}|${r.emitterId}`;
@@ -107,16 +148,19 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       seen[key] = idx + 1;
       return { row: r, filename: notaFiscalFileName(r.driverName, r.emitterLabel, periodLabel, idx, extOf(r)) };
     });
+    const visible = soAtencao ? named.filter((it) => it.row.status !== 'validada') : named;
     const byDriver = new Map<string, { driverName: string; recebedorNome: string | null; items: typeof named }>();
-    for (const it of named) {
+    for (const it of visible) {
       const g = byDriver.get(it.row.driverId);
       if (g) g.items.push(it);
       else byDriver.set(it.row.driverId, { driverName: it.row.driverName, recebedorNome: it.row.recebedorNome, items: [it] });
     }
-    return [...byDriver.values()].sort((a, b) => a.driverName.localeCompare(b.driverName, 'pt-BR'));
-  }, [files, periodLabel]);
-
-  const allNamed = useMemo(() => groups.flatMap((g) => g.items), [groups]);
+    return {
+      groups: [...byDriver.values()].sort((a, b) => a.driverName.localeCompare(b.driverName, 'pt-BR')),
+      // O .zip "Baixar todas" baixa TODAS mesmo com o filtro ligado.
+      allNamed: named,
+    };
+  }, [files, periodLabel, soAtencao]);
 
   const handleView = async (row: NotaFiscalFileRow) => {
     try {
@@ -232,10 +276,26 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
 
       {files !== null && total > 0 && (
         <div className="space-y-4">
-          <p className="text-xs text-gray-500">
-            {total} nota(s). <b className="text-green-700">Validar</b> deixa a NF do driver/grupo verde no painel ·{' '}
-            <b className="text-red-700">Recusar</b> pede outra (com motivo) · <b className="text-gray-600">Excluir</b> apaga de vez.
-          </p>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <p className="text-xs text-gray-500">
+              {total} nota(s). <b className="text-green-700">Validar</b> deixa a NF do driver/grupo verde no painel ·{' '}
+              <b className="text-red-700">Recusar</b> pede outra (com motivo) · <b className="text-gray-600">Excluir</b> apaga de vez.
+            </p>
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={soAtencao}
+                onChange={(e) => setSoAtencao(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Só as que precisam de atenção
+            </label>
+          </div>
+          {soAtencao && groups.length === 0 && (
+            <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+              ✓ Nenhuma nota precisando de atenção — todas validadas.
+            </p>
+          )}
           {groups.map((g) => (
             <div key={g.driverName} className="rounded-lg border border-gray-200 overflow-hidden">
               <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800 border-b border-gray-200 flex items-center gap-2 flex-wrap">
@@ -259,7 +319,8 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-medium text-gray-700 truncate">{row.emitterLabel} · {row.emitterCnpj}</span>
-                          <StatusBadge status={row.status} reason={row.rejectReason} />
+                          <StatusBadge status={row.status} reason={row.rejectReason} auto={row.validatedBy === 'auto'} />
+                          <CheckBadges row={row} />
                         </div>
                         <div className="text-[11px] text-gray-400 truncate" title={filename}>{filename}</div>
                       </div>

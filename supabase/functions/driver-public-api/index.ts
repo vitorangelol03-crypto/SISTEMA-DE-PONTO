@@ -23,6 +23,8 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
+import { extractText, getDocumentProxy } from 'npm:unpdf@1.8.0';
+import { runNfCheck, type NfCheckResult } from './nfCheck.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -329,7 +331,81 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
   return json({ slots });
 }
 
-// Recebe a nota (base64), sobe no bucket privado, registra e marca o "check" antigo.
+// ─── Conferência automática (v8) ─────────────────────────────────────────────
+// Candidatos de valor esperado. Regra provada na Fase 0 (26/07, 18 notas reais):
+// o driver emite a nota pelo valor do ESPELHO PUBLICADO que ele recebeu (escopo
+// grupo/individual + filtro de plataforma) — por isso cada publicação vira um
+// candidato. Soma-por-CNPJ e líquidos entram como fallback (nota "cheia").
+async function buildValueCandidates(
+  driverId: string, companyId: string, periodId: string, emitterId: string,
+): Promise<Record<string, number>> {
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+
+  const { data: ledGroup } = await supabase.from('driverpay_groups')
+    .select('id').eq('leader_driver_id', driverId).eq('company_id', companyId).maybeSingle();
+  let groupIds: string[] = [driverId];
+  if (ledGroup?.id) {
+    const { data: members } = await supabase.from('driverpay_group_members')
+      .select('driver_id').eq('group_id', ledGroup.id);
+    groupIds = [...new Set([driverId, ...(members ?? []).map((m) => m.driver_id as string)])];
+  }
+
+  const { data: pays } = await supabase.from('driverpay_payments')
+    .select('id, driver_id, total_net').eq('period_id', periodId).in('driver_id', groupIds);
+  const payList = pays ?? [];
+  const payIds = payList.map((p) => p.id);
+
+  const { data: packs } = payIds.length
+    ? await supabase.from('driverpay_payment_packages')
+      .select('payment_id, platform_name, packages, rate_snapshot').in('payment_id', payIds)
+    : { data: [] as never[] };
+
+  const { data: plats } = await supabase.from('driverpay_platforms')
+    .select('name, nota_emitter_id').eq('company_id', companyId);
+  const emitterByPlatform = new Map((plats ?? []).map((p) => [p.name as string, p.nota_emitter_id as string | null]));
+
+  const driverOf = new Map(payList.map((p) => [p.id as string, p.driver_id as string]));
+  const platformSum = (ids: string[], filter: string[] | null, onlyEmitter: boolean): number => {
+    let total = 0;
+    for (const pk of packs ?? []) {
+      const dId = driverOf.get(pk.payment_id as string);
+      if (!dId || !ids.includes(dId)) continue;
+      if (filter && !filter.includes(pk.platform_name as string)) continue;
+      if (onlyEmitter && emitterByPlatform.get(pk.platform_name as string) !== emitterId) continue;
+      total += (pk.packages ?? 0) * Number(pk.rate_snapshot ?? 0);
+    }
+    return round2(total);
+  };
+  const netSum = (ids: string[]): number =>
+    round2(payList.filter((p) => ids.includes(p.driver_id as string))
+      .reduce((s, p) => s + Number(p.total_net ?? 0), 0));
+
+  const cands: Record<string, number> = {
+    somaCnpj_individual: platformSum([driverId], null, true),
+    liquido_individual: netSum([driverId]),
+  };
+  if (groupIds.length > 1) {
+    cands.somaCnpj_grupo = platformSum(groupIds, null, true);
+    cands.liquido_grupo = netSum(groupIds);
+  }
+
+  const { data: pubs } = await supabase.from('driverpay_mirror_publications')
+    .select('scope, platform_filter').eq('driver_id', driverId).eq('period_id', periodId);
+  for (const pub of pubs ?? []) {
+    const filter = Array.isArray(pub.platform_filter) && pub.platform_filter.length
+      ? (pub.platform_filter as string[])
+      : null;
+    const ids = pub.scope === 'group' && groupIds.length > 1 ? groupIds : [driverId];
+    const value = filter ? platformSum(ids, filter, false) : netSum(ids);
+    cands[`espelho_${pub.scope}${filter ? '_' + filter.join('+') : '_cheio'}`] = value;
+  }
+  return cands;
+}
+
+// Recebe a nota (base64), CONFERE contra o espelho publicado (valor/CNPJ/nome) e
+// registra. Decisão do Victor (26/07): não bateu ou ilegível → RECUSA automática
+// com motivo (status 'rejeitada' reabre o slot; app mostra o porquê). Erro
+// INTERNO da conferência nunca recusa nem derruba o upload → 'pendente'.
 async function nfUpload(req: Request, body: Body): Promise<Response> {
   const claims = await claimsFromRequest(req, body);
   if (!claims) return json({ error: 'Sessao invalida' }, 401);
@@ -341,7 +417,7 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   if (!periodId || !emitterId || !b64raw) return json({ error: 'Dados incompletos' }, 400);
 
   const { data: em } = await supabase.from('driverpay_nota_emitters')
-    .select('id').eq('id', emitterId).eq('company_id', claims.company_id).maybeSingle();
+    .select('id, cnpj, label').eq('id', emitterId).eq('company_id', claims.company_id).maybeSingle();
   if (!em) return json({ error: 'CNPJ invalido' }, 400);
 
   const pure = b64raw.includes(',') ? b64raw.slice(b64raw.indexOf(',') + 1) : b64raw;
@@ -357,6 +433,39 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   const isPdfMagic = bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
   if (!isPdfType || !isPdfMagic) return json({ error: 'A nota deve ser um arquivo PDF (foto nao e aceita)' }, 400);
 
+  // Conferência automática ANTES de registrar. Qualquer exceção aqui vira
+  // 'pendente' (conferir manualmente) — jamais bloqueia o envio por falha nossa.
+  let check: NfCheckResult | null = null;
+  let candidates: Record<string, number> = {};
+  try {
+    const pdf = await getDocumentProxy(new Uint8Array(bytes));
+    const { text } = await extractText(pdf, { mergePages: true });
+    const { data: driver } = await supabase.from('driverpay_drivers')
+      .select('name, recebedor_nome').eq('id', claims.driver_id).maybeSingle();
+    candidates = await buildValueCandidates(claims.driver_id, claims.company_id, periodId, emitterId);
+    check = runNfCheck({
+      text: text ?? '',
+      expectedCnpj: String(em.cnpj ?? '').replace(/\D/g, ''),
+      expectedCnpjLabel: em.label ?? '',
+      driverName: driver?.name ?? '',
+      recebedorNome: driver?.recebedor_nome ?? null,
+      valueCandidates: candidates,
+    });
+  } catch (checkErr) {
+    console.error('[nf-check] falha interna (upload segue como pendente):', checkErr);
+    check = null;
+  }
+
+  const autoReject = check !== null && check.status !== 'ok';
+  const rejectReason = autoReject
+    ? `[automático] ${check!.reasons.join(' ')}`
+    : null;
+  // Auto-validação (decisão do Victor 26/07, "validar já no envio"): só quando os
+  // TRÊS checks confirmaram positivo. Check null (ex.: sem espelho publicado pra
+  // comparar valor) NUNCA valida sozinho — fica 'recebida' pra validação manual.
+  const autoValidate = check !== null && check.status === 'ok'
+    && check.valorOk === true && check.cnpjOk === true && check.nomeOk === true;
+
   const path = `${claims.company_id}/${periodId}/${claims.driver_id}/${emitterId}/${crypto.randomUUID()}.${extFromType(contentType)}`;
   const { error: upErr } = await supabase.storage.from(NF_BUCKET).upload(path, bytes, { contentType, upsert: false });
   if (upErr) return json({ error: 'Falha ao subir a nota', details: upErr.message }, 500);
@@ -368,12 +477,31 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     company_id: claims.company_id, driver_id: claims.driver_id, period_id: periodId,
     payment_id: pay?.id ?? null, nota_emitter_id: emitterId, file_path: path,
     file_type: contentType, original_filename: filename, uploaded_by: claims.driver_id,
+    status: autoReject ? 'rejeitada' : (autoValidate ? 'validada' : 'recebida'),
+    reject_reason: rejectReason,
+    validated_at: autoValidate ? new Date().toISOString() : null,
+    validated_by: autoValidate ? 'auto' : null,
+    check_status: check ? check.status : 'pendente',
+    check_valor: check?.valorOk ?? null,
+    check_cnpj: check?.cnpjOk ?? null,
+    check_nome: check?.nomeOk ?? null,
+    check_details: check ? {
+      foundValues: check.foundValues, foundCnpjs: check.foundCnpjs,
+      matchedCandidates: check.matchedCandidates, candidates, reasons: check.reasons,
+    } : null,
+    checked_at: new Date().toISOString(),
   }]);
   if (insErr) return json({ error: 'Falha ao registrar a nota', details: insErr.message }, 500);
 
   // NAO marca mais o "nota recebida" antigo automaticamente: agora quem deixa a NF verde
   // no painel e a VALIDACAO da nota pelo mestre (status 'validada'), nao o simples upload.
-  return json({ ok: true });
+  if (autoReject) {
+    // HTTP 422 de propósito: o client (novo E antigo em cache) trata não-2xx como
+    // erro e mostra a mensagem — nota recusada NUNCA aparece como "enviada".
+    // A nota fica registrada como 'rejeitada' e o slot reabre pro reenvio.
+    return json({ ok: false, rejected: true, error: rejectReason, reason: rejectReason, checks: check }, 422);
+  }
+  return json({ ok: true, validated: autoValidate, checks: check });
 }
 
 // Lista as notas que o proprio driver ja enviou no periodo.

@@ -129,6 +129,8 @@ export function driverNfList(periodId: string, token: string): Promise<{ files: 
 export function driverNfUpload(
   input: { periodId: string; emitterId: string; contentType: string; fileBase64: string; filename?: string },
   token: string,
-): Promise<{ ok: boolean }> {
-  return callDriverApi<{ ok: boolean }>('nf-upload', input, token);
+): Promise<{ ok: boolean; validated?: boolean }> {
+  // Nota recusada pela conferência automática volta como HTTP 422 → callDriverApi
+  // lança DriverApiError com o motivo (o slot reabre e mostra "recusada: <motivo>").
+  return callDriverApi<{ ok: boolean; validated?: boolean }>('nf-upload', input, token);
 }
