@@ -18,6 +18,11 @@ main `def84ab` no origin, Vercel conferido (`index-Bhy_UBHh.js`), migration
 Validado: tsc 0 · build · 602 unit · 59 E2E ✅ e, pós-migration, **10-errors 8/8**
 com os 3 specs MULTI rodando de verdade (2 erros no mesmo dia coexistem). Pendente:
 equipe dar F5 no painel (aba antiga em cache erra ao registrar erro).
+**Mesma sessão — Fase 0 da conferência automática de NF:** diagnóstico com as 18 notas
+reais: 94% legíveis, CNPJ 100%, valor 94% — 🔑 nota bate com o valor do **ESPELHO
+PUBLICADO** (escopo+filtro de plataforma), não com o total da quinzena; os "erros" de
+nome/valor achados são casos reais (recebedores não cadastrados: Pablo Raspante e
+Karinne; Marize divergiu R$ 249×238). Leitura simples resolve sem IA. Fase 1 aguarda OK.
 Ver `CHECKPOINT_SESSAO_2026-07-26.md`.
 
 **Sessão 25/07 (manhã) — driver sem login + fix do reset:** Caio não logava ("credenciais

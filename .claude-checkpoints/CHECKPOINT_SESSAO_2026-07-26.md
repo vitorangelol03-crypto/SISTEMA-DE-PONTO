@@ -63,9 +63,33 @@ error de infra sem detalhe capturado — **nenhum teste falhou**) · E2E chromiu
 Rollback da migration: recriar as constraints — só enquanto não houver 2 erros no
 mesmo dia lançados (SQL no cabeçalho da migration).
 
+## Fase 0 — diagnóstico da conferência automática de NF (leitura, sem mudar nada)
+
+Victor propôs: sistema conferir automaticamente valor/CNPJ/nome quando a nota chega.
+Rodado diagnóstico com as **18 notas reais** do bucket (script no scratchpad; pdfminer.six
+instalado no user site igual ao faster-whisper). **Resultados:**
+
+- **17/18 legíveis** (94%) — 1 é PDF escaneado (Lucas Aredes, 0 chars; só OCR/IA leria).
+- **CNPJ: 17/17 (100%)** — o CNPJ esperado do slot aparece como tomador em todas.
+- **Valor: 16/17 (94%)** — 🔑 **REGRA DESCOBERTA: a nota bate com o valor do ESPELHO
+  PUBLICADO** (escopo grupo/individual + filtro de plataforma da publicação — a leva
+  LOGGI de 24/07), **não** com o total da quinzena. Ex.: Rodrigo LOGGI 17×2,50=42,50 ✓.
+  A única divergência é REAL: Marize emitiu R$ 249,00 × espelho R$ 238,00.
+- **Nome: 15/17** — as 2 "falhas" são recebedores de fato NÃO cadastrados no sistema:
+  nota da Marize emitida por PABLO PAULO DE SOUZA LIMA RASPANTE (nome que já está na
+  pendência de PIX de 25/07!) e a do Fernando Martins por KARINNE ROBERTA DA SILVA
+  PEREIRA. Feature flagaria certo; resolve cadastrando o recebedor.
+
+**Conclusão:** leitura simples (grátis, sem IA) já cobre 94%; IA só ajudaria na nota
+escaneada. Desenho a seguir (aprovado na conversa): pré-conferência com selos ✓/✗ no
+painel + aviso imediato ao driver, humano continua validando; valor esperado ancorado
+na PUBLICAÇÃO do espelho (scope + platform_filter). Aguarda OK do Victor pro plano da
+Fase 1 (implementação).
+
 ## Pendências
 
 - Equipe dar F5 no painel (passo 5 acima).
+- Fase 1 da conferência automática de NF (plano a apresentar).
 - Herdadas de 25/07: Caio confirmar login 1234; apagar backups
   (`backup_driver_auth_20260725`, `backup_mirror_pub_20260724`, `backup_driver_pix_20260724`)
   quando Victor liberar; recebedor Mutum (Gustavo × João Victor); PIX Othon/Pablo
