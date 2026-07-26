@@ -95,14 +95,49 @@ Fase 1 (implementação).
   **PIX pendente** (não inventado). Antes: recebedor null/null; pix_key dela segue null.
   CNPJ MEI do Pablo na nota: 49.860.622/0001-89 (candidato a PIX, Victor confirma).
 
+## Fase 1 — conferência automática de NF CONSTRUÍDA (commit `ba0c348`, aguarda release)
+
+Decisões do Victor (26/07, chat): **errado → recusa na hora** dizendo o ponto exato e
+pedindo reenvio no padrão; **valor exato** (±R$ 0,02 só arredondamento); **"validar já
+no envio"** = 3 checks verdes → nota entra `validada` automaticamente (`validated_by='auto'`).
+
+O que foi feito:
+- `supabase/functions/driver-public-api/nfCheck.ts` — módulo PURO (edge fn + vitest,
+  16 unit novos): normalização, CNPJs, valores BR, nomes (driver OU recebedor), motivos
+  em português leigo. Ilegível (PDF escaneado) também recusa (padrão configurado).
+- Edge fn `index.ts` → **v8 (SÓ NO REPO, ainda não deployada)**: unpdf\@1.8.0 extrai o
+  texto; candidatos de valor = espelhos publicados (escopo+filtro) + soma por CNPJ +
+  líquidos (individual e grupo); recusa = HTTP 422 + status 'rejeitada' + motivo
+  `[automático] ...` (slot reabre; app antigo em cache mostra erro — nunca "enviada");
+  erro interno → 'pendente', upload nunca falha pela conferência; check null (ex.: sem
+  espelho publicado) nunca valida nem recusa sozinho.
+- Painel (`NotasRecebidasModal` + `listNotaFiscalFiles`): selos ✓/✗ valor·CNPJ·nome,
+  "validada (auto)", filtro "só as que precisam de atenção" (zip continua com todas).
+- App (`DriverApp` + `driverApp.ts`): toast "enviada e validada ✓" / recusada com motivo
+  (12s) + recarga do slot.
+- Migration `20260726200000_driverpay_nf_auto_check.sql` (colunas check_* aditivas) —
+  **NÃO aplicada**.
+- Scripts prontos no scratchpad (`nf-diagnostico/`): `testar-fn-v8.mjs` (teste real da fn
+  deployada com driver de teste descartável + notas reais 01/04, cleanup total) e
+  `backfill-checks.mjs` (18 notas antigas: preenche selos + auto-valida as 100% verdes;
+  divergente/ilegível antiga NÃO recusa retroativo — fica pra decisão manual do Victor).
+
+**ORDEM DE RELEASE (diferente da feature de erros — migration PRIMEIRO):**
+1. ⏳ Migration em prod (aditiva, painel atual nem vê).
+2. ⏳ Deploy edge fn v8 (2 arquivos: index.ts + nfCheck.ts) + rodar `testar-fn-v8.mjs`.
+3. ⏳ Push + Vercel (painel novo consulta as colunas novas — por isso migration antes).
+4. ⏳ Backfill das 18 notas.
+Validação local FEITA: tsc 0 · build ok · 622 unit (41 files) · smoke E2E 52-driverpay ·
+pipeline real local (unpdf + nfCheck na nota real do Rodrigo: ok/3 checks ✓).
+
 ## Pendências
 
-- Equipe dar F5 no painel (passo 5 acima).
+- **Release da conferência de NF** (passos 1-4 acima — aguarda OK do Victor).
+- Equipe dar F5 no painel (multi-erros, seção acima).
 - **PIX do recebedor da Marize (Pablo Raspante)** — Victor confirmar (candidato: CNPJ
   MEI 49860622000189). Liga com a pendência antiga "PIX othon/Pablo Raspante" de 25/07.
 - **Nota da Marize divergente** (R$ 249,00 × espelho LOGGI R$ 238,00) — decisão do
-  Victor na validação manual.
-- Fase 1 da conferência automática de NF (plano a apresentar).
+  Victor na validação manual (backfill vai marcar ✗ valor, sem recusar sozinho).
 - Herdadas de 25/07: Caio confirmar login 1234; apagar backups
   (`backup_driver_auth_20260725`, `backup_mirror_pub_20260724`, `backup_driver_pix_20260724`)
   quando Victor liberar; recebedor Mutum (Gustavo × João Victor); PIX Othon/Pablo

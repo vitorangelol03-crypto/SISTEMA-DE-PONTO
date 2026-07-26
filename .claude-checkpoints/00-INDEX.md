@@ -24,8 +24,14 @@ PUBLICADO** (escopo+filtro de plataforma), não com o total da quinzena; os "err
 nome/valor achados são casos reais e Victor ditou os cadastros: **Karinne = recebedora
 do Fernando (nome+PIX gravados)** e **Pablo Raspante = recebedor da Marize (nome gravado;
 PIX pendente — candidato CNPJ MEI 49860622000189)**. Nota da Marize divergente
-(R$ 249×238) fica pra validação manual. Leitura simples resolve sem IA. Fase 1 aguarda OK.
-Ver `CHECKPOINT_SESSAO_2026-07-26.md`.
+(R$ 249×238) fica pra validação manual. Leitura simples resolve sem IA.
+**Fase 1 CONSTRUÍDA (commit `ba0c348`, aguarda release):** edge fn v8 lê a nota no envio
+e confere valor (espelho publicado) + CNPJ + nome (driver/recebedor); errado → RECUSA
+na hora com o motivo exato (422, slot reabre); 3 checks verdes → VALIDADA automática
+(`auto`); painel com selos ✓/✗ + filtro "só atenção". Validado local (tsc 0 · build ·
+622 unit · smoke E2E · pipeline real com nota verdadeira). **Release pendente, ordem:
+migration `20260726200000` PRIMEIRO → deploy fn v8 + teste real → push/Vercel → backfill
+das 18 notas.** Ver `CHECKPOINT_SESSAO_2026-07-26.md`.
 
 **Sessão 25/07 (manhã) — driver sem login + fix do reset:** Caio não logava ("credenciais
 inválidas"); investigação em prod achou que o **botão "Resetar senha" do painel NUNCA
