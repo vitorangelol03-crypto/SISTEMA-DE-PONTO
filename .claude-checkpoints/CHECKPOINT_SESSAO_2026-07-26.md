@@ -86,9 +86,22 @@ painel + aviso imediato ao driver, humano continua validando; valor esperado anc
 na PUBLICAÇÃO do espelho (scope + platform_filter). Aguarda OK do Victor pro plano da
 Fase 1 (implementação).
 
+## Recebedores cadastrados (ditados pelo Victor, 26/07 — a partir do diagnóstico)
+
+- **FERNANDO MARTINS DA SILVA** → recebedor `KARINNE ROBERTA DA SILVA PEREIRA`,
+  PIX `65853284000104` (o pix_key que já estava no cadastro É o CNPJ MEI dela —
+  batido com a nota; era só o nome que faltava). Antes: recebedor null/null.
+- **MARIZE DE LOURDES GOMES** → recebedor `PABLO PAULO DE SOUZA LIMA RASPANTE`,
+  **PIX pendente** (não inventado). Antes: recebedor null/null; pix_key dela segue null.
+  CNPJ MEI do Pablo na nota: 49.860.622/0001-89 (candidato a PIX, Victor confirma).
+
 ## Pendências
 
 - Equipe dar F5 no painel (passo 5 acima).
+- **PIX do recebedor da Marize (Pablo Raspante)** — Victor confirmar (candidato: CNPJ
+  MEI 49860622000189). Liga com a pendência antiga "PIX othon/Pablo Raspante" de 25/07.
+- **Nota da Marize divergente** (R$ 249,00 × espelho LOGGI R$ 238,00) — decisão do
+  Victor na validação manual.
 - Fase 1 da conferência automática de NF (plano a apresentar).
 - Herdadas de 25/07: Caio confirmar login 1234; apagar backups
   (`backup_driver_auth_20260725`, `backup_mirror_pub_20260724`, `backup_driver_pix_20260724`)
