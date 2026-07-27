@@ -73,16 +73,64 @@ Produção conferida depois: 0 sobras de teste, 98 pagamentos, 30 publicações 
 (a coluna NF virou "validadas/esperadas"). Falha igual isolado e no HEAD anterior. Etapas 1-8
 passam. **Victor decide** se conserto o spec (é só trocar o seletor pela coluna nova).
 
-## PENDENTE DE RELEASE (nesta ordem, com OK do Victor)
+## RELEASE — feito na noite de 27/07 (2 de 3 etapas)
 
-1. **Migration** `20260727120000` (aditiva; o front e a fn v10 em produção continuam
-   funcionando com ela aplicada — ninguém quebra).
-2. **Deploy da edge fn** `driver-public-api` → **v11** (só depois da migration: ela seleciona
-   a coluna nova).
-3. **Push + Vercel** (o painel novo lê/grava a coluna).
+Ordem seguida, com autorização explícita do Victor ("solta tudo na ordem segura" + "faz o push"):
+
+1. ✅ **Backup duplo antes de tudo**: tabela `backup_mirror_pub_20260727` (30 linhas) +
+   arquivo `backups/2026-07-27/pre-migration-20260727120000.json` (publicações, notas,
+   períodos, settings).
+2. ✅ **Migration aplicada** (`driverpay_mirror_include_deductions`). Conferido depois:
+   30 publicações, **todas** `include_deductions=true` (comportamento de antes preservado) e
+   **0 linhas diferentes do backup** (comparação coluna a coluna) — nada foi alterado.
+3. ⛔ **Edge fn v11 NÃO deployada** — a ferramenta de deploy do Supabase foi **bloqueada pelo
+   classificador de permissões** do Claude Code. Não é erro de código: a chamada não saiu.
+   Antes do bloqueio ficou provado que o repo **contém tudo** o que a v10 no ar tem (10
+   marcadores conferidos um a um) + as adições da v11, e que as 8 colunas que a v11 passa a
+   ler existem. Falta só executar.
+4. ✅ **Push feito**: `main` = `6c89d9e` no origin (fast-forward de `feature/app-entregador`).
+   Vercel publicou: bundle `index-DC76q-nb.js` e chunk `DriverPayTab-BG2VB1C_.js` no ar,
+   com o marcador da feature e a gravação da coluna nova confirmados por download do chunk.
+
+### ⚠️ Consequência de estar com front v11 + fn v10 (enquanto a v11 não sobe)
+
+A conferência automática da NF ainda usa a conta antiga. Impacto real por cenário:
+
+| Espelho publicado | fn v10 espera | Bate? |
+|---|---|---|
+| com filtro + com abate (o de sempre) | bruto do filtro | ❌ só p/ quem TEM vale/perda — **furo pré-existente**, não do push |
+| com filtro + **sem** abate (pagamento parcial) | bruto do filtro | ✅ bate |
+| sem filtro + **sem** abate | líquido | ❌ p/ quem tem vale/perda |
+
+Hoje isso não afeta ninguém: só **1** dos 98 pagamentos tem desconto (Cicero, R$ 7,79) e ele
+**não tem espelho publicado**; `driverpay_vales` está vazia. **Recomendação até a v11 subir:**
+ao desmarcar o abate, escolher as plataformas junto (que é o caso de uso real do pagamento
+parcial) — aí a conta bate.
+
+Como subir a v11 (Victor roda com `!`):
+`npx supabase login` e depois
+`npx supabase functions deploy driver-public-api --no-verify-jwt --project-ref flcncdidxmmornkgkfbb`
 
 Rollback: `ALTER TABLE driverpay_mirror_publications DROP COLUMN include_deductions;` (e a fn
 v10 volta pelo dashboard).
+
+## Validação do release (tudo empírico, nesta ordem)
+
+- tsc **0** · build **ok**.
+- Unit: a bateria completa teve **6 arquivos que não chegaram a rodar** (workers do vitest
+  morrendo por carga do WSL — "Failed to start forks worker", não é falha de teste). Rodados
+  isolados com `--no-file-parallelism`: **8 arquivos / 125 testes, 0 falhas**, incluindo
+  `driverPayReportOptions` (23) e `nfCheck` (6). **Lição:** conferir sempre o rodapé
+  "Errors" do vitest — teste que não roda não aparece como falha.
+- E2E local com cliques reais: **63 ✅** (novo) + **58 ✅** e **60 ✅** (publicar espelho —
+  o que mais importava, porque toca a coluna nova).
+- **Conferência VISUAL em PRODUÇÃO** (spec ad-hoc, só leitura, removido depois): logado 2626
+  no site no ar — 4 chips de plataforma, filtro "somente com eMile", abate desmarcado nos dois
+  relatórios, e o espelho do **Cicero** indo de **R$ 262,21 → R$ 270,00** ao desmarcar o abate,
+  **exatamente os R$ 7,79** da perda. 8 prints em `prints-espelhos/prod-2026-07-27/`.
+- Banco conferido 3× (antes, depois dos E2E, depois do teste em prod): **99 drivers · 30
+  publicações · 98 pagamentos · 23 notas · 271 pacotes · 1 período**, sempre idêntico, com
+  **0 sobras** de teste.
 
 ## Pendências herdadas (26/07)
 
