@@ -7,6 +7,38 @@
 // emitida pelo valor do ESPELHO PUBLICADO (escopo grupo/individual + filtro de
 // plataforma), não pelo total da quinzena. Os candidatos chegam prontos.
 
+/** Entrada do valor esperado de UM espelho publicado (tudo já somado pelo chamador). */
+export interface MirrorExpectedValueInput {
+  /** Bruto (pacotes × taxa + Zapex) das plataformas que o espelho mostra. */
+  grossInScope: number;
+  /** Vales + perdas de quem o espelho cobre (o driver, ou o grupo inteiro). */
+  deductions: number;
+  /** Líquido persistido (total_net) das mesmas pessoas — já com vales/perdas abatidos. */
+  netFull: number;
+  /** O espelho tinha filtro de plataforma? */
+  hasPlatformFilter: boolean;
+  /** O espelho ABATEU os vales/perdas? (coluna include_deductions da publicação) */
+  includeDeductions: boolean;
+}
+
+/**
+ * Valor pelo qual o driver deve emitir a nota daquele espelho publicado.
+ *
+ * Regra (2026-07-27): a nota segue SEMPRE o "TOTAL A RECEBER" impresso no espelho.
+ *  - sem filtro + com abate  -> total_net (é o espelho cheio de sempre);
+ *  - com filtro + com abate  -> bruto das plataformas do filtro MENOS vales/perdas
+ *    (era o furo antigo: a fn esperava o bruto e recusaria a nota certa de quem tem
+ *    desconto — hoje nenhum publicado tem, mas a regra passa a bater sempre);
+ *  - sem abate (parcial)     -> bruto puro, com ou sem filtro: os vales/perdas saem
+ *    listados no espelho mas não entram no total.
+ */
+export function mirrorExpectedValue(i: MirrorExpectedValueInput): number {
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  if (!i.includeDeductions) return round2(i.grossInScope);
+  if (!i.hasPlatformFilter) return round2(i.netFull);
+  return round2(i.grossInScope - i.deductions);
+}
+
 export interface NfCheckInput {
   /** Texto extraído do PDF ('' ou curto demais = ilegível). */
   text: string;

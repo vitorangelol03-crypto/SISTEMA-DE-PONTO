@@ -257,12 +257,16 @@ export function computeNfProgressByPayment(
  * pacotes das plataformas desse conjunto (e o Zapex so se 'Zapex' estiver nele), pra que o
  * TOTAL do espelho filtrado bata com as linhas exibidas. Quando ausente (todos os callers
  * atuais), comporta-se EXATAMENTE como antes — soma todas as plataformas do row.
- * Descontos e vales sao do driver (nao de uma plataforma) e NAO sao filtrados aqui: a
- * decisao de exibi-los/abate-los num espelho filtrado fica na camada de UI (Fase 1).
+ *
+ * Pagamento PARCIAL (2026-07-27, decisao do Victor): descontos e vales sao do DRIVER, nao
+ * de uma plataforma — pagar so a ANJUN abatendo tudo e depois pagar o resto abateria duas
+ * vezes. `includeDeductions=false` deixa o net BRUTO (so pacotes), sem mexer nos campos
+ * `discounts`/`vales`, que continuam com os valores reais pra exibicao ("vem por ai").
  */
 export function computeRowTotals(
   row: DriverRowData,
   allowedPlatformNames?: ReadonlySet<string>,
+  includeDeductions = true,
 ): RowTotals {
   const isAllowed = (name: string) => !allowedPlatformNames || allowedPlatformNames.has(name);
   let packagesAmount = 0;
@@ -281,14 +285,23 @@ export function computeRowTotals(
   const zapexAmount = isAllowed('Zapex') ? row.zapex.length * row.zapexRate : 0;
   const discounts = row.discounts.reduce((sum, d) => sum + d.amount, 0);
   const vales = row.vales.reduce((sum, v) => sum + v.amount, 0);
+  const deducted = includeDeductions ? discounts + vales : 0;
   return {
     totalPackages,
     packagesAmount,
     zapex: zapexAmount,
     discounts,
     vales,
-    net: packagesAmount + zapexAmount - discounts - vales,
+    net: packagesAmount + zapexAmount - deducted,
   };
+}
+
+/** Vales + perdas (descontos) do driver neste pagamento, em R$. Puro/testavel. */
+export function deductionsOf(row: DriverRowData): number {
+  return (
+    row.discounts.reduce((sum, d) => sum + d.amount, 0) +
+    row.vales.reduce((sum, v) => sum + v.amount, 0)
+  );
 }
 
 /** Uma reaplicacao de taxa a decidir: (rota, plataforma) -> nova taxa. */
@@ -468,9 +481,10 @@ export function buildDriverMirrorData(
   company: Company,
   period: DriverPaymentPeriod,
   allowedPlatformNames?: ReadonlySet<string>,
+  includeDeductions = true,
 ): DriverMirrorData {
   const isAllowed = (name: string) => !allowedPlatformNames || allowedPlatformNames.has(name);
-  const totals = computeRowTotals(row, allowedPlatformNames);
+  const totals = computeRowTotals(row, allowedPlatformNames, includeDeductions);
   // Ganho Zapex (R$) do driver: entra como uma "plataforma" no espelho e soma no packagesValue.
   const includeZapex = isAllowed('Zapex');
   const zapexAmount = includeZapex ? row.zapex.length * row.zapexRate : 0;
@@ -558,6 +572,8 @@ export function buildDriverMirrorData(
       valesValue: totals.vales,
       toReceive: totals.net,
     },
+    // false = descontos/vales aparecem listados mas NAO foram abatidos (pagamento parcial).
+    deductionsApplied: includeDeductions,
   };
 }
 
@@ -569,8 +585,11 @@ export function buildGroupMirrorData(
   company: Company,
   period: DriverPaymentPeriod,
   allowedPlatformNames?: ReadonlySet<string>,
+  includeDeductions = true,
 ): DriverGroupMirrorData {
-  const drivers = rows.map((r) => buildDriverMirrorData(r, platforms, company, period, allowedPlatformNames));
+  const drivers = rows.map((r) =>
+    buildDriverMirrorData(r, platforms, company, period, allowedPlatformNames, includeDeductions),
+  );
   const groupTotals = drivers.reduce(
     (acc, d) => ({
       driverCount: acc.driverCount + 1,
@@ -587,6 +606,7 @@ export function buildGroupMirrorData(
     groupName,
     drivers,
     groupTotals,
+    deductionsApplied: includeDeductions,
   };
 }
 
@@ -607,6 +627,7 @@ export function buildSelectionMirrorData(
   company: Company,
   period: DriverPaymentPeriod,
   allowedPlatformNames?: ReadonlySet<string>,
+  includeDeductions = true,
 ): { groups: DriverGroupMirrorData[]; singles: DriverMirrorData[] } {
   const groupOf = (r: DriverRowData): string => r.groupName ?? NO_GROUP_LABEL;
   const groups = Array.from(selectedGroups)
@@ -614,13 +635,13 @@ export function buildSelectionMirrorData(
     .map((name) => {
       const groupRows = rows.filter((r) => groupOf(r) === name);
       return groupRows.length > 0
-        ? buildGroupMirrorData(name, groupRows, platforms, company, period, allowedPlatformNames)
+        ? buildGroupMirrorData(name, groupRows, platforms, company, period, allowedPlatformNames, includeDeductions)
         : null;
     })
     .filter((g): g is DriverGroupMirrorData => g !== null);
   const singles = rows
     .filter((r) => selectedDrivers.has(r.paymentId) && !selectedGroups.has(groupOf(r)))
-    .map((r) => buildDriverMirrorData(r, platforms, company, period, allowedPlatformNames));
+    .map((r) => buildDriverMirrorData(r, platforms, company, period, allowedPlatformNames, includeDeductions));
   return { groups, singles };
 }
 
@@ -719,29 +740,66 @@ export function unitRecipientInfo(unit: ReportUnit): { name: string; pix: string
 }
 
 /**
+ * Opções dos relatórios (2026-07-27, decisões do Victor):
+ *  - `allowedPlatformNames`: gera o relatório SÓ das plataformas escolhidas (colunas,
+ *    TOTAL PACOTES e TOTAL A RECEBER contam só elas). Ausente/vazio = todas, igual sempre.
+ *  - `includeDeductions=false`: vales/perdas NÃO são abatidos do total (pagamento parcial
+ *    por plataforma — o abate sai no pagamento das demais). As colunas DESCONTO/VALE
+ *    continuam mostrando o valor real, e o export marca "não abatido" no cabeçalho.
+ */
+export interface ReportBuildOptions {
+  allowedPlatformNames?: ReadonlySet<string>;
+  includeDeductions?: boolean;
+}
+
+/** Normaliza as opções: conjunto vazio = sem filtro (evita relatório vazio por engano). */
+function normalizeReportOptions(opts: ReportBuildOptions): {
+  allowed?: ReadonlySet<string>;
+  includeDeductions: boolean;
+} {
+  const allowed =
+    opts.allowedPlatformNames && opts.allowedPlatformNames.size > 0 ? opts.allowedPlatformNames : undefined;
+  return { allowed, includeDeductions: opts.includeDeductions !== false };
+}
+
+/** A unidade tem movimento nas plataformas do escopo? (pacotes ou itens Zapex). */
+function hasPackagesInScope(totals: RowTotals): boolean {
+  return totals.totalPackages > 0 || totals.zapex !== 0;
+}
+
+/**
  * Relatório GERAL com o líder como recebedor, dividido POR ROTA (decisões do Victor):
  * cada unidade vira N linhas (1 por rota), colunas por plataforma. Desconto/vale/TOTAL A
  * RECEBER (net = já abatido) saem na 1ª linha da unidade (blank nas demais) pra o SUM do
  * rodapé fechar certo. `name` só na 1ª linha (bloco do recebedor). Membros não viram linha.
+ *
+ * Filtrado por plataforma: só as plataformas escolhidas viram coluna, rota sem pacote
+ * nelas não vira linha e unidade sem nenhum pacote nelas SOME do relatório (linha zerada
+ * não serve pra pagar — decisão do Victor).
  */
 export function buildLeaderReportRows(
   rows: DriverRowData[],
   platforms: DriverPlatform[],
   leaderNameByGroup: ReadonlyMap<string, string>,
+  opts: ReportBuildOptions = {},
 ): DriverReportRow[] {
+  const { allowed, includeDeductions } = normalizeReportOptions(opts);
+  const scopedPlatforms = allowed ? platforms.filter((pl) => allowed.has(pl.name)) : platforms;
   const out: DriverReportRow[] = [];
   for (const unit of groupReportUnits(rows, leaderNameByGroup)) {
     const recipient = unitRecipientInfo(unit);
     let discount = 0;
     let vale = 0;
     let net = 0;
+    let unitHasPackages = false;
     const routeMap = new Map<string, Record<string, { packages: number; value: number }>>();
     const routeOrder: string[] = [];
     for (const row of unit.rows) {
-      const t = computeRowTotals(row);
+      const t = computeRowTotals(row, allowed, includeDeductions);
       discount += t.discounts;
       vale += t.vales;
       net += t.net;
+      if (hasPackagesInScope(t)) unitHasPackages = true;
       for (const rl of row.routes) {
         const rname = (rl.route || '').trim() || '(sem rota)';
         let rec = routeMap.get(rname);
@@ -750,7 +808,7 @@ export function buildLeaderReportRows(
           routeMap.set(rname, rec);
           routeOrder.push(rname);
         }
-        for (const pl of platforms) {
+        for (const pl of scopedPlatforms) {
           const pkgs = rl.packages[pl.name] ?? 0;
           if (pkgs === 0) continue;
           const rate = rl.rates[pl.name] ?? row.ratesByPlatform[pl.name] ?? pl.default_rate ?? 0;
@@ -760,12 +818,23 @@ export function buildLeaderReportRows(
         }
       }
     }
-    const routeNames = routeOrder.length ? routeOrder : ['(sem rota)'];
+    // Filtrado: unidade sem pacote nas plataformas escolhidas sai fora.
+    if (allowed && !unitHasPackages) continue;
+    const routesWithPackages = routeOrder.filter((rname) =>
+      Object.values(routeMap.get(rname) ?? {}).some((c) => c.packages > 0),
+    );
+    const routeNames = allowed
+      ? routesWithPackages.length
+        ? routesWithPackages
+        : ['(sem rota)']
+      : routeOrder.length
+      ? routeOrder
+      : ['(sem rota)'];
     routeNames.forEach((rname, i) => {
       const rec = routeMap.get(rname) ?? {};
       const platformsRec: Record<string, { packages: number; value: number }> = {};
       let routeGross = 0;
-      for (const pl of platforms) {
+      for (const pl of scopedPlatforms) {
         const c = rec[pl.name] ?? { packages: 0, value: 0 };
         platformsRec[pl.name] = c;
         routeGross += c.value;
@@ -788,6 +857,60 @@ export function buildLeaderReportRows(
   return out;
 }
 
+/** Publicação de espelho já registrada no período (o que o painel precisa saber dela). */
+export interface MirrorPublicationInfo {
+  driverId: string;
+  scope: 'individual' | 'group' | 'selection';
+  /** O espelho publicado ABATEU os vales/perdas do driver? */
+  includeDeductions: boolean;
+}
+
+/** Driver que já teve vales/perdas abatidos — alimenta o aviso anti-desconto-duplo. */
+export interface AlreadyDeductedDriver {
+  driverId: string;
+  name: string;
+  amount: number;
+}
+
+/**
+ * Quem, dentre `scopeRows`, JÁ teve os vales/perdas abatidos numa publicação deste período
+ * (proteção contra descontar duas vezes — decisão do Victor, 2026-07-27). Espelho de GRUPO
+ * é publicado no líder mas cobre todos os membros, então o grupo inteiro conta como abatido.
+ * `allRows` (padrão: o próprio escopo) resolve a composição dos grupos. Puro/testável.
+ */
+export function alreadyDeductedDrivers(
+  scopeRows: DriverRowData[],
+  publications: readonly MirrorPublicationInfo[],
+  allRows: DriverRowData[] = scopeRows,
+): AlreadyDeductedDriver[] {
+  const groupOfDriver = new Map<string, string | null>();
+  const membersOfGroup = new Map<string, string[]>();
+  for (const r of allRows) {
+    groupOfDriver.set(r.driverId, r.groupName);
+    if (!r.groupName) continue;
+    const arr = membersOfGroup.get(r.groupName);
+    if (arr) arr.push(r.driverId);
+    else membersOfGroup.set(r.groupName, [r.driverId]);
+  }
+
+  const covered = new Set<string>();
+  for (const pub of publications) {
+    if (!pub.includeDeductions) continue;
+    covered.add(pub.driverId);
+    if (pub.scope !== 'group') continue;
+    const groupName = groupOfDriver.get(pub.driverId);
+    if (groupName) for (const id of membersOfGroup.get(groupName) ?? []) covered.add(id);
+  }
+
+  const out: AlreadyDeductedDriver[] = [];
+  for (const r of scopeRows) {
+    if (!covered.has(r.driverId)) continue;
+    const amount = deductionsOf(r);
+    if (amount > 0) out.push({ driverId: r.driverId, name: r.name, amount });
+  }
+  return out;
+}
+
 /** Linha do relatório SIMPLES: A nome (sem acento) · B total a receber · C chave PIX · D obs (quinzena). */
 export interface SimpleReportRow {
   name: string;
@@ -800,17 +923,28 @@ export interface SimpleReportRow {
  * Relatório SIMPLES: 1 linha por unidade (líder/avulso) — nome SEM acento (recebedor, se
  * configurado) + TOTAL A RECEBER (net do grupo, já com desconto/vale abatidos) + chave PIX.
  * A coluna OBS (nome da quinzena) é preenchida no export a partir do período.
+ *
+ * Mesmas opções do relatório geral: filtrado por plataforma, o total conta só as escolhidas
+ * e quem não tem pacote nelas some da lista; `includeDeductions=false` não abate vales/perdas.
  */
 export function buildSimpleReportRows(
   rows: DriverRowData[],
   leaderNameByGroup: ReadonlyMap<string, string>,
+  opts: ReportBuildOptions = {},
 ): SimpleReportRow[] {
-  return groupReportUnits(rows, leaderNameByGroup).map((unit) => {
+  const { allowed, includeDeductions } = normalizeReportOptions(opts);
+  const out: SimpleReportRow[] = [];
+  for (const unit of groupReportUnits(rows, leaderNameByGroup)) {
     const recipient = unitRecipientInfo(unit);
-    return {
-      name: stripAccents(recipient.name),
-      total: unit.rows.reduce((s, r) => s + computeRowTotals(r).net, 0),
-      pix: recipient.pix,
-    };
-  });
+    let total = 0;
+    let unitHasPackages = false;
+    for (const row of unit.rows) {
+      const t = computeRowTotals(row, allowed, includeDeductions);
+      total += t.net;
+      if (hasPackagesInScope(t)) unitHasPackages = true;
+    }
+    if (allowed && !unitHasPackages) continue;
+    out.push({ name: stripAccents(recipient.name), total, pix: recipient.pix });
+  }
+  return out;
 }

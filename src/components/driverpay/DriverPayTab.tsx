@@ -36,10 +36,11 @@ import {
   setNotaFiscal,
   setEspelhoConferido,
   publishDriverMirror,
-  listPublishedDriverIds,
+  listMirrorPublications,
   unpublishDriverMirror,
   unpublishAllMirrorsForPeriod,
   listNotaFiscalFiles,
+  type MirrorPublicationRow,
 } from '../../services/driverPay';
 import { exportDriverGeneralReportExcel, exportDriverSimpleReportExcel } from '../../utils/driverReport';
 import { generateDriverMirrorPdf, generateDriverGroupMirrorPdf } from '../../utils/driverMirrorPdf';
@@ -56,10 +57,13 @@ import {
   planRateReapply,
   computeNfProgressByPayment,
   platformPackages,
+  deductionsOf,
+  alreadyDeductedDrivers,
   formatBRL,
   formatInt,
   MIRROR_COMPANY_NAME,
 } from './driverPayShared';
+import { ReportOptionsModal, type ReportOptions } from './ReportOptionsModal';
 import { DriverFilters, GROUP_NONE } from './DriverFilters';
 import { DriverPeriodSelector } from './DriverPeriodSelector';
 import { DriverList } from './DriverList';
@@ -163,8 +167,11 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [publishScope, setPublishScope] = useState<'individual' | 'group' | 'selection'>('individual');
   // Fase 4: contexto do grupo aberto (nome/id/líder) — envio de grupo vai só pro líder.
   const [publishGroupInfo, setPublishGroupInfo] = useState<{ groupName: string; groupId: string | null; leaderId: string | null } | null>(null);
-  // driver_ids que já têm espelho publicado no app neste período (selo "no app" + "já publicado").
-  const [publishedDriverIds, setPublishedDriverIds] = useState<Set<string>>(new Set());
+  // Espelhos já publicados no app neste período (selo "no app" + "já publicado" + o aviso
+  // anti-desconto-duplo, que precisa saber se a publicação abateu os vales/perdas).
+  const [publications, setPublications] = useState<MirrorPublicationRow[]>([]);
+  // Opções do relatório (plataformas + abate): abre antes de baixar.
+  const [reportModal, setReportModal] = useState<{ kind: 'geral' | 'simples' } | null>(null);
   // Notas do período por driver: CNPJs (emitterIds) com nota validada / recebida-não-rejeitada.
   // Alimenta a coluna NF (validadas/esperadas). Recarrega ao validar/recusar/excluir nota.
   const [nfByDriver, setNfByDriver] = useState<Map<string, { validated: Set<string>; received: Set<string> }>>(new Map());
@@ -274,17 +281,22 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const reloadPublished = useCallback(
     async (periodId: string | null) => {
       if (!company?.id || !periodId) {
-        setPublishedDriverIds(new Set());
+        setPublications([]);
         return;
       }
       try {
-        const ids = await listPublishedDriverIds(company.id, periodId);
-        setPublishedDriverIds(new Set(ids));
+        setPublications(await listMirrorPublications(company.id, periodId));
       } catch (e) {
         console.error('Erro ao carregar publicações do app:', e);
       }
     },
     [company?.id],
+  );
+
+  /** driver_ids com espelho publicado (derivado das publicações — selo "no app"). */
+  const publishedDriverIds = useMemo(
+    () => new Set(publications.map((p) => p.driverId)),
+    [publications],
   );
 
   // Carrega as notas do período e monta, por driver, os CNPJs com nota validada / recebida
@@ -741,8 +753,11 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
   // Publica no app do driver: 1 PDF INDIVIDUAL por driver coberto (cada um ve o seu).
   // `allowed` = plataformas incluidas (filtro D3); null/vazio = todas.
+  // `includeDeductions` = abateu vales/perdas (false = pagamento parcial por plataforma).
+  // A escolha vai GRAVADA na publicacao: a conferencia automatica da NF calcula o valor
+  // esperado por ela (espelho sem abate => o driver emite a nota pelo valor cheio).
   const onPublish = useCallback(
-    async (allowed: string[] | null) => {
+    async (allowed: string[] | null, includeDeductions: boolean) => {
       if (!company || !selectedPeriod) return;
       const targets = publishRows;
       if (targets.length === 0) {
@@ -760,11 +775,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           return;
         }
         try {
-          const data = buildGroupMirrorData(info.groupName, targets, platformsRef.current, company, selectedPeriod, allowedSet);
+          const data = buildGroupMirrorData(
+            info.groupName, targets, platformsRef.current, company, selectedPeriod, allowedSet, includeDeductions,
+          );
           const blob = await generateDriverGroupMirrorPdf(data, { compact: false });
           await publishDriverMirror({
             companyId: company.id, periodId: selectedPeriod.id, driverId: info.leaderId,
-            scope: 'group', groupId: info.groupId, platformFilter: filter, pdf: blob, userId,
+            scope: 'group', groupId: info.groupId, platformFilter: filter, includeDeductions, pdf: blob, userId,
           });
           toast.success('Espelho do grupo publicado para o líder.');
           await reloadPublished(selectedPeriod.id);
@@ -780,7 +797,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       let fail = 0;
       for (const row of targets) {
         try {
-          const data = buildDriverMirrorData(row, platformsRef.current, company, selectedPeriod, allowedSet);
+          const data = buildDriverMirrorData(
+            row, platformsRef.current, company, selectedPeriod, allowedSet, includeDeductions,
+          );
           const blob = await generateDriverMirrorPdf(data);
           await publishDriverMirror({
             companyId: company.id,
@@ -788,6 +807,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             driverId: row.driverId,
             scope: publishScope,
             platformFilter: filter,
+            includeDeductions,
             pdf: blob,
             userId,
           });
@@ -849,50 +869,70 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     periodLabel: selectedPeriod?.label ?? '',
   });
 
-  // Relatório geral DETALHADO: líder como recebedor do grupo (regra da NF), dividido por rota
-  // e plataforma. Membros não viram linha; avulso = ele mesmo. Escopo = seleção (se houver) ou filtro.
-  const handleReport = async () => {
+  /** Abre a janela de opções do relatório (plataformas + descontar vales/perdas). */
+  const openReport = (kind: 'geral' | 'simples') => {
     if (!hasPermission('driverpay.exportReport')) {
       toast.error('Você não tem permissão para exportar o relatório');
       return;
     }
+    if (reportScopeRows().length === 0) {
+      toast.error('Nenhum dado para exportar');
+      return;
+    }
+    setReportModal({ kind });
+  };
+
+  /**
+   * Gera o relatório com as opções escolhidas (2026-07-27):
+   *  - GERAL: líder como recebedor do grupo (regra da NF), dividido por rota e plataforma;
+   *  - SIMPLES: A nome do líder (sem acento) · B valor · C chave PIX · D obs (quinzena).
+   * Escopo = seleção (se houver) ou o filtro atual da lista. Sem filtro de plataforma e com
+   * o abate marcado, o arquivo sai idêntico ao de antes desta feature.
+   */
+  const handleGenerateReport = async (opts: ReportOptions) => {
+    const kind = reportModal?.kind ?? 'geral';
     const scoped = reportScopeRows();
     if (scoped.length === 0) {
       toast.error('Nenhum dado para exportar');
       return;
     }
+    const allowedSet = opts.allowed && opts.allowed.length > 0 ? new Set(opts.allowed) : undefined;
+    const buildOpts = { allowedPlatformNames: allowedSet, includeDeductions: opts.includeDeductions };
+    const filterLabel = opts.allowed && opts.allowed.length > 0 ? opts.allowed.join(' + ') : null;
+    const scopedPlatformNames = (opts.allowed && opts.allowed.length > 0
+      ? platforms.filter((p) => allowedSet?.has(p.name))
+      : platforms
+    ).map((p) => p.name);
+    const meta = {
+      ...reportMeta(),
+      platformFilterLabel: filterLabel,
+      deductionsApplied: opts.includeDeductions,
+    };
     try {
-      const reportRows = buildLeaderReportRows(scoped, platforms, leaderNameByGroup);
-      await exportDriverGeneralReportExcel(
-        reportRows,
-        { ...reportMeta(), platforms: platforms.map((p) => p.name), entityLabel: 'recebedor(es)' },
-        { includeGroupSheet: false },
-      );
-      toast.success('Relatório gerado');
+      if (kind === 'geral') {
+        const reportRows = buildLeaderReportRows(scoped, platforms, leaderNameByGroup, buildOpts);
+        if (reportRows.length === 0) {
+          toast.error('Ninguém tem pacote nas plataformas escolhidas');
+          return;
+        }
+        await exportDriverGeneralReportExcel(
+          reportRows,
+          { ...meta, platforms: scopedPlatformNames, entityLabel: 'recebedor(es)' },
+          { includeGroupSheet: false },
+        );
+      } else {
+        const simpleRows = buildSimpleReportRows(scoped, leaderNameByGroup, buildOpts);
+        if (simpleRows.length === 0) {
+          toast.error('Ninguém tem pacote nas plataformas escolhidas');
+          return;
+        }
+        await exportDriverSimpleReportExcel(simpleRows, { ...meta, platforms: [] });
+      }
+      toast.success(kind === 'geral' ? 'Relatório gerado' : 'Relatório simples gerado');
+      setReportModal(null);
     } catch (e) {
       console.error('Erro ao gerar relatório:', e);
       toast.error('Erro ao gerar relatório');
-    }
-  };
-
-  // Relatório SIMPLES: A nome do líder (sem acento) · B valor total (net) · C obs = nome da quinzena.
-  const handleSimpleReport = async () => {
-    if (!hasPermission('driverpay.exportReport')) {
-      toast.error('Você não tem permissão para exportar o relatório');
-      return;
-    }
-    const scoped = reportScopeRows();
-    if (scoped.length === 0) {
-      toast.error('Nenhum dado para exportar');
-      return;
-    }
-    try {
-      const rows = buildSimpleReportRows(scoped, leaderNameByGroup);
-      await exportDriverSimpleReportExcel(rows, { ...reportMeta(), platforms: [] });
-      toast.success('Relatório simples gerado');
-    } catch (e) {
-      console.error('Erro ao gerar relatório simples:', e);
-      toast.error('Erro ao gerar relatório simples');
     }
   };
 
@@ -1029,26 +1069,38 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // Reconstrói o espelho ABERTO aplicando o filtro de plataforma (chips) — usado pela prévia
   // e pelo "Gerar PDF" pra mostrarem os valores só das plataformas marcadas (mesma regra do envio ao app).
   const rebuildMirror = useCallback(
-    (allowed: string[] | null): MirrorRequest | null => {
+    (allowed: string[] | null, includeDeductions: boolean): MirrorRequest | null => {
       if (!company || !selectedPeriod || !mirror) return null;
       const allowedSet = allowed && allowed.length > 0 ? new Set(allowed) : undefined;
       const plats = platformsRef.current;
       if (mirror.mode === 'individual') {
         const row = publishRows[0];
         if (!row) return null;
-        return { mode: 'individual', data: buildDriverMirrorData(row, plats, company, selectedPeriod, allowedSet) };
+        return {
+          mode: 'individual',
+          data: buildDriverMirrorData(row, plats, company, selectedPeriod, allowedSet, includeDeductions),
+        };
       }
       if (mirror.mode === 'group') {
         if (!publishGroupInfo) return null;
         return {
           mode: 'group',
-          data: buildGroupMirrorData(publishGroupInfo.groupName, publishRows, plats, company, selectedPeriod, allowedSet),
+          data: buildGroupMirrorData(
+            publishGroupInfo.groupName, publishRows, plats, company, selectedPeriod, allowedSet, includeDeductions,
+          ),
         };
       }
       if (mirror.mode === 'mass') {
-        return { mode: 'mass', list: publishRows.map((r) => buildDriverMirrorData(r, plats, company, selectedPeriod, allowedSet)) };
+        return {
+          mode: 'mass',
+          list: publishRows.map((r) =>
+            buildDriverMirrorData(r, plats, company, selectedPeriod, allowedSet, includeDeductions),
+          ),
+        };
       }
-      const sel = buildSelectionMirrorData(filteredRows, selGroups, selDrivers, plats, company, selectedPeriod, allowedSet);
+      const sel = buildSelectionMirrorData(
+        filteredRows, selGroups, selDrivers, plats, company, selectedPeriod, allowedSet, includeDeductions,
+      );
       return { mode: 'selection', groups: sel.groups, singles: sel.singles };
     },
     [company, selectedPeriod, mirror, publishRows, publishGroupInfo, filteredRows, selGroups, selDrivers],
@@ -1264,11 +1316,11 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             <>
               <button
                 type="button"
-                onClick={handleReport}
+                onClick={() => openReport('geral')}
                 title={
                   selCount > 0
-                    ? 'Relatório detalhado só dos grupos/drivers marcados (líder recebe pelo grupo, dividido por rota)'
-                    : 'Relatório detalhado de todos (líder recebe pelo grupo, dividido por rota)'
+                    ? 'Relatório detalhado só dos grupos/drivers marcados (escolha as plataformas na próxima tela)'
+                    : 'Relatório detalhado de todos (escolha as plataformas na próxima tela)'
                 }
                 className="px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 inline-flex items-center gap-1.5 min-h-[40px]"
               >
@@ -1276,8 +1328,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               </button>
               <button
                 type="button"
-                onClick={handleSimpleReport}
-                title="Relatório simples: nome do líder (sem acento) · valor total · obs (nome da quinzena)"
+                onClick={() => openReport('simples')}
+                title="Relatório simples: nome do líder (sem acento) · valor total · chave PIX · obs (quinzena)"
                 className="px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 inline-flex items-center gap-1.5 min-h-[40px]"
               >
                 <Download className="w-4 h-4" /> Relatório simples
@@ -1499,6 +1551,24 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             alreadyPublished={!!recipientId && publishedDriverIds.has(recipientId)}
             onUnpublish={canMirror && singleRecipient ? onUnpublishCurrent : undefined}
             onRebuild={rebuildMirror}
+            alreadyDeducted={alreadyDeductedDrivers(publishRows, publications, rows)}
+          />
+        );
+      })()}
+
+      {reportModal && (() => {
+        const scoped = reportScopeRows();
+        return (
+          <ReportOptionsModal
+            kind={reportModal.kind}
+            platformOptions={platforms.map((p) => p.name)}
+            deductionsTotal={scoped.reduce((s, r) => s + deductionsOf(r), 0)}
+            alreadyDeducted={alreadyDeductedDrivers(scoped, publications, rows)}
+            scopeLabel={
+              selCount > 0 ? `Só o que está marcado (${selCount})` : `${scoped.length} driver(s) da lista atual`
+            }
+            onClose={() => setReportModal(null)}
+            onConfirm={handleGenerateReport}
           />
         );
       })()}

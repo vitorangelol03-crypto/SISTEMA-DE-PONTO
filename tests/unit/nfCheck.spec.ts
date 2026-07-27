@@ -6,6 +6,7 @@ import {
   findCnpjs,
   findMoneyValues,
   formatCnpj,
+  mirrorExpectedValue,
   nameMatches,
   normText,
   runNfCheck,
@@ -170,5 +171,64 @@ describe('runNfCheck', () => {
     expect(r.valorOk).toBe(false);
     expect(r.nomeOk).toBe(false);
     expect(r.reasons).toHaveLength(3);
+  });
+});
+
+/**
+ * Valor esperado do espelho publicado (2026-07-27). A nota segue SEMPRE o "TOTAL A
+ * RECEBER" impresso no espelho — inclusive no pagamento PARCIAL por plataforma, em que
+ * os vales/perdas saem listados mas não são abatidos.
+ *
+ * Cenário base: driver com ANJUN 100×2 (200) + LOGGI 50×2 (100) = bruto 300,
+ * vales+perdas 80 → total_net 220.
+ */
+describe('mirrorExpectedValue — valor que a nota tem que ter', () => {
+  it('espelho cheio COM abate: o líquido persistido (comportamento antigo)', () => {
+    expect(
+      mirrorExpectedValue({
+        grossInScope: 300, deductions: 80, netFull: 220, hasPlatformFilter: false, includeDeductions: true,
+      }),
+    ).toBe(220);
+  });
+
+  it('espelho filtrado COM abate: bruto do filtro MENOS vales/perdas', () => {
+    // Era o furo antigo: a fn esperava 200 (bruto) enquanto o PDF mostrava 120.
+    expect(
+      mirrorExpectedValue({
+        grossInScope: 200, deductions: 80, netFull: 220, hasPlatformFilter: true, includeDeductions: true,
+      }),
+    ).toBe(120);
+  });
+
+  it('espelho filtrado SEM abate (pagamento parcial): bruto puro do filtro', () => {
+    expect(
+      mirrorExpectedValue({
+        grossInScope: 200, deductions: 80, netFull: 220, hasPlatformFilter: true, includeDeductions: false,
+      }),
+    ).toBe(200);
+  });
+
+  it('espelho cheio SEM abate: bruto de todas as plataformas', () => {
+    expect(
+      mirrorExpectedValue({
+        grossInScope: 300, deductions: 80, netFull: 220, hasPlatformFilter: false, includeDeductions: false,
+      }),
+    ).toBe(300);
+  });
+
+  it('sem vale/perda nenhum (o caso de hoje em produção): filtrado dá o bruto, igual antes', () => {
+    expect(
+      mirrorExpectedValue({
+        grossInScope: 42.5, deductions: 0, netFull: 42.5, hasPlatformFilter: true, includeDeductions: true,
+      }),
+    ).toBe(42.5);
+  });
+
+  it('arredonda em 2 casas (centavo exato)', () => {
+    expect(
+      mirrorExpectedValue({
+        grossInScope: 238.005, deductions: 0.001, netFull: 0, hasPlatformFilter: true, includeDeductions: true,
+      }),
+    ).toBe(238);
   });
 });

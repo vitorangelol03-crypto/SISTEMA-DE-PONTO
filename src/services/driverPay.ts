@@ -1413,6 +1413,12 @@ export interface PublishMirrorInput {
   scope: 'individual' | 'group' | 'selection';
   /** array de nomes de plataforma incluidos; null = todas (filtro D3). */
   platformFilter: string[] | null;
+  /**
+   * O espelho publicado ABATEU os vales/perdas do driver? (2026-07-27, decisao do Victor)
+   * false = pagamento PARCIAL por plataforma: o desconto sai no pagamento das demais.
+   * Fica gravado porque a conferencia automatica da NF calcula o valor esperado por aqui.
+   */
+  includeDeductions?: boolean;
   pdf: Blob;
   userId: string;
   groupId?: string | null;
@@ -1449,24 +1455,44 @@ export const publishDriverMirror = async (i: PublishMirrorInput): Promise<void> 
     scope: i.scope,
     group_id: i.groupId ?? null,
     platform_filter: i.platformFilter,
+    include_deductions: i.includeDeductions !== false,
     pdf_path: path,
     delivered_by: i.userId,
   }]);
   if (error) throwDbError(error);
 };
 
+/** Publicacao de espelho como o painel precisa dela (selo "no app" + aviso de desconto). */
+export interface MirrorPublicationRow {
+  driverId: string;
+  scope: 'individual' | 'group' | 'selection';
+  /** O espelho publicado abateu os vales/perdas? (coluna default true = comportamento antigo) */
+  includeDeductions: boolean;
+}
+
 /**
- * driver_ids que JA tem espelho publicado no app neste periodo (alimenta o selo "no app"
- * na lista e o "ja publicado" no dialogo). Escopado por empresa+periodo (RLS confirma).
+ * Espelhos JA publicados no app neste periodo (alimenta o selo "no app" na lista, o
+ * "ja publicado" no dialogo e o aviso anti-desconto-duplo). Escopado por empresa+periodo
+ * (RLS confirma).
  */
-export const listPublishedDriverIds = async (companyId: string, periodId: string): Promise<string[]> => {
+export const listMirrorPublications = async (
+  companyId: string,
+  periodId: string,
+): Promise<MirrorPublicationRow[]> => {
   const { data, error } = await supabase
     .from('driverpay_mirror_publications')
-    .select('driver_id')
+    .select('driver_id, scope, include_deductions')
     .eq('company_id', companyId)
     .eq('period_id', periodId);
   if (error) throwDbError(error);
-  return (data ?? []).map((r) => (r as { driver_id: string }).driver_id);
+  return (data ?? []).map((r) => {
+    const row = r as { driver_id: string; scope: string; include_deductions: boolean | null };
+    return {
+      driverId: row.driver_id,
+      scope: (row.scope as MirrorPublicationRow['scope']) ?? 'individual',
+      includeDeductions: row.include_deductions !== false,
+    };
+  });
 };
 
 /**

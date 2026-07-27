@@ -98,7 +98,12 @@ export interface DriverMirrorTotals {
   packagesValue: number;
   discountsValue: number;
   valesValue: number;
-  /** TOTAL A RECEBER = packagesValue − discountsValue − valesValue (pode ser negativo). */
+  /**
+   * TOTAL A RECEBER = packagesValue − discountsValue − valesValue (pode ser negativo).
+   * Pagamento PARCIAL por plataforma (2026-07-27): quando `deductionsApplied` do espelho
+   * é `false`, os descontos/vales continuam LISTADOS (o driver vê o que vem por aí) mas
+   * NÃO entram nesta conta — `toReceive` fica igual a `packagesValue`.
+   */
   toReceive: number;
 }
 
@@ -143,6 +148,12 @@ export interface DriverMirrorData {
   discounts: DriverDiscountLine[];
   vales: DriverValeLine[];
   totals: DriverMirrorTotals;
+  /**
+   * Pagamento PARCIAL por plataforma (2026-07-27, decisão do Victor): `false` = os vales
+   * e perdas listados NÃO foram abatidos deste espelho (saem no pagamento das demais
+   * plataformas). Ausente/`true` = comportamento de sempre (abatidos do total).
+   */
+  deductionsApplied?: boolean;
   /** default: `new Date().toLocaleString('pt-BR')` no momento da geração do PDF. */
   generatedAt?: string;
 }
@@ -164,7 +175,19 @@ export interface DriverGroupMirrorData {
   groupName: string;
   drivers: DriverMirrorData[];
   groupTotals: DriverGroupMirrorTotals;
+  /** Igual ao do espelho individual: `false` = vales/perdas listados mas não abatidos. */
+  deductionsApplied?: boolean;
   generatedAt?: string;
+}
+
+/**
+ * Os vales/perdas deste espelho foram abatidos do total? Ausente = `true` (todo espelho
+ * gerado antes de 2026-07-27 abatia; a leitura por omissão preserva o comportamento).
+ */
+export function areDeductionsApplied(
+  data: { deductionsApplied?: boolean } | null | undefined,
+): boolean {
+  return data?.deductionsApplied !== false;
 }
 
 // ─── Builders (DriverPayment do serviço → dados de apresentação) ──────────────

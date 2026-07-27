@@ -24,7 +24,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
 import { extractText, getDocumentProxy } from 'npm:unpdf@1.8.0';
-import { runNfCheck, type NfCheckResult } from './nfCheck.ts';
+import { runNfCheck, mirrorExpectedValue, type NfCheckResult } from './nfCheck.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -331,11 +331,16 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
   return json({ slots });
 }
 
-// ─── Conferência automática (v8) ─────────────────────────────────────────────
+// ─── Conferência automática (v8; abate parcial em v11) ───────────────────────
 // Candidatos de valor esperado. Regra provada na Fase 0 (26/07, 18 notas reais):
 // o driver emite a nota pelo valor do ESPELHO PUBLICADO que ele recebeu (escopo
 // grupo/individual + filtro de plataforma) — por isso cada publicação vira um
 // candidato. Soma-por-CNPJ e líquidos entram como fallback (nota "cheia").
+//
+// 27/07 — pagamento PARCIAL por plataforma: a publicação agora grava se ABATEU os
+// vales/perdas (include_deductions). O valor esperado segue o total impresso no
+// espelho: com abate = bruto do filtro − vales/perdas; sem abate = bruto puro.
+// A conta mora em `mirrorExpectedValue` (nfCheck.ts, coberta por unit).
 async function buildValueCandidates(
   driverId: string, companyId: string, periodId: string, emitterId: string,
 ): Promise<Record<string, number>> {
@@ -351,13 +356,24 @@ async function buildValueCandidates(
   }
 
   const { data: pays } = await supabase.from('driverpay_payments')
-    .select('id, driver_id, total_net').eq('period_id', periodId).in('driver_id', groupIds);
+    .select('id, driver_id, total_net, zapex_rate').eq('period_id', periodId).in('driver_id', groupIds);
   const payList = pays ?? [];
   const payIds = payList.map((p) => p.id);
 
   const { data: packs } = payIds.length
     ? await supabase.from('driverpay_payment_packages')
       .select('payment_id, platform_name, packages, rate_snapshot').in('payment_id', payIds)
+    : { data: [] as never[] };
+
+  // Vales/perdas e Zapex: entram na conta do espelho parcial (2026-07-27).
+  const { data: discountRows } = payIds.length
+    ? await supabase.from('driverpay_discounts').select('payment_id, amount').in('payment_id', payIds)
+    : { data: [] as never[] };
+  const { data: valeRows } = payIds.length
+    ? await supabase.from('driverpay_vales').select('payment_id, amount').in('payment_id', payIds)
+    : { data: [] as never[] };
+  const { data: zapexRows } = payIds.length
+    ? await supabase.from('driverpay_zapex').select('payment_id').in('payment_id', payIds)
     : { data: [] as never[] };
 
   const { data: plats } = await supabase.from('driverpay_platforms')
@@ -380,6 +396,29 @@ async function buildValueCandidates(
     round2(payList.filter((p) => ids.includes(p.driver_id as string))
       .reduce((s, p) => s + Number(p.total_net ?? 0), 0));
 
+  /** Vales + perdas das pessoas cobertas pelo espelho. */
+  const deductionsSum = (ids: string[]): number => {
+    let total = 0;
+    for (const row of [...(discountRows ?? []), ...(valeRows ?? [])]) {
+      const dId = driverOf.get(row.payment_id as string);
+      if (dId && ids.includes(dId)) total += Number(row.amount ?? 0);
+    }
+    return round2(total);
+  };
+
+  /** Ganho Zapex (itens × zapex_rate). A Zapex é tratada como "plataforma" no filtro. */
+  const zapexRateOf = new Map(payList.map((p) => [p.id as string, Number(p.zapex_rate ?? 0)]));
+  const zapexSum = (ids: string[], filter: string[] | null): number => {
+    if (filter && !filter.includes('Zapex')) return 0;
+    let total = 0;
+    for (const z of zapexRows ?? []) {
+      const payId = z.payment_id as string;
+      const dId = driverOf.get(payId);
+      if (dId && ids.includes(dId)) total += zapexRateOf.get(payId) ?? 0;
+    }
+    return round2(total);
+  };
+
   const cands: Record<string, number> = {
     somaCnpj_individual: platformSum([driverId], null, true),
     liquido_individual: netSum([driverId]),
@@ -390,14 +429,27 @@ async function buildValueCandidates(
   }
 
   const { data: pubs } = await supabase.from('driverpay_mirror_publications')
-    .select('scope, platform_filter').eq('driver_id', driverId).eq('period_id', periodId);
+    .select('scope, platform_filter, include_deductions').eq('driver_id', driverId).eq('period_id', periodId);
   for (const pub of pubs ?? []) {
     const filter = Array.isArray(pub.platform_filter) && pub.platform_filter.length
       ? (pub.platform_filter as string[])
       : null;
     const ids = pub.scope === 'group' && groupIds.length > 1 ? groupIds : [driverId];
-    const value = filter ? platformSum(ids, filter, false) : netSum(ids);
-    cands[`espelho_${pub.scope}${filter ? '_' + filter.join('+') : '_cheio'}`] = value;
+    // include_deductions=false (pagamento parcial por plataforma): o espelho lista os
+    // vales/perdas mas NÃO abate — a nota vem pelo bruto. Coluna nova (default true):
+    // publicação antiga/sem a coluna segue como sempre.
+    const includeDeductions = pub.include_deductions !== false;
+    const value = mirrorExpectedValue({
+      grossInScope: round2(platformSum(ids, filter, false) + zapexSum(ids, filter)),
+      deductions: deductionsSum(ids),
+      netFull: netSum(ids),
+      hasPlatformFilter: filter !== null,
+      includeDeductions,
+    });
+    const key = `espelho_${pub.scope}${filter ? '_' + filter.join('+') : '_cheio'}${
+      includeDeductions ? '' : '_sem_abate'
+    }`;
+    cands[key] = value;
   }
   return cands;
 }

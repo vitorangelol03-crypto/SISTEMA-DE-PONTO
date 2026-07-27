@@ -67,6 +67,35 @@ export interface DriverReportMeta {
   generatedAt?: string;
   /** Rótulo da entidade no rodapé/meta (default 'driver'; ex.: 'recebedor(es)' no relatório do líder). */
   entityLabel?: string;
+  /**
+   * Filtro de plataforma aplicado (2026-07-27): "LOGGI" / "LOGGI + ANJUN".
+   * Ausente/null = relatório de todas as plataformas (comportamento de sempre).
+   */
+  platformFilterLabel?: string | null;
+  /**
+   * `false` = vales/perdas NÃO foram abatidos deste relatório (pagamento parcial por
+   * plataforma). Sai avisado no cabeçalho e nos rótulos das colunas.
+   */
+  deductionsApplied?: boolean;
+}
+
+/** Sufixo " — SOMENTE LOGGI" pro título/OBS quando o relatório está filtrado. */
+function platformSuffix(meta: DriverReportMeta): string {
+  const label = (meta.platformFilterLabel ?? '').trim();
+  return label ? ` — SOMENTE ${label.toUpperCase()}` : '';
+}
+
+/** Aviso do pagamento parcial (vazio quando os descontos saíram normalmente). */
+function deductionsWarning(meta: DriverReportMeta): string {
+  return meta.deductionsApplied === false
+    ? 'ATENÇÃO: vales e perdas NÃO foram abatidos deste relatório — eles saem no pagamento das demais plataformas.'
+    : '';
+}
+
+/** Trecho do nome do arquivo com a plataforma filtrada ("_LOGGI"); vazio quando é tudo. */
+function platformFilePart(meta: DriverReportMeta): string {
+  const label = (meta.platformFilterLabel ?? '').trim();
+  return label ? `_${sanitizeForFile(label)}` : '';
 }
 
 // ─── Constantes de estilo (Excel) ─────────────────────────────────────────────
@@ -227,14 +256,15 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
 
   // Título mesclado.
   const titleRow = blankRow();
-  titleRow[0] = `RELATÓRIO GERAL — ${meta.companyName} — ${meta.periodLabel}`;
+  titleRow[0] = `RELATÓRIO GERAL — ${meta.companyName} — ${meta.periodLabel}${platformSuffix(meta)}`;
   data[R_TITLE] = titleRow;
 
-  // Meta.
+  // Meta (+ aviso do pagamento parcial, quando os descontos não saíram aqui).
+  const warning = deductionsWarning(meta);
   const metaRow = blankRow();
   metaRow[0] = `Gerado em ${generatedAt}  ·  ${entityText}  ·  Plataformas: ${
     platforms.join(' / ') || '—'
-  }`;
+  }${warning ? `  ·  ${warning}` : ''}`;
   data[R_META] = metaRow;
 
   // Linha em branco (respiro).
@@ -249,8 +279,8 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
     hGroup[platPkgCol(i)] = p;
   });
   hGroup[colTotalPackages] = 'TOTAL PACOTES';
-  hGroup[colDiscount] = 'DESCONTO';
-  hGroup[colVale] = 'VALE';
+  hGroup[colDiscount] = warning ? 'DESCONTO (NÃO ABATIDO)' : 'DESCONTO';
+  hGroup[colVale] = warning ? 'VALE (NÃO ABATIDO)' : 'VALE';
   hGroup[colToReceive] = 'TOTAL A RECEBER';
   hGroup[colPix] = 'CHAVE PIX';
   data[R_HGROUP] = hGroup;
@@ -333,9 +363,11 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
     alignment: { horizontal: 'center', vertical: 'center' },
     border: applyBorder('medium'),
   });
-  // Meta.
+  // Meta (vermelho e em negrito quando tem aviso de pagamento parcial — não passa batido).
   applyCellStyle(ws[XLSX.utils.encode_cell({ r: R_META, c: 0 })], {
-    font: { italic: true, sz: 10, color: { rgb: XL_INK_MUTED } },
+    font: warning
+      ? { bold: true, sz: 10.5, color: { rgb: XL_RED } }
+      : { italic: true, sz: 10, color: { rgb: XL_INK_MUTED } },
     alignment: { horizontal: 'left', vertical: 'center' },
   });
 
@@ -609,7 +641,7 @@ export async function exportDriverGeneralReportExcel(
     XLSX.utils.book_append_sheet(workbook, groupSheet, 'Por Grupo');
   }
 
-  const filename = `Relatorio_Geral_Driver_${sanitizeForFile(meta.periodLabel)}.xlsx`;
+  const filename = `Relatorio_Geral_Driver_${sanitizeForFile(meta.periodLabel)}${platformFilePart(meta)}.xlsx`;
   XLSX.writeFile(workbook, filename, { bookType: 'xlsx', type: 'binary', cellStyles: true });
 }
 
@@ -638,11 +670,18 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
   const blank = (): any[] => ['', '', '', ''];
   const data: any[][] = [];
 
+  const warning = deductionsWarning(meta);
+  const platformLabel = (meta.platformFilterLabel ?? '').trim();
+  // OBS = nome da quinzena; filtrado, leva a plataforma junto pra não pagar o arquivo errado.
+  const obs = platformLabel ? `${meta.periodLabel} — ${platformLabel}` : meta.periodLabel;
+
   const title = blank();
-  title[0] = `RELATÓRIO SIMPLES — ${meta.companyName} — ${meta.periodLabel}`;
+  title[0] = `RELATÓRIO SIMPLES — ${meta.companyName} — ${meta.periodLabel}${platformSuffix(meta)}`;
   data[R_TITLE] = title;
   const metaRow = blank();
-  metaRow[0] = `Gerado em ${generatedAt}  ·  ${n} recebedor${n !== 1 ? 'es' : ''}`;
+  metaRow[0] = `Gerado em ${generatedAt}  ·  ${n} recebedor${n !== 1 ? 'es' : ''}${
+    warning ? `  ·  ${warning}` : ''
+  }`;
   data[R_META] = metaRow;
   data[2] = blank();
 
@@ -658,7 +697,7 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
     line[0] = r.name;
     line[1] = r.total;
     line[2] = r.pix ?? '';
-    line[3] = meta.periodLabel; // OBS = nome da quinzena
+    line[3] = obs;
     data[R_DATA + j] = line;
   });
 
@@ -678,7 +717,9 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
     border: applyBorder('medium'),
   });
   applyCellStyle(ws[XLSX.utils.encode_cell({ r: R_META, c: 0 })], {
-    font: { italic: true, sz: 10, color: { rgb: XL_INK_MUTED } },
+    font: warning
+      ? { bold: true, sz: 10.5, color: { rgb: XL_RED } }
+      : { italic: true, sz: 10, color: { rgb: XL_INK_MUTED } },
     alignment: { horizontal: 'left', vertical: 'center' },
   });
   for (let c = 0; c <= lastCol; c++) {
@@ -742,7 +783,7 @@ export async function exportDriverSimpleReportExcel(
 ): Promise<void> {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, buildSimpleSheet(rows, meta), 'Relatório Simples');
-  const filename = `Relatorio_Simples_Driver_${sanitizeForFile(meta.periodLabel)}.xlsx`;
+  const filename = `Relatorio_Simples_Driver_${sanitizeForFile(meta.periodLabel)}${platformFilePart(meta)}.xlsx`;
   XLSX.writeFile(workbook, filename, { bookType: 'xlsx', type: 'binary', cellStyles: true });
 }
 
@@ -770,7 +811,15 @@ function buildReportPdf(rows: DriverReportRow[], meta: DriverReportMeta): jsPDF 
   doc.text('RELATÓRIO GERAL', pageW / 2, 40, { align: 'center' });
   doc.setFont('helvetica', 'normal').setFontSize(10);
   doc.setTextColor(80);
-  doc.text(`${meta.companyName} — ${meta.periodLabel}`, pageW / 2, 58, { align: 'center' });
+  doc.text(`${meta.companyName} — ${meta.periodLabel}${platformSuffix(meta)}`, pageW / 2, 58, {
+    align: 'center',
+  });
+  const pdfWarning = deductionsWarning(meta);
+  if (pdfWarning) {
+    doc.setFont('helvetica', 'bold').setFontSize(9);
+    doc.setTextColor(PDF_DANGER[0], PDF_DANGER[1], PDF_DANGER[2]);
+    doc.text(pdfWarning, pageW / 2, 69, { align: 'center' });
+  }
   doc.setTextColor(0);
 
   // Índices de coluna (mesma ordem do Excel).
@@ -795,7 +844,12 @@ function buildReportPdf(rows: DriverReportRow[], meta: DriverReportMeta): jsPDF 
   platforms.forEach((p) => {
     head.push(`${p}\nPct`, `${p}\nR$`);
   });
-  head.push('TOTAL\nPACOTES', 'DESCONTO', 'VALE', 'TOTAL A\nRECEBER');
+  head.push(
+    'TOTAL\nPACOTES',
+    pdfWarning ? 'DESCONTO\n(NÃO ABATIDO)' : 'DESCONTO',
+    pdfWarning ? 'VALE\n(NÃO ABATIDO)' : 'VALE',
+    'TOTAL A\nRECEBER',
+  );
 
   // Body.
   const body: string[][] = rows.map((row) => {
@@ -831,7 +885,7 @@ function buildReportPdf(rows: DriverReportRow[], meta: DriverReportMeta): jsPDF 
   }
 
   autoTable(doc, {
-    startY: 72,
+    startY: pdfWarning ? 80 : 72,
     head: [head],
     body,
     foot: [foot],

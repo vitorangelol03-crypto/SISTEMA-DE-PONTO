@@ -15,10 +15,11 @@ import {
   platformLineLabel,
   separatedPlatformTotals,
   separatedAmount,
+  areDeductionsApplied,
   type SeparatedPlatformTotal,
 } from '../../utils/driverMirrorGenerator';
 import { ModalShell } from './ModalShell';
-import { formatBRL, formatInt, sanitizeFile } from './driverPayShared';
+import { formatBRL, formatInt, sanitizeFile, type AlreadyDeductedDriver } from './driverPayShared';
 
 export type MirrorRequest =
   | { mode: 'individual'; data: DriverMirrorData }
@@ -37,6 +38,18 @@ function platformNamesOf(req: MirrorRequest): string[] {
   return [...set];
 }
 
+/** Vales + perdas somados neste espelho (qualquer modo) — decide se o botão aparece. */
+function deductionsTotalOf(req: MirrorRequest): number {
+  const of = (d: DriverMirrorData) => d.totals.discountsValue + d.totals.valesValue;
+  if (req.mode === 'individual') return of(req.data);
+  if (req.mode === 'group') return req.data.drivers.reduce((s, d) => s + of(d), 0);
+  if (req.mode === 'mass') return req.list.reduce((s, d) => s + of(d), 0);
+  return (
+    req.groups.reduce((s, g) => s + g.drivers.reduce((a, d) => a + of(d), 0), 0) +
+    req.singles.reduce((s, d) => s + of(d), 0)
+  );
+}
+
 interface DriverMirrorPreviewDialogProps {
   request: MirrorRequest;
   canGenerate: boolean;
@@ -44,14 +57,22 @@ interface DriverMirrorPreviewDialogProps {
   /** Aviso de corte (2026-07-19): empresa + usuário p/ carregar/salvar as datas. */
   companyId?: string;
   userId?: string;
-  /** Publicar no app do entregador (1 PDF por driver). `allowed`=plataformas incluídas; null=todas. */
-  onPublish?: (allowed: string[] | null) => Promise<void>;
+  /**
+   * Publicar no app do entregador (1 PDF por driver). `allowed`=plataformas incluídas
+   * (null=todas); `includeDeductions`=abateu os vales/perdas (false = pagamento parcial).
+   */
+  onPublish?: (allowed: string[] | null, includeDeductions: boolean) => Promise<void>;
   /** Já existe publicação no app pro destinatário deste espelho (individual/líder do grupo). */
   alreadyPublished?: boolean;
   /** Despublicar (tirar do app) — só faz sentido pro destinatário único (individual/grupo). */
   onUnpublish?: () => Promise<void>;
-  /** Reconstrói o espelho com o filtro de plataforma (chips) — a prévia e o PDF seguem a seleção. */
-  onRebuild?: (allowed: string[] | null) => MirrorRequest | null;
+  /** Reconstrói o espelho com o filtro de plataforma (chips) + o abate — prévia e PDF seguem. */
+  onRebuild?: (allowed: string[] | null, includeDeductions: boolean) => MirrorRequest | null;
+  /**
+   * Drivers deste espelho que JÁ tiveram vales/perdas abatidos noutra publicação do período
+   * (aviso anti-desconto-duplo — decisão do Victor, 2026-07-27).
+   */
+  alreadyDeducted?: AlreadyDeductedDriver[];
 }
 
 /** Faixa amarela do corte — mesma cara do PDF (prévia fiel). */
@@ -136,11 +157,27 @@ const groupSeparated = (g: DriverGroupMirrorData): SeparatedPlatformTotal[] => {
   return order.map((name) => map.get(name)!);
 };
 
+/** Faixa âmbar do pagamento parcial — mesma frase do PDF (fonte única). */
+const DeferredDeductionsBandPreview: React.FC<{ amount: number }> = ({ amount }) => (
+  <div className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2 text-center">
+    <p className="text-[13px] font-bold text-gray-900">
+      Os vales e perdas acima <span className="text-red-700">NÃO</span> foram descontados deste pagamento
+    </p>
+    <p className="text-[11px] text-gray-800">
+      Total de <span className="font-bold">{formatBRL(amount)}</span> será descontado no pagamento das demais
+      plataformas.
+    </p>
+  </div>
+);
+
 const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
   // Valor separado (2026-07-20): plataformas marcadas saem do total exibido.
   const sep = separatedPlatformTotals(data.platforms);
   const sepTotal = sep.reduce((s, x) => s + x.amount, 0);
   const sepNames = sep.map((s) => s.platform.toUpperCase()).join(' + ');
+  // Pagamento parcial (2026-07-27): vales/perdas listados, mas fora do total.
+  const applied = areDeductionsApplied(data);
+  const deferredTotal = data.totals.discountsValue + data.totals.valesValue;
   return (
   <div className="bg-white border border-gray-200 rounded-lg shadow-sm max-w-[720px] mx-auto overflow-hidden">
     <div className="p-6 sm:p-8">
@@ -233,14 +270,17 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
       </Section>
 
       {data.discounts.length > 0 && (
-        <Section title="Descontos">
+        <Section title={applied ? 'Descontos' : 'Descontos (não abatidos neste pagamento)'}>
           <table className="w-full text-sm">
             <tbody>
               {data.discounts.map((d, i) => (
                 <tr key={i} className="border-t border-gray-100">
                   <td className="py-1">{d.packageId || '—'}</td>
                   <td className="py-1 text-gray-500">{d.description || 'Pacote descontado'}</td>
-                  <td className="py-1 text-right text-red-600 tabular-nums">− {formatBRL(d.value)}</td>
+                  <td className={`py-1 text-right tabular-nums ${applied ? 'text-red-600' : 'text-gray-700'}`}>
+                    {applied ? '− ' : ''}
+                    {formatBRL(d.value)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -249,14 +289,17 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
       )}
 
       {data.vales.length > 0 && (
-        <Section title="Vales / adiantamentos">
+        <Section title={applied ? 'Vales / adiantamentos' : 'Vales / adiantamentos (não abatidos neste pagamento)'}>
           <table className="w-full text-sm">
             <tbody>
               {data.vales.map((v, i) => (
                 <tr key={i} className="border-t border-gray-100">
                   <td className="py-1">{v.date || '—'}</td>
                   <td className="py-1 text-gray-500">{v.note || 'Vale'}</td>
-                  <td className="py-1 text-right text-red-600 tabular-nums">− {formatBRL(v.value)}</td>
+                  <td className={`py-1 text-right tabular-nums ${applied ? 'text-red-600' : 'text-gray-700'}`}>
+                    {applied ? '− ' : ''}
+                    {formatBRL(v.value)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -270,13 +313,27 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
         <PlatformNoticeBandsPreview data={data} exclude={new Set(sep.map((s) => s.platform))} />
       </div>
 
+      {!applied && deferredTotal > 0 && (
+        <div className="mt-4">
+          <DeferredDeductionsBandPreview amount={deferredTotal} />
+        </div>
+      )}
+
       <div className="mt-5 border border-gray-200 rounded-lg overflow-hidden">
         <Row
           k={sep.length > 0 ? `Total de pacotes (sem ${sepNames})` : 'Total de pacotes'}
           v={`+ ${formatBRL(data.totals.packagesValue - sepTotal)}`}
         />
-        <Row k="Descontos" v={`− ${formatBRL(data.totals.discountsValue)}`} danger={data.totals.discountsValue > 0} />
-        <Row k="Vales / adiantamentos" v={`− ${formatBRL(data.totals.valesValue)}`} danger={data.totals.valesValue > 0} />
+        <Row
+          k={applied ? 'Descontos' : 'Descontos (não abatidos neste pagamento)'}
+          v={`${applied ? '− ' : ''}${formatBRL(data.totals.discountsValue)}`}
+          danger={applied && data.totals.discountsValue > 0}
+        />
+        <Row
+          k={applied ? 'Vales / adiantamentos' : 'Vales / adiantamentos (não abatidos neste pagamento)'}
+          v={`${applied ? '− ' : ''}${formatBRL(data.totals.valesValue)}`}
+          danger={applied && data.totals.valesValue > 0}
+        />
         <div className="flex items-center justify-between px-4 py-3 bg-green-700 text-white">
           <span className="font-bold text-sm">TOTAL A RECEBER</span>
           <span className="font-extrabold text-lg tabular-nums">{formatBRL(data.totals.toReceive - sepTotal)}</span>
@@ -344,6 +401,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   alreadyPublished,
   onUnpublish,
   onRebuild,
+  alreadyDeducted,
 }) => {
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -356,12 +414,20 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     () => (selectedPlatforms.size >= availablePlatforms.length ? null : availablePlatforms.filter((p) => selectedPlatforms.has(p))),
     [selectedPlatforms, availablePlatforms],
   );
-  // Prévia + "Gerar PDF" seguem os chips: reconstrói o espelho só com as plataformas marcadas
-  // (mesma regra do envio ao app). Todas marcadas => request original.
-  const activeRequest = useMemo<MirrorRequest>(
-    () => (onRebuild && allowedFromSelection !== null ? onRebuild(allowedFromSelection) ?? request : request),
-    [onRebuild, allowedFromSelection, request],
-  );
+  // Pagamento PARCIAL por plataforma (2026-07-27, decisão do Victor): marcado (padrão) =
+  // abate vales/perdas como sempre; desmarcado = eles saem listados mas fora do total, pra
+  // não descontar de novo no pagamento das demais plataformas.
+  const [includeDeductions, setIncludeDeductions] = useState(true);
+  const deductionsTotal = useMemo(() => deductionsTotalOf(request), [request]);
+  const alreadyDeductedList = alreadyDeducted ?? [];
+
+  // Prévia + "Gerar PDF" seguem os chips E o abate: reconstrói o espelho só com as
+  // plataformas marcadas (mesma regra do envio ao app). Sem filtro e com abate => original.
+  const activeRequest = useMemo<MirrorRequest>(() => {
+    const needsRebuild = allowedFromSelection !== null || !includeDeductions;
+    if (!onRebuild || !needsRebuild) return request;
+    return onRebuild(allowedFromSelection, includeDeductions) ?? request;
+  }, [onRebuild, allowedFromSelection, includeDeductions, request]);
   const [includeReceipts, setIncludeReceipts] = useState(true);
   // Aviso de corte (2026-07-19): pré-carrega o último salvo; salva automático ao gerar.
   const [cutoffTime, setCutoffTime] = useState('');
@@ -481,7 +547,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     }
     setPublishing(true);
     try {
-      await onPublish(allowed);
+      await onPublish(allowed, includeDeductions);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao publicar no app');
     } finally {
@@ -581,6 +647,55 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
               Este espelho <b>já está publicado no app</b> do driver. <b>Republicar</b> substitui o anterior (corrige);{' '}
               <b>Despublicar</b> tira do app (o driver deixa de ver).
             </span>
+          </div>
+        )}
+
+        {/* ── Pagamento parcial (2026-07-27): descontar ou não os vales/perdas ── */}
+        {deductionsTotal > 0 && (
+          <div
+            className={`border rounded-md p-3 ${
+              includeDeductions ? 'border-gray-200 bg-gray-50' : 'border-amber-300 bg-amber-50'
+            }`}
+            data-testid="mirror-deductions-box"
+          >
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeDeductions}
+                onChange={(e) => setIncludeDeductions(e.target.checked)}
+                className="w-4 h-4 mt-0.5 text-blue-600 rounded border-gray-300"
+                data-testid="mirror-deductions-toggle"
+              />
+              <span className="text-sm text-gray-800">
+                <b>Descontar vales e perdas neste espelho</b> ({formatBRL(deductionsTotal)})
+                <span className="block text-xs text-gray-600 mt-0.5">
+                  {includeDeductions
+                    ? 'Marcado: o total já sai com os vales e perdas abatidos (como sempre foi).'
+                    : 'Desmarcado: pagamento PARCIAL — o espelho lista os vales e perdas mas NÃO abate do total (eles saem no pagamento das demais plataformas).'}
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
+
+        {/* ── Aviso anti-desconto-duplo: já saiu noutra publicação deste período ── */}
+        {includeDeductions && alreadyDeductedList.length > 0 && (
+          <div
+            className="border-2 border-amber-400 bg-amber-50 rounded-md p-3 text-sm text-amber-900"
+            data-testid="mirror-already-deducted-warning"
+          >
+            <p className="font-bold">⚠ Atenção: vale/perda já descontado neste período</p>
+            <ul className="mt-1 list-disc list-inside space-y-0.5">
+              {alreadyDeductedList.map((d) => (
+                <li key={d.driverId}>
+                  <b>{d.name}</b> já teve {formatBRL(d.amount)} abatido num espelho publicado.
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-xs">
+              Se publicar assim, o valor é descontado de novo. Desmarque "Descontar vales e perdas" se este for o
+              pagamento das demais plataformas.
+            </p>
           </div>
         )}
 
@@ -697,8 +812,12 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                     <th className="text-left py-1.5">Driver</th>
                     <th className="text-right py-1.5">Pacotes</th>
                     {groupHasZapex && <th className="text-right py-1.5">Zapex</th>}
-                    <th className="text-right py-1.5">Desc.</th>
-                    <th className="text-right py-1.5">Vale</th>
+                    <th className="text-right py-1.5">
+                      Desc.{areDeductionsApplied(activeRequest.data) ? '' : ' (não abat.)'}
+                    </th>
+                    <th className="text-right py-1.5">
+                      Vale{areDeductionsApplied(activeRequest.data) ? '' : ' (não abat.)'}
+                    </th>
                     <th className="text-right py-1.5">A receber</th>
                   </tr>
                 </thead>
@@ -714,11 +833,23 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                           {zapexValueOf(d) > 0 ? `+ ${formatBRL(zapexValueOf(d))}` : '—'}
                         </td>
                       )}
-                      <td className="py-1.5 text-right tabular-nums text-red-600">
-                        {d.totals.discountsValue > 0 ? `− ${formatBRL(d.totals.discountsValue)}` : '—'}
+                      <td
+                        className={`py-1.5 text-right tabular-nums ${
+                          areDeductionsApplied(d) ? 'text-red-600' : 'text-gray-700'
+                        }`}
+                      >
+                        {d.totals.discountsValue > 0
+                          ? `${areDeductionsApplied(d) ? '− ' : ''}${formatBRL(d.totals.discountsValue)}`
+                          : '—'}
                       </td>
-                      <td className="py-1.5 text-right tabular-nums text-amber-600">
-                        {d.totals.valesValue > 0 ? `− ${formatBRL(d.totals.valesValue)}` : '—'}
+                      <td
+                        className={`py-1.5 text-right tabular-nums ${
+                          areDeductionsApplied(d) ? 'text-amber-600' : 'text-gray-700'
+                        }`}
+                      >
+                        {d.totals.valesValue > 0
+                          ? `${areDeductionsApplied(d) ? '− ' : ''}${formatBRL(d.totals.valesValue)}`
+                          : '—'}
                       </td>
                       <td className="py-1.5 text-right tabular-nums font-semibold text-green-700">
                         {formatBRL(d.totals.toReceive - sepValueOf(d))}
@@ -791,8 +922,15 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
             {(() => {
               const gSep = groupSeparated(activeRequest.data);
               const gSepTotal = gSep.reduce((s, x) => s + x.amount, 0);
+              const gDeferred =
+                activeRequest.data.groupTotals.discountsValue + activeRequest.data.groupTotals.valesValue;
               return (
                 <>
+                  {!areDeductionsApplied(activeRequest.data) && gDeferred > 0 && (
+                    <div className="mt-4">
+                      <DeferredDeductionsBandPreview amount={gDeferred} />
+                    </div>
+                  )}
                   <div className="mt-4 flex items-center justify-between px-4 py-3 bg-green-700 text-white rounded-lg">
                     <span className="font-bold text-sm">
                       TOTAL — {activeRequest.data.groupTotals.driverCount} driver(s)

@@ -36,6 +36,7 @@ import {
   platformLineLabel,
   separatedPlatformTotals,
   separatedAmount,
+  areDeductionsApplied,
 } from './driverMirrorGenerator';
 
 // Reexporta os tipos para que consumidores possam importar tudo deste módulo.
@@ -411,6 +412,45 @@ function drawSeparatedValueBanner(
 }
 
 /** Faixa verde de resumo (idioma mockup `.esp-resumo .grand`). */
+/**
+ * Faixa âmbar do pagamento PARCIAL (2026-07-27): vales/perdas listados mas NÃO abatidos.
+ * Fica colada ANTES do total verde pra o driver ler antes de bater o olho no valor.
+ */
+function drawDeferredDeductionsBand(doc: jsPDF, amount: number, y: number): number {
+  const h = 40;
+  const usable = CONTENT_W - 24;
+  doc.setFillColor(...COLOR_NOTICE_BG);
+  doc.rect(X_LEFT, y, CONTENT_W, h, 'F');
+  doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1);
+  doc.rect(X_LEFT, y, CONTENT_W, h, 'S');
+
+  drawSegmentsCentered(
+    doc,
+    fitSegments(
+      doc,
+      [
+        { text: 'Os vales e perdas acima', bold: true, size: 9.5 },
+        { text: 'NÃO', bold: true, color: COLOR_DANGER, size: 11.5, padLeft: 4 },
+        { text: 'foram descontados deste pagamento', bold: true, size: 9.5, padLeft: 4 },
+      ],
+      usable,
+    ),
+    y + 16,
+  );
+  drawSegmentsCentered(
+    doc,
+    fitSegments(
+      doc,
+      [
+        { text: `Total de ${fmtBRL(amount)} será descontado no pagamento das demais plataformas.`, size: 9 },
+      ],
+      usable,
+    ),
+    y + 31,
+  );
+  return y + h + 8;
+}
+
 function drawGreenBanner(doc: jsPDF, label: string, value: string, y: number): number {
   const h = 34;
   doc.setFillColor(...COLOR_SUCCESS);
@@ -428,6 +468,9 @@ function drawGreenBanner(doc: jsPDF, label: string, value: string, y: number): n
 /** Desenha um espelho de driver na página atual (assume topo livre). */
 function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   const { company, period, driver, platforms, discounts, vales, totals } = data;
+  // Pagamento parcial (2026-07-27): false = descontos/vales LISTADOS, mas fora do total.
+  const deductionsApplied = areDeductionsApplied(data);
+  const deferredTotal = totals.discountsValue + totals.valesValue;
 
   drawCompanyHeader(doc, company);
   drawBand(doc, 'ESPELHO DE PAGAMENTO — DRIVER', period);
@@ -611,12 +654,19 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
     const body: RowInput[] = discounts.map((d) => [
       d.packageId || '—',
       d.description || '—',
-      `- ${fmtBRL(d.value)}`,
+      deductionsApplied ? `- ${fmtBRL(d.value)}` : fmtBRL(d.value),
     ]);
     const foot: RowInput[] = [
       [
-        { content: 'Subtotal de descontos', colSpan: 2, styles: { halign: 'left' } },
-        { content: `- ${fmtBRL(totals.discountsValue)}`, styles: { halign: 'right' } },
+        {
+          content: deductionsApplied ? 'Subtotal de descontos' : 'Subtotal de descontos (NÃO abatido neste pagamento)',
+          colSpan: 2,
+          styles: { halign: 'left' },
+        },
+        {
+          content: deductionsApplied ? `- ${fmtBRL(totals.discountsValue)}` : fmtBRL(totals.discountsValue),
+          styles: { halign: 'right' },
+        },
       ],
     ];
 
@@ -653,12 +703,19 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
     const body: RowInput[] = vales.map((v) => [
       v.date ? formatDateBR(v.date) : '—',
       v.note || '—',
-      `- ${fmtBRL(v.value)}`,
+      deductionsApplied ? `- ${fmtBRL(v.value)}` : fmtBRL(v.value),
     ]);
     const foot: RowInput[] = [
       [
-        { content: 'Subtotal de vales', colSpan: 2, styles: { halign: 'left' } },
-        { content: `- ${fmtBRL(totals.valesValue)}`, styles: { halign: 'right' } },
+        {
+          content: deductionsApplied ? 'Subtotal de vales' : 'Subtotal de vales (NÃO abatido neste pagamento)',
+          colSpan: 2,
+          styles: { halign: 'left' },
+        },
+        {
+          content: deductionsApplied ? `- ${fmtBRL(totals.valesValue)}` : fmtBRL(totals.valesValue),
+          styles: { halign: 'right' },
+        },
       ],
     ];
 
@@ -693,8 +750,12 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
       sep.length > 0 ? `Total de pacotes (sem ${sepNames})` : 'Total de pacotes',
       `+ ${fmtBRL(totals.packagesValue - sepTotal)}`,
     ],
-    ['Descontos', `- ${fmtBRL(totals.discountsValue)}`],
-    ['Vales / adiantamentos', `- ${fmtBRL(totals.valesValue)}`],
+    deductionsApplied
+      ? ['Descontos', `- ${fmtBRL(totals.discountsValue)}`]
+      : ['Descontos (não abatidos neste pagamento)', fmtBRL(totals.discountsValue)],
+    deductionsApplied
+      ? ['Vales / adiantamentos', `- ${fmtBRL(totals.valesValue)}`]
+      : ['Vales / adiantamentos (não abatidos neste pagamento)', fmtBRL(totals.valesValue)],
   ];
 
   autoTable(doc, {
@@ -708,7 +769,9 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
       1: { cellWidth: 170, halign: 'right' },
     },
     didParseCell: (cell) => {
-      if (cell.section === 'body' && cell.column.index === 1) {
+      // Vermelho só quando o valor REALMENTE sai do total; no pagamento parcial ele é
+      // informativo (fica neutro pra não parecer que foi abatido).
+      if (deductionsApplied && cell.section === 'body' && cell.column.index === 1) {
         if (
           (cell.row.index === 1 && totals.discountsValue > 0) ||
           (cell.row.index === 2 && totals.valesValue > 0)
@@ -730,6 +793,12 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   if (noticesLoose.length > 0) {
     const r2 = drawPlatformNoticeBands(doc, noticesLoose, y);
     y = r2.y;
+  }
+
+  // Pagamento parcial: avisa ANTES do total verde que os vales/perdas não saíram daqui.
+  if (!deductionsApplied && deferredTotal > 0) {
+    y = ensureSpace(doc, y, 60);
+    y = drawDeferredDeductionsBand(doc, deferredTotal, y);
   }
 
   y = ensureSpace(doc, y, 60);
@@ -779,6 +848,9 @@ function drawGroupSummaryPage(
   includeIndividuals: boolean,
 ): number {
   const { company, period, groupName, drivers, groupTotals } = data;
+  // Pagamento parcial (2026-07-27): false = vales/perdas listados, mas fora do total.
+  const deductionsApplied = areDeductionsApplied(data);
+  const deferredTotal = groupTotals.discountsValue + groupTotals.valesValue;
 
   drawCompanyHeader(doc, company);
   drawBand(doc, `ESPELHO DE GRUPO — ${groupName}`, period);
@@ -851,8 +923,20 @@ function drawGroupSummaryPage(
   const valeIdx = descIdx + 1;
   const netIdx = valeIdx + 1;
 
+  // Pagamento parcial: o número continua na tabela (o líder precisa ver), com o rótulo
+  // dizendo que NÃO saiu deste pagamento e sem o sinal de menos.
+  const signed = (value: number): string =>
+    value > 0 ? (deductionsApplied ? `- ${fmtBRL(value)}` : fmtBRL(value)) : '—';
   const head: RowInput[] = [
-    ['Driver', 'Rota(s)', ...platformNames, ...(hasZapex ? ['Zapex'] : []), 'Desconto', 'Vale', 'A Receber'],
+    [
+      'Driver',
+      'Rota(s)',
+      ...platformNames,
+      ...(hasZapex ? ['Zapex'] : []),
+      deductionsApplied ? 'Desconto' : 'Desconto (não abatido)',
+      deductionsApplied ? 'Vale' : 'Vale (não abatido)',
+      'A Receber',
+    ],
   ];
   const body: RowInput[] = drivers.map((d) => {
     const platCols = platformNames.map((name) => fmtQty(packagesForPlatform(d, name)));
@@ -862,8 +946,8 @@ function drawGroupSummaryPage(
       joinRouteCities(d.driver.routes) || '—',
       ...platCols,
       ...zapexCol,
-      d.totals.discountsValue > 0 ? `- ${fmtBRL(d.totals.discountsValue)}` : '—',
-      d.totals.valesValue > 0 ? `- ${fmtBRL(d.totals.valesValue)}` : '—',
+      signed(d.totals.discountsValue),
+      signed(d.totals.valesValue),
       // Valor separado fica FORA do "A Receber" exibido (sai na faixa amarela).
       fmtBRL(d.totals.toReceive - separatedAmount(d.platforms)),
     ];
@@ -876,8 +960,8 @@ function drawGroupSummaryPage(
       { content: `SUBTOTAL — ${fmtQty(groupTotals.driverCount)} driver(s)`, colSpan: 2 },
       ...footPlatSums.map((v) => ({ content: v })),
       ...(hasZapex ? [{ content: `+ ${fmtBRL(zapexTotal)}` }] : []),
-      { content: `- ${fmtBRL(groupTotals.discountsValue)}` },
-      { content: `- ${fmtBRL(groupTotals.valesValue)}` },
+      { content: signed(groupTotals.discountsValue) },
+      { content: signed(groupTotals.valesValue) },
       { content: fmtBRL(groupTotals.toReceive - groupSepTotal) },
     ],
   ];
@@ -923,6 +1007,7 @@ function drawGroupSummaryPage(
       }
       if (cell.section === 'body') {
         if (
+          deductionsApplied &&
           (cell.column.index === descIdx || cell.column.index === valeIdx) &&
           cell.cell.text[0] !== '—'
         ) {
@@ -967,7 +1052,7 @@ function drawGroupSummaryPage(
       s.packageId || '—',
       s.status ?? '—',
       s.description || '—',
-      `- ${fmtBRL(s.value)}`,
+      deductionsApplied ? `- ${fmtBRL(s.value)}` : fmtBRL(s.value),
     ]);
     const dFoot: RowInput[] = [
       [
@@ -975,11 +1060,16 @@ function drawGroupSummaryPage(
           content:
             rest > 0
               ? `… e mais ${rest} desconto(s) — ver o recibo individual de cada driver`
-              : 'Total de descontos do grupo',
+              : deductionsApplied
+              ? 'Total de descontos do grupo'
+              : 'Total de descontos do grupo (NÃO abatido neste pagamento)',
           colSpan: 4,
           styles: { halign: 'left' },
         },
-        { content: `- ${fmtBRL(groupTotals.discountsValue)}`, styles: { halign: 'right' } },
+        {
+          content: deductionsApplied ? `- ${fmtBRL(groupTotals.discountsValue)}` : fmtBRL(groupTotals.discountsValue),
+          styles: { halign: 'right' },
+        },
       ],
     ];
 
@@ -1026,6 +1116,12 @@ function drawGroupSummaryPage(
   if (groupNoticesLoose.length > 0) {
     const r2 = drawPlatformNoticeBands(doc, groupNoticesLoose, y);
     y = r2.y;
+  }
+
+  // Pagamento parcial: aviso colado antes do total do grupo.
+  if (!deductionsApplied && deferredTotal > 0) {
+    y = ensureSpace(doc, y, 60);
+    y = drawDeferredDeductionsBand(doc, deferredTotal, y);
   }
 
   y = ensureSpace(doc, y, 50);
