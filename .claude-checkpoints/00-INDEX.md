@@ -2,9 +2,27 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-07-26**.
+> Última atualização: **2026-07-27**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 27/07 — pagamento por plataforma (filtro nos relatórios + abate opcional):** Victor
+pediu filtro por plataforma nos relatórios geral e simples; no meio da conversa apareceu o
+problema de verdade — pagando só a ANJUN, o espelho filtrado já abatia vales/perdas e o mesmo
+valor seria descontado de novo ao pagar as demais. **Construído e validado, commit `a385b43`,
+AGUARDANDO RELEASE.** Os dois relatórios abrem uma janela com chips de plataforma (todas
+marcadas = arquivo idêntico ao de antes) + botão "Descontar vales e perdas" (marcado por
+padrão); o espelho (individual/grupo/massa/seleção) ganhou o mesmo botão — desmarcado, os
+vales/perdas saem LISTADOS mas fora do total, com faixa âmbar avisando; e há aviso
+anti-desconto-duplo de quem já teve abate numa publicação do período. **Achado empírico
+importante:** a fn v10 calculava o candidato do espelho FILTRADO como o bruto enquanto o PDF
+mostrava o líquido — driver com desconto teria a nota CERTA recusada; não estourou porque só
+1 dos 98 pagamentos tem desconto e ele não tem espelho publicado. A conta virou
+`mirrorExpectedValue` (pura, 6 unit). Validado: tsc 0 · lint 0 · build · 650 unit (23+6 novos)
+· **E2E 63 novo com cliques reais lendo o conteúdo do .xlsx** · regressão 52-56/59/60/61 ok.
+**Falta (nesta ordem, com OK do Victor): migration `20260727120000` → edge fn v11 → push+Vercel.**
+Achado paralelo: `tests/57` está quebrado desde 23/07 (procura título de NF que não existe mais)
+— Victor decide se conserto. Ver `CHECKPOINT_SESSAO_2026-07-27.md`.
 
 **Sessão 26/07 — multi-erros por dia (individuais + triagem):** Victor pediu por áudio
 poder lançar 2+ erros no mesmo dia (unidade + valor juntos); o painel SUBSTITUÍA o
@@ -146,7 +164,8 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-26.md` | **Mais recente.** Multi-erros por dia (individuais + triagem): insert/edição por ID, aviso do dia, Descontar Erros soma por data (commit `40e4c6b`) · migration `20260726120000` NO REPO aguardando **push+deploy → migration** nessa ordem · 3 specs MULTI auto-detectam | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-27.md` | **Mais recente.** Filtro por plataforma nos relatórios + "Descontar vales e perdas" no espelho e nos relatórios (commit `a385b43`) · conserta furo latente da conferência de NF em espelho filtrado · **release pendente: migration `20260727120000` → fn v11 → push** · spec 57 quebrado desde 23/07 (pré-existente) | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-26.md` | Multi-erros por dia (individuais + triagem): insert/edição por ID, aviso do dia, Descontar Erros soma por data (commit `40e4c6b`) · migration `20260726120000` NO REPO aguardando **push+deploy → migration** nessa ordem · 3 specs MULTI auto-detectam | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-25.md` | Caio sem login (causa: tentativas nem chegavam no servidor; resetado de verdade no banco c/ backup) · botão de reset NUNCA funcionou (RLS DELETE sem SELECT) → RPC `driverpay_reset_driver_password` (fix `398befc`, migration em prod) · push+deploy conferidos | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-24.md` | Leva LOGGI só-líder (3 republicados + 25 membros despublicados) · 39 PIX da planilha C6 · FEATURE recebedor diferente (commit `3820842`, migration em prod, relatórios com CHAVE PIX) · backups `backup_mirror_pub_20260724`/`backup_driver_pix_20260724` | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-23.md` | App do Entregador completo + **GO-LIVE em prod** (merge main + Vercel; driver real Iago já usando) + feature despublicar espelho/resetar senha (§6). Decisões (login CPF, web-first, filtro plataforma, CNPJs) + backfill CPF 91/97 reversível | 🟢 ATIVO |
@@ -188,6 +207,7 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 - **Tela de ponto (20/07 noite, decisões do Victor):** saída < 10 min da marcação anterior = confirmação obrigatória; tela volta ao CPF 35s após registrar; GPS bloqueado = instruir sem chamar servidor; tentativa sem GPS que CHEGA no servidor continua criando bonus_block (regra mantida).
 - **Conferência de NF (26/07, decisões do Victor):** a nota é conferida NO ENVIO contra o **espelho publicado** (escopo+filtro de plataforma — provado na Fase 0), CNPJ do slot e nome do driver **ou** recebedor cadastrado; valor exige **centavo exato** (±R$ 0,02 só arredondamento); nota errada ou ilegível é **RECUSADA na hora** com o motivo exato (o driver reenvia); 3 checks verdes → **validada automaticamente**, e isso pode ser **desligado** no botão do modal "Notas recebidas" (desligado, a conferência e a recusa continuam — só a validação vira manual). `validated_by` tem FK pra `users`: auto grava NULL + `check_details.autoValidated`.
 - **RLS + DELETE (lição 25/07):** DELETE com WHERE numa tabela com RLS exige as linhas visíveis pelas policies de SELECT — tabela deny-all de leitura (ex.: `driverpay_driver_auth`) NUNCA aceita DELETE do client (0 linhas, silencioso). Operação assim = RPC SECURITY DEFINER com authz do chamador e retorno do row_count. Reset de senha do app agora é só via `driverpay_reset_driver_password`.
+- **Pagamento por plataforma (27/07, decisões do Victor):** os relatórios (geral e simples) e o espelho escolhem as **plataformas** na hora de gerar (todas marcadas = arquivo/PDF idêntico ao de antes) e têm o botão **"Descontar vales e perdas"**, marcado por padrão. Desmarcado = pagamento PARCIAL: os vales/perdas saem **listados mas fora do total** (faixa âmbar no espelho, "NÃO ABATIDO" nas colunas do Excel), pra não descontar duas vezes ao pagar as demais plataformas. Quem não tem pacote nas plataformas escolhidas **some** do relatório; a plataforma vai no nome do arquivo e na OBS do simples. O sistema **avisa** (não trava) quando alguém do escopo já teve vale/perda abatido numa publicação do período. A escolha fica gravada em `driverpay_mirror_publications.include_deductions` porque **a nota fiscal segue sempre o total impresso no espelho** — espelho sem abate ⇒ nota pelo valor cheio da plataforma.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
