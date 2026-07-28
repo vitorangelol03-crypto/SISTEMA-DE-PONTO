@@ -25,8 +25,14 @@ e **espelho POR PLATAFORMA** (`31ef70f` + migration `20260728140000` + **fn v12*
 LOGGI e depois SHOPEE dava UM espelho só (o PDF ia pro mesmo caminho e a publicação anterior
 era deletada) — agora a identidade do espelho é o **conjunto de plataformas**, com índice
 único; no app saem **2 cards com selo SOMENTE LOGGI/SHOPEE** e **2 lugares de nota no mesmo
-CNPJ** (decisão: *uma nota por espelho*). **Falta só a bateria completa (~380).**
-Ver `CHECKPOINT_SESSAO_2026-07-28.md`.
+CNPJ** (decisão: *uma nota por espelho*). **Bateria completa RODADA** (392 ✅ / 2 ❌ / 4 flaky / 23 skip, 1,2h): as 2 falhas são a
+premissa morta "Ponte Nova vazia" (PN tem 9 triagens e 14 bloqueios), a mesma que já pôs os
+specs 26.3/26.9 em skip — **não é bug**. 🚨 **Mas a bateria APAGOU 2 pontos REAIS de hoje**
+(Euder 08:14 e Ronaldo 08:16) — **restaurados** do backup com os 39 campos e os mesmos ids
+(4.680 = 4.680). **Causa não identificada** (cleanup, limpeza administrativa, deletes por
+employee_id e o wizard do spec 46 foram descartados com evidência). Funcionários reais 92→92
+e entregadores 99→99 conferidos **por id**; configurações intactas em valor (facial da
+Caratinga segue LIGADA). Ver `CHECKPOINT_SESSAO_2026-07-28.md`.
 
 **Sessão 27→28/07 — RELEASE COMPLETO do pagamento por plataforma (3/3 no ar):** com OK explícito
 do Victor. ✅ Backup duplo (`backup_mirror_pub_20260727` + `backups/2026-07-27/`) → ✅ **migration
@@ -256,6 +262,12 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
+
+- 🔴 **A bateria E2E completa pode APAGAR ponto REAL** (28/07): sumiram 2 registros de
+  funcionários de verdade, do próprio dia, e a **causa segue desconhecida**. Antes de rodar
+  a bateria: **dump COMPLETO** (registros inteiros, não contagem — com contagem não dá pra
+  restaurar) e **comparação registro a registro** depois; de preferência fora do expediente.
+  Modelo pronto em `backups/2026-07-28-pre-bateria/`.
 
 - 🟠 **Segurança driverpay:** exclusividade "2626" é client-side; RLS = `company_id OR sub IN (9999,2626)`; RPCs sem authz do chamador.
 - 🟡 Bucket `driverpay-discount-proofs` público; sem trava server-side de `driverpay_periods`; `driverPayCalc.ts` sem termo Zapex.
