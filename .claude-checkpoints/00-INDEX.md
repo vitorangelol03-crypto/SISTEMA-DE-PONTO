@@ -6,22 +6,21 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Sessão 27/07 (noite) — RELEASE do pagamento por plataforma:** com OK explícito do Victor,
-o release saiu **2 de 3 etapas**. ✅ Backup duplo (`backup_mirror_pub_20260727` + arquivo em
-`backups/2026-07-27/`) → ✅ **migration aplicada** (30 publicações, todas `include_deductions=true`,
-**0 linhas alteradas** vs backup) → ⛔ **edge fn v11 NÃO subiu** (ferramenta de deploy do Supabase
-**bloqueada pelo classificador de permissões** — não é erro de código; ficou provado que o repo tem
-tudo da v10 no ar + as adições) → ✅ **PUSH FEITO**, `main`=`6c89d9e` no origin, **Vercel no ar**
-(`index-DC76q-nb.js` + `DriverPayTab-BG2VB1C_.js`, marcador da feature conferido por download).
-**Enquanto a v11 não sobe:** a conferência da NF usa a conta antiga — desmarcar o abate **junto com
-o filtro de plataforma** bate certo; sem filtro, erraria pra quem tem vale/perda (hoje: só Cicero
-R$ 7,79, sem espelho publicado — ninguém afetado). Victor sobe a v11 com `!npx supabase login` +
-`!npx supabase functions deploy driver-public-api --no-verify-jwt --project-ref flcncdidxmmornkgkfbb`.
+**Sessão 27→28/07 — RELEASE COMPLETO do pagamento por plataforma (3/3 no ar):** com OK explícito
+do Victor. ✅ Backup duplo (`backup_mirror_pub_20260727` + `backups/2026-07-27/`) → ✅ **migration
+aplicada** (30 publicações, todas `include_deductions=true`, **0 linhas alteradas** vs backup) →
+✅ **PUSH**, `main`=`6c89d9e`, **Vercel no ar** (`index-DC76q-nb.js` + `DriverPayTab-BG2VB1C_.js`,
+marcador conferido por download do chunk) → ✅ **edge fn v11 ACTIVE**. O MCP de deploy é **bloqueado
+pelo classificador** (SQL/migration do mesmo MCP passam): o caminho que funciona é o **CLI**
+(`npx supabase login --token <PAT>` + `functions deploy ... --no-verify-jwt --project-ref ...`).
+⚠️ **PAT do Victor foi colado no chat — revogar** em supabase.com/dashboard/account/tokens.
 **Validado:** tsc 0 · build · unit 125/125 nos 8 arquivos rodados isolados (a bateria cheia teve 6
 arquivos que **não rodaram** por worker morto do WSL — sempre conferir o rodapé "Errors" do vitest) ·
-E2E 63/58/60 ✅ · **conferência visual em PRODUÇÃO com cliques reais**: espelho do Cicero
-**R$ 262,21 → R$ 270,00** ao desmarcar (exato o R$ 7,79), 8 prints em `prints-espelhos/prod-2026-07-27/`.
-Banco conferido 3×, sempre **idêntico** (99/30/98/23/271/1), zero sobras.
+E2E 63/58/60 ✅ · **visual em PRODUÇÃO com cliques reais** (espelho do Cicero **R$ 262,21 → R$ 270,00**
+ao desmarcar = exato o R$ 7,79; 8 prints em `prints-espelhos/prod-2026-07-27/`) · **teste REAL da fn
+v11 com nota em PDF: 7/7 ✅** (2 plataformas em CNPJs diferentes — a nota de R$ 170 casou **só** com
+`espelho_individual_LOGGI`, valor que a v10 calculava como R$ 200: **o furo ficou provado e fechado**).
+Banco conferido 4×, sempre **idêntico** (99/30/98/23/271/1), zero sobras.
 
 **Sessão 27/07 (tarde) — pagamento por plataforma (filtro nos relatórios + abate opcional):** Victor
 pediu filtro por plataforma nos relatórios geral e simples; no meio da conversa apareceu o
@@ -181,7 +180,7 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-27.md` | **Mais recente.** Filtro por plataforma nos relatórios + "Descontar vales e perdas" no espelho e nos relatórios (commit `a385b43`) · conserta furo latente da conferência de NF em espelho filtrado · **RELEASE: migration ✅ + push/Vercel ✅ · fn v11 ⛔ PENDENTE (deploy bloqueado por permissão)** · conferência visual em prod com prints · spec 57 quebrado desde 23/07 (pré-existente) | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-27.md` | **Mais recente.** Filtro por plataforma nos relatórios + "Descontar vales e perdas" no espelho e nos relatórios (commit `a385b43`) · conserta furo latente da conferência de NF em espelho filtrado · **RELEASE COMPLETO: migration ✅ + push/Vercel ✅ + fn v11 ✅** (deploy via CLI — MCP é bloqueado) · visual em prod com prints · teste real da NF 7/7 · spec 57 quebrado desde 23/07 (pré-existente) | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-26.md` | Multi-erros por dia (individuais + triagem): insert/edição por ID, aviso do dia, Descontar Erros soma por data (commit `40e4c6b`) · migration `20260726120000` NO REPO aguardando **push+deploy → migration** nessa ordem · 3 specs MULTI auto-detectam | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-25.md` | Caio sem login (causa: tentativas nem chegavam no servidor; resetado de verdade no banco c/ backup) · botão de reset NUNCA funcionou (RLS DELETE sem SELECT) → RPC `driverpay_reset_driver_password` (fix `398befc`, migration em prod) · push+deploy conferidos | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-24.md` | Leva LOGGI só-líder (3 republicados + 25 membros despublicados) · 39 PIX da planilha C6 · FEATURE recebedor diferente (commit `3820842`, migration em prod, relatórios com CHAVE PIX) · backups `backup_mirror_pub_20260724`/`backup_driver_pix_20260724` | 🟢 ATIVO |

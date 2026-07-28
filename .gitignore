@@ -45,3 +45,6 @@ android/app/src/main/assets/public/
 android/keystore/
 *.jks
 prints-espelhos/
+
+# lixo do supabase CLI
+supabase/.temp/
