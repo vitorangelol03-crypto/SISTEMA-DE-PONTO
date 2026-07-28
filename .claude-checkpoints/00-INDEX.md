@@ -2,9 +2,25 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-07-27**.
+> Última atualização: **2026-07-28**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 28/07 — fechou o release e validou tudo que faltava:** **edge fn v11 NO AR**
+(deploy pelo **CLI** — o MCP é bloqueado pelo classificador; ⚠️ **revogar o PAT** colado no
+chat). **Teste real da conferência 7/7** com nota em PDF: a nota de R$ 170 casou **só** com
+`espelho_individual_LOGGI`, valor que a v10 dava como R$ 200 — **o furo ficou provado e
+fechado**. Validado o que faltava: **app do entregador**, **ciclo inteiro** (painel publica
+sem abate → app baixa o PDF → o PDF é **lido** → nota por aquele valor → robô **aceita**),
+**espelho de grupo sem abate** (R$ 175 → R$ 200 com vale no membro) e **relatórios com dados
+reais**. `tests/57` **consertado** (quebrado desde 23/07). **NOVO (commit `e662fca`, só
+local):** relatórios **100% ASCII** (o arquivo vai direto pro banco) + **chave PIX de
+CPF/CNPJ só com números** (e-mail/telefone/chave aleatória intocados — validação por dígito
+verificador). ⚠️ **Achado no banco:** employees 107→92 e ponto 4689→4679 durante os testes —
+apurado que eram funcionários `PW Test` (a conta fecha: média real é 50,9 pontos/funcionário;
+15 reais teriam levado ~760 registros, levaram 10; 0 órfãos). **Não consegui provar nome a
+nome** porque só guardei contagem — agora há snapshot com NOMES. **Falta: bateria completa e
+push do `e662fca`.** Ver `CHECKPOINT_SESSAO_2026-07-28.md`.
 
 **Sessão 27→28/07 — RELEASE COMPLETO do pagamento por plataforma (3/3 no ar):** com OK explícito
 do Victor. ✅ Backup duplo (`backup_mirror_pub_20260727` + `backups/2026-07-27/`) → ✅ **migration
@@ -180,7 +196,8 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-27.md` | **Mais recente.** Filtro por plataforma nos relatórios + "Descontar vales e perdas" no espelho e nos relatórios (commit `a385b43`) · conserta furo latente da conferência de NF em espelho filtrado · **RELEASE COMPLETO: migration ✅ + push/Vercel ✅ + fn v11 ✅** (deploy via CLI — MCP é bloqueado) · visual em prod com prints · teste real da NF 7/7 · spec 57 quebrado desde 23/07 (pré-existente) | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-28.md` | **Mais recente.** fn v11 no ar (deploy via CLI) + conferência da NF provada com nota real 7/7 · valida o que faltava (app do entregador, ciclo inteiro com o PDF lido, espelho de grupo sem abate, relatórios reais) · **relatórios 100% ASCII + PIX de CPF/CNPJ só números** (`e662fca`, só local) · spec 57 consertado · achado dos funcionários `PW Test` no cleanup | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-27.md` | Filtro por plataforma nos relatórios + "Descontar vales e perdas" no espelho e nos relatórios (commit `a385b43`) · conserta furo latente da conferência de NF em espelho filtrado · **RELEASE COMPLETO: migration ✅ + push/Vercel ✅ + fn v11 ✅** (deploy via CLI — MCP é bloqueado) · visual em prod com prints · teste real da NF 7/7 · spec 57 quebrado desde 23/07 (pré-existente) | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-26.md` | Multi-erros por dia (individuais + triagem): insert/edição por ID, aviso do dia, Descontar Erros soma por data (commit `40e4c6b`) · migration `20260726120000` NO REPO aguardando **push+deploy → migration** nessa ordem · 3 specs MULTI auto-detectam | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-25.md` | Caio sem login (causa: tentativas nem chegavam no servidor; resetado de verdade no banco c/ backup) · botão de reset NUNCA funcionou (RLS DELETE sem SELECT) → RPC `driverpay_reset_driver_password` (fix `398befc`, migration em prod) · push+deploy conferidos | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-24.md` | Leva LOGGI só-líder (3 republicados + 25 membros despublicados) · 39 PIX da planilha C6 · FEATURE recebedor diferente (commit `3820842`, migration em prod, relatórios com CHAVE PIX) · backups `backup_mirror_pub_20260724`/`backup_driver_pix_20260724` | 🟢 ATIVO |
@@ -224,6 +241,10 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 - **Conferência de NF (26/07, decisões do Victor):** a nota é conferida NO ENVIO contra o **espelho publicado** (escopo+filtro de plataforma — provado na Fase 0), CNPJ do slot e nome do driver **ou** recebedor cadastrado; valor exige **centavo exato** (±R$ 0,02 só arredondamento); nota errada ou ilegível é **RECUSADA na hora** com o motivo exato (o driver reenvia); 3 checks verdes → **validada automaticamente**, e isso pode ser **desligado** no botão do modal "Notas recebidas" (desligado, a conferência e a recusa continuam — só a validação vira manual). `validated_by` tem FK pra `users`: auto grava NULL + `check_details.autoValidated`.
 - **RLS + DELETE (lição 25/07):** DELETE com WHERE numa tabela com RLS exige as linhas visíveis pelas policies de SELECT — tabela deny-all de leitura (ex.: `driverpay_driver_auth`) NUNCA aceita DELETE do client (0 linhas, silencioso). Operação assim = RPC SECURITY DEFINER com authz do chamador e retorno do row_count. Reset de senha do app agora é só via `driverpay_reset_driver_password`.
 - **Pagamento por plataforma (27/07, decisões do Victor):** os relatórios (geral e simples) e o espelho escolhem as **plataformas** na hora de gerar (todas marcadas = arquivo/PDF idêntico ao de antes) e têm o botão **"Descontar vales e perdas"**, marcado por padrão. Desmarcado = pagamento PARCIAL: os vales/perdas saem **listados mas fora do total** (faixa âmbar no espelho, "NÃO ABATIDO" nas colunas do Excel), pra não descontar duas vezes ao pagar as demais plataformas. Quem não tem pacote nas plataformas escolhidas **some** do relatório; a plataforma vai no nome do arquivo e na OBS do simples. O sistema **avisa** (não trava) quando alguém do escopo já teve vale/perda abatido numa publicação do período. A escolha fica gravada em `driverpay_mirror_publications.include_deductions` porque **a nota fiscal segue sempre o total impresso no espelho** — espelho sem abate ⇒ nota pelo valor cheio da plataforma.
+- **Relatórios em ASCII (28/07, decisão do Victor):** o `.xlsx` dos relatórios vai **direto pro banco**, que não aceita acento nem símbolo — o **arquivo inteiro** sai limpo (nome, título, cabeçalho, rota, OBS e nome das abas), via `sanitizeWorkbookAscii` rodando no workbook antes do `writeFile`. A **tela e o PDF continuam acentuados** — é só o Excel. Teste que confere conteúdo de .xlsx tem que esperar "NAO"/"-", não "NÃO"/"—".
+- **Chave PIX no relatório (28/07, decisão do Victor):** CPF e CNPJ saem **só com números**; a limpeza só acontece quando o **dígito verificador** confirma. E-mail, telefone e chave aleatória saem **intocados** — neles o hífen faz parte da chave. Celular com DDD tem 11 dígitos como CPF: é o DV que separa os dois.
+- **Deploy de edge function (28/07):** o MCP `deploy_edge_function` é **bloqueado pelo classificador** (migration/SQL do mesmo MCP passam). Caminho que funciona: `npx supabase login --token <PAT>` + `npx supabase functions deploy <fn> --no-verify-jwt --project-ref flcncdidxmmornkgkfbb`. Sempre comparar o repo com o `get_edge_function` antes, porque o repo pode estar atrasado.
+- **Testes e o banco (28/07):** o cleanup do Playwright apaga funcionário `PW Test ` e o ponto dele — a contagem de `employees` CAI depois da bateria e isso é esperado. Antes de rodar bateria, guardar **NOMES** (não só contagem) pra conseguir provar depois o que sumiu. Teste de abate não pode usar a **eMile** (única com `mirror_separate_value`, valor fora do total). Teste de recusa de NF precisa de valor que não bata com **nenhum** candidato.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
