@@ -13,6 +13,7 @@
  * Nada aqui toca banco: recebe dados prontos do servico e devolve estruturas de
  * apresentacao. Toda escrita passa pelo servico driverPay.ts (que faz ensurePerm + RLS).
  */
+import { validateCPF } from '../../utils/validation';
 import type { Company } from '../../services/database';
 import type {
   Driver,
@@ -685,6 +686,61 @@ export function buildReportRows(rows: DriverRowData[], platforms: DriverPlatform
 /** Remove acentos (coluna A do relatório simples pede nome do líder SEM acento). */
 export function stripAccents(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/**
+ * Texto 100% ASCII para os relatórios (decisão do Victor, 28/07): o arquivo é jogado
+ * direto no banco, que não aceita acento nem símbolo. Além dos acentos, troca os
+ * símbolos "bonitos" que o Excel gera (travessão, aspas curvas, bullet, nbsp) pelos
+ * equivalentes simples, e derruba o que sobrar de fora da tabela ASCII.
+ */
+export function asciiSafe(s: string): string {
+  return stripAccents(String(s ?? ''))
+    .replace(/[\u2010-\u2015\u2212]/g, '-')                 // hifens/travessoes/menos unicode
+    .replace(/[\u2018\u2019\u201B]/g, "'")                  // aspas simples curvas
+    .replace(/[\u201C\u201D\u201F]/g, '"')                  // aspas duplas curvas
+    .replace(/\u2026/g, '...')                              // reticencias
+    .replace(/[\u00B7\u2022]/g, '-')                        // ponto medio / bullet
+    .replace(/[\u00A0\u2007\u2009\u202F\u200B]/g, ' ')      // espacos nao-quebraveis
+    .replace(/\u00BA/g, 'o').replace(/\u00AA/g, 'a')         // simbolos ordinais
+    .replace(/\u20AC/g, 'EUR').replace(/\u00A9/g, '(c)').replace(/\u00AE/g, '(r)')
+    .replace(/[^\x20-\x7E\n\r\t]/g, '');                    // o que sobrou de nao-ASCII cai fora
+}
+
+/** CNPJ pelo dígito verificador (Mod 11) — irmão do validateCPF de utils/validation. */
+export function isValidCNPJ(digits: string): boolean {
+  if (!/^\d{14}$/.test(digits) || /^(\d)\1{13}$/.test(digits)) return false;
+  const calc = (base: string, pesoInicial: number): number => {
+    let peso = pesoInicial;
+    let soma = 0;
+    for (const ch of base) {
+      soma += Number(ch) * peso;
+      peso = peso === 2 ? 9 : peso - 1;
+    }
+    const resto = soma % 11;
+    return resto < 2 ? 0 : 11 - resto;
+  };
+  const d1 = calc(digits.slice(0, 12), 5);
+  const d2 = calc(digits.slice(0, 13), 6);
+  return d1 === Number(digits[12]) && d2 === Number(digits[13]);
+}
+
+/**
+ * Chave PIX como o banco quer (decisão do Victor, 28/07): CPF e CNPJ saem SÓ com os
+ * números, sem ponto, traço ou barra.
+ *
+ * Só mexe quando o dígito verificador confirma que é mesmo CPF ou CNPJ. E-mail,
+ * telefone e chave aleatória saem intocados de propósito — nelas o hífen faz parte
+ * da chave, e limpar quebraria o pagamento. Celular com DDD também tem 11 dígitos:
+ * é a validação do DV que impede confundir com CPF.
+ */
+export function sanitizePixKey(key: string | null | undefined): string {
+  const original = String(key ?? '').trim();
+  if (!original) return '';
+  const digits = original.replace(/\D/g, '');
+  if (digits.length === 11 && validateCPF(digits)) return digits;
+  if (digits.length === 14 && isValidCNPJ(digits)) return digits;
+  return original;
 }
 
 /** Uma unidade de recebimento do relatório: grupo (recebedor = líder) ou avulso (ele mesmo). */

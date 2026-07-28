@@ -223,10 +223,18 @@ test.describe('Pagamentos Driver — jornada completa de edições', () => {
     await closeModal(page);
 
     // ── 9. NF e Espelho conferido (toggles) ────────────────────────────────
-    await driverRow(page).getByTitle('Marcar nota fiscal recebida').click();
-    await expect(driverRow(page).getByTitle('Nota fiscal recebida')).toBeVisible({ timeout: 10_000 });
-    await driverRow(page).getByTitle('Nota fiscal recebida').click();
-    await expect(driverRow(page).getByTitle('Marcar nota fiscal recebida')).toBeVisible({ timeout: 10_000 });
+    // 2026-07-28: a coluna NF mudou em 23/07 (virou "validadas/esperadas") e o título
+    // antigo 'Marcar nota fiscal recebida' deixou de existir — era o que quebrava este
+    // spec. Hoje o botão tem DOIS títulos possíveis: com CNPJ esperado mostra o contador,
+    // sem CNPJ esperado mostra o círculo manual. O estado vem do aria-pressed nos dois.
+    const nfBotao = driverRow(page).getByRole('button', {
+      name: /NF: notas validadas|Nota fiscal recebida|Sem CNPJ esperado/,
+    }).first();
+    await expect(nfBotao).toHaveAttribute('aria-pressed', 'false', { timeout: 10_000 });
+    await nfBotao.click();
+    await expect(nfBotao).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+    await nfBotao.click();
+    await expect(nfBotao).toHaveAttribute('aria-pressed', 'false', { timeout: 10_000 });
     await driverRow(page).getByTitle('Marcar espelho conferido').click();
     await expect(driverRow(page).getByTitle('Espelho conferido (bate com a planilha)')).toBeVisible({
       timeout: 10_000,

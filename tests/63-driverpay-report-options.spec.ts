@@ -232,8 +232,10 @@ test.describe('Pagamentos Driver — filtro de plataforma e abate nos relatório
     await expect(modal(page).getByTestId('report-deductions-box')).toContainText('NÃO abate');
     const semAbate = await downloadSheet(page);
     const textoSemAbate = flat(semAbate.rows);
-    expect(textoSemAbate).toContain('vales e perdas NÃO foram abatidos');
-    expect(textoSemAbate).toContain('NÃO ABATIDO'); // rótulo das colunas DESCONTO/VALE
+    // 28/07: o .xlsx sai 100% ASCII (o arquivo vai direto pro banco, que não aceita
+    // acento) — por isso "NAO", sem til. A tela e o PDF continuam acentuados.
+    expect(textoSemAbate).toContain('vales e perdas NAO foram abatidos');
+    expect(textoSemAbate).toContain('NAO ABATIDO'); // rótulo das colunas DESCONTO/VALE
     // sem abater o vale, o total do driver é o bruto da plataforma: 100
     const linhaSemAbate = rowOf(semAbate.rows, DRIVER).join(' | ');
     expect(linhaSemAbate).toContain('100');
@@ -250,7 +252,8 @@ test.describe('Pagamentos Driver — filtro de plataforma e abate nos relatório
     expect(simples.filename).toContain(platB.name);
     const linhaSimples = rowOf(simples.rows, DRIVER);
     expect(linhaSimples.join(' | ')).toContain('100'); // valor cheio da plataforma
-    expect(linhaSimples.join(' | ')).toContain(`${PERIOD} — ${platB.name}`); // OBS leva a plataforma
+    // OBS leva a plataforma. O travessão vira hífen simples no .xlsx (regra ASCII de 28/07).
+    expect(linhaSimples.join(' | ')).toContain(`${PERIOD} - ${platB.name}`);
     await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 15_000 });
 
     // ═══ 5. Espelho individual: desmarcar o abate muda o TOTAL A RECEBER ═════

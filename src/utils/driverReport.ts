@@ -21,6 +21,7 @@
 import * as XLSX from 'xlsx-js-style';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { asciiSafe, sanitizePixKey } from '../components/driverpay/driverPayShared';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -308,7 +309,7 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
     line[colDiscount] = row.discount;
     line[colVale] = row.vale;
     line[colToReceive] = row.totalToReceive;
-    line[colPix] = row.pixKey ?? '';
+    line[colPix] = sanitizePixKey(row.pixKey);
     data[R_DATA + j] = line;
   });
 
@@ -623,6 +624,40 @@ function buildGroupSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLSX.
  * + aba "Por Grupo" (quando houver pelo menos um grupo nomeado). Dispara o download
  * via `XLSX.writeFile` (browser), idêntico a `exportC6PaymentSheet`.
  */
+/**
+ * Deixa o .xlsx inteiro em ASCII antes de salvar (decisão do Victor, 28/07: o arquivo
+ * vai direto pro banco, que não aceita acento nem símbolo).
+ *
+ * Roda no WORKBOOK, não campo a campo: pega célula de dado, título, cabeçalho, rodapé
+ * e até o nome das abas — inclusive o que for acrescentado depois, sem ninguém precisar
+ * lembrar de limpar. Fórmula (`.f`) fica intocada de propósito.
+ */
+function sanitizeWorkbookAscii(workbook: XLSX.WorkBook): void {
+  for (const sheetName of workbook.SheetNames) {
+    const ws = workbook.Sheets[sheetName];
+    if (!ws) continue;
+    for (const addr of Object.keys(ws)) {
+      if (addr.startsWith('!')) continue;
+      const cell = ws[addr] as XLSX.CellObject & { w?: string; h?: string; r?: string };
+      if (!cell) continue;
+      if (typeof cell.v === 'string') cell.v = asciiSafe(cell.v);
+      if (typeof cell.w === 'string') cell.w = asciiSafe(cell.w);
+      if (typeof cell.h === 'string') cell.h = asciiSafe(cell.h);
+      delete cell.r; // rich text: recriado pelo writer a partir de .v
+    }
+  }
+  // nome das abas também faz parte do arquivo
+  const limpos = workbook.SheetNames.map((n) => asciiSafe(n));
+  limpos.forEach((novo, i) => {
+    const antigo = workbook.SheetNames[i];
+    if (novo !== antigo) {
+      workbook.Sheets[novo] = workbook.Sheets[antigo];
+      delete workbook.Sheets[antigo];
+      workbook.SheetNames[i] = novo;
+    }
+  });
+}
+
 export async function exportDriverGeneralReportExcel(
   rows: DriverReportRow[],
   meta: DriverReportMeta,
@@ -641,7 +676,9 @@ export async function exportDriverGeneralReportExcel(
     XLSX.utils.book_append_sheet(workbook, groupSheet, 'Por Grupo');
   }
 
-  const filename = `Relatorio_Geral_Driver_${sanitizeForFile(meta.periodLabel)}${platformFilePart(meta)}.xlsx`;
+  sanitizeWorkbookAscii(workbook);
+  const filename = asciiSafe(
+    `Relatorio_Geral_Driver_${sanitizeForFile(meta.periodLabel)}${platformFilePart(meta)}.xlsx`);
   XLSX.writeFile(workbook, filename, { bookType: 'xlsx', type: 'binary', cellStyles: true });
 }
 
@@ -696,7 +733,7 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
     const line = blank();
     line[0] = r.name;
     line[1] = r.total;
-    line[2] = r.pix ?? '';
+    line[2] = sanitizePixKey(r.pix);
     line[3] = obs;
     data[R_DATA + j] = line;
   });
@@ -783,7 +820,9 @@ export async function exportDriverSimpleReportExcel(
 ): Promise<void> {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, buildSimpleSheet(rows, meta), 'Relatório Simples');
-  const filename = `Relatorio_Simples_Driver_${sanitizeForFile(meta.periodLabel)}${platformFilePart(meta)}.xlsx`;
+  sanitizeWorkbookAscii(workbook);
+  const filename = asciiSafe(
+    `Relatorio_Simples_Driver_${sanitizeForFile(meta.periodLabel)}${platformFilePart(meta)}.xlsx`);
   XLSX.writeFile(workbook, filename, { bookType: 'xlsx', type: 'binary', cellStyles: true });
 }
 
