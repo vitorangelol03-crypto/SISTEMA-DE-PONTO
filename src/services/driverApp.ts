@@ -84,11 +84,20 @@ export interface DriverMirror {
   viewedAt: string | null;
 }
 
-/** Um "lugar de anexo" (CNPJ) que o driver deve enviar nota no período. */
+/**
+ * Um "lugar de anexo" que o driver deve enviar nota no período.
+ *
+ * 28/07: com pagamento por plataforma existe um slot por (ESPELHO × CNPJ) — pagando
+ * LOGGI hoje e SHOPEE depois, são duas notas mesmo caindo no mesmo CNPJ.
+ */
 export interface NfSlot {
   emitterId: string;
   cnpj: string;
   label: string;
+  /** Espelho que pediu esta nota ('' = quinzena inteira; null = sem espelho publicado). */
+  mirrorKey: string | null;
+  /** Rótulo pro driver: "SOMENTE LOGGI" / "Quinzena completa". */
+  mirrorLabel: string;
   /** notas NÃO rejeitadas enviadas neste CNPJ (pendentes/validadas). */
   sent: number;
   /** notas rejeitadas (pediram outra). */
@@ -127,7 +136,12 @@ export function driverNfList(periodId: string, token: string): Promise<{ files: 
   return callDriverApi<{ files: NfFile[] }>('nf-list', { periodId }, token);
 }
 export function driverNfUpload(
-  input: { periodId: string; emitterId: string; contentType: string; fileBase64: string; filename?: string },
+  input: {
+    periodId: string; emitterId: string; contentType: string; fileBase64: string;
+    filename?: string;
+    /** De qual espelho é esta nota (28/07). Omitido = sem espelho publicado. */
+    mirrorKey?: string | null;
+  },
   token: string,
 ): Promise<{ ok: boolean; validated?: boolean }> {
   // Nota recusada pela conferência automática volta como HTTP 422 → callDriverApi

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FileText, Eye, Download, Printer, Loader2, AlarmClock, Send, Trash2, CheckCircle2 } from 'lucide-react';
+import { mirrorPlatformKey } from './driverPayShared';
 import toast from 'react-hot-toast';
 import {
   downloadDriverMirrorPdf,
@@ -64,6 +65,12 @@ interface DriverMirrorPreviewDialogProps {
   onPublish?: (allowed: string[] | null, includeDeductions: boolean) => Promise<void>;
   /** Já existe publicação no app pro destinatário deste espelho (individual/líder do grupo). */
   alreadyPublished?: boolean;
+  /**
+   * Conjuntos de plataformas JA publicados deste destinatario (28/07). Com pagamento por
+   * plataforma o "ja publicado" e por ESPELHO: com a LOGGI no ar, abrir o da SHOPEE tem
+   * que oferecer "Publicar", nao "Republicar" — senao nao da pra publicar o segundo.
+   */
+  publishedKeys?: ReadonlySet<string>;
   /** Despublicar (tirar do app) — só faz sentido pro destinatário único (individual/grupo). */
   onUnpublish?: () => Promise<void>;
   /** Reconstrói o espelho com o filtro de plataforma (chips) + o abate — prévia e PDF seguem. */
@@ -399,6 +406,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   userId,
   onPublish,
   alreadyPublished,
+  publishedKeys,
   onUnpublish,
   onRebuild,
   alreadyDeducted,
@@ -414,6 +422,15 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     () => (selectedPlatforms.size >= availablePlatforms.length ? null : availablePlatforms.filter((p) => selectedPlatforms.has(p))),
     [selectedPlatforms, availablePlatforms],
   );
+  /**
+   * Este ESPELHO (o conjunto de plataformas marcado agora) já está no app? Quando o
+   * chamador passa `publishedKeys`, manda ele; senão cai no `alreadyPublished` antigo.
+   */
+  const esteEspelhoPublicado = useMemo(() => {
+    if (!publishedKeys) return !!alreadyPublished;
+    return publishedKeys.has(mirrorPlatformKey(allowedFromSelection));
+  }, [publishedKeys, alreadyPublished, allowedFromSelection]);
+
   // Pagamento PARCIAL por plataforma (2026-07-27, decisão do Victor): marcado (padrão) =
   // abate vales/perdas como sempre; desmarcado = eles saem listados mas fora do total, pra
   // não descontar de novo no pagamento das demais plataformas.
@@ -621,10 +638,10 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium inline-flex items-center gap-2 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              {alreadyPublished ? 'Republicar (atualiza)' : 'Publicar no app'}
+              {esteEspelhoPublicado ? 'Republicar (atualiza)' : 'Publicar no app'}
             </button>
           )}
-          {onUnpublish && alreadyPublished && (
+          {onUnpublish && esteEspelhoPublicado && (
             <button
               type="button"
               onClick={handleUnpublish}
@@ -640,7 +657,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     >
       <div className="space-y-4">
         {/* ── Já publicado no app: aviso + o que os botões fazem ── */}
-        {alreadyPublished && (
+        {esteEspelhoPublicado && (
           <div className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-md px-3 py-2 text-sm text-green-800">
             <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <span>

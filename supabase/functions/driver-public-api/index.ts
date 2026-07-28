@@ -266,8 +266,14 @@ function extFromType(t: string): string {
   return 'jpg';
 }
 
-// Lugares de anexo do driver no periodo: 1 por CNPJ que fatura alguma plataforma
-// com pacotes>0 dele naquele periodo. `sent` = quantas notas ele ja mandou naquele CNPJ.
+// Lugares de anexo do driver no periodo.
+//
+// 28/07 (decisao do Victor "uma nota por espelho — se tem 2 espelhos, 2 notas"): quando
+// ha espelho PUBLICADO, cada espelho pede a sua nota, um slot por (espelho x CNPJ). Assim,
+// pagando LOGGI hoje e SHOPEE depois, o driver manda uma nota pra cada — mesmo os dois
+// caindo no MESMO CNPJ (Shopee/Anjun/Loggi compartilham 11.802.464/0001-38).
+// Um espelho da quinzena inteira que envolve 2 CNPJs continua pedindo 2 notas, como antes.
+// SEM espelho publicado, vale a regra antiga: um slot por CNPJ com pacote no periodo.
 async function nfSlots(req: Request, body: Body): Promise<Response> {
   const claims = await claimsFromRequest(req, body);
   if (!claims) return json({ error: 'Sessao invalida' }, 401);
@@ -295,39 +301,89 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
       .select('platform_name, packages').in('payment_id', payIds);
     platformNames = [...new Set((pks ?? []).filter((p) => (p.packages ?? 0) > 0).map((p) => p.platform_name))];
   }
+  if (platformNames.length === 0) return json({ slots: [] });
 
-  let emitterIds: string[] = [];
-  if (platformNames.length) {
-    const { data: plats } = await supabase.from('driverpay_platforms')
-      .select('name, nota_emitter_id').eq('company_id', claims.company_id).in('name', platformNames);
-    emitterIds = [...new Set((plats ?? []).map((p) => p.nota_emitter_id).filter(Boolean))] as string[];
-  }
+  const { data: plats } = await supabase.from('driverpay_platforms')
+    .select('name, nota_emitter_id').eq('company_id', claims.company_id).in('name', platformNames);
+  const emitterOf = new Map((plats ?? []).map((p) => [p.name as string, p.nota_emitter_id as string | null]));
+
+  const emitterIds = [...new Set((plats ?? []).map((p) => p.nota_emitter_id).filter(Boolean))] as string[];
   if (emitterIds.length === 0) return json({ slots: [] });
 
   const { data: emitters } = await supabase.from('driverpay_nota_emitters')
     .select('id, cnpj, label').in('id', emitterIds).eq('active', true).order('sort_order', { ascending: true });
+  const emitterById = new Map((emitters ?? []).map((e) => [e.id as string, e]));
+
+  // Espelhos publicados pra ESTE driver no periodo (o driver e quem recebe: no grupo,
+  // so o lider tem publicacao).
+  const { data: pubs } = await supabase.from('driverpay_mirror_publications')
+    .select('platform_key, platform_filter, delivered_at')
+    .eq('driver_id', claims.driver_id).eq('period_id', periodId)
+    .order('delivered_at', { ascending: true });
 
   const { data: files } = await supabase.from('driverpay_nota_fiscal_files')
-    .select('nota_emitter_id, status, reject_reason, uploaded_at')
+    .select('nota_emitter_id, status, reject_reason, uploaded_at, mirror_platform_key')
     .eq('driver_id', claims.driver_id).eq('period_id', periodId)
     .order('uploaded_at', { ascending: true });
-  // sent = notas NAO rejeitadas. Rejeitada nao conta (reabre o slot pro driver reenviar);
-  // guarda o motivo da ultima rejeicao pra mostrar "recusada: <motivo>, envie outra".
+
+  // Contagem por SLOT (espelho + CNPJ). Nota antiga (mirror_platform_key NULL) conta no
+  // slot daquele CNPJ de qualquer espelho — senao quem ja mandou antes desta mudanca
+  // apareceria devendo nota.
   const sent: Record<string, number> = {};
   const rejected: Record<string, number> = {};
   const rejectReason: Record<string, string | null> = {};
-  for (const f of files ?? []) {
+  const slotKey = (mirrorKey: string | null, emitterId: string) => `${mirrorKey ?? '*'}|${emitterId}`;
+  const bump = (key: string, f: { status: string; reject_reason: string | null }) => {
     if (f.status === 'rejeitada') {
-      rejected[f.nota_emitter_id] = (rejected[f.nota_emitter_id] ?? 0) + 1;
-      rejectReason[f.nota_emitter_id] = f.reject_reason ?? null; // ordem asc -> fica a mais recente
+      rejected[key] = (rejected[key] ?? 0) + 1;
+      rejectReason[key] = f.reject_reason ?? null; // ordem asc -> fica a mais recente
     } else {
-      sent[f.nota_emitter_id] = (sent[f.nota_emitter_id] ?? 0) + 1;
+      sent[key] = (sent[key] ?? 0) + 1;
     }
+  };
+
+  const temEspelho = (pubs ?? []).length > 0;
+
+  // Monta os slots: um por (espelho, CNPJ) quando ha espelho; senao um por CNPJ.
+  interface SlotOut {
+    emitterId: string; cnpj: string; label: string;
+    mirrorKey: string | null; mirrorLabel: string;
+    sent: number; rejected: number; rejectReason: string | null;
   }
-  const slots = (emitters ?? []).map((e) => ({
-    emitterId: e.id, cnpj: e.cnpj, label: e.label,
-    sent: sent[e.id] ?? 0, rejected: rejected[e.id] ?? 0, rejectReason: rejectReason[e.id] ?? null,
-  }));
+  const slots: SlotOut[] = [];
+  const push = (emitterId: string, mirrorKey: string | null, mirrorLabel: string) => {
+    const em = emitterById.get(emitterId);
+    if (!em) return;
+    const k = slotKey(mirrorKey, emitterId);
+    const kLegado = slotKey(null, emitterId);
+    slots.push({
+      emitterId, cnpj: em.cnpj as string, label: em.label as string,
+      mirrorKey, mirrorLabel,
+      sent: (sent[k] ?? 0) + (mirrorKey ? (sent[kLegado] ?? 0) : 0),
+      rejected: rejected[k] ?? 0,
+      rejectReason: rejectReason[k] ?? null,
+    });
+  };
+
+  for (const f of files ?? []) {
+    bump(slotKey((f.mirror_platform_key as string | null) ?? null, f.nota_emitter_id as string), {
+      status: f.status as string, reject_reason: (f.reject_reason as string | null) ?? null,
+    });
+  }
+
+  if (temEspelho) {
+    for (const pub of pubs ?? []) {
+      const filtro = Array.isArray(pub.platform_filter) && pub.platform_filter.length
+        ? (pub.platform_filter as string[]) : null;
+      const doEspelho = (filtro ?? platformNames).filter((n) => platformNames.includes(n));
+      const cnpjsDoEspelho = [...new Set(doEspelho.map((n) => emitterOf.get(n)).filter(Boolean))] as string[];
+      const label = filtro ? `SOMENTE ${filtro.join(' + ').toUpperCase()}` : 'Quinzena completa';
+      for (const emitterId of cnpjsDoEspelho) push(emitterId, (pub.platform_key as string) ?? '', label);
+    }
+  } else {
+    for (const emitterId of emitterIds) push(emitterId, null, 'Quinzena completa');
+  }
+
   return json({ slots });
 }
 
@@ -465,6 +521,11 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   const emitterId = String(body.emitterId ?? '').trim();
   const contentType = String(body.contentType ?? 'image/jpeg');
   const filename = body.filename ? String(body.filename) : null;
+  // De qual espelho e esta nota (28/07). '' = espelho da quinzena inteira; ausente =
+  // cliente antigo em cache ou envio sem espelho publicado -> null (regra antiga).
+  const mirrorKeyRaw = body.mirrorKey;
+  const mirrorPlatformKey = mirrorKeyRaw === undefined || mirrorKeyRaw === null
+    ? null : String(mirrorKeyRaw);
   const b64raw = String(body.fileBase64 ?? '');
   if (!periodId || !emitterId || !b64raw) return json({ error: 'Dados incompletos' }, 400);
 
@@ -536,6 +597,7 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     company_id: claims.company_id, driver_id: claims.driver_id, period_id: periodId,
     payment_id: pay?.id ?? null, nota_emitter_id: emitterId, file_path: path,
     file_type: contentType, original_filename: filename, uploaded_by: claims.driver_id,
+    mirror_platform_key: mirrorPlatformKey,
     status: autoReject ? 'rejeitada' : (autoValidate ? 'validada' : 'recebida'),
     reject_reason: rejectReason,
     // validated_by tem FK pra users(id) — validação AUTOMÁTICA fica com null e o

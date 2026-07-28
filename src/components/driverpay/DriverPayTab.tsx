@@ -56,6 +56,8 @@ import {
   buildSimpleReportRows,
   planRateReapply,
   computeNfProgressByPayment,
+  nfSlotKey,
+  type MirrorPubForNf,
   platformPackages,
   deductionsOf,
   alreadyDeductedDrivers,
@@ -299,6 +301,21 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     [publications],
   );
 
+  /**
+   * Espelhos publicados por driver (28/07): com pagamento por plataforma um driver pode
+   * ter VÁRIOS espelhos na mesma quinzena, e cada um pede a sua nota.
+   */
+  const pubsByDriver = useMemo(() => {
+    const m = new Map<string, MirrorPubForNf[]>();
+    for (const p of publications) {
+      const arr = m.get(p.driverId);
+      const item: MirrorPubForNf = { platformKey: p.platformKey, platformFilter: p.platformFilter };
+      if (arr) arr.push(item);
+      else m.set(p.driverId, [item]);
+    }
+    return m;
+  }, [publications]);
+
   // Carrega as notas do período e monta, por driver, os CNPJs com nota validada / recebida
   // (não rejeitada). Alimenta a coluna NF (validadas/esperadas, ciente de grupo).
   const reloadNotes = useCallback(
@@ -316,11 +333,14 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             e = { validated: new Set(), received: new Set() };
             map.set(f.driverId, e);
           }
+          // 28/07: a chave e (espelho, CNPJ) — duas notas no mesmo CNPJ, uma por espelho,
+          // contam separado. Nota antiga (sem espelho) vira '*' e vale pro CNPJ inteiro.
+          const chave = nfSlotKey(f.mirrorPlatformKey, f.emitterId);
           if (f.status === 'validada') {
-            e.validated.add(f.emitterId);
-            e.received.add(f.emitterId);
+            e.validated.add(chave);
+            e.received.add(chave);
           } else if (f.status !== 'rejeitada') {
-            e.received.add(f.emitterId);
+            e.received.add(chave);
           }
         }
         setNfByDriver(map);
@@ -953,8 +973,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // Progresso da NF por pagamento (validadas/esperadas, ciente de grupo — só o líder anexa).
   // Sobre TODOS os rows (não os filtrados) pra o grupo agregar certo mesmo com filtro.
   const nfProgressByPayment = useMemo(
-    () => computeNfProgressByPayment(rows, platforms, nfByDriver),
-    [rows, platforms, nfByDriver],
+    () => computeNfProgressByPayment(rows, platforms, nfByDriver, pubsByDriver),
+    [rows, platforms, nfByDriver, pubsByDriver],
   );
 
   // Grupos com espelho publicado: o espelho do grupo vai pro líder, então se qualquer membro
@@ -1549,6 +1569,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             userId={userId}
             onPublish={canMirror ? onPublish : undefined}
             alreadyPublished={!!recipientId && publishedDriverIds.has(recipientId)}
+            publishedKeys={new Set((pubsByDriver.get(recipientId ?? '') ?? []).map((p) => p.platformKey))}
             onUnpublish={canMirror && singleRecipient ? onUnpublishCurrent : undefined}
             onRebuild={rebuildMirror}
             alreadyDeducted={alreadyDeductedDrivers(publishRows, publications, rows)}

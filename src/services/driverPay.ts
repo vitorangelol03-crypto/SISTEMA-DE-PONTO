@@ -14,6 +14,7 @@ import { supabase } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
 import { isMaster, isDriverpayPermission, canAccessDriverpay } from '../config/masters';
 import type { ImportResolvedItem, ImportApplyResult } from '../utils/driverImportApply';
+import { mirrorPlatformKey, sanitizeMirrorKeyForPath } from '../components/driverpay/driverPayShared';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -532,12 +533,14 @@ export interface NotaFiscalFileRow {
   checkDetails: Record<string, unknown> | null;
   /** userId da validação manual; null quando auto (marcador: checkDetails.autoValidated). */
   validatedBy: string | null;
+  /** Espelho que pediu esta nota (28/07). null = nota antiga / sem espelho publicado. */
+  mirrorPlatformKey: string | null;
 }
 
 export const listNotaFiscalFiles = async (companyId: string, periodId: string): Promise<NotaFiscalFileRow[]> => {
   const { data, error } = await supabase
     .from('driverpay_nota_fiscal_files')
-    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, reject_reason, uploaded_at, check_status, check_valor, check_cnpj, check_nome, check_details, validated_by, driverpay_drivers(name, recebedor_nome), driverpay_nota_emitters(label, cnpj)')
+    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, reject_reason, uploaded_at, check_status, check_valor, check_cnpj, check_nome, check_details, validated_by, mirror_platform_key, driverpay_drivers(name, recebedor_nome), driverpay_nota_emitters(label, cnpj)')
     .eq('company_id', companyId)
     .eq('period_id', periodId)
     .order('uploaded_at', { ascending: true });
@@ -556,6 +559,7 @@ export const listNotaFiscalFiles = async (companyId: string, periodId: string): 
       emitterId: String(r.nota_emitter_id),
       emitterLabel: em?.label ?? '',
       emitterCnpj: em?.cnpj ?? '',
+      mirrorPlatformKey: (r.mirror_platform_key as string | null) ?? null,
       filePath: String(r.file_path),
       fileType: (r.file_type as string | null) ?? null,
       originalFilename: (r.original_filename as string | null) ?? null,
@@ -1426,26 +1430,33 @@ export interface PublishMirrorInput {
 
 /**
  * Publica UM espelho (PDF ja gerado) pro app do driver: sobe o PDF no bucket privado
- * e registra a publicacao. Re-publicar substitui a anterior do mesmo (periodo, driver):
- * o arquivo e sobrescrito (upsert) e a linha antiga e trocada — o driver ve sempre 1
- * espelho atual por quinzena, nao uma pilha de duplicatas.
+ * e registra a publicacao.
+ *
+ * 2026-07-28 (decisao do Victor): a identidade do espelho e o CONJUNTO DE PLATAFORMAS
+ * (`platformKey`), nao mais so o periodo+driver. Republicar o MESMO conjunto substitui
+ * aquele espelho (corrige um valor errado); um conjunto DIFERENTE vira outro espelho e
+ * os dois aparecem lado a lado no app. Antes, publicar a SHOPEE apagava a LOGGI — o
+ * PDF ia pro mesmo caminho e a publicacao anterior era deletada sem olhar o filtro.
  */
 export const publishDriverMirror = async (i: PublishMirrorInput): Promise<void> => {
   await ensurePerm(i.userId, 'driverpay.generateMirror');
-  const path = `${i.companyId}/${i.periodId}/${i.driverId}.pdf`;
+  const platformKey = mirrorPlatformKey(i.platformFilter);
+  // A plataforma entra no NOME do arquivo: sem isso um espelho sobrescreve o outro.
+  const path = `${i.companyId}/${i.periodId}/${i.driverId}${platformKey ? `__${sanitizeMirrorKeyForPath(platformKey)}` : ''}.pdf`;
 
   const { error: upErr } = await supabase.storage
     .from(DRIVER_MIRRORS_BUCKET)
     .upload(path, i.pdf, { contentType: 'application/pdf', upsert: true });
   if (upErr) throw new Error(`Falha ao subir o PDF do espelho: ${upErr.message}`);
 
-  // Troca a publicacao anterior do mesmo periodo+driver (arquivo ja foi sobrescrito).
+  // Troca SO o espelho do mesmo conjunto de plataformas (os outros continuam no app).
   const { error: delErr } = await supabase
     .from('driverpay_mirror_publications')
     .delete()
     .eq('company_id', i.companyId)
     .eq('period_id', i.periodId)
-    .eq('driver_id', i.driverId);
+    .eq('driver_id', i.driverId)
+    .eq('platform_key', platformKey);
   if (delErr) throwDbError(delErr);
 
   const { error } = await supabase.from('driverpay_mirror_publications').insert([{
@@ -1455,6 +1466,7 @@ export const publishDriverMirror = async (i: PublishMirrorInput): Promise<void> 
     scope: i.scope,
     group_id: i.groupId ?? null,
     platform_filter: i.platformFilter,
+    platform_key: platformKey,
     include_deductions: i.includeDeductions !== false,
     pdf_path: path,
     delivered_by: i.userId,
@@ -1468,6 +1480,10 @@ export interface MirrorPublicationRow {
   scope: 'individual' | 'group' | 'selection';
   /** O espelho publicado abateu os vales/perdas? (coluna default true = comportamento antigo) */
   includeDeductions: boolean;
+  /** Conjunto de plataformas do espelho ('' = quinzena inteira). Identidade dele desde 28/07. */
+  platformKey: string;
+  /** Plataformas do espelho, como foram publicadas (null = todas). */
+  platformFilter: string[] | null;
 }
 
 /**
@@ -1481,16 +1497,22 @@ export const listMirrorPublications = async (
 ): Promise<MirrorPublicationRow[]> => {
   const { data, error } = await supabase
     .from('driverpay_mirror_publications')
-    .select('driver_id, scope, include_deductions')
+    .select('driver_id, scope, include_deductions, platform_key, platform_filter')
     .eq('company_id', companyId)
     .eq('period_id', periodId);
   if (error) throwDbError(error);
   return (data ?? []).map((r) => {
-    const row = r as { driver_id: string; scope: string; include_deductions: boolean | null };
+    const row = r as {
+      driver_id: string; scope: string; include_deductions: boolean | null;
+      platform_key: string | null; platform_filter: string[] | null;
+    };
     return {
       driverId: row.driver_id,
       scope: (row.scope as MirrorPublicationRow['scope']) ?? 'individual',
       includeDeductions: row.include_deductions !== false,
+      platformKey: row.platform_key ?? '',
+      platformFilter: Array.isArray(row.platform_filter) && row.platform_filter.length
+        ? row.platform_filter : null,
     };
   });
 };
@@ -1506,14 +1528,22 @@ export const unpublishDriverMirror = async (
   periodId: string,
   driverId: string,
   userId: string,
+  /**
+   * Plataformas do espelho a tirar do app (28/07). Passando o filtro, sai SO aquele
+   * espelho e os outros do mesmo periodo continuam no app; `undefined` tira todos os
+   * espelhos do driver naquele periodo (comportamento de antes, usado na limpeza geral).
+   */
+  platformFilter?: string[] | null,
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.generateMirror');
-  const { error } = await supabase
+  let q = supabase
     .from('driverpay_mirror_publications')
     .delete()
     .eq('company_id', companyId)
     .eq('period_id', periodId)
     .eq('driver_id', driverId);
+  if (platformFilter !== undefined) q = q.eq('platform_key', mirrorPlatformKey(platformFilter));
+  const { error } = await q;
   if (error) throwDbError(error);
 };
 

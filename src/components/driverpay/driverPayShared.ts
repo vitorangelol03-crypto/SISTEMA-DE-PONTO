@@ -168,6 +168,68 @@ export function expectedEmitterIds(row: DriverRowData, platforms: EmitterPlatfor
   return [...ids];
 }
 
+/**
+ * Chave de um "lugar de nota" = (espelho, CNPJ). `null` no espelho vira '*': é a nota
+ * antiga (mandada antes de 28/07) ou enviada sem espelho publicado — ela vale pra
+ * QUALQUER espelho daquele CNPJ, senão quem já mandou apareceria devendo.
+ */
+export function nfSlotKey(mirrorKey: string | null, emitterId: string): string {
+  return `${mirrorKey ?? '*'}|${emitterId}`;
+}
+
+/** Espelho publicado, no mínimo que o cálculo de NF precisa saber. */
+export interface MirrorPubForNf {
+  platformKey: string;
+  platformFilter: string[] | null;
+}
+
+/**
+ * Lugares de nota que o driver precisa preencher (decisão do Victor, 28/07: "uma nota
+ * por espelho — se tem 2 espelhos, 2 notas").
+ *
+ * SEM espelho publicado: um por CNPJ com pacote (exatamente a regra de antes).
+ * COM espelho: um por (espelho × CNPJ que aquele espelho envolve) — então o espelho só
+ * da LOGGI pede 1 nota, e a quinzena inteira de quem roda eMile + LOGGI pede 2, como já
+ * era. Pagando LOGGI e SHOPEE em separado saem 2 notas mesmo sendo o MESMO CNPJ.
+ */
+export function expectedNfSlotKeys(
+  row: DriverRowData,
+  platforms: EmitterPlatform[],
+  pubs: readonly MirrorPubForNf[],
+): string[] {
+  const emitterOf = new Map(platforms.map((p) => [p.name, p.nota_emitter_id]));
+  const comPacote = platforms.filter((p) => platformPackages(row, p.name) > 0).map((p) => p.name);
+  if (!pubs.length) {
+    return [...new Set(comPacote.map((n) => emitterOf.get(n)).filter(Boolean) as string[])]
+      .map((id) => nfSlotKey(null, id));
+  }
+  const out = new Set<string>();
+  for (const pub of pubs) {
+    const nomes = (pub.platformFilter ?? comPacote).filter((n) => comPacote.includes(n));
+    for (const n of nomes) {
+      const id = emitterOf.get(n);
+      if (id) out.add(nfSlotKey(pub.platformKey, id));
+    }
+  }
+  return [...out];
+}
+
+/**
+ * A nota cobre este slot?
+ *
+ * Aceita TRÊS formatos de propósito, e a ordem importa menos que a compatibilidade:
+ *  1. `espelho|CNPJ` — a nota daquele espelho (formato de 28/07);
+ *  2. `*|CNPJ` — nota mandada sem espelho publicado: vale pra qualquer espelho do CNPJ;
+ *  3. `CNPJ` puro — formato ANTERIOR a 28/07. Aceitar isso não é gentileza: qualquer
+ *     caller que ainda monte o conjunto pelo id do emitente continua funcionando, em
+ *     vez de a coluna NF zerar silenciosamente pra todo mundo.
+ */
+export function slotCoberto(slot: string, chavesDasNotas: ReadonlySet<string>): boolean {
+  if (chavesDasNotas.has(slot)) return true;
+  const emitterId = slot.slice(slot.indexOf('|') + 1);
+  return chavesDasNotas.has(nfSlotKey(null, emitterId)) || chavesDasNotas.has(emitterId);
+}
+
 /** Progresso da NF de um driver: quantas das CNPJs esperadas já têm nota VALIDADA. */
 export interface NfProgress {
   /** nº de CNPJs que o driver precisa mandar nota. */
@@ -216,6 +278,11 @@ export function computeNfProgressByPayment(
   rows: DriverRowData[],
   platforms: EmitterPlatform[],
   notesByDriver: ReadonlyMap<string, { validated: ReadonlySet<string>; received: ReadonlySet<string> }>,
+  /**
+   * Espelhos publicados por driver (28/07). Ausente/vazio = conta por CNPJ, igual antes;
+   * com espelho, cada um pede a sua nota (um slot por espelho x CNPJ).
+   */
+  pubsByDriver?: ReadonlyMap<string, readonly MirrorPubForNf[]>,
 ): Map<string, NfProgress> {
   const units = new Map<string, DriverRowData[]>();
   for (const row of rows) {
@@ -227,23 +294,27 @@ export function computeNfProgressByPayment(
 
   const out = new Map<string, NfProgress>();
   for (const unitRows of units.values()) {
-    const expectedIds = new Set<string>();
-    const validatedIds = new Set<string>();
-    const receivedIds = new Set<string>();
+    const expectedSlots = new Set<string>();
+    const validatedKeys = new Set<string>();
+    const receivedKeys = new Set<string>();
     let manual = false;
     for (const row of unitRows) {
-      for (const id of expectedEmitterIds(row, platforms)) expectedIds.add(id);
+      // No grupo, quem recebe o espelho e anexa a nota e o LIDER — as publicacoes dele
+      // valem pra unidade inteira (mesma regra ja usada pelos CNPJs esperados).
+      for (const slot of expectedNfSlotKeys(row, platforms, pubsByDriver?.get(row.driverId) ?? [])) {
+        expectedSlots.add(slot);
+      }
       const nf = notesByDriver.get(row.driverId);
       if (nf) {
-        for (const id of nf.validated) validatedIds.add(id);
-        for (const id of nf.received) receivedIds.add(id);
+        for (const k of nf.validated) validatedKeys.add(k);
+        for (const k of nf.received) receivedKeys.add(k);
       }
       if (row.notaFiscal) manual = true;
     }
-    const expectedArr = [...expectedIds];
-    const expected = expectedArr.length;
-    const validated = expectedArr.filter((id) => validatedIds.has(id)).length;
-    const pending = expectedArr.filter((id) => !validatedIds.has(id) && receivedIds.has(id)).length;
+    const slots = [...expectedSlots];
+    const expected = slots.length;
+    const validated = slots.filter((s) => slotCoberto(s, validatedKeys)).length;
+    const pending = slots.filter((s) => !slotCoberto(s, validatedKeys) && slotCoberto(s, receivedKeys)).length;
     const complete = manual || (expected > 0 && validated >= expected);
     const progress: NfProgress = { expected, validated, pending, complete, manual };
     for (const row of unitRows) out.set(row.paymentId, progress);
@@ -681,6 +752,31 @@ export function buildReportRows(rows: DriverRowData[], platforms: DriverPlatform
       totalToReceive: t.net,
     };
   });
+}
+
+/**
+ * Identidade de um espelho publicado = o CONJUNTO de plataformas dele (2026-07-28).
+ *
+ * Nomes ORDENADOS e unidos por '+'; string vazia = espelho da quinzena inteira. Ordenar
+ * é o que faz ["LOGGI","ANJUN"] e ["ANJUN","LOGGI"] serem o MESMO espelho — senão o
+ * driver receberia duas cópias do mesmo pagamento só porque os chips foram clicados em
+ * ordem diferente. Precisa bater com o backfill da migration 20260728140000.
+ */
+export function mirrorPlatformKey(filter: string[] | null | undefined): string {
+  if (!filter || filter.length === 0) return '';
+  return [...new Set(filter.map((s) => String(s ?? '').trim()).filter(Boolean))].sort().join('+');
+}
+
+/** A chave vira parte do nome do arquivo no bucket — só o que é seguro em path. */
+export function sanitizeMirrorKeyForPath(key: string): string {
+  return asciiSafe(key).replace(/[^A-Za-z0-9+]+/g, '-').replace(/^-+|-+$/g, '') || 'filtro';
+}
+
+/** Rótulo do espelho pro driver leigo: "SOMENTE LOGGI" / "Quinzena completa". */
+export function mirrorPlatformLabel(filter: string[] | null | undefined): string {
+  const key = mirrorPlatformKey(filter);
+  if (!key) return 'Quinzena completa';
+  return `SOMENTE ${key.split('+').join(' + ').toUpperCase()}`;
 }
 
 /** Remove acentos (coluna A do relatório simples pede nome do líder SEM acento). */

@@ -210,7 +210,8 @@ export function DriverApp() {
     loadNf(m.periodId);
   }
 
-  async function handleNfFile(emitterId: string, file: File | null | undefined) {
+  async function handleNfFile(slot: NfSlot, file: File | null | undefined) {
+    const emitterId = slot.emitterId;
     if (!file || !token || !nfCtx) return;
     // Somente PDF (decisão do Victor, 2026-07-24): foto confundia os drivers.
     // A edge fn também recusa não-PDF (valida a assinatura %PDF) — aqui é só o aviso amigável.
@@ -219,10 +220,13 @@ export function DriverApp() {
       toast.error('Envie a nota em PDF — foto não é aceita.');
       return;
     }
-    setNfUploading(emitterId);
+    setNfUploading(`${slot.mirrorKey ?? '*'}|${emitterId}`);
     try {
       const { base64, contentType, filename } = await fileToUpload(file);
-      const res = await driverNfUpload({ periodId: nfCtx.periodId, emitterId, contentType, fileBase64: base64, filename }, token);
+      const res = await driverNfUpload(
+        { periodId: nfCtx.periodId, emitterId, contentType, fileBase64: base64, filename, mirrorKey: slot.mirrorKey },
+        token,
+      );
       // Conferência automática: 3 checks verdes = já validada; senão fica pra conferência manual.
       if (res.validated) toast.success('Nota enviada e validada! ✓ Valor, CNPJ e nome conferidos.', { duration: 6000 });
       else toast.success('Nota enviada! Ela será conferida.');
@@ -339,9 +343,16 @@ export function DriverApp() {
           )}
 
           {nfSlots?.map((s) => (
-            <div key={s.emitterId} className="bg-white rounded-xl shadow-sm p-4">
+            <div key={`${s.mirrorKey ?? '*'}|${s.emitterId}`} className="bg-white rounded-xl shadow-sm p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
+                  {/* 28/07: com 2 espelhos no mesmo CNPJ, o driver precisa saber
+                      qual nota esta mandando — o espelho vem primeiro. */}
+                  {s.mirrorKey !== null && (
+                    <div className="inline-block text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 mb-1">
+                      {s.mirrorLabel}
+                    </div>
+                  )}
                   <div className="font-semibold text-gray-800">{s.label}</div>
                   <div className="text-xs text-gray-500">CNPJ {s.cnpj}</div>
                 </div>
@@ -356,12 +367,12 @@ export function DriverApp() {
                   <b>Nota recusada.</b>{s.rejectReason ? ` Motivo: ${s.rejectReason}.` : ''} Envie outra, por favor.
                 </div>
               )}
-              <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === s.emitterId ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
-                {nfUploading === s.emitterId ? <Spinner /> : <><Upload size={16} /> {s.sent === 0 && s.rejected > 0 ? 'Reenviar nota (PDF)' : s.sent > 0 ? 'Enviar outro PDF' : 'Enviar PDF da nota'}</>}
+              <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
+                {nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? <Spinner /> : <><Upload size={16} /> {s.sent === 0 && s.rejected > 0 ? 'Reenviar nota (PDF)' : s.sent > 0 ? 'Enviar outro PDF' : 'Enviar PDF da nota'}</>}
                 <input
                   type="file" accept="application/pdf" className="hidden"
-                  disabled={nfUploading === s.emitterId}
-                  onChange={(e) => { handleNfFile(s.emitterId, e.target.files?.[0]); e.currentTarget.value = ''; }}
+                  disabled={nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}`}
+                  onChange={(e) => { handleNfFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
                 />
               </label>
               <p className="mt-1.5 text-[11px] text-gray-400 text-center">Somente arquivo PDF — foto não é aceita.</p>
@@ -423,12 +434,21 @@ export function DriverApp() {
                 ) : m.periodStatus === 'aberto' ? (
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Atual</span>
                 ) : null}
+                {/* Pagamento por plataforma (28/07): com 2 espelhos na mesma quinzena, o
+                    driver PRECISA ver de qual e cada um — antes isso era uma linha cinza. */}
+                {m.platformFilter && m.platformFilter.length > 0 && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                    SOMENTE {m.platformFilter.join(' + ').toUpperCase()}
+                  </span>
+                )}
               </div>
+              {m.platformFilter && m.platformFilter.length > 0 && (
+                <div className="text-[11px] text-blue-700 mt-1">
+                  Pagamento so das entregas {m.platformFilter.join(' e ')} desta quinzena.
+                </div>
+              )}
               <div className="text-xs text-gray-500 mt-0.5">
                 Enviado em {fmtDate(m.deliveredAt)}
-                {m.platformFilter && m.platformFilter.length > 0 && (
-                  <> · {m.platformFilter.join(', ')}</>
-                )}
               </div>
               {m.viewedAt && <div className="text-[11px] text-green-600 mt-0.5">Já visualizado</div>}
             </div>
