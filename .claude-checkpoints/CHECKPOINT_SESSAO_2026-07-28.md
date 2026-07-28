@@ -99,8 +99,58 @@ Backups: `backups/2026-07-28/pre-testes-completos.json` (13 tabelas) + nomes.
 
 1. **Bateria E2E completa** (~380 specs) — **não rodada**. Janela segura é de dia
    (turno bate ~02:00). Só rodei o que cerca as mudanças.
-2. **Push + deploy do commit `e662fca`** (ASCII/PIX) — **só local**. Enquanto não subir,
-   o relatório em produção continua saindo com acento.
+2. ~~Push do `e662fca` (ASCII/PIX)~~ — ✅ **FEITO e conferido no ar**: baixei o relatório
+   do site e os nomes saem `Caique` / `MARIO` / `JOAO`, 0 caracteres proibidos, 43 chaves
+   PIX de CPF/CNPJ só com números.
 3. Revogar o PAT do Supabase colado no chat.
 4. Herdadas: Marize (R$ 249×238) e Lucas (escaneada) · PIX do Pablo Raspante · apagar
    backups quando liberar · 6 CPFs faltantes · painel responsivo.
+
+---
+
+## 7. Espelho POR PLATAFORMA no app (commit `31ef70f`) — NO AR
+
+> Victor mandou print do app: publicando o espelho só da LOGGI e depois só da SHOPEE,
+> o segundo APAGAVA o primeiro. "Se eu gerar da Shopee depois devem aparecer dois
+> espelhos separados."
+
+**Causa (empírica, no código):** o PDF ia sempre pra `<empresa>/<periodo>/<driver>.pdf`
+— sem a plataforma no nome, então sobrescrevia — e `publishDriverMirror` **deletava** a
+publicação anterior do mesmo período+driver sem olhar o filtro. Era desenho de quando o
+espelho era um só por quinzena.
+
+**Agora:** a identidade do espelho é o **conjunto de plataformas** (`platform_key`, nomes
+ordenados unidos por `+`; `''` = quinzena inteira), com **índice único** no banco.
+Republicar o mesmo conjunto substitui só ele; conjunto diferente vira outro espelho.
+Ordenar é o que impede `["LOGGI","ANJUN"]` e `["ANJUN","LOGGI"]` virarem dois espelhos
+do mesmo pagamento.
+
+### Decisões do Victor (28/07)
+1. **Uma nota por espelho** — "se tem 2 espelhos, 2 notas; se tem 3, 3 notas". Como
+   LOGGI/SHOPEE/ANJUN dividem o **mesmo CNPJ** (11.802.464/0001-38), os slots passaram a
+   ser **(espelho × CNPJ)**. Espelho da quinzena inteira com 2 CNPJs segue pedindo 2.
+   (Dado que motivou: **57 dos 98 drivers têm 2 CNPJs**.)
+2. **Republicar substitui** o espelho do mesmo conjunto, sem encostar nos outros.
+
+### Achados durante a construção (os dois pegos por teste real)
+- **`slotCoberto` quebrou 5 testes antigos:** a 1ª versão exigia a chave composta, e o
+  formato antigo (só o id do emitente) deixou de contar. Em produção isso teria **zerado
+  a coluna NF de todo mundo**. Corrigido na raiz (aceita os 3 formatos) + teste de
+  regressão que trava isso. **Foi a suíte completa que pegou — não o tsc, não o lint.**
+- **Não dava pra publicar o 2º espelho:** o diálogo mostrava "Republicar" ao abrir o da
+  SHOPEE só porque a LOGGI já estava no ar (o "já publicado" era por *driver*). Agora é
+  por espelho (`publishedKeys`).
+
+### Validação
+tsc 0 · eslint 0 · build · **30 unit** (19 novos) · **E2E real**: publica LOGGI e SHOPEE,
+confere **2 publicações no banco com arquivos separados**, **2 cards no app** com os selos,
+**2 lugares de anexar nota no mesmo CNPJ** e **coluna NF `0/2`**.
+Migration aplicada com backup duplo (`backup_mirror_pub_20260728` + `backup_nf_files_20260728`
++ `backups/2026-07-28-espelho-plataforma/`): 28 espelhos viraram key `LOGGI`, 2 `''`,
+**0 linhas alteradas**. Edge fn **v12** no ar. Push `31ef70f`; Vercel conferido nos chunks
+reais (`DriverApp-vwitJmNZ.js` com o selo, `DriverPayTab-895wDJlC.js` com o platform_key).
+Banco conferido: 99/98/30/26/1, **0 sobras**.
+
+⚠️ **Nota de método:** o `dist/` local pode estar de um build antigo — pra conferir o que
+está no ar, extrair os nomes dos chunks **do bundle servido** e usar `curl --compressed`
+(sem isso o grep lê byte comprimido e dá falso negativo).
