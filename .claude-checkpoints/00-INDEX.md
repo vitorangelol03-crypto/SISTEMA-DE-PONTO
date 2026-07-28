@@ -19,8 +19,14 @@ CPF/CNPJ só com números** (e-mail/telefone/chave aleatória intocados — vali
 verificador). ⚠️ **Achado no banco:** employees 107→92 e ponto 4689→4679 durante os testes —
 apurado que eram funcionários `PW Test` (a conta fecha: média real é 50,9 pontos/funcionário;
 15 reais teriam levado ~760 registros, levaram 10; 0 órfãos). **Não consegui provar nome a
-nome** porque só guardei contagem — agora há snapshot com NOMES. **Falta: bateria completa e
-push do `e662fca`.** Ver `CHECKPOINT_SESSAO_2026-07-28.md`.
+nome** porque só guardei contagem — agora há snapshot com NOMES. **Depois, no mesmo dia:** relatórios ASCII/PIX **no ar** (`e662fca`, conferido baixando o
+arquivo do site: `Caique`/`MARIO`/`JOAO`, 0 caractere proibido, 43 chaves PIX só com números)
+e **espelho POR PLATAFORMA** (`31ef70f` + migration `20260728140000` + **fn v12**): publicar
+LOGGI e depois SHOPEE dava UM espelho só (o PDF ia pro mesmo caminho e a publicação anterior
+era deletada) — agora a identidade do espelho é o **conjunto de plataformas**, com índice
+único; no app saem **2 cards com selo SOMENTE LOGGI/SHOPEE** e **2 lugares de nota no mesmo
+CNPJ** (decisão: *uma nota por espelho*). **Falta só a bateria completa (~380).**
+Ver `CHECKPOINT_SESSAO_2026-07-28.md`.
 
 **Sessão 27→28/07 — RELEASE COMPLETO do pagamento por plataforma (3/3 no ar):** com OK explícito
 do Victor. ✅ Backup duplo (`backup_mirror_pub_20260727` + `backups/2026-07-27/`) → ✅ **migration
