@@ -154,3 +154,60 @@ Banco conferido: 99/98/30/26/1, **0 sobras**.
 ⚠️ **Nota de método:** o `dist/` local pode estar de um build antigo — pra conferir o que
 está no ar, extrair os nomes dos chunks **do bundle servido** e usar `curl --compressed`
 (sem isso o grep lê byte comprimido e dá falso negativo).
+
+---
+
+## 8. Bateria E2E completa — 392 ✅ / 2 ❌ / 4 flaky (1,2h)
+
+Rodada com OK do Victor, em janela segura (14h40 de terça).
+
+### As 2 falhas: premissa morta, NÃO é bug
+`26-multi-company-ui-isolation-extras` testes **12 e 13** esperam que Ponte Nova esteja
+**vazia** ("Nenhum registro neste mês" / "Nenhum bloqueio encontrado"). Conferido no banco:
+
+| Empresa | Triagem do mês | Bloqueios | Funcionários | Pontos |
+|---|---|---|---|---|
+| Caratinga | 18 | 67 | 87 | 4.125 |
+| **Ponte Nova** | **9** | **14** | 5 | 553 |
+
+É a **mesma premissa "PN vazia" que morreu em 20/07** (specs 26.3 e 26.9 já foram para skip
+por isso; estes dois passaram batido). Nada a ver com as mudanças desta sessão, que são todas
+do driverpay. **Victor decide** se reescreve os dois ou coloca em skip como os irmãos.
+
+### 🚨 ACHADO GRAVE: a bateria APAGOU 2 pontos REAIS (restaurados)
+
+| Funcionário | Data | Entrada | Situação |
+|---|---|---|---|
+| Euder da Silva Machado | 28/07 | 08:14 (UTC) | em aberto |
+| Ronaldo Luiz Silva | 28/07 | 08:16 (UTC) | em aberto |
+
+São funcionários REAIS e ponto de HOJE. **Restaurados do backup com os 39 campos originais
+e os mesmos ids** — total voltou a 4.680 = 4.680, e eles aparecem na ordem cronológica certa
+entre os 22 pontos do dia.
+
+**Só foi possível detectar (e reverter) porque o backup guardava os REGISTROS INTEIROS,
+não a contagem.** Com contagem, "4680 → 4678" seria só um número estranho sem conserto.
+(Foi a lição da manhã, aplicada no mesmo dia.)
+
+**Causa: NÃO identificada.** O que foi descartado com evidência:
+- `cleanup.ts:214` (o único delete de attendance sem filtro de funcionário) preserva
+  `date = hoje` e só apaga o criado **durante** a suíte — esses são das 05h;
+- limpeza administrativa do sistema: última em 17/07, próxima em 17/10 — não rodou;
+- todos os outros deletes de attendance filtram por `employee_id` (varredura nos 66 specs);
+- `ensureTestEmployee` acha o funcionário por CPF fake (`99903000103`), sem colisão;
+- spec 46 (wizard de exclusão em massa) nunca digita o ID correto — só testa o bloqueio.
+
+Os outros 20 pontos do dia sobreviveram, inclusive um criado **durante** a bateria — então
+não é "apaga tudo em aberto". O padrão dos 2 (únicos entre 05:17 e 10:00) segue sem explicação.
+
+**⚠️ RISCO ABERTO:** rodar a bateria completa pode apagar ponto real. Enquanto a causa não
+for achada: **sempre fazer o dump COMPLETO antes** (`backups/2026-07-28-pre-bateria/`) e
+**comparar registro a registro depois**; de preferência rodar fora do horário de expediente.
+
+### O que NÃO foi danificado (conferido registro a registro)
+- **Funcionários reais: 92 → 92**, zero sumiram, zero surgiram (comparação por id);
+- **Entregadores: 99 → 99**, zero sumiram;
+- **Configurações intactas em VALOR** — facial da Caratinga segue **ligada**, geo, período e
+  bônus iguais; só mudou `updated_at`, ou seja, os specs mexeram e **restauraram certo**
+  (a blindagem de 20/07 funcionando);
+- driverpay: 98 pagamentos, 30 espelhos, 26 notas, 1 período — tudo igual; **0 sobras**.
