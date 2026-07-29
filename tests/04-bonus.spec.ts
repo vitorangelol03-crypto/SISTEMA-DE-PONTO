@@ -157,15 +157,42 @@ test.describe('Bonificações (B / C1 / C2) — em Ponte Nova, isolado', () => {
   });
 
   test('2626: Reset Geral do ponto remove bonificações também (regressão)', async ({ page }) => {
+    const s = getClient();
     const row = await openPontoPN(page, MASTER_2626);
     await markPresent(page, row);
     await applyBonus(page, 'B', '10');
     await expect(page.getByText(/Bonificações Aplicadas/)).toBeVisible();
+
+    // ── Blindagem (29/07): este clique JÁ APAGOU ponto REAL de Ponte Nova. ──────
+    // O Reset Geral montava os alvos a partir de TODOS os registros do dia, ignorando
+    // a busca da tela — e este spec roda em PN, onde há gente de verdade batendo ponto.
+    // Some duas coisas agora: o app só apaga quem está VISÍVEL (attendancesToReset), e
+    // este teste confere que os registros dos OUTROS continuam intactos.
+    const outrosAntes = await s
+      .from('attendance')
+      .select('id, employee_id')
+      .eq('company_id', pnCompanyId)
+      .eq('date', todayIso())
+      .neq('employee_id', empId);
+    const idsAntes = (outrosAntes.data ?? []).map((a: { id: string }) => a.id).sort();
 
     await page.getByRole('button', { name: /^Reset Geral$/ }).click();
     await page.getByRole('button', { name: /Confirmar Reset/ }).click();
     await expect(page.getByRole('button', { name: /Confirmar Reset/ })).toBeHidden();
 
     await expect(page.getByText(/Bonificações Aplicadas/)).toBeHidden();
+
+    const outrosDepois = await s
+      .from('attendance')
+      .select('id')
+      .eq('company_id', pnCompanyId)
+      .eq('date', todayIso())
+      .neq('employee_id', empId);
+    const idsDepois = (outrosDepois.data ?? []).map((a: { id: string }) => a.id).sort();
+    expect(
+      idsDepois,
+      `O Reset Geral apagou ponto de quem NÃO estava na busca (antes ${idsAntes.length}, depois ${idsDepois.length}). ` +
+      'Era exatamente o bug de 28/07 que destruiu registro real de Ponte Nova.',
+    ).toEqual(idsAntes);
   });
 });

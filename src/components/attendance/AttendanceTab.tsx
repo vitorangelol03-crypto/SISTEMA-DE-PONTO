@@ -23,6 +23,7 @@ import {
   BonusTypeRecord,
 } from '../../services/database';
 import { useCompany } from '../../contexts/CompanyContext';
+import { attendancesToReset, resetIsFiltered } from '../../utils/attendanceReset';
 import { supabase } from '../../lib/supabase';
 import { getBrazilDate, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
@@ -391,6 +392,22 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     }
   };
 
+  /**
+   * Registros do dia VISÍVEIS na tela (respeitam a busca). É o que o Reset Geral
+   * pode apagar — antes ele usava `attendances` inteiro e levava junto quem estava
+   * fora do filtro (apagou ponto real de Ponte Nova na bateria de 28/07).
+   */
+  const visibleAttendances = useMemo(
+    () => attendancesToReset(attendances, filteredEmployees),
+    [attendances, filteredEmployees],
+  );
+
+  /** Há gente fora da busca? Then o modal precisa deixar claro o que "todos" significa. */
+  const resetFiltrado = useMemo(
+    () => resetIsFiltered(attendances, filteredEmployees),
+    [attendances, filteredEmployees],
+  );
+
   const statusCounts = useMemo(() => {
     const filteredAttendances = attendances.filter(att =>
       filteredEmployees.some(emp => emp.id === att.employee_id)
@@ -614,7 +631,9 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
         await deleteAttendance(employeeToReset, selectedDate);
         toast.success('Registro de ponto resetado com sucesso');
       } else if (resetType === 'all') {
-        const attendanceIds = attendances.map(att => att.employee_id);
+        // SOMENTE quem está visível na tela (a busca vale como escopo). Antes usava
+        // `attendances` inteiro e apagava o ponto de quem nem aparecia na lista.
+        const attendanceIds = visibleAttendances.map(att => att.employee_id);
         for (const empId of attendanceIds) {
           await deleteAttendance(empId, selectedDate);
         }
@@ -625,7 +644,11 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
         } catch (bonusError) {
           console.error('Erro ao limpar bonuses do dia no reset geral:', bonusError);
         }
-        toast.success('Todos os registros de ponto foram resetados');
+        toast.success(
+          visibleAttendances.length === 1
+            ? '1 registro de ponto foi resetado'
+            : `${visibleAttendances.length} registros de ponto foram resetados`,
+        );
       }
       await loadData(selectedDate);
     } catch (error) {
@@ -1524,10 +1547,38 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                     O registro será completamente removido e o status voltará para "Não marcado".
                   </p>
                 ) : (
-                  <p className="text-sm text-gray-600">
-                    Você está prestes a resetar <strong>TODOS</strong> os registros de ponto de hoje ({attendances.length} registro{attendances.length !== 1 ? 's' : ''}).
-                    Todos os registros serão completamente removidos.
-                  </p>
+                  <div className="text-sm text-gray-600 space-y-2">
+                    <p>
+                      Você está prestes a resetar <strong>{visibleAttendances.length}</strong> registro
+                      {visibleAttendances.length !== 1 ? 's' : ''} de ponto do dia selecionado.
+                      {visibleAttendances.length > 0 && ' Eles serão completamente removidos.'}
+                    </p>
+                    {resetFiltrado && (
+                      <p className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-800">
+                        Você está com uma <strong>busca ativa</strong>: só os {visibleAttendances.length} que
+                        aparecem na lista serão resetados. Os demais {attendances.length - visibleAttendances.length} registro
+                        {attendances.length - visibleAttendances.length !== 1 ? 's' : ''} do dia <strong>não</strong> serão tocados.
+                      </p>
+                    )}
+                    {visibleAttendances.length > 0 && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <p className="font-medium text-gray-700 mb-1">Quem será resetado:</p>
+                        <ul className="list-disc list-inside text-gray-600">
+                          {visibleAttendances.slice(0, 5).map(att => (
+                            <li key={att.employee_id}>
+                              {employees.find(e => e.id === att.employee_id)?.name ?? att.employee_id}
+                            </li>
+                          ))}
+                        </ul>
+                        {visibleAttendances.length > 5 && (
+                          <p className="text-gray-500 mt-1">e mais {visibleAttendances.length - 5}…</p>
+                        )}
+                      </div>
+                    )}
+                    {visibleAttendances.length === 0 && (
+                      <p className="text-gray-500">Nenhum registro na lista atual — nada será apagado.</p>
+                    )}
+                  </div>
                 )}
               </div>
 
