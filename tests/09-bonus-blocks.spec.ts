@@ -59,7 +59,30 @@ test.describe('Bloqueio de Bonificação (silencioso)', () => {
       .single();
     if (error) throw error;
     employeeId = data.id;
+    await capturarBonuses();
   });
+
+  /**
+   * Bonificações do DIA como estavam antes do spec (29/07).
+   *
+   * Este spec apagava `bonuses` por DATA, sem filtrar empresa — ou seja, bonificação
+   * real lançada hoje (em qualquer das duas empresas) sumia quando a bateria rodava.
+   * Agora ele fotografa e devolve: o que era do Victor volta, o que o teste criou sai.
+   */
+  let bonusesAntes: Array<Record<string, unknown>> = [];
+
+  const capturarBonuses = async () => {
+    const { data } = await supabase.from('bonuses').select('*').eq('date', today);
+    bonusesAntes = (data ?? []) as Array<Record<string, unknown>>;
+  };
+
+  const restaurarBonuses = async () => {
+    const { data: agora } = await supabase.from('bonuses').select('id').eq('date', today);
+    const idsAntes = new Set(bonusesAntes.map((b) => b.id as string));
+    const criados = (agora ?? []).map((b: { id: string }) => b.id).filter((id) => !idsAntes.has(id));
+    if (criados.length > 0) await supabase.from('bonuses').delete().in('id', criados);
+    if (bonusesAntes.length > 0) await supabase.from('bonuses').upsert(bonusesAntes);
+  };
 
   test.afterAll(async () => {
     if (employeeId) {
@@ -69,7 +92,7 @@ test.describe('Bloqueio de Bonificação (silencioso)', () => {
       await supabase.from('geo_fraud_attempts').delete().eq('employee_id', employeeId);
       await supabase.from('bonus_removals').delete().eq('employee_id', employeeId);
       await supabase.from('employees').delete().eq('id', employeeId);
-      await supabase.from('bonuses').delete().eq('date', today);
+      await restaurarBonuses();
     }
   });
 
@@ -78,7 +101,7 @@ test.describe('Bloqueio de Bonificação (silencioso)', () => {
       await supabase.from('payments').delete().eq('employee_id', employeeId);
       await supabase.from('attendance').delete().eq('employee_id', employeeId);
       await supabase.from('bonus_blocks').delete().eq('employee_id', employeeId);
-      await supabase.from('bonuses').delete().eq('date', today);
+      await restaurarBonuses();
     }
   });
 

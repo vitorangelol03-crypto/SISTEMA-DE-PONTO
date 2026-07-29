@@ -28,11 +28,50 @@ let pnCompanyId = '';
 
 const todayIso = (): string => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
+/**
+ * Pagamentos de Ponte Nova do dia como estavam ANTES do teste.
+ *
+ * Por que isso existe (29/07): `applyBonus` aplica a bonificação do DIA na EMPRESA
+ * inteira — não só no funcionário de teste. Numa rodada, isso lançou **R$ 10 em cada um
+ * dos 5 funcionários REAIS de PN** (R$ 50) e o resíduo ficou no banco. Antes passava
+ * despercebido porque o "Reset Geral" apagava o dia inteiro e levava o bônus junto;
+ * com o Reset agora restrito ao que está visível (correção de 29/07), o resíduo apareceu.
+ *
+ * Capturar e restaurar (em vez de "apagar bônus do dia") é o que protege bonificação
+ * LEGÍTIMA que o Victor tenha lançado hoje: ela volta exatamente como estava.
+ */
+let pnPaymentsAntes: Array<Record<string, unknown>> = [];
+
+async function capturarPnPayments(): Promise<void> {
+  const s = getClient();
+  const { data } = await s.from('payments').select('*')
+    .eq('company_id', pnCompanyId).eq('date', todayIso());
+  pnPaymentsAntes = (data ?? []) as Array<Record<string, unknown>>;
+}
+
+/** Desfaz o que o teste espalhou pelos pagamentos de PN: apaga os criados, devolve os alterados. */
+async function restaurarPnPayments(): Promise<void> {
+  const s = getClient();
+  const { data: agora } = await s.from('payments').select('id')
+    .eq('company_id', pnCompanyId).eq('date', todayIso());
+  const idsAntes = new Set(pnPaymentsAntes.map((p) => p.id as string));
+  const criadosPeloTeste = (agora ?? [])
+    .map((p: { id: string }) => p.id)
+    .filter((id) => !idsAntes.has(id));
+  if (criadosPeloTeste.length > 0) {
+    await s.from('payments').delete().in('id', criadosPeloTeste);
+  }
+  if (pnPaymentsAntes.length > 0) {
+    await s.from('payments').upsert(pnPaymentsAntes);
+  }
+}
+
 /** Zera o estado do DIA em Ponte Nova (bônus do dia + ponto do funcionário de teste). */
 async function wipePnDayState(): Promise<void> {
   const s = getClient();
   await s.from('bonuses').delete().eq('company_id', pnCompanyId).eq('date', todayIso());
   await deleteAttendanceForEmployee(empId);
+  await restaurarPnPayments();
 }
 
 /** Login + troca pra Ponte Nova + aba Ponto + linha do funcionário de teste. */
@@ -90,6 +129,9 @@ test.describe('Bonificações (B / C1 / C2) — em Ponte Nova, isolado', () => {
     );
     if (!pn) throw new Error('Ponte Nova não encontrada');
     pnCompanyId = (pn as { id: string }).id;
+    // Fotografa os pagamentos de PN do dia ANTES de qualquer bônus deste spec — é o que
+    // permite devolver bonificação legítima ao valor original no fim.
+    await capturarPnPayments();
   });
 
   test.beforeEach(async () => {
