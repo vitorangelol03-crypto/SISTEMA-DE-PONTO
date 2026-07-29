@@ -101,13 +101,58 @@ cada empresa ganha o SEU funcionário com dados próprios e o assert é por comp
 **Placar do isolamento:** `26-isolation` **9/9** (era 7 + 2 skip) · `26-extras` **4/4**
 (era 2/4). **Nenhum skip sobrou nos dois arquivos.**
 
-## 6. Banco — conferido registro a registro no fim
+## 6. Auditoria das bonificações (pedido do Victor) — achado nos DOIS sentidos
 
-`4.702 → 4.702` pontos, **0 registros do backup sumidos**, **92 funcionários reais**
-intactos, **0 sobras** de teste. Comparação por id contra
-`backups/2026-07-29/pre-fix-reset.json`.
+### 6.1 SOBRANDO: o spec 04 deixou R$ 50 em funcionários REAIS
+`applyBonus` aplica a bonificação do **DIA na EMPRESA inteira** — não só no funcionário
+de teste. Lançou **R$ 10 em cada um dos 5 funcionários reais de Ponte Nova** (Amanda,
+Euder, João Henrique, Leticia, Ronaldo), em pagamentos criados pelo próprio teste às
+09:55 com a **diária ZERADA** — o que, na folha, faria essas 5 pessoas aparecerem como
+tendo trabalhado de graça.
 
-## 7. PENDENTE
+**Por que só apareceu agora:** antes o "Reset Geral" apagava o dia inteiro e levava o
+bônus junto. Com o Reset restrito ao visível (`fc41a09`), o resíduo ficou exposto. Ou
+seja: a correção da manhã **não criou** o problema, **revelou** — o teste sempre sujou.
+
+### 6.2 SUMINDO: o spec 09 apagava bonificação real
+Fazia `from('bonuses').delete().eq('date', today)` **sem filtrar empresa**, em dois
+pontos. Bonificação lançada hoje pelo Victor — em qualquer das duas empresas — seria
+destruída na próxima bateria.
+
+### 6.3 Correção (`9596a76`): captura + restauração nos dois
+Em vez de delete cego, os dois specs **fotografam o estado antes e devolvem depois**.
+Isso protege bonificação **legítima** (volta idêntica) e remove só o que o teste criou.
+Filtrar por prefixo/empresa não resolveria: o teste suja registro de gente **real**.
+
+**Provado com sentinelas:**
+- spec 04 → rodada nova deixa **0 pagamentos e 0 bônus** em PN (antes: 5 e R$ 50);
+- spec 09 → um bônus de **R$ 33 em Caratinga SOBREVIVE** à rodada, com o mesmo id
+  (antes seria apagado).
+
+### 6.4 Limpeza dos dados (autorizada)
+Os 5 pagamentos-resíduo foram removidos **com OK explícito do Victor**, com backup
+dedicado (`backups/2026-07-29-bonus/removidos-residuo-teste.json`) e **guarda no
+script**: só apagava o que tivesse diária 0, banco de horas 0 e `created_by = 2626` —
+abortaria se algum não casasse.
+
+**Resíduo histórico (não mexi):** existem pagamentos "fantasma" (diária 0, sem banco de
+horas) espalhados desde maio, 1 a 5 por data, criados por 2626/9999. Só o de hoje tinha
+bônus relevante. Fica como pendência para o Victor decidir.
+
+## 7. Banco — conferido registro a registro no fim
+
+Comparação por **id** contra `backups/2026-07-29-bonus/pre-auditoria.json`:
+
+| Tabela | Antes | Agora | Sumidos |
+|---|---|---|---|
+| bonuses | 64 | 64 | **0** |
+| bonus_removals | 58 | 58 | **0** |
+| bonus_blocks | 82 | 82 | **0** |
+| employees | 92 | 92 | **0** |
+| attendance | 4.703 | 4.703 | **0** |
+| payments | 2.787 | 2.782 | **5** (exatamente os autorizados) |
+
+## 8. PENDENTE
 
 1. **Revogar o PAT do Supabase** colado no chat.
 2. Herdadas: Marize (R$ 249×238) e Lucas (escaneada) · PIX do Pablo Raspante · apagar

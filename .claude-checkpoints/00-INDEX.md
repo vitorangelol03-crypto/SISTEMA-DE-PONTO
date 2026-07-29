@@ -283,6 +283,15 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 
 ## ⚠️ Áreas frágeis / pendências abertas
 
+- 🔴 **Teste NÃO pode lançar dado e esquecer de tirar — nem apagar dado real** (29/07): o
+  spec 04 deixou **R$ 50 de bonificação em 5 funcionários REAIS** de PN (a bonificação do
+  dia vale pra EMPRESA inteira, não só pro funcionário de teste), e o spec 09 apagava
+  `bonuses` por data **sem filtrar empresa**. Os dois agora usam **captura + restauração**
+  (`9596a76`). Regra pra qualquer spec novo que toque dinheiro: **fotografe o estado antes
+  e devolva depois** — delete por prefixo não protege, porque o teste suja registro de
+  gente real. Verificar com **sentinela** (um bônus/registro plantado que tem que
+  sobreviver). ⚠️ Sobrou resíduo histórico de pagamentos "fantasma" (diária 0) desde maio,
+  1-5 por data — Victor decide se limpa.
 - 🔵 **Teste de isolamento multi-empresa: nunca asserte por "a outra empresa está vazia"** —
   a premissa morre assim que a empresa entra em uso (matou 4 testes: 26.3, 26.9, 26.12,
   26.13). O padrão certo é o do teste 8: criar o dado em cada empresa e provar que **não
