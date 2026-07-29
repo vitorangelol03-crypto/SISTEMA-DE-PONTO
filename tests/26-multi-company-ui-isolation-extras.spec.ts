@@ -129,7 +129,7 @@ test.describe('Isolamento UI multi-empresa — extras (6.18-6.21)', () => {
     }
   });
 
-  test('12. TriageTab: CT mostra registro do mês corrente; PN "Nenhum registro neste mês" (6.20)', async ({ page }) => {
+  test('12. TriageTab: registro de CT aparece em CT e NÃO vaza pra PN (6.20)', async ({ page }) => {
     const s = getClient();
     const today = todayBR();
 
@@ -160,9 +160,17 @@ test.describe('Isolamento UI multi-empresa — extras (6.18-6.21)', () => {
       await goToTab(page, 'Erros');
       await page.getByRole('button', { name: /Triagem/i }).first().click();
 
+      // 2026-07-29: este teste exigia "Nenhum registro neste mês" em PN — premissa
+      // MORTA desde 20/07, quando se descobriu que Ponte Nova está em uso real (hoje
+      // tem triagem própria no mês). O que importa aqui nunca foi PN estar vazia, e
+      // sim o ISOLAMENTO: o registro de Caratinga não pode vazar pra Ponte Nova.
+      // Espera a aba carregar antes de afirmar ausência (senão passaria com a tela vazia).
       await expect(
-        page.getByText(/Nenhum registro neste m[êe]s/i)
-      ).toBeVisible({ timeout: 10_000 });
+        page.getByRole('button', { name: /Triagem/i }).first()
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(
+        page.locator('tbody tr', { hasText: `${PREFIX}TriageRow` })
+      ).toHaveCount(0, { timeout: 10_000 });
     } finally {
       // Cleanup: remove a row inserida.
       await s.from('triage_errors')
@@ -172,7 +180,7 @@ test.describe('Isolamento UI multi-empresa — extras (6.18-6.21)', () => {
     }
   });
 
-  test('13. AdminTab Bloqueios: CT mostra block ativo; PN "Nenhum bloqueio encontrado" (6.21)', async ({ page }) => {
+  test('13. AdminTab Bloqueios: block de CT aparece em CT e NÃO vaza pra PN (6.21)', async ({ page }) => {
     const empId = await createTestEmployee({ name: `${PREFIX}Block` });
     const s = getClient();
 
@@ -208,9 +216,12 @@ test.describe('Isolamento UI multi-empresa — extras (6.18-6.21)', () => {
     await switchCompany(page, 'Ponte Nova');
     await unlockAdmin(page);
 
+    // 2026-07-29: exigia "Nenhum bloqueio encontrado" em PN — premissa MORTA (PN está
+    // em uso e tem bloqueios próprios). O que se testa é o ISOLAMENTO: o bloqueio
+    // criado em Caratinga não aparece em Ponte Nova.
     await expect(
-      page.getByText(/Nenhum bloqueio encontrado/i)
-    ).toBeVisible({ timeout: 10_000 });
+      page.getByText(`${PREFIX}BlockReason`)
+    ).toHaveCount(0, { timeout: 10_000 });
     // Cleanup do bonus_block é feito por cleanupByPrefix (afterAll +
     // beforeEach do próximo teste), via empIds com prefix.
   });
