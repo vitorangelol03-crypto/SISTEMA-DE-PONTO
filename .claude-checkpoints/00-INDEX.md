@@ -16,7 +16,11 @@ exclusões de ponto dos 66 specs. **Correção:** `attendancesToReset()` (puro) 
 a quem está visível — **sem busca ativa nada muda**; o modal passa a dizer quantos e quem, e
 avisa quando há filtro. O spec 04 virou teste de regressão. Dado restaurado 2× (4.680).
 ⚠️ **Muda comportamento que a equipe usa** (Reset Geral + busca = só a lista filtrada),
-decisão do Victor. **Falta o push.** Ver `CHECKPOINT_SESSAO_2026-07-29.md`.
+decisão do Victor. **NO AR** (`78ec4fa`, chunk `AttendanceTab-DW_oVGtO.js` conferido).
+Junto: **26.12 e 26.13 consertados** (`51738ba`) — paravam de passar por exigir "PN vazia";
+agora provam o **isolamento** (fixture de CT não vaza pra PN), que é o que sempre importou:
+**4/4**. Os irmãos **26.3 e 26.9 seguem em skip** pela mesma premissa — dá pra recuperar
+igual, decisão do Victor. Ver `CHECKPOINT_SESSAO_2026-07-29.md`.
 
 **Sessão 28/07 — fechou o release e validou tudo que faltava:** **edge fn v11 NO AR**
 (deploy pelo **CLI** — o MCP é bloqueado pelo classificador; ⚠️ **revogar o PAT** colado no

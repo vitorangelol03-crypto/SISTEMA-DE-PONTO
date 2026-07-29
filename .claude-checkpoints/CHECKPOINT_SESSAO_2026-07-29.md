@@ -71,12 +71,26 @@ tsc **0** · eslint **0** · build ok · **9 unit novos** (53 no bloco rodado) �
 spec 03 (que também usa Reset) **7/7**.
 Backups: `backups/2026-07-29/pre-fix-reset.json` + `backups/2026-07-28-pre-bateria/`.
 
-## 5. PENDENTE
+## 5. Push e conserto dos testes vermelhos — FEITOS
 
-1. **Push do `fc41a09`** — ainda **só local**. Enquanto não subir, o "Reset Geral" em
-   produção continua apagando o dia inteiro mesmo com busca ativa.
-2. Os **2 testes vermelhos** do spec 26 (premissa "Ponte Nova vazia", morta desde 20/07) —
-   Victor decide se reescreve ou põe em skip como os irmãos 26.3/26.9.
-3. **Revogar o PAT do Supabase** colado no chat.
-4. Herdadas: Marize (R$ 249×238) e Lucas (escaneada) · PIX do Pablo Raspante · apagar
+**Push (`78ec4fa`) e Vercel conferidos**: o chunk `AttendanceTab-DW_oVGtO.js` que o site
+serve tem o aviso de "busca ativa" e a lista "Quem será resetado". O Reset Geral em
+produção **já respeita a busca**.
+
+**Testes 26.12 e 26.13 (`51738ba`)**: paravam de passar porque exigiam PN vazia. O que eles
+provam nunca foi isso, e sim o **isolamento** — a fixture criada em Caratinga não pode
+aparecer em Ponte Nova. Reescritos pra verificar exatamente isso, então continuam valendo
+mesmo com PN (e CT) crescendo. No 12 a espera da aba carregar virou explícita: afirmar
+ausência sem esperar passaria com a tela ainda vazia (falso verde). Títulos corrigidos —
+continuavam prometendo "PN: Nenhum registro". **26-extras: 4/4** (eram 2/4);
+**26 principal: 7 passed / 2 skip**.
+
+> 🔎 **Vizinhança (não mexi, é aviso):** `26-multi-company-ui-isolation.spec.ts` tem os
+> testes **3 e 9** em `test.skip` pela **mesma** premissa morta ("Relatórios/Admin de PN
+> vazios"). Dá pra recuperar os dois com a mesma correção — decisão do Victor.
+
+## 6. PENDENTE
+
+1. **Revogar o PAT do Supabase** colado no chat.
+2. Herdadas: Marize (R$ 249×238) e Lucas (escaneada) · PIX do Pablo Raspante · apagar
    backups quando liberar · 6 CPFs faltantes · painel responsivo.
