@@ -2,9 +2,21 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-07-28**.
+> Última atualização: **2026-07-29**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 29/07 — achado o que apagava ponto REAL, e corrigido dos dois lados (`fc41a09`,
+só local):** a causa era o **"Reset Geral"** da tela de Ponto, que montava os alvos a partir
+de TODOS os registros do dia **ignorando a busca** — e `tests/04-bonus.spec.ts` roda dentro
+de **Ponte Nova** e clica nele. Provado com **sentinelas** (uma em cada empresa, nomes fora
+de qualquer filtro): rodando só o spec 04, a de PN morre e a de CT vive. Descartados com
+evidência o cleanup, a limpeza administrativa, colisão de CPF, o seed do PN e as 30
+exclusões de ponto dos 66 specs. **Correção:** `attendancesToReset()` (puro) limita o reset
+a quem está visível — **sem busca ativa nada muda**; o modal passa a dizer quantos e quem, e
+avisa quando há filtro. O spec 04 virou teste de regressão. Dado restaurado 2× (4.680).
+⚠️ **Muda comportamento que a equipe usa** (Reset Geral + busca = só a lista filtrada),
+decisão do Victor. **Falta o push.** Ver `CHECKPOINT_SESSAO_2026-07-29.md`.
 
 **Sessão 28/07 — fechou o release e validou tudo que faltava:** **edge fn v11 NO AR**
 (deploy pelo **CLI** — o MCP é bloqueado pelo classificador; ⚠️ **revogar o PAT** colado no
@@ -208,7 +220,8 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-28.md` | **Mais recente.** fn v11 e **v12** no ar (deploy via CLI) · conferência da NF provada com nota real 7/7 · valida o que faltava (app, ciclo inteiro com o PDF lido, grupo sem abate, relatórios reais) · **relatórios 100% ASCII + PIX só números** (`e662fca`, no ar) · **espelho POR PLATAFORMA: 2 espelhos separados no app + 1 nota por espelho** (`31ef70f`, no ar) · spec 57 consertado · achado dos funcionários `PW Test` no cleanup | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-29.md` | **Mais recente.** Caça ao que apagava ponto real: causa = "Reset Geral" ignorando a busca, clicado pelo spec 04 dentro de Ponte Nova · corrigido no botão (`attendancesToReset`, puro) + modal que diz quantos/quem + teste de regressão no próprio spec 04 (`fc41a09`, **só local**) · método das sentinelas | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-28.md` | fn v11 e **v12** no ar (deploy via CLI) · conferência da NF provada com nota real 7/7 · valida o que faltava (app, ciclo inteiro com o PDF lido, grupo sem abate, relatórios reais) · **relatórios 100% ASCII + PIX só números** (`e662fca`, no ar) · **espelho POR PLATAFORMA: 2 espelhos separados no app + 1 nota por espelho** (`31ef70f`, no ar) · spec 57 consertado · achado dos funcionários `PW Test` no cleanup | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-27.md` | Filtro por plataforma nos relatórios + "Descontar vales e perdas" no espelho e nos relatórios (commit `a385b43`) · conserta furo latente da conferência de NF em espelho filtrado · **RELEASE COMPLETO: migration ✅ + push/Vercel ✅ + fn v11 ✅** (deploy via CLI — MCP é bloqueado) · visual em prod com prints · teste real da NF 7/7 · spec 57 quebrado desde 23/07 (pré-existente) | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-26.md` | Multi-erros por dia (individuais + triagem): insert/edição por ID, aviso do dia, Descontar Erros soma por data (commit `40e4c6b`) · migration `20260726120000` NO REPO aguardando **push+deploy → migration** nessa ordem · 3 specs MULTI auto-detectam | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-25.md` | Caio sem login (causa: tentativas nem chegavam no servidor; resetado de verdade no banco c/ backup) · botão de reset NUNCA funcionou (RLS DELETE sem SELECT) → RPC `driverpay_reset_driver_password` (fix `398befc`, migration em prod) · push+deploy conferidos | 🟢 ATIVO |
@@ -259,15 +272,18 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 - **Testes e o banco (28/07):** o cleanup do Playwright apaga funcionário `PW Test ` e o ponto dele — a contagem de `employees` CAI depois da bateria e isso é esperado. Antes de rodar bateria, guardar **NOMES** (não só contagem) pra conseguir provar depois o que sumiu. Teste de abate não pode usar a **eMile** (única com `mirror_separate_value`, valor fora do total). Teste de recusa de NF precisa de valor que não bata com **nenhum** candidato.
 - **Espelho por plataforma (28/07, decisões do Victor):** a identidade do espelho é o **conjunto de plataformas** (`platform_key`: nomes ordenados unidos por `+`; `''` = quinzena inteira), com índice único em (empresa, período, driver, platform_key). Publicar LOGGI e depois SHOPEE dá **dois espelhos**, que aparecem separados no app com selo **SOMENTE X**; **republicar o mesmo conjunto substitui só ele**. Antes o 2º apagava o 1º (mesmo caminho de PDF + delete sem olhar o filtro).
 - **Uma nota por espelho (28/07, decisão do Victor):** "se tem 2 espelhos, 2 notas; se tem 3, 3 notas". Os slots de NF são **(espelho × CNPJ)** — LOGGI/SHOPEE/ANJUN dividem o mesmo CNPJ e ainda assim pedem uma nota cada; espelho da quinzena inteira com 2 CNPJs segue pedindo 2. Nota antiga (`mirror_platform_key` NULL) vale pra qualquer espelho daquele CNPJ, e `slotCoberto` aceita **também** a chave no formato antigo — exigir a chave nova zerou a coluna NF em 5 testes e teria zerado em produção.
+- **Reset Geral do ponto (29/07, decisão do Victor):** o botão passa a resetar **somente os funcionários visíveis na tela** — com busca ativa, só a lista filtrada; sem busca, todos, como sempre foi. O modal mostra **quantos e quem** (até 5 nomes) e avisa em destaque quando há filtro. Antes ele apagava o dia inteiro ignorando a busca, e foi isso que destruiu ponto real de Ponte Nova na bateria de 28/07.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
 
-- 🔴 **A bateria E2E completa pode APAGAR ponto REAL** (28/07): sumiram 2 registros de
-  funcionários de verdade, do próprio dia, e a **causa segue desconhecida**. Antes de rodar
-  a bateria: **dump COMPLETO** (registros inteiros, não contagem — com contagem não dá pra
-  restaurar) e **comparação registro a registro** depois; de preferência fora do expediente.
-  Modelo pronto em `backups/2026-07-28-pre-bateria/`.
+- 🟢 ~~A bateria E2E pode apagar ponto REAL~~ — **CAUSA ACHADA E CORRIGIDA em 29/07**
+  (`fc41a09`): era o "Reset Geral" ignorando a busca, clicado pelo `04-bonus.spec.ts` dentro
+  de Ponte Nova. Continua valendo a **regra de proteção**: antes de rodar a bateria, **dump
+  COMPLETO** (registros inteiros, não contagem — com contagem não dá pra restaurar) e
+  **comparação registro a registro** depois. Modelo em `backups/2026-07-28-pre-bateria/`.
+  Sentinelas (`ZZSentinela …` em cada empresa, com ponto do dia) são a forma rápida de
+  detectar estrago novo.
 
 - 🟠 **Segurança driverpay:** exclusividade "2626" é client-side; RLS = `company_id OR sub IN (9999,2626)`; RPCs sem authz do chamador.
 - 🟡 Bucket `driverpay-discount-proofs` público; sem trava server-side de `driverpay_periods`; `driverPayCalc.ts` sem termo Zapex.
