@@ -85,11 +85,29 @@ ausência sem esperar passaria com a tela ainda vazia (falso verde). Títulos co
 continuavam prometendo "PN: Nenhum registro". **26-extras: 4/4** (eram 2/4);
 **26 principal: 7 passed / 2 skip**.
 
-> 🔎 **Vizinhança (não mexi, é aviso):** `26-multi-company-ui-isolation.spec.ts` tem os
-> testes **3 e 9** em `test.skip` pela **mesma** premissa morta ("Relatórios/Admin de PN
-> vazios"). Dá pra recuperar os dois com a mesma correção — decisão do Victor.
+**Testes 3 e 9 recuperados do skip (`9688b51`)** — pedido do Victor depois do aviso.
+Estavam parados desde 21/07 pela mesma premissa morta. Reescritos no molde do teste 8:
+cada empresa ganha o SEU funcionário com dados próprios e o assert é por comparação.
+  - **3 (Relatórios)** cria ponto do dia em cada empresa — sem isso nenhum apareceria e o
+    teste passaria por tela vazia (falso verde);
+  - **9 (Admin)** cria uma tentativa de GPS e uma facial em cada empresa, e re-autentica
+    após o switch (a sessão do painel Admin cai na troca).
 
-## 6. PENDENTE
+> ⚠️ **Pegadinha que derrubou a 1ª versão dos dois:** `getByText(nome)` casa com o
+> `<option>` **HIDDEN** do filtro de funcionário, não com a linha — falhavam com
+> "Received: hidden". O assert tem que ser em `tbody tr`. Já estava documentado no teste 13
+> do 26-extras; agora vale para os quatro.
+
+**Placar do isolamento:** `26-isolation` **9/9** (era 7 + 2 skip) · `26-extras` **4/4**
+(era 2/4). **Nenhum skip sobrou nos dois arquivos.**
+
+## 6. Banco — conferido registro a registro no fim
+
+`4.702 → 4.702` pontos, **0 registros do backup sumidos**, **92 funcionários reais**
+intactos, **0 sobras** de teste. Comparação por id contra
+`backups/2026-07-29/pre-fix-reset.json`.
+
+## 7. PENDENTE
 
 1. **Revogar o PAT do Supabase** colado no chat.
 2. Herdadas: Marize (R$ 249×238) e Lucas (escaneada) · PIX do Pablo Raspante · apagar

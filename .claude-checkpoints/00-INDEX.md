@@ -19,8 +19,10 @@ avisa quando há filtro. O spec 04 virou teste de regressão. Dado restaurado 2�
 decisão do Victor. **NO AR** (`78ec4fa`, chunk `AttendanceTab-DW_oVGtO.js` conferido).
 Junto: **26.12 e 26.13 consertados** (`51738ba`) — paravam de passar por exigir "PN vazia";
 agora provam o **isolamento** (fixture de CT não vaza pra PN), que é o que sempre importou:
-**4/4**. Os irmãos **26.3 e 26.9 seguem em skip** pela mesma premissa — dá pra recuperar
-igual, decisão do Victor. Ver `CHECKPOINT_SESSAO_2026-07-29.md`.
+**4/4**. E os irmãos **26.3 e 26.9 saíram do skip** (`9688b51`), reescritos igual: **isolation 9/9**
+(era 7+2 skip) e **extras 4/4** — **nenhum skip sobrou** nos dois arquivos. Banco conferido
+registro a registro no fim: **4.702 → 4.702**, 0 sumidos, 92 funcionários reais, 0 sobras.
+Ver `CHECKPOINT_SESSAO_2026-07-29.md`.
 
 **Sessão 28/07 — fechou o release e validou tudo que faltava:** **edge fn v11 NO AR**
 (deploy pelo **CLI** — o MCP é bloqueado pelo classificador; ⚠️ **revogar o PAT** colado no
@@ -280,6 +282,12 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
+
+- 🔵 **Teste de isolamento multi-empresa: nunca asserte por "a outra empresa está vazia"** —
+  a premissa morre assim que a empresa entra em uso (matou 4 testes: 26.3, 26.9, 26.12,
+  26.13). O padrão certo é o do teste 8: criar o dado em cada empresa e provar que **não
+  vaza** de uma pra outra. E o assert vai em `tbody tr`, porque `getByText(nome)` casa com o
+  `<option>` **hidden** do filtro de funcionário e falha com "Received: hidden".
 
 - 🟢 ~~A bateria E2E pode apagar ponto REAL~~ — **CAUSA ACHADA E CORRIGIDA em 29/07**
   (`fc41a09`): era o "Reset Geral" ignorando a busca, clicado pelo `04-bonus.spec.ts` dentro
