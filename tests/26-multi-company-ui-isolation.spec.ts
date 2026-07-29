@@ -100,26 +100,61 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     }
   });
 
-  // TECH_DEBT 2026-07-21: premissa "PN vazia" MORREU — Ponte Nova está em uso
-  // real desde maio/2026 (Ronaldo/Euder/Leticia/Amanda batem ponto lá; 518
-  // attendance até 20/07). Reescrever o assert de isolamento por COMPARAÇÃO
-  // (nome de CT não aparece em PN e vice-versa), não por estado vazio.
-  test.skip('3. Relatórios em Ponte Nova mostra "Nenhum registro encontrado"; Caratinga mostra lista de registros', async ({ page }) => {
-    // 1. Caratinga: aba Relatórios com listagem (DOM count > 0).
-    await goToTab(page, 'Relatórios');
-    await expect(
-      page.locator('tbody tr').first()
-    ).toBeVisible({ timeout: 15_000 });
+  /**
+   * 2026-07-29 (era test.skip desde 21/07): a premissa "Ponte Nova vazia" morreu —
+   * PN está em uso real desde maio (553 registros de ponto hoje), então exigir
+   * "Nenhum registro encontrado" lá era falso por construção.
+   *
+   * O que este teste sempre quis provar é ISOLAMENTO. Reescrito no molde do teste 8
+   * (o que já passava): cada empresa ganha o SEU funcionário com ponto, e o assert é
+   * por COMPARAÇÃO — o de CT aparece em CT e não vaza pra PN, e vice-versa. Não
+   * depende de nenhuma das duas estar vazia, então continua valendo enquanto as duas
+   * crescem.
+   */
+  test('3. Relatórios: cada empresa lista só os SEUS registros (isolamento real)', async ({ page }) => {
+    const s = getClient();
+    const ctName = 'PW Test Iso Rel CT';
+    const pnName = 'PW Test Iso Rel PN';
+    const ctId = await ensureTestEmployee(ctName, '99926000326', 'caratinga');
+    const pnId = await ensureTestEmployee(pnName, '99926000426', 'ponte');
+    const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
-    // 2. Trocar empresa + re-navegar (reload reseta activeTab).
-    await switchCompany(page, 'Ponte Nova');
-    await goToTab(page, 'Relatórios');
+    // Ponto de hoje pra cada um — o relatório lista attendance, então sem isso
+    // nenhum dos dois apareceria e o teste passaria por vazio (falso verde).
+    const criarPonto = async (empId: string, companyId: string) => {
+      await s.from('attendance').delete().eq('employee_id', empId).eq('date', hoje);
+      await s.from('attendance').insert([{
+        employee_id: empId, date: hoje, status: 'present',
+        entry_time: new Date().toISOString(), company_id: companyId, marked_by: '9999',
+      }]);
+    };
 
-    // 3. ReportsTab em Ponte Nova: estado vazio (texto exclusivo
-    //    deste componente, conforme auditoria L821/829).
-    await expect(
-      page.getByText(/Nenhum registro encontrado/i)
-    ).toBeVisible({ timeout: 10_000 });
+    try {
+      await criarPonto(ctId, CARATINGA_ID);
+      await criarPonto(pnId, PONTE_NOVA_ID);
+
+      // O nome também existe num <option> HIDDEN do filtro de funcionário, então o
+      // assert é sempre na LINHA da tabela — senão o locator casa com o option e
+      // falha por "hidden" (mesma pegadinha já documentada no teste 13 do 26-extras).
+      const linha = (nome: string) => page.locator('tbody tr', { hasText: nome });
+
+      // 1. Caratinga: vê o SEU; o de PN não vaza.
+      await goToTab(page, 'Relatórios');
+      await expect(linha(ctName).first()).toBeVisible({ timeout: 15_000 });
+      await expect(linha(pnName)).toHaveCount(0, { timeout: 5_000 });
+
+      // 2. Ponte Nova: o inverso.
+      await switchCompany(page, 'Ponte Nova');
+      await goToTab(page, 'Relatórios');
+      await expect(linha(pnName).first()).toBeVisible({ timeout: 15_000 });
+      await expect(linha(ctName)).toHaveCount(0, { timeout: 5_000 });
+    } finally {
+      // Limpeza explícita: o cleanup geral PRESERVA registros de hoje, então estes
+      // ficariam pra trás se não forem removidos aqui.
+      for (const id of [ctId, pnId]) {
+        await s.from('attendance').delete().eq('employee_id', id).eq('date', hoje);
+      }
+    }
   });
 
   test('4. Erros (Individual): combobox count UI bate com DB; empresas distintas (isolamento real)', async ({ page }) => {
@@ -359,66 +394,69 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     await expect(page.getByText(ctName)).toHaveCount(0, { timeout: 5_000 });
   });
 
-  // TECH_DEBT 2026-07-21: mesma premissa morta do teste 3 — PN tem geo (18),
-  // face_attempts (359) e attendance reais. Reescrever por comparação.
-  test.skip('9. Admin: Caratinga sections com dados; Ponte Nova vazias (Geo, Face, Suspeitas)', async ({ page }) => {
-    // Componente: AdminTab. Página única protegida por senha
-    // 'Clayton2024' (literal, confirmada em specs 12/24/27).
-    //
-    // 3 sections testáveis (filtros default vazios + texto
-    // vazio EXCLUSIVO de cada section):
-    //   - "Registros de Geolocalização" → "Nenhum registro encontrado"
-    //   - "Histórico de Tentativas Faciais" → "Nenhuma tentativa registrada"
-    //   - "Tentativas Suspeitas" → "Nenhuma tentativa encontrada"
-    //
-    // Section "Bloqueios de Bonificação" excluída deste teste:
-    // blockActiveOnly default true filtra blocks expirados; o
-    // único block de CT está expirado, então CT e PN ficam
-    // visualmente iguais. → vai pro TECH_DEBT.
-    //
-    // Re-autenticação obrigatória após switchCompany porque
-    // 'authenticated' é useState local sem persistência (reload
-    // do CompanySwitcher derruba pra false).
+  /**
+   * 2026-07-29 (era test.skip desde 21/07): mesma premissa morta do teste 3 — PN tem
+   * 88 tentativas de GPS e 359 faciais próprias, então "seções vazias em PN" nunca
+   * mais foi verdade.
+   *
+   * Reescrito por COMPARAÇÃO: cada empresa ganha uma tentativa de GPS e uma facial
+   * do SEU funcionário de teste, e o assert é que o nome de uma não aparece na outra.
+   * As seções continuam sendo as mesmas três da versão original (Geolocalização,
+   * Tentativas Faciais, Suspeitas), só que agora o que se verifica é o isolamento.
+   */
+  test('9. Admin: cada empresa vê só as SUAS tentativas de GPS e faciais (isolamento real)', async ({ page }) => {
+    const s = getClient();
+    const ctName = 'PW Test Iso Adm CT';
+    const pnName = 'PW Test Iso Adm PN';
+    const ctId = await ensureTestEmployee(ctName, '99926000526', 'caratinga');
+    const pnId = await ensureTestEmployee(pnName, '99926000626', 'ponte');
+    const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
-    // ─── Caratinga (default) ──────────────────────────────
-    await goToTab(page, 'Admin');
-    await page.getByPlaceholder('Senha').fill('Clayton2024');
-    await page.getByRole('button', { name: /^Entrar$/ }).click();
-    await expect(
-      page.getByRole('heading', { name: /Painel Admin/ })
-    ).toBeVisible({ timeout: 15_000 });
+    const criarTentativas = async (empId: string, companyId: string) => {
+      await s.from('geo_fraud_attempts').delete().eq('employee_id', empId);
+      await s.from('face_auth_attempts').delete().eq('employee_id', empId);
+      await s.from('geo_fraud_attempts').insert([{
+        employee_id: empId, date: hoje, attempted_at: new Date().toISOString(),
+        latitude: -19.8, longitude: -42.13, distance_meters: 5000,
+        clock_type: 'entry', company_id: companyId,
+      }]);
+      await s.from('face_auth_attempts').insert([{
+        employee_id: empId, date: hoje, attempted_at: new Date().toISOString(),
+        success: false, confidence: 0.1, clock_type: 'entry', company_id: companyId,
+      }]);
+    };
 
-    // 3 sections com dados em CT → textos vazios NÃO aparecem
-    await expect.soft(
-      page.getByText(/Nenhum registro encontrado/i)
-    ).toHaveCount(0, { timeout: 10_000 });
-    await expect.soft(
-      page.getByText(/Nenhuma tentativa registrada/i)
-    ).toHaveCount(0);
-    await expect.soft(
-      page.getByText(/Nenhuma tentativa encontrada/i)
-    ).toHaveCount(0);
+    /** A tela Admin é protegida por senha e o login cai a cada troca de empresa. */
+    const abrirAdmin = async () => {
+      await goToTab(page, 'Admin');
+      await page.getByPlaceholder('Senha').fill('Clayton2024');
+      await page.getByRole('button', { name: /^Entrar$/ }).click();
+      await expect(page.getByRole('heading', { name: /Painel Admin/ })).toBeVisible({ timeout: 20_000 });
+    };
 
-    // ─── Ponte Nova ───────────────────────────────────────
-    // switchCompany dispara reload → authenticated reset →
-    // re-autenticar.
-    await switchCompany(page, 'Ponte Nova');
-    await goToTab(page, 'Admin');
-    await page.getByPlaceholder('Senha').fill('Clayton2024');
-    await page.getByRole('button', { name: /^Entrar$/ }).click();
-    await expect(
-      page.getByRole('heading', { name: /Painel Admin/ })
-    ).toBeVisible({ timeout: 15_000 });
+    try {
+      await criarTentativas(ctId, CARATINGA_ID);
+      await criarTentativas(pnId, PONTE_NOVA_ID);
 
-    // 3 sections vazias em PN → textos vazios aparecem
-    await expect.soft(
-      page.getByText(/Nenhum registro encontrado/i)
-    ).toBeVisible({ timeout: 10_000 });
-    await expect.soft(
-      page.getByText(/Nenhuma tentativa registrada/i)
-    ).toBeVisible();
-    await expect.soft(
-      page.getByText(/Nenhuma tentativa encontrada/i)
-    ).toBeVisible();
+      // Igual ao teste 3: o nome aparece num <option> HIDDEN do filtro de
+      // funcionário do AdminTab, então o assert vai na LINHA da tabela.
+      const linha = (nome: string) => page.locator('tbody tr', { hasText: nome });
+
+      // 1. Caratinga: vê o SEU funcionário nas tentativas; o de PN não vaza.
+      await abrirAdmin();
+      await expect(linha(ctName).first()).toBeVisible({ timeout: 20_000 });
+      await expect(linha(pnName)).toHaveCount(0, { timeout: 5_000 });
+
+      // 2. Ponte Nova: o inverso (re-autentica — o switch derruba a sessão do painel).
+      await switchCompany(page, 'Ponte Nova');
+      await abrirAdmin();
+      await expect(linha(pnName).first()).toBeVisible({ timeout: 20_000 });
+      await expect(linha(ctName)).toHaveCount(0, { timeout: 5_000 });
+    } finally {
+      for (const id of [ctId, pnId]) {
+        await s.from('geo_fraud_attempts').delete().eq('employee_id', id);
+        await s.from('face_auth_attempts').delete().eq('employee_id', id);
+      }
+    }
   });
 });
