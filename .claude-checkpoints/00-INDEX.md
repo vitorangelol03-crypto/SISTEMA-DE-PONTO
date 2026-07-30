@@ -290,8 +290,12 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
   (`9596a76`). Regra pra qualquer spec novo que toque dinheiro: **fotografe o estado antes
   e devolva depois** — delete por prefixo não protege, porque o teste suja registro de
   gente real. Verificar com **sentinela** (um bônus/registro plantado que tem que
-  sobreviver). ⚠️ Sobrou resíduo histórico de pagamentos "fantasma" (diária 0) desde maio,
-  1-5 por data — Victor decide se limpa.
+  sobreviver). ⚠️ **Não confundir com "diária zerada"**: são 104 no
+  sistema, 49 com ponto no dia e 15 lançados pelo supervisor `01` — **padrão normal, não
+  lixo**. Resíduo de teste se identifica por VÁRIOS sinais juntos (horário da rodada +
+  usuário do teste + valor que o teste usa + não existir antes), nunca por um só.
+  `payments` tem UNIQUE (employee_id, date): pagamento zerado deixado por teste **ocupa a
+  vaga** do lançamento real do dia.
 - 🔵 **Teste de isolamento multi-empresa: nunca asserte por "a outra empresa está vazia"** —
   a premissa morre assim que a empresa entra em uso (matou 4 testes: 26.3, 26.9, 26.12,
   26.13). O padrão certo é o do teste 8: criar o dado em cada empresa e provar que **não

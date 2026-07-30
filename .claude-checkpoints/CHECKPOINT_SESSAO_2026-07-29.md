@@ -135,9 +135,34 @@ dedicado (`backups/2026-07-29-bonus/removidos-residuo-teste.json`) e **guarda no
 script**: só apagava o que tivesse diária 0, banco de horas 0 e `created_by = 2626` —
 abortaria se algum não casasse.
 
-**Resíduo histórico (não mexi):** existem pagamentos "fantasma" (diária 0, sem banco de
-horas) espalhados desde maio, 1 a 5 por data, criados por 2626/9999. Só o de hoje tinha
-bônus relevante. Fica como pendência para o Victor decidir.
+### 6.5 ⚠️ CORREÇÃO da minha própria análise: "diária zerada" NÃO é lixo de teste
+
+Chamei de "fantasma" todo pagamento com diária 0 — **estava errado**. São **104** no
+sistema: **49 têm ponto no dia** e **15 foram criados pelo supervisor `01`** (lançamento
+humano). Em **06/11/2025** há 15 funcionários assim de uma vez, com bônus de R$ 30 pelo
+supervisor. É **padrão normal do sistema**, não sujeira. **Não mexi em nenhum deles.**
+
+Os 5 que foram removidos não bateram só na diária zerada, e sim em **4 critérios juntos**:
+criados às 09:55:18 (janela exata do spec 04), por `2626` (usuário do teste), com bônus de
+**R$ 10** (valor que aquele teste aplica) e **sem pagamento anterior** naquele dia.
+
+### 6.6 As 2 "cascas" de 28/07 — o que eram, e removidas
+Euder e Ronaldo, 28/07, **tudo zero** e `bonus_breakdown {}`. Reconstrução: eles eram os
+**únicos 2 de PN com ponto** naquele dia; o spec 04 aplicou o bônus do dia (que vale pra
+empresa inteira) e criou o pagamento dos dois; segundos depois o **Reset Geral** (versão
+antiga) apagou o ponto deles e **zerou** o bônus. Sobrou a casca.
+
+**Não eram inofensivas:** `payments` tem **UNIQUE (employee_id, date)** — as cascas
+**ocupavam a vaga** do pagamento de 28/07 de quem trabalhou. Removidas com OK do Victor,
+backup em `backups/2026-07-29-bonus/removidos-casca-28-07.json`, guarda no script (abortaria
+se houvesse qualquer valor) e **ponto dos dois conferido INTACTO** depois.
+
+### 6.7 Últimos 10 dias — conferência pedida pelo Victor
+Comparação por id contra o backup: **ponto 257 → 0 sumidos**; **bonificações 64 → 64, 0
+sumidos**; **pagamentos**: dos 84 do período saíram **exatamente os 5 autorizados**, nada a
+mais. Valores coerentes no período (Caratinga R$ 350–400/dia, PN R$ 541–550).
+**Observação pro Victor:** 26, 27 e 29/07 estão **sem pagamento lançado** em nenhuma das
+duas empresas, embora haja ponto — pode ser lançamento em lote pendente.
 
 ## 7. Banco — conferido registro a registro no fim
 
