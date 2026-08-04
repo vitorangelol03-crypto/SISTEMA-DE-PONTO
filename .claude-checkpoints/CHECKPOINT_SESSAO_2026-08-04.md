@@ -80,6 +80,40 @@ tsc **0** · eslint **0** · **759 unit** (66 novos) · build ok (1m04) ·
 ⚠️ **`tests/unit/edgeFnEmployeePublicApi.spec.ts` (set-pin) falhou na bateria por timeout e passou
 sozinho 4/4** — cold start da edge fn, flaky conhecido desde maio. Não tem relação com esta feature.
 
+## 6.6 🔴 ACHADO QUE VALE PRA TODAS AS SESSÕES: `npx tsc --noEmit` não checava NADA
+
+O `tsconfig.json` da raiz usa **project references** com `"files": []`. Rodar `npx tsc --noEmit`
+ali **não tem arquivo pra checar** — ele sai vazio, e essa saída vazia vinha sendo lida (por mim,
+a sessão inteira, e provavelmente em sessões anteriores) como **"tsc 0 erros"**.
+
+**Como apareceu:** o E2E com cliques reais quebrou porque `reloadPeriods` **não existia**. Um nome
+inexistente, que o TypeScript pegaria em um segundo — e o "tsc 0" tinha dito que estava tudo bem.
+
+**Corrigido:** `npm run typecheck` → `tsc -p tsconfig.app.json --noEmit`. Roda de verdade:
+**65 erros**, todos do baseline antigo (App.tsx, AttendanceTab, LoginForm, DataManagementTab…),
+**zero** nos arquivos desta feature. Isso também explica o "63 erros de baseline" que o índice
+registra desde julho: alguém já tinha rodado o comando certo alguma vez.
+
+⚠️ **`npm run build` não substitui**: o Vite transpila sem checar tipo.
+
+## 6.7 O E2E com cliques reais (tests/64) — e os 2 bugs que ele pegou
+
+Roda com a **foto real do Victor** (`tests/fixtures/espelho-shopee-real.jpg`), sobe ela no bucket
+de verdade e confere que a imagem **carregou no navegador** (`naturalWidth > 0`), não só o `src`.
+Prova: as datas obrigatórias + aviso de quinzena estranha → coluna "Print" 0/1 → print divergente
+(1808 × 1750) mostrando a foto e "58 a mais" → botão âmbar com (1) → validar na mão deixa 1/1.
+**1 passed em 1,2 min.**
+
+Bugs que só apareceram clicando:
+1. **`reloadPeriods` inexistente** — o pedido era gravado certo e a tela quebrava logo depois,
+   deixando o modal aberto com cara de erro. Além do fix, o modal passou a fechar mesmo se a
+   recarga falhar: a gravação já aconteceu, não pode parecer que não.
+2. O `tsc` cego acima.
+
+Duas armadilhas de ambiente registradas no próprio spec: **`__dirname` não existe em ESM**, e o
+**Vite no WSL** precisa de um `goto` com timeout folgado antes do login — sem isso a primeira
+tentativa sempre morre e o teste vive marcado como *flaky*.
+
 ## 6. Aprendizados desta sessão
 
 - **Deno agora dá pra checar localmente**: instalei em
