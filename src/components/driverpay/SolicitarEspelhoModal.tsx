@@ -12,7 +12,7 @@
  * o mês do fim adiantado, então este campo não é burocracia.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Loader2, AlertTriangle, Users, Check } from 'lucide-react';
+import { ClipboardList, Loader2, AlertTriangle, Users, Check, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   listProofRequests,
@@ -49,6 +49,7 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
 }) => {
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
   const [jaSolicitadas, setJaSolicitadas] = useState<string[]>([]);
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [inicio, setInicio] = useState(periodStart ?? '');
@@ -102,6 +103,32 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
     });
   };
 
+  /**
+   * Fecha a torneira de TODAS as plataformas já pedidas nesta quinzena. Os prints que já
+   * chegaram FICAM no painel — só para de pedir novos. É destrutivo o bastante pra pedir
+   * confirmação, e barato o bastante pra refazer (é só solicitar de novo).
+   */
+  const handleCancelarPedido = async () => {
+    if (!window.confirm(
+      `Parar de pedir o print nesta quinzena (${jaSolicitadas.join(', ')})?\n\n` +
+      'Os entregadores deixam de ver o pedido no portal. Os prints que ja chegaram continuam ' +
+      'guardados, e voce pode solicitar de novo quando quiser.',
+    )) return;
+    setCancelando(true);
+    try {
+      for (const nome of jaSolicitadas) await cancelProofRequest(companyId, periodId, nome, userId);
+      setJaSolicitadas([]);
+      setMarcadas(new Set());
+      toast.success('Solicitacao cancelada. O portal parou de pedir print.');
+      try { await onChanged(); } catch (err) { console.error('[solicitar-espelho] recarga falhou:', err); }
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Nao consegui cancelar a solicitacao.');
+    } finally {
+      setCancelando(false);
+    }
+  };
+
   const handleSalvar = async () => {
     if (!datasOk) { toast.error('Preencha as datas da quinzena.'); return; }
     setSalvando(true);
@@ -144,11 +171,25 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
       maxWidth="sm:max-w-xl"
       footer={
         <>
+          {/* Cancelar a SOLICITAÇÃO era escondido: só acontecia desmarcando todas as
+              plataformas e clicando em "Solicitar espelho" — ninguém adivinha. Agora tem
+              botão próprio, e o "Fechar" ao lado não mexe em nada (antes se chamava
+              "Cancelar" e parecia que cancelava o pedido). */}
+          {jaSolicitadas.length > 0 && (
+            <button
+              type="button" onClick={handleCancelarPedido} disabled={salvando || carregando}
+              data-testid="proof-request-cancel"
+              className="px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 disabled:opacity-50 text-sm font-medium min-h-[40px] flex items-center gap-2 mr-auto"
+            >
+              {cancelando ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+              Cancelar solicitacao
+            </button>
+          )}
           <button
             type="button" onClick={onClose}
             className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium min-h-[40px]"
           >
-            Cancelar
+            Fechar
           </button>
           <button
             type="button" onClick={handleSalvar} disabled={salvando || carregando || !datasOk}
