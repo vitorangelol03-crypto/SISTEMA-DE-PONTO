@@ -200,7 +200,13 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
     await enviarPrint(page, FOTO_CERTA);
     await expect(page.getByText(/Espelho enviado/i)).toBeVisible({ timeout: 20_000 });
     await print(page, 'B-print-CERTO-aceito');
-    await expect(page.getByText(/enviado\(s\)/i).first()).toBeVisible({ timeout: 20_000 });
+    // A tela reorganizada (04/08) confirma de dois jeitos: o placar fica VERDE e o
+    // cartão desce pra lista dos resolvidos. Antes o sinal era o selo "1 enviado(s)"
+    // no próprio cartão, que saiu de propósito — virava ruído em grupo grande.
+    await expect(page.getByText(/Tudo enviado!/i)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/J[áa] enviados \(1\)/i)).toBeVisible();
+    // E não sobra nenhum botão de envio pendente pra ele.
+    await expect(page.getByText(/Enviar print do app/i)).toHaveCount(0);
 
     // No banco: leu certo, conferiu e marcou o pagamento.
     const { data: proof } = await db.from('driverpay_delivery_proofs')

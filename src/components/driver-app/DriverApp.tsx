@@ -10,10 +10,10 @@ import { CircleDollarSign, LogOut, Eye, FileText, KeyRound, Upload, ChevronLeft,
 import {
   driverLogin, driverChangePassword, driverMyMirrors, driverMirrorUrl,
   driverNfSlots, driverNfList, driverNfUpload,
-  driverProofSlots, driverProofList, driverProofUpload,
+  driverProofSlots, driverProofUpload,
   getDriverToken, getDriverName, setDriverSession, clearDriverSession,
   DriverApiError, type DriverMirror, type NfSlot, type NfFile,
-  type ProofSlot, type ProofFile,
+  type ProofSlot,
 } from '../../services/driverApp';
 
 type Screen = 'login' | 'change' | 'mirrors' | 'nf' | 'proof';
@@ -101,7 +101,6 @@ export function DriverApp() {
   /** Quantos prints ainda faltam — alimenta a faixa no topo da lista. */
   const [proofPendentes, setProofPendentes] = useState(0);
   const [proofSlots, setProofSlots] = useState<ProofSlot[] | null>(null);
-  const [proofFiles, setProofFiles] = useState<ProofFile[]>([]);
   const [proofUploading, setProofUploading] = useState<string | null>(null);
 
   const logout = useCallback(() => {
@@ -232,12 +231,10 @@ export function DriverApp() {
     if (!token) return;
     setProofSlots(null);
     try {
-      const [{ slots }, { files }] = await Promise.all([
-        driverProofSlots(periodId ?? '', token),
-        driverProofList(periodId ?? '', token),
-      ]);
+      // Só os slots: o histórico separado saiu da tela (repetia o que os
+      // próprios cartões já mostram) — uma requisição a menos no celular.
+      const { slots } = await driverProofSlots(periodId ?? '', token);
       setProofSlots(slots);
-      setProofFiles(files);
       setProofPendentes(slots.filter((s) => s.sent === 0).length);
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
@@ -401,8 +398,22 @@ export function DriverApp() {
   // ─── Tela do ESPELHO DO APP (print da tela da Shopee) ────────────────────
   // ⚠️ Nao existe numero nenhum nesta tela, de proposito: o driver so anexa a foto.
   if (screen === 'proof') {
-    const meus = (proofSlots ?? []).filter((s) => !s.doGrupo);
-    const doGrupo = (proofSlots ?? []).filter((s) => s.doGrupo);
+    // ── Ordem da tela (ajustes pedidos pelo Victor em 04/08, olhando o print de
+    //    um grupo de 6): quem AINDA FALTA aparece primeiro e chama atenção; quem
+    //    já resolveu vai pro fim, apagado. Dentro do que falta, o RECUSADO vem
+    //    na frente — é o mais urgente, porque já tomou "não" uma vez.
+    const todos = proofSlots ?? [];
+    const faltam = todos.filter((s) => s.sent === 0);
+    const prontos = todos.filter((s) => s.sent > 0);
+    const urgencia = (s: ProofSlot) => (s.rejected > 0 ? 0 : 1);
+    const meusFaltam = faltam.filter((s) => !s.doGrupo);
+    const grupoFaltam = faltam.filter((s) => s.doGrupo).sort((a, b) => urgencia(a) - urgencia(b));
+
+    // A quinzena é a mesma pra todos na prática. Mostrar em CADA cartão virava
+    // ruído (repetia 6 vezes e quebrava linha), então sobe pro topo — e só volta
+    // pro cartão se houver mais de uma quinzena aberta ao mesmo tempo.
+    const quinzenas = [...new Set(todos.map((s) => s.periodLabel).filter(Boolean))];
+    const umaQuinzenaSo = quinzenas.length === 1;
 
     const cartao = (s: ProofSlot) => {
       const chave = `${s.driverId}|${s.platformName}`;
@@ -410,16 +421,11 @@ export function DriverApp() {
       const precisaReenviar = s.sent === 0 && s.rejected > 0;
       return (
         <div key={chave} className="bg-white rounded-xl shadow-sm p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="font-semibold text-gray-900 break-words">{s.driverName}</div>
-              <div className="text-xs text-gray-500 mt-0.5">Entregas {s.platformName} · {s.periodLabel}</div>
+          <div className="min-w-0">
+            <div className="font-semibold text-gray-900 break-words">{s.driverName}</div>
+            <div className="text-xs text-gray-500 mt-0.5">
+              Entregas {s.platformName}{umaQuinzenaSo ? '' : ` · ${s.periodLabel}`}
             </div>
-            {s.sent > 0 && (
-              <span className="flex items-center gap-1 text-green-700 text-xs font-medium whitespace-nowrap">
-                <CheckCircle2 size={14} /> {s.sent} enviado(s)
-              </span>
-            )}
           </div>
 
           {precisaReenviar && (
@@ -431,15 +437,32 @@ export function DriverApp() {
 
           <label
             className={`mt-3 w-full flex items-center justify-center gap-2 text-sm font-medium rounded-lg px-3 py-2.5 cursor-pointer ${
-              enviando
-                ? 'bg-gray-100 text-gray-400 cursor-wait'
-                : s.sent > 0
-                ? 'bg-white border border-blue-600 text-blue-700 hover:bg-blue-50'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
+              enviando ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
           >
             {enviando ? <Spinner /> : <Upload size={16} />}
-            {enviando ? 'Enviando...' : s.sent > 0 ? 'Enviar outro print' : 'Enviar print do app'}
+            {enviando ? 'Enviando...' : 'Enviar print do app'}
+            <input
+              type="file" accept="image/*" capture="environment" className="hidden" disabled={enviando}
+              onChange={(e) => { handleProofFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
+            />
+          </label>
+        </div>
+      );
+    };
+
+    /** Já resolvido: fica apagado e discreto, pra não competir com quem falta. */
+    const cartaoPronto = (s: ProofSlot) => {
+      const chave = `${s.driverId}|${s.platformName}`;
+      const enviando = proofUploading === chave;
+      return (
+        <div key={chave} className="bg-white/60 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+          <div className="min-w-0 flex items-center gap-2">
+            <CheckCircle2 size={18} className="text-green-600 flex-shrink-0" />
+            <span className="text-sm text-gray-600 break-words">{s.driverName}</span>
+          </div>
+          <label className="text-xs text-blue-700 underline whitespace-nowrap cursor-pointer flex-shrink-0">
+            {enviando ? 'enviando...' : 'trocar'}
             <input
               type="file" accept="image/*" capture="environment" className="hidden" disabled={enviando}
               onChange={(e) => { handleProofFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
@@ -474,6 +497,38 @@ export function DriverApp() {
 
           {proofSlots !== null && proofSlots.length > 0 && (
             <>
+              {/* Placar: sem isto o líder de um grupo grande tinha que contar
+                  cartão por cartão pra saber quanto falta. */}
+              <div
+                className={`rounded-xl p-4 text-center ${
+                  faltam.length === 0
+                    ? 'bg-green-50 border border-green-300'
+                    : 'bg-amber-50 border border-amber-300'
+                }`}
+              >
+                {faltam.length === 0 ? (
+                  <>
+                    <div className="text-green-800 font-bold text-lg flex items-center justify-center gap-2">
+                      <CheckCircle2 size={20} /> Tudo enviado!
+                    </div>
+                    <div className="text-green-700 text-xs mt-0.5">
+                      {todos.length === 1 ? 'Seu espelho já chegou na CD.' : `Os ${todos.length} espelhos já chegaram na CD.`}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-amber-900 font-bold text-lg">
+                      {todos.length === 1
+                        ? 'Falta enviar o seu espelho'
+                        : `Faltam ${faltam.length} de ${todos.length}`}
+                    </div>
+                    <div className="text-amber-800 text-xs mt-0.5">
+                      {umaQuinzenaSo ? quinzenas[0] : 'Quinzenas em aberto'}
+                    </div>
+                  </>
+                )}
+              </div>
+
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900">
                 <p className="font-medium mb-1">Como tirar o print</p>
                 <ol className="list-decimal list-inside space-y-0.5 text-xs">
@@ -484,36 +539,33 @@ export function DriverApp() {
                 </ol>
               </div>
 
-              {meus.map(cartao)}
-
-              {doGrupo.length > 0 && (
+              {/* O cartão dele agora tem rótulo: antes ficava solto no topo e
+                  parecia mais um da lista. */}
+              {meusFaltam.length > 0 && (
                 <>
-                  <div className="pt-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Do seu grupo — um print de cada
+                  <div className="pt-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Seu espelho
                   </div>
-                  {doGrupo.map(cartao)}
+                  {meusFaltam.map(cartao)}
                 </>
               )}
 
-              {proofFiles.length > 0 && (
-                <div className="pt-2">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Enviados</div>
-                  <div className="bg-white rounded-xl shadow-sm divide-y">
-                    {proofFiles.map((f) => (
-                      <div key={f.id} className="px-4 py-2.5 flex items-center justify-between gap-2 text-sm">
-                        <div className="min-w-0">
-                          <div className="text-gray-800 truncate">{f.driverName}</div>
-                          <div className="text-xs text-gray-500">{f.platformName} · {fmtDate(f.uploadedAt)}</div>
-                        </div>
-                        <span className={`text-xs font-medium whitespace-nowrap ${
-                          f.status === 'rejeitado' ? 'text-red-600' : 'text-green-700'
-                        }`}>
-                          {f.status === 'rejeitado' ? 'recusado' : 'enviado'}
-                        </span>
-                      </div>
-                    ))}
+              {grupoFaltam.length > 0 && (
+                <>
+                  <div className="pt-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Do seu grupo — falta{grupoFaltam.length > 1 ? 'm' : ''} {grupoFaltam.length}
                   </div>
-                </div>
+                  {grupoFaltam.map(cartao)}
+                </>
+              )}
+
+              {prontos.length > 0 && (
+                <>
+                  <div className="pt-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    Já enviados ({prontos.length})
+                  </div>
+                  <div className="space-y-1.5">{prontos.map(cartaoPronto)}</div>
+                </>
               )}
             </>
           )}
