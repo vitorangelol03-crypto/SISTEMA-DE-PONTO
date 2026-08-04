@@ -20,9 +20,7 @@ inventa número**. 🔑 **Cota do Gemini grátis = 20 leituras/dia POR MODELO**,
 modelos (~180/dia) contra as **89 leituras/quinzena** do volume real. **Corrigido em produção
 (autorizado):** as datas das quinzenas estavam com o mês do fim +1 (45 dias em vez de 14) — não
 atrapalhava nada até hoje, mas a conferência do print compara com elas; backup em
-`backups/2026-08-04/`, banco conferido intacto depois. Validado: tsc 0 · eslint 0 · 759 unit ·
-build ok · `deno check` sem erro novo. **Falta:** fn admin, painel, portal do driver, E2E, release.
-Ver `CHECKPOINT_SESSAO_2026-08-04.md`.
+`backups/2026-08-04/`, banco conferido intacto depois. **Segunda leva do dia:** as 2 migrations **APLICADAS em prod** (banco conferido idêntico antes/depois) e **as telas prontas** (`dae8766`): botão "Solicitar espelho", modal "Espelhos recebidos" com a foto ao lado do que a planilha diz, coluna "Print" na grade, e a tela nova no portal do entregador com **zero número** (um cartão por driver; no grupo o líder vê os membros separados). Validado: tsc 0 · eslint 0 · build ok · **777 unit**. ⚠️ **Falta só o RELEASE**: deploy da edge fn pelo CLI, reagendar o cron (nasceu dormindo até 2028 de propósito) e o push dos 5 commits. Não foi feita a fn `proof-admin` (anexar pelo painel). Ver `CHECKPOINT_SESSAO_2026-08-04.md`.
 
 **Sessão 29/07 — achado o que apagava ponto REAL, e corrigido dos dois lados (`fc41a09`,
 só local):** a causa era o **"Reset Geral"** da tela de Ponto, que montava os alvos a partir

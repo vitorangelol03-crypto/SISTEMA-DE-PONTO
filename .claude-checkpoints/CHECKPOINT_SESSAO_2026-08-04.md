@@ -92,19 +92,46 @@ sozinho 4/4** — cold start da edge fn, flaky conhecido desde maio. Não tem re
   separador de milhar e lia `"0 1808"` (a tela tem "Em Rota (0)" ao lado) como **1808**. O teste
   pegou. Ambíguo tem que virar nulo — número errado em silêncio é pior que número nenhum.
 
+## 6.5 Segunda leva do dia — telas + banco aplicado
+
+**Aplicado em produção (autorizado):** migration `20260804120000` (2 tabelas, bucket privado,
+2 colunas em `driverpay_settings`) e `20260804140000` (pg_cron + pg_net + segredo no vault + job).
+Conferido antes/depois: pagamentos 294 · pacotes 542 · drivers 99 · ponto 4.818 · funcionários 94 ·
+R$ 336.157,66 · os 2 espelhos já conferidos na mão — **todos idênticos**.
+
+**Aprendido aplicando o cron** (o arquivo da migration foi corrigido pra refletir):
+- a função é **`net.http_post`**, não `extensions.http_post` — conferido no catálogo ANTES de
+  agendar; chutar faria o job falhar em silêncio a cada 15 min;
+- o role `postgres` do Supabase **não enxerga `cron.job` sem GRANT** explícito, e mesmo com ele
+  só **lê**, não altera. Então "pausar" por SQL é reagendar com data que não chega;
+- o job nasceu **DORMINDO** (`0 5 29 2 *` = 29/02, próximo em 2028) porque a fn no ar ainda é a
+  v12. **Reagendar com `*/15 * * * *` no deploy.**
+
+**Telas prontas** (commit `dae8766`): botão "Solicitar espelho" (exige as datas e mostra prévia de
+quem será cobrado), modal "Espelhos recebidos" (a foto ao lado do que a planilha diz, filtro "só o
+que precisa de atenção" ligado, aviso de planilha mudada e de print repetido), coluna "Print" na
+grade + rodapé + card do celular, e a tela nova no portal do entregador (um cartão por driver, com
+**zero número na tela**).
+
+⚠️ **`DriverRow.tsx` tem `totalCols` contado na mão** — foi incrementado junto com a coluna nova.
+
 ## 7. PENDENTE
 
-**Da feature (nesta ordem):**
-1. Edge fn `driverpay-proof-admin` (anexar/reconferir pelo painel — precisa de JWT do painel).
-2. Painel: botão "Solicitar espelho" + modal "Espelhos recebidos" + coluna "Print" na grade.
-   ⚠️ `DriverRow.tsx:91` tem `totalCols` na mão — incrementar junto.
-3. Portal do driver: aba do print (`Screen = 'proof'`), reativando o `fileToUpload` de imagem que
-   está parado em `DriverApp.tsx:43-74` desde que a NF virou só-PDF.
-4. E2E 64 (painel) e 65 (**primeiro spec do portal do driver** — hoje não existe nenhum).
-5. Estender `tests/cleanup.ts` pra tabela e bucket novos.
-6. Release: migration → deploy das 2 edge fns (CLI, na mão do Victor) → push.
-7. Opcional: `pg_cron` + `pg_net` (disponíveis, **não instalados**) pra fila andar sozinha sem
-   ninguém abrir o painel.
+**RELEASE — é só isto que falta pra estar no ar (nesta ordem):**
+1. **Deploy da edge fn** pelo CLI (o MCP é bloqueado pelo classificador):
+   `npx supabase functions deploy driver-public-api --no-verify-jwt --project-ref flcncdidxmmornkgkfbb`
+2. **Reagendar o cron** pra valer (hoje está dormindo até 2028):
+   `SELECT cron.schedule('driverpay-proof-queue', '*/15 * * * *', $job$ ... $job$);`
+   — o corpo está na migration `20260804140000`, PARTE 3.
+3. **Push** (do Victor): 5 commits locais.
+4. Testar ao vivo: solicitar o espelho numa quinzena, anexar o print real pelo portal, ver a linha
+   ficar verde sozinha.
+
+**Depois do release:**
+- Edge fn `driverpay-proof-admin` (anexar/reconferir **pelo painel**) — **NÃO foi feita**. Hoje só
+  o portal do entregador anexa; quem manda por WhatsApp ainda depende de você por fora.
+- E2E 64 (painel) e 65 (**primeiro spec do portal do driver** — hoje não existe nenhum).
+- Estender `tests/cleanup.ts` pra tabela e bucket novos.
 
 **Herdadas:** revogar o PAT do Supabase (desde 28/07) · trocar a chave do Gemini quando der ·
 Marize (R$ 249×238) e Lucas (escaneada) · PIX do Pablo Raspante · 6 CPFs faltantes · painel responsivo.
