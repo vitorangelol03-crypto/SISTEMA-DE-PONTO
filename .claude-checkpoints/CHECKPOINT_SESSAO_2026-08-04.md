@@ -531,3 +531,74 @@ no iPhone mantém a aba viva por dias com o JS antigo.
 ⚠️ Se aparecer o painel novo e mesmo assim abrir só a câmera, aí é navegador embutido (link aberto
 dentro do WhatsApp, por exemplo) — nesse caso nenhum atributo força a galeria, e o caminho seria dar
 dois botões separados. **Ainda não testado em Safari de verdade** (WebKit pede ~30 libs via sudo).
+
+---
+
+## 13. Descontos PNR lançados da planilha + provas ao editar (`57fd352`)
+
+> ⚠️ Esta leva rodou **em paralelo com outra sessão** do Victor (a do holerite/prazo da nota).
+> Ver §13.3 — houve mistura de commit.
+
+### 13.1 Lançamento dos descontos PNR (dado de produção)
+Planilha `Descontos_PNR_Fechamento.xlsx` (grupo WhatsApp "PNR - PARA FATURAMENTO - CARATINGA",
+mensagens de 02/07 a 03/08/2026). Conferida antes de lançar: resumo × detalhado bate entregador a
+entregador, TOTAL GERAL R$ 1.126,65 confere, 52 rastreios sem repetição.
+
+**Decisões do Victor:** valor **R$ 10,00** para os pacotes que vieram com o valor **tampado (`****`)**
+no grupo · tudo na **1 quinzena de julho** · **um código de rastreio por desconto** · os dois
+entregadores fora do cadastro **ficam de fora** (ele pediu os códigos deles no chat).
+
+**Lançado: 47 descontos, R$ 1.212,05, em 24 entregadores** — 29 com valor real (R$ 1.032,05) e 18
+com o padrão (R$ 180,00), todos `package_status='PNR'`, `created_by='2626'`.
+
+- **Ficaram de fora:** `Josiane Batista Barbosa` (4 pacotes) e `JUSSIMAR DA SILVA MARTINS` (1) — não
+  existem em `driverpay_drivers` nem nos apelidos. R$ 94,60 do que dá pra ver.
+- 🔑 **`XPT (DUTRA) GERSON BOTELHO DE SOUSA` = `GERSON BOTELHO DE SOUSA`** — não foi chute: o alias
+  `87191-XPT (DUTRA) GERSON BOTELHO DE SOUSA` já estava gravado em `driverpay_driver_aliases`.
+- ⚠️ **Os totais do pagamento NÃO são atualizados por trigger.** O app chama
+  `recomputePaymentTotals`, que lê a view `driverpay_payment_computed`. Lançando por SQL é
+  obrigatório rodar o mesmo UPDATE, senão `total_discounts` fica 0 e a grade mente.
+- ⚠️ **`total_net` está negativo** nesses 24 — esperado: a planilha de julho ainda não foi importada,
+  então não há pacote pra abater. Some quando a planilha entrar.
+- ⚠️ Os 18 provisórios levam **"valor a confirmar"** na observação, e **a observação aparece no
+  espelho que o entregador recebe** (`driverMirrorPdf`, coluna "Descrição"). Decisão consciente;
+  trocar é um UPDATE.
+- Backup + rollback + a planilha: `backups/2026-08-04-descontos-pnr/`.
+- Banco conferido antes/depois: 99 drivers · 294 pagamentos · 542 linhas de pacote · 3 períodos ·
+  30 espelhos · junho concluída intacta em R$ 336.157,66.
+
+### 🔴 Pegadinha do Postgres que travou o INSERT na primeira tentativa
+A trava anti-erro era `CASE WHEN (SELECT count(*) FROM alvo) <> 47 THEN (SELECT 1/0) ELSE 0 END`.
+Deu **division by zero mesmo com a condição falsa**: subquery dentro de `CASE` vira **InitPlan** e é
+avaliada antes do `CASE` escolher o ramo. Isolado, `CASE WHEN 1=2 THEN (SELECT 1/0) ELSE 0 END`
+funciona (constant folding), o que confunde o diagnóstico. **Trava que presta é `WHERE`:**
+`FROM alvo a, guarda g WHERE g.n_casadas = 47` — não bate, insere zero linha, sem erro.
+
+### 13.2 🔴 Editar desconto não salvava foto nem vídeo (bug do Victor, corrigido)
+`updateDiscount` só gravava valor/código/observação/marca; a tela coletava a prova e **jogava fora**.
+O aviso azul *"as fotos/vídeo não mudam aqui"* descrevia a limitação em vez de corrigi-la.
+
+- Agora a edição **mostra as provas já salvas** — dá pra ver, remover, trocar e somar mais uma; o que
+  fica na tela é o que é gravado.
+- 🔑 **O bucket `driverpay-discount-proofs` tem policy de INSERT/SELECT/DELETE e NÃO de UPDATE**
+  (migration `20260704120000`). Reenviar por cima do mesmo caminho seria **barrado pela RLS**. Por
+  isso toda prova nova nasce com **nome único** (`proofFileName`) e a antiga é apagada depois —
+  nunca `upsert`.
+- Prova que sai é removida do Storage **só depois** do banco confirmar o caminho novo; upload que
+  falha **desfaz tudo e não altera nada** (perder prova antiga por foto que não subiu é pior).
+- `orphanProofPaths` é pura e compara **por conteúdo, não por posição**: a foto que só muda de lugar
+  (slot 2 → 1) quando a outra é removida **não pode** ser apagada.
+
+**Validação:** 14 unit novos · **853 unit** no total · typecheck sem erro novo (zero nos arquivos
+tocados) · eslint · build · **E2E 66 novo, com cliques reais e arquivos subindo pro bucket**.
+🔑 **O E2E foi provado ao contrário:** reintroduzi o bug e ele falhou em *"2ª foto anexada na EDIÇÃO
+— Received: null"*, o sintoma exato relatado; com o fix, passa. ⚠️ Para essa prova valer foi preciso
+**reiniciar o Vite** — na primeira tentativa ele serviu o bundle antigo e o teste passou com o bug
+reintroduzido, dando falso verde. **Terceira vez no mesmo dia.**
+
+### 13.3 ⚠️ Mistura de commit entre sessões paralelas
+A outra sessão commitou enquanto eu editava e **arrastou meu `src/services/driverPay.ts` para o
+commit `fbe5d3f`** ("prazo da nota"). O código está correto e presente, mas naquele commit ele
+**importa `src/utils/discountProofs.ts`, que só entrou em `57fd352`** — ou seja, `fbe5d3f` sozinho
+não compila. Não reescrevi história (é trabalho de outra sessão). **Lição: com duas sessões abertas
+no mesmo repo, `git add <arquivos>` explícito — nunca `git add -A`.**
