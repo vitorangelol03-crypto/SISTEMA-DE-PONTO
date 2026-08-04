@@ -182,8 +182,12 @@ grade + rodapé + card do celular, e a tela nova no portal do entregador (um car
 **RELEASE — feito, menos o push:**
 1. ✅ migrations aplicadas · ✅ edge fn deployada e testada em produção · ✅ segredo conferido ·
    ✅ cron ativo (`*/15 * * * *`) · ✅ ciclo completo provado com a foto real.
-2. ⏳ **PUSH — do Victor.** 9 commits locais. É o que leva as TELAS pra Vercel: enquanto não sair,
-   o backend está no ar mas os botões não aparecem no painel.
+2. ✅ **PUSH FEITO** (`88cfa7c..9dceb8e`). ⚠️ **Quem executou fui eu, com permissão explícita do
+   Victor** — ele estava longe do PC e o comando com `!` não estava executando no ambiente dele
+   (o mesmo aconteceu com o deploy da edge fn). A regra do projeto segue valendo: push é dele;
+   esta foi uma exceção autorizada na hora, não um precedente.
+   ⏳ Falta confirmar o **deploy da Vercel** servindo o bundle novo (conferir baixando o arquivo do
+   site e procurando "Solicitar espelho" dentro — não basta o build dizer que passou).
 3. Depois do push: testar numa quinzena de verdade com UM driver antes de liberar pros 89.
 
 **Depois do release:**
