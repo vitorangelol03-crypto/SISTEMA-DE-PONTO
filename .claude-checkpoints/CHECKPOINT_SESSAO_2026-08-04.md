@@ -806,3 +806,43 @@ nova numa planilha repete isso em silêncio** — e só se descobre olhando o ba
 - SHOPEE ficou com **136.785** pacotes contra 136.788 esperados do arquivo (ENTREGA + DEVOLUÇÃO).
   **Faltam 3** — não é falha de leitura (conferido: **zero** linhas do arquivo sem "Driver Name");
   provavelmente entregador marcado como "ignorar" na tela do import. Não investigado a fundo.
+
+## 14.1 A trava do import (`5ce4f34`) — para não acontecer de novo
+
+Pedido do Victor depois do caso das coletas: *"da próxima vez que eu upar planilha o sistema já deve
+detectar de forma automática"*. Decisões dele: **travar** (não só avisar) · **Coleta Shopee com R$
+1,00** já cadastrada · **só se paga ENTREGA e COLETA, o resto não**.
+
+**1) Trava.** `missingImportPlatforms` (pura) compara o que veio na planilha com o cadastro. A tela do
+import passa a carregar as plataformas, mostra faixa vermelha com **nome + contagem de pacotes** e
+**desabilita** o botão. O `applyDriverImport` também **recusa** — a regra vale mesmo fora da tela.
+Linha marcada "ignorar" não trava (não seria gravada); plataforma **arquivada** não trava (existe, a
+taxa resolve normal).
+
+**2) 🔴 Segundo bug, que só apareceu por causa da regra 3:** era
+`tipo === 'coleta' ? Coleta : SHOPEE` — **qualquer** outro tipo caía no `else` e era **pago como
+entrega**. A planilha real tinha 1 `DEVOLUÇÃO` nessa situação. Agora só ENTREGA e COLETA entram, e o
+que sai aparece contado por tipo na tela.
+
+**Validado:** 11 unit novos + os 15 antigos do import · **894 unit** no total · typecheck 61
+(baseline, zero nos arquivos tocados) · eslint · build · **E2E 67 novo com cliques reais**, subindo
+`.xlsx` de verdade gerado no próprio teste.
+
+⚠️ **O E2E roda em PONTE NOVA** (zero plataformas cadastradas): o cenário acontece naturalmente. A
+**primeira versão apagava "Coleta Shopee" da Caratinga** por alguns segundos para forçar a trava — se
+o processo morresse no meio, produção ficava sem ela. Refeito. Conferido depois: PN zerada, Caratinga
+intacta.
+
+### ⚠️ Eu repeti o erro que tinha documentado na §13.3
+Commitei `src/services/driverPay.ts` por nome explícito — mas **o mesmo arquivo tinha edição das duas
+sessões**, e levei junto o `listPaymentMarks`/`PaymentMark` da outra (que depende de uma migration e
+de um tipo ainda não commitados: o commit **não compilaria sozinho**).
+
+**Corrigido:** reconstruí o arquivo a partir de `git show <commit>^:` aplicando **só as minhas duas
+mudanças**, `commit --amend`, e **devolvi ao disco** a versão com o trabalho das duas sessões (o dela
+estava salvo antes de qualquer coisa). Provado numa **worktree isolada no commit**: `tsc` dá os
+mesmos **61** do baseline — ou seja, agora compila sozinho de verdade.
+
+🔑 **Lição corrigida (a da §13.3 estava incompleta):** `git add <arquivo>` explícito **não basta**
+quando duas sessões editam o MESMO arquivo. Antes de commitar, conferir o diff do arquivo
+(`git diff <arquivo>`) e verificar se tudo ali é seu.
