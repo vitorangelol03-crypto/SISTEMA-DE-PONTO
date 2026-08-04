@@ -4,11 +4,16 @@
 // lider manda uma que vale pelos membros), mas o print e UM POR DRIVER — o lider
 // envia, porem cada print marca o pagamento DAQUELE membro.
 //
+// ⚠️ Desde 04/08/2026 o pedido "pra todos" SO alcanca quem esta EM GRUPO (regra de
+// logistica do Victor). Por isso os cenarios de "foi pedido" passam um grupo explicito —
+// na operacao real os 89 entregadores com Shopee estao todos em grupo.
+//
 // Roda com: npx vitest run driverPayProofProgress
 import { describe, expect, it } from 'vitest';
 import {
   computeProofProgressByPayment,
   expectedProofPlatforms,
+  proofForaPorSemGrupo,
   melhorEstado,
   proofStateFromRow,
   type DriverRowData,
@@ -49,7 +54,7 @@ function row(driverId: string, pacotes: Record<string, number>, groupName?: stri
 
 describe('expectedProofPlatforms', () => {
   it('so pede print de plataforma SOLICITADA onde ele tem pacote', () => {
-    const r = row('caio', { SHOPEE: 1808, LOGGI: 300 });
+    const r = row('caio', { SHOPEE: 1808, LOGGI: 300 }, 'Grupo Ana');
     expect(expectedProofPlatforms(r, paraTodos('SHOPEE'))).toEqual(['SHOPEE']);
   });
 
@@ -63,7 +68,7 @@ describe('expectedProofPlatforms', () => {
   });
 
   it('"Coleta Shopee" fica de fora (decisao do Victor: so SHOPEE)', () => {
-    const r = row('caio', { SHOPEE: 1808, 'Coleta Shopee': 40 });
+    const r = row('caio', { SHOPEE: 1808, 'Coleta Shopee': 40 }, 'Grupo Ana');
     expect(expectedProofPlatforms(r, paraTodos('SHOPEE'))).toEqual(['SHOPEE']);
   });
 
@@ -85,13 +90,54 @@ describe('expectedProofPlatforms', () => {
   });
 
   it('pedido geral + individual nao duplica a plataforma', () => {
-    const caio = row('caio', { SHOPEE: 1808 });
+    const caio = row('caio', { SHOPEE: 1808 }, 'Grupo Ana');
     expect(expectedProofPlatforms(caio, [...paraTodos('SHOPEE'), ...soDe('caio', 'SHOPEE')])).toEqual(['SHOPEE']);
   });
 
   it('pedido individual de OUTRO nao vaza pra quem tem pacote na mesma plataforma', () => {
-    const bia = row('bia', { SHOPEE: 900, LOGGI: 10 });
+    const bia = row('bia', { SHOPEE: 900, LOGGI: 10 }, 'Grupo Ana');
     expect(expectedProofPlatforms(bia, [...soDe('caio', 'SHOPEE'), ...paraTodos('LOGGI')])).toEqual(['LOGGI']);
+  });
+});
+
+// ── Regra de logistica (04/08/2026): "Todos" so cobra quem esta EM GRUPO ──
+describe('"Todos" nao cobra quem esta sem grupo', () => {
+  it('quem esta em grupo continua sendo cobrado', () => {
+    const emGrupo = row('bia', { SHOPEE: 900 }, 'Grupo Ana');
+    expect(expectedProofPlatforms(emGrupo, paraTodos('SHOPEE'))).toEqual(['SHOPEE']);
+    expect(proofForaPorSemGrupo(emGrupo, paraTodos('SHOPEE'))).toEqual([]);
+  });
+
+  it('🎯 avulso NAO e cobrado pelo pedido geral — e aparece como "de fora"', () => {
+    const avulso = row('marcos', { SHOPEE: 300 });
+    expect(expectedProofPlatforms(avulso, paraTodos('SHOPEE'))).toEqual([]);
+    expect(proofForaPorSemGrupo(avulso, paraTodos('SHOPEE'))).toEqual(['SHOPEE']);
+  });
+
+  it('avulso SEM pacote na plataforma pedida nao aparece como "de fora"', () => {
+    const avulso = row('marcos', { LOGGI: 300 });
+    expect(proofForaPorSemGrupo(avulso, paraTodos('SHOPEE'))).toEqual([]);
+  });
+
+  it('pedido INDIVIDUAL cobra o avulso mesmo sem grupo (o operador escolheu ele)', () => {
+    const avulso = row('marcos', { SHOPEE: 300 });
+    expect(expectedProofPlatforms(avulso, soDe('marcos', 'SHOPEE'))).toEqual(['SHOPEE']);
+    expect(proofForaPorSemGrupo(avulso, soDe('marcos', 'SHOPEE'))).toEqual([]);
+  });
+
+  it('geral + individual do avulso: ele e cobrado e some da lista de "de fora"', () => {
+    const avulso = row('marcos', { SHOPEE: 300 });
+    const reqs = [...paraTodos('SHOPEE'), ...soDe('marcos', 'SHOPEE')];
+    expect(expectedProofPlatforms(avulso, reqs)).toEqual(['SHOPEE']);
+    expect(proofForaPorSemGrupo(avulso, reqs)).toEqual([]);
+  });
+
+  it('o contador do avulso fica zerado — nao entra na conta de prints', () => {
+    const p = computeProofProgressByPayment([row('marcos', { SHOPEE: 300 })], paraTodos('SHOPEE'), new Map())
+      .get('pay-marcos')!;
+    expect(p.expected).toBe(0);
+    expect(p.missing).toBe(0);
+    expect(p.complete).toBe(false);
   });
 });
 
@@ -131,21 +177,21 @@ describe('computeProofProgressByPayment', () => {
   const solicitadas = paraTodos('SHOPEE');
 
   it('print certo deixa o driver completo', () => {
-    const rows = [row('caio', { SHOPEE: 1808 })];
+    const rows = [row('caio', { SHOPEE: 1808 }, 'Grupo Ana')];
     const estados = new Map<string, ProofState>([['caio|SHOPEE', 'confirmado']]);
     const p = computeProofProgressByPayment(rows, solicitadas, estados).get('pay-caio')!;
     expect(p).toMatchObject({ expected: 1, confirmed: 1, complete: true, needsAttention: false });
   });
 
   it('quantidade divergente pede ATENCAO e nao completa', () => {
-    const rows = [row('caio', { SHOPEE: 1808 })];
+    const rows = [row('caio', { SHOPEE: 1808 }, 'Grupo Ana')];
     const estados = new Map<string, ProofState>([['caio|SHOPEE', 'divergente']]);
     const p = computeProofProgressByPayment(rows, solicitadas, estados).get('pay-caio')!;
     expect(p).toMatchObject({ divergent: 1, complete: false, needsAttention: true });
   });
 
   it('quem nao mandou fica faltando', () => {
-    const p = computeProofProgressByPayment([row('caio', { SHOPEE: 1808 })], solicitadas, new Map())
+    const p = computeProofProgressByPayment([row('caio', { SHOPEE: 1808 }, 'Grupo Ana')], solicitadas, new Map())
       .get('pay-caio')!;
     expect(p).toMatchObject({ expected: 1, missing: 1, complete: false });
   });
@@ -156,7 +202,7 @@ describe('computeProofProgressByPayment', () => {
   });
 
   it('driver sem pacote da Shopee nao deve print nenhum', () => {
-    const p = computeProofProgressByPayment([row('ana', { LOGGI: 300 })], solicitadas, new Map())
+    const p = computeProofProgressByPayment([row('ana', { LOGGI: 300 }, 'Grupo Ana')], solicitadas, new Map())
       .get('pay-ana')!;
     expect(p.expected).toBe(0);
   });

@@ -67,6 +67,7 @@ import {
   formatInt,
   MIRROR_COMPANY_NAME,
   computeProofProgressByPayment,
+  proofForaPorSemGrupo,
   melhorEstado,
   proofStateFromRow,
   type ProofState,
@@ -1049,6 +1050,21 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     [rows, proofRequests, proofStates],
   );
 
+  /**
+   * Quem tem pacote numa plataforma pedida "pra todos" mas ficou de fora **por não estar em
+   * grupo** (regra de logística de 04/08). Fica fora do contador de propósito — decisão do
+   * Victor: contador que nunca fecha vira ruído. Aparece com selo próprio na grade e como
+   * aviso na janela de solicitar.
+   */
+  const semGrupoForaByPayment = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const r of rows) {
+      const fora = proofForaPorSemGrupo(r, proofRequests);
+      if (fora.length > 0) m.set(r.paymentId, fora);
+    }
+    return m;
+  }, [rows, proofRequests]);
+
   /** Quantos drivers precisam da sua atenção no print (divergente ou recusado). */
   const proofAtencao = useMemo(
     () => [...proofProgressByPayment.values()]
@@ -1509,6 +1525,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             publishedDriverIds={publishedDriverIds}
             nfProgressByPayment={nfProgressByPayment}
             proofProgressByPayment={proofProgressByPayment}
+            semGrupoForaByPayment={semGrupoForaByPayment}
             selGroups={canMirror ? selGroups : undefined}
             selDrivers={canMirror ? selDrivers : undefined}
             onToggleSelGroup={canMirror ? toggleSelGroup : undefined}

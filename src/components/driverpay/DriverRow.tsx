@@ -49,6 +49,8 @@ interface DriverRowProps {
   nfProgress?: NfProgress;
   /** Espelho do app (print da Shopee) — 04/08. Ausente = ninguem solicitou. */
   proofProgress?: ProofProgress;
+  /** Plataformas em que ele ficou de fora do pedido geral por nao ter grupo. */
+  semGrupoFora?: string[];
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkbox. */
   selected?: boolean;
   /** Driver já coberto por um GRUPO selecionado: checkbox marcado e travado. */
@@ -86,6 +88,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   publishedInApp,
   nfProgress,
   proofProgress,
+  semGrupoFora = [],
   selected,
   selectionLocked,
   onToggleSelect,
@@ -372,6 +375,18 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 ? <AlertTriangle className="w-4 h-4" />
                 : <Circle className="w-4 h-4" />}
               {proofProgress.confirmed}/{proofProgress.expected}
+            </span>
+          ) : semGrupoFora.length > 0 ? (
+            /* Regra de logistica (04/08/2026): o pedido "pra todos" nao cobra quem esta sem
+               grupo. Ele NAO entra no contador (senao nunca fecharia) — fica com selo
+               proprio, porque o motivo e outro: falta GRUPO, nao falta print. */
+            <span
+              title={`Nao foi pedido: este entregador nao esta em nenhum grupo (${semGrupoFora.join(', ')}). Coloque-o num grupo ou peca o print so dele.`}
+              data-testid="print-sem-grupo"
+              className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border bg-gray-50 text-gray-500 border-gray-300"
+            >
+              <Circle className="w-3 h-3" />
+              sem grupo
             </span>
           ) : (
             <span className="text-gray-300 text-xs">—</span>

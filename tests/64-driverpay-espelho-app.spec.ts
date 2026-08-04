@@ -139,6 +139,30 @@ test.describe('Espelho do app da Shopee — painel (04/08/2026)', () => {
       await input.blur();
       await expect(driverRow(page)).toContainText('3.500,00', { timeout: 10_000 }); // 1750 × R$2
 
+      // ⚠️ REGRA DE LOGISTICA (04/08/2026): o pedido "pra todos" so cobra quem esta EM
+      // GRUPO. Sem isto a previa diria — corretamente — que ninguem sera cobrado, e o
+      // resto do teste nao teria print nenhum pra conferir. Na operacao real os 89
+      // entregadores com Shopee estao todos em grupo. O cleanup apaga pelo prefixo.
+      {
+        // A empresa vem do proprio driver — nada de id fixo no teste.
+        const { data: d } = await db.from('driverpay_drivers')
+          .select('id, company_id').eq('name', DRIVER).single();
+        const { data: g } = await db.from('driverpay_groups').insert({
+          company_id: d!.company_id, name: `${TEST_EMPLOYEE_NAME_PREFIX}Grupo Esp ${RUN}`,
+          leader_driver_id: d!.id,
+        }).select('id').single();
+        await db.from('driverpay_group_members').insert({
+          company_id: d!.company_id, group_id: g!.id, driver_id: d!.id,
+        });
+        // O grupo foi criado por fora do app: precisa recarregar pra grade enxergar.
+        // ⚠️ `reload()` volta pra aba inicial — tem que refazer o caminho todo.
+        await page.reload();
+        await goToTab(page, 'Pagamentos Driver');
+        await periodSelect(page, PERIOD).selectOption({ label: PERIOD });
+        await page.getByPlaceholder(/Nome do driver/).fill(DRIVER);
+        await expect(driverRow(page)).toBeVisible({ timeout: 20_000 });
+      }
+
       // ══ 1. SOLICITAR ESPELHO — as datas são obrigatórias ═════════════════
       await page.getByRole('button', { name: 'Solicitar espelho' }).click();
       await expect(modal(page).getByText('Solicitar espelho do app')).toBeVisible({ timeout: 10_000 });

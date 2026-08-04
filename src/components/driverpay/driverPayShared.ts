@@ -356,6 +356,18 @@ export interface ProofRequest {
   driverId: string | null;
 }
 
+/**
+ * REGRA DE LOGÍSTICA (decisão do Victor, 04/08/2026): o pedido **"pra todos" só cobra quem
+ * está EM GRUPO**. Na prática quem anexa é o líder, que já vê um cartão por membro — e quem
+ * não tem grupo nenhum não deve receber pedido pelo portal, fica pra alguém resolver na mão
+ * (ou colocar num grupo). Um pedido **individual** continua valendo mesmo sem grupo: ali o
+ * operador escolheu aquela pessoa de propósito.
+ */
+function pedidoAlcanca(req: ProofRequest, row: DriverRowData): boolean {
+  if (req.driverId === null) return row.groupName !== null;
+  return req.driverId === row.driverId;
+}
+
 /** Plataformas em que este driver deve mandar print: as SOLICITADAS PRA ELE onde tem pacote. */
 export function expectedProofPlatforms(
   row: DriverRowData,
@@ -363,10 +375,31 @@ export function expectedProofPlatforms(
 ): string[] {
   const nomes = new Set<string>();
   for (const req of requests) {
-    // driverId null = pedido vale pra todo mundo; preenchido = só pra aquele entregador.
-    if (req.driverId !== null && req.driverId !== row.driverId) continue;
+    if (!pedidoAlcanca(req, row)) continue;
     if (platformPackages(row, req.platformName) > 0) nomes.add(req.platformName);
   }
+  return [...nomes];
+}
+
+/**
+ * Plataformas em que este driver TERIA pacote pra mandar, mas ficou de fora **por não estar
+ * em grupo nenhum**. Não entra no contador de prints (senão ele nunca fecharia — decisão do
+ * Victor: "marca separado, fora da conta"); serve pro selo cinza "sem grupo — não pedido"
+ * e pro aviso da janela de solicitar.
+ */
+export function proofForaPorSemGrupo(
+  row: DriverRowData,
+  requests: readonly ProofRequest[],
+): string[] {
+  if (row.groupName !== null) return [];
+  const nomes = new Set<string>();
+  for (const req of requests) {
+    if (req.driverId !== null) continue;                        // pedido geral só
+    if (platformPackages(row, req.platformName) <= 0) continue; // sem pacote, nada a mandar
+    nomes.add(req.platformName);
+  }
+  // Se alguém pediu dele individualmente, ele ESTÁ sendo cobrado — não é "de fora".
+  for (const req of requests) if (req.driverId === row.driverId) nomes.delete(req.platformName);
   return [...nomes];
 }
 

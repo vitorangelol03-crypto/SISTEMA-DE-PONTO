@@ -81,12 +81,24 @@ async function cenario(opts: {
     platform_name: PLAT, route: '', packages: opts.pacotes, rate_snapshot: 2.0,
   });
 
+  // ⚠️ REGRA DE LOGISTICA (04/08/2026): o pedido "pra todos" so cobra quem esta EM GRUPO.
+  // Por isso todo cenario nasce com o driver liderando o proprio grupo — e o que acontece
+  // na operacao real (os 89 com Shopee estao todos em grupo). Sem isto, o portal
+  // corretamente nao pediria print nenhum e os cenarios B..E nao teriam o que testar.
+  const { data: grp } = await db.from('driverpay_groups').insert({
+    company_id: COMPANY, name: `${PREF}Grupo ${opts.label} ${RUN}`, leader_driver_id: drv!.id,
+  }).select('id').single();
+  criados.grupos.push(grp!.id);
+  await db.from('driverpay_group_members').insert({
+    company_id: COMPANY, group_id: grp!.id, driver_id: drv!.id,
+  });
+
   if (opts.solicitar !== false) {
     await db.from('driverpay_proof_requests').insert({
       company_id: COMPANY, period_id: per!.id, platform_name: PLAT, requested_by: '2626',
     });
   }
-  return { periodId: per!.id, driverId: drv!.id, paymentId: pay!.id };
+  return { periodId: per!.id, driverId: drv!.id, paymentId: pay!.id, groupId: grp!.id };
 }
 
 /** Entra no portal do entregador e abre a tela do espelho. */
@@ -333,14 +345,14 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
       platform_name: PLAT, route: '', packages: 900, rate_snapshot: 2.0,
     });
 
-    const { data: grupo } = await db.from('driverpay_groups').insert({
-      company_id: COMPANY, name: `${PREF}Grupo ${RUN}`, leader_driver_id: liderId,
-    }).select('id').single();
-    criados.grupos.push(grupo!.id);
-    await db.from('driverpay_group_members').insert([
-      { company_id: COMPANY, group_id: grupo!.id, driver_id: liderId },
+    // ⚠️ Reusa o grupo que o `cenario()` do teste E ja criou pra este lider. Criar um
+    // segundo grupo com o MESMO lider quebraria a edge fn, que resolve o grupo dele com
+    // `maybeSingle()` — duas linhas viram erro e o portal ficaria vazio.
+    const { data: grupo } = await db.from('driverpay_groups')
+      .select('id').eq('leader_driver_id', liderId).single();
+    await db.from('driverpay_group_members').insert(
       { company_id: COMPANY, group_id: grupo!.id, driver_id: membro!.id },
-    ]);
+    );
 
     await entrarNoPortal(page, CPF.lider);
     await abrirEspelho(page);

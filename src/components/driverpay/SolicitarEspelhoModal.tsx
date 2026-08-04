@@ -20,7 +20,7 @@ import {
   cancelProofRequest,
   updatePeriod,
 } from '../../services/driverPay';
-import { expectedProofPlatforms, type DriverRowData, type ProofRequest } from './driverPayShared';
+import { expectedProofPlatforms, proofForaPorSemGrupo, type DriverRowData, type ProofRequest } from './driverPayShared';
 import { ModalShell } from './ModalShell';
 
 interface SolicitarEspelhoModalProps {
@@ -130,6 +130,15 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
     for (const platformName of marcadas) for (const driverId of alvos) out.push({ platformName, driverId });
     return out;
   }, [marcadas, alvos]);
+
+  /**
+   * Quem TEM pacote mas fica de fora por não estar em grupo (regra de logística de 04/08).
+   * Só faz sentido no pedido geral — num pedido individual o operador escolheu a pessoa.
+   */
+  const foraSemGrupo = useMemo(
+    () => rows.filter((r) => proofForaPorSemGrupo(r, pedidosDesejados).length > 0),
+    [rows, pedidosDesejados],
+  );
 
   /** Quem vai ser cobrado — mesma funcao que a coluna "Print" da grade usa. */
   const previa = useMemo(() => {
@@ -419,6 +428,25 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
               )}
             </div>
           </div>
+
+          {/* ── Quem fica de fora por nao ter grupo (regra de 04/08) ───── */}
+          {foraSemGrupo.length > 0 && (
+            <div
+              className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-3"
+              data-testid="proof-sem-grupo-aviso"
+            >
+              <p className="text-sm text-amber-900">
+                <strong>{foraSemGrupo.length} entregador(es) ficam de fora por nao ter grupo:</strong>{' '}
+                {foraSemGrupo.slice(0, 8).map((r) => r.name).join(', ')}
+                {foraSemGrupo.length > 8 ? ` e mais ${foraSemGrupo.length - 8}` : ''}.
+              </p>
+              <p className="text-xs text-amber-800 mt-1">
+                O pedido "pra todos" so vai pra quem esta em grupo — quem anexa e o lider, que ve um
+                cartao por membro. Pra cobrar essa gente, coloque cada um num grupo ou use
+                <strong> So um entregador</strong> aqui em cima.
+              </p>
+            </div>
+          )}
 
           {/* ── Previa honesta de quem vai ser cobrado ─────────────────── */}
           <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">

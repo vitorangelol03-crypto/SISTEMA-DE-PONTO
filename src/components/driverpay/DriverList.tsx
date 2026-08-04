@@ -52,6 +52,8 @@ interface DriverListProps {
   nfProgressByPayment?: ReadonlyMap<string, NfProgress>;
   /** Espelho do app (print da Shopee) — 04/08. Vazio = ninguem solicitou nesta quinzena. */
   proofProgressByPayment?: ReadonlyMap<string, ProofProgress>;
+  /** paymentId -> plataformas em que ele ficou de fora do pedido geral por nao ter grupo. */
+  semGrupoForaByPayment?: ReadonlyMap<string, string[]>;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkboxes. */
   selGroups?: ReadonlySet<string>;
   selDrivers?: ReadonlySet<string>;
@@ -103,6 +105,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   publishedDriverIds,
   nfProgressByPayment,
   proofProgressByPayment,
+  semGrupoForaByPayment,
   selGroups,
   selDrivers,
   onToggleSelGroup,
@@ -341,6 +344,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                 publishedInApp={publishedDriverIds?.has(row.driverId)}
                 nfProgress={nfProgressByPayment?.get(row.paymentId)}
                 proofProgress={proofProgressByPayment?.get(row.paymentId)}
+                semGrupoFora={semGrupoForaByPayment?.get(row.paymentId)}
                 selected={selDrivers?.has(row.paymentId)}
                 selectionLocked={rowGroupSelected(row)}
                 onToggleSelect={onToggleSelDriver}

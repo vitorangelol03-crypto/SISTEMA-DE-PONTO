@@ -954,6 +954,15 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
   const driverOf = new Map(payList.map((p) => [p.id as string, p.driver_id as string]));
   const periodOf = new Map(payList.map((p) => [p.id as string, p.period_id as string]));
 
+  // REGRA DE LOGISTICA (decisao do Victor, 04/08/2026): o pedido "PRA TODOS" so cobra quem
+  // esta EM GRUPO. Quem anexa na pratica e o lider, que ve um cartao por membro; quem nao
+  // esta em grupo nenhum NAO recebe pedido pelo portal — fica sinalizado no painel pra
+  // alguem resolver na mao ou coloca-lo num grupo. Pedido INDIVIDUAL continua valendo mesmo
+  // sem grupo: ali o operador escolheu aquela pessoa de proposito.
+  const { data: emGrupo } = await supabase.from('driverpay_group_members')
+    .select('driver_id').in('driver_id', driverIds);
+  const temGrupo = new Set((emGrupo ?? []).map((m) => m.driver_id as string));
+
   // (quinzena, driver, plataforma) que TEM pacote e foi solicitado.
   const precisa = new Set<string>();
   for (const pk of pks ?? []) {
@@ -962,8 +971,8 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
     const perId = periodOf.get(payId);
     const plat = pk.platform_name as string;
     if (!dId || !perId || (pk.packages ?? 0) <= 0) continue;
-    // Pedido "pra todos" OU pedido individual daquele entregador — qualquer um dos dois cobra.
-    const praTodos = platsTodos.get(perId)?.has(plat) === true;
+    // Pedido "pra todos" (SO pra quem esta em grupo) OU pedido individual daquele entregador.
+    const praTodos = platsTodos.get(perId)?.has(plat) === true && temGrupo.has(dId);
     const soPraEle = platsDoDriver.get(`${perId}|${dId}`)?.has(plat) === true;
     if (praTodos || soPraEle) precisa.add(`${perId}|${dId}|${plat}`);
   }
