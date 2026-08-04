@@ -846,3 +846,53 @@ mesmos **61** do baseline — ou seja, agora compila sozinho de verdade.
 🔑 **Lição corrigida (a da §13.3 estava incompleta):** `git add <arquivo>` explícito **não basta**
 quando duas sessões editam o MESMO arquivo. Antes de commitar, conferir o diff do arquivo
 (`git diff <arquivo>`) e verificar se tudo ali é seu.
+
+---
+
+## 14. Tag "pagamento concluído" (`4effa53`) + bug da caixa do grupo (`0a00783`)
+
+### 14.1 🐛 Caixa de seleção do grupo ficava um passo atrás
+Bug que o Victor achou usando. **Reproduzido com cliques reais:** clico na 1ª → contador vai pra (1)
+mas **nenhuma** caixa marcada; clico na 2ª → contador (2) e **aí a 1ª** aparece marcada.
+
+**Causa raiz:** a caixa vivia **dentro do `<summary>`** do `<details>`. Pra o clique nela não abrir a
+gaveta, o código chamava `preventDefault()` — só que isso cancela **também o próprio marcar**. Com
+`checked` controlado + `readOnly`, o React perde a sincronia com o DOM e só se acerta no render
+seguinte.
+
+**Conserto de raiz** (não mascarei com `key`/force-update): o `<details>/<summary>` saiu. O cabeçalho
+virou uma linha com a caixa **fora** do gatilho e um `<button aria-expanded>` do lado. **Marcar é
+marcar, abrir é abrir** — sem `preventDefault` nenhum. Provado com cliques: marca na hora, desmarca
+na hora, e abrir a gaveta (0 → 1 tabela) **não mexe na caixa**.
+
+### 14.2 Tag "pagamento concluído"
+O sistema não sabia quem já tinha recebido. Agora, na janela do relatório: **"Esta planilha é o
+pagamento de verdade"** (desmarcado por padrão). Ao gerar, quem saiu ganha a tag **PAGO** nas
+plataformas daquele relatório.
+
+**Decisões dele:**
+- marca por **(entregador, PLATAFORMA)** — pagar só a SHOPEE marca só a SHOPEE; "concluído" só
+  quando **todas** as que ele tem foram cobertas, senão o painel diria "pago" pra quem ainda tem a
+  receber;
+- num **grupo marca os N membros**, não só o líder — o dinheiro da linha do líder cobre todos.
+
+**Aviso antes de baixar:** quem já foi pago naquelas plataformas aparece **com a data** e com botão
+**"tirar do relatório"** (por pessoa ou todos), **sem sair da tela de gerar** — ele pediu isso
+explicitamente. **Avisa, não bloqueia.**
+
+**Na tela:** tag roxa na linha (`✓ pago 04/08` ou `pago SHOPEE` quando parcial) e no cabeçalho do
+grupo (`pago 8/10` / `pagamento concluído`).
+
+**Banco:** migration `20260804200000` (`driverpay_payment_marks`) **aplicada**, RLS no padrão.
+⚠️ **É o registro de quem já recebeu:** guarda quem marcou e quando, e a remarcação é **idempotente**
+(`ignoreDuplicates`) pra a data do **primeiro** pagamento não ser sobrescrita — é ela que o aviso
+mostra. A marcação só roda **depois** de o arquivo ter sido gerado; se ela falhar, o aviso diz a
+verdade em vez de fingir que deu certo.
+
+**Validado:** typecheck sem erro novo · eslint 0 · build · **203 unit** (14 novos).
+
+### ⚠️ Armadilha que me pegou 3× hoje (fica registrada)
+Script Python com vários `assert ... in s` **antes** de gravar o arquivo: quando um `assert` falha no
+meio, **nada é salvo** — nem as edições que já tinham passado. Perdi trabalho e só percebi porque o
+`grep` seguinte não achou o que eu tinha acabado de "editar". **Gravar depois de cada edição, ou
+conferir com grep antes de seguir.**
