@@ -410,3 +410,45 @@ guardado. Conta pura, **zero download e zero chamada de IA**. Um teste roda essa
 com o `runProofCheck`** da edge fn pra as duas nunca divergirem em silêncio.
 
 **Validado:** 173 unit (19 novos) · **21/21 contra a edge fn NO AR** · build · banco idêntico.
+
+---
+
+## 11. Caminho do envio do print: rápido, à prova de queda, galeria e iPhone (`addd28a`)
+
+Veio de uma pergunta dele: *"o sistema aguenta 30 drivers enviando no mesmo minuto?"* Fui ler o
+código e achei uma falha real.
+
+### 🔴 O print era LIDO antes de ser SALVO
+A IA leva ~40s. Se o 4G do entregador caísse nesse meio-tempo, ou ele fechasse a tela, ou a função
+estourasse o tempo, **não ficava nada**: nem arquivo nem registro, e ele mandava tudo de novo. Com
+30 no mesmo minuto (IA mais lenta, cota estourando) a chance disso era alta.
+**Agora arquivo e registro entram primeiro, já dentro da fila.** O pior caso virou "demora alguns
+minutos pra ser conferido".
+
+### ⏱️ O entregador não espera mais a IA
+Como o print já está salvo, a função responde na hora e confere por trás (`EdgeRuntime.waitUntil`;
+sem `waitUntil` no runtime, espera como antes — melhor lento do que sem conferir).
+**MEDIDO no E2E: era ~45s, passou a 0,8s–4,2s.** A recusa por data errada continua chegando: o
+portal se atualiza sozinho por ~1 min e mostra o motivo no cartão.
+
+### Galeria (bug que o Victor achou usando)
+O input tinha `capture="environment"`, que **abre a câmera direto** e impede escolher o print da
+galeria — e print de tela **nasce** na galeria. Atributo removido.
+
+### iPhone
+O iOS salva foto em **HEIC** e a edge fn só aceita JPEG/PNG/WEBP (confere a assinatura real). O
+reencode pra JPEG já existia, mas **se falhasse o código mandava o arquivo original** — HEIC
+recusado com erro sem sentido. Agora tenta `createImageBitmap` (decodifica HEIC no iOS melhor que
+`<img>`), cai pro `<img>`, e se nada funcionar explica em português o que fazer.
+⚠️ **Não testado em Safari de verdade:** o WebKit pede ~30 bibliotecas de sistema via `sudo` nesta
+máquina — não instalei sem OK.
+
+### Testes ajustados ao comportamento novo, sem afrouxar
+- as asserções de banco passaram a **esperar a conferência que roda por trás** (`esperarConferencia`);
+- o E2E agora **mede e imprime** quanto o entregador esperou;
+- ⚠️ o cenário C tinha um driver chamado **"Divergente"** — a asserção de privacidade procura
+  "divergen" na tela e casava com o **nome dele**, dando falso vazamento. Conferi no print que a
+  tela não mostra número nenhum; troquei o nome e a asserção continua intacta.
+
+**Validado:** typecheck · eslint · build · `deno check` com os mesmos 2 erros pré-existentes ·
+**E2E 64 1/1 e 65 6/6**.
