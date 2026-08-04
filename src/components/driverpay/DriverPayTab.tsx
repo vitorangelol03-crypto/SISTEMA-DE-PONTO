@@ -70,6 +70,9 @@ import {
   melhorEstado,
   proofStateFromRow,
   type ProofState,
+  applyChecksFilter,
+  type ChecksFilterOptions,
+  type ChecksFilterResult,
 } from './driverPayShared';
 import { ReportOptionsModal, type ReportOptions } from './ReportOptionsModal';
 import { DriverFilters, GROUP_NONE } from './DriverFilters';
@@ -961,9 +964,20 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
    */
   const handleGenerateReport = async (opts: ReportOptions) => {
     const kind = reportModal?.kind ?? 'geral';
-    const scoped = reportScopeRows();
-    if (scoped.length === 0) {
+    const inScope = reportScopeRows();
+    if (inScope.length === 0) {
       toast.error('Nenhum dado para exportar');
+      return;
+    }
+    // Filtro de conferência (04/08/2026), driver a driver — "paga o resto": num grupo,
+    // quem está pendente sai e o líder continua recebendo pelos que passaram.
+    const checks = applyChecksFilter(inScope, nfCompleteByPayment, leaderNameByGroup, {
+      onlyEspelhoConferido: opts.onlyEspelhoConferido,
+      onlyNfValidada: opts.onlyNfValidada,
+    });
+    const scoped = checks.kept;
+    if (scoped.length === 0) {
+      toast.error('Ninguém do escopo está com o espelho/nota conferidos');
       return;
     }
     const allowedSet = opts.allowed && opts.allowed.length > 0 ? new Set(opts.allowed) : undefined;
@@ -973,10 +987,16 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       ? platforms.filter((p) => allowedSet?.has(p.name))
       : platforms
     ).map((p) => p.name);
+    const checksParts: string[] = [];
+    if (opts.onlyEspelhoConferido) checksParts.push('espelho conferido');
+    if (opts.onlyNfValidada) checksParts.push('nota validada');
     const meta = {
       ...reportMeta(),
       platformFilterLabel: filterLabel,
       deductionsApplied: opts.includeDeductions,
+      checksFilterLabel: checksParts.length
+        ? `${checksParts.join(' + ')}${checks.removed.length ? ` (${checks.removed.length} driver(s) de fora)` : ''}`
+        : null,
     };
     try {
       if (kind === 'geral') {
@@ -1125,6 +1145,26 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     }
     return m;
   }, [groups, drivers]);
+
+  /**
+   * "Nota validada" nos relatórios = a MESMA regra do filtro "NF ok (validada)" da lista
+   * (ciente de grupo, com o fallback do sinalizador manual). Se as duas divergissem, o
+   * operador veria números diferentes pro mesmo driver em telas vizinhas.
+   */
+  const nfCompleteByPayment = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const r of rows) m.set(r.paymentId, nfProgressByPayment.get(r.paymentId)?.complete ?? r.notaFiscal);
+    return m;
+  }, [rows, nfProgressByPayment]);
+
+  /**
+   * Prévia de quem sai do relatório com os filtros marcados (a janela mostra antes de baixar).
+   * Função simples de propósito: memorizar exigiria repetir à mão as dependências de
+   * `reportScopeRows` (seleção + filtro da lista), e a conta é pura e barata — roda só
+   * enquanto a janela está aberta.
+   */
+  const checksPreview = (o: ChecksFilterOptions): ChecksFilterResult =>
+    applyChecksFilter(reportScopeRows(), nfCompleteByPayment, leaderNameByGroup, o);
 
   const kpis = useMemo(() => {
     let driverCount = 0;
@@ -1710,6 +1750,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             scopeLabel={
               selCount > 0 ? `Só o que está marcado (${selCount})` : `${scoped.length} driver(s) da lista atual`
             }
+            checksPreview={checksPreview}
             onClose={() => setReportModal(null)}
             onConfirm={handleGenerateReport}
           />

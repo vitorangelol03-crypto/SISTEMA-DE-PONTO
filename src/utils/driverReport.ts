@@ -78,6 +78,18 @@ export interface DriverReportMeta {
    * plataforma). Sai avisado no cabeçalho e nos rótulos das colunas.
    */
   deductionsApplied?: boolean;
+  /**
+   * Filtro de conferência aplicado (2026-08-04): "espelho conferido", "nota validada" ou
+   * os dois, com quantos drivers ficaram de fora. Ausente/null = ninguém foi filtrado.
+   * Vai no cabeçalho porque um arquivo que esconde gente em silêncio paga errado depois.
+   */
+  checksFilterLabel?: string | null;
+}
+
+/** Aviso do filtro de conferência (vazio quando o relatório saiu com todo mundo). */
+function checksWarning(meta: DriverReportMeta): string {
+  const label = (meta.checksFilterLabel ?? '').trim();
+  return label ? `SOMENTE ${label}` : '';
 }
 
 /** Sufixo " — SOMENTE LOGGI" pro título/OBS quando o relatório está filtrado. */
@@ -262,10 +274,11 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
 
   // Meta (+ aviso do pagamento parcial, quando os descontos não saíram aqui).
   const warning = deductionsWarning(meta);
+  const checks = checksWarning(meta);
   const metaRow = blankRow();
   metaRow[0] = `Gerado em ${generatedAt}  ·  ${entityText}  ·  Plataformas: ${
     platforms.join(' / ') || '—'
-  }${warning ? `  ·  ${warning}` : ''}`;
+  }${checks ? `  ·  ${checks}` : ''}${warning ? `  ·  ${warning}` : ''}`;
   data[R_META] = metaRow;
 
   // Linha em branco (respiro).
@@ -715,10 +728,11 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
   const title = blank();
   title[0] = `RELATÓRIO SIMPLES — ${meta.companyName} — ${meta.periodLabel}${platformSuffix(meta)}`;
   data[R_TITLE] = title;
+  const checks = checksWarning(meta);
   const metaRow = blank();
   metaRow[0] = `Gerado em ${generatedAt}  ·  ${n} recebedor${n !== 1 ? 'es' : ''}${
-    warning ? `  ·  ${warning}` : ''
-  }`;
+    checks ? `  ·  ${checks}` : ''
+  }${warning ? `  ·  ${warning}` : ''}`;
   data[R_META] = metaRow;
   data[2] = blank();
 

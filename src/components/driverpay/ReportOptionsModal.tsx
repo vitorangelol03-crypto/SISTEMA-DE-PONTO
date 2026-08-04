@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Download, Loader2, FileSpreadsheet } from 'lucide-react';
 import { ModalShell } from './ModalShell';
-import { formatBRL, type AlreadyDeductedDriver } from './driverPayShared';
+import { formatBRL, type AlreadyDeductedDriver, type ChecksFilterOptions, type ChecksFilterResult } from './driverPayShared';
 
 /** Escolhas do operador na hora de baixar o relatório. */
 export interface ReportOptions {
@@ -9,6 +9,10 @@ export interface ReportOptions {
   allowed: string[] | null;
   /** false = vales/perdas NÃO abatidos (pagamento parcial por plataforma). */
   includeDeductions: boolean;
+  /** Só quem está com o botão "Espelho conferido" marcado. */
+  onlyEspelhoConferido: boolean;
+  /** Só quem está com a nota validada (mesma regra da coluna NF da lista). */
+  onlyNfValidada: boolean;
 }
 
 interface ReportOptionsModalProps {
@@ -22,6 +26,8 @@ interface ReportOptionsModalProps {
   alreadyDeducted: AlreadyDeductedDriver[];
   /** Nº de recebedores/drivers no escopo (só informativo no cabeçalho). */
   scopeLabel: string;
+  /** Quem sai do relatório com os filtros de conferência marcados (prévia honesta). */
+  checksPreview: (opts: ChecksFilterOptions) => ChecksFilterResult;
   onClose: () => void;
   onConfirm: (opts: ReportOptions) => Promise<void>;
 }
@@ -38,12 +44,33 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
   deductionsTotal,
   alreadyDeducted,
   scopeLabel,
+  checksPreview,
   onClose,
   onConfirm,
 }) => {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(platformOptions));
   const [includeDeductions, setIncludeDeductions] = useState(true);
+  // Desmarcados por padrão: sem tocar em nada, o arquivo sai igual ao de sempre.
+  const [onlyEspelhoConferido, setOnlyEspelho] = useState(false);
+  const [onlyNfValidada, setOnlyNf] = useState(false);
   const [generating, setGenerating] = useState(false);
+
+  const preview = useMemo(
+    () => checksPreview({ onlyEspelhoConferido, onlyNfValidada }),
+    [checksPreview, onlyEspelhoConferido, onlyNfValidada],
+  );
+  const algumFiltro = onlyEspelhoConferido || onlyNfValidada;
+  const foraPorMotivo = useMemo(() => {
+    let espelho = 0;
+    let nota = 0;
+    for (const r of preview.removed) {
+      if (r.reason === 'espelho' || r.reason === 'ambos') espelho += 1;
+      if (r.reason === 'nota' || r.reason === 'ambos') nota += 1;
+    }
+    return { espelho, nota };
+  }, [preview.removed]);
+  const unidadesPerdidas = preview.recipientsBefore - preview.recipientsAfter;
+  const vaiSairVazio = algumFiltro && preview.kept.length === 0;
 
   // Todas marcadas => null (sem filtro, arquivo idêntico ao de hoje).
   const allowed = useMemo<string[] | null>(
@@ -61,9 +88,10 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
 
   const handleConfirm = async () => {
     if (allowed && allowed.length === 0) return;
+    if (vaiSairVazio) return;
     setGenerating(true);
     try {
-      await onConfirm({ allowed, includeDeductions });
+      await onConfirm({ allowed, includeDeductions, onlyEspelhoConferido, onlyNfValidada });
     } finally {
       setGenerating(false);
     }
@@ -90,7 +118,7 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={generating || (allowed !== null && allowed.length === 0)}
+            disabled={generating || (allowed !== null && allowed.length === 0) || vaiSairVazio}
             data-testid="report-confirm"
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium inline-flex items-center gap-2 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -137,6 +165,90 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
           )}
           {allowed !== null && allowed.length === 0 && (
             <p className="text-xs text-red-700 mt-2">Marque ao menos uma plataforma.</p>
+          )}
+        </div>
+
+        {/* ── Só quem já está conferido (04/08/2026) ──
+             Regra "paga o resto": o filtro é driver a driver. Grupo de 10 com 1 pendente
+             continua saindo com os 9 — não segura 9 pessoas por causa de 1. */}
+        <div
+          className={`border rounded-md p-3 ${algumFiltro ? 'border-emerald-300 bg-emerald-50' : 'border-gray-200 bg-gray-50'}`}
+          data-testid="report-checks-box"
+        >
+          <p className="text-xs font-semibold text-gray-700 mb-2">
+            Pagar só quem já está conferido{' '}
+            <span className="font-normal text-gray-500">(desmarcado = todo mundo, como sempre foi)</span>:
+          </p>
+          <div className="space-y-2">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={onlyEspelhoConferido}
+                onChange={(e) => setOnlyEspelho(e.target.checked)}
+                className="w-4 h-4 mt-0.5 text-emerald-600 rounded border-gray-300"
+                data-testid="report-only-espelho"
+              />
+              <span className="text-sm text-gray-800">
+                Só quem está com o <b>espelho conferido</b>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={onlyNfValidada}
+                onChange={(e) => setOnlyNf(e.target.checked)}
+                className="w-4 h-4 mt-0.5 text-emerald-600 rounded border-gray-300"
+                data-testid="report-only-nf"
+              />
+              <span className="text-sm text-gray-800">
+                Só quem está com a <b>nota validada</b>
+              </span>
+            </label>
+          </div>
+
+          {algumFiltro && (
+            <div className="mt-2 text-xs" data-testid="report-checks-preview">
+              {preview.removed.length === 0 ? (
+                <p className="text-emerald-800">
+                  <b>Todo mundo do escopo passa.</b> O arquivo sai igual ao sem filtro.
+                </p>
+              ) : (
+                <>
+                  <p className="text-emerald-900">
+                    <b>{preview.removed.length} driver(s) ficam de fora</b>
+                    {onlyEspelhoConferido && onlyNfValidada
+                      ? ` — ${foraPorMotivo.espelho} sem espelho, ${foraPorMotivo.nota} sem nota`
+                      : ''}
+                    . O relatório sai com <b>{preview.recipientsAfter}</b> recebedor(es).
+                  </p>
+                  {unidadesPerdidas > 0 && (
+                    <p className="text-amber-900 mt-1">
+                      ⚠ <b>{unidadesPerdidas}</b> recebedor(es) somem por completo (ninguém do grupo passou).
+                    </p>
+                  )}
+                  <p className="text-gray-600 mt-1">
+                    Num grupo, quem está pendente sai e <b>o resto continua sendo pago</b> na linha do líder.
+                  </p>
+                  <ul className="mt-1 max-h-24 overflow-y-auto list-disc list-inside text-gray-700">
+                    {preview.removed.slice(0, 20).map((r) => (
+                      <li key={r.paymentId}>
+                        {r.name}
+                        {r.group ? ` (${r.group})` : ''} — falta{' '}
+                        {r.reason === 'ambos' ? 'espelho e nota' : r.reason}
+                      </li>
+                    ))}
+                  </ul>
+                  {preview.removed.length > 20 && (
+                    <p className="text-gray-500">…e mais {preview.removed.length - 20}.</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          {vaiSairVazio && (
+            <p className="text-xs text-red-700 mt-2" data-testid="report-checks-empty">
+              Ninguém do escopo passa nesses filtros — não há o que baixar.
+            </p>
           )}
         </div>
 

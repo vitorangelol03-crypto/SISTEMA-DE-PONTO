@@ -1035,6 +1035,74 @@ function hasPackagesInScope(totals: RowTotals): boolean {
 }
 
 /**
+ * Filtros de conferência dos relatórios (04/08/2026): baixar só quem já está com o
+ * ESPELHO CONFERIDO e/ou a NOTA VALIDADA. Desmarcados = arquivo idêntico ao de sempre.
+ */
+export interface ChecksFilterOptions {
+  /** Só quem está com o botão "Espelho conferido" marcado no pagamento. */
+  onlyEspelhoConferido?: boolean;
+  /** Só quem está com a nota validada — mesma regra da coluna NF da lista. */
+  onlyNfValidada?: boolean;
+}
+
+export type ChecksFilterReason = 'espelho' | 'nota' | 'ambos';
+
+export interface ChecksFilterResult {
+  kept: DriverRowData[];
+  /** Quem saiu e por quê — o operador precisa ver ANTES de baixar. */
+  removed: { paymentId: string; name: string; group: string | null; reason: ChecksFilterReason }[];
+  /** Linhas de recebedor antes/depois: denuncia quando uma unidade INTEIRA some. */
+  recipientsBefore: number;
+  recipientsAfter: number;
+}
+
+/**
+ * Aplica os filtros driver a driver — regra "PAGA O RESTO" (decisão do Victor, 04/08/2026):
+ * num grupo de 10 em que 1 não está pronto, a linha do líder continua saindo com os 9; o
+ * que falta entra no próximo pagamento. O grupo só some quando NINGUÉM dele passa.
+ *
+ * `nfCompleteByPayment` vem de fora justamente pra este módulo não ter que saber de onde a
+ * NF é lida — o painel monta com a MESMA regra do filtro "NF ok (validada)" da lista.
+ */
+export function applyChecksFilter(
+  rows: DriverRowData[],
+  nfCompleteByPayment: ReadonlyMap<string, boolean>,
+  leaderNameByGroup: ReadonlyMap<string, string>,
+  opts: ChecksFilterOptions,
+): ChecksFilterResult {
+  const wantEspelho = opts.onlyEspelhoConferido === true;
+  const wantNf = opts.onlyNfValidada === true;
+  const recipientsBefore = groupReportUnits(rows, leaderNameByGroup).length;
+
+  if (!wantEspelho && !wantNf) {
+    return { kept: rows, removed: [], recipientsBefore, recipientsAfter: recipientsBefore };
+  }
+
+  const kept: DriverRowData[] = [];
+  const removed: ChecksFilterResult['removed'] = [];
+  for (const row of rows) {
+    const faltaEspelho = wantEspelho && !row.espelhoConferido;
+    const faltaNf = wantNf && !(nfCompleteByPayment.get(row.paymentId) ?? false);
+    if (!faltaEspelho && !faltaNf) {
+      kept.push(row);
+      continue;
+    }
+    removed.push({
+      paymentId: row.paymentId,
+      name: row.name,
+      group: row.groupName,
+      reason: faltaEspelho && faltaNf ? 'ambos' : faltaEspelho ? 'espelho' : 'nota',
+    });
+  }
+  return {
+    kept,
+    removed,
+    recipientsBefore,
+    recipientsAfter: groupReportUnits(kept, leaderNameByGroup).length,
+  };
+}
+
+/**
  * Relatório GERAL com o líder como recebedor, dividido POR ROTA (decisões do Victor):
  * cada unidade vira N linhas (1 por rota), colunas por plataforma. Desconto/vale/TOTAL A
  * RECEBER (net = já abatido) saem na 1ª linha da unidade (blank nas demais) pra o SUM do
