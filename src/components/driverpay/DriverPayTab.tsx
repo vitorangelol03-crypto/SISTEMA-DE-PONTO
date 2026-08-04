@@ -14,6 +14,7 @@ import {
   Search,
   X,
   Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCompany } from '../../contexts/CompanyContext';
@@ -1394,9 +1395,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         <KpiCard color="purple" icon={<Package className="w-4 h-4" />} label="Pacotes" value={formatInt(kpis.packages)} />
         <KpiCard color="red" icon={<Minus className="w-4 h-4" />} label="Descontos" value={formatBRL(kpis.discounts)} />
         <KpiCard color="amber" icon={<Wallet className="w-4 h-4" />} label="Vales" value={formatBRL(kpis.vales)} />
+        {/* Negativo = a empresa tem a receber do entregador (desconto/vale maior que os
+            pacotes, ou planilha ainda não importada). Verde com tique ali seria mentira.
+            Mesma regra da linha do driver e do card de grupo — telas vizinhas não podem
+            discordar sobre o mesmo número. */}
         <KpiCard
-          color="green"
-          icon={<Check className="w-4 h-4" />}
+          color={kpis.net < 0 ? 'red' : 'green'}
+          icon={kpis.net < 0 ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
           label="Total a receber"
           value={formatBRL(kpis.net)}
         />
