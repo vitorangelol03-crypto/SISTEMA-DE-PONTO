@@ -16,7 +16,7 @@ import { isMaster, isDriverpayPermission, canAccessDriverpay } from '../config/m
 import type { ImportResolvedItem, ImportApplyResult } from '../utils/driverImportApply';
 import { missingImportPlatforms } from '../utils/driverImportApply';
 import { mirrorPlatformKey, sanitizeMirrorKeyForPath } from '../components/driverpay/driverPayShared';
-import type { ProofRequest } from '../components/driverpay/driverPayShared';
+import type { ProofRequest, PaymentMark } from '../components/driverpay/driverPayShared';
 import { statusPorQuantidade } from '../components/driverpay/driverPayShared';
 import { orphanProofPaths, proofFileName, isKeptProof, type ProofSlot } from '../utils/discountProofs';
 
@@ -2288,6 +2288,47 @@ export const aplicarCorrecaoDePacotes = async (
     await upsertPackage(companyId, paymentId, platformName, a.route, a.para, a.rate, userId);
   }
   return reconferirPrintsComPlanilha(companyId, periodId, userId);
+};
+
+/** Quem JA RECEBEU nesta quinzena, por (entregador, plataforma). */
+export const listPaymentMarks = async (
+  companyId: string, periodId: string,
+): Promise<PaymentMark[]> => {
+  const { data, error } = await supabase
+    .from('driverpay_payment_marks')
+    .select('driver_id, platform_name, paid_at')
+    .eq('company_id', companyId).eq('period_id', periodId);
+  if (error) throwDbError(error);
+  return (data ?? []).map((r) => ({
+    driverId: String(r.driver_id), platformName: String(r.platform_name), paidAt: String(r.paid_at),
+  }));
+};
+
+/**
+ * Marca como PAGO os pares (entregador, plataforma) que sairam no relatorio.
+ *
+ * ⚠️ E o REGISTRO DE QUEM JA RECEBEU: guarda quem marcou e quando. Idempotente — remarcar
+ * o mesmo par nao duplica nem apaga a data original (`ignoreDuplicates`), porque a data do
+ * PRIMEIRO pagamento e a que o operador precisa ver no aviso.
+ */
+export const markPaymentDone = async (
+  companyId: string,
+  periodId: string,
+  pares: readonly { driverId: string; platformName: string }[],
+  reportKind: 'geral' | 'simples',
+  userId: string,
+): Promise<number> => {
+  await ensurePerm(userId, 'driverpay.exportReport');
+  if (pares.length === 0) return 0;
+  const { error } = await supabase.from('driverpay_payment_marks').upsert(
+    pares.map((p) => ({
+      company_id: companyId, period_id: periodId, driver_id: p.driverId,
+      platform_name: p.platformName, paid_by: userId, report_kind: reportKind,
+    })),
+    { onConflict: 'company_id,period_id,driver_id,platform_name', ignoreDuplicates: true },
+  );
+  if (error) throwDbError(error);
+  return pares.length;
 };
 
 /** Um print recebido, com o driver resolvido, pro painel. */

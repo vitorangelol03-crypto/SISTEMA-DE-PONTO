@@ -31,6 +31,7 @@ import {
   formatInt,
   type NfProgress,
   type ProofProgress,
+  type PagamentoDoDriver,
 } from './driverPayShared';
 
 interface DriverListProps {
@@ -56,6 +57,8 @@ interface DriverListProps {
   semGrupoForaByPayment?: ReadonlyMap<string, string[]>;
   /** paymentId -> plataformas em que ele NAO precisa mandar print (planilha chegou, sem pacote). */
   dispensadoByPayment?: ReadonlyMap<string, string[]>;
+  /** paymentId -> situacao de PAGAMENTO (tag "pago" / "parcial" / "pendente"). */
+  pagamentoByPayment?: ReadonlyMap<string, PagamentoDoDriver>;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkboxes. */
   selGroups?: ReadonlySet<string>;
   selDrivers?: ReadonlySet<string>;
@@ -109,6 +112,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   proofProgressByPayment,
   semGrupoForaByPayment,
   dispensadoByPayment,
+  pagamentoByPayment,
   selGroups,
   selDrivers,
   onToggleSelGroup,
@@ -347,6 +351,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                 publishedInApp={publishedDriverIds?.has(row.driverId)}
                 nfProgress={nfProgressByPayment?.get(row.paymentId)}
                 proofProgress={proofProgressByPayment?.get(row.paymentId)}
+                pagamento={pagamentoByPayment?.get(row.paymentId)}
                 semGrupoFora={semGrupoForaByPayment?.get(row.paymentId)}
                 dispensadoSemPacote={dispensadoByPayment?.get(row.paymentId)}
                 selected={selDrivers?.has(row.paymentId)}
@@ -724,6 +729,32 @@ export const DriverList: React.FC<DriverListProps> = ({
                       {name === NO_GROUP ? <Users className="w-4 h-4 text-gray-400" /> : <Tag className="w-4 h-4 text-blue-600" />}
                       {name}
                     </span>
+                    {/* Tag de pagamento do GRUPO (04/08/2026): conta membro a membro,
+                        porque o dinheiro da linha do líder cobre todos eles. */}
+                    {(() => {
+                      if (!pagamentoByPayment) return null;
+                      const sits = groupRows
+                        .map((r) => pagamentoByPayment.get(r.paymentId))
+                        .filter((x): x is PagamentoDoDriver => !!x && x.estado !== 'sem_pacote');
+                      if (sits.length === 0) return null;
+                      const pagos = sits.filter((x) => x.estado === 'concluido').length;
+                      const nenhum = sits.every((x) => x.estado === 'pendente');
+                      if (nenhum) return null;
+                      const todos = pagos === sits.length;
+                      return (
+                        <span
+                          data-testid="selo-pago-grupo"
+                          title={todos
+                            ? 'Todos os membros deste grupo já foram pagos.'
+                            : `${pagos} de ${sits.length} membros já foram pagos.`}
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                            todos ? 'bg-purple-100 text-purple-800' : 'bg-purple-50 text-purple-700 border border-purple-200'
+                          }`}
+                        >
+                          {todos ? '✓ pagamento concluído' : `pago ${pagos}/${sits.length}`}
+                        </span>
+                      );
+                    })()}
                     <span className="text-xs text-gray-500">
                       · {t.drivers} drivers · {formatInt(packages)} pacotes
                       {t.zapex > 0 && (

@@ -43,6 +43,8 @@ import {
   listNotaFiscalFiles,
   type NotaFiscalFileRow,
   reconferirPrintsComPlanilha,
+  listPaymentMarks,
+  markPaymentDone,
   listProofRequests,
   listDeliveryProofs,
   type MirrorPublicationRow,
@@ -72,6 +74,11 @@ import {
   computeProofProgressByPayment,
   plataformasSemPlanilha,
   nfPrazoStatus,
+  indexarMarcas,
+  pagamentoDoDriver,
+  jaPagosNoRelatorio,
+  marcasDoRelatorio,
+  type PaymentMark,
   proofForaPorSemGrupo,
   proofDispensadoSemPacote,
   melhorEstado,
@@ -205,6 +212,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [nfByDriver, setNfByDriver] = useState<Map<string, { validated: Set<string>; received: Set<string> }>>(new Map());
   /** Notas cruas da quinzena — só o filtro de PRAZO dos relatórios usa (04/08/2026). */
   const [nfFiles, setNfFiles] = useState<NotaFiscalFileRow[]>([]);
+  /** Quem JA RECEBEU nesta quinzena, por (entregador, plataforma) — a tag de pago. */
+  const [paymentMarks, setPaymentMarks] = useState<PaymentMark[]>([]);
 
   // Refs para leitura estavel em callbacks assincronos
   const driversRef = useRef<Driver[]>([]);
@@ -417,6 +426,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       if (!company?.id || !periodId) {
         setNfByDriver(new Map());
         setNfFiles([]);
+        setPaymentMarks([]);
         return;
       }
       try {
@@ -440,6 +450,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         }
         setNfByDriver(map);
         setNfFiles(files);
+        setPaymentMarks(await listPaymentMarks(company.id, periodId));
       } catch (e) {
         console.error('Erro ao carregar notas do período:', e);
       }
@@ -1017,7 +1028,12 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     }
     // Filtro de conferência (04/08/2026), driver a driver — "paga o resto": num grupo,
     // quem está pendente sai e o líder continua recebendo pelos que passaram.
-    const checks = applyChecksFilter(inScope, nfCompleteByPayment, leaderNameByGroup, {
+    // Já pagos que o operador tirou na própria janela (04/08/2026).
+    const removidos = new Set(opts.excluirDriverIds);
+    const inScopeSemRemovidos = removidos.size > 0
+      ? inScope.filter((r) => !removidos.has(r.driverId))
+      : inScope;
+    const checks = applyChecksFilter(inScopeSemRemovidos, nfCompleteByPayment, leaderNameByGroup, {
       onlyEspelhoConferido: opts.onlyEspelhoConferido,
       onlyNfValidada: opts.onlyNfValidada,
       onlyNfNoPrazo: opts.onlyNfNoPrazo,
@@ -1065,6 +1081,22 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           return;
         }
         await exportDriverSimpleReportExcel(simpleRows, { ...meta, platforms: [] });
+      }
+      // ESTA PLANILHA É O PAGAMENTO: registra quem recebeu, por plataforma (04/08/2026).
+      // ⚠️ Só depois de o arquivo ter sido gerado — se a geração falhar, ninguém é marcado.
+      if (opts.marcarComoPago && company?.id && selectedPeriod?.id) {
+        try {
+          const pares = marcasDoRelatorio(scoped, platforms.map((p) => p.name), allowedSet);
+          const n = await markPaymentDone(company.id, selectedPeriod.id, pares, kind, userId);
+          setPaymentMarks(await listPaymentMarks(company.id, selectedPeriod.id));
+          const pessoas = new Set(pares.map((p) => p.driverId)).size;
+          toast.success(`${pessoas} entregador(es) marcados como PAGOS (${n} plataforma/entregador).`,
+            { duration: 9000 });
+        } catch (e) {
+          // O arquivo já foi baixado: não posso fingir que a marcação deu certo.
+          console.error('[pagamento] falhou ao marcar como pago:', e);
+          toast.error('O relatório saiu, mas NÃO consegui marcar como pago. Gere de novo pra marcar.');
+        }
       }
       toast.success(kind === 'geral' ? 'Relatório gerado' : 'Relatório simples gerado');
       setReportModal(null);
@@ -1264,6 +1296,30 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     }
     return m;
   }, [rows, nfFiles, publications]);
+
+  /** Índice `driver|plataforma` -> data do pagamento. */
+  const indiceMarcas = useMemo(() => indexarMarcas(paymentMarks), [paymentMarks]);
+
+  /** Situação de pagamento de cada linha, pra tag na grade e pro filtro. */
+  const pagamentoPorPagamento = useMemo(() => {
+    const nomes = platforms.map((p) => p.name);
+    const m = new Map<string, ReturnType<typeof pagamentoDoDriver>>();
+    for (const r of rows) m.set(r.paymentId, pagamentoDoDriver(r, nomes, indiceMarcas));
+    return m;
+  }, [rows, platforms, indiceMarcas]);
+
+  /**
+   * Quem, no escopo do relatório, JÁ foi pago nas plataformas escolhidas — com a data.
+   * A janela usa isto pra avisar e pra oferecer tirar a pessoa do relatório na hora.
+   */
+  const jaPagosDoRelatorio = (allowed: string[] | null, excluir: readonly string[]) => {
+    const fora = new Set(excluir);
+    const escopo = reportScopeRows().filter((r) => !fora.has(r.driverId));
+    return jaPagosNoRelatorio(
+      escopo, platforms.map((p) => p.name), indiceMarcas,
+      allowed && allowed.length > 0 ? new Set(allowed) : undefined,
+    );
+  };
 
   /**
    * Prévia de quem sai do relatório com os filtros marcados (a janela mostra antes de baixar).
@@ -1622,6 +1678,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             proofProgressByPayment={proofProgressByPayment}
             semGrupoForaByPayment={semGrupoForaByPayment}
             dispensadoByPayment={dispensadoByPayment}
+            pagamentoByPayment={pagamentoPorPagamento}
             selGroups={canMirror ? selGroups : undefined}
             selDrivers={canMirror ? selDrivers : undefined}
             onToggleSelGroup={canMirror ? toggleSelGroup : undefined}
@@ -1867,6 +1924,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               selCount > 0 ? `Só o que está marcado (${selCount})` : `${scoped.length} driver(s) da lista atual`
             }
             checksPreview={checksPreview}
+            jaPagos={jaPagosDoRelatorio}
             onClose={() => setReportModal(null)}
             onConfirm={handleGenerateReport}
           />

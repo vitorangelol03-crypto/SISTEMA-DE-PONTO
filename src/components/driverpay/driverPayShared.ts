@@ -553,6 +553,117 @@ export function planejarCorrecaoDePacotes(
   return { ajustes, totalAntes, totalDepois: alvo, deltaReais, precosDiferentes, erro: null };
 }
 
+// ─── TAG DE PAGAMENTO CONCLUÍDO (04/08/2026) ─────────────────────────────────
+// Quem JÁ RECEBEU, por (entregador, plataforma). Decisões do Victor:
+//  · pagar só a SHOPEE marca **só a SHOPEE** — as outras continuam podendo ser pagas;
+//  · num GRUPO, o dinheiro sai numa linha só do líder mas cobre os N membros, então
+//    marcar o relatório marca **os N membros**, não só o líder.
+
+export interface PaymentMark {
+  driverId: string;
+  platformName: string;
+  /** ISO. É a data que a tela mostra: "já pago em 04/08". */
+  paidAt: string;
+}
+
+export type EstadoPagamento =
+  /** todas as plataformas em que ele tem pacote já foram pagas */
+  | 'concluido'
+  /** algumas pagas, outras não */
+  | 'parcial'
+  /** nenhuma paga */
+  | 'pendente'
+  /** não tem pacote nenhum nesta quinzena — não há o que pagar */
+  | 'sem_pacote';
+
+export interface PagamentoDoDriver {
+  estado: EstadoPagamento;
+  pagas: string[];
+  faltando: string[];
+  /** Data do pagamento mais recente dele (ISO), pra mostrar no aviso. */
+  ultimoPagamento: string | null;
+}
+
+/** Índice rápido `driverId|plataforma` -> data do pagamento. */
+export function indexarMarcas(marcas: readonly PaymentMark[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const x of marcas) {
+    const k = `${x.driverId}|${x.platformName}`;
+    const atual = m.get(k);
+    // Se marcaram duas vezes, vale a mais recente (é a que o operador lembra).
+    if (!atual || x.paidAt > atual) m.set(k, x.paidAt);
+  }
+  return m;
+}
+
+/**
+ * Situação de pagamento de UM entregador, olhando só as plataformas em que ele tem pacote.
+ *
+ * ⚠️ "concluído" NUNCA aparece pra quem ainda tem plataforma a receber — foi a razão de a
+ * marca ser por plataforma, e não um simples "pago sim/não" no pagamento.
+ */
+export function pagamentoDoDriver(
+  row: DriverRowData,
+  platformNames: readonly string[],
+  indice: ReadonlyMap<string, string>,
+): PagamentoDoDriver {
+  const comPacote = platformNames.filter((nome) => platformPackages(row, nome) > 0);
+  if (comPacote.length === 0) {
+    return { estado: 'sem_pacote', pagas: [], faltando: [], ultimoPagamento: null };
+  }
+  const pagas: string[] = [];
+  const faltando: string[] = [];
+  let ultimo: string | null = null;
+  for (const nome of comPacote) {
+    const quando = indice.get(`${row.driverId}|${nome}`);
+    if (quando) {
+      pagas.push(nome);
+      if (!ultimo || quando > ultimo) ultimo = quando;
+    } else {
+      faltando.push(nome);
+    }
+  }
+  const estado: EstadoPagamento =
+    pagas.length === 0 ? 'pendente' : faltando.length === 0 ? 'concluido' : 'parcial';
+  return { estado, pagas, faltando, ultimoPagamento: ultimo };
+}
+
+/**
+ * Os pares (entregador, plataforma) que um relatório vai marcar como pagos.
+ * São as plataformas DO RELATÓRIO em que cada linha tem pacote — linha de grupo entra
+ * membro por membro, porque `rows` já vem com todos eles.
+ */
+export function marcasDoRelatorio(
+  rows: readonly DriverRowData[],
+  platformNames: readonly string[],
+  allowed?: ReadonlySet<string>,
+): Array<{ driverId: string; platformName: string }> {
+  const escopo = allowed && allowed.size > 0 ? platformNames.filter((n) => allowed.has(n)) : platformNames;
+  const out: Array<{ driverId: string; platformName: string }> = [];
+  for (const row of rows) {
+    for (const nome of escopo) {
+      if (platformPackages(row, nome) > 0) out.push({ driverId: row.driverId, platformName: nome });
+    }
+  }
+  return out;
+}
+
+/** Quem, nesse relatório, JÁ tinha sido pago naquelas plataformas — com a data. */
+export function jaPagosNoRelatorio(
+  rows: readonly DriverRowData[],
+  platformNames: readonly string[],
+  indice: ReadonlyMap<string, string>,
+  allowed?: ReadonlySet<string>,
+): Array<{ driverId: string; name: string; platformName: string; paidAt: string }> {
+  const nomeDe = new Map(rows.map((r) => [r.driverId, r.name]));
+  const out: Array<{ driverId: string; name: string; platformName: string; paidAt: string }> = [];
+  for (const { driverId, platformName } of marcasDoRelatorio(rows, platformNames, allowed)) {
+    const quando = indice.get(`${driverId}|${platformName}`);
+    if (quando) out.push({ driverId, name: nomeDe.get(driverId) ?? '', platformName, paidAt: quando });
+  }
+  return out;
+}
+
 /** Plataformas em que este driver deve mandar print: as SOLICITADAS PRA ELE onde tem pacote. */
 export function expectedProofPlatforms(
   row: DriverRowData,

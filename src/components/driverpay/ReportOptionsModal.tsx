@@ -15,6 +15,10 @@ export interface ReportOptions {
   onlyNfValidada: boolean;
   /** Só quem mandou a nota dentro do prazo do espelho dele. */
   onlyNfNoPrazo: boolean;
+  /** Esta planilha É o pagamento: quem sair nela fica com a tag "pago". */
+  marcarComoPago: boolean;
+  /** Entregadores tirados do relatório na hora (já pagos que o operador removeu). */
+  excluirDriverIds: string[];
 }
 
 interface ReportOptionsModalProps {
@@ -30,6 +34,12 @@ interface ReportOptionsModalProps {
   scopeLabel: string;
   /** Quem sai do relatório com os filtros de conferência marcados (prévia honesta). */
   checksPreview: (opts: ChecksFilterOptions) => ChecksFilterResult;
+  /**
+   * Quem, neste relatório, JÁ foi pago naquelas plataformas — com a data. Recalculado
+   * conforme o operador mexe nas plataformas e tira gente da lista.
+   */
+  jaPagos: (allowed: string[] | null, excluirDriverIds: readonly string[]) =>
+    Array<{ driverId: string; name: string; platformName: string; paidAt: string }>;
   onClose: () => void;
   onConfirm: (opts: ReportOptions) => Promise<void>;
 }
@@ -47,6 +57,7 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
   alreadyDeducted,
   scopeLabel,
   checksPreview,
+  jaPagos,
   onClose,
   onConfirm,
 }) => {
@@ -56,6 +67,10 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
   const [onlyEspelhoConferido, setOnlyEspelho] = useState(false);
   const [onlyNfValidada, setOnlyNf] = useState(false);
   const [onlyNfNoPrazo, setOnlyPrazo] = useState(false);
+  /** "Esta planilha é o pagamento de verdade" — desmarcado por padrão: marcar é ato consciente. */
+  const [marcarComoPago, setMarcarComoPago] = useState(false);
+  /** Já pagos que o operador TIROU do relatório aqui mesmo, sem sair da tela. */
+  const [excluidos, setExcluidos] = useState<Set<string>>(new Set());
   const [generating, setGenerating] = useState(false);
 
   const preview = useMemo(
@@ -81,6 +96,21 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
     [selected, platformOptions],
   );
 
+  const conflitos = useMemo(
+    () => jaPagos(allowed, [...excluidos]),
+    [jaPagos, allowed, excluidos],
+  );
+  /** Um driver pode aparecer em 2 plataformas; a lista de remoção é por PESSOA. */
+  const pessoasEmConflito = useMemo(() => {
+    const m = new Map<string, { name: string; plats: string[]; paidAt: string }>();
+    for (const c of conflitos) {
+      const e = m.get(c.driverId);
+      if (e) { e.plats.push(c.platformName); if (c.paidAt > e.paidAt) e.paidAt = c.paidAt; }
+      else m.set(c.driverId, { name: c.name, plats: [c.platformName], paidAt: c.paidAt });
+    }
+    return [...m].map(([driverId, v]) => ({ driverId, ...v }));
+  }, [conflitos]);
+
   const toggle = (name: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -94,7 +124,10 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
     if (vaiSairVazio) return;
     setGenerating(true);
     try {
-      await onConfirm({ allowed, includeDeductions, onlyEspelhoConferido, onlyNfValidada, onlyNfNoPrazo });
+      await onConfirm({
+        allowed, includeDeductions, onlyEspelhoConferido, onlyNfValidada, onlyNfNoPrazo,
+        marcarComoPago, excluirDriverIds: [...excluidos],
+      });
     } finally {
       setGenerating(false);
     }
@@ -266,6 +299,83 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
           {vaiSairVazio && (
             <p className="text-xs text-red-700 mt-2" data-testid="report-checks-empty">
               Ninguém do escopo passa nesses filtros — não há o que baixar.
+            </p>
+          )}
+        </div>
+
+        {/* ── ESTA PLANILHA É O PAGAMENTO (04/08/2026) ──────────────────
+             Marcando, todo mundo que sair no arquivo ganha a tag "pago" NAS PLATAFORMAS
+             DESTE relatório. Pagar só a SHOPEE marca só a SHOPEE. Desmarcado por padrão:
+             marcar é o registro de que o dinheiro saiu, tem que ser ato consciente. */}
+        <div
+          className={`border rounded-md p-3 ${marcarComoPago ? 'border-purple-300 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}
+          data-testid="report-pagamento-box"
+        >
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={marcarComoPago}
+              onChange={(e) => setMarcarComoPago(e.target.checked)}
+              className="w-4 h-4 mt-0.5 text-purple-600 rounded border-gray-300"
+              data-testid="report-marcar-pago"
+            />
+            <span className="text-sm text-gray-800">
+              <b>Esta planilha é o pagamento de verdade</b>
+              <span className="block text-xs text-gray-600 mt-0.5">
+                Quem sair nela fica com <b>pago</b>
+                {allowed && allowed.length > 0 ? ` em ${allowed.join(' + ')}` : ' nas plataformas em que tem pacote'}.
+                Num grupo, marca <b>cada membro</b> — o dinheiro da linha do líder cobre todos.
+              </span>
+            </span>
+          </label>
+
+          {pessoasEmConflito.length > 0 && (
+            <div className="mt-2 rounded-md border-2 border-amber-400 bg-amber-50 px-3 py-2" data-testid="report-ja-pagos">
+              <p className="text-sm font-bold text-amber-900">
+                ⚠ {pessoasEmConflito.length} entregador(es) já foram pagos nestas plataformas
+              </p>
+              <ul className="mt-1 max-h-32 overflow-y-auto text-xs text-amber-900 space-y-1">
+                {pessoasEmConflito.map((p) => (
+                  <li key={p.driverId} className="flex items-center justify-between gap-2">
+                    <span>
+                      <b>{p.name}</b> — {p.plats.join(', ')}, pago em{' '}
+                      {new Date(p.paidAt).toLocaleDateString('pt-BR')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setExcluidos((prev) => new Set(prev).add(p.driverId))}
+                      data-testid={`tirar-${p.driverId}`}
+                      className="px-2 py-0.5 rounded border border-amber-500 text-amber-900 hover:bg-amber-100 whitespace-nowrap"
+                    >
+                      tirar do relatório
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={() => setExcluidos((prev) => {
+                  const n = new Set(prev);
+                  for (const p of pessoasEmConflito) n.add(p.driverId);
+                  return n;
+                })}
+                data-testid="tirar-todos-ja-pagos"
+                className="mt-1.5 text-xs font-semibold text-amber-900 underline"
+              >
+                Tirar todos estes do relatório
+              </button>
+              <p className="text-xs text-amber-800 mt-1">
+                Se baixar assim, eles entram <b>de novo</b> na planilha de pagamento.
+              </p>
+            </div>
+          )}
+
+          {excluidos.size > 0 && (
+            <p className="mt-2 text-xs text-gray-700" data-testid="report-excluidos">
+              <b>{excluidos.size} entregador(es) tirados</b> deste relatório.{' '}
+              <button type="button" onClick={() => setExcluidos(new Set())} className="underline text-blue-700">
+                desfazer
+              </button>
             </p>
           )}
         </div>

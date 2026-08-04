@@ -28,6 +28,7 @@ import {
   formatInt,
   type NfProgress,
   type ProofProgress,
+  type PagamentoDoDriver,
 } from './driverPayShared';
 
 interface DriverRowProps {
@@ -53,6 +54,8 @@ interface DriverRowProps {
   semGrupoFora?: string[];
   /** Plataformas em que ele NAO precisa mandar print: a planilha chegou e ele nao tem pacote. */
   dispensadoSemPacote?: string[];
+  /** Situacao de PAGAMENTO deste driver (tag "pago"/"parcial"). */
+  pagamento?: PagamentoDoDriver;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkbox. */
   selected?: boolean;
   /** Driver já coberto por um GRUPO selecionado: checkbox marcado e travado. */
@@ -92,6 +95,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   proofProgress,
   semGrupoFora = [],
   dispensadoSemPacote = [],
+  pagamento,
   selected,
   selectionLocked,
   onToggleSelect,
@@ -158,6 +162,24 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 </button>
               )}
               <span className="break-words">{row.name}</span>
+              {/* Tag de PAGAMENTO (04/08/2026) — some quando ele nao tem pacote nenhum. */}
+              {pagamento && pagamento.estado !== 'sem_pacote' && pagamento.estado !== 'pendente' && (
+                <span
+                  data-testid="row-selo-pago"
+                  title={pagamento.estado === 'concluido'
+                    ? `Pagamento concluído em ${pagamento.ultimoPagamento ? new Date(pagamento.ultimoPagamento).toLocaleDateString('pt-BR') : ''} — ${pagamento.pagas.join(', ')}.`
+                    : `Pago: ${pagamento.pagas.join(', ')}. Ainda falta: ${pagamento.faltando.join(', ')}.`}
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                    pagamento.estado === 'concluido'
+                      ? 'bg-purple-100 text-purple-800'
+                      : 'bg-purple-50 text-purple-700 border border-purple-200'
+                  }`}
+                >
+                  {pagamento.estado === 'concluido'
+                    ? `✓ pago ${pagamento.ultimoPagamento ? new Date(pagamento.ultimoPagamento).toLocaleDateString('pt-BR') : ''}`
+                    : `pago ${pagamento.pagas.join('+')}`}
+                </span>
+              )}
             </span>
             <span className="text-sm text-gray-600 flex items-center gap-1 flex-wrap">
               <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
