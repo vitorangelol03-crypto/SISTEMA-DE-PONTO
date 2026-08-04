@@ -897,27 +897,57 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
   const claims = await claimsFromRequest(req, body);
   if (!claims) return json({ error: 'Sessao invalida' }, 401);
   const periodId = String(body.periodId ?? '').trim();
-  if (!periodId) return json({ error: 'periodId ausente' }, 400);
 
-  const plataformas = await plataformasSolicitadas(claims.company_id, periodId);
-  if (plataformas.length === 0) return json({ slots: [] });
+  // ⚠️ periodId e OPCIONAL de proposito (corrigido em 04/08, achado pelo E2E do
+  // portal): no fluxo real o print e pedido ANTES de o espelho de pagamento ser
+  // publicado — a conferencia e justamente o que libera o pagamento. Se a tela
+  // dependesse de uma quinzena vinda do espelho publicado, o driver nao teria por
+  // onde enviar. Sem periodId, devolve o que ele deve em TODAS as quinzenas.
+  let periodIds: string[];
+  if (periodId) {
+    periodIds = [periodId];
+  } else {
+    const { data: reqs } = await supabase.from('driverpay_proof_requests')
+      .select('period_id').eq('company_id', claims.company_id);
+    periodIds = [...new Set((reqs ?? []).map((r) => r.period_id as string))];
+  }
+  if (periodIds.length === 0) return json({ slots: [] });
+
+  // Plataformas solicitadas, por quinzena.
+  const { data: reqRows } = await supabase.from('driverpay_proof_requests')
+    .select('period_id, platform_name').eq('company_id', claims.company_id).in('period_id', periodIds);
+  const platsPorPeriodo = new Map<string, string[]>();
+  for (const r of reqRows ?? []) {
+    const lista = platsPorPeriodo.get(r.period_id as string) ?? [];
+    lista.push(r.platform_name as string);
+    platsPorPeriodo.set(r.period_id as string, lista);
+  }
+  if (platsPorPeriodo.size === 0) return json({ slots: [] });
+
+  const { data: pers } = await supabase.from('driverpay_periods')
+    .select('id, label').in('id', [...platsPorPeriodo.keys()]);
+  const labelDe = new Map((pers ?? []).map((p) => [p.id as string, p.label as string]));
 
   const driverIds = await driversQuePossoEnviar(claims);
   const { data: pays } = await supabase.from('driverpay_payments')
-    .select('id, driver_id').eq('period_id', periodId).in('driver_id', driverIds);
+    .select('id, driver_id, period_id').in('period_id', [...platsPorPeriodo.keys()]).in('driver_id', driverIds);
   const payList = pays ?? [];
   if (payList.length === 0) return json({ slots: [] });
 
   const { data: pks } = await supabase.from('driverpay_payment_packages')
     .select('payment_id, platform_name, packages').in('payment_id', payList.map((p) => p.id));
   const driverOf = new Map(payList.map((p) => [p.id as string, p.driver_id as string]));
+  const periodOf = new Map(payList.map((p) => [p.id as string, p.period_id as string]));
 
-  // (driver, plataforma) que TEM pacote e foi solicitado.
+  // (quinzena, driver, plataforma) que TEM pacote e foi solicitado.
   const precisa = new Set<string>();
   for (const pk of pks ?? []) {
-    const dId = driverOf.get(pk.payment_id as string);
+    const payId = pk.payment_id as string;
+    const dId = driverOf.get(payId);
+    const perId = periodOf.get(payId);
     const plat = pk.platform_name as string;
-    if (dId && (pk.packages ?? 0) > 0 && plataformas.includes(plat)) precisa.add(`${dId}|${plat}`);
+    if (!dId || !perId || (pk.packages ?? 0) <= 0) continue;
+    if ((platsPorPeriodo.get(perId) ?? []).includes(plat)) precisa.add(`${perId}|${dId}|${plat}`);
   }
   if (precisa.size === 0) return json({ slots: [] });
 
@@ -926,15 +956,15 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
   const nomeDe = new Map((drivers ?? []).map((d) => [d.id as string, d.name as string]));
 
   const { data: proofs } = await supabase.from('driverpay_delivery_proofs')
-    .select('driver_id, platform_name, status, reject_reason, uploaded_at')
-    .eq('period_id', periodId).in('driver_id', driverIds)
+    .select('period_id, driver_id, platform_name, status, reject_reason, uploaded_at')
+    .in('period_id', [...platsPorPeriodo.keys()]).in('driver_id', driverIds)
     .order('uploaded_at', { ascending: true });
 
   const enviados: Record<string, number> = {};
   const recusados: Record<string, number> = {};
   const motivo: Record<string, string | null> = {};
   for (const p of proofs ?? []) {
-    const k = `${p.driver_id}|${p.platform_name}`;
+    const k = `${p.period_id}|${p.driver_id}|${p.platform_name}`;
     if (p.status === 'rejeitado') {
       recusados[k] = (recusados[k] ?? 0) + 1;
       motivo[k] = (p.reject_reason as string | null) ?? null; // asc -> fica o mais recente
@@ -944,8 +974,10 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
   }
 
   const slots = [...precisa].map((k) => {
-    const [driverId, platformName] = k.split('|');
+    const [pId, driverId, platformName] = k.split('|');
     return {
+      periodId: pId,
+      periodLabel: labelDe.get(pId) ?? '',
       driverId,
       driverName: nomeDe.get(driverId) ?? '',
       /** true quando o print e de outra pessoa (membro do grupo) — o app destaca. */
@@ -1108,14 +1140,16 @@ async function proofUpload(req: Request, body: Body): Promise<Response> {
 async function proofList(req: Request, body: Body): Promise<Response> {
   const claims = await claimsFromRequest(req, body);
   if (!claims) return json({ error: 'Sessao invalida' }, 401);
+  // periodId opcional: sem ele, lista o que o driver mandou em qualquer quinzena
+  // (mesma razao do proof-slots — o print vem antes do espelho publicado).
   const periodId = String(body.periodId ?? '').trim();
-  if (!periodId) return json({ error: 'periodId ausente' }, 400);
 
   const driverIds = await driversQuePossoEnviar(claims);
-  const { data } = await supabase.from('driverpay_delivery_proofs')
+  let q = supabase.from('driverpay_delivery_proofs')
     .select('id, driver_id, platform_name, original_filename, status, reject_reason, uploaded_at')
-    .eq('period_id', periodId).in('driver_id', driverIds)
-    .order('uploaded_at', { ascending: false });
+    .eq('company_id', claims.company_id).in('driver_id', driverIds);
+  if (periodId) q = q.eq('period_id', periodId);
+  const { data } = await q.order('uploaded_at', { ascending: false });
 
   const { data: drivers } = await supabase.from('driverpay_drivers').select('id, name').in('id', driverIds);
   const nomeDe = new Map((drivers ?? []).map((d) => [d.id as string, d.name as string]));

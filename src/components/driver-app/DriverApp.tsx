@@ -98,7 +98,8 @@ export function DriverApp() {
 
   // Espelho do app da Shopee (print da tela) — 04/08/2026.
   // ⚠️ Nada aqui guarda quantidade: o driver so anexa a foto.
-  const [proofCtx, setProofCtx] = useState<{ periodId: string; periodLabel: string } | null>(null);
+  /** Quantos prints ainda faltam — alimenta a faixa no topo da lista. */
+  const [proofPendentes, setProofPendentes] = useState(0);
   const [proofSlots, setProofSlots] = useState<ProofSlot[] | null>(null);
   const [proofFiles, setProofFiles] = useState<ProofFile[]>([]);
   const [proofUploading, setProofUploading] = useState<string | null>(null);
@@ -115,6 +116,10 @@ export function DriverApp() {
     try {
       const { mirrors } = await driverMyMirrors(tk);
       setMirrors(mirrors);
+      // Quantos prints a CD está esperando. Independe de haver espelho publicado.
+      driverProofSlots(undefined, tk)
+        .then(({ slots }) => setProofPendentes(slots.filter((s) => s.sent === 0).length))
+        .catch(() => setProofPendentes(0));
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else { setMirrors([]); toast.error(errMsg(e, 'Nao consegui carregar os espelhos.')); }
@@ -223,30 +228,30 @@ export function DriverApp() {
   // A CD pede o print pra conferir a quantidade de pacotes da planilha. Aqui o
   // driver só anexa a foto — nenhuma informação nossa aparece nesta tela.
 
-  const loadProof = useCallback(async (periodId: string) => {
+  const loadProof = useCallback(async (periodId?: string) => {
     if (!token) return;
     setProofSlots(null);
     try {
       const [{ slots }, { files }] = await Promise.all([
-        driverProofSlots(periodId, token),
-        driverProofList(periodId, token),
+        driverProofSlots(periodId ?? '', token),
+        driverProofList(periodId ?? '', token),
       ]);
       setProofSlots(slots);
       setProofFiles(files);
+      setProofPendentes(slots.filter((s) => s.sent === 0).length);
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else { setProofSlots([]); toast.error(errMsg(e, 'Nao consegui carregar os espelhos.')); }
     }
   }, [token, logout]);
 
-  function openProof(m: DriverMirror) {
-    setProofCtx({ periodId: m.periodId, periodLabel: m.periodLabel });
+  function openProof() {
     setScreen('proof');
-    loadProof(m.periodId);
+    loadProof();
   }
 
   async function handleProofFile(slot: ProofSlot, file: File | null | undefined) {
-    if (!file || !token || !proofCtx) return;
+    if (!file || !token) return;
     // Aqui e o CONTRARIO da nota fiscal: so imagem. A edge fn tambem confere a
     // assinatura real do arquivo — este aviso e so pra ser gentil.
     if (!file.type.startsWith('image/')) {
@@ -259,7 +264,7 @@ export function DriverApp() {
       const { base64, contentType, filename } = await fileToUpload(file);
       await driverProofUpload(
         {
-          periodId: proofCtx.periodId,
+          periodId: slot.periodId,
           driverId: slot.driverId,
           platformName: slot.platformName,
           contentType, fileBase64: base64, filename,
@@ -269,14 +274,14 @@ export function DriverApp() {
       // Mensagem PROPOSITALMENTE simples: o driver nao pode saber se a quantidade
       // bateu. Print divergente chega aqui igualzinho a um print certo.
       toast.success('Espelho enviado!');
-      await loadProof(proofCtx.periodId);
+      await loadProof();
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else if (errStatus(e) === 422) {
         // Recusa na hora: SO acontece por data errada ou print ilegivel — as duas
         // coisas que o proprio driver resolve reenviando.
         toast.error(errMsg(e, 'Espelho recusado.'), { duration: 12000 });
-        await loadProof(proofCtx.periodId);
+        await loadProof();
       } else {
         toast.error(errMsg(e, 'Nao consegui enviar o espelho.'));
       }
@@ -408,7 +413,7 @@ export function DriverApp() {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="font-semibold text-gray-900 break-words">{s.driverName}</div>
-              <div className="text-xs text-gray-500 mt-0.5">Entregas {s.platformName}</div>
+              <div className="text-xs text-gray-500 mt-0.5">Entregas {s.platformName} · {s.periodLabel}</div>
             </div>
             {s.sent > 0 && (
               <span className="flex items-center gap-1 text-green-700 text-xs font-medium whitespace-nowrap">
@@ -447,12 +452,12 @@ export function DriverApp() {
     return (
       <div className="min-h-screen bg-gray-100">
         <header className="bg-blue-600 text-white px-4 py-3 flex items-center gap-2 sticky top-0 z-10">
-          <button onClick={() => { setScreen('mirrors'); setProofCtx(null); }} className="p-1 -ml-1 rounded hover:bg-blue-700/60">
+          <button onClick={() => { setScreen('mirrors'); loadMirrors(token!); }} className="p-1 -ml-1 rounded hover:bg-blue-700/60">
             <ChevronLeft size={22} />
           </button>
           <div className="leading-tight">
             <div className="font-semibold text-sm">Espelho do app</div>
-            {proofCtx && <div className="text-blue-100 text-xs">{proofCtx.periodLabel}</div>}
+            <div className="text-blue-100 text-xs">Print da tela do aplicativo</div>
           </div>
         </header>
 
@@ -610,11 +615,37 @@ export function DriverApp() {
       </header>
 
       <main className="max-w-md mx-auto p-4 space-y-3">
+        {/* Espelho do app (print da tela) — 04/08/2026.
+            ⚠️ FICA FORA dos cards de espelho publicado de propósito: a CD pede o
+            print ANTES de publicar o pagamento (a conferência é o que libera o
+            pagamento). Se este botão dependesse de um espelho publicado, o driver
+            não teria por onde enviar — foi o que o E2E do portal pegou. */}
+        {proofPendentes > 0 && (
+          <button
+            onClick={openProof}
+            className="w-full bg-amber-50 border border-amber-300 rounded-xl p-4 text-left hover:bg-amber-100"
+          >
+            <div className="flex items-center gap-3">
+              <Upload size={20} className="text-amber-700 flex-shrink-0" />
+              <div className="min-w-0">
+                <div className="font-semibold text-amber-900 text-sm">
+                  {proofPendentes === 1
+                    ? 'A CD está esperando 1 espelho do app'
+                    : `A CD está esperando ${proofPendentes} espelhos do app`}
+                </div>
+                <div className="text-xs text-amber-800 mt-0.5">
+                  Toque aqui pra enviar o print da tela do aplicativo de entregas.
+                </div>
+              </div>
+            </div>
+          </button>
+        )}
+
         {mirrors === null && (
           <div className="flex items-center justify-center py-16"><Spinner /></div>
         )}
 
-        {mirrors !== null && mirrors.length === 0 && (
+        {mirrors !== null && mirrors.length === 0 && proofPendentes === 0 && (
           <div className="text-center py-16 text-gray-500">
             <FileText size={40} className="mx-auto mb-3 text-gray-300" />
             <p className="font-medium">Nenhum espelho por aqui ainda.</p>
@@ -665,13 +696,7 @@ export function DriverApp() {
                 <Upload size={16} /> Anexar nota
               </button>
             </div>
-            {/* Espelho do app da Shopee (print da tela) — 04/08/2026. Botao separado
-                do "Anexar nota" de proposito: sao dois envios diferentes e os drivers
-                ja confundiam foto com PDF. */}
-            <button onClick={() => openProof(m)}
-              className="mt-2 w-full flex items-center justify-center gap-1.5 bg-white border border-blue-600 text-blue-700 hover:bg-blue-50 text-sm font-medium rounded-lg px-3 py-2">
-              <Upload size={16} /> Enviar espelho do app
-            </button>
+
           </div>
         ))}
       </main>

@@ -157,6 +157,10 @@ export function driverNfUpload(
 
 /** Um print que este driver precisa anexar. */
 export interface ProofSlot {
+  /** Quinzena deste print. Vem do slot, NÃO do espelho publicado — o print é
+   *  pedido ANTES de o espelho existir (corrigido em 04/08). */
+  periodId: string;
+  periodLabel: string;
   /** De QUEM é o print. Se ele lidera um grupo, vem um item por membro. */
   driverId: string;
   driverName: string;
@@ -183,11 +187,11 @@ export interface ProofFile {
   uploadedAt: string;
 }
 
-export function driverProofSlots(periodId: string, token: string): Promise<{ slots: ProofSlot[] }> {
+export function driverProofSlots(periodId: string | undefined, token: string): Promise<{ slots: ProofSlot[] }> {
   return callDriverApi<{ slots: ProofSlot[] }>('proof-slots', { periodId }, token);
 }
 
-export function driverProofList(periodId: string, token: string): Promise<{ files: ProofFile[] }> {
+export function driverProofList(periodId: string | undefined, token: string): Promise<{ files: ProofFile[] }> {
   return callDriverApi<{ files: ProofFile[] }>('proof-list', { periodId }, token);
 }
 
