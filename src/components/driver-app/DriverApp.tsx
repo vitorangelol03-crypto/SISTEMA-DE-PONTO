@@ -10,11 +10,13 @@ import { CircleDollarSign, LogOut, Eye, FileText, KeyRound, Upload, ChevronLeft,
 import {
   driverLogin, driverChangePassword, driverMyMirrors, driverMirrorUrl,
   driverNfSlots, driverNfList, driverNfUpload,
+  driverProofSlots, driverProofList, driverProofUpload,
   getDriverToken, getDriverName, setDriverSession, clearDriverSession,
   DriverApiError, type DriverMirror, type NfSlot, type NfFile,
+  type ProofSlot, type ProofFile,
 } from '../../services/driverApp';
 
-type Screen = 'login' | 'change' | 'mirrors' | 'nf';
+type Screen = 'login' | 'change' | 'mirrors' | 'nf' | 'proof';
 
 const Spinner = ({ light = false }: { light?: boolean }) => (
   <div className={`animate-spin rounded-full h-5 w-5 border-b-2 ${light ? 'border-white' : 'border-blue-600'}`} />
@@ -93,6 +95,13 @@ export function DriverApp() {
   const [nfSlots, setNfSlots] = useState<NfSlot[] | null>(null);
   const [nfFiles, setNfFiles] = useState<NfFile[]>([]);
   const [nfUploading, setNfUploading] = useState<string | null>(null);
+
+  // Espelho do app da Shopee (print da tela) — 04/08/2026.
+  // ⚠️ Nada aqui guarda quantidade: o driver so anexa a foto.
+  const [proofCtx, setProofCtx] = useState<{ periodId: string; periodLabel: string } | null>(null);
+  const [proofSlots, setProofSlots] = useState<ProofSlot[] | null>(null);
+  const [proofFiles, setProofFiles] = useState<ProofFile[]>([]);
+  const [proofUploading, setProofUploading] = useState<string | null>(null);
 
   const logout = useCallback(() => {
     clearDriverSession();
@@ -210,6 +219,72 @@ export function DriverApp() {
     loadNf(m.periodId);
   }
 
+  // ─── Espelho do app da Shopee (print da tela) — 04/08/2026 ────────────────
+  // A CD pede o print pra conferir a quantidade de pacotes da planilha. Aqui o
+  // driver só anexa a foto — nenhuma informação nossa aparece nesta tela.
+
+  const loadProof = useCallback(async (periodId: string) => {
+    if (!token) return;
+    setProofSlots(null);
+    try {
+      const [{ slots }, { files }] = await Promise.all([
+        driverProofSlots(periodId, token),
+        driverProofList(periodId, token),
+      ]);
+      setProofSlots(slots);
+      setProofFiles(files);
+    } catch (e) {
+      if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
+      else { setProofSlots([]); toast.error(errMsg(e, 'Nao consegui carregar os espelhos.')); }
+    }
+  }, [token, logout]);
+
+  function openProof(m: DriverMirror) {
+    setProofCtx({ periodId: m.periodId, periodLabel: m.periodLabel });
+    setScreen('proof');
+    loadProof(m.periodId);
+  }
+
+  async function handleProofFile(slot: ProofSlot, file: File | null | undefined) {
+    if (!file || !token || !proofCtx) return;
+    // Aqui e o CONTRARIO da nota fiscal: so imagem. A edge fn tambem confere a
+    // assinatura real do arquivo — este aviso e so pra ser gentil.
+    if (!file.type.startsWith('image/')) {
+      toast.error('Envie uma imagem — o print ou a foto da tela do app.');
+      return;
+    }
+    const chave = `${slot.driverId}|${slot.platformName}`;
+    setProofUploading(chave);
+    try {
+      const { base64, contentType, filename } = await fileToUpload(file);
+      await driverProofUpload(
+        {
+          periodId: proofCtx.periodId,
+          driverId: slot.driverId,
+          platformName: slot.platformName,
+          contentType, fileBase64: base64, filename,
+        },
+        token,
+      );
+      // Mensagem PROPOSITALMENTE simples: o driver nao pode saber se a quantidade
+      // bateu. Print divergente chega aqui igualzinho a um print certo.
+      toast.success('Espelho enviado!');
+      await loadProof(proofCtx.periodId);
+    } catch (e) {
+      if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
+      else if (errStatus(e) === 422) {
+        // Recusa na hora: SO acontece por data errada ou print ilegivel — as duas
+        // coisas que o proprio driver resolve reenviando.
+        toast.error(errMsg(e, 'Espelho recusado.'), { duration: 12000 });
+        await loadProof(proofCtx.periodId);
+      } else {
+        toast.error(errMsg(e, 'Nao consegui enviar o espelho.'));
+      }
+    } finally {
+      setProofUploading(null);
+    }
+  }
+
   async function handleNfFile(slot: NfSlot, file: File | null | undefined) {
     const emitterId = slot.emitterId;
     if (!file || !token || !nfCtx) return;
@@ -318,6 +393,130 @@ export function DriverApp() {
   }
 
   // ─── ANEXAR NOTA (por CNPJ) ──────────────────────────────────────────────────
+  // ─── Tela do ESPELHO DO APP (print da tela da Shopee) ────────────────────
+  // ⚠️ Nao existe numero nenhum nesta tela, de proposito: o driver so anexa a foto.
+  if (screen === 'proof') {
+    const meus = (proofSlots ?? []).filter((s) => !s.doGrupo);
+    const doGrupo = (proofSlots ?? []).filter((s) => s.doGrupo);
+
+    const cartao = (s: ProofSlot) => {
+      const chave = `${s.driverId}|${s.platformName}`;
+      const enviando = proofUploading === chave;
+      const precisaReenviar = s.sent === 0 && s.rejected > 0;
+      return (
+        <div key={chave} className="bg-white rounded-xl shadow-sm p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="font-semibold text-gray-900 break-words">{s.driverName}</div>
+              <div className="text-xs text-gray-500 mt-0.5">Entregas {s.platformName}</div>
+            </div>
+            {s.sent > 0 && (
+              <span className="flex items-center gap-1 text-green-700 text-xs font-medium whitespace-nowrap">
+                <CheckCircle2 size={14} /> {s.sent} enviado(s)
+              </span>
+            )}
+          </div>
+
+          {precisaReenviar && (
+            <div className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800">
+              <strong>Espelho recusado.</strong>
+              {s.rejectReason ? ` ${s.rejectReason.replace('[automático] ', '')}` : ' Envie outro.'}
+            </div>
+          )}
+
+          <label
+            className={`mt-3 w-full flex items-center justify-center gap-2 text-sm font-medium rounded-lg px-3 py-2.5 cursor-pointer ${
+              enviando
+                ? 'bg-gray-100 text-gray-400 cursor-wait'
+                : s.sent > 0
+                ? 'bg-white border border-blue-600 text-blue-700 hover:bg-blue-50'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {enviando ? <Spinner /> : <Upload size={16} />}
+            {enviando ? 'Enviando...' : s.sent > 0 ? 'Enviar outro print' : 'Enviar print do app'}
+            <input
+              type="file" accept="image/*" capture="environment" className="hidden" disabled={enviando}
+              onChange={(e) => { handleProofFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
+            />
+          </label>
+        </div>
+      );
+    };
+
+    return (
+      <div className="min-h-screen bg-gray-100">
+        <header className="bg-blue-600 text-white px-4 py-3 flex items-center gap-2 sticky top-0 z-10">
+          <button onClick={() => { setScreen('mirrors'); setProofCtx(null); }} className="p-1 -ml-1 rounded hover:bg-blue-700/60">
+            <ChevronLeft size={22} />
+          </button>
+          <div className="leading-tight">
+            <div className="font-semibold text-sm">Espelho do app</div>
+            {proofCtx && <div className="text-blue-100 text-xs">{proofCtx.periodLabel}</div>}
+          </div>
+        </header>
+
+        <main className="max-w-md mx-auto p-4 space-y-3">
+          {proofSlots === null && <div className="flex items-center justify-center py-16"><Spinner /></div>}
+
+          {proofSlots !== null && proofSlots.length === 0 && (
+            <div className="text-center py-16 text-gray-500">
+              <Upload size={40} className="mx-auto mb-3 text-gray-300" />
+              <p className="font-medium">Nada pra enviar aqui.</p>
+              <p className="text-sm">A CD ainda não pediu o espelho desta quinzena.</p>
+            </div>
+          )}
+
+          {proofSlots !== null && proofSlots.length > 0 && (
+            <>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900">
+                <p className="font-medium mb-1">Como tirar o print</p>
+                <ol className="list-decimal list-inside space-y-0.5 text-xs">
+                  <li>Abra o app de entregas e vá em <strong>Entrega</strong>.</li>
+                  <li>Toque em <strong>Selecionar data</strong> e escolha o período desta quinzena.</li>
+                  <li>Deixe aparecendo a aba <strong>Encerrado</strong> com o número do lado.</li>
+                  <li>Tire o print pelo próprio celular e envie aqui.</li>
+                </ol>
+              </div>
+
+              {meus.map(cartao)}
+
+              {doGrupo.length > 0 && (
+                <>
+                  <div className="pt-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Do seu grupo — um print de cada
+                  </div>
+                  {doGrupo.map(cartao)}
+                </>
+              )}
+
+              {proofFiles.length > 0 && (
+                <div className="pt-2">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Enviados</div>
+                  <div className="bg-white rounded-xl shadow-sm divide-y">
+                    {proofFiles.map((f) => (
+                      <div key={f.id} className="px-4 py-2.5 flex items-center justify-between gap-2 text-sm">
+                        <div className="min-w-0">
+                          <div className="text-gray-800 truncate">{f.driverName}</div>
+                          <div className="text-xs text-gray-500">{f.platformName} · {fmtDate(f.uploadedAt)}</div>
+                        </div>
+                        <span className={`text-xs font-medium whitespace-nowrap ${
+                          f.status === 'rejeitado' ? 'text-red-600' : 'text-green-700'
+                        }`}>
+                          {f.status === 'rejeitado' ? 'recusado' : 'enviado'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   if (screen === 'nf') {
     return (
       <div className="min-h-screen bg-gray-100">
@@ -466,6 +665,13 @@ export function DriverApp() {
                 <Upload size={16} /> Anexar nota
               </button>
             </div>
+            {/* Espelho do app da Shopee (print da tela) — 04/08/2026. Botao separado
+                do "Anexar nota" de proposito: sao dois envios diferentes e os drivers
+                ja confundiam foto com PDF. */}
+            <button onClick={() => openProof(m)}
+              className="mt-2 w-full flex items-center justify-center gap-1.5 bg-white border border-blue-600 text-blue-700 hover:bg-blue-50 text-sm font-medium rounded-lg px-3 py-2">
+              <Upload size={16} /> Enviar espelho do app
+            </button>
           </div>
         ))}
       </main>

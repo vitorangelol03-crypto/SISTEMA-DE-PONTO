@@ -40,6 +40,8 @@ import {
   unpublishDriverMirror,
   unpublishAllMirrorsForPeriod,
   listNotaFiscalFiles,
+  listProofRequests,
+  listDeliveryProofs,
   type MirrorPublicationRow,
 } from '../../services/driverPay';
 import { exportDriverGeneralReportExcel, exportDriverSimpleReportExcel } from '../../utils/driverReport';
@@ -64,6 +66,10 @@ import {
   formatBRL,
   formatInt,
   MIRROR_COMPANY_NAME,
+  computeProofProgressByPayment,
+  melhorEstado,
+  proofStateFromRow,
+  type ProofState,
 } from './driverPayShared';
 import { ReportOptionsModal, type ReportOptions } from './ReportOptionsModal';
 import { DriverFilters, GROUP_NONE } from './DriverFilters';
@@ -78,6 +84,8 @@ import { GroupManagerModal } from './GroupManagerModal';
 import { PlatformModal } from './PlatformModal';
 import { EmittersModal } from './EmittersModal';
 import { NotasRecebidasModal } from './NotasRecebidasModal';
+import { SolicitarEspelhoModal } from './SolicitarEspelhoModal';
+import { EspelhosRecebidosModal } from './EspelhosRecebidosModal';
 import { PeriodCreateModal } from './PeriodCreateModal';
 import { PeriodConcludeModal } from './PeriodConcludeModal';
 import { PeriodEditModal } from './PeriodEditModal';
@@ -154,6 +162,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [showPlatform, setShowPlatform] = useState(false);
   const [showEmitters, setShowEmitters] = useState(false);
   const [showNotas, setShowNotas] = useState(false);
+  // Espelho do app da Shopee (print da tela) — 04/08/2026
+  const [showSolicitarEspelho, setShowSolicitarEspelho] = useState(false);
+  const [showEspelhosRecebidos, setShowEspelhosRecebidos] = useState(false);
+  /** Plataformas com print solicitado nesta quinzena. Vazio = ninguém pediu ainda. */
+  const [proofRequests, setProofRequests] = useState<string[]>([]);
+  /** Estado do print por `driverId|plataforma`, pra pintar a coluna da grade. */
+  const [proofStates, setProofStates] = useState<Map<string, ProofState>>(new Map());
   const [showCreatePeriod, setShowCreatePeriod] = useState(false);
   const [showConclude, setShowConclude] = useState(false);
   const [editPeriodModal, setEditPeriodModal] = useState<{ period: DriverPaymentPeriod; confirmDelete: boolean } | null>(
@@ -318,6 +333,40 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
   // Carrega as notas do período e monta, por driver, os CNPJs com nota validada / recebida
   // (não rejeitada). Alimenta a coluna NF (validadas/esperadas, ciente de grupo).
+  /**
+   * Carrega o estado do ESPELHO DO APP (print da Shopee) da quinzena.
+   *
+   * Um driver pode ter mandado mais de um print pra mesma plataforma (reenvio
+   * depois de recusa), então `melhorEstado` decide qual vale — ver a regra lá.
+   */
+  const reloadProofs = useCallback(
+    async (periodId: string | null) => {
+      if (!company?.id || !periodId) {
+        setProofRequests([]);
+        setProofStates(new Map());
+        return;
+      }
+      try {
+        const [solicitadas, prints] = await Promise.all([
+          listProofRequests(company.id, periodId),
+          listDeliveryProofs(company.id, periodId),
+        ]);
+        const porSlot = new Map<string, ProofState[]>();
+        for (const p of prints) {
+          const k = `${p.driverId}|${p.platformName}`;
+          const lista = porSlot.get(k) ?? [];
+          lista.push(proofStateFromRow({ status: p.status, checkStatus: p.checkStatus }));
+          porSlot.set(k, lista);
+        }
+        setProofRequests(solicitadas);
+        setProofStates(new Map([...porSlot].map(([k, v]) => [k, melhorEstado(v)])));
+      } catch (e) {
+        console.error('Erro ao carregar os espelhos do app:', e);
+      }
+    },
+    [company?.id],
+  );
+
   const reloadNotes = useCallback(
     async (periodId: string | null) => {
       if (!company?.id || !periodId) {
@@ -355,7 +404,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   useEffect(() => {
     reloadPublished(selectedPeriodId);
     reloadNotes(selectedPeriodId);
-  }, [selectedPeriodId, reloadPublished, reloadNotes]);
+    reloadProofs(selectedPeriodId);
+  }, [selectedPeriodId, reloadPublished, reloadNotes, reloadProofs]);
 
   // Reset total + recarga ao trocar de empresa (evita vazamento cross-empresa).
   useEffect(() => {
@@ -972,6 +1022,19 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
   // Progresso da NF por pagamento (validadas/esperadas, ciente de grupo — só o líder anexa).
   // Sobre TODOS os rows (não os filtrados) pra o grupo agregar certo mesmo com filtro.
+  /** Progresso do ESPELHO DO APP por pagamento (um print por driver — nao agrega grupo). */
+  const proofProgressByPayment = useMemo(
+    () => computeProofProgressByPayment(rows, proofRequests, proofStates),
+    [rows, proofRequests, proofStates],
+  );
+
+  /** Quantos drivers precisam da sua atenção no print (divergente ou recusado). */
+  const proofAtencao = useMemo(
+    () => [...proofProgressByPayment.values()]
+      .filter((p) => p.needsAttention || p.rejected > 0).length,
+    [proofProgressByPayment],
+  );
+
   const nfProgressByPayment = useMemo(
     () => computeNfProgressByPayment(rows, platforms, nfByDriver, pubsByDriver),
     [rows, platforms, nfByDriver, pubsByDriver],
@@ -1252,6 +1315,31 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               Notas recebidas
             </button>
           )}
+          {/* Espelho do app da Shopee (print da tela) — 04/08/2026 */}
+          {selectedPeriod && canMirror && (
+            <button
+              type="button"
+              onClick={() => setShowSolicitarEspelho(true)}
+              title="Pedir aos entregadores o print da tela do app (aba Encerrado), pra conferir a quantidade da planilha"
+              className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+            >
+              Solicitar espelho
+            </button>
+          )}
+          {selectedPeriod && canMirror && proofRequests.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowEspelhosRecebidos(true)}
+              title="Ver os prints recebidos, com a foto ao lado do que a planilha diz"
+              className={`px-3 py-2 text-sm font-medium rounded-md inline-flex items-center gap-1.5 min-h-[40px] ${
+                proofAtencao > 0
+                  ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+              }`}
+            >
+              Espelhos recebidos{proofAtencao > 0 ? ` (${proofAtencao})` : ''}
+            </button>
+          )}
           {selectedPeriod && canMirror && publishedDriverIds.size > 0 && (
             <button
               type="button"
@@ -1379,6 +1467,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             onGroupMirror={onGroupMirror}
             publishedDriverIds={publishedDriverIds}
             nfProgressByPayment={nfProgressByPayment}
+            proofProgressByPayment={proofProgressByPayment}
             selGroups={canMirror ? selGroups : undefined}
             selDrivers={canMirror ? selDrivers : undefined}
             onToggleSelGroup={canMirror ? toggleSelGroup : undefined}
@@ -1481,6 +1570,34 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           userId={userId}
           onClose={() => setShowNotas(false)}
           onChanged={() => reloadNotes(selectedPeriod.id)}
+        />
+      )}
+
+      {/* Espelho do app da Shopee (print da tela) — 04/08/2026 */}
+      {showSolicitarEspelho && selectedPeriod && (
+        <SolicitarEspelhoModal
+          companyId={company.id}
+          periodId={selectedPeriod.id}
+          periodLabel={selectedPeriod.label}
+          periodStart={selectedPeriod.start_date ?? null}
+          periodEnd={selectedPeriod.end_date ?? null}
+          rows={rows}
+          platformNames={platforms.map((p) => p.name)}
+          userId={userId}
+          onClose={() => setShowSolicitarEspelho(false)}
+          onChanged={() => { reloadProofs(selectedPeriod.id); reloadPeriods(); }}
+        />
+      )}
+
+      {showEspelhosRecebidos && selectedPeriod && (
+        <EspelhosRecebidosModal
+          companyId={company.id}
+          periodId={selectedPeriod.id}
+          periodLabel={selectedPeriod.label}
+          rows={rows}
+          userId={userId}
+          onClose={() => setShowEspelhosRecebidos(false)}
+          onChanged={() => { reloadProofs(selectedPeriod.id); reloadPayments(); }}
         />
       )}
 

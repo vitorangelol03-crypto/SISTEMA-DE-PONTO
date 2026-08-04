@@ -148,3 +148,63 @@ export function driverNfUpload(
   // lança DriverApiError com o motivo (o slot reabre e mostra "recusada: <motivo>").
   return callDriverApi<{ ok: boolean; validated?: boolean }>('nf-upload', input, token);
 }
+
+// ─── Espelho do app da Shopee (print da tela) — 04/08/2026 ───────────────────
+//
+// ⚠️ O driver NUNCA recebe quantidade esperada nem resultado de conferência de
+// quantidade — decisão do Victor: "ele só anexa a foto, não pode ter acesso a
+// nenhuma informação". Repare que não há campo de número nenhum aqui embaixo.
+
+/** Um print que este driver precisa anexar. */
+export interface ProofSlot {
+  /** De QUEM é o print. Se ele lidera um grupo, vem um item por membro. */
+  driverId: string;
+  driverName: string;
+  /** true quando o print é de um membro do grupo, não dele próprio. */
+  doGrupo: boolean;
+  platformName: string;
+  /** prints NÃO recusados já enviados neste lugar. */
+  sent: number;
+  /** prints recusados (data errada / ilegível): precisa reenviar. */
+  rejected: number;
+  /** motivo da última recusa — é a única coisa que o driver fica sabendo. */
+  rejectReason: string | null;
+}
+
+export interface ProofFile {
+  id: string;
+  driverId: string;
+  driverName: string;
+  platformName: string;
+  filename: string | null;
+  /** 'enviado' | 'rejeitado'. Divergente e validado aparecem IGUAIS ('enviado'). */
+  status: string;
+  rejectReason: string | null;
+  uploadedAt: string;
+}
+
+export function driverProofSlots(periodId: string, token: string): Promise<{ slots: ProofSlot[] }> {
+  return callDriverApi<{ slots: ProofSlot[] }>('proof-slots', { periodId }, token);
+}
+
+export function driverProofList(periodId: string, token: string): Promise<{ files: ProofFile[] }> {
+  return callDriverApi<{ files: ProofFile[] }>('proof-list', { periodId }, token);
+}
+
+export function driverProofUpload(
+  input: {
+    periodId: string;
+    /** De quem é o print (o líder envia pelos membros). O servidor valida. */
+    driverId: string;
+    platformName: string;
+    contentType: string;
+    fileBase64: string;
+    filename?: string;
+  },
+  token: string,
+): Promise<{ ok: boolean }> {
+  // Print recusado (data errada / ilegível) volta como HTTP 422 → callDriverApi
+  // lança DriverApiError com o motivo. Quantidade divergente NUNCA cai aqui:
+  // ela é aceita em silêncio e só aparece no painel.
+  return callDriverApi<{ ok: boolean }>('proof-upload', input, token);
+}

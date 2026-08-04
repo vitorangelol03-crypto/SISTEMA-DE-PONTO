@@ -18,6 +18,7 @@ import {
   ArrowUpDown,
   ChevronsUpDown,
   Smartphone,
+  AlertTriangle,
 } from 'lucide-react';
 import type { DriverPlatform } from '../../services/driverPay';
 import { DriverRow } from './DriverRow';
@@ -29,6 +30,7 @@ import {
   formatBRL,
   formatInt,
   type NfProgress,
+  type ProofProgress,
 } from './driverPayShared';
 
 interface DriverListProps {
@@ -48,6 +50,8 @@ interface DriverListProps {
   publishedDriverIds?: ReadonlySet<string>;
   /** Progresso da NF (validadas/esperadas) por paymentId — ciente de grupo. */
   nfProgressByPayment?: ReadonlyMap<string, NfProgress>;
+  /** Espelho do app (print da Shopee) — 04/08. Vazio = ninguem solicitou nesta quinzena. */
+  proofProgressByPayment?: ReadonlyMap<string, ProofProgress>;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkboxes. */
   selGroups?: ReadonlySet<string>;
   selDrivers?: ReadonlySet<string>;
@@ -98,6 +102,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   onGroupMirror,
   publishedDriverIds,
   nfProgressByPayment,
+  proofProgressByPayment,
   selGroups,
   selDrivers,
   onToggleSelGroup,
@@ -149,6 +154,14 @@ export const DriverList: React.FC<DriverListProps> = ({
         return t.net;
       case 'nf':
         return row.notaFiscal ? 1 : 0;
+      case 'print': {
+        // Ordena pelo que exige acao: quem precisa de atencao vem primeiro (0),
+        // depois quem falta mandar (1), e por ultimo o que ja bateu (2).
+        const p = proofProgressByPayment?.get(row.paymentId);
+        if (!p || p.expected === 0) return 3;
+        if (p.needsAttention || p.rejected > 0) return 0;
+        return p.complete ? 2 : 1;
+      }
       case 'espelho':
         return row.espelhoConferido ? 1 : 0;
       default:
@@ -259,6 +272,9 @@ export const DriverList: React.FC<DriverListProps> = ({
     // NF "completa" = todas as CNPJs esperadas validadas (ciente de grupo) OU marcada na mão.
     const nfCount = subset.filter((r) => nfProgressByPayment?.get(r.paymentId)?.complete).length;
     const espelhoCount = subset.filter((r) => r.espelhoConferido).length;
+    // Print do app: conta quem tem print esperado E ja conferido.
+    const printEsperado = subset.filter((r) => (proofProgressByPayment?.get(r.paymentId)?.expected ?? 0) > 0).length;
+    const printOk = subset.filter((r) => proofProgressByPayment?.get(r.paymentId)?.complete).length;
     return (
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse">
@@ -297,6 +313,9 @@ export const DriverList: React.FC<DriverListProps> = ({
                 {sortBtn('nf', 'NF')}
               </th>
               <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                {sortBtn('print', 'Print')}
+              </th>
+              <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('espelho', 'Espelho')}
               </th>
               <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -321,6 +340,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                 handlers={handlers}
                 publishedInApp={publishedDriverIds?.has(row.driverId)}
                 nfProgress={nfProgressByPayment?.get(row.paymentId)}
+                proofProgress={proofProgressByPayment?.get(row.paymentId)}
                 selected={selDrivers?.has(row.paymentId)}
                 selectionLocked={rowGroupSelected(row)}
                 onToggleSelect={onToggleSelDriver}
@@ -348,6 +368,9 @@ export const DriverList: React.FC<DriverListProps> = ({
                 <td className="px-2 py-3.5 text-center text-xs font-bold text-gray-700 whitespace-nowrap">
                   NF {nfCount}/{totals.drivers}
                 </td>
+                <td className="px-2 py-3.5 text-center text-xs font-bold text-gray-700 whitespace-nowrap">
+                  {printEsperado > 0 ? `Print ${printOk}/${printEsperado}` : '—'}
+                </td>
                 <td className="px-2 py-3.5 text-center text-xs font-bold text-green-700 whitespace-nowrap">
                   Espelho {espelhoCount}/{totals.drivers}
                 </td>
@@ -364,6 +387,7 @@ export const DriverList: React.FC<DriverListProps> = ({
     const t = computeRowTotals(row);
     const multi = row.routes.length > 1;
     const nf = nfProgressByPayment?.get(row.paymentId);
+    const proof = proofProgressByPayment?.get(row.paymentId);
     const nfComplete = nf?.complete ?? row.notaFiscal;
     return (
       <div
@@ -473,6 +497,35 @@ export const DriverList: React.FC<DriverListProps> = ({
             ? 'Nota fiscal recebida'
             : 'Sem nota esperada'}
         </button>
+
+        {/* Espelho do app (print da Shopee) — so informativo no card: quem resolve
+            divergencia e o modal "Espelhos recebidos". */}
+        {proof && proof.expected > 0 && (
+          <div
+            className={`w-full mb-2 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium min-h-[40px] border ${
+              proof.complete
+                ? 'bg-green-50 border-green-200 text-green-700'
+                : proof.needsAttention || proof.rejected > 0
+                ? 'bg-amber-50 border-amber-200 text-amber-700'
+                : 'bg-gray-50 border-gray-200 text-gray-500'
+            }`}
+          >
+            {proof.complete
+              ? <CheckCircle2 className="w-5 h-5 fill-green-100" />
+              : proof.needsAttention || proof.rejected > 0
+              ? <AlertTriangle className="w-5 h-5" />
+              : <Circle className="w-5 h-5" />}
+            {proof.complete
+              ? 'Espelho do app confere'
+              : proof.needsAttention
+              ? 'Espelho do app: quantidade diferente'
+              : proof.rejected > 0
+              ? 'Espelho do app recusado — vai reenviar'
+              : proof.pending > 0
+              ? 'Espelho do app: conferindo'
+              : `Espelho do app: falta ${proof.missing}`}
+          </div>
+        )}
 
         {/* Espelho conferido — deixa o card inteiro verde */}
         <button

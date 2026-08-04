@@ -15,6 +15,7 @@ import {
   ClipboardCheck,
   Clipboard,
   Smartphone,
+  AlertTriangle,
 } from 'lucide-react';
 import type { DriverPlatform } from '../../services/driverPay';
 import {
@@ -26,6 +27,7 @@ import {
   formatBRL,
   formatInt,
   type NfProgress,
+  type ProofProgress,
 } from './driverPayShared';
 
 interface DriverRowProps {
@@ -45,6 +47,8 @@ interface DriverRowProps {
   publishedInApp?: boolean;
   /** Progresso da NF (validadas/esperadas, ciente de grupo). Ausente = sem dado. */
   nfProgress?: NfProgress;
+  /** Espelho do app (print da Shopee) — 04/08. Ausente = ninguem solicitou. */
+  proofProgress?: ProofProgress;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkbox. */
   selected?: boolean;
   /** Driver já coberto por um GRUPO selecionado: checkbox marcado e travado. */
@@ -81,14 +85,16 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   handlers,
   publishedInApp,
   nfProgress,
+  proofProgress,
   selected,
   selectionLocked,
   onToggleSelect,
 }) => {
   const multi = isMultiRoute(row);
   const totals = computeRowTotals(row);
-  // driver+grupo (2) + plataformas + 5 totais (pacotes, ZAPEX, desconto, vale, receber) + NF (1) + Espelho (1) + acoes (1)
-  const totalCols = 2 + platforms.length + 5 + 1 + 1 + 1;
+  // driver+grupo (2) + plataformas + 5 totais (pacotes, ZAPEX, desconto, vale, receber)
+  // + NF (1) + Print (1) + Espelho (1) + acoes (1)
+  const totalCols = 2 + platforms.length + 5 + 1 + 1 + 1 + 1;
   const inputsDisabled = readOnly || !canEdit;
   // Ganho Zapex do driver: qtd de itens x valor unitario individual (soma no total a receber).
   const zapexCount = row.zapex.length;
@@ -331,6 +337,44 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 <Circle className="w-6 h-6 text-gray-500" />
               )}
             </button>
+          )}
+        </td>
+
+        {/* Espelho do app (print da tela da Shopee) — 04/08/2026.
+            Verde = o print bate com a planilha (periodo e quantidade). Ambar = chegou
+            mas a quantidade NAO bate: e o que voce precisa olhar em "Espelhos recebidos".
+            Cinza = ninguem mandou ainda. Vazio = print nao foi solicitado nesta quinzena. */}
+        <td className="px-2 py-3 text-center align-middle">
+          {proofProgress && proofProgress.expected > 0 ? (
+            <span
+              title={
+                proofProgress.complete
+                  ? 'Print do app confere com a planilha'
+                  : proofProgress.needsAttention
+                  ? 'O print chegou mas a quantidade NAO bate com a planilha — veja em "Espelhos recebidos"'
+                  : proofProgress.rejected > 0
+                  ? 'Print recusado (data errada ou ilegivel) — o entregador precisa reenviar'
+                  : proofProgress.pending > 0
+                  ? 'Print recebido, esperando conferencia'
+                  : 'Print ainda nao enviado'
+              }
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-bold tabular-nums border ${
+                proofProgress.complete
+                  ? 'bg-green-100 text-green-700 border-green-300'
+                  : proofProgress.needsAttention || proofProgress.rejected > 0
+                  ? 'bg-amber-100 text-amber-700 border-amber-300'
+                  : 'bg-gray-100 text-gray-500 border-gray-300'
+              }`}
+            >
+              {proofProgress.complete
+                ? <CheckCircle2 className="w-4 h-4" />
+                : proofProgress.needsAttention || proofProgress.rejected > 0
+                ? <AlertTriangle className="w-4 h-4" />
+                : <Circle className="w-4 h-4" />}
+              {proofProgress.confirmed}/{proofProgress.expected}
+            </span>
+          ) : (
+            <span className="text-gray-300 text-xs">—</span>
           )}
         </td>
 

@@ -1994,3 +1994,202 @@ export const applyDriverImport = async (
 
   return { driversCreated, aliasesLearned, packagesApplied, driversAffected: affected.size, ignored };
 };
+
+// ─── Espelho do app da Shopee (print da tela) — 04/08/2026 ───────────────────
+//
+// A planilha da Shopee pode vir com a quantidade de pacotes errada por driver.
+// O driver anexa pelo portal o print da tela do app dele e o sistema confere.
+// Ver supabase/functions/_shared/proofCheck.ts pra regra da conferência.
+
+/** Plataformas com print SOLICITADO nesta quinzena (o botão "Solicitar espelho"). */
+export const listProofRequests = async (companyId: string, periodId: string): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from('driverpay_proof_requests')
+    .select('platform_name')
+    .eq('company_id', companyId)
+    .eq('period_id', periodId);
+  if (error) throwDbError(error);
+  return [...new Set((data ?? []).map((r) => String(r.platform_name)))];
+};
+
+/**
+ * Abre a "torneira": a partir daqui o portal do driver passa a pedir o print
+ * desta plataforma nesta quinzena. Idempotente (apertar de novo não duplica).
+ */
+export const requestProof = async (
+  companyId: string, periodId: string, platformName: string, userId: string,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase
+    .from('driverpay_proof_requests')
+    .upsert(
+      { company_id: companyId, period_id: periodId, platform_name: platformName, requested_by: userId },
+      { onConflict: 'company_id,period_id,platform_name' },
+    );
+  if (error) throwDbError(error);
+};
+
+/** Fecha a torneira. Os prints já enviados FICAM — só para de pedir novos. */
+export const cancelProofRequest = async (
+  companyId: string, periodId: string, platformName: string, userId: string,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase
+    .from('driverpay_proof_requests')
+    .delete()
+    .eq('company_id', companyId).eq('period_id', periodId).eq('platform_name', platformName);
+  if (error) throwDbError(error);
+};
+
+/** Um print recebido, com o driver resolvido, pro painel. */
+export interface DeliveryProofRow {
+  id: string;
+  driverId: string;
+  driverName: string;
+  platformName: string;
+  filePath: string;
+  fileType: string | null;
+  originalFilename: string | null;
+  /** Impressão digital do arquivo — o painel usa pra avisar de print repetido entre drivers. */
+  fileSha256: string | null;
+  /** 'app' = o driver/líder enviou pelo portal; 'painel' = o operador anexou. */
+  uploadSource: string;
+  uploadedAt: string;
+  /** 'recebido' | 'validado' | 'rejeitado'. */
+  status: string;
+  rejectReason: string | null;
+  /** 'ok' | 'divergente' | 'periodo_errado' | 'ilegivel' | 'pendente' | null. */
+  checkStatus: string | null;
+  checkQtd: boolean | null;
+  checkPeriodo: boolean | null;
+  /** O que a leitura entendeu do print. */
+  readPackages: number | null;
+  readStartDate: string | null;
+  readEndDate: string | null;
+  /** O que a planilha dizia NA HORA da conferência (o painel compara com o de hoje). */
+  expectedPackages: number | null;
+  checkDetails: Record<string, unknown> | null;
+  checkedAt: string | null;
+  /** Fila: preenchido = esperando reconferência automática. */
+  nextCheckAt: string | null;
+  checkAttempts: number;
+  validatedBy: string | null;
+}
+
+export const listDeliveryProofs = async (
+  companyId: string, periodId: string,
+): Promise<DeliveryProofRow[]> => {
+  const { data, error } = await supabase
+    .from('driverpay_delivery_proofs')
+    .select('id, driver_id, platform_name, file_path, file_type, original_filename, file_sha256, upload_source, uploaded_at, status, reject_reason, check_status, check_qtd, check_periodo, read_packages, read_start_date, read_end_date, expected_packages, check_details, checked_at, next_check_at, check_attempts, validated_by, driverpay_drivers(name)')
+    .eq('company_id', companyId)
+    .eq('period_id', periodId)
+    .order('uploaded_at', { ascending: true });
+  if (error) throwDbError(error);
+  return (data ?? []).map((row) => {
+    const r = row as Record<string, unknown>;
+    const drvRaw = r.driverpay_drivers;
+    const drv = (Array.isArray(drvRaw) ? drvRaw[0] : drvRaw) as { name?: string } | null;
+    return {
+      id: String(r.id),
+      driverId: String(r.driver_id),
+      driverName: drv?.name ?? '(sem nome)',
+      platformName: String(r.platform_name),
+      filePath: String(r.file_path),
+      fileType: (r.file_type as string | null) ?? null,
+      originalFilename: (r.original_filename as string | null) ?? null,
+      fileSha256: (r.file_sha256 as string | null) ?? null,
+      uploadSource: (r.upload_source as string) ?? 'app',
+      uploadedAt: String(r.uploaded_at),
+      status: (r.status as string) ?? 'recebido',
+      rejectReason: (r.reject_reason as string | null) ?? null,
+      checkStatus: (r.check_status as string | null) ?? null,
+      checkQtd: (r.check_qtd as boolean | null) ?? null,
+      checkPeriodo: (r.check_periodo as boolean | null) ?? null,
+      readPackages: (r.read_packages as number | null) ?? null,
+      readStartDate: (r.read_start_date as string | null) ?? null,
+      readEndDate: (r.read_end_date as string | null) ?? null,
+      expectedPackages: (r.expected_packages as number | null) ?? null,
+      checkDetails: (r.check_details as Record<string, unknown> | null) ?? null,
+      checkedAt: (r.checked_at as string | null) ?? null,
+      nextCheckAt: (r.next_check_at as string | null) ?? null,
+      checkAttempts: Number(r.check_attempts ?? 0),
+      validatedBy: (r.validated_by as string | null) ?? null,
+    };
+  });
+};
+
+/**
+ * Validar/recusar um print NA MÃO — a palavra final é sempre do operador.
+ *
+ * Validar aqui também sai da fila (`next_check_at = null`): se um humano decidiu,
+ * o automático não tem mais o que reconferir.
+ */
+export const setProofStatus = async (
+  companyId: string, proofId: string, status: 'validado' | 'rejeitado' | 'recebido',
+  userId: string, rejectReason?: string,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase
+    .from('driverpay_delivery_proofs')
+    .update({
+      status,
+      reject_reason: status === 'rejeitado' ? (rejectReason ?? null) : null,
+      validated_at: status === 'validado' ? new Date().toISOString() : null,
+      validated_by: status === 'validado' ? userId : null,
+      next_check_at: null,
+    })
+    .eq('id', proofId).eq('company_id', companyId);
+  if (error) throwDbError(error);
+};
+
+export const deleteDeliveryProof = async (
+  companyId: string, proofId: string, userId: string,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase
+    .from('driverpay_delivery_proofs').delete().eq('id', proofId).eq('company_id', companyId);
+  if (error) throwDbError(error);
+};
+
+export const PROOF_BUCKET = 'driverpay-delivery-proofs';
+
+/** Link temporário (5 min) pra ver/baixar o print. Bucket é privado. */
+export const proofFileUrl = async (path: string): Promise<string | null> => {
+  const { data, error } = await supabase.storage.from(PROOF_BUCKET).createSignedUrl(path, 300);
+  if (error) return null;
+  return data?.signedUrl ?? null;
+};
+
+/** Configuração do print por empresa. Sem linha na tabela = padrão. */
+export interface ProofSettings {
+  /** Marcar "espelho conferido" sozinho quando o print bate. */
+  autoConfirm: boolean;
+  /** Folga aceita na quantidade. 0 = tem que bater exato (decisão do Victor). */
+  tolerancePackages: number;
+}
+
+export const getProofSettings = async (companyId: string): Promise<ProofSettings> => {
+  const { data, error } = await supabase
+    .from('driverpay_settings')
+    .select('proof_auto_confirm, proof_tolerance_packages')
+    .eq('company_id', companyId)
+    .maybeSingle();
+  if (error) throwDbError(error);
+  return {
+    autoConfirm: data?.proof_auto_confirm !== false,
+    tolerancePackages: Number(data?.proof_tolerance_packages ?? 0) || 0,
+  };
+};
+
+export const setProofSettings = async (
+  companyId: string, settings: Partial<ProofSettings>, userId: string,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const patch: Record<string, unknown> = { company_id: companyId, updated_by: userId, updated_at: new Date().toISOString() };
+  if (settings.autoConfirm !== undefined) patch.proof_auto_confirm = settings.autoConfirm;
+  if (settings.tolerancePackages !== undefined) patch.proof_tolerance_packages = settings.tolerancePackages;
+  const { error } = await supabase
+    .from('driverpay_settings').upsert(patch, { onConflict: 'company_id' });
+  if (error) throwDbError(error);
+};
