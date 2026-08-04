@@ -896,3 +896,49 @@ Script Python com vários `assert ... in s` **antes** de gravar o arquivo: quand
 meio, **nada é salvo** — nem as edições que já tinham passado. Perdi trabalho e só percebi porque o
 `grep` seguinte não achou o que eu tinha acabado de "editar". **Gravar depois de cada edição, ou
 conferir com grep antes de seguir.**
+
+## 15. Correção com 2+ rotas + ordenar grupos por espelho (`3c2bf49`)
+
+**(a) Correção da contagem com mais de uma rota.** Antes só aparecia a rota que muda
+(*"Caratinga: 2009 → 2124"*) — a outra rota **não existia na tela**. Ficava sem resposta a pergunta
+que decide o valor: *"em qual rota entrou, e a outra ficou como?"*. Como os preços por rota são
+**diferentes**, é ONDE a diferença cai que define quanto o entregador recebe.
+
+Agora, com 2+ rotas, cada rota sai com o **seu preço por pacote**, a que recebeu a diferença fica
+marcada com ➜ e as demais dizem "não muda". Rota única segue com a frase curta. O plano puro passa a
+devolver `linhas` (TODAS as rotas, com `mudou`); `ajustes` — o que grava no banco — **não mudou**.
+
+**(b) Ordenar grupos por "Espelho conferido"**, igual já existia no individual. Mesma escala do
+"NF validada" (2 = todos, 1 = parte, 0 = nenhum). ⚠️ **Diferente do NF**, o espelho conferido é
+**por membro** (cada print marca o pagamento daquele driver), então conta um a um em vez de olhar só
+o líder.
+
+**Validado:** 8 unit novos + os 11 antigos · **902 unit** · typecheck 61 (baseline) · eslint · build ·
+**tela FOTOGRAFADA** com o caso real do Fabricio (Caratinga R$ 2,00 × Inhapim R$ 1,50):
+`➜ Caratinga · R$ 2,00/pct 1307 → 1422 (+115)` / `Inhapim · R$ 1,50/pct 702 (não muda)`.
+O cenário da foto foi montado em **Ponte Nova** (empresa vazia) e apagado — PN zerada, Caratinga intacta.
+
+⚠️ **Segunda vez que precisei separar commit misturado** (`driverPayShared.ts` tinha minha mudança e a
+feature "desconto pendente" da outra sessão). Mesmo procedimento da §14.1: reconstruir do `git show
+HEAD:`, commitar, devolver o arquivo completo ao disco. Provado em worktree isolada: **61 erros**, o
+baseline — compila sozinho.
+
+## 16. ⏳ ABERTO — decisão do Victor sobre recusa de print (§ pedido dele, não implementado)
+
+Ele pediu: **print com data errada → recusa e exclui automaticamente** · **1 print por entregador**
+(outro só depois de excluir o primeiro). **Investiguei e NÃO implementei**, porque achei um risco que
+muda o desenho:
+
+**🔴 A reconferência NUNCA recusa.** Conferido na função **no ar**:
+`status: confirmado ? 'validado' : 'recebido'` — hardcoded, e não toca em `reject_reason`. Então um
+print recusado no envio é **destravado sozinho** pela fila, ficando "recebido" com a mensagem
+vermelha antiga na tela. **É a causa do caso do GESSILEY** que ele fotografou.
+
+**🔴 A IA leu a MESMA foto duas vezes com respostas diferentes:** 1ª leitura 4049 pacotes / período
+16-31/07 (recusou); 2ª leitura 3733 / 01-15/07 (período certo). A planilha esperava **3734** — ou
+seja, a 2ª leitura é a certa e a **1ª foi alucinação**. Se "excluir automático" estivesse ligado, o
+print BOM do Gessiley teria sido **apagado**.
+
+**Perguntei e aguardo:** (A) recusa+apaga na hora, como pedido; ou (B) recusa na hora mas só apaga
+depois de uma **segunda leitura confirmar** a data errada. Recomendei B. Também perguntei se print
+recusado libera a vaga do "1 por entregador" (recomendei que sim).
