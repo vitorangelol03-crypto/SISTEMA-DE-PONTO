@@ -56,3 +56,15 @@ CREATE POLICY driverpay_rls ON public.driverpay_payment_marks FOR ALL TO authent
 -- ROLLBACK:
 -- DROP TABLE IF EXISTS public.driverpay_payment_marks CASCADE;
 -- ============================================================================
+
+-- ---------- ADITIVO (04/08/2026, mesmo dia): o desconto saiu ou não? ----------
+-- POR QUÊ: quando o operador DESMARCA "Descontar vales e perdas neste relatório", o
+-- pagamento sai PARCIAL — o desconto fica pra sair no pagamento das demais plataformas.
+-- Sem registrar isso, é fácil esquecer e o vale nunca ser descontado de ninguém.
+ALTER TABLE public.driverpay_payment_marks
+  ADD COLUMN IF NOT EXISTS deductions_applied boolean;
+
+COMMENT ON COLUMN public.driverpay_payment_marks.deductions_applied IS
+  'Neste pagamento os vales e perdas foram DESCONTADOS? true = sim (o normal). false = '
+  'pagamento PARCIAL: as colunas mostraram os valores mas o total NAO abateu, entao o '
+  'desconto ainda esta pendente. NULL = marca criada antes desta coluna existir.';

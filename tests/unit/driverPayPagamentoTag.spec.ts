@@ -131,3 +131,45 @@ describe('jaPagosNoRelatorio — o aviso antes de baixar', () => {
     expect(r.map((x) => x.driverId)).toEqual(['caio']);
   });
 });
+
+// ── O desconto saiu ou não? (04/08/2026) ────────────────────────────────────
+// Quando o pagamento sai PARCIAL, o vale/perda não é abatido e fica pendente pro pagamento
+// das demais plataformas. Sem registrar isso, o desconto some e ninguém percebe.
+describe('desconto pendente', () => {
+  const comDesconto = (d: string, p: string, at: string): PaymentMark =>
+    ({ driverId: d, platformName: p, paidAt: at, deductionsApplied: true });
+  const semDesconto = (d: string, p: string, at: string): PaymentMark =>
+    ({ driverId: d, platformName: p, paidAt: at, deductionsApplied: false });
+
+  it('pago COM desconto: nada pendente', () => {
+    const idx = indexarMarcas([comDesconto('caio', 'SHOPEE', '2026-08-04T12:00:00Z')]);
+    expect(pagamentoDoDriver(row('caio', { SHOPEE: 1 }), PLATS, idx).descontoPendente).toBe(false);
+  });
+
+  it('🎯 pago SEM desconto: acusa pendente', () => {
+    const idx = indexarMarcas([semDesconto('caio', 'SHOPEE', '2026-08-04T12:00:00Z')]);
+    expect(pagamentoDoDriver(row('caio', { SHOPEE: 1 }), PLATS, idx).descontoPendente).toBe(true);
+  });
+
+  it('basta UMA plataforma sem desconto pra acusar', () => {
+    const idx = indexarMarcas([
+      comDesconto('caio', 'SHOPEE', '2026-08-04T12:00:00Z'),
+      semDesconto('caio', 'LOGGI', '2026-08-05T12:00:00Z'),
+    ]);
+    const r = pagamentoDoDriver(row('caio', { SHOPEE: 1, LOGGI: 1 }), PLATS, idx);
+    expect(r.estado).toBe('concluido');
+    expect(r.descontoPendente).toBe(true);
+  });
+
+  it('⚠️ marca ANTIGA (null) nao acusa — nao da pra afirmar o que aconteceu', () => {
+    const antiga: PaymentMark = { driverId: 'caio', platformName: 'SHOPEE', paidAt: '2026-08-04T12:00:00Z' };
+    expect(pagamentoDoDriver(row('caio', { SHOPEE: 1 }), PLATS, indexarMarcas([antiga])).descontoPendente)
+      .toBe(false);
+  });
+
+  it('o aviso do relatorio carrega o "sem desconto" junto', () => {
+    const idx = indexarMarcas([semDesconto('caio', 'SHOPEE', '2026-08-04T12:00:00Z')]);
+    const r = jaPagosNoRelatorio([row('caio', { SHOPEE: 1 })], PLATS, idx);
+    expect(r[0].deductionsApplied).toBe(false);
+  });
+});

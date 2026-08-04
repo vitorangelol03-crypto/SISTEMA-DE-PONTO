@@ -2296,11 +2296,12 @@ export const listPaymentMarks = async (
 ): Promise<PaymentMark[]> => {
   const { data, error } = await supabase
     .from('driverpay_payment_marks')
-    .select('driver_id, platform_name, paid_at')
+    .select('driver_id, platform_name, paid_at, deductions_applied')
     .eq('company_id', companyId).eq('period_id', periodId);
   if (error) throwDbError(error);
   return (data ?? []).map((r) => ({
     driverId: String(r.driver_id), platformName: String(r.platform_name), paidAt: String(r.paid_at),
+    deductionsApplied: (r.deductions_applied as boolean | null) ?? null,
   }));
 };
 
@@ -2317,6 +2318,8 @@ export const markPaymentDone = async (
   pares: readonly { driverId: string; platformName: string }[],
   reportKind: 'geral' | 'simples',
   userId: string,
+  /** Os vales/perdas foram descontados NESTE pagamento? (04/08/2026) */
+  deductionsApplied = true,
 ): Promise<number> => {
   await ensurePerm(userId, 'driverpay.exportReport');
   if (pares.length === 0) return 0;
@@ -2324,6 +2327,7 @@ export const markPaymentDone = async (
     pares.map((p) => ({
       company_id: companyId, period_id: periodId, driver_id: p.driverId,
       platform_name: p.platformName, paid_by: userId, report_kind: reportKind,
+      deductions_applied: deductionsApplied,
     })),
     { onConflict: 'company_id,period_id,driver_id,platform_name', ignoreDuplicates: true },
   );

@@ -39,7 +39,7 @@ interface ReportOptionsModalProps {
    * conforme o operador mexe nas plataformas e tira gente da lista.
    */
   jaPagos: (allowed: string[] | null, excluirDriverIds: readonly string[]) =>
-    Array<{ driverId: string; name: string; platformName: string; paidAt: string }>;
+    Array<{ driverId: string; name: string; platformName: string; paidAt: string; deductionsApplied?: boolean | null }>;
   onClose: () => void;
   onConfirm: (opts: ReportOptions) => Promise<void>;
 }
@@ -102,14 +102,26 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
   );
   /** Um driver pode aparecer em 2 plataformas; a lista de remoção é por PESSOA. */
   const pessoasEmConflito = useMemo(() => {
-    const m = new Map<string, { name: string; plats: string[]; paidAt: string }>();
+    const m = new Map<string, { name: string; plats: string[]; paidAt: string; semDesconto: boolean }>();
     for (const c of conflitos) {
       const e = m.get(c.driverId);
-      if (e) { e.plats.push(c.platformName); if (c.paidAt > e.paidAt) e.paidAt = c.paidAt; }
-      else m.set(c.driverId, { name: c.name, plats: [c.platformName], paidAt: c.paidAt });
+      // `false` explícito = o pagamento saiu SEM descontar vale/perda; o desconto ficou pendente.
+      const semDesconto = c.deductionsApplied === false;
+      if (e) {
+        e.plats.push(c.platformName);
+        if (c.paidAt > e.paidAt) e.paidAt = c.paidAt;
+        e.semDesconto = e.semDesconto || semDesconto;
+      } else {
+        m.set(c.driverId, { name: c.name, plats: [c.platformName], paidAt: c.paidAt, semDesconto });
+      }
     }
     return [...m].map(([driverId, v]) => ({ driverId, ...v }));
   }, [conflitos]);
+  /** Quem já foi pago mas com o vale/perda AINDA por descontar (04/08/2026). */
+  const semDescontoAnterior = useMemo(
+    () => pessoasEmConflito.filter((p) => p.semDesconto),
+    [pessoasEmConflito],
+  );
 
   const toggle = (name: string) =>
     setSelected((prev) => {
@@ -340,6 +352,9 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
                     <span>
                       <b>{p.name}</b> — {p.plats.join(', ')}, pago em{' '}
                       {new Date(p.paidAt).toLocaleDateString('pt-BR')}
+                      {p.semDesconto && (
+                        <b className="text-red-800"> · sem desconto de vale/perda</b>
+                      )}
                     </span>
                     <button
                       type="button"
@@ -405,6 +420,30 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
                 </span>
               </span>
             </label>
+          </div>
+        )}
+
+        {/* ── Desconto que ficou pendente de um pagamento anterior (04/08/2026) ──
+             Quando o pagamento sai PARCIAL, o vale/perda não é abatido e fica pra sair no
+             pagamento das demais plataformas. Se ninguém lembrar, o desconto some. */}
+        {semDescontoAnterior.length > 0 && (
+          <div
+            className="border-2 border-red-300 bg-red-50 rounded-md p-3 text-sm text-red-900"
+            data-testid="report-desconto-pendente"
+          >
+            <p className="font-bold">
+              ⚠ {semDescontoAnterior.length} entregador(es) já foram pagos SEM o desconto de vale/perda
+            </p>
+            <p className="text-xs mt-1">
+              {semDescontoAnterior.map((p) => p.name).join(', ')}.
+            </p>
+            <p className="text-xs mt-1">
+              O desconto deles ficou <b>pendente</b> — era pra sair no pagamento das demais
+              plataformas.{' '}
+              {includeDeductions
+                ? <b>Como "Descontar vales e perdas" está MARCADO, ele sai agora.</b>
+                : <b className="text-red-800">Com a caixa abaixo DESMARCADA, ele continua pendente.</b>}
+            </p>
           </div>
         )}
 

@@ -593,6 +593,12 @@ export interface PaymentMark {
   platformName: string;
   /** ISO. É a data que a tela mostra: "já pago em 04/08". */
   paidAt: string;
+  /**
+   * Neste pagamento os vales e perdas foram descontados? (04/08/2026)
+   * `false` = saiu PARCIAL, o desconto ficou pendente pro pagamento das demais plataformas.
+   * `null` = marca antiga, de antes desta coluna existir.
+   */
+  deductionsApplied?: boolean | null;
 }
 
 export type EstadoPagamento =
@@ -611,16 +617,21 @@ export interface PagamentoDoDriver {
   faltando: string[];
   /** Data do pagamento mais recente dele (ISO), pra mostrar no aviso. */
   ultimoPagamento: string | null;
+  /**
+   * Ele foi pago em ALGUMA plataforma SEM o desconto de vales/perdas ter saído?
+   * (04/08/2026) — o desconto ficou pendente e é fácil esquecer de aplicar depois.
+   */
+  descontoPendente: boolean;
 }
 
-/** Índice rápido `driverId|plataforma` -> data do pagamento. */
-export function indexarMarcas(marcas: readonly PaymentMark[]): Map<string, string> {
-  const m = new Map<string, string>();
+/** Índice rápido `driverId|plataforma` -> a marca daquele pagamento. */
+export function indexarMarcas(marcas: readonly PaymentMark[]): Map<string, PaymentMark> {
+  const m = new Map<string, PaymentMark>();
   for (const x of marcas) {
     const k = `${x.driverId}|${x.platformName}`;
     const atual = m.get(k);
     // Se marcaram duas vezes, vale a mais recente (é a que o operador lembra).
-    if (!atual || x.paidAt > atual) m.set(k, x.paidAt);
+    if (!atual || x.paidAt > atual.paidAt) m.set(k, x);
   }
   return m;
 }
@@ -634,27 +645,31 @@ export function indexarMarcas(marcas: readonly PaymentMark[]): Map<string, strin
 export function pagamentoDoDriver(
   row: DriverRowData,
   platformNames: readonly string[],
-  indice: ReadonlyMap<string, string>,
+  indice: ReadonlyMap<string, PaymentMark>,
 ): PagamentoDoDriver {
   const comPacote = platformNames.filter((nome) => platformPackages(row, nome) > 0);
   if (comPacote.length === 0) {
-    return { estado: 'sem_pacote', pagas: [], faltando: [], ultimoPagamento: null };
+    return { estado: 'sem_pacote', pagas: [], faltando: [], ultimoPagamento: null, descontoPendente: false };
   }
   const pagas: string[] = [];
   const faltando: string[] = [];
   let ultimo: string | null = null;
+  let descontoPendente = false;
   for (const nome of comPacote) {
-    const quando = indice.get(`${row.driverId}|${nome}`);
-    if (quando) {
+    const m = indice.get(`${row.driverId}|${nome}`);
+    if (m) {
       pagas.push(nome);
-      if (!ultimo || quando > ultimo) ultimo = quando;
+      if (!ultimo || m.paidAt > ultimo) ultimo = m.paidAt;
+      // `false` explícito = saiu parcial de propósito. `null`/undefined = marca antiga,
+      // de antes de a gente registrar isso — não dá pra afirmar nada, então não acusa.
+      if (m.deductionsApplied === false) descontoPendente = true;
     } else {
       faltando.push(nome);
     }
   }
   const estado: EstadoPagamento =
     pagas.length === 0 ? 'pendente' : faltando.length === 0 ? 'concluido' : 'parcial';
-  return { estado, pagas, faltando, ultimoPagamento: ultimo };
+  return { estado, pagas, faltando, ultimoPagamento: ultimo, descontoPendente };
 }
 
 /**
@@ -681,14 +696,17 @@ export function marcasDoRelatorio(
 export function jaPagosNoRelatorio(
   rows: readonly DriverRowData[],
   platformNames: readonly string[],
-  indice: ReadonlyMap<string, string>,
+  indice: ReadonlyMap<string, PaymentMark>,
   allowed?: ReadonlySet<string>,
-): Array<{ driverId: string; name: string; platformName: string; paidAt: string }> {
+): Array<{ driverId: string; name: string; platformName: string; paidAt: string; deductionsApplied?: boolean | null }> {
   const nomeDe = new Map(rows.map((r) => [r.driverId, r.name]));
-  const out: Array<{ driverId: string; name: string; platformName: string; paidAt: string }> = [];
+  const out: Array<{ driverId: string; name: string; platformName: string; paidAt: string; deductionsApplied?: boolean | null }> = [];
   for (const { driverId, platformName } of marcasDoRelatorio(rows, platformNames, allowed)) {
-    const quando = indice.get(`${driverId}|${platformName}`);
-    if (quando) out.push({ driverId, name: nomeDe.get(driverId) ?? '', platformName, paidAt: quando });
+    const m = indice.get(`${driverId}|${platformName}`);
+    if (m) {
+      out.push({ driverId, name: nomeDe.get(driverId) ?? '', platformName,
+                 paidAt: m.paidAt, deductionsApplied: m.deductionsApplied });
+    }
   }
   return out;
 }

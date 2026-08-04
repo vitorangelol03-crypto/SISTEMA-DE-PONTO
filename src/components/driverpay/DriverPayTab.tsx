@@ -1087,7 +1087,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       if (opts.marcarComoPago && company?.id && selectedPeriod?.id) {
         try {
           const pares = marcasDoRelatorio(scoped, platforms.map((p) => p.name), allowedSet);
-          const n = await markPaymentDone(company.id, selectedPeriod.id, pares, kind, userId);
+          const n = await markPaymentDone(company.id, selectedPeriod.id, pares, kind, userId, opts.includeDeductions);
           setPaymentMarks(await listPaymentMarks(company.id, selectedPeriod.id));
           const pessoas = new Set(pares.map((p) => p.driverId)).size;
           toast.success(`${pessoas} entregador(es) marcados como PAGOS (${n} plataforma/entregador).`,

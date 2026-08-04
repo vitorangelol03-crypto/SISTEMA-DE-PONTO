@@ -180,6 +180,16 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                     : `pago ${pagamento.pagas.join('+')}`}
                 </span>
               )}
+              {/* Pagou, mas o vale/perda NAO foi descontado: fica pendente e some fácil (04/08/2026) */}
+              {pagamento?.descontoPendente && (
+                <span
+                  data-testid="row-selo-sem-desconto"
+                  title="Este entregador foi pago SEM o desconto de vale/perda — o desconto ficou pendente pro pagamento das demais plataformas."
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200 whitespace-nowrap"
+                >
+                  vale a descontar
+                </span>
+              )}
             </span>
             <span className="text-sm text-gray-600 flex items-center gap-1 flex-wrap">
               <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
