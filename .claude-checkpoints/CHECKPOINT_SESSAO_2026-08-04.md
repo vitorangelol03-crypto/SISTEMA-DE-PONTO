@@ -942,3 +942,37 @@ print BOM do Gessiley teria sido **apagado**.
 **Perguntei e aguardo:** (A) recusa+apaga na hora, como pedido; ou (B) recusa na hora mas só apaga
 depois de uma **segunda leitura confirmar** a data errada. Recomendei B. Também perguntei se print
 recusado libera a vaga do "1 por entregador" (recomendei que sim).
+
+---
+
+## 15. Planilha da LOGGI lançada à mão (01–15/jul) — DADO DE PRODUÇÃO
+
+O Victor mandou a planilha `entregas-por-entregador (01 jul - 15 jul)` da LOGGI e pediu pra comparar
+os nomes e **lançar só nos entregadores que já existem** no sistema.
+
+**O problema do nome:** a planilha usa nome CURTO com prefixo de base (`(IPT INT) LUCAS AREDES
+(CARATINGA)`) e o sistema tem o nome COMPLETO (`LUCAS AREDES MARTINS VIEIRA`). Comparação exata
+casou **3 de 48**. Refiz com casamento por palavras (todas as palavras da planilha presentes no nome
+do sistema) + normalização de acento/parênteses: **28 casaram sozinhos**.
+
+**Antes de gravar, três checagens:**
+1. LOGGI na quinzena estava **zerada** (0 pacotes) → gravar era só somar, sem sobrescrever nada;
+2. os não-achados **não existem em nenhuma empresa** do sistema (só há uma empresa, 109 drivers);
+3. rodei em **modo simulação** primeiro, conferindo driver por driver.
+
+**Gravados: 28 entregadores · 2.828 pacotes · R$ 5.656** (taxa R$ 2,00). Cada um na **rota que já
+usava** na quinzena, pra não criar linha duplicada na grade. Total do pagamento recalculado pela
+**mesma view** que o painel usa (`driverpay_payment_computed`).
+**SHOPEE conferida antes/depois: 270.158 → 270.158, intacta.**
+
+**NÃO lançados — 20 nomes, 4.913 pacotes (63% do volume):**
+- **19 não existem no sistema**, quase todos de outra base (Ipatinga, Cel. Fabriciano, Timóteo, Belo
+  Oriente, Naque, Iapu, Marliéria). Maiores: EDVALDO SIMEAO 534 · KELCIO ANTONIO 450 · GABRIEL LUCAS
+  415 · DANILO RODRIGUES 401 · RENATO DA COSTA 385.
+- **1 ambíguo:** `FABRÍCIO DOS SANTOS` (131) casava com `FABRICIO DOS SANTOS FERREIRA` **e**
+  `Fabricio dos Santos Maia Soares` — perguntei e ele respondeu **"nenhum dos dois"**, então é uma
+  terceira pessoa, fora do sistema. Não lançado.
+
+⚠️ **Quase-colisão pra ficar de olho:** existem `FILIPE AUGUSTO PENA DA SILVEIRA` e `Fillipe Augusto
+Dos Santos Emidio` (um "L" de diferença). Casaram certo — 354 e 69 — mas é o tipo de par que uma
+mudança na normalização quebraria.
