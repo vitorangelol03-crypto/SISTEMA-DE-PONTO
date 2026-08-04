@@ -2,9 +2,27 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-07-29**.
+> Última atualização: **2026-08-04**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 04/08 — espelho do app da Shopee conferido sozinho (backend do driver pronto,
+`cb460b8`, só local, NADA no ar):** a planilha da Shopee pode vir com a quantidade de pacotes
+errada por driver, então o driver passa a anexar pelo portal o **print da tela do app** (aba
+"Encerrado" + período) e o sistema confere e marca o **"Espelho conferido"** sozinho. Entregues:
+`_shared/proofCheck.ts` (conferência pura + **fila** de reconferência) e `_shared/visionRead.ts`
+(leitura com **provedor trocável por variável de ambiente** — sem chave o sistema roda igual, em
+modo manual), migration `20260804120000` **escrita e NÃO aplicada**, e as rotas
+`proof-slots`/`proof-upload`/`proof-list` na `driver-public-api` (**não deployada**; o ar segue v12).
+**Medido com a foto real do Victor:** leitura certa (1808 · 01–15/07) e **teste negativo 4/4** — foto
+de etiqueta, foto aleatória e foto antiga TODAS voltaram "não consegui ler", ou seja **a leitora não
+inventa número**. 🔑 **Cota do Gemini grátis = 20 leituras/dia POR MODELO**, daí o rodízio de 9
+modelos (~180/dia) contra as **89 leituras/quinzena** do volume real. **Corrigido em produção
+(autorizado):** as datas das quinzenas estavam com o mês do fim +1 (45 dias em vez de 14) — não
+atrapalhava nada até hoje, mas a conferência do print compara com elas; backup em
+`backups/2026-08-04/`, banco conferido intacto depois. Validado: tsc 0 · eslint 0 · 759 unit ·
+build ok · `deno check` sem erro novo. **Falta:** fn admin, painel, portal do driver, E2E, release.
+Ver `CHECKPOINT_SESSAO_2026-08-04.md`.
 
 **Sessão 29/07 — achado o que apagava ponto REAL, e corrigido dos dois lados (`fc41a09`,
 só local):** a causa era o **"Reset Geral"** da tela de Ponto, que montava os alvos a partir
@@ -226,7 +244,8 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-07-29.md` | **Mais recente.** Caça ao que apagava ponto real: causa = "Reset Geral" ignorando a busca, clicado pelo spec 04 dentro de Ponte Nova · corrigido no botão (`attendancesToReset`, puro) + modal que diz quantos/quem + teste de regressão no próprio spec 04 (`fc41a09`, **só local**) · método das sentinelas | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-04.md` | **Mais recente.** Espelho do app da Shopee conferido sozinho — backend do driver (`cb460b8`, **só local, nada no ar**) · conferência pura + fila de reconferência · leitora com provedor trocável (Gemini grátis; sem chave = modo manual) · migration **escrita e não aplicada** · medições reais com a foto do Victor (teste negativo 4/4; cota 20/dia **por modelo**) · datas das quinzenas corrigidas em prod | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-07-29.md` | Caça ao que apagava ponto real. Caça ao que apagava ponto real: causa = "Reset Geral" ignorando a busca, clicado pelo spec 04 dentro de Ponte Nova · corrigido no botão (`attendancesToReset`, puro) + modal que diz quantos/quem + teste de regressão no próprio spec 04 (`fc41a09`, **só local**) · método das sentinelas | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-28.md` | fn v11 e **v12** no ar (deploy via CLI) · conferência da NF provada com nota real 7/7 · valida o que faltava (app, ciclo inteiro com o PDF lido, grupo sem abate, relatórios reais) · **relatórios 100% ASCII + PIX só números** (`e662fca`, no ar) · **espelho POR PLATAFORMA: 2 espelhos separados no app + 1 nota por espelho** (`31ef70f`, no ar) · spec 57 consertado · achado dos funcionários `PW Test` no cleanup | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-27.md` | Filtro por plataforma nos relatórios + "Descontar vales e perdas" no espelho e nos relatórios (commit `a385b43`) · conserta furo latente da conferência de NF em espelho filtrado · **RELEASE COMPLETO: migration ✅ + push/Vercel ✅ + fn v11 ✅** (deploy via CLI — MCP é bloqueado) · visual em prod com prints · teste real da NF 7/7 · spec 57 quebrado desde 23/07 (pré-existente) | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-26.md` | Multi-erros por dia (individuais + triagem): insert/edição por ID, aviso do dia, Descontar Erros soma por data (commit `40e4c6b`) · migration `20260726120000` NO REPO aguardando **push+deploy → migration** nessa ordem · 3 specs MULTI auto-detectam | 🟢 ATIVO |
@@ -279,6 +298,23 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 - **Espelho por plataforma (28/07, decisões do Victor):** a identidade do espelho é o **conjunto de plataformas** (`platform_key`: nomes ordenados unidos por `+`; `''` = quinzena inteira), com índice único em (empresa, período, driver, platform_key). Publicar LOGGI e depois SHOPEE dá **dois espelhos**, que aparecem separados no app com selo **SOMENTE X**; **republicar o mesmo conjunto substitui só ele**. Antes o 2º apagava o 1º (mesmo caminho de PDF + delete sem olhar o filtro).
 - **Uma nota por espelho (28/07, decisão do Victor):** "se tem 2 espelhos, 2 notas; se tem 3, 3 notas". Os slots de NF são **(espelho × CNPJ)** — LOGGI/SHOPEE/ANJUN dividem o mesmo CNPJ e ainda assim pedem uma nota cada; espelho da quinzena inteira com 2 CNPJs segue pedindo 2. Nota antiga (`mirror_platform_key` NULL) vale pra qualquer espelho daquele CNPJ, e `slotCoberto` aceita **também** a chave no formato antigo — exigir a chave nova zerou a coluna NF em 5 testes e teria zerado em produção.
 - **Reset Geral do ponto (29/07, decisão do Victor):** o botão passa a resetar **somente os funcionários visíveis na tela** — com busca ativa, só a lista filtrada; sem busca, todos, como sempre foi. O modal mostra **quantos e quem** (até 5 nomes) e avisa em destaque quando há filtro. Antes ele apagava o dia inteiro ignorando a busca, e foi isso que destruiu ponto real de Ponte Nova na bateria de 28/07.
+- **Espelho do app da Shopee (04/08, decisões do Victor):** o driver anexa pelo portal o **print da
+  tela do app** e o sistema marca o "Espelho conferido" sozinho. Confere **só a SHOPEE**; a
+  quantidade tem que bater **EXATO** (1 pacote de diferença já aparece). **Data errada ou print
+  ilegível = RECUSA na hora** com o motivo na tela (o driver resolve reenviando); **quantidade
+  divergente = ACEITA calado e aparece SÓ no painel** — 🔑 **o driver nunca vê número nenhum**, nem o
+  esperado nem que divergiu (há teste unitário dedicado que quebra se algum motivo vazar pra ele).
+  **Grupo: só o líder anexa, mas UM PRINT POR DRIVER**, e cada print marca o pagamento daquele
+  membro. Operador também pode anexar pelo painel. **Se a leitura falhar por culpa nossa (cota, rede,
+  API fora): o print é ACEITO e volta pra fila sozinho** — nunca vira trabalho manual só por cota, e
+  nenhum driver é recusado por problema nosso.
+- **Leitura de imagem (04/08):** provedor **trocável por variável de ambiente**
+  (`PROOF_VISION_PROVIDER`, `GOOGLE_AI_API_KEY`, `PROOF_VISION_MODELS`) — **sem chave configurada o
+  sistema roda igual, em modo manual**. Hoje é o **Gemini grátis**. 🔑 A cota é de **20 leituras/dia
+  POR MODELO POR PROJETO**, por isso o rodízio de 9 modelos (~180/dia) e a possibilidade de somar
+  chaves. Modelo aposentado dá **404** (aconteceu com o `gemini-2.5-*` durante os testes) — por isso
+  a lista de modelos é config, não código. ⚠️ No plano grátis o Google **pode usar o conteúdo pra
+  melhorar os produtos deles**; o print traz códigos de rastreio e endereços que a Shopee já mascara.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
