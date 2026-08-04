@@ -237,6 +237,16 @@ export const DriverList: React.FC<DriverListProps> = ({
       if (!nf || nf.expected === 0) return 2;
       return nf.complete ? 2 : nf.validated > 0 ? 1 : 0;
     }
+    if (key === 'espelho') {
+      // Espelho conferido do GRUPO, mesma escala do NF: 2 = todos os membros
+      // conferidos, 1 = parte, 0 = nenhum. desc = conferidos primeiro; asc = quem
+      // ainda falta conferir na frente. ⚠️ Diferente do NF, o espelho conferido é
+      // POR MEMBRO (cada print marca o pagamento daquele driver), então conta um a
+      // um em vez de olhar só o líder.
+      if (list.length === 0) return 0;
+      const conferidos = list.filter((r) => r.espelhoConferido).length;
+      return conferidos === list.length ? 2 : conferidos > 0 ? 1 : 0;
+    }
     const t = sumTotals(list);
     if (key === 'net') return t.net;
     if (key === 'zapex') return t.zapex;
@@ -667,6 +677,7 @@ export const DriverList: React.FC<DriverListProps> = ({
             ))}
             {groupSortBtn('net', 'Total a receber')}
             {groupSortBtn('nf', 'NF validada')}
+            {groupSortBtn('espelho', 'Espelho conferido')}
           </div>
           <button
             type="button"

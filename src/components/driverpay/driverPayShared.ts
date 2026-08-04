@@ -466,8 +466,29 @@ export interface AjusteDeRota {
   rate: number;
 }
 
+/**
+ * Uma rota do driver nesta plataforma, com o antes/depois — INCLUSIVE as que não
+ * mudam. Existe porque, com duas rotas, mostrar só a que mudou esconde a pergunta
+ * que o operador faz: "e a outra, ficou como?". Com preços diferentes por rota,
+ * saber ONDE a diferença caiu é o que explica o valor.
+ */
+export interface LinhaDeRota {
+  indice: number;
+  route: string;
+  /** Pacotes hoje nesta rota. */
+  de: number;
+  /** Pacotes depois da correção (igual a `de` quando a rota não muda). */
+  para: number;
+  /** Valor por pacote DESTA rota. */
+  rate: number;
+  /** true na rota que recebeu (ou perdeu) a diferença. */
+  mudou: boolean;
+}
+
 export interface PlanoDeCorrecao {
   ajustes: AjusteDeRota[];
+  /** TODAS as rotas do driver nesta plataforma, na ordem da grade. */
+  linhas: LinhaDeRota[];
   totalAntes: number;
   totalDepois: number;
   /** Quanto o "Total a receber" do driver muda em R$ (positivo = ele recebe mais). */
@@ -511,12 +532,17 @@ export function planejarCorrecaoDePacotes(
   const precosDiferentes = new Set(linhas.map((l) => l.rate)).size > 1;
   const alvo = Math.max(0, Math.round(novoTotal));
 
+  /** Retrato das rotas quando NADA muda (todas iguais ao que já está lançado). */
+  const linhasParadas = (): LinhaDeRota[] =>
+    linhas.map((l) => ({ indice: l.indice, route: l.route, de: l.atual, para: l.atual, rate: l.rate, mudou: false }));
+
   if (linhas.length === 0) {
-    return { ajustes: [], totalAntes: 0, totalDepois: 0, deltaReais: 0, precosDiferentes: false,
+    return { ajustes: [], linhas: [], totalAntes: 0, totalDepois: 0, deltaReais: 0, precosDiferentes: false,
              erro: 'Este driver não tem pacote lançado nesta plataforma — lance na grade primeiro.' };
   }
   if (alvo === totalAntes) {
-    return { ajustes: [], totalAntes, totalDepois: totalAntes, deltaReais: 0, precosDiferentes, erro: null };
+    return { ajustes: [], linhas: linhasParadas(), totalAntes, totalDepois: totalAntes, deltaReais: 0,
+             precosDiferentes, erro: null };
   }
 
   // Da MAIOR pra menor: a diferença cai na maior; o que não couber escorre pra próxima.
@@ -538,19 +564,22 @@ export function planejarCorrecaoDePacotes(
     }
   }
   if (falta !== 0) {
-    return { ajustes: [], totalAntes, totalDepois: totalAntes, deltaReais: 0, precosDiferentes,
+    return { ajustes: [], linhas: linhasParadas(), totalAntes, totalDepois: totalAntes, deltaReais: 0, precosDiferentes,
              erro: `Não dá pra chegar em ${alvo}: o driver só tem ${totalAntes} pacote(s) nesta plataforma.` };
   }
 
   const ajustes: AjusteDeRota[] = [];
+  const linhasFinais: LinhaDeRota[] = [];
   let deltaReais = 0;
   for (const l of linhas) {
     const para = novos.get(l.indice);
-    if (para === undefined || para === l.atual) continue;
-    ajustes.push({ indice: l.indice, route: l.route, packageId: l.packageId, de: l.atual, para, rate: l.rate });
-    deltaReais += (para - l.atual) * l.rate;
+    const mudou = para !== undefined && para !== l.atual;
+    linhasFinais.push({ indice: l.indice, route: l.route, de: l.atual, para: mudou ? para! : l.atual, rate: l.rate, mudou });
+    if (!mudou) continue;
+    ajustes.push({ indice: l.indice, route: l.route, packageId: l.packageId, de: l.atual, para: para!, rate: l.rate });
+    deltaReais += (para! - l.atual) * l.rate;
   }
-  return { ajustes, totalAntes, totalDepois: alvo, deltaReais, precosDiferentes, erro: null };
+  return { ajustes, linhas: linhasFinais, totalAntes, totalDepois: alvo, deltaReais, precosDiferentes, erro: null };
 }
 
 // ─── TAG DE PAGAMENTO CONCLUÍDO (04/08/2026) ─────────────────────────────────

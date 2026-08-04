@@ -101,20 +101,63 @@ const CorrigirContagem: React.FC<{
       </div>
       {plano?.erro && <p className="text-xs text-red-700 mt-1.5">{plano.erro}</p>}
       {plano && !plano.erro && plano.ajustes.length > 0 && (
-        <p className="text-xs text-blue-900 mt-1.5">
-          Vai gravar <strong>{plano.totalDepois}</strong> no lugar de {plano.totalAntes}
-          {rotas > 0 && ` — ${plano.ajustes.map((a) => `${a.route || '(sem rota)'}: ${a.de} → ${a.para}`).join(' · ')}`}
-          . Total a receber muda em{' '}
-          <strong className={plano.deltaReais < 0 ? 'text-red-700' : 'text-green-700'}>
-            {plano.deltaReais >= 0 ? '+' : ''}{formatBRL(plano.deltaReais)}
-          </strong>
-          {plano.precosDiferentes && (
-            <span className="block text-amber-800 mt-0.5">
-              ⚠ As rotas deste entregador tem <strong>precos diferentes</strong> — a diferenca foi
-              posta na maior rota, e por isso o valor acima e o que realmente muda.
-            </span>
+        <div className="text-xs text-blue-900 mt-1.5">
+          <p>
+            Vai gravar <strong>{plano.totalDepois}</strong> no lugar de {plano.totalAntes}
+            {/* Rota única: a frase curta já diz tudo. Com 2+, a lista abaixo é que explica. */}
+            {plano.linhas.length === 1 && rotas > 0 &&
+              ` — ${plano.ajustes[0].route || '(sem rota)'}: ${plano.ajustes[0].de} → ${plano.ajustes[0].para}`}
+            . Total a receber muda em{' '}
+            <strong className={plano.deltaReais < 0 ? 'text-red-700' : 'text-green-700'}>
+              {plano.deltaReais >= 0 ? '+' : ''}{formatBRL(plano.deltaReais)}
+            </strong>
+          </p>
+
+          {/* ── MAIS DE UMA ROTA (pedido do Victor, 04/08/2026) ──
+               Antes só saía a rota que mudou, e ficava sem resposta a pergunta óbvia:
+               "em qual rota entrou, e a outra ficou como?". Com preços diferentes por
+               rota, é ONDE a diferença cai que define o valor — então cada rota aparece
+               com o seu preço, e a que recebeu a diferença fica marcada. */}
+          {plano.linhas.length > 1 && (
+            <div className="mt-1.5 rounded-md border border-blue-200 bg-white overflow-hidden" data-testid="rotas-da-correcao">
+              {plano.linhas.map((l) => (
+                <div
+                  key={l.indice}
+                  className={`flex items-center justify-between gap-2 px-2 py-1 border-b last:border-b-0 border-blue-100 ${
+                    l.mudou ? 'bg-blue-50' : ''
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {l.mudou && <strong className="text-blue-800">➜ </strong>}
+                    {l.route || '(sem rota)'}
+                    <span className="text-gray-500"> · {formatBRL(l.rate)}/pct</span>
+                  </span>
+                  <span className={`whitespace-nowrap tabular-nums ${l.mudou ? 'font-bold text-blue-900' : 'text-gray-500'}`}>
+                    {l.mudou ? (
+                      <>
+                        {l.de} → {l.para}{' '}
+                        <span className={l.para >= l.de ? 'text-green-700' : 'text-red-700'}>
+                          ({l.para >= l.de ? '+' : ''}
+                          {l.para - l.de})
+                        </span>
+                      </>
+                    ) : (
+                      <>{l.de} (não muda)</>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
-        </p>
+
+          {plano.precosDiferentes && (
+            <p className="text-amber-800 mt-1">
+              ⚠ As rotas deste entregador têm <strong>preços diferentes</strong> — a diferença vai
+              para a <strong>maior rota</strong> (a marcada com ➜), e é por isso que o valor acima é
+              o que realmente muda.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
