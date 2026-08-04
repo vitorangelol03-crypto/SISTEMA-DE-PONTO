@@ -1585,7 +1585,12 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           platformNames={platforms.map((p) => p.name)}
           userId={userId}
           onClose={() => setShowSolicitarEspelho(false)}
-          onChanged={() => { reloadProofs(selectedPeriod.id); reloadPeriods(); }}
+          onChanged={async () => {
+            // As datas da quinzena podem ter sido corrigidas aqui dentro — recarrega
+            // a lista pra tela não continuar mostrando as antigas.
+            await reloadProofs(selectedPeriod.id);
+            if (company?.id) setPeriods(await getPeriods(company.id));
+          }}
         />
       )}
 

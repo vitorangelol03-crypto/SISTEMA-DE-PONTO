@@ -36,8 +36,8 @@ interface SolicitarEspelhoModalProps {
   platformNames: string[];
   userId: string;
   onClose: () => void;
-  /** Chamado depois de gravar, pra grade recarregar. */
-  onChanged: () => void;
+  /** Chamado depois de gravar, pra grade recarregar. Pode ser async. */
+  onChanged: () => void | Promise<void>;
 }
 
 /** Só a Shopee vem marcada por padrão — foi a decisão do Victor em 04/08. */
@@ -123,7 +123,10 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
           ? `Espelho solicitado. ${previa.drivers} entregador(es) vao ver o pedido no portal.`
           : 'Solicitacao cancelada. O portal parou de pedir print.',
       );
-      onChanged();
+      // ⚠️ A gravação já foi feita: uma falha ao RECARREGAR a tela não pode prender
+      // o modal aberto com cara de erro. Foi o que aconteceu no primeiro E2E — o
+      // pedido entrou no banco e o modal ficou lá, parecendo que nada funcionou.
+      try { await onChanged(); } catch (err) { console.error('[solicitar-espelho] recarga falhou:', err); }
       onClose();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Nao consegui salvar a solicitacao.');
