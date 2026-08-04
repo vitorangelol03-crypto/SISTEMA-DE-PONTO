@@ -22,6 +22,7 @@ import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 import FunctionRoleFilter, { FUNCTION_ROLE_ALL, FUNCTION_ROLE_NONE } from '../common/FunctionRoleFilter';
 import * as XLSX from 'xlsx';
+import { somarTotaisDoHolerite } from '../../utils/holeriteTotals';
 
 interface FinancialTabProps {
   userId: string;
@@ -48,6 +49,15 @@ interface EmployeeFinancialData {
   totalEarnedGross: number;
   totalEarned: number;
   triageDiscounts: TriageDiscount[];
+  /**
+   * Somas que o HOLERITE imprime na "Composição do Pagamento". Faltavam aqui, mas o
+   * gerador do PDF já as lia — então o papel do funcionário saía com "Diárias R$ 0,00" e
+   * SEM as linhas de bonificação, enquanto o total bruto/líquido saía certo (04/08/2026).
+   */
+  totalDailyRate: number;
+  totalBonusB: number;
+  totalBonusC1: number;
+  totalBonusC2: number;
 }
 
 const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
@@ -199,6 +209,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       // payments.total — são deduzidos aqui na exibição.
       const totalEarnedGross = employeePayments.reduce((sum, pay) => sum + (pay.total || 0), 0);
       const totalEarned = Math.max(0, totalEarnedGross - totalErrorValue - totalTriageDiscount);
+      // Somas do holerite. Da MESMA lista que vai pro PDF: o gerador conta os dias e a
+      // quantidade de cada bônus a partir dela, então outra origem faria contagem e valor
+      // não baterem no mesmo papel.
+      const totaisHolerite = somarTotaisDoHolerite(employeePayments);
 
       return {
         employee,
@@ -212,7 +226,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         totalTriageDiscount,
         totalEarnedGross,
         totalEarned,
-        triageDiscounts
+        triageDiscounts,
+        ...totaisHolerite,
       };
     });
 
