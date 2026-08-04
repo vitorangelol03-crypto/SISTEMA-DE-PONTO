@@ -867,14 +867,14 @@ async function reconferirPrint(row: {
  * Chamado de dois jeitos: OPORTUNISTA (todo print novo aproveita e limpa alguns
  * da fila de graca) e SOB DEMANDA (botao "Conferir pendentes" do painel / cron).
  */
-async function processarFila(companyId: string, limite: number): Promise<Record<string, number>> {
-  const { data: fila } = await supabase.from('driverpay_delivery_proofs')
+async function processarFila(companyId: string | null, limite: number): Promise<Record<string, number>> {
+  let q = supabase.from('driverpay_delivery_proofs')
     .select('id, company_id, period_id, driver_id, payment_id, platform_name, file_path, file_type, check_attempts')
-    .eq('company_id', companyId)
     .not('next_check_at', 'is', null)
-    .lte('next_check_at', new Date().toISOString())
-    .order('next_check_at', { ascending: true })
-    .limit(limite);
+    .lte('next_check_at', new Date().toISOString());
+  // null = TODAS as empresas (e o caso do agendador, que nao tem empresa).
+  if (companyId) q = q.eq('company_id', companyId);
+  const { data: fila } = await q.order('next_check_at', { ascending: true }).limit(limite);
 
   const placar: Record<string, number> = {};
   for (const row of fila ?? []) {
@@ -1135,6 +1135,39 @@ async function proofList(req: Request, body: Body): Promise<Response> {
   return json({ files });
 }
 
+/**
+ * Esvazia a fila. Chamada pelo AGENDADOR do banco (pg_cron + pg_net), pra fila
+ * andar sozinha sem ninguem abrir o painel — pedido do Victor em 04/08:
+ * "a fila deve funcionar sozinha de forma sempre automatica".
+ *
+ * ⚠️ Esta fn roda com --no-verify-jwt (o driver precisa chamar sem login do
+ * painel), entao TODAS as rotas sao publicas. Esta aqui mexe em varias empresas,
+ * entao exige um segredo dedicado: `PROOF_QUEUE_SECRET`, comparado em tempo
+ * CONSTANTE (comparar com === vaza o tamanho do prefixo correto pelo tempo de
+ * resposta). Sem o secret configurado a rota fica desligada — negada sempre.
+ */
+async function proofProcessQueue(req: Request, body: Body): Promise<Response> {
+  const esperado = Deno.env.get('PROOF_QUEUE_SECRET') ?? '';
+  const auth = req.headers.get('authorization') ?? '';
+  const recebido = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : String(body.secret ?? '');
+  if (!esperado || !timingSafeEqual(esperado, recebido)) {
+    return json({ error: 'Nao autorizado' }, 401);
+  }
+  const limite = Math.min(Math.max(Number(body.limit ?? 10) || 10, 1), 50);
+  const placar = await processarFila(null, limite);
+  const total = Object.values(placar).reduce((s, n) => s + n, 0);
+  console.log(`[fila] rodada do agendador: ${total} print(s) — ${JSON.stringify(placar)}`);
+  return json({ ok: true, processados: total, placar });
+}
+
+/** Comparacao que nao vaza o tamanho do acerto pelo tempo gasto. */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
@@ -1159,6 +1192,7 @@ Deno.serve(async (req) => {
       case 'proof-slots': return await proofSlots(req, body);
       case 'proof-upload': return await proofUpload(req, body);
       case 'proof-list': return await proofList(req, body);
+      case 'proof-process-queue': return await proofProcessQueue(req, body);
       default: return json({ error: `Unknown action: ${body.action}` }, 400);
     }
   } catch (err) {
