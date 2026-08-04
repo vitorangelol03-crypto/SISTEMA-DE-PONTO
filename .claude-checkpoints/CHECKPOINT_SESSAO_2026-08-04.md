@@ -452,3 +452,39 @@ máquina — não instalei sem OK.
 
 **Validado:** typecheck · eslint · build · `deno check` com os mesmos 2 erros pré-existentes ·
 **E2E 64 1/1 e 65 6/6**.
+
+---
+
+## 12. Migration do prazo APLICADA + os 65 erros de tipo investigados
+
+### 12.1 `nf_due_at` aplicada em produção (com OK do Victor)
+`driverpay_mirror_publications.nf_due_at`. Banco conferido antes/depois: **30 publicações · 30 notas ·
+294 pagamentos · 99 drivers · 49 grupos · 3 períodos · 4.826 pontos — idênticos**.
+
+⚠️ **Susto que valeu a checagem:** funcionários apareceu **109 antes e 94 depois**. Não foi perda: os
+109 eram um retrato tirado **no meio da bateria de testes** (15 funcionários temporários), e a
+limpeza dos próprios testes os removeu. Conferido: **94 reais, 0 de teste**, datas contínuas de
+29/09/2025 a 03/08/2026. **Snapshot durante execução de teste não serve de linha de base.**
+
+### 12.2 Os 65 erros de tipo — todos PRÉ-EXISTENTES, nenhum meu
+⚠️ **Correção do que eu disse antes:** falei "14 erros"; eram **65**. Eu estava lendo a saída cortada.
+
+Ninguém tinha visto porque, até hoje de manhã, `npx tsc --noEmit` na raiz **não conferia nada**
+(project references com `"files": []`) — eles foram se acumulando invisíveis.
+
+- **46 = barulho.** 34 numa tela só (`DataManagementTab`, lê planilha importada sem tipo declarado) +
+  12 de código morto.
+- **2 = tipo mentindo, mas funciona.** `EmployeeClockIn` lê `employee.company_id`; a coluna **existe**
+  no banco (uuid NOT NULL) e a consulta usa `select('*')`, então chega em tempo de execução — só
+  falta declarar na interface `Employee`.
+- 🔴 **4 = BUG DE VERDADE, no holerite.** `FinancialTab` monta `EmployeeFinancialData` **sem**
+  `totalDailyRate`, `totalBonusB`, `totalBonusC1`, `totalBonusC2` (linhas 202-216), mas o holerite lê
+  `data.totalDailyRate || 0` → **sempre 0**. No PDF que vai pro funcionário:
+  - `"Diárias (N dias) + R$ 0,00"`;
+  - as linhas de Bonificação B/C1/C2 **nem aparecem** (o gerador só imprime `if (total > 0)`);
+  - mas **total bruto e líquido estão certos** (vêm de campos reais).
+
+  Resultado: **holerite se contradizendo** — composição zerada, total correto.
+  **NÃO consertei**: é a aba de Financeiro, mexe com dinheiro, e está fora do que foi pedido.
+  O conserto é somar dos pagamentos (`p.daily_rate`, `p.bonus_b`, `p.bonus_c1`, `p.bonus_c2` — que
+  já estão certos no detalhe por pagamento) e declarar os 4 campos na interface.
