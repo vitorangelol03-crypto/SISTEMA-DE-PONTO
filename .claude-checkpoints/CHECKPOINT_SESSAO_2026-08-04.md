@@ -357,3 +357,38 @@ edge fn, que resolve o grupo do líder com `maybeSingle()`.
 **Validação:** typecheck · eslint · build · **140 unit** (6 novos) · **17/17 contra a edge fn NO AR**
 (avulso barrado no geral, cobrado no individual, e passando a ser cobrado ao entrar num grupo) ·
 **E2E 64 1/1 e 65 6/6** · banco idêntico antes/depois.
+
+---
+
+## 10. Prazo da nota por espelho — base pronta, tela PARADA num ponto de decisão (`70f1cda`)
+
+**Pedido:** cada espelho publicado carrega o seu prazo ("manda a nota até dia 3 às 15h"); nota que
+chega depois fica **atrasada**; dá pra filtrar por isso nas notas e nos dois relatórios.
+
+**Decisões do Victor (04/08):** prazo **obrigatório** · **com padrão** preenchido (2 dias depois,
+18:00) · **por espelho**, não por quinzena.
+
+**Feito (aditivo, não muda nenhuma tela):**
+- `nfPrazoStatus` / `nfAtrasoLabel` — comparam a hora do **envio** (não a da validação: o driver não
+  controla quando conferem). Calculado **na hora de mostrar, não gravado** — se o prazo for
+  corrigido depois, a tela se ajusta em vez de guardar um "atrasada" que virou mentira.
+- `prazoNfPadrao` — 2 dias depois, 18:00.
+- Migration `20260804180000` **ESCRITA E NÃO APLICADA**: `nf_due_at` na publicação do espelho.
+  ⚠️ **Nullable de propósito, mesmo o prazo sendo obrigatório na tela**: as publicações antigas não
+  têm prazo e inventar um seria cobrar por horário que ninguém combinou. `NOT NULL` quebraria as
+  linhas existentes; `DEFAULT` inventaria dado.
+- `publishDriverMirror` aceita `nfDueAt`; `listMirrorPublications` devolve. **14 testes unitários.**
+
+### 🛑 Onde parei e por quê
+O espelho **já tem** a faixa *"As notas deverão ser enviadas até as 15H do dia 03"* — é exatamente o
+campo que o Victor descreveu. Mas **hora e data são TEXTO LIVRE** (`"14:00"`, `"20/07"`, sem ano),
+guardados **por empresa** em `driverpay_mirror_notice`, não por espelho. Não dá pra conferir
+automático a partir disso.
+
+Cheguei a construir um segundo campo de prazo e **desfiz**: duas datas parecidas na mesma tela é
+defeito de produto. O caminho certo é **converter os campos de corte em data/hora de verdade** — a
+faixa continua imprimindo a mesma frase, agora derivada — mas isso mexe numa tela usada toda
+quinzena, então **parei e perguntei** em vez de decidir sozinho.
+
+**Pendente:** OK pra aplicar a migration · OK pra converter os campos de corte · depois: selo
+"atrasada" na nota, filtro em "Notas recebidas" e nos dois relatórios.
