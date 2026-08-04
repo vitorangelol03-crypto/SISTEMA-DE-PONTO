@@ -21,9 +21,10 @@ import {
   deleteDeliveryProof,
   getProofSettings,
   setProofSettings,
+  aplicarCorrecaoDePacotes,
   type DeliveryProofRow,
 } from '../../services/driverPay';
-import { platformPackages, type DriverRowData } from './driverPayShared';
+import { platformPackages, planejarCorrecaoDePacotes, formatBRL, type DriverRowData } from './driverPayShared';
 import { ModalShell } from './ModalShell';
 
 interface EspelhosRecebidosModalProps {
@@ -44,6 +45,81 @@ const dataBr = (iso: string | null): string => {
 };
 
 /** Selo do resultado da conferência, em português leigo. */
+/**
+ * Botõezinhos pra corrigir a contagem sem fechar a janela (04/08/2026, pedido do Victor).
+ *
+ * Só aparece pra quem NÃO bateu. O operador escolhe qual número fica — o do print, o da
+ * planilha, ou um digitado. A diferença cai na MAIOR rota (decisão dele); quando as rotas
+ * têm preços diferentes, o efeito em R$ é mostrado ANTES de aplicar, porque aí a escolha
+ * muda o valor a receber.
+ */
+const CorrigirContagem: React.FC<{
+  row: DriverRowData | undefined;
+  platformName: string;
+  doPrint: number;
+  daPlanilha: number;
+  aplicando: boolean;
+  onAplicar: (novoTotal: number) => void;
+}> = ({ row, platformName, doPrint, daPlanilha, aplicando, onAplicar }) => {
+  const [outro, setOutro] = useState('');
+  const alvo = outro.trim() ? Number(outro.trim()) : doPrint;
+  const plano = useMemo(
+    () => (row && Number.isFinite(alvo) ? planejarCorrecaoDePacotes(row, platformName, alvo) : null),
+    [row, platformName, alvo],
+  );
+
+  if (!row) return null;
+  const rotas = plano?.ajustes.length ?? 0;
+
+  return (
+    <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2" data-testid="corrigir-contagem">
+      <p className="text-xs font-semibold text-blue-900 mb-1.5">
+        Corrigir a contagem deste entregador (a planilha diz {daPlanilha})
+      </p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button" disabled={aplicando} data-testid="usar-do-print"
+          onClick={() => onAplicar(doPrint)}
+          className="px-2.5 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          Usar {doPrint} (do print)
+        </button>
+        <span className="text-xs text-gray-500">ou</span>
+        <input
+          type="number" value={outro} onChange={(e) => setOutro(e.target.value)}
+          placeholder="outro numero" data-testid="corrigir-outro"
+          className="w-28 border border-gray-300 rounded-md px-2 py-1 text-xs"
+        />
+        <button
+          type="button"
+          disabled={aplicando || !outro.trim() || !Number.isFinite(alvo) || !!plano?.erro}
+          onClick={() => onAplicar(alvo)}
+          className="px-2.5 py-1.5 text-xs font-medium rounded-md border border-blue-600 text-blue-700 hover:bg-blue-100 disabled:opacity-40"
+        >
+          Aplicar
+        </button>
+      </div>
+      {plano?.erro && <p className="text-xs text-red-700 mt-1.5">{plano.erro}</p>}
+      {plano && !plano.erro && plano.ajustes.length > 0 && (
+        <p className="text-xs text-blue-900 mt-1.5">
+          Vai gravar <strong>{plano.totalDepois}</strong> no lugar de {plano.totalAntes}
+          {rotas > 0 && ` — ${plano.ajustes.map((a) => `${a.route || '(sem rota)'}: ${a.de} → ${a.para}`).join(' · ')}`}
+          . Total a receber muda em{' '}
+          <strong className={plano.deltaReais < 0 ? 'text-red-700' : 'text-green-700'}>
+            {plano.deltaReais >= 0 ? '+' : ''}{formatBRL(plano.deltaReais)}
+          </strong>
+          {plano.precosDiferentes && (
+            <span className="block text-amber-800 mt-0.5">
+              ⚠ As rotas deste entregador tem <strong>precos diferentes</strong> — a diferenca foi
+              posta na maior rota, e por isso o valor acima e o que realmente muda.
+            </span>
+          )}
+        </p>
+      )}
+    </div>
+  );
+};
+
 const SeloConferencia: React.FC<{ p: DeliveryProofRow }> = ({ p }) => {
   const base = 'text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap';
   if (p.status === 'rejeitado') return <span className={`${base} bg-red-100 text-red-800`}>recusado</span>;
@@ -134,6 +210,37 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
     try { await fn(); toast.success(ok); await recarregar(); onChanged(); }
     catch (e) { toast.error(e instanceof Error ? e.message : 'Nao consegui fazer isso.'); }
     finally { setOcupado(null); }
+  };
+
+  /**
+   * Aplica a contagem escolhida e reconfere o print — sem fechar a janela.
+   * Reusa a MESMA reconferencia que roda depois de importar a planilha, entao a regra de
+   * marcar o espelho e uma so.
+   */
+  const aplicarContagem = async (p: DeliveryProofRow, novoTotal: number) => {
+    const row = rows.find((r) => r.driverId === p.driverId);
+    if (!row) { toast.error('Nao achei este entregador na lista.'); return; }
+    const plano = planejarCorrecaoDePacotes(row, p.platformName, novoTotal);
+    if (plano.erro) { toast.error(plano.erro); return; }
+    if (plano.ajustes.length === 0) { toast('A contagem ja esta nesse numero.'); return; }
+    setOcupado(p.id);
+    try {
+      const r = await aplicarCorrecaoDePacotes(
+        companyId, periodId, row.paymentId, p.platformName,
+        plano.ajustes.map((a) => ({ route: a.route, para: a.para, rate: a.rate })), userId,
+      );
+      toast.success(
+        `Contagem corrigida pra ${plano.totalDepois}` +
+        `${r.conferidos ? ' — print conferido e espelho marcado' : ''}.`,
+        { duration: 8000 },
+      );
+      await recarregar();
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Nao consegui corrigir a contagem.');
+    } finally {
+      setOcupado(null);
+    }
   };
 
   const handleToggleAuto = async () => {
@@ -290,6 +397,22 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
                           <p className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
                             {p.rejectReason}
                           </p>
+                        )}
+
+                        {/* ── Corrigir a contagem sem sair daqui (04/08/2026) ──
+                             So aparece pra quem NAO bateu. A diferenca cai na MAIOR rota
+                             (decisao do Victor); com precos diferentes entre rotas o valor
+                             a receber muda, entao a tela diz quanto ANTES de aplicar.
+                             ⚠️ Nada disso roda sozinho: automatico so quando a contagem bate. */}
+                        {p.readPackages !== null && hoje !== null && p.readPackages !== hoje && (
+                          <CorrigirContagem
+                            row={rows.find((r) => r.driverId === p.driverId)}
+                            platformName={p.platformName}
+                            doPrint={p.readPackages}
+                            daPlanilha={hoje}
+                            aplicando={ocupado === p.id}
+                            onAplicar={(novoTotal) => aplicarContagem(p, novoTotal)}
+                          />
                         )}
 
                         {/* Acoes */}

@@ -451,6 +451,108 @@ export function plataformasSemPlanilha(
   return semPlanilha;
 }
 
+/**
+ * Uma linha de rota que vai ser corrigida, com o efeito em dinheiro.
+ */
+export interface AjusteDeRota {
+  /** Índice da rota em `row.routes`. */
+  indice: number;
+  route: string;
+  /** id da linha em `driverpay_payment_packages` (null = rota sem linha gravada ainda). */
+  packageId: string | null;
+  de: number;
+  para: number;
+  /** Valor por pacote DESTA rota — é o que faz a diferença mudar de tamanho. */
+  rate: number;
+}
+
+export interface PlanoDeCorrecao {
+  ajustes: AjusteDeRota[];
+  totalAntes: number;
+  totalDepois: number;
+  /** Quanto o "Total a receber" do driver muda em R$ (positivo = ele recebe mais). */
+  deltaReais: number;
+  /** true quando as rotas têm preços DIFERENTES — aí onde a diferença cai muda o valor. */
+  precosDiferentes: boolean;
+  /** Não deu pra chegar no total pedido (ex.: pedir mais do que dá pra tirar). */
+  erro: string | null;
+}
+
+/**
+ * Planeja a correção da quantidade de pacotes de um driver numa plataforma.
+ *
+ * REGRA (decisão do Victor, 04/08/2026): **a diferença vai pra MAIOR rota**. Isso resolve
+ * 87 dos 95 casos de múltiplas rotas medidos em produção sem ninguém ter que pensar.
+ *
+ * ⚠️ Se não couber na maior (tirar mais do que ela tem), continua na próxima maior — uma
+ * rota NUNCA fica negativa. E quando as rotas têm **preços diferentes** (8 casos medidos), a
+ * escolha muda o valor a receber: por isso `deltaReais` e `precosDiferentes` saem daqui, pra
+ * tela avisar ANTES de aplicar. O veredito final é sempre um clique do operador.
+ */
+export function planejarCorrecaoDePacotes(
+  row: DriverRowData,
+  platformName: string,
+  novoTotal: number,
+): PlanoDeCorrecao {
+  const rateDa = (rl: RouteLine): number =>
+    rl.rates[platformName] ?? row.ratesByPlatform[platformName] ?? 0;
+
+  const linhas = row.routes
+    .map((rl, indice) => ({
+      indice,
+      route: rl.route,
+      packageId: rl.packageIds[platformName] ?? null,
+      atual: rl.packages[platformName] ?? 0,
+      rate: rateDa(rl),
+    }))
+    .filter((l) => l.atual > 0 || l.packageId !== null);
+
+  const totalAntes = linhas.reduce((s, l) => s + l.atual, 0);
+  const precosDiferentes = new Set(linhas.map((l) => l.rate)).size > 1;
+  const alvo = Math.max(0, Math.round(novoTotal));
+
+  if (linhas.length === 0) {
+    return { ajustes: [], totalAntes: 0, totalDepois: 0, deltaReais: 0, precosDiferentes: false,
+             erro: 'Este driver não tem pacote lançado nesta plataforma — lance na grade primeiro.' };
+  }
+  if (alvo === totalAntes) {
+    return { ajustes: [], totalAntes, totalDepois: totalAntes, deltaReais: 0, precosDiferentes, erro: null };
+  }
+
+  // Da MAIOR pra menor: a diferença cai na maior; o que não couber escorre pra próxima.
+  const ordem = [...linhas].sort((a, b) => b.atual - a.atual);
+  let falta = alvo - totalAntes;
+  const novos = new Map<number, number>();
+  for (const l of ordem) {
+    if (falta === 0) break;
+    if (falta > 0) {
+      // Sobrando pacotes: joga TUDO na maior (não há teto pra somar).
+      novos.set(l.indice, l.atual + falta);
+      falta = 0;
+      break;
+    }
+    const podeTirar = Math.min(l.atual, -falta);
+    if (podeTirar > 0) {
+      novos.set(l.indice, l.atual - podeTirar);
+      falta += podeTirar;
+    }
+  }
+  if (falta !== 0) {
+    return { ajustes: [], totalAntes, totalDepois: totalAntes, deltaReais: 0, precosDiferentes,
+             erro: `Não dá pra chegar em ${alvo}: o driver só tem ${totalAntes} pacote(s) nesta plataforma.` };
+  }
+
+  const ajustes: AjusteDeRota[] = [];
+  let deltaReais = 0;
+  for (const l of linhas) {
+    const para = novos.get(l.indice);
+    if (para === undefined || para === l.atual) continue;
+    ajustes.push({ indice: l.indice, route: l.route, packageId: l.packageId, de: l.atual, para, rate: l.rate });
+    deltaReais += (para - l.atual) * l.rate;
+  }
+  return { ajustes, totalAntes, totalDepois: alvo, deltaReais, precosDiferentes, erro: null };
+}
+
 /** Plataformas em que este driver deve mandar print: as SOLICITADAS PRA ELE onde tem pacote. */
 export function expectedProofPlatforms(
   row: DriverRowData,

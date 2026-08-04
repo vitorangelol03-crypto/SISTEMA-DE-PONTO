@@ -2248,6 +2248,32 @@ export const reconferirPrintsComPlanilha = async (
   return { conferidos, divergentes, semBase };
 };
 
+/**
+ * Aplica a correção da quantidade de pacotes escolhida em "Espelhos recebidos" e já
+ * reconfere o print (04/08/2026).
+ *
+ * O plano vem de `planejarCorrecaoDePacotes` (a diferença cai na MAIOR rota — decisão do
+ * Victor). Aqui só grava e manda reconferir: a reconferência é a MESMA que roda depois de
+ * importar a planilha, então a regra de marcar o espelho é uma só, não duas parecidas.
+ *
+ * ⚠️ Mexe em DINHEIRO: `upsertPackage` já recalcula o total do pagamento a cada linha.
+ * O veredito é sempre um clique do operador — nada aqui roda sozinho.
+ */
+export const aplicarCorrecaoDePacotes = async (
+  companyId: string,
+  periodId: string,
+  paymentId: string,
+  platformName: string,
+  ajustes: readonly { route: string; para: number; rate: number }[],
+  userId: string,
+): Promise<{ conferidos: number; divergentes: number; semBase: number }> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  for (const a of ajustes) {
+    await upsertPackage(companyId, paymentId, platformName, a.route, a.para, a.rate, userId);
+  }
+  return reconferirPrintsComPlanilha(companyId, periodId, userId);
+};
+
 /** Um print recebido, com o driver resolvido, pro painel. */
 export interface DeliveryProofRow {
   id: string;
