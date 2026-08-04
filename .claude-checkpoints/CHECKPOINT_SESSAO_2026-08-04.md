@@ -80,6 +80,34 @@ tsc **0** · eslint **0** · **759 unit** (66 novos) · build ok (1m04) ·
 ⚠️ **`tests/unit/edgeFnEmployeePublicApi.spec.ts` (set-pin) falhou na bateria por timeout e passou
 sozinho 4/4** — cold start da edge fn, flaky conhecido desde maio. Não tem relação com esta feature.
 
+## 6.8 🔴 BUG DE PRODUTO que só o E2E do portal pegou (e o release do dia)
+
+**No ar agora:** edge fn `driver-public-api` deployada (o `_shared/` foi empacotado junto —
+o risco marcado no plano está resolvido), segredo `PROOF_QUEUE_SECRET` conferido em produção
+(a rota da fila respondeu `{"ok":true}`), e o **cron ativo de 15 em 15 minutos**.
+
+**O bug:** o botão de enviar o print vivia DENTRO do card de um espelho de pagamento já
+publicado. Mas a ordem real é `importar planilha → PEDIR O PRINT → driver manda → conferir →
+só então publicar o espelho`. Ou seja: **na hora em que o driver precisa mandar, ele ainda não
+tem espelho publicado** — o botão não existiria pra ele e a feature não funcionaria em produção.
+Nenhum teste anterior pegaria: todos partiam do slot já existente.
+
+**Correção:** `proof-slots`/`proof-list` aceitam `periodId` opcional (sem ele, devolvem o que o
+driver deve em TODAS as quinzenas com pedido); cada slot carrega `periodId`/`periodLabel`; e o
+portal ganhou uma **faixa no topo** ("A CD está esperando N espelhos do app"), independente de
+espelho publicado.
+
+**`tests/65` — primeiro spec E2E do portal do entregador do projeto. 6/6 em 4,2 min**, com cliques
+reais e as fotos reais: sem pedido · print certo (marca sozinho) · **quantidade diferente com a
+tela IDÊNTICA à do print certo** (a prova visual da privacidade) · quinzena errada · foto de
+etiqueta (não inventa número) · reenvio · grupo com um cartão por membro. Prints das telas em
+`prints-espelho-app/` (gitignored).
+
+⚠️ **Duas armadilhas de teste**, documentadas no spec: **"Meus Pagamentos" é o título da tela de
+LOGIN também** — usá-lo como prova de "entrou" dá falso positivo (um cenário chegou a passar por
+motivo errado); o marcador certo é o botão **"Sair"**. E **`isVisible()` não aceita timeout**
+(retorna na hora) — esperar exige `expect`/`waitFor`.
+
 ## 6.6 🔴 ACHADO QUE VALE PRA TODAS AS SESSÕES: `npx tsc --noEmit` não checava NADA
 
 O `tsconfig.json` da raiz usa **project references** com `"files": []`. Rodar `npx tsc --noEmit`
@@ -151,15 +179,12 @@ grade + rodapé + card do celular, e a tela nova no portal do entregador (um car
 
 ## 7. PENDENTE
 
-**RELEASE — é só isto que falta pra estar no ar (nesta ordem):**
-1. **Deploy da edge fn** pelo CLI (o MCP é bloqueado pelo classificador):
-   `npx supabase functions deploy driver-public-api --no-verify-jwt --project-ref flcncdidxmmornkgkfbb`
-2. **Reagendar o cron** pra valer (hoje está dormindo até 2028):
-   `SELECT cron.schedule('driverpay-proof-queue', '*/15 * * * *', $job$ ... $job$);`
-   — o corpo está na migration `20260804140000`, PARTE 3.
-3. **Push** (do Victor): 5 commits locais.
-4. Testar ao vivo: solicitar o espelho numa quinzena, anexar o print real pelo portal, ver a linha
-   ficar verde sozinha.
+**RELEASE — feito, menos o push:**
+1. ✅ migrations aplicadas · ✅ edge fn deployada e testada em produção · ✅ segredo conferido ·
+   ✅ cron ativo (`*/15 * * * *`) · ✅ ciclo completo provado com a foto real.
+2. ⏳ **PUSH — do Victor.** 9 commits locais. É o que leva as TELAS pra Vercel: enquanto não sair,
+   o backend está no ar mas os botões não aparecem no painel.
+3. Depois do push: testar numa quinzena de verdade com UM driver antes de liberar pros 89.
 
 **Depois do release:**
 - Edge fn `driverpay-proof-admin` (anexar/reconferir **pelo painel**) — **NÃO foi feita**. Hoje só
