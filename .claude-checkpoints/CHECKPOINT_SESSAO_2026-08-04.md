@@ -198,3 +198,54 @@ grade + rodapé + card do celular, e a tela nova no portal do entregador (um car
 
 **Herdadas:** revogar o PAT do Supabase (desde 28/07) · trocar a chave do Gemini quando der ·
 Marize (R$ 249×238) e Lucas (escaneada) · PIX do Pablo Raspante · 6 CPFs faltantes · painel responsivo.
+
+---
+
+## 8. Tela do líder revista — grupo grande (commit `4abdad7`)
+
+O Victor pediu pra ver a tela do portal como ela aparece pro **líder de um grupo com vários
+membros**, "de uma forma que ele consegue entender como ele vai anexar separado individual".
+Montei um grupo de 10 (líder + 9, com nomes de gente de verdade e situações misturadas: 4 faltando,
+1 recusado, 5 já enviados) em tela de iPhone 13. **O que apareceu não estava bom**: 10 cartões azuis
+idênticos, sem saber quantos faltam, qual é o dele, nem o que já resolveu. Ele aprovou os 5 ajustes:
+
+1. **Placar no topo** — "Faltam 5 de 10" em âmbar, ou "Tudo enviado!" em verde. Antes só contando
+   cartão por cartão.
+2. **Rótulo "Seu espelho"** no cartão dele, que antes ficava solto no topo e parecia mais um da lista.
+3. **Ordem por urgência** — quem falta primeiro (o **recusado na frente**, é quem já tomou "não"),
+   quem já enviou desce pro fim como linha discreta em "Já enviados (N)" com um "trocar" pequeno no
+   lugar do botão azul grande.
+4. **Nome da quinzena sobe pro topo** — repetido em cada cartão virava ruído e quebrava linha; só
+   volta pro cartão se houver **mais de uma quinzena aberta** (`umaQuinzenaSo`).
+5. **Lista "ENVIADOS" duplicada removida** do rodapé — o que também eliminou o estado `proofFiles` e
+   uma requisição `driverProofList` a menos no celular.
+
+Resultado: a tela encolheu quase pela metade e a primeira dobra já responde "quanto falta / qual é o
+meu / o que é mais urgente".
+
+### ⚠️ Armadilha que quase virou print errado pro Victor
+O **Vite no WSL não pega a mudança sem reiniciar** (já registrado em 19/07). Rodei o script de print
+com o servidor antigo no ar e a tela veio **idêntica à de antes** — eu ia mandar isso como "melhoria
+pronta". Conferi o PNG antes de enviar, vi que era a tela velha, reiniciei o dev server e refiz.
+**Sempre reiniciar o `npm run dev` antes de fotografar tela.**
+
+### Teste que quebrou (era regressão de verdade)
+Spec 65 cenário B falhou em `getByText(/enviado\(s\)/i)`: o selo **"1 enviado(s)"** no cartão saiu de
+propósito no ajuste 3. Não afrouxei o teste — troquei por um sinal **mais forte**: placar verde
+"Tudo enviado!", seção "Já enviados (1)", e **zero** botão "Enviar print do app" sobrando.
+
+### Validação
+- `npm run typecheck`: 14 erros, **todos pré-existentes** em arquivos intocados (`permissions.ts`,
+  `database.ts`, `pushNotifications.ts`, `employeeImport.ts`) — como só o `DriverApp.tsx` diferia do
+  HEAD, isso é prova, não suposição. Zero no que mudou.
+- eslint limpo · `npm run build` ok.
+- vitest: **776 passam**. `faceAutoResetTrigger` falha só na suíte cheia e passa **4/4 sozinho** —
+  flake de teste que toca o banco em paralelo, mesma classe do `edgeFnEmployeePublicApi`. Um
+  componente React do portal não tem como afetar trigger de reconhecimento facial.
+- **spec 65: 6/6 no chromium e 6/6 no mobile-pixel5**, com leitura real do Gemini (confere no banco
+  `read_packages`, `check_status` e `espelho_conferido`). **spec 64: 1/1.**
+- 🔎 **firefox e webkit não estão instalados nesta máquina** (`webkit-2311/pw_run.sh` não existe).
+  As falhas deles na rodada de 4 navegadores eram **binário faltando, não bug no Safari** — mas o
+  portal do driver **nunca foi rodado em WebKit**, e driver de iPhone usa Safari. Fica anotado.
+- **Banco conferido antes e depois: 99 drivers · 49 grupos · 3 períodos · 0 prints · 0 pedidos —
+  idêntico.** Era a exigência explícita do Victor ("muito cuidado pra não perder nenhum dado").
