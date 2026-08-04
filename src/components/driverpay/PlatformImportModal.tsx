@@ -13,6 +13,7 @@ import {
 } from '../../utils/driverNameMatch';
 import {
   summarizeDriverImport,
+  missingImportPlatforms,
   type ImportResolvedItem,
   type ImportResolution,
 } from '../../utils/driverImportApply';
@@ -20,7 +21,9 @@ import {
   getDriverMatchContext,
   applyDriverImport,
   getPeriods,
+  getPlatforms,
   type DriverPaymentPeriod,
+  type DriverPlatform,
 } from '../../services/driverPay';
 import { formatInt } from './driverPayShared';
 
@@ -57,6 +60,8 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
   const [aliases, setAliases] = useState<DriverAlias[]>([]);
   const [periods, setPeriods] = useState<DriverPaymentPeriod[]>([]);
   const [periodId, setPeriodId] = useState<string>('');
+  // Plataformas cadastradas na empresa — a planilha pode trazer nome que nao existe.
+  const [platforms, setPlatforms] = useState<DriverPlatform[]>([]);
   // resolucao manual por entregador (driverRaw); ausente => usa o match automatico.
   const [resolutions, setResolutions] = useState<Record<string, ImportResolution>>({});
   const [applying, setApplying] = useState(false);
@@ -72,15 +77,19 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
       setParsing(true);
       setResult(null);
       try {
-        const [parsed, ctx, pers] = await Promise.all([
+        // `false` = traz tambem as arquivadas: elas EXISTEM no cadastro, entao a
+        // taxa e resolvida normalmente e nao devem disparar o bloqueio.
+        const [parsed, ctx, pers, plats] = await Promise.all([
           parseDriverSheetFileInWorker(file),
           getDriverMatchContext(companyId),
           getPeriods(companyId),
+          getPlatforms(companyId, false),
         ]);
         setResult(parsed);
         setDrivers(ctx.drivers);
         setAliases(ctx.aliases);
         setPeriods(pers);
+        setPlatforms(plats);
         const open = pers.filter((p) => p.status === 'aberto');
         setPeriodId(open[0]?.id ?? pers[0]?.id ?? '');
         setResolutions({});
@@ -134,12 +143,24 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
 
   const summary = useMemo(() => summarizeDriverImport(items), [items]);
 
+  // Plataforma da planilha que nao existe no cadastro: TRAVA o import. Sem isso os
+  // pacotes entram valendo R$ 0,00 e somem da grade (caso real das 1.600 coletas
+  // da Shopee, 04/08/2026). Recalcula quando o operador marca alguem como "ignorar".
+  const missingPlatforms = useMemo(
+    () => missingImportPlatforms(items, platforms.map((p) => p.name)),
+    [items, platforms],
+  );
+
   const setResolution = (driverRaw: string, res: ImportResolution) =>
     setResolutions((prev) => ({ ...prev, [driverRaw]: res }));
 
   const handleApply = async () => {
     if (!result || !periodId) {
       toast.error('Selecione o período de destino.');
+      return;
+    }
+    if (missingPlatforms.length > 0) {
+      toast.error('Cadastre a plataforma que está faltando antes de importar.');
       return;
     }
     setApplying(true);
@@ -177,7 +198,8 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
             <button
               type="button"
               onClick={handleApply}
-              disabled={applying || !periodId}
+              disabled={applying || !periodId || missingPlatforms.length > 0}
+              title={missingPlatforms.length > 0 ? 'Cadastre a plataforma que está faltando para liberar o import' : undefined}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium inline-flex items-center gap-2 min-h-[40px] disabled:opacity-50"
             >
               {applying ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
@@ -229,6 +251,42 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
             Detectado: <b>{PLATFORM_LABEL[result.platform] ?? result.platform}</b> · {result.totalDrivers} entregadores ·{' '}
             {formatInt(result.totalPackages)} pacotes
           </div>
+
+          {/* TRAVA: plataforma da planilha que não existe no cadastro. Antes disso o
+              import seguia calado e os pacotes entravam valendo R$ 0,00, invisíveis
+              na grade (1.600 coletas da Shopee, 04/08/2026). */}
+          {missingPlatforms.length > 0 && (
+            <div className="border-2 border-red-300 rounded-md overflow-hidden">
+              <div className="flex items-center gap-2 bg-red-50 px-3 py-2 text-sm font-bold text-red-800 border-b border-red-200">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" /> Import bloqueado — plataforma não cadastrada
+              </div>
+              <div className="px-3 py-2.5 space-y-2 bg-white">
+                {missingPlatforms.map((p) => (
+                  <div key={p.name} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="font-bold text-gray-900 break-words">{p.name}</span>
+                    <span className="text-gray-600 whitespace-nowrap">{formatInt(p.packages)} pacote(s)</span>
+                  </div>
+                ))}
+                <p className="text-xs text-red-700 border-t border-red-100 pt-2">
+                  Essa planilha traz uma plataforma que não existe nesta empresa. Se entrasse assim, os pacotes
+                  ficariam valendo <b>R$ 0,00</b> e <b>não apareceriam na grade</b> — foi o que aconteceu com as
+                  coletas da Shopee. Feche esta janela, cadastre em <b>“Adicionar plataforma”</b> com o valor por
+                  pacote, e suba a planilha de novo.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Linhas que a empresa não paga (Shopee: só ENTREGA e COLETA entram). */}
+          {result.ignored.length > 0 && (
+            <div className="flex items-start gap-2 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 text-xs text-gray-700">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-500" />
+              <span>
+                Ficaram <b>de fora</b> (só ENTREGA e COLETA são pagas):{' '}
+                {result.ignored.map((ig) => `${formatInt(ig.rows)} × "${ig.type}"`).join(' · ')}
+              </span>
+            </div>
+          )}
 
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-gray-700">Período de destino</label>

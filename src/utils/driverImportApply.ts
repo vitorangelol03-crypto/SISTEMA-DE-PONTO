@@ -45,6 +45,42 @@ export interface ImportApplyResult {
   ignored: number;
 }
 
+/** Uma plataforma que veio na planilha mas nao existe no cadastro da empresa. */
+export interface MissingPlatform {
+  /** Nome exatamente como o leitor da planilha classificou (ex.: "Coleta Shopee"). */
+  name: string;
+  /** Quantos pacotes entrariam por ela. */
+  packages: number;
+}
+
+/**
+ * Plataformas da planilha que NAO estao cadastradas na empresa.
+ *
+ * Existe por causa de um caso real (04/08/2026): a planilha da Shopee trouxe 1.600
+ * COLETAS, o leitor classificou certo como "Coleta Shopee", mas essa plataforma nao
+ * existia. O import gravou **taxa 0,00** (o `?? 0` do fim da conta da taxa) e a grade
+ * — que so desenha coluna de plataforma cadastrada — **nao mostrava os pacotes**.
+ * Ninguem viu, e so apareceu conferindo o banco.
+ *
+ * Compara pelo nome exato, que e como a taxa e resolvida no `applyDriverImport`.
+ * Linhas marcadas como "ignorar" na tela nao contam: elas nao vao ser gravadas.
+ */
+export function missingImportPlatforms(
+  items: ImportResolvedItem[],
+  registeredPlatformNames: string[],
+): MissingPlatform[] {
+  const registered = new Set(registeredPlatformNames);
+  const faltando = new Map<string, number>();
+  for (const it of items) {
+    if (it.resolution.kind === 'ignore') continue;
+    if (registered.has(it.platform)) continue;
+    faltando.set(it.platform, (faltando.get(it.platform) ?? 0) + it.packages);
+  }
+  return [...faltando]
+    .map(([name, packages]) => ({ name, packages }))
+    .sort((a, b) => b.packages - a.packages || a.name.localeCompare(b.name));
+}
+
 /** Resumo do que a aplicacao VAI fazer (para a previa/confirmacao na tela). */
 export function summarizeDriverImport(items: ImportResolvedItem[]): ImportSummary {
   const toCreate = new Set<string>(); // driverRaw dos "create" (dedup por entregador)

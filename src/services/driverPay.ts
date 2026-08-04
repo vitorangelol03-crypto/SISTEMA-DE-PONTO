@@ -14,6 +14,7 @@ import { supabase } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
 import { isMaster, isDriverpayPermission, canAccessDriverpay } from '../config/masters';
 import type { ImportResolvedItem, ImportApplyResult } from '../utils/driverImportApply';
+import { missingImportPlatforms } from '../utils/driverImportApply';
 import { mirrorPlatformKey, sanitizeMirrorKeyForPath } from '../components/driverpay/driverPayShared';
 import type { ProofRequest } from '../components/driverpay/driverPayShared';
 import { statusPorQuantidade } from '../components/driverpay/driverPayShared';
@@ -2028,6 +2029,21 @@ export const applyDriverImport = async (
 
   const platforms = await getPlatforms(companyId, false);
   const defaultByPlatform = new Map(platforms.map((p) => [p.name, p.default_rate]));
+
+  // TRAVA (04/08/2026): plataforma que nao existe no cadastro NAO entra.
+  // Antes, o `?? 0` da taxa mais abaixo deixava passar com valor ZERO — e a grade,
+  // que so desenha coluna de plataforma cadastrada, escondia os pacotes. Foi assim
+  // que 1.600 coletas da Shopee entraram invisiveis e sem valor. Falhar aqui e o
+  // unico jeito de a regra valer mesmo quando a chamada nao vem da tela do import.
+  const faltando = missingImportPlatforms(items, [...defaultByPlatform.keys()]);
+  if (faltando.length > 0) {
+    const lista = faltando.map((f) => `"${f.name}" (${f.packages} pacote(s))`).join(', ');
+    throw new Error(
+      `Plataforma nao cadastrada nesta empresa: ${lista}. ` +
+        'Cadastre em "Adicionar plataforma" com o valor por pacote antes de importar — ' +
+        'sem isso os pacotes entrariam valendo R$ 0,00 e nao apareceriam na grade.',
+    );
+  }
   const ratesByDriver = new Map<string, Record<string, number>>();
   const createdByRaw = new Map<string, string>();
 

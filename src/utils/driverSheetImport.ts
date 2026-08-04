@@ -45,6 +45,18 @@ export interface DriverSheetResult {
   /** Entregadores distintos (driverRaw) na planilha. */
   totalDrivers: number;
   warnings: string[];
+  /**
+   * Linhas descartadas por tipo de servico que a empresa NAO paga (Shopee: so
+   * ENTREGA e COLETA entram). Vazio nas demais planilhas.
+   */
+  ignored: IgnoredRows[];
+}
+
+/** Quantas linhas de um tipo de servico ficaram de fora do import. */
+export interface IgnoredRows {
+  /** Rotulo como veio na planilha (ex.: "DEVOLUCAO"). */
+  type: string;
+  rows: number;
 }
 
 // ─── helpers puros ───────────────────────────────────────────────────────────
@@ -82,6 +94,13 @@ interface RawRecord {
   code: string;
 }
 
+/** Saida de um extrator: o que entra + o que foi descartado, por tipo de servico. */
+interface ExtractResult {
+  records: RawRecord[];
+  /** rotulo do tipo (como veio na planilha) -> quantas linhas. Vazio = nada descartado. */
+  ignored: Map<string, number>;
+}
+
 function aggregate(records: RawRecord[]): {
   rows: SheetAggregateRow[];
   totalPackages: number;
@@ -113,7 +132,7 @@ function aggregate(records: RawRecord[]): {
   return { rows: [...map.values()].map((e) => e.row), totalPackages, drivers };
 }
 
-function extractImile(aoa: unknown[][], headers: unknown[]): RawRecord[] {
+function extractImile(aoa: unknown[][], headers: unknown[]): ExtractResult {
   const cDriver = colExact(headers, 'da');
   const cCity = colExact(headers, 'recipient city');
   const cCode = colExact(headers, 'waybill no.');
@@ -125,28 +144,42 @@ function extractImile(aoa: unknown[][], headers: unknown[]): RawRecord[] {
     if (!driverRaw) continue;
     out.push({ driverRaw, city: cleanCell(row[cCity]), platform: PLATFORM_IMILE, code: cleanCell(row[cCode]) });
   }
-  return out;
+  return { records: out, ignored: new Map() };
 }
 
-function extractShopee(aoa: unknown[][], headers: unknown[]): RawRecord[] {
+/**
+ * Shopee. Regra do Victor (04/08/2026): **so se paga ENTREGA e COLETA**.
+ *
+ * Antes era `tipo === 'coleta' ? Coleta : SHOPEE` — ou seja, QUALQUER outro tipo
+ * (DEVOLUCAO, por exemplo) caia no `else` e era **pago como entrega**. Agora o que
+ * nao e entrega nem coleta fica de fora e aparece contado no aviso, para ninguem
+ * descobrir depois que pagou o que nao devia.
+ */
+function extractShopee(aoa: unknown[][], headers: unknown[]): ExtractResult {
   const cTipo = colExact(headers, 'tipo do servico');
   const cDriver = colExact(headers, 'driver name');
   const cCity = colExact(headers, 'cidade entrega');
   const cCode = colStartsWith(headers, '3pl tracking number');
   const out: RawRecord[] = [];
+  const ignored = new Map<string, number>();
   for (let i = 1; i < aoa.length; i++) {
     const row = aoa[i];
     if (!row) continue;
     const driverRaw = cleanCell(row[cDriver]);
     if (!driverRaw) continue;
     const tipo = normHeader(row[cTipo]);
+    if (tipo !== 'entrega' && tipo !== 'coleta') {
+      const rotulo = cleanCell(row[cTipo]) || '(sem tipo)';
+      ignored.set(rotulo, (ignored.get(rotulo) ?? 0) + 1);
+      continue;
+    }
     const platform = tipo === 'coleta' ? PLATFORM_SHOPEE_COLETA : PLATFORM_SHOPEE;
     out.push({ driverRaw, city: cleanCell(row[cCity]), platform, code: cCode >= 0 ? cleanCell(row[cCode]) : '' });
   }
-  return out;
+  return { records: out, ignored };
 }
 
-function extractAnjun(aoa: unknown[][], headers: unknown[]): RawRecord[] {
+function extractAnjun(aoa: unknown[][], headers: unknown[]): ExtractResult {
   const cDriver = colExact(headers, 'operador de despacho');
   const cCity = colExact(headers, 'cidade destinataria');
   const cCode = colExact(headers, 'numero do negocio');
@@ -158,7 +191,7 @@ function extractAnjun(aoa: unknown[][], headers: unknown[]): RawRecord[] {
     if (!driverRaw) continue;
     out.push({ driverRaw, city: cleanCell(row[cCity]), platform: PLATFORM_ANJUN, code: cleanCell(row[cCode]) });
   }
-  return out;
+  return { records: out, ignored: new Map() };
 }
 
 /**
@@ -174,18 +207,28 @@ export function parseDriverSheetData(aoa: unknown[][]): DriverSheetResult {
       'Planilha nao reconhecida. Envie a planilha crua da iMile (Delivered), da Shopee (CLAYTONBDOSSANTOS) ou da Anjun (Taxas a Pagar).',
     );
   }
-  const records =
+  const extracted =
     platform === 'imile'
       ? extractImile(aoa, headers)
       : platform === 'shopee'
         ? extractShopee(aoa, headers)
         : extractAnjun(aoa, headers);
 
-  const { rows, totalPackages, drivers } = aggregate(records);
+  const { rows, totalPackages, drivers } = aggregate(extracted.records);
   const warnings: string[] = [];
   const noCity = rows.filter((r) => !r.city).length;
   if (noCity > 0) warnings.push(`${noCity} agrupamento(s) sem cidade/rota informada.`);
-  return { platform, rows, totalPackages, totalDrivers: drivers.size, warnings };
+
+  // Linhas que a empresa nao paga (so ENTREGA e COLETA entram). Fica visivel na
+  // tela: descartar em silencio e como o problema que originou esta mudanca.
+  const ignored = [...extracted.ignored]
+    .map(([type, rowsCount]) => ({ type, rows: rowsCount }))
+    .sort((a, b) => b.rows - a.rows);
+  for (const ig of ignored) {
+    warnings.push(`${ig.rows} linha(s) do tipo "${ig.type}" ficaram de fora (so ENTREGA e COLETA sao pagas).`);
+  }
+
+  return { platform, rows, totalPackages, totalDrivers: drivers.size, warnings, ignored };
 }
 
 /**
