@@ -425,17 +425,65 @@ function pedidoAlcanca(req: ProofRequest, row: DriverRowData): boolean {
   return req.driverId === row.driverId;
 }
 
+/**
+ * Plataformas cuja **planilha ainda não chegou** nesta quinzena: NINGUÉM tem pacote nelas.
+ *
+ * Pedido do Victor (04/08): dá pra solicitar o print ANTES de importar a planilha, pra
+ * adiantar. Sem planilha o sistema não sabe quem entregou o quê — então cobra todo mundo
+ * que está em grupo (decisão dele: "somente entregadores que estiverem em grupos").
+ *
+ * ⚠️ É por PLATAFORMA de propósito: importar a eMile não pode fazer o sistema achar que a
+ * planilha da Shopee chegou. E se alguém já tem pacote na plataforma, a planilha chegou —
+ * aí vale a regra normal (só quem tem pacote), senão voltaríamos a cobrar quem não entregou.
+ */
+export function plataformasSemPlanilha(
+  rows: readonly DriverRowData[],
+  platformNames: readonly string[],
+): Set<string> {
+  const semPlanilha = new Set(platformNames);
+  for (const row of rows) {
+    for (const rl of row.routes) {
+      for (const [nome, qtd] of Object.entries(rl.packages)) {
+        if ((qtd ?? 0) > 0) semPlanilha.delete(nome);
+      }
+    }
+  }
+  return semPlanilha;
+}
+
 /** Plataformas em que este driver deve mandar print: as SOLICITADAS PRA ELE onde tem pacote. */
 export function expectedProofPlatforms(
   row: DriverRowData,
   requests: readonly ProofRequest[],
+  /** Plataformas sem planilha importada: aí cobra sem exigir pacote (ver acima). */
+  semPlanilha?: ReadonlySet<string>,
 ): string[] {
   const nomes = new Set<string>();
   for (const req of requests) {
     if (!pedidoAlcanca(req, row)) continue;
-    if (platformPackages(row, req.platformName) > 0) nomes.add(req.platformName);
+    const temPacote = platformPackages(row, req.platformName) > 0;
+    if (temPacote || semPlanilha?.has(req.platformName)) nomes.add(req.platformName);
   }
   return [...nomes];
+}
+
+/**
+ * Veredito da QUANTIDADE quando a planilha finalmente chega, usando o número que a IA
+ * **já leu** e está guardado no print. É conta pura: nenhuma foto é baixada e nenhuma
+ * chamada de IA é feita — foi a exigência do Victor ("não trave a fila, não trave a API").
+ *
+ * ⚠️ Tem que dar o MESMO veredito que o `runProofCheck` da edge function. Existe um teste
+ * (`driverPaySemPlanilha.spec.ts`) que roda os dois lado a lado justamente pra travar isso.
+ */
+export function statusPorQuantidade(
+  readPackages: number | null,
+  expectedPackages: number,
+  tolerancePackages = 0,
+): 'confirmado' | 'divergente' | 'pendente' {
+  if (readPackages === null) return 'pendente';       // nunca foi lido: nada a comparar
+  if (!(expectedPackages > 0)) return 'pendente';     // ainda sem planilha pra ele
+  const tol = Math.max(0, tolerancePackages);
+  return Math.abs(readPackages - expectedPackages) <= tol ? 'confirmado' : 'divergente';
 }
 
 /**
@@ -490,10 +538,12 @@ export function computeProofProgressByPayment(
   rows: readonly DriverRowData[],
   requests: readonly ProofRequest[],
   stateByDriverPlatform: ReadonlyMap<string, ProofState>,
+  /** Plataformas sem planilha importada: cobra sem exigir pacote (ver expectedProofPlatforms). */
+  semPlanilha?: ReadonlySet<string>,
 ): Map<string, ProofProgress> {
   const out = new Map<string, ProofProgress>();
   for (const row of rows) {
-    const plataformas = expectedProofPlatforms(row, requests);
+    const plataformas = expectedProofPlatforms(row, requests, semPlanilha);
     const contagem: Record<ProofState, number> = {
       confirmado: 0, divergente: 0, pendente: 0, recusado: 0, faltando: 0,
     };

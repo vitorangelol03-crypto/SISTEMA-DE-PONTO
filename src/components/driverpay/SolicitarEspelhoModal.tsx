@@ -34,6 +34,12 @@ interface SolicitarEspelhoModalProps {
   rows: DriverRowData[];
   /** Plataformas da empresa que podem ser cobradas. */
   platformNames: string[];
+  /**
+   * Plataformas cuja planilha ainda NAO foi importada nesta quinzena. Da pra pedir o print
+   * mesmo assim (pedido do Victor, 04/08, pra adiantar): cobra todo mundo que esta em grupo,
+   * e a conferencia da QUANTIDADE espera a planilha chegar.
+   */
+  semPlanilha?: ReadonlySet<string>;
   userId: string;
   onClose: () => void;
   /** Chamado depois de gravar, pra grade recarregar. Pode ser async. */
@@ -52,7 +58,7 @@ type Escopo = 'todos' | 'grupo' | 'driver' | 'manter';
 
 export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
   companyId, periodId, periodLabel, periodStart, periodEnd,
-  rows, platformNames, userId, onClose, onChanged,
+  rows, platformNames, semPlanilha, userId, onClose, onChanged,
 }) => {
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -142,8 +148,8 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
 
   /** Quem vai ser cobrado — mesma funcao que a coluna "Print" da grade usa. */
   const previa = useMemo(() => {
-    const cobrados = rows.filter((r) => expectedProofPlatforms(r, pedidosDesejados).length > 0);
-    const prints = cobrados.reduce((s, r) => s + expectedProofPlatforms(r, pedidosDesejados).length, 0);
+    const cobrados = rows.filter((r) => expectedProofPlatforms(r, pedidosDesejados, semPlanilha).length > 0);
+    const prints = cobrados.reduce((s, r) => s + expectedProofPlatforms(r, pedidosDesejados, semPlanilha).length, 0);
     const emGrupo = cobrados.filter((r) => r.groupName);
     const grupos = new Set(emGrupo.map((r) => r.groupName as string));
     return {
@@ -153,7 +159,7 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
       grupos: grupos.size,
       avulsos: cobrados.length - emGrupo.length,
     };
-  }, [rows, pedidosDesejados]);
+  }, [rows, pedidosDesejados, semPlanilha]);
 
   const datasOk = Boolean(inicio && fim && inicio <= fim);
   const duracao = datasOk
@@ -428,6 +434,30 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
               )}
             </div>
           </div>
+
+          {/* ── Planilha ainda nao importada (04/08) ────────────────────
+               Da pra pedir assim mesmo, pra adiantar: o sistema confere a DATA na hora e
+               guarda a quantidade pra comparar quando a planilha chegar. */}
+          {[...marcadas].some((n) => semPlanilha?.has(n)) && (
+            <div
+              className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-3"
+              data-testid="proof-sem-planilha-aviso"
+            >
+              <p className="text-sm text-blue-900">
+                <strong>
+                  A planilha de {[...marcadas].filter((n) => semPlanilha?.has(n)).join(' e ')} ainda
+                  nao foi importada nesta quinzena.
+                </strong>
+              </p>
+              <p className="text-xs text-blue-800 mt-1">
+                Da pra pedir do mesmo jeito, pra adiantar: vai pra <b>todos os entregadores em
+                grupo</b> (o lider anexa por cada membro). O sistema ja <b>recusa na hora</b> print
+                de quinzena errada; a conferencia da <b>quantidade</b> acontece sozinha quando voce
+                importar a planilha — sem gastar leitura de novo, porque o numero do print ja fica
+                guardado.
+              </p>
+            </div>
+          )}
 
           {/* ── Quem fica de fora por nao ter grupo (regra de 04/08) ───── */}
           {foraSemGrupo.length > 0 && (

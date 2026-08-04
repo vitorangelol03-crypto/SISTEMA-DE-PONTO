@@ -951,8 +951,35 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
 
   const { data: pks } = await supabase.from('driverpay_payment_packages')
     .select('payment_id, platform_name, packages').in('payment_id', payList.map((p) => p.id));
-  const driverOf = new Map(payList.map((p) => [p.id as string, p.driver_id as string]));
-  const periodOf = new Map(payList.map((p) => [p.id as string, p.period_id as string]));
+  /** pagamento -> plataforma -> pacotes (so os DELE; o resto da quinzena vem abaixo). */
+  const pacotesDe = new Map<string, Map<string, number>>();
+  for (const pk of pks ?? []) {
+    const payId = pk.payment_id as string;
+    const m = pacotesDe.get(payId) ?? new Map<string, number>();
+    m.set(pk.platform_name as string, (m.get(pk.platform_name as string) ?? 0) + (pk.packages ?? 0));
+    pacotesDe.set(payId, m);
+  }
+
+  // PEDIR ANTES DA PLANILHA (decisao do Victor, 04/08/2026): da pra solicitar o print sem
+  // ter importado a planilha, pra adiantar. Enquanto NINGUEM da quinzena tem pacote naquela
+  // plataforma, o pedido vale pra todo mundo em grupo. Assim que a planilha entra, volta a
+  // regra normal (so quem tem pacote) — senao continuariamos cobrando quem nao entregou.
+  // ⚠️ E por PLATAFORMA: importar a eMile nao pode fazer o sistema achar que a Shopee chegou.
+  const { data: paysDoPeriodo } = await supabase.from('driverpay_payments')
+    .select('id, period_id').in('period_id', [...periodosComPedido]);
+  const idsPorPeriodo = new Map<string, string[]>();
+  for (const p of paysDoPeriodo ?? []) {
+    const lista = idsPorPeriodo.get(p.period_id as string) ?? [];
+    lista.push(p.id as string);
+    idsPorPeriodo.set(p.period_id as string, lista);
+  }
+  const planilhaChegou = new Set<string>(); // `${periodo}|${plataforma}`
+  for (const [perId, ids] of idsPorPeriodo) {
+    if (ids.length === 0) continue;
+    const { data: todosPks } = await supabase.from('driverpay_payment_packages')
+      .select('platform_name').in('payment_id', ids).gt('packages', 0);
+    for (const pk of todosPks ?? []) planilhaChegou.add(`${perId}|${pk.platform_name as string}`);
+  }
 
   // REGRA DE LOGISTICA (decisao do Victor, 04/08/2026): o pedido "PRA TODOS" so cobra quem
   // esta EM GRUPO. Quem anexa na pratica e o lider, que ve um cartao por membro; quem nao
@@ -963,19 +990,28 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
     .select('driver_id').in('driver_id', driverIds);
   const temGrupo = new Set((emGrupo ?? []).map((m) => m.driver_id as string));
 
-  // (quinzena, driver, plataforma) que TEM pacote e foi solicitado.
+  // (quinzena, driver, plataforma) que foi solicitado E ele deve mandar.
+  // ⚠️ Percorre PAGAMENTO x PLATAFORMA PEDIDA, nao a lista de pacotes: sem planilha nao
+  // existe pacote nenhum, e varrer pacotes deixaria a tela do entregador vazia.
   const precisa = new Set<string>();
-  for (const pk of pks ?? []) {
-    const payId = pk.payment_id as string;
-    const dId = driverOf.get(payId);
-    const perId = periodOf.get(payId);
-    const plat = pk.platform_name as string;
-    if (!dId || !perId || (pk.packages ?? 0) <= 0) continue;
-    // Pedido "pra todos" (SO pra quem esta em grupo) OU pedido individual daquele entregador.
-    const praTodos = platsTodos.get(perId)?.has(plat) === true && temGrupo.has(dId);
-    const soPraEle = platsDoDriver.get(`${perId}|${dId}`)?.has(plat) === true;
-    if (praTodos || soPraEle) precisa.add(`${perId}|${dId}|${plat}`);
+  for (const pay of payList) {
+    const payId = pay.id as string;
+    const dId = pay.driver_id as string;
+    const perId = pay.period_id as string;
+    const plats = new Set<string>([
+      ...(platsTodos.get(perId) ?? []),
+      ...(platsDoDriver.get(`${perId}|${dId}`) ?? []),
+    ]);
+    for (const plat of plats) {
+      const praTodos = platsTodos.get(perId)?.has(plat) === true && temGrupo.has(dId);
+      const soPraEle = platsDoDriver.get(`${perId}|${dId}`)?.has(plat) === true;
+      if (!praTodos && !soPraEle) continue;
+      const temPacote = (pacotesDe.get(payId)?.get(plat) ?? 0) > 0;
+      const semPlanilha = !planilhaChegou.has(`${perId}|${plat}`);
+      if (temPacote || semPlanilha) precisa.add(`${perId}|${dId}|${plat}`);
+    }
   }
+
   if (precisa.size === 0) return json({ slots: [] });
 
   const { data: drivers } = await supabase.from('driverpay_drivers')

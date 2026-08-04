@@ -67,6 +67,7 @@ import {
   formatInt,
   MIRROR_COMPANY_NAME,
   computeProofProgressByPayment,
+  plataformasSemPlanilha,
   proofForaPorSemGrupo,
   melhorEstado,
   proofStateFromRow,
@@ -1045,9 +1046,19 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // Progresso da NF por pagamento (validadas/esperadas, ciente de grupo — só o líder anexa).
   // Sobre TODOS os rows (não os filtrados) pra o grupo agregar certo mesmo com filtro.
   /** Progresso do ESPELHO DO APP por pagamento (um print por driver — nao agrega grupo). */
+  /**
+   * Plataformas cuja planilha ainda não foi importada nesta quinzena. Enquanto isso o
+   * pedido de print vale pra todo mundo em grupo (pedido do Victor pra adiantar) — ver
+   * `plataformasSemPlanilha`.
+   */
+  const semPlanilha = useMemo(
+    () => plataformasSemPlanilha(rows, platforms.map((p) => p.name)),
+    [rows, platforms],
+  );
+
   const proofProgressByPayment = useMemo(
-    () => computeProofProgressByPayment(rows, proofRequests, proofStates),
-    [rows, proofRequests, proofStates],
+    () => computeProofProgressByPayment(rows, proofRequests, proofStates, semPlanilha),
+    [rows, proofRequests, proofStates, semPlanilha],
   );
 
   /**
@@ -1641,6 +1652,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           periodEnd={selectedPeriod.end_date ?? null}
           rows={rows}
           platformNames={platforms.map((p) => p.name)}
+          semPlanilha={semPlanilha}
           userId={userId}
           onClose={() => setShowSolicitarEspelho(false)}
           onChanged={async () => {
