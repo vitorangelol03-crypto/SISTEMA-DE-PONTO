@@ -41,6 +41,7 @@ import {
   unpublishAllMirrorsForPeriod,
   listNotaFiscalFiles,
   type NotaFiscalFileRow,
+  reconferirPrintsComPlanilha,
   listProofRequests,
   listDeliveryProofs,
   type MirrorPublicationRow,
@@ -377,6 +378,38 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     },
     [company?.id],
   );
+
+  /**
+   * Depois de IMPORTAR A PLANILHA: fecha a conta dos prints que estavam esperando ela.
+   *
+   * O print pode chegar ANTES da planilha (feature de 04/08) — nesse momento nao ha
+   * quantidade pra comparar, entao ele fica lido mas sem veredito e o espelho NAO e
+   * marcado. Quando a planilha entra, é aqui que a conta fecha: usa o numero que a IA JA
+   * LEU, sem baixar foto e sem chamar a IA de novo (exigencia do Victor: nao travar a fila
+   * nem a cota). Sem isto o print ficava "recebido" pra sempre — e a janela de solicitar
+   * ja PROMETIA que isso aconteceria sozinho.
+   */
+  const refreshComReconferencia = useCallback(async () => {
+    await refresh();
+    const periodId = selectedPeriodIdRef.current;
+    if (!company?.id || !periodId) return;
+    try {
+      const r = await reconferirPrintsComPlanilha(company.id, periodId, userId);
+      if (r.conferidos > 0 || r.divergentes > 0) {
+        toast.success(
+          `Prints reconferidos com a planilha: ${r.conferidos} bateram (espelho marcado)` +
+          `${r.divergentes ? ` · ${r.divergentes} com quantidade diferente pra voce olhar` : ''}.`,
+          { duration: 9000 },
+        );
+        await reloadProofs(periodId);
+      }
+    } catch (e) {
+      // Falha aqui NAO pode estragar a importacao, que ja terminou e deu certo.
+      console.error('[reconferencia] falhou depois da importacao:', e);
+      toast.error('A planilha entrou, mas nao consegui reconferir os prints. Abra "Espelhos recebidos".');
+    }
+  }, [refresh, company?.id, userId, reloadProofs]);
+
 
   const reloadNotes = useCallback(
     async (periodId: string | null) => {
@@ -1777,7 +1810,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           userId={userId}
           platforms={platforms}
           onClose={() => setShowImport(false)}
-          onImported={refresh}
+          onImported={refreshComReconferencia}
         />
       )}
 
@@ -1786,7 +1819,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           companyId={company.id}
           userId={userId}
           onClose={() => setShowPlatformImport(false)}
-          onImported={refresh}
+          onImported={refreshComReconferencia}
         />
       )}
 

@@ -16,6 +16,7 @@ import { isMaster, isDriverpayPermission, canAccessDriverpay } from '../config/m
 import type { ImportResolvedItem, ImportApplyResult } from '../utils/driverImportApply';
 import { mirrorPlatformKey, sanitizeMirrorKeyForPath } from '../components/driverpay/driverPayShared';
 import type { ProofRequest } from '../components/driverpay/driverPayShared';
+import { statusPorQuantidade } from '../components/driverpay/driverPayShared';
 import { orphanProofPaths, proofFileName, isKeptProof, type ProofSlot } from '../utils/discountProofs';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -2151,6 +2152,100 @@ export const cancelProofRequest = async (
   else if (driverId !== '*') q = q.eq('driver_id', driverId);
   const { error } = await q;
   if (error) throwDbError(error);
+};
+
+/**
+ * RECONFERE, sem chamar a IA, os prints que estavam esperando a planilha.
+ *
+ * POR QUE EXISTE (04/08/2026): da pra pedir o print ANTES de importar a planilha. Nesse
+ * momento nao ha quantidade pra comparar, entao o print entra lido mas sem veredito de
+ * quantidade — e o espelho NAO e marcado (seria aprovar as cegas). Quando a planilha chega,
+ * alguem precisa fechar essa conta. Era o pedaco que faltava: sem isto o print ficava
+ * "recebido" pra sempre, e a janela de solicitar ja PROMETIA que isso aconteceria sozinho.
+ *
+ * ⚠️ NAO baixa foto e NAO chama a IA: usa o numero que ja esta gravado em `read_packages`.
+ * Foi a exigencia do Victor — "nao trave a fila, nao trave a API". Por isso pode rodar em
+ * cima de 89 prints logo depois da importacao sem gastar cota nenhuma.
+ *
+ * So mexe em print que: ja foi lido (`read_packages` preenchido), teve o PERIODO aprovado,
+ * e ainda nao foi decidido por um humano. Print recusado ou ilegivel nao e tocado.
+ */
+export const reconferirPrintsComPlanilha = async (
+  companyId: string, periodId: string, userId: string,
+): Promise<{ conferidos: number; divergentes: number; semBase: number }> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+
+  const { data: proofs, error: pErr } = await supabase
+    .from('driverpay_delivery_proofs')
+    .select('id, driver_id, payment_id, platform_name, read_packages, check_periodo, status, validated_by')
+    .eq('company_id', companyId).eq('period_id', periodId)
+    .not('read_packages', 'is', null)
+    .neq('status', 'rejeitado');
+  if (pErr) throwDbError(pErr);
+  if (!proofs?.length) return { conferidos: 0, divergentes: 0, semBase: 0 };
+
+  // Quantidade da planilha por (driver, plataforma) — uma consulta so pra quinzena toda.
+  const { data: pays } = await supabase.from('driverpay_payments')
+    .select('id, driver_id').eq('company_id', companyId).eq('period_id', periodId);
+  const driverDoPagamento = new Map((pays ?? []).map((p) => [p.id as string, p.driver_id as string]));
+  const { data: pks } = await supabase.from('driverpay_payment_packages')
+    .select('payment_id, platform_name, packages').in('payment_id', (pays ?? []).map((p) => p.id));
+  const pacotes = new Map<string, number>(); // `${driverId}|${plataforma}`
+  for (const pk of pks ?? []) {
+    const dId = driverDoPagamento.get(pk.payment_id as string);
+    if (!dId) continue;
+    const k = `${dId}|${pk.platform_name as string}`;
+    pacotes.set(k, (pacotes.get(k) ?? 0) + (pk.packages ?? 0));
+  }
+
+  const { data: settings } = await supabase.from('driverpay_settings')
+    .select('proof_auto_confirm, proof_tolerance_packages').eq('company_id', companyId).maybeSingle();
+  const tolerancia = Number(settings?.proof_tolerance_packages ?? 0) || 0;
+  const autoConfirmar = settings?.proof_auto_confirm !== false; // sem linha = ligado
+
+  let conferidos = 0, divergentes = 0, semBase = 0;
+  for (const pr of proofs) {
+    // Periodo reprovado nao volta pela quantidade — quem decide isso e a leitura.
+    if (pr.check_periodo === false) continue;
+    // Um humano ja decidiu: nao passa por cima.
+    if (pr.validated_by) continue;
+
+    const esperado = pacotes.get(`${pr.driver_id as string}|${pr.platform_name as string}`) ?? 0;
+    const veredito = statusPorQuantidade(pr.read_packages as number, esperado, tolerancia);
+    if (veredito === 'pendente') { semBase += 1; continue; } // planilha ainda nao tem ele
+
+    const ok = veredito === 'confirmado';
+    const { error: uErr } = await supabase.from('driverpay_delivery_proofs').update({
+      status: ok ? 'validado' : 'recebido',
+      check_status: ok ? 'ok' : 'divergente',
+      check_qtd: ok,
+      expected_packages: esperado,
+      checked_at: new Date().toISOString(),
+      next_check_at: null, // conta fechada: sai da fila
+    }).eq('id', pr.id).eq('company_id', companyId);
+    if (uErr) throwDbError(uErr);
+
+    if (ok) {
+      conferidos += 1;
+      // Marca o espelho com a MESMA regra da edge function: respeita o liga/desliga e
+      // nunca passa por cima de quem foi tocado por um humano.
+      if (autoConfirmar && pr.payment_id) {
+        const { data: pay } = await supabase.from('driverpay_payments')
+          .select('espelho_conferido, espelho_conferido_by').eq('id', pr.payment_id).maybeSingle();
+        const soAuto = !pay?.espelho_conferido_by || pay.espelho_conferido_by === 'auto';
+        if (!pay?.espelho_conferido && soAuto) {
+          await supabase.from('driverpay_payments').update({
+            espelho_conferido: true,
+            espelho_conferido_at: new Date().toISOString(),
+            espelho_conferido_by: 'auto',
+          }).eq('id', pr.payment_id).eq('company_id', companyId);
+        }
+      }
+    } else {
+      divergentes += 1;
+    }
+  }
+  return { conferidos, divergentes, semBase };
 };
 
 /** Um print recebido, com o driver resolvido, pro painel. */
