@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Minus, Trash2, Plus, ImagePlus, X, AlertTriangle, Play, Video, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { addDiscount, updateDiscount, removeDiscount, discountProofUrl } from '../../services/driverPay';
+import { isKeptProof, type ProofSlot } from '../../utils/discountProofs';
 import { ModalShell } from './ModalShell';
 import { ImageLightbox } from './ImageLightbox';
 import { DriverRowData, formatBRL } from './driverPayShared';
@@ -46,8 +47,10 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
   const [amount, setAmount] = useState('');
   const [packageCode, setPackageCode] = useState('');
   const [observation, setObservation] = useState('');
-  const [images, setImages] = useState<Blob[]>([]);
-  const [video, setVideo] = useState<Blob | null>(null);
+  // Provas do formulario: cada item ou e uma que ja estava salva ({keep}) ou um
+  // arquivo novo ({blob}). Editando, as duas coisas convivem na mesma lista.
+  const [images, setImages] = useState<ProofSlot[]>([]);
+  const [video, setVideo] = useState<ProofSlot | null>(null);
   const [busy, setBusy] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [packageStatus, setPackageStatus] = useState<'PNR' | 'LOST' | null>(null);
@@ -57,15 +60,29 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
 
   const total = row.discounts.reduce((s, d) => s + d.amount, 0);
 
-  // Previews das novas imagens; revoga as URLs anteriores quando muda/desmonta.
-  const previews = useMemo(() => images.map((b) => URL.createObjectURL(b)), [images]);
-  useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
+  // Previews: prova já salva usa a URL pública; arquivo novo usa objectURL — e só
+  // o objectURL pode ser revogado (revogar a URL pública quebraria a imagem).
+  const previews = useMemo(
+    () =>
+      images.map((p) =>
+        isKeptProof(p) ? { url: discountProofUrl(p.keep), local: false } : { url: URL.createObjectURL(p.blob), local: true },
+      ),
+    [images],
+  );
+  useEffect(
+    () => () => previews.forEach((p) => p.local && URL.revokeObjectURL(p.url)),
+    [previews],
+  );
 
-  // Preview do vídeo novo; revoga a URL anterior quando muda/desmonta (igual às imagens).
-  const videoPreview = useMemo(() => (video ? URL.createObjectURL(video) : null), [video]);
+  // Preview do vídeo; mesma regra das imagens (salvo = URL pública, novo = objectURL).
+  const videoPreview = useMemo(
+    () => (video ? (isKeptProof(video) ? { url: discountProofUrl(video.keep), local: false } : { url: URL.createObjectURL(video.blob), local: true }) : null),
+    [video],
+  );
   useEffect(() => {
-    if (!videoPreview) return;
-    return () => URL.revokeObjectURL(videoPreview);
+    if (!videoPreview?.local) return;
+    const { url } = videoPreview;
+    return () => URL.revokeObjectURL(url);
   }, [videoPreview]);
 
   const addImages = (files: (File | Blob)[]) => {
@@ -84,7 +101,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
         toast('Máximo de 2 fotos por desconto', { icon: '⚠️' });
         return prev;
       }
-      return [...prev, ...valid].slice(0, 2);
+      return [...prev, ...valid.map((blob) => ({ blob }))].slice(0, 2);
     });
   };
 
@@ -123,7 +140,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
       toast.error('Vídeo acima de 50 MB');
       return;
     }
-    setVideo(file);
+    setVideo({ blob: file });
   };
 
   const removeVideo = () => setVideo(null);
@@ -144,8 +161,14 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
     setPackageCode(d.package_code ?? '');
     setObservation(d.observation ?? '');
     setPackageStatus(d.package_status ?? null);
-    setImages([]);
-    setVideo(null);
+    // Traz as provas que ja estao salvas para a tela: assim da para VER o que tem,
+    // remover, trocar ou somar mais uma — sem precisar apagar o desconto inteiro.
+    setImages(
+      [d.proof1_path, d.proof2_path]
+        .filter((p): p is string => !!p)
+        .map((keep) => ({ keep })),
+    );
+    setVideo(d.proof_video_path ? { keep: d.proof_video_path } : null);
   };
 
   const handleAdd = async () => {
@@ -157,12 +180,19 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
     setBusy(true);
     try {
       if (editingId) {
-        await updateDiscount(editingId, companyId, row.paymentId, userId, {
-          amount: value,
-          packageCode: packageCode.trim() || null,
-          observation: observation.trim() || null,
-          packageStatus,
-        });
+        await updateDiscount(
+          editingId,
+          companyId,
+          row.paymentId,
+          userId,
+          {
+            amount: value,
+            packageCode: packageCode.trim() || null,
+            observation: observation.trim() || null,
+            packageStatus,
+          },
+          { images, video },
+        );
         toast.success('Desconto atualizado');
       } else {
         await addDiscount(
@@ -173,8 +203,9 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
           observation.trim() || null,
           userId,
           packageStatus,
-          images,
-          video,
+          // Lancando um desconto novo, toda prova e arquivo novo (nao ha o que manter).
+          images.map((p) => (isKeptProof(p) ? null : p.blob)).filter((b): b is Blob => !!b),
+          video && !isKeptProof(video) ? video.blob : null,
         );
         toast.success('Desconto lançado');
       }
@@ -367,7 +398,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {previews.map((url, i) => (
+                {previews.map(({ url }, i) => (
                   <div key={i} className="relative w-20 h-20 rounded-md border border-gray-200 overflow-hidden">
                     <img
                       src={url}
@@ -420,7 +451,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
               <div className="flex flex-wrap gap-2">
                 {videoPreview ? (
                   <div className="relative w-28 h-20 rounded-md border border-gray-200 overflow-hidden">
-                    <video src={videoPreview} muted controls className="w-full h-full object-cover" />
+                    <video src={videoPreview.url} muted controls className="w-full h-full object-cover" />
                     <button
                       type="button"
                       onClick={removeVideo}
@@ -456,7 +487,8 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
 
             {editingId && (
               <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-md px-3 py-2">
-                Editando um desconto lançado — as fotos/vídeo não mudam aqui (remova e lance de novo se precisar trocar as provas).
+                Editando um desconto lançado — as provas acima são as que já estão salvas. Pode remover, trocar ou
+                adicionar; o que ficar na tela é o que será gravado ao salvar.
               </p>
             )}
             <div className="flex flex-wrap gap-2">
