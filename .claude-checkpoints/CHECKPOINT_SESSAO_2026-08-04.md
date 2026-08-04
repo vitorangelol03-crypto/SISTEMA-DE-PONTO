@@ -727,3 +727,29 @@ aplicar.
 **11 testes** em `planejarCorrecaoDePacotes`: maior rota não ser a primeira, diferença que não cabe e
 escorre, preços diferentes (tirar 10 da rota de R$ 3 custa R$ 30, não R$ 20) e a invariante de que o
 total final é **sempre exatamente o pedido**.
+
+### 13.8 ✅ Validação em produção — a reconferência funcionou no teste do Victor
+Ele importou a planilha da Shopee de verdade. **Os 5 prints foram lidos e comparados sozinhos:**
+
+| entregador | print | planilha | resultado |
+|---|---|---|---|
+| CAIO | 1808 | 1808 | ✅ conferido |
+| LUCAS AREDES | 1478 | 1477 | ⚠️ 1 a mais |
+| Luis Fernando | 2299 | 2288 | ⚠️ **11 a mais** |
+| LUAN FIALHO | 2000 | 1996 | ⚠️ 4 a mais |
+| TALES | 2067 | 2069 | ⚠️ 2 a menos |
+
+⚠️ **O CAIO ficou validado mas o "Espelho conferido" NÃO foi marcado sozinho** — e está certo: o
+campo tem `espelho_conferido_by = '2626'`, ou seja **um humano tocou** (marcou/desmarcou). A trava
+"não passa por cima de humano" funcionou. Pra o automático voltar a valer naquele pagamento, é
+preciso limpar esse marcador.
+
+**Menu de correção conferido no ar** (`DriverPayTab-BAA6Xe8f.js` contém "Corrigir a contagem deste
+entregador") e validado contra o banco real **só com entregadores descartáveis**:
+- uma rota: 1811 → 1808 exato;
+- 🎯 **três rotas com preços diferentes**: a diferença saiu da maior (R$ 3,00), então o valor caiu
+  **R$ 9,00** e não R$ 6,00 — o risco que eu tinha levantado, funcionando certo;
+- caso extremo (não cabe na maior): escorre e **nenhuma rota fica negativa**.
+
+**Banco idêntico antes/depois:** 314 pagamentos · 720 linhas · 310.134 pacotes · R$ 657.051,55 ·
+5 prints · 109 drivers.
