@@ -322,6 +322,121 @@ export function computeNfProgressByPayment(
   return out;
 }
 
+// ─── Espelho do app da Shopee (print da tela) — 04/08/2026 ──────────────────
+//
+// ⚠️ Diferente da NF em um ponto que muda tudo: a nota fiscal é AGREGADA POR
+// GRUPO (o líder manda uma que vale pelos membros), mas o print é UM POR DRIVER
+// — o líder envia, porém cada print é do pacote de um membro e marca o pagamento
+// DAQUELE membro. Por isso aqui não há agregação por grupo: é por pagamento,
+// direto. (O cabeçalho verde do grupo continua saindo de `every()` na DriverList,
+// como já acontece com o "espelho conferido".)
+
+/** Como está o print de um driver numa plataforma. */
+export type ProofState =
+  /** conferido: período e quantidade batem — autoriza o "espelho conferido" */
+  | 'confirmado'
+  /** chegou, mas a quantidade não bate com a planilha — precisa da sua atenção */
+  | 'divergente'
+  /** chegou e ainda não foi lido (fila) ou a leitura falhou — conferir na mão */
+  | 'pendente'
+  /** recusado na hora (data errada / ilegível): o driver precisa reenviar */
+  | 'recusado'
+  /** ainda não mandou nada */
+  | 'faltando';
+
+/** Plataformas em que este driver deve mandar print: as SOLICITADAS onde ele tem pacote. */
+export function expectedProofPlatforms(
+  row: DriverRowData,
+  requestedPlatforms: readonly string[],
+): string[] {
+  return requestedPlatforms.filter((name) => platformPackages(row, name) > 0);
+}
+
+export interface ProofProgress {
+  /** quantos prints este driver deve mandar */
+  expected: number;
+  /** quantos já bateram (período + quantidade) */
+  confirmed: number;
+  /** quantos chegaram com quantidade diferente da planilha — SÓ o painel vê */
+  divergent: number;
+  /** quantos chegaram e ainda não foram lidos (na fila) ou falharam na leitura */
+  pending: number;
+  /** quantos foram recusados e esperam o driver reenviar */
+  rejected: number;
+  /** quantos ainda não chegaram */
+  missing: number;
+  /** verde: todos os esperados conferidos */
+  complete: boolean;
+  /** âmbar: tem divergência de quantidade — é o que você precisa olhar */
+  needsAttention: boolean;
+}
+
+/**
+ * Progresso do print por pagamento. `stateByDriverPlatform` traz o estado de cada
+ * print já recebido, na chave `driverId|plataforma`. Puro/testável.
+ *
+ * Sem plataforma solicitada (ninguém apertou "Solicitar espelho"), `expected` é 0
+ * e `complete` é false — a coluna some da tela em vez de aparecer verde de graça.
+ */
+export function computeProofProgressByPayment(
+  rows: readonly DriverRowData[],
+  requestedPlatforms: readonly string[],
+  stateByDriverPlatform: ReadonlyMap<string, ProofState>,
+): Map<string, ProofProgress> {
+  const out = new Map<string, ProofProgress>();
+  for (const row of rows) {
+    const plataformas = expectedProofPlatforms(row, requestedPlatforms);
+    const contagem: Record<ProofState, number> = {
+      confirmado: 0, divergente: 0, pendente: 0, recusado: 0, faltando: 0,
+    };
+    for (const nome of plataformas) {
+      contagem[stateByDriverPlatform.get(`${row.driverId}|${nome}`) ?? 'faltando'] += 1;
+    }
+    const expected = plataformas.length;
+    out.set(row.paymentId, {
+      expected,
+      confirmed: contagem.confirmado,
+      divergent: contagem.divergente,
+      pending: contagem.pendente,
+      rejected: contagem.recusado,
+      missing: contagem.faltando,
+      complete: expected > 0 && contagem.confirmado >= expected,
+      needsAttention: contagem.divergente > 0,
+    });
+  }
+  return out;
+}
+
+/**
+ * Traduz a linha do banco (`driverpay_delivery_proofs`) pro estado que a tela usa.
+ *
+ * Note que `divergente` vem do `check_status`, não do `status`: o print divergente
+ * é ACEITO (status 'recebido'), e a diferença só existe pro painel.
+ */
+export function proofStateFromRow(row: {
+  status: string;
+  checkStatus: string | null;
+}): ProofState {
+  if (row.status === 'rejeitado') return 'recusado';
+  if (row.status === 'validado') return 'confirmado';
+  if (row.checkStatus === 'divergente') return 'divergente';
+  return 'pendente';
+}
+
+/**
+ * Qual print vale, quando o driver mandou mais de um pra mesma plataforma.
+ *
+ * Ordem de prioridade — pensada pra tela não mentir: um print confirmado depois de
+ * uma recusa apaga a recusa (o driver corrigiu), e uma divergência nunca some por
+ * causa de um envio pendente posterior, senão a linha que você precisa olhar
+ * sumiria sozinha.
+ */
+export function melhorEstado(estados: readonly ProofState[]): ProofState {
+  const ordem: ProofState[] = ['confirmado', 'divergente', 'pendente', 'recusado', 'faltando'];
+  for (const e of ordem) if (estados.includes(e)) return e;
+  return 'faltando';
+}
+
 /**
  * Formula do pagamento (net pode ser negativo).
  *

@@ -23,11 +23,29 @@
 -- Fora de ordem o job so vai tomar 401 — sem estrago, mas sem funcionar.
 -- ============================================================================
 
+-- ⚠️ APLICADA EM PROD EM 04/08/2026, em partes, com o que se aprendeu no caminho:
+--   · `net.http_post` (schema `net`), NAO `extensions.http_post` — conferido antes
+--     de agendar; chutar errado faria o job falhar em silencio a cada 15 min;
+--   · o role `postgres` do Supabase NAO enxerga `cron.job` por padrao: e preciso o
+--     GRANT da PARTE 0 (a UI de Cron Jobs do Dashboard faz isso sozinha);
+--   · mesmo com o GRANT o `postgres` le mas NAO altera `cron.job`, entao "pausar"
+--     (`UPDATE cron.job SET active=false`) so funciona pelo Dashboard. Para pausar
+--     por SQL, reagende com uma data que nao chega (ver PARTE 3);
+--   · o segredo real NAO esta neste arquivo de proposito — ele foi passado na hora
+--     da aplicacao. Aqui fica o placeholder pra nao vazar segredo pro git.
+
+-- ---------- PARTE 0: permissao (a UI do Dashboard faz isso automaticamente) ----------
+GRANT USAGE ON SCHEMA cron TO postgres;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA cron TO postgres;
+
 -- ---------- PARTE 1: extensoes ----------
 -- pg_cron: agendador dentro do Postgres. pg_net: HTTP assincrono (e ele que
 -- chama a edge fn). Ambos ja vem disponiveis no Supabase, so nao instalados.
+-- ⚠️ Sem `WITH SCHEMA`: o pg_net cria o proprio schema `net` e e la que a funcao
+-- fica (`net.http_post`). Conferido em prod antes de agendar — chutar
+-- `extensions.http_post` faria o job falhar em silencio a cada 15 minutos.
 CREATE EXTENSION IF NOT EXISTS pg_cron;
-CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_net;
 
 -- ---------- PARTE 2: o segredo ----------
 -- O mesmo valor que esta nos Edge Function Secrets. Fica no vault (cifrado) e
@@ -57,18 +75,19 @@ END $vault$;
 -- indice parcial e volta vazia num piscar) — o custo real so aparece quando ha
 -- print esperando. O limite de 10 por rodada da 960 leituras/dia de capacidade,
 -- MUITO acima da cota, entao o gargalo continua sendo a cota e nunca o agendador.
-DO $cron$
-BEGIN
-  -- Idempotente: se o job ja existe, remove antes de recriar.
-  PERFORM cron.unschedule('driverpay-proof-queue')
-  WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'driverpay-proof-queue');
-END $cron$;
-
+--
+-- ⚠️ ORDEM: enquanto a edge fn no ar nao tiver a rota `proof-process-queue`, este
+-- job so tomaria 400 a cada 15 minutos. Por isso em 04/08 ele foi criado com
+-- `'0 5 29 2 *'` (29 de fevereiro — so em ano bissexto, proximo 2028), ou seja
+-- DORMINDO, e deve ser reagendado com `'*/15 * * * *'` no momento do deploy.
+-- `cron.schedule` com o MESMO nome sobrescreve, entao reagendar e so rodar isto
+-- de novo com a expressao certa. Esse mesmo truque serve pra "pausar" por SQL,
+-- ja que o role postgres nao consegue dar UPDATE em cron.job.
 SELECT cron.schedule(
   'driverpay-proof-queue',
   '*/15 * * * *',
   $job$
-  SELECT extensions.http_post(
+  SELECT net.http_post(
     url     := 'https://flcncdidxmmornkgkfbb.supabase.co/functions/v1/driver-public-api',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',

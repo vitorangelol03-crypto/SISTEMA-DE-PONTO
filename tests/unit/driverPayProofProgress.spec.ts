@@ -1,0 +1,167 @@
+// Progresso do ESPELHO DO APP (print da Shopee) na grade do painel.
+//
+// A diferenca que importa em relacao a NF: a nota fiscal e AGREGADA POR GRUPO (o
+// lider manda uma que vale pelos membros), mas o print e UM POR DRIVER — o lider
+// envia, porem cada print marca o pagamento DAQUELE membro.
+//
+// Roda com: npx vitest run driverPayProofProgress
+import { describe, expect, it } from 'vitest';
+import {
+  computeProofProgressByPayment,
+  expectedProofPlatforms,
+  melhorEstado,
+  proofStateFromRow,
+  type DriverRowData,
+  type ProofState,
+} from '../../src/components/driverpay/driverPayShared';
+
+/** Linha mínima da grade — só o que estas funções olham. */
+function row(driverId: string, pacotes: Record<string, number>, groupName?: string): DriverRowData {
+  return {
+    paymentId: `pay-${driverId}`,
+    driverId,
+    name: driverId.toUpperCase(),
+    route: '',
+    groupName: groupName ?? null,
+    routes: [{ route: '', packages: pacotes, packageIds: {}, rates: {} }],
+    ratesByPlatform: {},
+    discounts: [],
+    vales: [],
+    zapexCount: 0,
+    zapexRate: 0,
+    totalPackages: 0,
+    packagesAmount: 0,
+    totalDiscounts: 0,
+    totalVales: 0,
+    totalZapex: 0,
+    totalNet: 0,
+    notaFiscal: false,
+    espelhoConferido: false,
+  } as unknown as DriverRowData;
+}
+
+describe('expectedProofPlatforms', () => {
+  it('so pede print de plataforma SOLICITADA onde ele tem pacote', () => {
+    const r = row('caio', { SHOPEE: 1808, LOGGI: 300 });
+    expect(expectedProofPlatforms(r, ['SHOPEE'])).toEqual(['SHOPEE']);
+  });
+
+  it('nao pede print de plataforma sem pacote', () => {
+    const r = row('caio', { LOGGI: 300 });
+    expect(expectedProofPlatforms(r, ['SHOPEE'])).toEqual([]);
+  });
+
+  it('nao pede nada enquanto ninguem apertou "Solicitar espelho"', () => {
+    expect(expectedProofPlatforms(row('caio', { SHOPEE: 1808 }), [])).toEqual([]);
+  });
+
+  it('"Coleta Shopee" fica de fora (decisao do Victor: so SHOPEE)', () => {
+    const r = row('caio', { SHOPEE: 1808, 'Coleta Shopee': 40 });
+    expect(expectedProofPlatforms(r, ['SHOPEE'])).toEqual(['SHOPEE']);
+  });
+});
+
+describe('proofStateFromRow — traduz o banco pro que a tela mostra', () => {
+  it('recusado e validado vem do status', () => {
+    expect(proofStateFromRow({ status: 'rejeitado', checkStatus: 'periodo_errado' })).toBe('recusado');
+    expect(proofStateFromRow({ status: 'validado', checkStatus: 'ok' })).toBe('confirmado');
+  });
+
+  it('DIVERGENTE vem do check, nao do status — o print divergente e ACEITO', () => {
+    // status 'recebido' (aceito, driver nao soube de nada) + check 'divergente'.
+    expect(proofStateFromRow({ status: 'recebido', checkStatus: 'divergente' })).toBe('divergente');
+  });
+
+  it('esperando leitura (fila) ou falha nossa = pendente', () => {
+    expect(proofStateFromRow({ status: 'recebido', checkStatus: 'pendente' })).toBe('pendente');
+    expect(proofStateFromRow({ status: 'recebido', checkStatus: null })).toBe('pendente');
+  });
+});
+
+describe('melhorEstado — quando o driver mandou mais de um print', () => {
+  it('print confirmado depois de uma recusa apaga a recusa', () => {
+    expect(melhorEstado(['recusado', 'confirmado'])).toBe('confirmado');
+  });
+
+  it('divergencia NAO some por causa de um envio pendente depois', () => {
+    // Senao a linha que o Victor precisa olhar sumiria sozinha da tela.
+    expect(melhorEstado(['divergente', 'pendente'])).toBe('divergente');
+  });
+
+  it('sem print nenhum, esta faltando', () => {
+    expect(melhorEstado([])).toBe('faltando');
+  });
+});
+
+describe('computeProofProgressByPayment', () => {
+  const solicitadas = ['SHOPEE'];
+
+  it('print certo deixa o driver completo', () => {
+    const rows = [row('caio', { SHOPEE: 1808 })];
+    const estados = new Map<string, ProofState>([['caio|SHOPEE', 'confirmado']]);
+    const p = computeProofProgressByPayment(rows, solicitadas, estados).get('pay-caio')!;
+    expect(p).toMatchObject({ expected: 1, confirmed: 1, complete: true, needsAttention: false });
+  });
+
+  it('quantidade divergente pede ATENCAO e nao completa', () => {
+    const rows = [row('caio', { SHOPEE: 1808 })];
+    const estados = new Map<string, ProofState>([['caio|SHOPEE', 'divergente']]);
+    const p = computeProofProgressByPayment(rows, solicitadas, estados).get('pay-caio')!;
+    expect(p).toMatchObject({ divergent: 1, complete: false, needsAttention: true });
+  });
+
+  it('quem nao mandou fica faltando', () => {
+    const p = computeProofProgressByPayment([row('caio', { SHOPEE: 1808 })], solicitadas, new Map())
+      .get('pay-caio')!;
+    expect(p).toMatchObject({ expected: 1, missing: 1, complete: false });
+  });
+
+  it('sem espelho solicitado, ninguem aparece verde de graca', () => {
+    const p = computeProofProgressByPayment([row('caio', { SHOPEE: 1808 })], [], new Map()).get('pay-caio')!;
+    expect(p).toMatchObject({ expected: 0, complete: false });
+  });
+
+  it('driver sem pacote da Shopee nao deve print nenhum', () => {
+    const p = computeProofProgressByPayment([row('ana', { LOGGI: 300 })], solicitadas, new Map())
+      .get('pay-ana')!;
+    expect(p.expected).toBe(0);
+  });
+
+  describe('GRUPO — um print POR DRIVER (nao agrega, ao contrario da NF)', () => {
+    const grupo = [
+      row('lider', { SHOPEE: 500 }, 'Grupo A'),
+      row('membro1', { SHOPEE: 800 }, 'Grupo A'),
+      row('membro2', { SHOPEE: 508 }, 'Grupo A'),
+    ];
+
+    it('o print do lider NAO cobre os membros', () => {
+      const estados = new Map<string, ProofState>([['lider|SHOPEE', 'confirmado']]);
+      const p = computeProofProgressByPayment(grupo, solicitadas, estados);
+      expect(p.get('pay-lider')!.complete).toBe(true);
+      expect(p.get('pay-membro1')!.complete).toBe(false);   // ← a diferenca vs NF
+      expect(p.get('pay-membro2')!.missing).toBe(1);
+    });
+
+    it('cada print marca o pagamento do SEU dono', () => {
+      const estados = new Map<string, ProofState>([
+        ['lider|SHOPEE', 'confirmado'],
+        ['membro1|SHOPEE', 'divergente'],
+        ['membro2|SHOPEE', 'confirmado'],
+      ]);
+      const p = computeProofProgressByPayment(grupo, solicitadas, estados);
+      expect(p.get('pay-lider')!.complete).toBe(true);
+      expect(p.get('pay-membro1')!.needsAttention).toBe(true);
+      expect(p.get('pay-membro2')!.complete).toBe(true);
+    });
+
+    it('grupo so fica todo verde quando os 3 mandaram e bateram', () => {
+      const todos = new Map<string, ProofState>([
+        ['lider|SHOPEE', 'confirmado'],
+        ['membro1|SHOPEE', 'confirmado'],
+        ['membro2|SHOPEE', 'confirmado'],
+      ]);
+      const p = computeProofProgressByPayment(grupo, solicitadas, todos);
+      expect(grupo.every((r) => p.get(r.paymentId)!.complete)).toBe(true);
+    });
+  });
+});
