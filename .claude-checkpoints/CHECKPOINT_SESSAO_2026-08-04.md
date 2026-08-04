@@ -332,3 +332,28 @@ Matei o processo e o Playwright subiu um novo: passou. **Segunda vez no mesmo di
   94 funcionários — idêntico.**
 
 **Falta:** push destes 4 commits · fn `driverpay-proof-admin` (anexar pelo painel) · WebKit/Safari.
+
+### 9.4 Regra de logística: "Todos" só cobra quem está em grupo (`e674924`)
+Pedido do Victor como **trava** contra cobrar a empresa inteira sem querer. Quando marcar
+**"Todos"**, o print só é pedido de quem está **em grupo** — quem anexa é o líder, que vê um cartão
+por membro. **Quem não está em grupo nenhum não recebe pedido.** Pedido **individual** continua
+valendo mesmo sem grupo: ali o operador escolheu a pessoa de propósito.
+
+**A regra mora na edge function, não gravada no pedido** — se puserem o entregador num grupo depois,
+ele passa a ser cobrado **sem refazer o pedido**. Provado no caso [3c] do teste contra a fn no ar.
+
+**Dado que embasou a decisão** (última quinzena real com Shopee): **44 líderes + 45 membros e ZERO
+avulsos**. A regra não muda a quinzena atual — é trava pro futuro.
+
+**Quem fica de fora** (decisão dele: *"marca separado, fora da conta"*, a opção B que eu recomendei):
+selo cinza **"sem grupo"** na coluna Print com o motivo no `title`, **fora do contador** (contador que
+nunca fecha vira ruído), e aviso âmbar com os nomes na janela de solicitar.
+
+⚠️ **Testes atualizados, não afrouxados:** os specs 64 e 65 criavam entregador **sem grupo** com
+pedido geral — cenário que a regra agora barra de propósito. Passaram a nascer em grupo, como na
+operação real. No 65, o cenário **G reusa o grupo do E**: dois grupos com o **mesmo líder** quebram a
+edge fn, que resolve o grupo do líder com `maybeSingle()`.
+
+**Validação:** typecheck · eslint · build · **140 unit** (6 novos) · **17/17 contra a edge fn NO AR**
+(avulso barrado no geral, cobrado no individual, e passando a ser cobrado ao entrar num grupo) ·
+**E2E 64 1/1 e 65 6/6** · banco idêntico antes/depois.
