@@ -40,6 +40,7 @@ import {
   unpublishDriverMirror,
   unpublishAllMirrorsForPeriod,
   listNotaFiscalFiles,
+  type NotaFiscalFileRow,
   listProofRequests,
   listDeliveryProofs,
   type MirrorPublicationRow,
@@ -68,6 +69,7 @@ import {
   MIRROR_COMPANY_NAME,
   computeProofProgressByPayment,
   plataformasSemPlanilha,
+  nfPrazoStatus,
   proofForaPorSemGrupo,
   melhorEstado,
   proofStateFromRow,
@@ -198,6 +200,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // Notas do período por driver: CNPJs (emitterIds) com nota validada / recebida-não-rejeitada.
   // Alimenta a coluna NF (validadas/esperadas). Recarrega ao validar/recusar/excluir nota.
   const [nfByDriver, setNfByDriver] = useState<Map<string, { validated: Set<string>; received: Set<string> }>>(new Map());
+  /** Notas cruas da quinzena — só o filtro de PRAZO dos relatórios usa (04/08/2026). */
+  const [nfFiles, setNfFiles] = useState<NotaFiscalFileRow[]>([]);
 
   // Refs para leitura estavel em callbacks assincronos
   const driversRef = useRef<Driver[]>([]);
@@ -377,6 +381,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     async (periodId: string | null) => {
       if (!company?.id || !periodId) {
         setNfByDriver(new Map());
+        setNfFiles([]);
         return;
       }
       try {
@@ -399,6 +404,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           }
         }
         setNfByDriver(map);
+        setNfFiles(files);
       } catch (e) {
         console.error('Erro ao carregar notas do período:', e);
       }
@@ -833,7 +839,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // A escolha vai GRAVADA na publicacao: a conferencia automatica da NF calcula o valor
   // esperado por ela (espelho sem abate => o driver emite a nota pelo valor cheio).
   const onPublish = useCallback(
-    async (allowed: string[] | null, includeDeductions: boolean) => {
+    async (allowed: string[] | null, includeDeductions: boolean, nfDueAt: string | null) => {
       if (!company || !selectedPeriod) return;
       const targets = publishRows;
       if (targets.length === 0) {
@@ -857,7 +863,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           const blob = await generateDriverGroupMirrorPdf(data, { compact: false });
           await publishDriverMirror({
             companyId: company.id, periodId: selectedPeriod.id, driverId: info.leaderId,
-            scope: 'group', groupId: info.groupId, platformFilter: filter, includeDeductions, pdf: blob, userId,
+            scope: 'group', groupId: info.groupId, platformFilter: filter, includeDeductions, nfDueAt,
+            pdf: blob, userId,
           });
           toast.success('Espelho do grupo publicado para o líder.');
           await reloadPublished(selectedPeriod.id);
@@ -884,6 +891,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             scope: publishScope,
             platformFilter: filter,
             includeDeductions,
+            nfDueAt,
             pdf: blob,
             userId,
           });
@@ -977,7 +985,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     const checks = applyChecksFilter(inScope, nfCompleteByPayment, leaderNameByGroup, {
       onlyEspelhoConferido: opts.onlyEspelhoConferido,
       onlyNfValidada: opts.onlyNfValidada,
-    });
+      onlyNfNoPrazo: opts.onlyNfNoPrazo,
+    }, nfNoPrazoByPayment);
     const scoped = checks.kept;
     if (scoped.length === 0) {
       toast.error('Ninguém do escopo está com o espelho/nota conferidos');
@@ -993,6 +1002,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     const checksParts: string[] = [];
     if (opts.onlyEspelhoConferido) checksParts.push('espelho conferido');
     if (opts.onlyNfValidada) checksParts.push('nota validada');
+    if (opts.onlyNfNoPrazo) checksParts.push('nota no prazo');
     const meta = {
       ...reportMeta(),
       platformFilterLabel: filterLabel,
@@ -1186,13 +1196,34 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   }, [rows, nfProgressByPayment]);
 
   /**
+   * Este pagamento mandou TODAS as notas dentro do prazo do espelho dele? (04/08/2026)
+   *
+   * Ausente do mapa = não dá pra dizer (espelho sem prazo, ou nota nenhuma) — e nesses casos
+   * o filtro NÃO corta ninguém: punir por horário que ninguém combinou seria errado.
+   */
+  const nfNoPrazoByPayment = useMemo(() => {
+    const prazoDe = (driverId: string, platformKey: string): string | null =>
+      publications.find((p) => p.driverId === driverId && p.platformKey === platformKey)?.nfDueAt ?? null;
+    const m = new Map<string, boolean>();
+    for (const r of rows) {
+      const comPrazo = nfFiles
+        .filter((f) => f.driverId === r.driverId)
+        .map((f) => nfPrazoStatus(f.uploadedAt, prazoDe(f.driverId, f.mirrorPlatformKey ?? '')))
+        .filter((st) => st !== 'sem_prazo');
+      if (comPrazo.length === 0) continue; // sem base pra julgar
+      m.set(r.paymentId, comPrazo.every((st) => st === 'no_prazo'));
+    }
+    return m;
+  }, [rows, nfFiles, publications]);
+
+  /**
    * Prévia de quem sai do relatório com os filtros marcados (a janela mostra antes de baixar).
    * Função simples de propósito: memorizar exigiria repetir à mão as dependências de
    * `reportScopeRows` (seleção + filtro da lista), e a conta é pura e barata — roda só
    * enquanto a janela está aberta.
    */
   const checksPreview = (o: ChecksFilterOptions): ChecksFilterResult =>
-    applyChecksFilter(reportScopeRows(), nfCompleteByPayment, leaderNameByGroup, o);
+    applyChecksFilter(reportScopeRows(), nfCompleteByPayment, leaderNameByGroup, o, nfNoPrazoByPayment);
 
   const kpis = useMemo(() => {
     let driverCount = 0;
@@ -1639,6 +1670,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           userId={userId}
           onClose={() => setShowNotas(false)}
           onChanged={() => reloadNotes(selectedPeriod.id)}
+          publicacoes={publications}
         />
       )}
 

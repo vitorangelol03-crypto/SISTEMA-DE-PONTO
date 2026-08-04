@@ -13,6 +13,8 @@ export interface ReportOptions {
   onlyEspelhoConferido: boolean;
   /** Só quem está com a nota validada (mesma regra da coluna NF da lista). */
   onlyNfValidada: boolean;
+  /** Só quem mandou a nota dentro do prazo do espelho dele. */
+  onlyNfNoPrazo: boolean;
 }
 
 interface ReportOptionsModalProps {
@@ -53,13 +55,14 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
   // Desmarcados por padrão: sem tocar em nada, o arquivo sai igual ao de sempre.
   const [onlyEspelhoConferido, setOnlyEspelho] = useState(false);
   const [onlyNfValidada, setOnlyNf] = useState(false);
+  const [onlyNfNoPrazo, setOnlyPrazo] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   const preview = useMemo(
-    () => checksPreview({ onlyEspelhoConferido, onlyNfValidada }),
-    [checksPreview, onlyEspelhoConferido, onlyNfValidada],
+    () => checksPreview({ onlyEspelhoConferido, onlyNfValidada, onlyNfNoPrazo }),
+    [checksPreview, onlyEspelhoConferido, onlyNfValidada, onlyNfNoPrazo],
   );
-  const algumFiltro = onlyEspelhoConferido || onlyNfValidada;
+  const algumFiltro = onlyEspelhoConferido || onlyNfValidada || onlyNfNoPrazo;
   const foraPorMotivo = useMemo(() => {
     let espelho = 0;
     let nota = 0;
@@ -91,7 +94,7 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
     if (vaiSairVazio) return;
     setGenerating(true);
     try {
-      await onConfirm({ allowed, includeDeductions, onlyEspelhoConferido, onlyNfValidada });
+      await onConfirm({ allowed, includeDeductions, onlyEspelhoConferido, onlyNfValidada, onlyNfNoPrazo });
     } finally {
       setGenerating(false);
     }
@@ -202,6 +205,21 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
               />
               <span className="text-sm text-gray-800">
                 Só quem está com a <b>nota validada</b>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={onlyNfNoPrazo}
+                onChange={(e) => setOnlyPrazo(e.target.checked)}
+                className="w-4 h-4 mt-0.5 text-emerald-600 rounded border-gray-300"
+                data-testid="report-only-prazo"
+              />
+              <span className="text-sm text-gray-800">
+                Só quem mandou a nota <b>dentro do prazo</b>
+                <span className="block text-xs text-gray-500">
+                  O prazo é o do espelho de cada um. Espelho publicado sem prazo não corta ninguém.
+                </span>
               </span>
             </label>
           </div>

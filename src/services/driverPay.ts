@@ -16,6 +16,7 @@ import { isMaster, isDriverpayPermission, canAccessDriverpay } from '../config/m
 import type { ImportResolvedItem, ImportApplyResult } from '../utils/driverImportApply';
 import { mirrorPlatformKey, sanitizeMirrorKeyForPath } from '../components/driverpay/driverPayShared';
 import type { ProofRequest } from '../components/driverpay/driverPayShared';
+import { orphanProofPaths, proofFileName, isKeptProof, type ProofSlot } from '../utils/discountProofs';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -1326,6 +1327,37 @@ const videoExt = (blob: Blob): string => {
 export const discountProofUrl = (path: string): string =>
   supabase.storage.from(DISCOUNT_PROOF_BUCKET).getPublicUrl(path).data.publicUrl;
 
+/** Sufixo curto que torna unico o nome de cada prova nova. */
+const proofUnique = (): string =>
+  (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}${Math.random()}`).replace(/-/g, '').slice(0, 8);
+
+/**
+ * Sobe UMA prova (imagem ou video) e devolve o caminho gravado, ou null se falhar.
+ *
+ * Nunca sobrescreve (`upsert: false`): o bucket nao tem policy de UPDATE, entao
+ * escrever por cima de um caminho existente seria barrado pela RLS. Cada arquivo
+ * novo nasce com nome unico e o antigo e apagado depois, por quem chamou.
+ */
+const uploadDiscountProof = async (
+  companyId: string,
+  paymentId: string,
+  discountId: string,
+  slot: string,
+  blob: Blob,
+  isVideo: boolean,
+): Promise<string | null> => {
+  const ext = isVideo ? videoExt(blob) : proofExt(blob);
+  const path = `${companyId}/${paymentId}/${proofFileName(discountId, slot, ext, proofUnique())}`;
+  const { error } = await supabase.storage
+    .from(DISCOUNT_PROOF_BUCKET)
+    .upload(path, blob, { contentType: blob.type || (isVideo ? 'video/mp4' : 'image/jpeg'), upsert: false });
+  if (error) {
+    console.warn(`Upload da prova de desconto (${slot}) falhou:`, error.message);
+    return null;
+  }
+  return path;
+};
+
 /**
  * Lanca um desconto e, opcionalmente, sobe ate 2 imagens + 1 video de prova. O
  * desconto e inserido primeiro (fonte da verdade do valor); as provas (imagens e
@@ -1357,24 +1389,13 @@ export const addDiscount = async (
   for (let i = 0; i < list.length; i++) {
     const blob = list[i];
     if (!blob) continue;
-    const path = `${companyId}/${paymentId}/${discountId}-${i + 1}.${proofExt(blob)}`;
-    const { error: upErr } = await supabase.storage
-      .from(DISCOUNT_PROOF_BUCKET)
-      .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: true });
-    if (upErr) console.warn('Upload da prova de desconto falhou:', upErr.message);
-    else paths[i] = path;
+    paths[i] = await uploadDiscountProof(companyId, paymentId, discountId, String(i + 1), blob, false);
   }
 
   // Video de prova (complementar): sobe apos as imagens, no mesmo bucket.
-  let videoPath: string | null = null;
-  if (video) {
-    const path = `${companyId}/${paymentId}/${discountId}-video.${videoExt(video)}`;
-    const { error: vidErr } = await supabase.storage
-      .from(DISCOUNT_PROOF_BUCKET)
-      .upload(path, video, { contentType: video.type || 'video/mp4', upsert: true });
-    if (vidErr) console.warn('Upload do video de prova falhou:', vidErr.message);
-    else videoPath = path;
-  }
+  const videoPath = video
+    ? await uploadDiscountProof(companyId, paymentId, discountId, 'video', video, true)
+    : null;
 
   if (paths[0] || paths[1] || videoPath) {
     const { error: updErr } = await supabase
@@ -1625,6 +1646,7 @@ export const updateDiscount = async (
   paymentId: string,
   userId: string,
   data: { amount?: number; packageCode?: string | null; observation?: string | null; packageStatus?: 'PNR' | 'LOST' | null },
+  proofs?: { images: ProofSlot[]; video: ProofSlot | null },
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.manageDiscount');
   const upd: Record<string, unknown> = {};
@@ -1632,9 +1654,65 @@ export const updateDiscount = async (
   if (data.packageCode !== undefined) upd.package_code = data.packageCode;
   if (data.observation !== undefined) upd.observation = data.observation;
   if (data.packageStatus !== undefined) upd.package_status = data.packageStatus;
+
+  // Provas (fotos + video): so mexe quando a tela manda `proofs`. Cada item ou e
+  // uma prova que ja estava salva ({keep}) ou um arquivo novo ({blob}).
+  let orfaos: string[] = [];
+  if (proofs) {
+    const { data: atual, error: readErr } = await supabase
+      .from('driverpay_discounts')
+      .select('proof1_path, proof2_path, proof_video_path')
+      .eq('id', id)
+      .eq('company_id', companyId)
+      .maybeSingle();
+    if (readErr) throwDbError(readErr);
+
+    // Sobe TUDO que e novo antes de gravar qualquer coisa. Se um upload falhar,
+    // desfaz os que subiram e para: prova e prova de dinheiro — perder a antiga
+    // por causa de uma foto que nao subiu seria pior que nao trocar nada.
+    const subidos: string[] = [];
+    const enviar = async (slot: ProofSlot | null, nome: string, isVideo: boolean): Promise<string | null> => {
+      if (!slot) return null;
+      if (isKeptProof(slot)) return slot.keep;
+      const path = await uploadDiscountProof(companyId, paymentId, id, nome, slot.blob, isVideo);
+      if (path) subidos.push(path);
+      return path;
+    };
+
+    const imagens = proofs.images.slice(0, 2);
+    const finais: (string | null)[] = [null, null];
+    let falhou = false;
+    for (let i = 0; i < imagens.length; i++) {
+      finais[i] = await enviar(imagens[i], String(i + 1), false);
+      if (finais[i] === null) falhou = true;
+    }
+    const videoPath = await enviar(proofs.video, 'video', true);
+    if (proofs.video && videoPath === null) falhou = true;
+
+    if (falhou) {
+      if (subidos.length > 0) await supabase.storage.from(DISCOUNT_PROOF_BUCKET).remove(subidos);
+      throw new Error('Nao foi possivel enviar a prova. Nada foi alterado — tente de novo.');
+    }
+
+    upd.proof1_path = finais[0];
+    upd.proof2_path = finais[1];
+    upd.proof_video_path = videoPath;
+    orfaos = orphanProofPaths(
+      [atual?.proof1_path, atual?.proof2_path, atual?.proof_video_path],
+      [finais[0], finais[1], videoPath],
+    );
+  }
+
   if (Object.keys(upd).length === 0) return;
   const { error } = await supabase.from('driverpay_discounts').update(upd).eq('id', id).eq('company_id', companyId);
   if (error) throwDbError(error);
+
+  // So apaga a prova antiga DEPOIS que o banco confirmou o caminho novo.
+  if (orfaos.length > 0) {
+    const { error: rmErr } = await supabase.storage.from(DISCOUNT_PROOF_BUCKET).remove(orfaos);
+    if (rmErr) console.warn('Nao foi possivel remover provas antigas do Storage:', rmErr.message);
+  }
+
   await recomputePaymentTotals(paymentId);
 };
 

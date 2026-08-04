@@ -45,6 +45,15 @@ export interface HoleriteData {
   payments: HoleritePaymentLine[];
   errorDiscount: number;
   triageDiscount: number;
+  /**
+   * Desconto por erros de QUANTIDADE que ja foi abatido do pagamento la atras (botao
+   * "Descontar Erros") e por isso nao aparecia em lugar nenhum do papel (04/08/2026).
+   *
+   * Sem esta linha os proventos nao fechavam com o total: em 19 dos 46 funcionarios da
+   * quinzena de julho a soma das diarias era de R$ 1 a R$ 50 MAIOR que o total gravado, e
+   * o funcionario nao tinha como saber por que. Ausente/0 = nada a mostrar.
+   */
+  quantityErrorDiscount?: number;
   totalDailyRate: number;
   totalBonusB: number;
   totalBonusC1: number;
@@ -162,7 +171,11 @@ function buildPdf(data: HoleriteData): jsPDF {
   if (data.totalBonusC1 > 0) proventos.push([`Bonificação C1 (${bonusCounts.c1}×)`, '+', fmtBRL(data.totalBonusC1)]);
   if (data.totalBonusC2 > 0) proventos.push([`Bonificação C2 (${bonusCounts.c2}×)`, '+', fmtBRL(data.totalBonusC2)]);
 
+  const quantityErrorDiscount = data.quantityErrorDiscount || 0;
   const descontos: Array<[string, string, string]> = [];
+  if (quantityErrorDiscount > 0) {
+    descontos.push(['Desconto por erros de quantidade', '-', fmtBRL(quantityErrorDiscount)]);
+  }
   if (data.errorDiscount > 0) descontos.push(['Desconto de Erros', '-', fmtBRL(data.errorDiscount)]);
   if (data.triageDiscount > 0) descontos.push(['Desconto de Triagem', '-', fmtBRL(data.triageDiscount)]);
 
@@ -191,8 +204,13 @@ function buildPdf(data: HoleriteData): jsPDF {
   const afterComp = doc.lastAutoTable?.finalY || compY + 100;
 
   // ═══ Resumo por Categoria ═══
-  const totalProventos = data.totalGross;
-  const totalDescontos = (data.errorDiscount || 0) + (data.triageDiscount || 0);
+  // ⚠️ PROVENTOS = a soma do que esta LISTADO acima (diarias + bonificacoes), nao o
+  // `totalGross` — o total gravado ja vem com o desconto de quantidade abatido, e usa-lo
+  // aqui deixava o papel sem fechar. Com a linha do desconto no lugar, agora bate:
+  // proventos - descontos = liquido.
+  const totalProventos =
+    data.totalDailyRate + data.totalBonusB + data.totalBonusC1 + data.totalBonusC2;
+  const totalDescontos = quantityErrorDiscount + (data.errorDiscount || 0) + (data.triageDiscount || 0);
 
   autoTable(doc, {
     startY: afterComp + 12,

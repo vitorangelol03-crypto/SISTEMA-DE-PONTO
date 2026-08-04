@@ -1201,9 +1201,11 @@ export interface ChecksFilterOptions {
   onlyEspelhoConferido?: boolean;
   /** Só quem está com a nota validada — mesma regra da coluna NF da lista. */
   onlyNfValidada?: boolean;
+  /** Só quem mandou a nota DENTRO do prazo do espelho dele (04/08/2026). */
+  onlyNfNoPrazo?: boolean;
 }
 
-export type ChecksFilterReason = 'espelho' | 'nota' | 'ambos';
+export type ChecksFilterReason = 'espelho' | 'nota' | 'atraso' | 'ambos';
 
 export interface ChecksFilterResult {
   kept: DriverRowData[];
@@ -1227,12 +1229,15 @@ export function applyChecksFilter(
   nfCompleteByPayment: ReadonlyMap<string, boolean>,
   leaderNameByGroup: ReadonlyMap<string, string>,
   opts: ChecksFilterOptions,
+  /** paymentId -> mandou TODAS as notas dentro do prazo? (só usado com `onlyNfNoPrazo`) */
+  nfNoPrazoByPayment?: ReadonlyMap<string, boolean>,
 ): ChecksFilterResult {
   const wantEspelho = opts.onlyEspelhoConferido === true;
   const wantNf = opts.onlyNfValidada === true;
+  const wantPrazo = opts.onlyNfNoPrazo === true;
   const recipientsBefore = groupReportUnits(rows, leaderNameByGroup).length;
 
-  if (!wantEspelho && !wantNf) {
+  if (!wantEspelho && !wantNf && !wantPrazo) {
     return { kept: rows, removed: [], recipientsBefore, recipientsAfter: recipientsBefore };
   }
 
@@ -1241,15 +1246,19 @@ export function applyChecksFilter(
   for (const row of rows) {
     const faltaEspelho = wantEspelho && !row.espelhoConferido;
     const faltaNf = wantNf && !(nfCompleteByPayment.get(row.paymentId) ?? false);
-    if (!faltaEspelho && !faltaNf) {
+    // Sem informação de prazo o driver NÃO é cortado: espelho publicado antes da feature
+    // não tem prazo, e cortar aí seria punir por horário que ninguém combinou.
+    const atrasou = wantPrazo && (nfNoPrazoByPayment?.get(row.paymentId) ?? true) === false;
+    if (!faltaEspelho && !faltaNf && !atrasou) {
       kept.push(row);
       continue;
     }
+    const motivos = [faltaEspelho && 'espelho', faltaNf && 'nota', atrasou && 'atraso'].filter(Boolean);
     removed.push({
       paymentId: row.paymentId,
       name: row.name,
       group: row.groupName,
-      reason: faltaEspelho && faltaNf ? 'ambos' : faltaEspelho ? 'espelho' : 'nota',
+      reason: motivos.length > 1 ? 'ambos' : (motivos[0] as ChecksFilterReason),
     });
   }
   return {

@@ -20,7 +20,7 @@ import {
   setNfAutoValidate,
   type NotaFiscalFileRow,
 } from '../../services/driverPay';
-import { notaFiscalFileName } from './driverPayShared';
+import { notaFiscalFileName, nfPrazoStatus, nfAtrasoLabel } from './driverPayShared';
 import { ModalShell } from './ModalShell';
 
 interface NotasRecebidasModalProps {
@@ -31,6 +31,12 @@ interface NotasRecebidasModalProps {
   onClose: () => void;
   /** Chamado após validar/recusar/excluir — o painel recarrega a coluna NF. */
   onChanged?: () => void;
+  /**
+   * Espelhos publicados desta quinzena, pra saber o PRAZO de cada nota (04/08/2026).
+   * A nota é ligada ao espelho por (driver, conjunto de plataformas), que é a mesma
+   * chave que o resto do painel usa.
+   */
+  publicacoes?: readonly { driverId: string; platformKey: string; nfDueAt: string | null }[];
 }
 
 const extOf = (r: NotaFiscalFileRow): string => {
@@ -124,12 +130,15 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
   userId,
   onClose,
   onChanged,
+  publicacoes,
 }) => {
   const [files, setFiles] = useState<NotaFiscalFileRow[] | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null); // id do arquivo, ou 'ALL'
   const [acting, setActing] = useState<string | null>(null); // id em validação/recusa/exclusão
   // Com a conferência automática, o que sobra pro olho humano são as não-validadas.
   const [soAtencao, setSoAtencao] = useState(false);
+  /** '' todas | 'atrasada' | 'no_prazo' — o filtro de prazo pedido pelo Victor. */
+  const [filtroPrazo, setFiltroPrazo] = useState('');
   // Liga/desliga da auto-validação (null = ainda carregando).
   const [autoValidate, setAutoValidate] = useState<boolean | null>(null);
   const [savingAuto, setSavingAuto] = useState(false);
@@ -187,8 +196,19 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       seen[key] = idx + 1;
       return { row: r, filename: notaFiscalFileName(r.driverName, r.emitterLabel, periodLabel, idx, extOf(r)) };
     });
-    const visible = soAtencao ? named.filter((it) => it.row.status !== 'validada') : named;
-    const byDriver = new Map<string, { driverName: string; recebedorNome: string | null; items: typeof named }>();
+    // Prazo de cada nota: vem do espelho publicado daquele driver + conjunto de plataformas.
+    const prazoDe = (r: NotaFiscalFileRow): string | null =>
+      (publicacoes ?? []).find(
+        (p) => p.driverId === r.driverId && p.platformKey === (r.mirrorPlatformKey ?? ''),
+      )?.nfDueAt ?? null;
+    const comPrazo = named.map((it) => ({
+      ...it,
+      prazo: nfPrazoStatus(it.row.uploadedAt, prazoDe(it.row)),
+      atraso: nfAtrasoLabel(it.row.uploadedAt, prazoDe(it.row)),
+    }));
+    let visible = soAtencao ? comPrazo.filter((it) => it.row.status !== 'validada') : comPrazo;
+    if (filtroPrazo) visible = visible.filter((it) => it.prazo === filtroPrazo);
+    const byDriver = new Map<string, { driverName: string; recebedorNome: string | null; items: typeof comPrazo }>();
     for (const it of visible) {
       const g = byDriver.get(it.row.driverId);
       if (g) g.items.push(it);
@@ -199,7 +219,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       // O .zip "Baixar todas" baixa TODAS mesmo com o filtro ligado.
       allNamed: named,
     };
-  }, [files, periodLabel, soAtencao]);
+  }, [files, periodLabel, soAtencao, filtroPrazo, publicacoes]);
 
   const handleView = async (row: NotaFiscalFileRow) => {
     try {
@@ -329,6 +349,21 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
               />
               Só as que precisam de atenção
             </label>
+            {/* Filtro de PRAZO (04/08/2026): o prazo vem do espelho publicado de cada driver. */}
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap">
+              Prazo:
+              <select
+                value={filtroPrazo}
+                onChange={(e) => setFiltroPrazo(e.target.value)}
+                data-testid="nf-filtro-prazo"
+                className="border border-gray-300 rounded-md px-2 py-1 text-xs"
+              >
+                <option value="">Todas</option>
+                <option value="no_prazo">Só no prazo</option>
+                <option value="atrasada">Só atrasadas</option>
+                <option value="sem_prazo">Sem prazo definido</option>
+              </select>
+            </label>
           </div>
           {/* Liga/desliga da auto-validação. DESLIGADA, a conferência continua
               inteira (selos + recusa de nota errada) — só a nota certa espera você. */}
@@ -381,7 +416,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
                 )}
               </div>
               <div className="divide-y divide-gray-100">
-                {g.items.map(({ row, filename }) => {
+                {g.items.map(({ row, filename, prazo, atraso }) => {
                   const isActing = acting === row.id;
                   return (
                     <div key={row.id} className="flex items-center gap-2 p-2.5">
@@ -390,6 +425,22 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
                           <span className="text-xs font-medium text-gray-700 truncate">{row.emitterLabel} · {row.emitterCnpj}</span>
                           <StatusBadge status={row.status} reason={row.rejectReason} auto={row.checkDetails?.autoValidated === true} />
                           <CheckBadges row={row} />
+                          {/* Prazo do espelho daquele driver (04/08/2026). "sem prazo" = espelho
+                              publicado antes da feature — nao da pra cobrar horario que ninguem combinou. */}
+                          {prazo === 'atrasada' && (
+                            <span
+                              className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 whitespace-nowrap"
+                              title={`Chegou ${atraso} do prazo combinado no espelho.`}
+                              data-testid="nf-atrasada"
+                            >
+                              ⏰ atrasada — {atraso}
+                            </span>
+                          )}
+                          {prazo === 'no_prazo' && (
+                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 whitespace-nowrap">
+                              no prazo
+                            </span>
+                          )}
                         </div>
                         <div className="text-[11px] text-gray-400 truncate" title={filename}>{filename}</div>
                       </div>

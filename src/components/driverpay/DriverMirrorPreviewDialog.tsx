@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FileText, Eye, Download, Printer, Loader2, AlarmClock, Send, Trash2, CheckCircle2 } from 'lucide-react';
-import { mirrorPlatformKey } from './driverPayShared';
+import { mirrorPlatformKey, prazoNfPadrao } from './driverPayShared';
 import toast from 'react-hot-toast';
 import {
   downloadDriverMirrorPdf,
@@ -62,7 +62,7 @@ interface DriverMirrorPreviewDialogProps {
    * Publicar no app do entregador (1 PDF por driver). `allowed`=plataformas incluídas
    * (null=todas); `includeDeductions`=abateu os vales/perdas (false = pagamento parcial).
    */
-  onPublish?: (allowed: string[] | null, includeDeductions: boolean) => Promise<void>;
+  onPublish?: (allowed: string[] | null, includeDeductions: boolean, nfDueAt: string | null) => Promise<void>;
   /** Já existe publicação no app pro destinatário deste espelho (individual/líder do grupo). */
   alreadyPublished?: boolean;
   /**
@@ -447,8 +447,13 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   }, [onRebuild, allowedFromSelection, includeDeductions, request]);
   const [includeReceipts, setIncludeReceipts] = useState(true);
   // Aviso de corte (2026-07-19): pré-carrega o último salvo; salva automático ao gerar.
-  const [cutoffTime, setCutoffTime] = useState('');
-  const [cutoffDate, setCutoffDate] = useState('');
+  // ⚠️ Desde 04/08 estes dois sao data/hora DE VERDADE (antes eram texto livre: "14:00",
+  // "20/07", sem ano). O texto impresso no espelho continua igual — e derivado deles —, mas
+  // agora o sistema consegue comparar com a hora em que a nota chegou e dizer quem atrasou.
+  // `lateDate` segue texto livre: e so informativo, ninguem mede nada com ele.
+  const padraoPrazo = useMemo(() => prazoNfPadrao(new Date()), []);
+  const [cutoffTime, setCutoffTime] = useState(padraoPrazo.time);
+  const [cutoffDate, setCutoffDate] = useState(padraoPrazo.date);
   const [lateDate, setLateDate] = useState('');
   useEffect(() => {
     if (!companyId) return;
@@ -457,16 +462,31 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
         if (!n) return;
         // Fetch lento não pode APAGAR o que o usuário já digitou enquanto ele
         // estava no ar — só preenche campo que ainda está vazio.
-        setCutoffTime((cur) => (cur.trim() ? cur : n.cutoff_time));
-        setCutoffDate((cur) => (cur.trim() ? cur : n.cutoff_date));
+        // O valor salvo pode ser do formato ANTIGO (texto livre tipo "14:00" / "20/07").
+        // Hora no formato HH:MM o input aceita; data antiga nao tem ano, entao e descartada
+        // e o padrao (2 dias, 18:00) entra no lugar — melhor um padrao do que um campo torto.
+        if (/^\d{2}:\d{2}$/.test(n.cutoff_time ?? '')) setCutoffTime((cur) => (cur.trim() ? cur : n.cutoff_time));
+        if (/^\d{4}-\d{2}-\d{2}$/.test(n.cutoff_date ?? '')) setCutoffDate((cur) => (cur.trim() ? cur : n.cutoff_date));
         setLateDate((cur) => (cur.trim() ? cur : n.late_payment_date));
       })
       .catch((e) => console.error('Erro ao carregar aviso de corte:', e));
   }, [companyId]);
 
+  /** "2026-08-03" -> "03/08" — o formato que a faixa do espelho sempre imprimiu. */
+  const dataCurta = (iso: string): string => {
+    const [ano, mes, dia] = iso.split('-');
+    return ano && mes && dia ? `${dia}/${mes}` : iso;
+  };
+
   const cutoff: MirrorCutoffLine | null =
     cutoffTime.trim() && cutoffDate.trim() && lateDate.trim()
-      ? { time: cutoffTime.trim(), date: cutoffDate.trim(), lateDate: lateDate.trim() }
+      ? { time: cutoffTime.trim(), date: dataCurta(cutoffDate.trim()), lateDate: lateDate.trim() }
+      : null;
+
+  /** O prazo como INSTANTE, pra gravar na publicacao e medir atraso da nota. */
+  const nfDueAt: string | null =
+    cutoffTime.trim() && cutoffDate.trim()
+      ? new Date(`${cutoffDate.trim()}T${cutoffTime.trim()}`).toISOString()
       : null;
 
   /** Injeta o aviso de corte no espelho ATIVO (já filtrado pelos chips), todos os modos. */
@@ -564,7 +584,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     }
     setPublishing(true);
     try {
-      await onPublish(allowed, includeDeductions);
+      await onPublish(allowed, includeDeductions, nfDueAt);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao publicar no app');
     } finally {
@@ -748,24 +768,29 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
             <AlarmClock className="w-4 h-4 text-yellow-600" />
             Aviso de corte das notas — sai em todos os espelhos (a data usada fica salva até você alterar)
           </p>
+          <p className="text-[11px] text-gray-600 mb-2">
+            É este prazo que o sistema usa pra dizer quem mandou a nota <strong>atrasada</strong> —
+            ele fica gravado <strong>em cada espelho publicado</strong>, então mudar aqui depois não
+            mexe nos que já foram.
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <label className="text-xs text-gray-600">
               Hora do corte
               <input
-                type="text"
+                type="time"
                 value={cutoffTime}
                 onChange={(e) => setCutoffTime(e.target.value)}
-                placeholder="14:00"
+                data-testid="cutoff-time"
                 className="mt-0.5 w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
               />
             </label>
             <label className="text-xs text-gray-600">
               Data do corte
               <input
-                type="text"
+                type="date"
                 value={cutoffDate}
                 onChange={(e) => setCutoffDate(e.target.value)}
-                placeholder="20/07"
+                data-testid="cutoff-date"
                 className="mt-0.5 w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
               />
             </label>

@@ -1196,6 +1196,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                             })),
                             errorDiscount: data.totalErrorValue || 0,
                             triageDiscount: data.totalTriageDiscount || 0,
+                            // Erros de QUANTIDADE ja foram abatidos do `payments.total`
+                            // la atras: e a diferenca entre o que foi listado e o total.
+                            quantityErrorDiscount: Math.max(
+                              0,
+                              (data.totalDailyRate + data.totalBonusB + data.totalBonusC1 + data.totalBonusC2)
+                                - data.totalEarnedGross,
+                            ),
                             totalDailyRate: data.totalDailyRate || 0,
                             totalBonusB: data.totalBonusB || 0,
                             totalBonusC1: data.totalBonusC1 || 0,

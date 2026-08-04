@@ -66,3 +66,48 @@ describe('somarTotaisDoHolerite', () => {
     expect(somarTotaisDoHolerite(pagamentos).totalBonusB).toBe(20);
   });
 });
+
+// ── A linha "Desconto por erros de quantidade" (04/08/2026) ─────────────────
+// Erros de quantidade já são abatidos do `payments.total` quando o operador clica em
+// "Descontar Erros" — mas isso nunca aparecia no papel. Sem a linha, os proventos não
+// fechavam com o total e o funcionário não tinha como saber por quê.
+describe('o holerite tem que FECHAR', () => {
+  /** Mesma conta que o FinancialTab faz pra alimentar o PDF. */
+  const montar = (comps: number, totalGravado: number, errosValor = 0, triagem = 0) => {
+    const quantityErrorDiscount = Math.max(0, comps - totalGravado);
+    const proventos = comps;
+    const descontos = quantityErrorDiscount + errosValor + triagem;
+    const liquidoDoSistema = Math.max(0, totalGravado - errosValor - triagem);
+    return { proventos, descontos, liquidoDoPapel: proventos - descontos, liquidoDoSistema, quantityErrorDiscount };
+  };
+
+  it('🎯 caso real da Leticia: componentes 4050, total 4042, erros de valor 188,49', () => {
+    const r = montar(4050, 4042, 188.49);
+    expect(r.quantityErrorDiscount).toBe(8);
+    // O que o papel mostra tem que dar exatamente o líquido que o sistema calcula.
+    expect(r.liquidoDoPapel).toBeCloseTo(r.liquidoDoSistema, 2);
+    expect(r.liquidoDoPapel).toBeCloseTo(3853.51, 2);
+  });
+
+  it('quem bate certinho não ganha a linha (27 dos 46 na quinzena de julho)', () => {
+    const r = montar(3000, 3000, 0, 0);
+    expect(r.quantityErrorDiscount).toBe(0);
+    expect(r.liquidoDoPapel).toBe(r.liquidoDoSistema);
+  });
+
+  it('maior caso medido em produção (R$ 50) também fecha', () => {
+    const r = montar(900, 850);
+    expect(r.quantityErrorDiscount).toBe(50);
+    expect(r.liquidoDoPapel).toBe(r.liquidoDoSistema);
+  });
+
+  it('com triagem junto continua fechando', () => {
+    const r = montar(2550, 2535, 94.22, 30);
+    expect(r.quantityErrorDiscount).toBe(15);
+    expect(r.liquidoDoPapel).toBeCloseTo(r.liquidoDoSistema, 2);
+  });
+
+  it('nunca vira desconto NEGATIVO (em produção o total nunca é maior que os componentes)', () => {
+    expect(montar(1000, 1200).quantityErrorDiscount).toBe(0);
+  });
+});
