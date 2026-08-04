@@ -488,3 +488,22 @@ Ninguém tinha visto porque, até hoje de manhã, `npx tsc --noEmit` na raiz **n
   **NÃO consertei**: é a aba de Financeiro, mexe com dinheiro, e está fora do que foi pedido.
   O conserto é somar dos pagamentos (`p.daily_rate`, `p.bonus_b`, `p.bonus_c1`, `p.bonus_c2` — que
   já estão certos no detalhe por pagamento) e declarar os 4 campos na interface.
+
+### 12.3 Holerite consertado (`9cea0f4`) — o achado do 12.2
+`somarTotaisDoHolerite` num módulo próprio (testável sem React, mesmo padrão do
+`driverPayShared`), somando da **mesma lista de pagamentos** que vai pro PDF — o gerador conta os
+dias e as ocorrências de bônus a partir dela, então somar de outra origem faria contagem e valor não
+baterem no mesmo papel. Os 4 campos viraram **obrigatórios na interface**, então o compilador impede
+que voltem a faltar.
+
+**Prova com produção** (quinzena de julho): Leticia, 27 dias — o holerite mostrava
+`Diárias R$ 0,00` e passa a mostrar **R$ 4.050,00**.
+
+⚠️ **PONTO ABERTO PRA O VICTOR** (não inventei nada): em **19 dos 46** funcionários a soma dos
+componentes é **maior** que o `total` gravado (R$ 1 a R$ 50; nos outros 27 bate exato, e em **nenhum**
+é menor). É o **desconto de erros de quantidade** que já foi aplicado no `payments.total` e **não vira
+linha no PDF** — então pra esses 19 o papel mostra proventos que não fecham com o bruto. Antes isso
+ficava escondido atrás do zero. Decidir: criar a linha do desconto (e como chamá-la) ou deixar assim.
+
+**Validado:** typecheck **65 → 61** erros (os 4 eram exatamente estes) · eslint · build ·
+**834 unit, 52 arquivos, zero falhas** (6 novos).
