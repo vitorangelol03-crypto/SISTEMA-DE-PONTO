@@ -507,3 +507,27 @@ ficava escondido atrás do zero. Decidir: criar a linha do desconto (e como cham
 
 **Validado:** typecheck **65 → 61** erros (os 4 eram exatamente estes) · eslint · build ·
 **834 unit, 52 arquivos, zero falhas** (6 novos).
+
+### 12.4 "0 entregador(es)" no aviso + `[object Object]` no rodapé (`32dd8fa`)
+O Victor viu *"Espelho solicitado. **0** entregador(es)"* na quinzena de julho (sem planilha).
+
+**Diagnóstico, não chute:** o pedido **foi gravado certo** (linha do CAIO no banco). Abri a janela na
+tela real e medi a prévia nos três alcances com aquela quinzena (96 dos 98 em grupo, 0 pacotes):
+**TODOS 96 · UM GRUPO 1 · UM ENTREGADOR 1**. Ou seja, a contagem do código atual está certa — o "0"
+veio de **aba aberta com o bundle antigo**, de antes do deploy (naquele código, sem planilha, a
+prévia era 0 mesmo). Conferi que o chunk do painel no ar **é** o novo (`DriverPayTab-YS-UOAwM.js`,
+com o seletor "De quem pedir o print" dentro).
+
+**Bug real achado no caminho e corrigido:** o rodapé imprimia **`[object Object]`** — `jaSolicitadas`
+virou `ProofRequest[]` quando entrou o pedido por entregador/grupo, mas o texto ainda fazia
+`.join(', ')` na lista. Agora mostra `SHOPEE (1 entregador(es))`.
+
+### 12.5 iPhone/Safari abrindo direto na câmera
+O `capture="environment"` **já foi removido e conferi que não está no arquivo que o site entrega**.
+O service worker do projeto **não guarda arquivos** (só notificação), então não é ele — mas o Safari
+no iPhone mantém a aba viva por dias com o JS antigo.
+**Como saber a versão no celular:** a tela nova do print tem um painel no topo com **"Faltam N de M"**
+(âmbar) ou **"Tudo enviado!"** (verde). Se não aparecer, é versão antiga — fechar a aba e reabrir.
+⚠️ Se aparecer o painel novo e mesmo assim abrir só a câmera, aí é navegador embutido (link aberto
+dentro do WhatsApp, por exemplo) — nesse caso nenhum atributo força a galeria, e o caminho seria dar
+dois botões separados. **Ainda não testado em Safari de verdade** (WebKit pede ~30 libs via sudo).
