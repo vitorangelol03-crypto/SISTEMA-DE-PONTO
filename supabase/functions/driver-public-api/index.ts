@@ -25,6 +25,15 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
 import { extractText, getDocumentProxy } from 'npm:unpdf@1.8.0';
 import { runNfCheck, mirrorExpectedValue, type NfCheckResult } from './nfCheck.ts';
+import {
+  proofIsFullyConfirmed,
+  proofRetryDelayMinutes,
+  proofShouldReject,
+  proofShouldRequeue,
+  runProofCheck,
+  type ProofCheckResult,
+} from '../_shared/proofCheck.ts';
+import { readProofImage, visionConfigFromEnv } from '../_shared/visionRead.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -651,6 +660,481 @@ async function nfListFn(req: Request, body: Body): Promise<Response> {
   return json({ files });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ESPELHO DO APP (print da tela da Shopee) — pedido do Victor, 04/08/2026
+//
+// A planilha da Shopee pode vir com a quantidade de pacotes errada por driver.
+// O driver manda o print da tela "Entrega" (aba "Encerrado" + periodo selecionado)
+// e o sistema confere contra a planilha.
+//
+// REGRAS (decisoes do Victor):
+//  · so pede print onde existe driverpay_proof_requests (o botao "Solicitar espelho");
+//  · GRUPO: so o LIDER anexa, mas UM PRINT POR DRIVER — o print de cada membro
+//    marca o pagamento DAQUELE membro;
+//  · o driver NUNCA ve numero nenhum: nem o esperado, nem que houve diferenca;
+//  · data errada / print ilegivel  -> RECUSA na hora (422), com o motivo;
+//  · quantidade diferente          -> ACEITA calado, aparece so no painel;
+//  · falha nossa na leitura        -> ACEITA, fica pra conferir na mao.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const PROOF_BUCKET = 'driverpay-delivery-proofs';
+const MAX_PROOF_BYTES = 8 * 1024 * 1024; // 8 MB
+
+/** Assinatura real do arquivo. Espelha o guard `%PDF` da NF, ao contrario: aqui SO imagem. */
+function imageKind(bytes: Uint8Array): { ok: boolean; ext: string; mime: string } {
+  const b = bytes;
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
+    return { ok: true, ext: 'jpg', mime: 'image/jpeg' };
+  }
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return { ok: true, ext: 'png', mime: 'image/png' };
+  }
+  // WEBP = "RIFF"????"WEBP"
+  if (b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46
+    && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) {
+    return { ok: true, ext: 'webp', mime: 'image/webp' };
+  }
+  return { ok: false, ext: '', mime: '' };
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  // `.slice()` em vez de passar `bytes` direto: devolve um Uint8Array com buffer
+  // proprio (nunca SharedArrayBuffer), que e o que o WebCrypto exige. Sem isso o
+  // `deno check` acusa TS2345 — o mesmo alerta que o `crypto.subtle.verify` do
+  // login ja carrega hoje. Aqui da pra evitar sem forcar tipo.
+  const digest = await crypto.subtle.digest('SHA-256', bytes.slice());
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * De quem este driver pode mandar print: dele mesmo e, se for LIDER, dos membros
+ * do grupo dele. Nada mais.
+ *
+ * ⚠️ Esta e a trava de seguranca da feature. Diferente das rotas de NF, aqui o
+ * `driverId` do print vem do CORPO do pedido (o lider manda pelos membros) — sem
+ * esta checagem, qualquer driver mandaria print no nome de qualquer outro e
+ * deixaria o pagamento alheio verde.
+ */
+async function driversQuePossoEnviar(claims: DriverClaims): Promise<string[]> {
+  const { data: ledGroup } = await supabase.from('driverpay_groups')
+    .select('id').eq('leader_driver_id', claims.driver_id).eq('company_id', claims.company_id).maybeSingle();
+  if (!ledGroup?.id) return [claims.driver_id];
+  const { data: members } = await supabase.from('driverpay_group_members')
+    .select('driver_id').eq('group_id', ledGroup.id);
+  return [...new Set([claims.driver_id, ...(members ?? []).map((m) => m.driver_id as string)])];
+}
+
+/** Plataformas com print solicitado nesta quinzena. Vazio = nao pede nada. */
+async function plataformasSolicitadas(companyId: string, periodId: string): Promise<string[]> {
+  const { data } = await supabase.from('driverpay_proof_requests')
+    .select('platform_name').eq('company_id', companyId).eq('period_id', periodId);
+  return [...new Set((data ?? []).map((r) => r.platform_name as string))];
+}
+
+/** Pacotes que a planilha diz pra (driver, plataforma) na quinzena. 0 = sem base. */
+async function pacotesEsperados(periodId: string, driverId: string, platformName: string): Promise<number> {
+  const { data: pay } = await supabase.from('driverpay_payments')
+    .select('id').eq('period_id', periodId).eq('driver_id', driverId).maybeSingle();
+  if (!pay?.id) return 0;
+  const { data: pks } = await supabase.from('driverpay_payment_packages')
+    .select('packages').eq('payment_id', pay.id).eq('platform_name', platformName);
+  return (pks ?? []).reduce((s, p) => s + (p.packages ?? 0), 0);
+}
+
+/** Quando o print deve ser tentado de novo. null = sai da fila (conferiu ou desistiu). */
+function proximaTentativa(check: ProofCheckResult | null, tentativasJaFeitas: number): string | null {
+  if (!proofShouldRequeue(check)) return null;
+  const minutos = proofRetryDelayMinutes(tentativasJaFeitas);
+  if (minutos === null) return null; // desistiu: fica so a conferencia manual
+  return new Date(Date.now() + minutos * 60_000).toISOString();
+}
+
+/**
+ * Marca "espelho conferido" no pagamento do driver, se autorizado.
+ *
+ * Trava anti-remarcacao: se um humano ja mexeu neste check (marcou e depois
+ * desmarcou), o automatico NAO passa por cima. So marca o que nunca foi tocado,
+ * ou o que ja tinha sido marcado pelo proprio automatico.
+ */
+async function marcarEspelhoConferido(paymentId: string, companyId: string): Promise<boolean> {
+  const { data: settings } = await supabase.from('driverpay_settings')
+    .select('proof_auto_confirm').eq('company_id', companyId).maybeSingle();
+  if (settings?.proof_auto_confirm === false) return false; // sem linha = ligado (padrao)
+
+  const { data: atual } = await supabase.from('driverpay_payments')
+    .select('espelho_conferido, espelho_conferido_by').eq('id', paymentId).maybeSingle();
+  const nuncaTocadoPorHumano = !atual?.espelho_conferido_by || atual.espelho_conferido_by === 'auto';
+  if (atual?.espelho_conferido || !nuncaTocadoPorHumano) return false;
+
+  await supabase.from('driverpay_payments').update({
+    espelho_conferido: true,
+    espelho_conferido_at: new Date().toISOString(),
+    espelho_conferido_by: 'auto',
+  }).eq('id', paymentId);
+  return true;
+}
+
+/**
+ * Le o print de um registro que JA existe e grava o resultado. E o coracao da
+ * FILA: o mesmo caminho serve pro reprocessamento oportunista e pro botao
+ * "Conferir pendentes" do painel.
+ *
+ * Nao recusa ninguem aqui: o print ja foi aceito no envio. Se agora a leitura diz
+ * que o periodo esta errado, isso vira informacao pro painel (o driver ja recebeu
+ * "enviado" e nao pode ser desmentido depois).
+ */
+async function reconferirPrint(row: {
+  id: string; company_id: string; period_id: string; driver_id: string;
+  payment_id: string | null; platform_name: string; file_path: string;
+  file_type: string | null; check_attempts: number;
+}): Promise<'conferido' | 'divergente' | 'na-fila' | 'desistiu' | 'erro'> {
+  const tentativas = (row.check_attempts ?? 0) + 1;
+  try {
+    const { data: per } = await supabase.from('driverpay_periods')
+      .select('start_date, end_date').eq('id', row.period_id).maybeSingle();
+    if (!per?.start_date || !per?.end_date) return 'erro';
+
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from(PROOF_BUCKET).download(row.file_path);
+    if (dlErr || !blob) return 'erro';
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let b64 = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      b64 += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    b64 = btoa(b64);
+
+    const esperado = await pacotesEsperados(row.period_id, row.driver_id, row.platform_name);
+    const { data: settings } = await supabase.from('driverpay_settings')
+      .select('proof_tolerance_packages').eq('company_id', row.company_id).maybeSingle();
+
+    const leitura = await readProofImage(
+      b64, row.file_type ?? 'image/jpeg', visionConfigFromEnv(Deno.env.toObject()),
+      (m) => console.log(`[fila ${row.id}] ${m}`),
+    );
+    const check = runProofCheck({
+      reading: leitura,
+      periodStart: String(per.start_date),
+      periodEnd: String(per.end_date),
+      expectedPackages: esperado,
+      platformLabel: row.platform_name,
+      tolerancePackages: Number(settings?.proof_tolerance_packages ?? 0) || 0,
+    });
+
+    const confirmado = proofIsFullyConfirmed(check);
+    const next = proximaTentativa(check, tentativas);
+
+    await supabase.from('driverpay_delivery_proofs').update({
+      // O print ja foi aceito no envio: reconferencia nunca vira 'rejeitado'.
+      status: confirmado ? 'validado' : 'recebido',
+      validated_at: confirmado ? new Date().toISOString() : null,
+      check_status: check.status,
+      check_qtd: check.qtdOk,
+      check_periodo: check.periodoOk,
+      read_packages: check.readPackages,
+      read_start_date: check.readStart,
+      read_end_date: check.readEnd,
+      expected_packages: esperado || null,
+      check_details: {
+        autoConfirmed: confirmado,
+        driverReasons: check.driverReasons,
+        internalReasons: check.internalReasons,
+        reconferido: true,
+      },
+      checked_at: new Date().toISOString(),
+      check_attempts: tentativas,
+      next_check_at: next,
+    }).eq('id', row.id);
+
+    if (confirmado && row.payment_id) await marcarEspelhoConferido(row.payment_id, row.company_id);
+
+    if (confirmado) return 'conferido';
+    if (check.status === 'pendente') return next ? 'na-fila' : 'desistiu';
+    return 'divergente';
+  } catch (err) {
+    console.error(`[fila ${row.id}] falhou:`, err);
+    // Erro nosso: devolve pra fila (ou desiste, se ja passou do limite).
+    const next = proximaTentativa(null, tentativas);
+    await supabase.from('driverpay_delivery_proofs')
+      .update({ check_attempts: tentativas, next_check_at: next }).eq('id', row.id);
+    return next ? 'na-fila' : 'desistiu';
+  }
+}
+
+/**
+ * Puxa da fila quem ja pode ser tentado de novo e reconfere.
+ *
+ * Chamado de dois jeitos: OPORTUNISTA (todo print novo aproveita e limpa alguns
+ * da fila de graca) e SOB DEMANDA (botao "Conferir pendentes" do painel / cron).
+ */
+async function processarFila(companyId: string, limite: number): Promise<Record<string, number>> {
+  const { data: fila } = await supabase.from('driverpay_delivery_proofs')
+    .select('id, company_id, period_id, driver_id, payment_id, platform_name, file_path, file_type, check_attempts')
+    .eq('company_id', companyId)
+    .not('next_check_at', 'is', null)
+    .lte('next_check_at', new Date().toISOString())
+    .order('next_check_at', { ascending: true })
+    .limit(limite);
+
+  const placar: Record<string, number> = {};
+  for (const row of fila ?? []) {
+    const r = await reconferirPrint(row as Parameters<typeof reconferirPrint>[0]);
+    placar[r] = (placar[r] ?? 0) + 1;
+    // Cota esgotada: para de insistir agora e deixa o resto pra proxima rodada.
+    if (r === 'na-fila') break;
+  }
+  return placar;
+}
+
+/**
+ * O que este driver precisa anexar. Se ele lidera um grupo, vem um item por membro,
+ * com o NOME do membro pra ele saber de quem e cada print.
+ *
+ * ⚠️ CONTRATO DE PRIVACIDADE: a resposta NAO carrega quantidade esperada, nem
+ * resultado de conferencia de quantidade. So o que o driver precisa pra agir.
+ */
+async function proofSlots(req: Request, body: Body): Promise<Response> {
+  const claims = await claimsFromRequest(req, body);
+  if (!claims) return json({ error: 'Sessao invalida' }, 401);
+  const periodId = String(body.periodId ?? '').trim();
+  if (!periodId) return json({ error: 'periodId ausente' }, 400);
+
+  const plataformas = await plataformasSolicitadas(claims.company_id, periodId);
+  if (plataformas.length === 0) return json({ slots: [] });
+
+  const driverIds = await driversQuePossoEnviar(claims);
+  const { data: pays } = await supabase.from('driverpay_payments')
+    .select('id, driver_id').eq('period_id', periodId).in('driver_id', driverIds);
+  const payList = pays ?? [];
+  if (payList.length === 0) return json({ slots: [] });
+
+  const { data: pks } = await supabase.from('driverpay_payment_packages')
+    .select('payment_id, platform_name, packages').in('payment_id', payList.map((p) => p.id));
+  const driverOf = new Map(payList.map((p) => [p.id as string, p.driver_id as string]));
+
+  // (driver, plataforma) que TEM pacote e foi solicitado.
+  const precisa = new Set<string>();
+  for (const pk of pks ?? []) {
+    const dId = driverOf.get(pk.payment_id as string);
+    const plat = pk.platform_name as string;
+    if (dId && (pk.packages ?? 0) > 0 && plataformas.includes(plat)) precisa.add(`${dId}|${plat}`);
+  }
+  if (precisa.size === 0) return json({ slots: [] });
+
+  const { data: drivers } = await supabase.from('driverpay_drivers')
+    .select('id, name').in('id', driverIds);
+  const nomeDe = new Map((drivers ?? []).map((d) => [d.id as string, d.name as string]));
+
+  const { data: proofs } = await supabase.from('driverpay_delivery_proofs')
+    .select('driver_id, platform_name, status, reject_reason, uploaded_at')
+    .eq('period_id', periodId).in('driver_id', driverIds)
+    .order('uploaded_at', { ascending: true });
+
+  const enviados: Record<string, number> = {};
+  const recusados: Record<string, number> = {};
+  const motivo: Record<string, string | null> = {};
+  for (const p of proofs ?? []) {
+    const k = `${p.driver_id}|${p.platform_name}`;
+    if (p.status === 'rejeitado') {
+      recusados[k] = (recusados[k] ?? 0) + 1;
+      motivo[k] = (p.reject_reason as string | null) ?? null; // asc -> fica o mais recente
+    } else {
+      enviados[k] = (enviados[k] ?? 0) + 1;
+    }
+  }
+
+  const slots = [...precisa].map((k) => {
+    const [driverId, platformName] = k.split('|');
+    return {
+      driverId,
+      driverName: nomeDe.get(driverId) ?? '',
+      /** true quando o print e de outra pessoa (membro do grupo) — o app destaca. */
+      doGrupo: driverId !== claims.driver_id,
+      platformName,
+      sent: enviados[k] ?? 0,
+      rejected: recusados[k] ?? 0,
+      rejectReason: motivo[k] ?? null,
+    };
+  }).sort((a, b) => (a.doGrupo === b.doGrupo ? a.driverName.localeCompare(b.driverName) : a.doGrupo ? 1 : -1));
+
+  return json({ slots });
+}
+
+/**
+ * Recebe o print, LE (IA), confere e registra.
+ *
+ * `driverId` no corpo porque o LIDER manda pelos membros — validado contra o token
+ * por `driversQuePossoEnviar`. `claims.driver_id` continua sendo quem ENVIOU.
+ */
+async function proofUpload(req: Request, body: Body): Promise<Response> {
+  const claims = await claimsFromRequest(req, body);
+  if (!claims) return json({ error: 'Sessao invalida' }, 401);
+
+  const periodId = String(body.periodId ?? '').trim();
+  const platformName = String(body.platformName ?? '').trim();
+  const alvoId = String(body.driverId ?? claims.driver_id).trim();
+  const filename = body.filename ? String(body.filename) : null;
+  const b64raw = String(body.fileBase64 ?? '');
+  if (!periodId || !platformName || !b64raw) return json({ error: 'Dados incompletos' }, 400);
+
+  // Trava de seguranca: so pode enviar por si ou por membro do grupo que lidera.
+  const permitidos = await driversQuePossoEnviar(claims);
+  if (!permitidos.includes(alvoId)) return json({ error: 'Voce nao pode enviar o espelho deste entregador' }, 403);
+
+  // So aceita se o print foi realmente pedido nesta quinzena pra esta plataforma.
+  const plataformas = await plataformasSolicitadas(claims.company_id, periodId);
+  if (!plataformas.includes(platformName)) return json({ error: 'Nao ha espelho solicitado para esta plataforma' }, 400);
+
+  const pure = b64raw.includes(',') ? b64raw.slice(b64raw.indexOf(',') + 1) : b64raw;
+  let bytes: Uint8Array;
+  try { bytes = Uint8Array.from(atob(pure), (c) => c.charCodeAt(0)); }
+  catch { return json({ error: 'Arquivo invalido' }, 400); }
+  if (bytes.length === 0) return json({ error: 'Arquivo vazio' }, 400);
+  if (bytes.length > MAX_PROOF_BYTES) return json({ error: 'Imagem muito grande (max 8MB)' }, 413);
+
+  // SO imagem (o contrario da NF, que so aceita PDF). Confia na assinatura do
+  // arquivo, nao no que o cliente declarou.
+  const kind = imageKind(bytes);
+  if (!kind.ok) return json({ error: 'Envie uma imagem (print ou foto da tela do app)' }, 400);
+
+  // As datas da quinzena sao a base da conferencia. Sem elas nao da pra conferir
+  // periodo — o painel exige preencher no botao "Solicitar espelho", entao isto
+  // aqui e cinto de seguranca.
+  const { data: per } = await supabase.from('driverpay_periods')
+    .select('start_date, end_date, label').eq('id', periodId).maybeSingle();
+  if (!per?.start_date || !per?.end_date) {
+    return json({ error: 'A quinzena esta sem datas cadastradas. Avise a CD.' }, 400);
+  }
+
+  // ── Conferencia. Qualquer excecao vira 'pendente' — nunca recusa por falha nossa.
+  let check: ProofCheckResult | null = null;
+  let esperado = 0;
+  try {
+    esperado = await pacotesEsperados(periodId, alvoId, platformName);
+    const { data: settings } = await supabase.from('driverpay_settings')
+      .select('proof_auto_confirm, proof_tolerance_packages').eq('company_id', claims.company_id).maybeSingle();
+    const leitura = await readProofImage(
+      pure, kind.mime, visionConfigFromEnv(Deno.env.toObject()),
+      (m) => console.log(m),
+    );
+    check = runProofCheck({
+      reading: leitura,
+      periodStart: String(per.start_date),
+      periodEnd: String(per.end_date),
+      expectedPackages: esperado,
+      platformLabel: platformName,
+      tolerancePackages: Number(settings?.proof_tolerance_packages ?? 0) || 0,
+    });
+  } catch (err) {
+    console.error('[proof-check] falha interna (print segue como pendente):', err);
+    check = null;
+  }
+
+  const recusar = check !== null && proofShouldReject(check);
+  const confirmado = check !== null && proofIsFullyConfirmed(check);
+  const rejectReason = recusar ? `[automático] ${check!.driverReasons.join(' ')}` : null;
+
+  const sha = await sha256Hex(bytes);
+  const path = `${claims.company_id}/${periodId}/${alvoId}/${platformName.replace(/[^\w.-]+/g, '_')}/${crypto.randomUUID()}.${kind.ext}`;
+  const { error: upErr } = await supabase.storage.from(PROOF_BUCKET)
+    .upload(path, bytes, { contentType: kind.mime, upsert: false });
+  if (upErr) return json({ error: 'Falha ao subir o print', details: upErr.message }, 500);
+
+  const { data: pay } = await supabase.from('driverpay_payments')
+    .select('id').eq('period_id', periodId).eq('driver_id', alvoId).maybeSingle();
+
+  const { error: insErr } = await supabase.from('driverpay_delivery_proofs').insert([{
+    company_id: claims.company_id,
+    driver_id: alvoId,
+    period_id: periodId,
+    payment_id: pay?.id ?? null,
+    platform_name: platformName,
+    file_path: path,
+    file_type: kind.mime,
+    original_filename: filename,
+    file_sha256: sha,
+    upload_source: 'app',
+    uploaded_by: claims.driver_id, // quem ENVIOU (o lider, no grupo)
+    status: recusar ? 'rejeitado' : (confirmado ? 'validado' : 'recebido'),
+    reject_reason: rejectReason,
+    // validated_by tem FK pra users(id): confirmacao AUTOMATICA fica NULL e o
+    // marcador vive em check_details.autoConfirmed (licao da NF).
+    validated_at: confirmado ? new Date().toISOString() : null,
+    validated_by: null,
+    check_status: check ? check.status : 'pendente',
+    check_qtd: check?.qtdOk ?? null,
+    check_periodo: check?.periodoOk ?? null,
+    read_packages: check?.readPackages ?? null,
+    read_start_date: check?.readStart ?? null,
+    read_end_date: check?.readEnd ?? null,
+    expected_packages: esperado || null,
+    check_details: check ? {
+      autoConfirmed: confirmado,
+      driverReasons: check.driverReasons,
+      internalReasons: check.internalReasons,
+    } : null,
+    checked_at: new Date().toISOString(),
+    // FILA: a leitura falhou por culpa nossa (cota/rede/API fora)? Volta depois,
+    // sozinho. Se conferiu — ou se o problema e a foto — sai da fila na hora.
+    check_attempts: 1,
+    next_check_at: proximaTentativa(check, 1),
+  }]);
+  if (insErr) return json({ error: 'Falha ao registrar o print', details: insErr.message }, 500);
+
+  if (confirmado && pay?.id) await marcarEspelhoConferido(pay.id, claims.company_id);
+
+  // Reprocessamento OPORTUNISTA: este envio aproveita e tenta limpar alguns da
+  // fila de graca. Assim, numa leva grande, quem caiu na cota no comeco tende a
+  // ser reconferido pelos envios seguintes — sem ninguem clicar em nada.
+  // Falha aqui nunca atrapalha o envio que o driver acabou de fazer.
+  try {
+    if (check !== null && check.status !== 'pendente') await processarFila(claims.company_id, 2);
+  } catch (err) {
+    console.error('[fila] reprocessamento oportunista falhou (ignorado):', err);
+  }
+
+  if (recusar) {
+    // 422 = recusa de conferencia (o cliente trata nao-2xx como erro e mostra o
+    // motivo). SO chega aqui por data errada ou print ilegivel — quantidade
+    // divergente NUNCA recusa, por decisao do Victor.
+    return json({ ok: false, rejected: true, error: rejectReason, reason: rejectReason }, 422);
+  }
+  // ⚠️ Resposta de sucesso PROPOSITALMENTE pobre: nada de quantidade, nada de
+  // "bateu/nao bateu". O driver so sabe que chegou.
+  return json({ ok: true });
+}
+
+/** O que este driver ja mandou. Sem numero, sem resultado de conferencia. */
+async function proofList(req: Request, body: Body): Promise<Response> {
+  const claims = await claimsFromRequest(req, body);
+  if (!claims) return json({ error: 'Sessao invalida' }, 401);
+  const periodId = String(body.periodId ?? '').trim();
+  if (!periodId) return json({ error: 'periodId ausente' }, 400);
+
+  const driverIds = await driversQuePossoEnviar(claims);
+  const { data } = await supabase.from('driverpay_delivery_proofs')
+    .select('id, driver_id, platform_name, original_filename, status, reject_reason, uploaded_at')
+    .eq('period_id', periodId).in('driver_id', driverIds)
+    .order('uploaded_at', { ascending: false });
+
+  const { data: drivers } = await supabase.from('driverpay_drivers').select('id, name').in('id', driverIds);
+  const nomeDe = new Map((drivers ?? []).map((d) => [d.id as string, d.name as string]));
+
+  const files = (data ?? []).map((f) => ({
+    id: f.id,
+    driverId: f.driver_id,
+    driverName: nomeDe.get(f.driver_id as string) ?? '',
+    platformName: f.platform_name,
+    filename: f.original_filename,
+    // 'validado' e 'recebido' aparecem IGUAIS pro driver ("enviado"): ele nao pode
+    // saber se a quantidade bateu.
+    status: f.status === 'rejeitado' ? 'rejeitado' : 'enviado',
+    rejectReason: f.status === 'rejeitado' ? (f.reject_reason ?? null) : null,
+    uploadedAt: f.uploaded_at,
+  }));
+  return json({ files });
+}
+
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
@@ -671,6 +1155,10 @@ Deno.serve(async (req) => {
       case 'nf-slots': return await nfSlots(req, body);
       case 'nf-upload': return await nfUpload(req, body);
       case 'nf-list': return await nfListFn(req, body);
+      // Espelho do app (print da tela da Shopee) — 04/08/2026
+      case 'proof-slots': return await proofSlots(req, body);
+      case 'proof-upload': return await proofUpload(req, body);
+      case 'proof-list': return await proofList(req, body);
       default: return json({ error: `Unknown action: ${body.action}` }, 400);
     }
   } catch (err) {
