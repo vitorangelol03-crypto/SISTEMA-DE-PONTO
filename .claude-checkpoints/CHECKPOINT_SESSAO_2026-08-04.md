@@ -753,3 +753,56 @@ entregador") e validado contra o banco real **só com entregadores descartáveis
 
 **Banco idêntico antes/depois:** 314 pagamentos · 720 linhas · 310.134 pacotes · R$ 657.051,55 ·
 5 prints · 109 drivers.
+
+---
+
+## 14. 🔴 Coleta da Shopee entrava invisível e valendo ZERO (achado + corrigido nos dados)
+
+**Sintoma do Victor:** importou a planilha da Shopee (`CLAYTONBDOSSANTOS (01 07 2026  88).xlsx`,
+31 MB) e "o Lucas Aredes não identificou as coletas" — depois: *"me parece que ninguém saiu a coleta
+filtrada"*.
+
+**O leitor estava CERTO.** `extractShopee` separa pelo `Tipo do Serviço`
+(`COLETA` → `Coleta Shopee`, resto → `SHOPEE`). Conferido no arquivo: **136.787 ENTREGA · 1.600
+COLETA · 1 DEVOLUÇÃO**, e no banco entraram **exatamente 1.600** coletas — as **634 do Lucas** batem
+número por número.
+
+### 🔑 A causa: plataforma não cadastrada entra CALADA, com taxa 0 e sem coluna
+A Caratinga tinha 4 plataformas (ANJUN, eMile, LOGGI, SHOPEE) — **`Coleta Shopee` não existia**. Daí:
+
+- `applyDriverImport` faz `rate = rates[plat] ?? default ?? 0` → gravou **taxa 0,00**;
+- a grade desenha coluna com `platforms.map(...)` (só as **cadastradas**) → **os 1.600 pacotes eram
+  invisíveis na tela**, apesar de estarem no banco.
+
+Os dois efeitos juntos = "o sistema não identificou a coleta". Ele identificou; ninguém via, e não
+valia nada.
+
+### Corrigido nos dados (decisão do Victor: **coleta = R$ 1,00**)
+Plataforma `Coleta Shopee` criada (`default_rate` 1.00, `sort_order` 2) + `rate_snapshot` dos 4
+pacotes 0,00 → 1,00 + totais recomputados pela view. **+R$ 1.600,00** no total:
+
+| entregador | coletas | antes | depois |
+|---|---|---|---|
+| LUCAS AREDES MARTINS VIEIRA | 634 | R$ 3.440,80 | **R$ 4.074,80** |
+| FILIPE AUGUSTO PENA DA SILVEIRA | 509 | R$ 7.307,15 | **R$ 7.816,15** |
+| BRUNO FERRARI GUEDES | 238 | R$ 13.386,60 | **R$ 13.624,60** |
+| ROSANA RODRIGUES SOARES | 219 | R$ 1.371,50 | **R$ 1.590,50** |
+
+Backup + rollback: `backups/2026-08-04-coleta-shopee/ROLLBACK.md`. Banco conferido: 5 plataformas,
+1.600 coletas, **0 ainda zeradas**, junho concluída intacta (R$ 336.157,66).
+**Conferido em PRODUÇÃO com print**: a coluna "Coleta Shopee" aparece na grade e a linha do Lucas
+mostra `634 · R$ 1,00 · total R$ 4.074,80`.
+
+### ⚠️ A falha de produto NÃO foi corrigida (fora do pedido)
+O import **aceita plataforma desconhecida sem avisar**. Devia parar e dizer "a plataforma X não está
+cadastrada — os N pacotes vão entrar valendo zero". Enquanto não for corrigido, **toda plataforma
+nova numa planilha repete isso em silêncio** — e só se descobre olhando o banco.
+
+### Efeitos colaterais do import que valem registro
+- O import criou **10 entregadores novos** (todos gente real, 21:11 Shopee / 21:39 eMile; nenhum
+  resto de teste). Entre eles **`JUSSIMAR DA SILVA MARTINS`**, que era um dos 2 sem cadastro na §13.1
+  — agora ele **existe e tem pagamento na 1ª quinzena de julho**, então o PNR dele (R$ 57,90,
+  `BR2669439989682`) já pode ser lançado. **A Josiane continua sem cadastro.**
+- SHOPEE ficou com **136.785** pacotes contra 136.788 esperados do arquivo (ENTREGA + DEVOLUÇÃO).
+  **Faltam 3** — não é falha de leitura (conferido: **zero** linhas do arquivo sem "Driver Name");
+  provavelmente entregador marcado como "ignorar" na tela do import. Não investigado a fundo.
