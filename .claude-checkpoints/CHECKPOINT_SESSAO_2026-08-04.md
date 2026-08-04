@@ -266,3 +266,69 @@ estão "Faltam", "Seu espelho", "Tudo enviado" e "Já enviados". **A tela nova e
 **Ainda em aberto:** fn `driverpay-proof-admin` (anexar/reconferir pelo painel — quem manda por
 WhatsApp ainda depende de alguém por fora) · rodar o portal em **WebKit/Safari** (binário não
 instalado nesta máquina) · testar numa quinzena real com **um** driver antes de soltar pros 89.
+
+---
+
+## 9. Relatórios: filtrar por conferido · pedido de espelho com alcance (`21c4c2c`, `218da5b`, `d740c7b`)
+
+### 9.1 Filtro "pagar só quem está conferido" nos dois relatórios (`21c4c2c`)
+Nos relatórios **geral** e **simples**, duas chavinhas: *só quem está com o espelho conferido* e
+*só quem está com a nota validada*. **Desmarcadas por padrão** — sem mexer, o arquivo sai idêntico.
+
+**Decisões do Victor:**
+- **"PAGA O RESTO"** — o filtro é driver a driver. Grupo de 10 com 1 pendente **continua saindo na
+  linha do líder com os 9**; o grupo só some quando ninguém dele passa. Segurar 9 por causa de 1
+  foi recusado explicitamente.
+- **"espelho validado" = o botão "Espelho conferido"** (o que o print marca sozinho), NÃO o espelho
+  publicado — que no painel se chama "Espelho no app". Perguntei porque são coisas diferentes.
+
+"Nota validada" reusa a **mesma** regra do filtro "NF ok (validada)" da lista (`nfProgressByPayment`,
+ciente de grupo): se divergissem, o mesmo driver apareceria diferente em telas vizinhas.
+
+A janela mostra **antes de baixar** quem sai e por quê, e avisa em âmbar quando um recebedor some
+por completo. O cabeçalho do Excel leva `SOMENTE espelho conferido + nota validada (N de fora)` —
+arquivo que esconde gente em silêncio paga errado depois.
+
+### 9.2 Cancelar a solicitação, com botão próprio (`218da5b`)
+Cancelar existia mas **escondido**: só desmarcando todas as plataformas e clicando em "Solicitar
+espelho". O botão "Cancelar" ao lado só fechava a janela. Agora tem **"Cancelar solicitação"** em
+vermelho (só aparece com pedido aberto), com confirmação avisando que **os prints já recebidos
+ficam**. O outro virou "Fechar".
+
+### 9.3 Pedir espelho de UM entregador ou de UM grupo (`d740c7b`) — migration + deploy
+**Migration `20260804160000` APLICADA em prod** (com OK do Victor): coluna `driver_id` em
+`driverpay_proof_requests` — **vazia = todos** (comportamento de sempre), **preenchida = só aquele**.
+Grupo = uma linha por membro; nenhum conceito novo no banco.
+
+⚠️ **A UNIQUE antiga virou dois ÍNDICES PARCIAIS** (um "pra todos" `WHERE driver_id IS NULL`, outro
+por entregador). UNIQUE comum não serviria: no Postgres **NULLs são distintos entre si**, então
+caberiam várias linhas "pra todos" duplicadas.
+
+**Edge fn `driver-public-api` deployada** e conferida por sha256 (`05e84fb362cb2358`): `proof-slots`
+cobra quando há pedido geral **OU** individual daquele driver.
+
+**Painel:** bloco "De quem pedir o print" (Todos / Só um grupo / Só um entregador, com busca). A
+prévia usa a **mesma função** da coluna "Print" da grade. Ao salvar faz o **diff** do que já existe —
+trocar de "todos" pra um grupo **apaga o pedido geral**, senão o portal continuaria cobrando todo
+mundo. Estado `'manter'`: quando o pedido gravado atinge vários entregadores que não formam grupo
+nem um só, a tela **não cai em "todos"** — um clique ampliaria o pedido sem querer.
+
+### 🔴 Bug pego pelo E2E 64 (e a armadilha do Vite, de novo)
+`requestProof` usava `upsert` apontando pra UNIQUE que a migration derrubou → **`42P10`** e o modal
+ficava aberto com cara de erro. **Reproduzi antes de consertar** (rodei o upsert isolado e li o
+código do erro). Virou `insert` tolerando `23505` — que É o resultado desejado, com o porquê no
+código: o `onConflict` do PostgREST **não sabe informar o WHERE de índice parcial**.
+
+⚠️ Depois do fix o teste **continuou falhando** — era o **Vite servindo bundle velho** outra vez.
+Matei o processo e o Playwright subiu um novo: passou. **Segunda vez no mesmo dia.**
+
+### Validação
+- typecheck sem erro novo · eslint · build · **134 unit** (4 novos do alcance)
+- `deno check` com os **mesmos 2 erros pré-existentes** do HEAD (comparado em ambiente isolado)
+- **13/13 contra a EDGE FN NO AR**: individual, grupo, todos (regressão), sem pedido, e os dois
+  duplicados barrados pelo banco
+- **E2E 64: 1/1 · E2E 65: 6/6**
+- **Banco antes e depois: 294 pagamentos · 99 drivers · 49 grupos · 3 períodos · 4.822 pontos ·
+  94 funcionários — idêntico.**
+
+**Falta:** push destes 4 commits · fn `driverpay-proof-admin` (anexar pelo painel) · WebKit/Safari.
