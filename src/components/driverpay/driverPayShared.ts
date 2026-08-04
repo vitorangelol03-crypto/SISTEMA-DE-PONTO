@@ -181,6 +181,63 @@ export function nfSlotKey(mirrorKey: string | null, emitterId: string): string {
 export interface MirrorPubForNf {
   platformKey: string;
   platformFilter: string[] | null;
+  /**
+   * Prazo pra mandar a nota deste espelho (04/08/2026, decisão do Victor: **por espelho**).
+   * ISO com fuso. `null` só nos espelhos publicados ANTES desta feature — neles não dá pra
+   * inventar prazo, então a nota nunca fica atrasada.
+   */
+  nfDueAt?: string | null;
+}
+
+/** Como a nota se saiu em relação ao prazo daquele espelho. */
+export type NfPrazoStatus =
+  /** chegou dentro do prazo */
+  | 'no_prazo'
+  /** chegou depois do prazo — é o que o Victor quer filtrar */
+  | 'atrasada'
+  /** o espelho não tem prazo (publicado antes de 04/08) — não dá pra cobrar */
+  | 'sem_prazo';
+
+/**
+ * Compara quando a nota CHEGOU com o prazo do espelho. Usa a hora do envio (não a da
+ * validação): o driver não controla quando alguém confere.
+ *
+ * Calculado na hora de mostrar, de propósito — não fica gravado. Se o prazo for corrigido
+ * depois, a tela se ajusta sozinha em vez de guardar um "atrasada" que virou mentira.
+ */
+export function nfPrazoStatus(uploadedAt: string, dueAt: string | null | undefined): NfPrazoStatus {
+  if (!dueAt) return 'sem_prazo';
+  const enviada = new Date(uploadedAt).getTime();
+  const limite = new Date(dueAt).getTime();
+  if (Number.isNaN(enviada) || Number.isNaN(limite)) return 'sem_prazo';
+  return enviada > limite ? 'atrasada' : 'no_prazo';
+}
+
+/** "2 h e 15 min depois" — o quanto passou do prazo, pra explicar o selo sem abrir nada. */
+export function nfAtrasoLabel(uploadedAt: string, dueAt: string | null | undefined): string | null {
+  if (nfPrazoStatus(uploadedAt, dueAt) !== 'atrasada') return null;
+  const minutos = Math.round((new Date(uploadedAt).getTime() - new Date(dueAt as string).getTime()) / 60_000);
+  if (minutos < 60) return `${minutos} min depois`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) {
+    const resto = minutos % 60;
+    return resto ? `${horas} h e ${resto} min depois` : `${horas} h depois`;
+  }
+  const dias = Math.floor(horas / 24);
+  const restoH = horas % 24;
+  return restoH ? `${dias} dia(s) e ${restoH} h depois` : `${dias} dia(s) depois`;
+}
+
+/**
+ * Prazo padrão sugerido ao publicar um espelho: **2 dias depois, às 18:00** (decisão do
+ * Victor, 04/08 — "sim, com padrão, muda se quiser"). Devolve no formato que os campos
+ * `date` e `time` do HTML esperam, no fuso do navegador.
+ */
+export function prazoNfPadrao(agora: Date): { date: string; time: string } {
+  const d = new Date(agora.getTime());
+  d.setDate(d.getDate() + 2);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, time: '18:00' };
 }
 
 /**

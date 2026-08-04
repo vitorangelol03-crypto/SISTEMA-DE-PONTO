@@ -1424,6 +1424,11 @@ export interface PublishMirrorInput {
    * Fica gravado porque a conferencia automatica da NF calcula o valor esperado por aqui.
    */
   includeDeductions?: boolean;
+  /**
+   * Prazo pra mandar a nota DESTE espelho (04/08/2026), ISO com fuso. O painel exige o
+   * preenchimento; fica opcional no tipo só porque as publicacoes antigas nao tem prazo.
+   */
+  nfDueAt?: string | null;
   pdf: Blob;
   userId: string;
   groupId?: string | null;
@@ -1469,6 +1474,7 @@ export const publishDriverMirror = async (i: PublishMirrorInput): Promise<void> 
     platform_filter: i.platformFilter,
     platform_key: platformKey,
     include_deductions: i.includeDeductions !== false,
+    nf_due_at: i.nfDueAt ?? null,
     pdf_path: path,
     delivered_by: i.userId,
   }]);
@@ -1485,6 +1491,8 @@ export interface MirrorPublicationRow {
   platformKey: string;
   /** Plataformas do espelho, como foram publicadas (null = todas). */
   platformFilter: string[] | null;
+  /** Prazo pra mandar a nota deste espelho. null = publicado antes de 04/08 (sem prazo). */
+  nfDueAt: string | null;
 }
 
 /**
@@ -1498,14 +1506,14 @@ export const listMirrorPublications = async (
 ): Promise<MirrorPublicationRow[]> => {
   const { data, error } = await supabase
     .from('driverpay_mirror_publications')
-    .select('driver_id, scope, include_deductions, platform_key, platform_filter')
+    .select('driver_id, scope, include_deductions, platform_key, platform_filter, nf_due_at')
     .eq('company_id', companyId)
     .eq('period_id', periodId);
   if (error) throwDbError(error);
   return (data ?? []).map((r) => {
     const row = r as {
       driver_id: string; scope: string; include_deductions: boolean | null;
-      platform_key: string | null; platform_filter: string[] | null;
+      platform_key: string | null; platform_filter: string[] | null; nf_due_at: string | null;
     };
     return {
       driverId: row.driver_id,
@@ -1514,6 +1522,7 @@ export const listMirrorPublications = async (
       platformKey: row.platform_key ?? '',
       platformFilter: Array.isArray(row.platform_filter) && row.platform_filter.length
         ? row.platform_filter : null,
+      nfDueAt: row.nf_due_at ?? null,
     };
   });
 };
