@@ -686,31 +686,35 @@ export const DriverList: React.FC<DriverListProps> = ({
             .map((pl) => ({ pl, n: groupRows.reduce((s, r) => s + platformPackages(r, pl.name), 0) }))
             .filter((x) => x.n > 0);
           return (
-            <details
+            /* 04/08/2026 — ERA <details>/<summary> e a caixa vivia DENTRO do summary.
+               Pra a caixa não abrir a gaveta junto, o código chamava preventDefault() no
+               clique dela — só que isso cancela também o próprio marcar, e o React perdia a
+               sincronia: a tela ficava SEMPRE UM PASSO ATRÁS (clicava na 1ª e nada; clicava
+               na 2ª e aí a 1ª aparecia marcada). Medido com cliques reais.
+               Conserto de raiz: parar de brigar com o navegador. A caixa saiu de dentro do
+               gatilho e agora são duas coisas separadas — marcar é marcar, abrir é abrir. */
+            <div
               key={name}
-              open={openGroups.has(name)}
-              onToggle={(e) => onToggleGroup(name, e.currentTarget.open)}
               className="border border-gray-200 rounded-lg overflow-hidden"
             >
-              <summary
-                className={`list-none cursor-pointer px-3 py-3 flex items-center gap-3 ${allEspelho ? 'bg-green-200' : 'bg-gray-50'}`}
+              <div
+                className={`px-3 py-3 flex items-center gap-3 ${allEspelho ? 'bg-green-200' : 'bg-gray-50'}`}
               >
                 {onToggleSelGroup && (
                   <input
                     type="checkbox"
                     checked={!!selGroups?.has(name)}
-                    readOnly
-                    onClick={(e) => {
-                      // preventDefault: não abre/fecha a gaveta nem deixa o browser
-                      // flipar o checkbox — o estado controlado (React) decide.
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onToggleSelGroup(name);
-                    }}
+                    onChange={() => onToggleSelGroup(name)}
                     title="Selecionar o grupo inteiro para espelho"
-                    className="w-4 h-4 text-blue-600 rounded border-gray-300 flex-shrink-0"
+                    className="w-4 h-4 text-blue-600 rounded border-gray-300 flex-shrink-0 cursor-pointer"
                   />
                 )}
+                <button
+                  type="button"
+                  onClick={() => onToggleGroup(name, !openGroups.has(name))}
+                  aria-expanded={openGroups.has(name)}
+                  className="flex-1 min-w-0 flex items-center gap-3 text-left cursor-pointer"
+                >
                 <ChevronRight
                   className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${openGroups.has(name) ? 'rotate-90' : ''}`}
                 />
@@ -775,10 +779,15 @@ export const DriverList: React.FC<DriverListProps> = ({
                   )}
                   <span className={`font-bold ${t.net < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatBRL(t.net)}</span>
                 </div>
-              </summary>
-              <div className="hidden md:block">{renderTable(groupRows, true, 'SUBTOTAL DO GRUPO')}</div>
-              <div className="md:hidden divide-y divide-gray-200">{groupRows.map(renderMobileCard)}</div>
-            </details>
+                </button>
+              </div>
+              {openGroups.has(name) && (
+                <>
+                  <div className="hidden md:block">{renderTable(groupRows, true, 'SUBTOTAL DO GRUPO')}</div>
+                  <div className="md:hidden divide-y divide-gray-200">{groupRows.map(renderMobileCard)}</div>
+                </>
+              )}
+            </div>
           );
         })}
       </div>
