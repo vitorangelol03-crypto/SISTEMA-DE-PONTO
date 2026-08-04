@@ -43,20 +43,50 @@ const readAsDataUrl = (file: File): Promise<string> =>
   });
 
 /** Prepara o arquivo pra subir: foto vira JPEG reduzido (máx 1600px, q0.7); PDF vai como está. */
+/** O iPhone salva foto em HEIC/HEIF — formato que o servidor NAO aceita. */
+const ehHeic = (file: File): boolean =>
+  /hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+
+/**
+ * Decodifica a imagem pro canvas. Tenta `createImageBitmap` primeiro porque no iOS ele
+ * lida com HEIC melhor que o `<img>`; cai pro `<img>` quando nao existe ou falha.
+ */
+async function decodificarImagem(file: File, dataUrl: string): Promise<CanvasImageSource> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      return await createImageBitmap(file);
+    } catch {
+      // Formato que o bitmap nao entende: tenta pelo <img> logo abaixo.
+    }
+  }
+  return await new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error('nao consegui abrir a imagem'));
+    i.src = dataUrl;
+  });
+}
+
+/**
+ * Prepara a imagem pro envio: reduz pra 1600px e **sempre reencoda em JPEG**.
+ *
+ * ⚠️ iPhone (04/08/2026): o iOS salva foto em **HEIC**, e a edge function confere a
+ * ASSINATURA REAL do arquivo — so passa JPEG, PNG ou WEBP. O reencode resolve isso. Antes,
+ * se o reencode falhasse, o codigo mandava o arquivo ORIGINAL: no iPhone isso vira um HEIC
+ * recusado com mensagem sem sentido pro entregador. Agora, quando nao da pra converter um
+ * HEIC, ele recebe uma instrucao em portugues do que fazer.
+ */
 async function fileToUpload(file: File): Promise<{ base64: string; contentType: string; filename: string }> {
-  if (!file.type.startsWith('image/')) {
+  if (!file.type.startsWith('image/') && !ehHeic(file)) {
     return { base64: await readAsDataUrl(file), contentType: file.type || 'application/pdf', filename: file.name };
   }
   const dataUrl = await readAsDataUrl(file);
   try {
-    const img = await new Promise<HTMLImageElement>((res, rej) => {
-      const i = new Image();
-      i.onload = () => res(i);
-      i.onerror = () => rej(new Error('img'));
-      i.src = dataUrl;
-    });
+    const img = await decodificarImagem(file, dataUrl);
     const maxDim = 1600;
-    let { width, height } = img;
+    let width = (img as HTMLImageElement | ImageBitmap).width;
+    let height = (img as HTMLImageElement | ImageBitmap).height;
+    if (!width || !height) throw new Error('imagem sem tamanho');
     if (width > maxDim || height > maxDim) {
       const scale = maxDim / Math.max(width, height);
       width = Math.round(width * scale);
@@ -66,11 +96,21 @@ async function fileToUpload(file: File): Promise<{ base64: string; contentType: 
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return { base64: dataUrl, contentType: file.type, filename: file.name };
+    if (!ctx) throw new Error('sem canvas');
     ctx.drawImage(img, 0, 0, width, height);
     const out = canvas.toDataURL('image/jpeg', 0.7);
+    if (!out.startsWith('data:image/jpeg')) throw new Error('nao virou jpeg');
     return { base64: out, contentType: 'image/jpeg', filename: file.name.replace(/\.[^.]+$/, '') + '.jpg' };
-  } catch {
+  } catch (err) {
+    // HEIC sem conversao = recusa certa no servidor. Melhor explicar aqui.
+    if (ehHeic(file)) {
+      throw new Error(
+        'Seu iPhone salvou a imagem num formato que nao conseguimos abrir. ' +
+        'Tire um PRINT da tela (botao lateral + volume) e envie o print, ou mude em ' +
+        'Ajustes > Camera > Formatos para "Mais compativel".',
+      );
+    }
+    console.error('[upload] reencode falhou, mandando o arquivo original:', err);
     return { base64: dataUrl, contentType: file.type || 'image/jpeg', filename: file.name };
   }
 }
@@ -247,6 +287,31 @@ export function DriverApp() {
     loadProof();
   }
 
+  /**
+   * Fica olhando a conferencia por ~1 min depois do envio. Para assim que o slot sair de
+   * "esperando" (virou enviado ou recusado) — ou quando o tempo acaba, pra nao ficar
+   * batendo no servidor a toa no 4G do entregador.
+   */
+  function acompanharConferencia(chave: string) {
+    let tentativas = 0;
+    const bater = async () => {
+      tentativas += 1;
+      try {
+        const { slots: novos } = await driverProofSlots('', token!);
+        setProofSlots(novos);
+        setProofPendentes(novos.filter((x) => x.sent === 0).length);
+        const s = novos.find((x) => `${x.driverId}|${x.platformName}` === chave);
+        // Recusado ou ja contabilizado como enviado: acabou, nao precisa insistir.
+        if (!s || s.rejected > 0 || s.sent > 0) return;
+      } catch {
+        // Sem rede ou sessao caindo: nao vale insistir nem incomodar com aviso.
+        return;
+      }
+      if (tentativas < 12) setTimeout(bater, 5000);
+    };
+    setTimeout(bater, 5000);
+  }
+
   async function handleProofFile(slot: ProofSlot, file: File | null | undefined) {
     if (!file || !token) return;
     // Aqui e o CONTRARIO da nota fiscal: so imagem. A edge fn tambem confere a
@@ -272,6 +337,11 @@ export function DriverApp() {
       // bateu. Print divergente chega aqui igualzinho a um print certo.
       toast.success('Espelho enviado!');
       await loadProof();
+      // A conferencia agora acontece POR TRAS (04/08): o servidor responde assim que
+      // guarda o print, pra ele nao ficar ~40s parado. A recusa por data errada chega
+      // alguns segundos depois — entao a tela se atualiza sozinha por um tempinho pra
+      // ele ver o motivo sem precisar mexer em nada.
+      acompanharConferencia(chave);
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else if (errStatus(e) === 422) {
@@ -280,7 +350,8 @@ export function DriverApp() {
         toast.error(errMsg(e, 'Espelho recusado.'), { duration: 12000 });
         await loadProof();
       } else {
-        toast.error(errMsg(e, 'Nao consegui enviar o espelho.'));
+        // Pode ser a instrucao do HEIC do iPhone, que e longa — tempo pra ler.
+        toast.error(errMsg(e, 'Nao consegui enviar o espelho.'), { duration: 12000 });
       }
     } finally {
       setProofUploading(null);
@@ -443,7 +514,10 @@ export function DriverApp() {
             {enviando ? <Spinner /> : <Upload size={16} />}
             {enviando ? 'Enviando...' : 'Enviar print do app'}
             <input
-              type="file" accept="image/*" capture="environment" className="hidden" disabled={enviando}
+              // ⚠️ SEM `capture`: com ele o celular abre a CAMERA direto e o entregador nao
+              // consegue escolher o print que ja esta na galeria — e print de tela nasce
+              // na galeria. Sem o atributo, o proprio celular oferece as duas opcoes.
+              type="file" accept="image/*" className="hidden" disabled={enviando}
               onChange={(e) => { handleProofFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
             />
           </label>
@@ -464,7 +538,10 @@ export function DriverApp() {
           <label className="text-xs text-blue-700 underline whitespace-nowrap cursor-pointer flex-shrink-0">
             {enviando ? 'enviando...' : 'trocar'}
             <input
-              type="file" accept="image/*" capture="environment" className="hidden" disabled={enviando}
+              // ⚠️ SEM `capture`: com ele o celular abre a CAMERA direto e o entregador nao
+              // consegue escolher o print que ja esta na galeria — e print de tela nasce
+              // na galeria. Sem o atributo, o proprio celular oferece as duas opcoes.
+              type="file" accept="image/*" className="hidden" disabled={enviando}
               onChange={(e) => { handleProofFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
             />
           </label>

@@ -156,11 +156,36 @@ async function print(page: Page, nome: string) {
   });
 }
 
-/** Envia a imagem pelo cartão e espera a conferência (a leitura leva ~45s). */
+/**
+ * Envia a imagem pelo cartão e mede QUANTO O ENTREGADOR ESPERA.
+ *
+ * ⚠️ Desde 04/08 o servidor responde assim que GUARDA o print e lê com a IA por trás
+ * (pedido do Victor: "o driver espera o menos possível"). Então isto volta em segundos —
+ * quem precisa esperar a leitura é `esperarConferencia`, abaixo.
+ */
 async function enviarPrint(page: Page, arquivo: string) {
+  const t0 = Date.now();
   await page.locator('input[type="file"]').first().setInputFiles(arquivo);
   await expect(page.getByText(/Enviando/i)).toBeVisible({ timeout: 15_000 }).catch(() => {});
   await expect(page.getByText(/Enviando/i)).toHaveCount(0, { timeout: 180_000 });
+  const seg = ((Date.now() - t0) / 1000).toFixed(1);
+  console.log(`    ⏱️  o entregador esperou ${seg}s`);
+}
+
+/**
+ * Espera a conferência que roda POR TRÁS terminar (sai de 'pendente'). As asserções de
+ * banco continuam iguais — só param de olhar antes da hora.
+ */
+async function esperarConferencia(periodId: string, timeoutMs = 180_000) {
+  const ate = Date.now() + timeoutMs;
+  for (;;) {
+    const { data } = await db.from('driverpay_delivery_proofs')
+      .select('check_status').eq('period_id', periodId)
+      .order('uploaded_at', { ascending: false }).limit(1).maybeSingle();
+    if (data && data.check_status !== 'pendente') return;
+    if (Date.now() > ate) throw new Error(`a conferencia nao terminou em ${timeoutMs / 1000}s`);
+    await new Promise((r) => setTimeout(r, 3000));
+  }
 }
 
 test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () => {
@@ -216,6 +241,8 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
     // cartão desce pra lista dos resolvidos. Antes o sinal era o selo "1 enviado(s)"
     // no próprio cartão, que saiu de propósito — virava ruído em grupo grande.
     await expect(page.getByText(/Tudo enviado!/i)).toBeVisible({ timeout: 20_000 });
+    // A leitura roda POR TRÁS desde 04/08 — espera ela terminar antes de olhar o banco.
+    await esperarConferencia(periodId);
     await expect(page.getByText(/J[áa] enviados \(1\)/i)).toBeVisible();
     // E não sobra nenhum botão de envio pendente pra ele.
     await expect(page.getByText(/Enviar print do app/i)).toHaveCount(0);
@@ -238,7 +265,10 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
     test.setTimeout(300_000);
     // A planilha diz 1750; a foto mostra 1808. É o caso que o Victor precisa pegar.
     const { periodId, paymentId } = await cenario({
-      label: 'Divergente', cpf: CPF.divergente, nome: 'Divergente',
+      // ⚠️ NAO usar "Divergente" no nome: a assercao de privacidade abaixo procura a
+      // palavra "divergen" na tela, e o nome do proprio driver casaria com ela — dando
+      // um falso vazamento. O nome do driver e o rotulo da quinzena aparecem na tela.
+      label: 'QtdDif', cpf: CPF.divergente, nome: 'QtdDif',
       inicio: FOTO_INI, fim: FOTO_FIM, pacotes: 1750,
     });
 
@@ -248,6 +278,7 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
 
     // Pro driver: exatamente a MESMA mensagem do print certo.
     await expect(page.getByText(/Espelho enviado/i)).toBeVisible({ timeout: 20_000 });
+    await esperarConferencia(periodId);
     await print(page, 'C-quantidade-DIFERENTE-driver-nao-ve-nada');
     await expect(page.getByText(/recusad/i)).toHaveCount(0);
     await expect(page.getByText(/1750|1808|diferen|divergen|a mais|a menos/i)).toHaveCount(0);
@@ -278,8 +309,10 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
     await abrirEspelho(page);
     await enviarPrint(page, FOTO_CERTA);
 
-    // O driver vê o motivo e o que fazer — as duas datas aparecem.
-    await expect(page.getByText(/Espelho recusado/i).first()).toBeVisible({ timeout: 30_000 });
+    // O driver vê o motivo e o que fazer — as duas datas aparecem. Desde 04/08 a recusa
+    // chega alguns segundos DEPOIS do envio (a leitura roda por trás) e a tela se
+    // atualiza sozinha — por isso a espera é maior.
+    await expect(page.getByText(/Espelho recusado/i).first()).toBeVisible({ timeout: 120_000 });
     await print(page, 'D-quinzena-ERRADA-recusado-na-hora');
     await expect(page.getByText(/01\/07\/2026/).first()).toBeVisible();
     await expect(page.getByText(/16\/07\/2026/).first()).toBeVisible();
@@ -305,7 +338,7 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
     // Foto de etiqueta de pacote — o engano mais provável de um driver.
     await enviarPrint(page, FOTO_ERRADA);
     await expect(page.getByText(/Espelho recusado|Não consegui ler|Nao consegui ler/i).first())
-      .toBeVisible({ timeout: 30_000 });
+      .toBeVisible({ timeout: 120_000 });
     await print(page, 'E-foto-que-nao-e-a-tela-recusada');
 
     const { data: p1 } = await db.from('driverpay_delivery_proofs')
@@ -318,6 +351,7 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
     // F. O driver reenvia, agora com o print certo — a tela continua aberta.
     await enviarPrint(page, FOTO_CERTA);
     await expect(page.getByText(/Espelho enviado/i)).toBeVisible({ timeout: 20_000 });
+    await esperarConferencia(periodId);
     await print(page, 'F-reenvio-depois-da-recusa-aceito');
 
     const { data: pay } = await db.from('driverpay_payments')

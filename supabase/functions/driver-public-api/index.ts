@@ -893,6 +893,23 @@ async function processarFila(companyId: string | null, limite: number): Promise<
  * ⚠️ CONTRATO DE PRIVACIDADE: a resposta NAO carrega quantidade esperada, nem
  * resultado de conferencia de quantidade. So o que o driver precisa pra agir.
  */
+/**
+ * Roda a tarefa DEPOIS de a resposta ja ter saido (Supabase Edge Runtime).
+ *
+ * Serve pra o entregador nao ficar ~40s olhando pro "Enviando..." esperando a IA. Quando
+ * isto e chamado o print JA esta salvo e na fila — se o runtime matar a tarefa no meio, o
+ * cron pega o print depois e nada se perde.
+ *
+ * Se o runtime nao expuser `waitUntil`, devolve false e o chamador espera do jeito antigo:
+ * melhor lento do que sem conferir.
+ */
+function emBackground(tarefa: Promise<unknown>): boolean {
+  const rt = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (typeof rt?.waitUntil !== 'function') return false;
+  rt.waitUntil(tarefa.catch((e) => console.error('[background] tarefa falhou (print segue na fila):', e)));
+  return true;
+}
+
 async function proofSlots(req: Request, body: Body): Promise<Response> {
   const claims = await claimsFromRequest(req, body);
   if (!claims) return json({ error: 'Sessao invalida' }, 401);
@@ -1101,34 +1118,18 @@ async function proofUpload(req: Request, body: Body): Promise<Response> {
     return json({ error: 'A quinzena esta sem datas cadastradas. Avise a CD.' }, 400);
   }
 
-  // ── Conferencia. Qualquer excecao vira 'pendente' — nunca recusa por falha nossa.
-  let check: ProofCheckResult | null = null;
-  let esperado = 0;
-  try {
-    esperado = await pacotesEsperados(periodId, alvoId, platformName);
-    const { data: settings } = await supabase.from('driverpay_settings')
-      .select('proof_auto_confirm, proof_tolerance_packages').eq('company_id', claims.company_id).maybeSingle();
-    const leitura = await readProofImage(
-      pure, kind.mime, visionConfigFromEnv(Deno.env.toObject()),
-      (m) => console.log(m),
-    );
-    check = runProofCheck({
-      reading: leitura,
-      periodStart: String(per.start_date),
-      periodEnd: String(per.end_date),
-      expectedPackages: esperado,
-      platformLabel: platformName,
-      tolerancePackages: Number(settings?.proof_tolerance_packages ?? 0) || 0,
-    });
-  } catch (err) {
-    console.error('[proof-check] falha interna (print segue como pendente):', err);
-    check = null;
-  }
-
-  const recusar = check !== null && proofShouldReject(check);
-  const confirmado = check !== null && proofIsFullyConfirmed(check);
-  const rejectReason = recusar ? `[automático] ${check!.driverReasons.join(' ')}` : null;
-
+  // ══════════════════════════════════════════════════════════════════════════
+  // ORDEM: GUARDA PRIMEIRO, LE DEPOIS  (04/08/2026, pedido do Victor)
+  //
+  // Antes o print era LIDO pela IA antes de ser salvo — e a leitura leva ~40s. Se o 4G
+  // do entregador caisse nesse meio-tempo, ou ele fechasse a tela, ou a funcao
+  // estourasse o tempo, NAO FICAVA NADA: nem arquivo nem registro, e ele tinha que
+  // mandar tudo de novo. Com 30 enviando no mesmo minuto (a IA fica mais lenta e a cota
+  // estoura), a chance de alguem perder o envio ficava alta.
+  //
+  // Agora o arquivo e o registro entram PRIMEIRO, ja dentro da fila. O pior caso virou
+  // "o print demora alguns minutos pra ser conferido" em vez de "o driver perdeu a foto".
+  // ══════════════════════════════════════════════════════════════════════════
   const sha = await sha256Hex(bytes);
   const path = `${claims.company_id}/${periodId}/${alvoId}/${platformName.replace(/[^\w.-]+/g, '_')}/${crypto.randomUUID()}.${kind.ext}`;
   const { error: upErr } = await supabase.storage.from(PROOF_BUCKET)
@@ -1138,7 +1139,9 @@ async function proofUpload(req: Request, body: Body): Promise<Response> {
   const { data: pay } = await supabase.from('driverpay_payments')
     .select('id').eq('period_id', periodId).eq('driver_id', alvoId).maybeSingle();
 
-  const { error: insErr } = await supabase.from('driverpay_delivery_proofs').insert([{
+  // Nasce 'recebido' + 'pendente' + JA NA FILA (next_check_at = agora): se a leitura
+  // logo abaixo nao acontecer, o cron pega este print sozinho na proxima rodada.
+  const { data: inserido, error: insErr } = await supabase.from('driverpay_delivery_proofs').insert([{
     company_id: claims.company_id,
     driver_id: alvoId,
     period_id: periodId,
@@ -1150,52 +1153,110 @@ async function proofUpload(req: Request, body: Body): Promise<Response> {
     file_sha256: sha,
     upload_source: 'app',
     uploaded_by: claims.driver_id, // quem ENVIOU (o lider, no grupo)
-    status: recusar ? 'rejeitado' : (confirmado ? 'validado' : 'recebido'),
-    reject_reason: rejectReason,
-    // validated_by tem FK pra users(id): confirmacao AUTOMATICA fica NULL e o
-    // marcador vive em check_details.autoConfirmed (licao da NF).
-    validated_at: confirmado ? new Date().toISOString() : null,
-    validated_by: null,
-    check_status: check ? check.status : 'pendente',
-    check_qtd: check?.qtdOk ?? null,
-    check_periodo: check?.periodoOk ?? null,
-    read_packages: check?.readPackages ?? null,
-    read_start_date: check?.readStart ?? null,
-    read_end_date: check?.readEnd ?? null,
-    expected_packages: esperado || null,
-    check_details: check ? {
-      autoConfirmed: confirmado,
-      driverReasons: check.driverReasons,
-      internalReasons: check.internalReasons,
-    } : null,
-    checked_at: new Date().toISOString(),
-    // FILA: a leitura falhou por culpa nossa (cota/rede/API fora)? Volta depois,
-    // sozinho. Se conferiu — ou se o problema e a foto — sai da fila na hora.
-    check_attempts: 1,
-    next_check_at: proximaTentativa(check, 1),
-  }]);
-  if (insErr) return json({ error: 'Falha ao registrar o print', details: insErr.message }, 500);
+    status: 'recebido',
+    check_status: 'pendente',
+    check_attempts: 0,
+    next_check_at: new Date().toISOString(),
+  }]).select('id').single();
+  if (insErr || !inserido?.id) {
+    return json({ error: 'Falha ao registrar o print', details: insErr?.message ?? 'sem id' }, 500);
+  }
+  const proofId = inserido.id as string;
 
-  if (confirmado && pay?.id) await marcarEspelhoConferido(pay.id, claims.company_id);
+  /**
+   * Le o print com a IA e grava o resultado por cima do registro que ja existe.
+   * Qualquer excecao vira 'pendente' — nunca recusa por falha nossa. Se o update falhar,
+   * o print continua 'pendente' na fila, que e o comportamento seguro.
+   */
+  const conferir = async (): Promise<ProofCheckResult | null> => {
+    let check: ProofCheckResult | null = null;
+    let esperado = 0;
+    try {
+      esperado = await pacotesEsperados(periodId, alvoId, platformName);
+      const { data: settings } = await supabase.from('driverpay_settings')
+        .select('proof_auto_confirm, proof_tolerance_packages').eq('company_id', claims.company_id).maybeSingle();
+      const leitura = await readProofImage(
+        pure, kind.mime, visionConfigFromEnv(Deno.env.toObject()),
+        (m) => console.log(m),
+      );
+      check = runProofCheck({
+        reading: leitura,
+        periodStart: String(per.start_date),
+        periodEnd: String(per.end_date),
+        expectedPackages: esperado,
+        platformLabel: platformName,
+        tolerancePackages: Number(settings?.proof_tolerance_packages ?? 0) || 0,
+      });
+    } catch (err) {
+      console.error('[proof-check] falha interna (print segue como pendente):', err);
+      check = null;
+    }
 
-  // Reprocessamento OPORTUNISTA: este envio aproveita e tenta limpar alguns da
-  // fila de graca. Assim, numa leva grande, quem caiu na cota no comeco tende a
-  // ser reconferido pelos envios seguintes — sem ninguem clicar em nada.
-  // Falha aqui nunca atrapalha o envio que o driver acabou de fazer.
-  try {
-    if (check !== null && check.status !== 'pendente') await processarFila(claims.company_id, 2);
-  } catch (err) {
-    console.error('[fila] reprocessamento oportunista falhou (ignorado):', err);
+    const recusar = check !== null && proofShouldReject(check);
+    const confirmado = check !== null && proofIsFullyConfirmed(check);
+
+    const { error: updErr } = await supabase.from('driverpay_delivery_proofs').update({
+      status: recusar ? 'rejeitado' : (confirmado ? 'validado' : 'recebido'),
+      reject_reason: recusar ? `[automático] ${check!.driverReasons.join(' ')}` : null,
+      // validated_by tem FK pra users(id): confirmacao AUTOMATICA fica NULL e o
+      // marcador vive em check_details.autoConfirmed (licao da NF).
+      validated_at: confirmado ? new Date().toISOString() : null,
+      validated_by: null,
+      check_status: check ? check.status : 'pendente',
+      check_qtd: check?.qtdOk ?? null,
+      check_periodo: check?.periodoOk ?? null,
+      read_packages: check?.readPackages ?? null,
+      read_start_date: check?.readStart ?? null,
+      read_end_date: check?.readEnd ?? null,
+      expected_packages: esperado || null,
+      check_details: check ? {
+        autoConfirmed: confirmado,
+        driverReasons: check.driverReasons,
+        internalReasons: check.internalReasons,
+      } : null,
+      checked_at: new Date().toISOString(),
+      // FILA: a leitura falhou por culpa nossa (cota/rede/API fora)? Volta depois,
+      // sozinho. Se conferiu — ou se o problema e a foto — sai da fila na hora.
+      check_attempts: 1,
+      next_check_at: proximaTentativa(check, 1),
+    }).eq('id', proofId).eq('company_id', claims.company_id);
+    if (updErr) console.error('[proof-check] nao gravei o resultado (segue na fila):', updErr);
+
+    if (confirmado && pay?.id) await marcarEspelhoConferido(pay.id, claims.company_id);
+
+    // Reprocessamento OPORTUNISTA: este envio aproveita e tenta limpar alguns da
+    // fila de graca. Assim, numa leva grande, quem caiu na cota no comeco tende a
+    // ser reconferido pelos envios seguintes — sem ninguem clicar em nada.
+    try {
+      if (check !== null && check.status !== 'pendente') await processarFila(claims.company_id, 2);
+    } catch (err) {
+      console.error('[fila] reprocessamento oportunista falhou (ignorado):', err);
+    }
+    return check;
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // O ENTREGADOR NAO ESPERA A IA  (04/08/2026, pedido do Victor)
+  //
+  // A leitura leva ~40s. Como o print JA esta salvo e na fila, da pra responder agora e
+  // conferir por tras: o celular dele libera em ~3s em vez de ~45s. Se a recusa vier
+  // (data errada / ilegivel), o portal mostra na atualizacao seguinte da tela — ele
+  // continua sabendo, so nao fica parado esperando.
+  // ══════════════════════════════════════════════════════════════════════════
+  if (emBackground(conferir())) {
+    // ⚠️ Resposta PROPOSITALMENTE pobre: nada de quantidade, nada de "bateu/nao bateu".
+    return json({ ok: true, conferindo: true });
   }
 
-  if (recusar) {
+  // Runtime sem `waitUntil`: espera a conferencia e responde como antes.
+  const check = await conferir();
+  if (check !== null && proofShouldReject(check)) {
     // 422 = recusa de conferencia (o cliente trata nao-2xx como erro e mostra o
     // motivo). SO chega aqui por data errada ou print ilegivel — quantidade
     // divergente NUNCA recusa, por decisao do Victor.
-    return json({ ok: false, rejected: true, error: rejectReason, reason: rejectReason }, 422);
+    const motivo = `[automático] ${check.driverReasons.join(' ')}`;
+    return json({ ok: false, rejected: true, error: motivo, reason: motivo }, 422);
   }
-  // ⚠️ Resposta de sucesso PROPOSITALMENTE pobre: nada de quantidade, nada de
-  // "bateu/nao bateu". O driver so sabe que chegou.
   return json({ ok: true });
 }
 
