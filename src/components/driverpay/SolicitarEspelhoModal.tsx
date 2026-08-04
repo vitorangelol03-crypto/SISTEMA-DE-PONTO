@@ -20,7 +20,7 @@ import {
   cancelProofRequest,
   updatePeriod,
 } from '../../services/driverPay';
-import { expectedProofPlatforms, type DriverRowData } from './driverPayShared';
+import { expectedProofPlatforms, type DriverRowData, type ProofRequest } from './driverPayShared';
 import { ModalShell } from './ModalShell';
 
 interface SolicitarEspelhoModalProps {
@@ -43,6 +43,13 @@ interface SolicitarEspelhoModalProps {
 /** Só a Shopee vem marcada por padrão — foi a decisão do Victor em 04/08. */
 const PADRAO = 'SHOPEE';
 
+/**
+ * De quem pedir o print (04/08/2026). `manter` não é escolha do operador: é o estado que
+ * aparece quando o pedido já gravado atinge vários entregadores que não formam um grupo
+ * nem um só — sem ele, a tela cairia em "todos" e um clique ampliaria o pedido sem querer.
+ */
+type Escopo = 'todos' | 'grupo' | 'driver' | 'manter';
+
 export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
   companyId, periodId, periodLabel, periodStart, periodEnd,
   rows, platformNames, userId, onClose, onChanged,
@@ -50,8 +57,13 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
-  const [jaSolicitadas, setJaSolicitadas] = useState<string[]>([]);
+  const [jaSolicitadas, setJaSolicitadas] = useState<ProofRequest[]>([]);
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
+  /** De quem pedir. 'manter' so aparece quando o pedido atual nao cabe nas outras opcoes. */
+  const [escopo, setEscopo] = useState<Escopo>('todos');
+  const [grupoEscolhido, setGrupoEscolhido] = useState('');
+  const [driverEscolhido, setDriverEscolhido] = useState('');
+  const [buscaDriver, setBuscaDriver] = useState('');
   const [inicio, setInicio] = useState(periodStart ?? '');
   const [fim, setFim] = useState(periodEnd ?? '');
 
@@ -62,7 +74,14 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
         const atuais = await listProofRequests(companyId, periodId);
         if (!vivo) return;
         setJaSolicitadas(atuais);
-        setMarcadas(new Set(atuais.length ? atuais : platformNames.includes(PADRAO) ? [PADRAO] : []));
+        const plats = [...new Set(atuais.map((r) => r.platformName))];
+        setMarcadas(new Set(plats.length ? plats : platformNames.includes(PADRAO) ? [PADRAO] : []));
+        // ⚠️ Deriva o alcance do que JA esta gravado. Se cair no 'todos' por engano, um clique
+        // em "Solicitar espelho" ampliaria o pedido pra empresa inteira sem querer.
+        const alvos = [...new Set(atuais.map((r) => r.driverId))];
+        if (atuais.length === 0 || alvos.includes(null)) setEscopo('todos');
+        else if (alvos.length === 1) { setEscopo('driver'); setDriverEscolhido(alvos[0] as string); }
+        else setEscopo('manter');
       } catch {
         if (vivo) toast.error('Nao consegui carregar o que ja foi solicitado.');
       } finally {
@@ -72,11 +91,50 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
     return () => { vivo = false; };
   }, [companyId, periodId, platformNames]);
 
-  /** Quem vai ser cobrado, com as plataformas marcadas agora. */
+  /** Entregadores que o alcance escolhido atinge (null = todo mundo). */
+  const alvos = useMemo<(string | null)[]>(() => {
+    if (escopo === 'todos') return [null];
+    if (escopo === 'grupo') {
+      return grupoEscolhido ? rows.filter((r) => r.groupName === grupoEscolhido).map((r) => r.driverId) : [];
+    }
+    if (escopo === 'driver') return driverEscolhido ? [driverEscolhido] : [];
+    return [...new Set(jaSolicitadas.map((r) => r.driverId))]; // 'manter'
+  }, [escopo, grupoEscolhido, driverEscolhido, rows, jaSolicitadas]);
+
+  /** Grupos que tem gente nesta quinzena, com quantos membros — pro seletor. */
+  const gruposDisponiveis = useMemo(() => {
+    const cont = new Map<string, number>();
+    for (const r of rows) if (r.groupName) cont.set(r.groupName, (cont.get(r.groupName) ?? 0) + 1);
+    return [...cont].map(([nome, membros]) => ({ nome, membros }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [rows]);
+
+  /** Entregadores desta quinzena, filtrados pela busca (a lista tem ~90 nomes). */
+  const driversDisponiveis = useMemo(() => {
+    const q = buscaDriver.trim().toLowerCase();
+    return rows
+      .filter((r) => !q || r.name.toLowerCase().includes(q) || (r.groupName ?? '').toLowerCase().includes(q))
+      .map((r) => ({ driverId: r.driverId, name: r.name, groupName: r.groupName }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows, buscaDriver]);
+
+  /** Quantos entregadores distintos ja tem pedido gravado (usado no estado 'manter'). */
+  const alvosJaPedidos = useMemo(
+    () => new Set(jaSolicitadas.map((r) => r.driverId)).size,
+    [jaSolicitadas],
+  );
+
+  /** Exatamente o que sera gravado se ele confirmar agora. */
+  const pedidosDesejados = useMemo<ProofRequest[]>(() => {
+    const out: ProofRequest[] = [];
+    for (const platformName of marcadas) for (const driverId of alvos) out.push({ platformName, driverId });
+    return out;
+  }, [marcadas, alvos]);
+
+  /** Quem vai ser cobrado — mesma funcao que a coluna "Print" da grade usa. */
   const previa = useMemo(() => {
-    const escolhidas = [...marcadas];
-    const cobrados = rows.filter((r) => expectedProofPlatforms(r, escolhidas).length > 0);
-    const prints = cobrados.reduce((s, r) => s + expectedProofPlatforms(r, escolhidas).length, 0);
+    const cobrados = rows.filter((r) => expectedProofPlatforms(r, pedidosDesejados).length > 0);
+    const prints = cobrados.reduce((s, r) => s + expectedProofPlatforms(r, pedidosDesejados).length, 0);
     const emGrupo = cobrados.filter((r) => r.groupName);
     const grupos = new Set(emGrupo.map((r) => r.groupName as string));
     return {
@@ -86,7 +144,7 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
       grupos: grupos.size,
       avulsos: cobrados.length - emGrupo.length,
     };
-  }, [rows, marcadas]);
+  }, [rows, pedidosDesejados]);
 
   const datasOk = Boolean(inicio && fim && inicio <= fim);
   const duracao = datasOk
@@ -109,14 +167,16 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
    * confirmação, e barato o bastante pra refazer (é só solicitar de novo).
    */
   const handleCancelarPedido = async () => {
+    const platsAbertas = [...new Set(jaSolicitadas.map((r) => r.platformName))];
     if (!window.confirm(
-      `Parar de pedir o print nesta quinzena (${jaSolicitadas.join(', ')})?\n\n` +
+      `Parar de pedir o print nesta quinzena (${platsAbertas.join(', ')})?\n\n` +
       'Os entregadores deixam de ver o pedido no portal. Os prints que ja chegaram continuam ' +
       'guardados, e voce pode solicitar de novo quando quiser.',
     )) return;
     setCancelando(true);
     try {
-      for (const nome of jaSolicitadas) await cancelProofRequest(companyId, periodId, nome, userId);
+      // '*' apaga o pedido geral E os individuais daquela plataforma.
+      for (const nome of platsAbertas) await cancelProofRequest(companyId, periodId, nome, userId, '*');
       setJaSolicitadas([]);
       setMarcadas(new Set());
       toast.success('Solicitacao cancelada. O portal parou de pedir print.');
@@ -137,16 +197,20 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
       if (inicio !== periodStart || fim !== periodEnd) {
         await updatePeriod(periodId, companyId, userId, { start: inicio, end: fim });
       }
-      // 2. Abre/fecha a torneira de cada plataforma.
-      const escolhidas = [...marcadas];
-      for (const nome of escolhidas) {
-        if (!jaSolicitadas.includes(nome)) await requestProof(companyId, periodId, nome, userId);
+      // 2. Diferenca entre o que ja esta gravado e o que ele quer agora: grava o que falta
+      //    e apaga o que sobrou. Sem isso, trocar de "todos" pra um grupo deixaria o pedido
+      //    geral no banco e o portal continuaria cobrando a empresa inteira.
+      const chave = (r: ProofRequest) => `${r.platformName}|${r.driverId ?? ''}`;
+      const atuais = new Set(jaSolicitadas.map(chave));
+      const querKeys = new Set(pedidosDesejados.map(chave));
+      for (const r of pedidosDesejados) {
+        if (!atuais.has(chave(r))) await requestProof(companyId, periodId, r.platformName, userId, r.driverId);
       }
-      for (const nome of jaSolicitadas) {
-        if (!marcadas.has(nome)) await cancelProofRequest(companyId, periodId, nome, userId);
+      for (const r of jaSolicitadas) {
+        if (!querKeys.has(chave(r))) await cancelProofRequest(companyId, periodId, r.platformName, userId, r.driverId);
       }
       toast.success(
-        escolhidas.length
+        pedidosDesejados.length
           ? `Espelho solicitado. ${previa.drivers} entregador(es) vao ver o pedido no portal.`
           : 'Solicitacao cancelada. O portal parou de pedir print.',
       );
@@ -267,6 +331,92 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* ── De quem pedir (04/08/2026) ─────────────────────────────
+               Antes o pedido era sempre da quinzena inteira: nao dava pra cobrar
+               so um entregador ou so um grupo. */}
+          <div>
+            <p className="text-sm font-medium text-gray-800 mb-2">De quem pedir o print</p>
+            <div className="space-y-2">
+              {escopo === 'manter' && (
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="radio" checked readOnly
+                    className="w-4 h-4 mt-0.5 text-blue-600" data-testid="proof-scope-manter"
+                  />
+                  <span className="text-sm text-gray-800">
+                    Manter os <b>{alvosJaPedidos} entregador(es)</b> que ja foram pedidos
+                    <span className="block text-xs text-gray-500">
+                      Escolha outra opcao abaixo pra trocar quem sera cobrado.
+                    </span>
+                  </span>
+                </label>
+              )}
+
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio" name="proof-scope" checked={escopo === 'todos'}
+                  onChange={() => setEscopo('todos')}
+                  className="w-4 h-4 mt-0.5 text-blue-600" data-testid="proof-scope-todos"
+                />
+                <span className="text-sm text-gray-800">Todos os entregadores com pacote</span>
+              </label>
+
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio" name="proof-scope" checked={escopo === 'grupo'}
+                  onChange={() => setEscopo('grupo')}
+                  className="w-4 h-4 mt-0.5 text-blue-600" data-testid="proof-scope-grupo"
+                />
+                <span className="text-sm text-gray-800">So um grupo</span>
+              </label>
+              {escopo === 'grupo' && (
+                <select
+                  value={grupoEscolhido} onChange={(e) => setGrupoEscolhido(e.target.value)}
+                  data-testid="proof-scope-grupo-select"
+                  className="ml-6 w-[calc(100%-1.5rem)] border border-gray-300 rounded-md px-3 py-2 text-sm min-h-[40px]"
+                >
+                  <option value="">Escolha o grupo...</option>
+                  {gruposDisponiveis.map((g) => (
+                    <option key={g.nome} value={g.nome}>{g.nome} ({g.membros} entregador(es))</option>
+                  ))}
+                </select>
+              )}
+
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio" name="proof-scope" checked={escopo === 'driver'}
+                  onChange={() => setEscopo('driver')}
+                  className="w-4 h-4 mt-0.5 text-blue-600" data-testid="proof-scope-driver"
+                />
+                <span className="text-sm text-gray-800">So um entregador</span>
+              </label>
+              {escopo === 'driver' && (
+                <div className="ml-6 space-y-1.5">
+                  <input
+                    type="text" value={buscaDriver} onChange={(e) => setBuscaDriver(e.target.value)}
+                    placeholder="Buscar pelo nome..." data-testid="proof-scope-driver-busca"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm min-h-[40px]"
+                  />
+                  <select
+                    value={driverEscolhido} onChange={(e) => setDriverEscolhido(e.target.value)}
+                    data-testid="proof-scope-driver-select"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm min-h-[40px]"
+                  >
+                    <option value="">Escolha o entregador...</option>
+                    {driversDisponiveis.map((d) => (
+                      <option key={d.driverId} value={d.driverId}>
+                        {d.name}{d.groupName ? ` — ${d.groupName}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {buscaDriver.trim() && driversDisponiveis.length === 0 && (
+                    <p className="text-xs text-gray-500">Ninguem com esse nome nesta quinzena.</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

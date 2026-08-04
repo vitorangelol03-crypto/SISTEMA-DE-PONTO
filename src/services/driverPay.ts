@@ -15,6 +15,7 @@ import { getUserPermissions, hasPermission as checkPermission } from './permissi
 import { isMaster, isDriverpayPermission, canAccessDriverpay } from '../config/masters';
 import type { ImportResolvedItem, ImportApplyResult } from '../utils/driverImportApply';
 import { mirrorPlatformKey, sanitizeMirrorKeyForPath } from '../components/driverpay/driverPayShared';
+import type { ProofRequest } from '../components/driverpay/driverPayShared';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -2002,42 +2003,66 @@ export const applyDriverImport = async (
 // Ver supabase/functions/_shared/proofCheck.ts pra regra da conferência.
 
 /** Plataformas com print SOLICITADO nesta quinzena (o botão "Solicitar espelho"). */
-export const listProofRequests = async (companyId: string, periodId: string): Promise<string[]> => {
+export const listProofRequests = async (
+  companyId: string, periodId: string,
+): Promise<ProofRequest[]> => {
   const { data, error } = await supabase
     .from('driverpay_proof_requests')
-    .select('platform_name')
+    .select('platform_name, driver_id')
     .eq('company_id', companyId)
     .eq('period_id', periodId);
   if (error) throwDbError(error);
-  return [...new Set((data ?? []).map((r) => String(r.platform_name)))];
+  return (data ?? []).map((r) => ({
+    platformName: String(r.platform_name),
+    driverId: (r.driver_id as string | null) ?? null,
+  }));
 };
 
 /**
  * Abre a "torneira": a partir daqui o portal do driver passa a pedir o print
  * desta plataforma nesta quinzena. Idempotente (apertar de novo não duplica).
+ *
+ * `driverId` é o ALCANCE (04/08/2026): **null = todo mundo** com pacote na plataforma;
+ * **preenchido = só aquele entregador**. Um grupo é uma chamada por membro.
+ * O `onConflict` acompanha os dois índices parciais da migration.
  */
 export const requestProof = async (
   companyId: string, periodId: string, platformName: string, userId: string,
+  driverId: string | null = null,
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.editDriver');
   const { error } = await supabase
     .from('driverpay_proof_requests')
-    .upsert(
-      { company_id: companyId, period_id: periodId, platform_name: platformName, requested_by: userId },
-      { onConflict: 'company_id,period_id,platform_name' },
-    );
-  if (error) throwDbError(error);
+    .insert({
+      company_id: companyId, period_id: periodId, platform_name: platformName,
+      driver_id: driverId, requested_by: userId,
+    });
+  // 23505 = esse pedido já existe, que é exatamente o resultado desejado (idempotente).
+  // ⚠️ Não dá pra usar `upsert` aqui: desde 04/08 a unicidade vem de dois ÍNDICES
+  // PARCIAIS (um "pra todos" com driver_id IS NULL, outro por entregador), e o
+  // `onConflict` do PostgREST não tem como informar o WHERE do índice — o banco
+  // responde 42P10 ("no unique or exclusion constraint matching"). Medido: o E2E 64
+  // quebrou exatamente assim e o modal ficava aberto com cara de erro.
+  if (error && error.code !== '23505') throwDbError(error);
 };
 
-/** Fecha a torneira. Os prints já enviados FICAM — só para de pedir novos. */
+/**
+ * Fecha a torneira. Os prints já enviados FICAM — só para de pedir novos.
+ * `driverId` null apaga SÓ o pedido geral; `'*'` apaga tudo daquela plataforma
+ * (geral + individuais), que é o que o botão "Cancelar solicitação" faz.
+ */
 export const cancelProofRequest = async (
   companyId: string, periodId: string, platformName: string, userId: string,
+  driverId: string | null | '*' = '*',
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.editDriver');
-  const { error } = await supabase
+  let q = supabase
     .from('driverpay_proof_requests')
     .delete()
     .eq('company_id', companyId).eq('period_id', periodId).eq('platform_name', platformName);
+  if (driverId === null) q = q.is('driver_id', null);
+  else if (driverId !== '*') q = q.eq('driver_id', driverId);
+  const { error } = await q;
   if (error) throwDbError(error);
 };
 

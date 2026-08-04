@@ -913,24 +913,39 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
   }
   if (periodIds.length === 0) return json({ slots: [] });
 
-  // Plataformas solicitadas, por quinzena.
+  // Plataformas solicitadas, por quinzena. A coluna driver_id (04/08/2026) diz o ALCANCE
+  // do pedido: VAZIA = todo mundo com pacote (como sempre foi); PREENCHIDA = so aquele
+  // entregador. Pedir de um grupo inteiro e so gravar uma linha por membro.
   const { data: reqRows } = await supabase.from('driverpay_proof_requests')
-    .select('period_id, platform_name').eq('company_id', claims.company_id).in('period_id', periodIds);
-  const platsPorPeriodo = new Map<string, string[]>();
+    .select('period_id, platform_name, driver_id')
+    .eq('company_id', claims.company_id).in('period_id', periodIds);
+  /** quinzena -> plataformas pedidas pra TODOS. */
+  const platsTodos = new Map<string, Set<string>>();
+  /** "quinzena|driver" -> plataformas pedidas SO pra ele. */
+  const platsDoDriver = new Map<string, Set<string>>();
   for (const r of reqRows ?? []) {
-    const lista = platsPorPeriodo.get(r.period_id as string) ?? [];
-    lista.push(r.platform_name as string);
-    platsPorPeriodo.set(r.period_id as string, lista);
+    const per = r.period_id as string;
+    const plat = r.platform_name as string;
+    const dId = (r.driver_id as string | null) ?? null;
+    const alvo = dId === null ? platsTodos : platsDoDriver;
+    const chave = dId === null ? per : `${per}|${dId}`;
+    const atual = alvo.get(chave) ?? new Set<string>();
+    atual.add(plat);
+    alvo.set(chave, atual);
   }
-  if (platsPorPeriodo.size === 0) return json({ slots: [] });
+  const periodosComPedido = new Set<string>([
+    ...platsTodos.keys(),
+    ...[...platsDoDriver.keys()].map((k) => k.split('|')[0]),
+  ]);
+  if (periodosComPedido.size === 0) return json({ slots: [] });
 
   const { data: pers } = await supabase.from('driverpay_periods')
-    .select('id, label').in('id', [...platsPorPeriodo.keys()]);
+    .select('id, label').in('id', [...periodosComPedido]);
   const labelDe = new Map((pers ?? []).map((p) => [p.id as string, p.label as string]));
 
   const driverIds = await driversQuePossoEnviar(claims);
   const { data: pays } = await supabase.from('driverpay_payments')
-    .select('id, driver_id, period_id').in('period_id', [...platsPorPeriodo.keys()]).in('driver_id', driverIds);
+    .select('id, driver_id, period_id').in('period_id', [...periodosComPedido]).in('driver_id', driverIds);
   const payList = pays ?? [];
   if (payList.length === 0) return json({ slots: [] });
 
@@ -947,7 +962,10 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
     const perId = periodOf.get(payId);
     const plat = pk.platform_name as string;
     if (!dId || !perId || (pk.packages ?? 0) <= 0) continue;
-    if ((platsPorPeriodo.get(perId) ?? []).includes(plat)) precisa.add(`${perId}|${dId}|${plat}`);
+    // Pedido "pra todos" OU pedido individual daquele entregador — qualquer um dos dois cobra.
+    const praTodos = platsTodos.get(perId)?.has(plat) === true;
+    const soPraEle = platsDoDriver.get(`${perId}|${dId}`)?.has(plat) === true;
+    if (praTodos || soPraEle) precisa.add(`${perId}|${dId}|${plat}`);
   }
   if (precisa.size === 0) return json({ slots: [] });
 
@@ -957,7 +975,7 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
 
   const { data: proofs } = await supabase.from('driverpay_delivery_proofs')
     .select('period_id, driver_id, platform_name, status, reject_reason, uploaded_at')
-    .in('period_id', [...platsPorPeriodo.keys()]).in('driver_id', driverIds)
+    .in('period_id', [...periodosComPedido]).in('driver_id', driverIds)
     .order('uploaded_at', { ascending: true });
 
   const enviados: Record<string, number> = {};

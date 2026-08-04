@@ -70,6 +70,7 @@ import {
   melhorEstado,
   proofStateFromRow,
   type ProofState,
+  type ProofRequest,
   applyChecksFilter,
   type ChecksFilterOptions,
   type ChecksFilterResult,
@@ -169,7 +170,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [showSolicitarEspelho, setShowSolicitarEspelho] = useState(false);
   const [showEspelhosRecebidos, setShowEspelhosRecebidos] = useState(false);
   /** Plataformas com print solicitado nesta quinzena. Vazio = ninguém pediu ainda. */
-  const [proofRequests, setProofRequests] = useState<string[]>([]);
+  const [proofRequests, setProofRequests] = useState<ProofRequest[]>([]);
   /** Estado do print por `driverId|plataforma`, pra pintar a coluna da grade. */
   const [proofStates, setProofStates] = useState<Map<string, ProofState>>(new Map());
   const [showCreatePeriod, setShowCreatePeriod] = useState(false);

@@ -13,7 +13,14 @@ import {
   proofStateFromRow,
   type DriverRowData,
   type ProofState,
+  type ProofRequest,
 } from '../../src/components/driverpay/driverPayShared';
+
+/** Pedido "pra todo mundo" — o alcance original, de antes de 04/08. */
+const paraTodos = (...plats: string[]): ProofRequest[] => plats.map((p) => ({ platformName: p, driverId: null }));
+/** Pedido individual: so este entregador e cobrado. */
+const soDe = (driverId: string, ...plats: string[]): ProofRequest[] =>
+  plats.map((p) => ({ platformName: p, driverId }));
 
 /** Linha mínima da grade — só o que estas funções olham. */
 function row(driverId: string, pacotes: Record<string, number>, groupName?: string): DriverRowData {
@@ -43,12 +50,12 @@ function row(driverId: string, pacotes: Record<string, number>, groupName?: stri
 describe('expectedProofPlatforms', () => {
   it('so pede print de plataforma SOLICITADA onde ele tem pacote', () => {
     const r = row('caio', { SHOPEE: 1808, LOGGI: 300 });
-    expect(expectedProofPlatforms(r, ['SHOPEE'])).toEqual(['SHOPEE']);
+    expect(expectedProofPlatforms(r, paraTodos('SHOPEE'))).toEqual(['SHOPEE']);
   });
 
   it('nao pede print de plataforma sem pacote', () => {
     const r = row('caio', { LOGGI: 300 });
-    expect(expectedProofPlatforms(r, ['SHOPEE'])).toEqual([]);
+    expect(expectedProofPlatforms(r, paraTodos('SHOPEE'))).toEqual([]);
   });
 
   it('nao pede nada enquanto ninguem apertou "Solicitar espelho"', () => {
@@ -57,7 +64,34 @@ describe('expectedProofPlatforms', () => {
 
   it('"Coleta Shopee" fica de fora (decisao do Victor: so SHOPEE)', () => {
     const r = row('caio', { SHOPEE: 1808, 'Coleta Shopee': 40 });
-    expect(expectedProofPlatforms(r, ['SHOPEE'])).toEqual(['SHOPEE']);
+    expect(expectedProofPlatforms(r, paraTodos('SHOPEE'))).toEqual(['SHOPEE']);
+  });
+
+  // ── Alcance do pedido (04/08/2026): pedir so de um entregador ou de um grupo ──
+  it('pedido individual cobra SO o entregador escolhido', () => {
+    const caio = row('caio', { SHOPEE: 1808 });
+    const bia = row('bia', { SHOPEE: 900 });
+    expect(expectedProofPlatforms(caio, soDe('caio', 'SHOPEE'))).toEqual(['SHOPEE']);
+    expect(expectedProofPlatforms(bia, soDe('caio', 'SHOPEE'))).toEqual([]);
+  });
+
+  it('pedido de GRUPO e uma linha por membro — quem esta de fora nao e cobrado', () => {
+    const membros = ['ana', 'bia', 'caio'];
+    const pedidos = membros.flatMap((d) => soDe(d, 'SHOPEE'));
+    for (const d of membros) {
+      expect(expectedProofPlatforms(row(d, { SHOPEE: 100 }, 'G1'), pedidos)).toEqual(['SHOPEE']);
+    }
+    expect(expectedProofPlatforms(row('zeca', { SHOPEE: 100 }, 'G2'), pedidos)).toEqual([]);
+  });
+
+  it('pedido geral + individual nao duplica a plataforma', () => {
+    const caio = row('caio', { SHOPEE: 1808 });
+    expect(expectedProofPlatforms(caio, [...paraTodos('SHOPEE'), ...soDe('caio', 'SHOPEE')])).toEqual(['SHOPEE']);
+  });
+
+  it('pedido individual de OUTRO nao vaza pra quem tem pacote na mesma plataforma', () => {
+    const bia = row('bia', { SHOPEE: 900, LOGGI: 10 });
+    expect(expectedProofPlatforms(bia, [...soDe('caio', 'SHOPEE'), ...paraTodos('LOGGI')])).toEqual(['LOGGI']);
   });
 });
 
@@ -94,7 +128,7 @@ describe('melhorEstado — quando o driver mandou mais de um print', () => {
 });
 
 describe('computeProofProgressByPayment', () => {
-  const solicitadas = ['SHOPEE'];
+  const solicitadas = paraTodos('SHOPEE');
 
   it('print certo deixa o driver completo', () => {
     const rows = [row('caio', { SHOPEE: 1808 })];

@@ -344,12 +344,30 @@ export type ProofState =
   /** ainda não mandou nada */
   | 'faltando';
 
-/** Plataformas em que este driver deve mandar print: as SOLICITADAS onde ele tem pacote. */
+/**
+ * Um pedido de print gravado em `driverpay_proof_requests`.
+ *
+ * `driverId` é o ALCANCE do pedido (04/08/2026): **null = todo mundo** com pacote naquela
+ * plataforma (como sempre foi); **preenchido = só aquele entregador**. Pedir de um grupo
+ * inteiro é gravar uma linha por membro — não existe conceito de "pedido de grupo".
+ */
+export interface ProofRequest {
+  platformName: string;
+  driverId: string | null;
+}
+
+/** Plataformas em que este driver deve mandar print: as SOLICITADAS PRA ELE onde tem pacote. */
 export function expectedProofPlatforms(
   row: DriverRowData,
-  requestedPlatforms: readonly string[],
+  requests: readonly ProofRequest[],
 ): string[] {
-  return requestedPlatforms.filter((name) => platformPackages(row, name) > 0);
+  const nomes = new Set<string>();
+  for (const req of requests) {
+    // driverId null = pedido vale pra todo mundo; preenchido = só pra aquele entregador.
+    if (req.driverId !== null && req.driverId !== row.driverId) continue;
+    if (platformPackages(row, req.platformName) > 0) nomes.add(req.platformName);
+  }
+  return [...nomes];
 }
 
 export interface ProofProgress {
@@ -380,12 +398,12 @@ export interface ProofProgress {
  */
 export function computeProofProgressByPayment(
   rows: readonly DriverRowData[],
-  requestedPlatforms: readonly string[],
+  requests: readonly ProofRequest[],
   stateByDriverPlatform: ReadonlyMap<string, ProofState>,
 ): Map<string, ProofProgress> {
   const out = new Map<string, ProofProgress>();
   for (const row of rows) {
-    const plataformas = expectedProofPlatforms(row, requestedPlatforms);
+    const plataformas = expectedProofPlatforms(row, requests);
     const contagem: Record<ProofState, number> = {
       confirmado: 0, divergente: 0, pendente: 0, recusado: 0, faltando: 0,
     };
