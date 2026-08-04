@@ -51,6 +51,8 @@ interface DriverRowProps {
   proofProgress?: ProofProgress;
   /** Plataformas em que ele ficou de fora do pedido geral por nao ter grupo. */
   semGrupoFora?: string[];
+  /** Plataformas em que ele NAO precisa mandar print: a planilha chegou e ele nao tem pacote. */
+  dispensadoSemPacote?: string[];
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkbox. */
   selected?: boolean;
   /** Driver já coberto por um GRUPO selecionado: checkbox marcado e travado. */
@@ -89,6 +91,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   nfProgress,
   proofProgress,
   semGrupoFora = [],
+  dispensadoSemPacote = [],
   selected,
   selectionLocked,
   onToggleSelect,
@@ -375,6 +378,19 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 ? <AlertTriangle className="w-4 h-4" />
                 : <Circle className="w-4 h-4" />}
               {proofProgress.confirmed}/{proofProgress.expected}
+            </span>
+          ) : dispensadoSemPacote.length > 0 ? (
+            /* Pedido do Victor (04/08): quando a planilha entra, quem nao tem pacote naquela
+               plataforma PARA de ser cobrado — o lider nao fica cacando print de quem nao roda
+               Shopee. Mas em vez de virar um traco mudo, ganha marca propria: da pra distinguir
+               "nao precisava" de "nao foi pedido". ⚠️ Resolve so o PRINT, nao o espelho conferido. */
+            <span
+              title={`Nao precisa mandar print: a planilha de ${dispensadoSemPacote.join(', ')} ja foi importada e este entregador nao tem pacote nela nesta quinzena.`}
+              data-testid="print-dispensado"
+              className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border bg-slate-100 text-slate-600 border-slate-300"
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              nao entrega
             </span>
           ) : semGrupoFora.length > 0 ? (
             /* Regra de logistica (04/08/2026): o pedido "pra todos" nao cobra quem esta sem

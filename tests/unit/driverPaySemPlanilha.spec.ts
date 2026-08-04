@@ -18,6 +18,7 @@ import {
   plataformasSemPlanilha,
   expectedProofPlatforms,
   statusPorQuantidade,
+  proofDispensadoSemPacote,
   type DriverRowData,
   type ProofRequest,
 } from '../../src/components/driverpay/driverPayShared';
@@ -131,4 +132,42 @@ describe('painel e edge function dao o MESMO veredito', () => {
       expect(doPainel, 'painel x edge function').toBe(esperadoDaEdge);
     });
   }
+});
+
+// ── Quem NÃO entrega naquela plataforma some da cobrança (04/08/2026) ───────
+// Pedido do Victor: quando a planilha entra, o líder para de caçar print de quem não roda
+// Shopee — mas o painel mostra uma marca própria, pra distinguir "não precisava" de "não
+// foi pedido". ⚠️ Resolve só o PRINT; o "Espelho conferido" do pagamento não é tocado.
+describe('proofDispensadoSemPacote', () => {
+  const semShopee = new Set(['SHOPEE']);
+
+  it('🎯 planilha JÁ importada e ele sem pacote: dispensado', () => {
+    const r = row('ana', { LOGGI: 300 }, 'G1');
+    expect(proofDispensadoSemPacote(r, geral('SHOPEE'), new Set())).toEqual(['SHOPEE']);
+    // e some da cobrança
+    expect(expectedProofPlatforms(r, geral('SHOPEE'), new Set())).toEqual([]);
+  });
+
+  it('planilha AINDA NÃO importada: continua pendente, não dispensado', () => {
+    const r = row('ana', {}, 'G1');
+    expect(proofDispensadoSemPacote(r, geral('SHOPEE'), semShopee)).toEqual([]);
+    expect(expectedProofPlatforms(r, geral('SHOPEE'), semShopee)).toEqual(['SHOPEE']);
+  });
+
+  it('tem pacote: continua sendo cobrado, não dispensado', () => {
+    const r = row('ana', { SHOPEE: 500 }, 'G1');
+    expect(proofDispensadoSemPacote(r, geral('SHOPEE'), new Set())).toEqual([]);
+    expect(expectedProofPlatforms(r, geral('SHOPEE'), new Set())).toEqual(['SHOPEE']);
+  });
+
+  it('sem grupo não é dispensado (nem foi cobrado — é outro caso, outra marca)', () => {
+    const r = row('marcos', { LOGGI: 10 }, null);
+    expect(proofDispensadoSemPacote(r, geral('SHOPEE'), new Set())).toEqual([]);
+  });
+
+  it('duas plataformas: dispensado só na que ele não roda', () => {
+    const r = row('ana', { LOGGI: 300 }, 'G1');
+    expect(proofDispensadoSemPacote(r, geral('SHOPEE', 'LOGGI'), new Set())).toEqual(['SHOPEE']);
+    expect(expectedProofPlatforms(r, geral('SHOPEE', 'LOGGI'), new Set())).toEqual(['LOGGI']);
+  });
 });

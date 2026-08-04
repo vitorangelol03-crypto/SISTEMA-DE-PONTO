@@ -71,6 +71,7 @@ import {
   plataformasSemPlanilha,
   nfPrazoStatus,
   proofForaPorSemGrupo,
+  proofDispensadoSemPacote,
   melhorEstado,
   proofStateFromRow,
   type ProofState,
@@ -1077,6 +1078,20 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
    * Victor: contador que nunca fecha vira ruído. Aparece com selo próprio na grade e como
    * aviso na janela de solicitar.
    */
+  /**
+   * Quem NAO precisa mandar print porque a planilha ja chegou e ele nao tem pacote naquela
+   * plataforma (04/08/2026). A pendencia some sozinha; a marca propria fica pra dar pra
+   * distinguir "nao precisava" de "nao foi pedido".
+   */
+  const dispensadoByPayment = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const r of rows) {
+      const d = proofDispensadoSemPacote(r, proofRequests, semPlanilha);
+      if (d.length > 0) m.set(r.paymentId, d);
+    }
+    return m;
+  }, [rows, proofRequests, semPlanilha]);
+
   const semGrupoForaByPayment = useMemo(() => {
     const m = new Map<string, string[]>();
     for (const r of rows) {
@@ -1568,6 +1583,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             nfProgressByPayment={nfProgressByPayment}
             proofProgressByPayment={proofProgressByPayment}
             semGrupoForaByPayment={semGrupoForaByPayment}
+            dispensadoByPayment={dispensadoByPayment}
             selGroups={canMirror ? selGroups : undefined}
             selDrivers={canMirror ? selDrivers : undefined}
             onToggleSelGroup={canMirror ? toggleSelGroup : undefined}

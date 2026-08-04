@@ -487,6 +487,30 @@ export function statusPorQuantidade(
 }
 
 /**
+ * Plataformas em que ele foi cobrado mas, **com a planilha já importada, não tem pacote** —
+ * ou seja, não entregou naquela plataforma nesta quinzena e **não precisa mandar print**.
+ *
+ * Pedido do Victor (04/08): assim que a planilha entra, a pendência dessa gente some sozinha
+ * (o líder para de caçar print de quem não roda Shopee), mas em vez de virar um traço mudo o
+ * painel mostra uma **marca própria** — pra dar pra distinguir "não precisava" de "não foi
+ * pedido". ⚠️ Isto resolve **só o print**: não marca o "Espelho conferido" do pagamento.
+ */
+export function proofDispensadoSemPacote(
+  row: DriverRowData,
+  requests: readonly ProofRequest[],
+  semPlanilha?: ReadonlySet<string>,
+): string[] {
+  const nomes = new Set<string>();
+  for (const req of requests) {
+    if (!pedidoAlcanca(req, row)) continue;
+    // Planilha ainda não chegou: ele continua pendente, não dispensado.
+    if (semPlanilha?.has(req.platformName)) continue;
+    if (platformPackages(row, req.platformName) <= 0) nomes.add(req.platformName);
+  }
+  return [...nomes];
+}
+
+/**
  * Plataformas em que este driver TERIA pacote pra mandar, mas ficou de fora **por não estar
  * em grupo nenhum**. Não entra no contador de prints (senão ele nunca fecharia — decisão do
  * Victor: "marca separado, fora da conta"); serve pro selo cinza "sem grupo — não pedido"

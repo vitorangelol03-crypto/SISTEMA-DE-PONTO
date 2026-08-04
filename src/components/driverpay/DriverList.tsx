@@ -54,6 +54,8 @@ interface DriverListProps {
   proofProgressByPayment?: ReadonlyMap<string, ProofProgress>;
   /** paymentId -> plataformas em que ele ficou de fora do pedido geral por nao ter grupo. */
   semGrupoForaByPayment?: ReadonlyMap<string, string[]>;
+  /** paymentId -> plataformas em que ele NAO precisa mandar print (planilha chegou, sem pacote). */
+  dispensadoByPayment?: ReadonlyMap<string, string[]>;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkboxes. */
   selGroups?: ReadonlySet<string>;
   selDrivers?: ReadonlySet<string>;
@@ -106,6 +108,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   nfProgressByPayment,
   proofProgressByPayment,
   semGrupoForaByPayment,
+  dispensadoByPayment,
   selGroups,
   selDrivers,
   onToggleSelGroup,
@@ -345,6 +348,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                 nfProgress={nfProgressByPayment?.get(row.paymentId)}
                 proofProgress={proofProgressByPayment?.get(row.paymentId)}
                 semGrupoFora={semGrupoForaByPayment?.get(row.paymentId)}
+                dispensadoSemPacote={dispensadoByPayment?.get(row.paymentId)}
                 selected={selDrivers?.has(row.paymentId)}
                 selectionLocked={rowGroupSelected(row)}
                 onToggleSelect={onToggleSelDriver}
