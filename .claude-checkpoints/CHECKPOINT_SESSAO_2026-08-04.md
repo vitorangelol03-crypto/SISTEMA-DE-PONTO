@@ -704,3 +704,26 @@ Deploy conferido do jeito certo (baixando o arquivo do site, não pelo "build pa
 da correção (`Nao foi possivel enviar a prova`, `Nao foi possivel remover provas antigas`,
 `Upload da prova de desconto`). ⚠️ `DiscountModal` mora nesse chunk — procurar no `index-*.js` dá
 falso negativo.
+
+### 13.7 Corrigir a contagem direto em "Espelhos recebidos" (`cf3353b`)
+Pedido dele: pro driver que **não bateu**, um botãozinho ali mesmo pra escolher qual número fica —
+sem fechar a janela e editar na mão. Caso real: **CAIO, print 1808 × planilha 1811**.
+
+Na linha do print divergente: `[Usar 1808 (do print)] · [outro número] [Aplicar]`. Ao aplicar, grava
+os pacotes e chama a **mesma reconferência** que roda depois da importação — a regra de marcar o
+espelho é **uma só**, não duas parecidas.
+
+⚠️ **Automático só quando a contagem BATE** (regra dele, reafirmada hoje). Divergiu, nada roda
+sozinho — o botão facilita o clique, não substitui.
+
+**A pedra que a investigação achou antes de eu desenhar:** das **238** combinações driver+plataforma
+em produção, **95 têm várias rotas** (até 7) — não existe "um lugar" pra gravar 1808. E em **8** delas
+as rotas têm **preço diferente**, então onde a diferença cai **muda o valor a receber**.
+
+**Decisão dele:** a diferença vai pra **MAIOR rota**. Se não couber nela, **escorre pra próxima** —
+nenhuma rota fica negativa. Com preços diferentes, a tela mostra **quanto o total muda** antes de
+aplicar.
+
+**11 testes** em `planejarCorrecaoDePacotes`: maior rota não ser a primeira, diferença que não cabe e
+escorre, preços diferentes (tirar 10 da rota de R$ 3 custa R$ 30, não R$ 20) e a invariante de que o
+total final é **sempre exatamente o pedido**.
