@@ -507,7 +507,11 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
 
           {jaSolicitadas.length > 0 && (
             <p className="text-xs text-gray-500">
-              Ja solicitado nesta quinzena: <strong>{jaSolicitadas.join(', ')}</strong>. Desmarcar faz o portal
+              {/* ⚠️ jaSolicitadas virou ProofRequest[] em 04/08 (plataforma + alcance).
+                  Juntar direto imprimia "[object Object]" na tela. */}
+              Ja solicitado nesta quinzena:{' '}
+              <strong>{[...new Set(jaSolicitadas.map((r) => r.platformName))].join(', ')}</strong>
+              {alvosJaPedidos > 0 && ` (${alvosJaPedidos} entregador(es))`}. Desmarcar faz o portal
               parar de pedir — os prints ja enviados continuam guardados.
             </p>
           )}
