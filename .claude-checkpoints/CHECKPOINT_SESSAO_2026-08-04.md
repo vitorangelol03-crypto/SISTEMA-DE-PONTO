@@ -602,3 +602,52 @@ commit `fbe5d3f`** ("prazo da nota"). O código está correto e presente, mas na
 **importa `src/utils/discountProofs.ts`, que só entrou em `57fd352`** — ou seja, `fbe5d3f` sozinho
 não compila. Não reescrevi história (é trabalho de outra sessão). **Lição: com duas sessões abertas
 no mesmo repo, `git add <arquivos>` explícito — nunca `git add -A`.**
+
+---
+
+## 13. Fechamento da leva: prazo da nota, holerite, Safari e dispensa do print
+
+### 13.1 Prazo da nota POR ESPELHO, medindo de verdade (`fbe5d3f`)
+Os campos de corte viraram **data/hora de verdade** (eram texto livre `"14:00"`/`"20/07"`, sem ano,
+guardados **por empresa** — impossível conferir). A faixa impressa no espelho **continua igual** (o
+`03/08` é derivado), mas agora o valor é comparável. Valor no formato antigo é descartado na carga e
+o padrão (2 dias, 18:00) entra no lugar.
+
+O prazo vai gravado em **`nf_due_at` na publicação** — mudar o padrão depois **não** mexe nos
+espelhos já publicados, que era a exigência do "prazo por espelho".
+
+- **Notas recebidas:** selo `⏰ atrasada — 2 h e 15 min depois` + filtro Todas / Só no prazo / Só
+  atrasadas / Sem prazo.
+- **Relatórios:** terceira chavinha "Só quem mandou a nota dentro do prazo", mesma regra "paga o
+  resto", e o rótulo entra no cabeçalho do Excel. ⚠️ **Quem não tem prazo definido não é cortado.**
+
+### 13.2 Holerite fecha (`fbe5d3f`)
+Linha **"Desconto por erros de quantidade"** (nome escolhido pelo Victor). O resumo passou a somar
+dos **proventos listados** em vez do `totalGross`, então agora **proventos − descontos = líquido**
+(conferido no caso real: 4.050 − 8 − 188,49 = 3.853,51).
+
+### 13.3 ✅ Safari — RESOLVIDO, e o portal funciona
+Um subagente descobriu que dá pra rodar o WebKit **sem sudo**: baixar os `.deb` com `apt-get
+download` (não precisa root), extrair com `dpkg -x` em `/tmp` e apontar `LD_LIBRARY_PATH`, com
+`PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1` e um wrapper próprio (o `MiniBrowser` sobrescreve o
+`LD_LIBRARY_PATH`).
+**Rodei o spec 65 inteiro no WebKit em tela de iPhone: 5 passaram direto + 1 no retry = 6/6**,
+incluindo anexar a foto. ⚠️ A gambiarra fica **fora do repositório** (config em `/tmp`) — não entra
+no `playwright.config.ts`. Pra deixar nativo, o Victor roda:
+`sudo npx playwright install-deps webkit`
+
+### 13.4 Quem não entrega na plataforma sai da cobrança (`0dc9822`)
+Pedido dele: pedimos o espelho pro grupo todo antes da planilha, mas tem driver que não roda Shopee.
+Quando a planilha entra, **a pendência dele some sozinha**. Metade já funcionava; faltava a **marca**
+— antes virava um traço mudo. Agora a coluna Print mostra **"não entrega"** (cinza) com o motivo.
+⚠️ **Resolve só o print**; o "Espelho conferido" do pagamento não é tocado.
+
+**Estados da coluna Print, completos:** verde (bate) · âmbar (não bate/recusado) · cinza (pedido, não
+mandou) · **"não entrega"** (planilha chegou, sem pacote) · **"sem grupo"** (fora do pedido geral) ·
+traço (não foi pedido).
+
+### 13.5 ⚠️ Victor trabalhando em paralelo no mesmo repositório
+Apareceram no meio da sessão `DiscountModal.tsx` alterado + `utils/discountProofs.ts`,
+`tests/unit/discountProofs.spec.ts` e `tests/66-...spec.ts` — **não eram meus**. Ele confirmou que
+estava em outro terminal. **Passei a commitar arquivo por arquivo, nominalmente, nunca `git add -A`.**
+Os 4 erros de tipo do `DiscountModal` são do trabalho dele em andamento, não meus.
