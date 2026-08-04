@@ -322,6 +322,14 @@ export async function deleteDriverpayTestArtifacts(): Promise<void> {
   if (driverIds.length > 0) {
     await supabase.from('driverpay_platform_rates').delete().in('driver_id', driverIds);
     await supabase.from('driverpay_group_members').delete().in('driver_id', driverIds);
+    // Espelho do app (04/08): os prints e os ARQUIVOS que eles deixaram no bucket.
+    // Apagar a linha sem apagar o objeto deixaria imagem órfã no storage pra sempre.
+    const { data: proofs } = await supabase
+      .from('driverpay_delivery_proofs').select('file_path').in('driver_id', driverIds);
+    const paths = (proofs || []).map((p: { file_path: string }) => p.file_path).filter(Boolean);
+    if (paths.length > 0) await supabase.storage.from('driverpay-delivery-proofs').remove(paths);
+    await supabase.from('driverpay_delivery_proofs').delete().in('driver_id', driverIds);
+    await supabase.from('driverpay_driver_auth').delete().in('driver_id', driverIds);
     await supabase.from('driverpay_payments').delete().in('driver_id', driverIds);
     await supabase.from('driverpay_drivers').delete().in('id', driverIds);
   }
