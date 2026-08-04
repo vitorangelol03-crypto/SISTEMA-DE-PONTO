@@ -249,3 +249,20 @@ propósito no ajuste 3. Não afrouxei o teste — troquei por um sinal **mais fo
   portal do driver **nunca foi rodado em WebKit**, e driver de iPhone usa Safari. Fica anotado.
 - **Banco conferido antes e depois: 99 drivers · 49 grupos · 3 períodos · 0 prints · 0 pedidos —
   idêntico.** Era a exigência explícita do Victor ("muito cuidado pra não perder nenhum dado").
+
+### Push + deploy confirmados (04/08, fim da sessão)
+
+**Push:** `9dceb8e..1a980c2` (4 commits) — o Victor pediu na hora ("faz o push de tudo que estiver
+pendente"). Antes de mandar, varri o diff atrás da chave do Gemini, do segredo da fila, de PAT e de
+JWT: **nada**. Só sobem 5 arquivos (`DriverApp.tsx`, specs 65 e `cleanup.ts`, checkpoints).
+⚠️ A regra do projeto **segue valendo**: push é dele. Foi pedido explícito, não virou padrão.
+
+**Deploy da Vercel — confirmado do jeito certo, não pelo "build passou":**
+o site troca `index-BwyhYIDk.js` por `index-DNQid7r5.js`, e o pedaço da tela do entregador
+(`/assets/DriverApp-B-6G8K-d.js`, que é chunk separado — procurar o texto no `index` dá falso
+negativo) baixado do ar tem **sha256 idêntico ao build local**: `d3721ba4c42b9941…`. Dentro dele
+estão "Faltam", "Seu espelho", "Tudo enviado" e "Já enviados". **A tela nova está servindo.**
+
+**Ainda em aberto:** fn `driverpay-proof-admin` (anexar/reconferir pelo painel — quem manda por
+WhatsApp ainda depende de alguém por fora) · rodar o portal em **WebKit/Safari** (binário não
+instalado nesta máquina) · testar numa quinzena real com **um** driver antes de soltar pros 89.
