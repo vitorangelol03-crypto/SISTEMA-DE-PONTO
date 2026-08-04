@@ -392,3 +392,21 @@ quinzena, então **parei e perguntei** em vez de decidir sozinho.
 
 **Pendente:** OK pra aplicar a migration · OK pra converter os campos de corte · depois: selo
 "atrasada" na nota, filtro em "Notas recebidas" e nos dois relatórios.
+
+### 10.1 Pedir o espelho ANTES da planilha (`2970b1e`) — no ar
+Decisão do Victor sobre quem recebe: **"somente entregadores que estiverem em grupos"** — a mesma
+regra de logística de 9.4. Enquanto **ninguém** da quinzena tem pacote naquela plataforma, o pedido
+vale pra todo mundo em grupo; assim que a planilha entra, volta a regra normal (só quem tem pacote).
+⚠️ **É por PLATAFORMA**: importar a eMile não pode fazer o sistema achar que a da Shopee chegou.
+
+`proof-slots` passou a percorrer **pagamento × plataforma pedida** em vez da lista de pacotes — sem
+planilha não existe pacote, e varrer pacotes deixava a tela do entregador vazia.
+
+Sem planilha: **data conferida na hora** (quinzena errada recusada na hora), **quantidade esperando**,
+e o espelho **NÃO** é marcado conferido — `proofIsFullyConfirmed` exige `qtdOk`, o que já estava certo.
+
+`statusPorQuantidade`: quando a planilha chega, o veredito sai do número que a IA **já leu** e está
+guardado. Conta pura, **zero download e zero chamada de IA**. Um teste roda essa conta **lado a lado
+com o `runProofCheck`** da edge fn pra as duas nunca divergirem em silêncio.
+
+**Validado:** 173 unit (19 novos) · **21/21 contra a edge fn NO AR** · build · banco idêntico.
