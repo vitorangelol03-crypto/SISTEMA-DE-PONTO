@@ -677,3 +677,30 @@ espelho não marcado · sem pacote → intocado. **Banco idêntico antes/depois.
 
 **LIÇÃO:** função pura testada ≠ feature entregue. Faltou o fio entre a conta e o gatilho, e os
 testes unitários não pegam isso — só olhar o dado em produção pegou.
+
+### 13.4 "Total a receber" verde mesmo negativo (`710d965`)
+Achado pelo Victor olhando a tela: com a quinzena só tendo desconto lançado, o KPI do topo mostrava
+**-R$ 1.212,05 em VERDE, com ícone de tique**. A linha do driver, o subtotal do grupo e o card de
+grupo já pintavam de vermelho no negativo (`net < 0`) — **só o KPI tinha `color="green"` fixo**.
+Telas vizinhas discordando do MESMO número é o tipo de coisa que faz pagar errado.
+
+Corrigido com a mesma regra dos outros três (+ ícone de alerta no lugar do tique). Validado em
+**navegador real**: `bg-red-50 border-red-100` e valor `text-red-600`. Nenhum teste afirmava a cor
+(o `bg-green-700` do spec 63 é a faixa da prévia do espelho, outro componente).
+
+⚠️ **A MESMA classe de erro continua na faixa "TOTAL A RECEBER" do espelho**
+(`DriverMirrorPreviewDialog.tsx:344` e o PDF em `driverMirrorPdf.ts`): verde fixo. Como os 24
+entregadores com PNR estão negativos até a planilha de julho entrar, um espelho publicado agora
+sairia com faixa verde num valor negativo. **NÃO corrigido — avisado, fora do que foi pedido.**
+
+### 13.5 ✅ A correção das provas foi confirmada EM PRODUÇÃO pelo uso real
+Depois do deploy, o Victor editou PNRs e anexou foto. No banco: **2 descontos da Regiane com
+`proof1_path` preenchido** — provas salvas de verdade, pelo painel, sem teste nenhum envolvido.
+Ele também corrigiu valor (`BR264287491019R` R$ 41,90 → R$ 39,90) e pôs os números de ticket na
+observação, então a soma da quinzena passou de R$ 1.212,05 para **R$ 1.210,05** (47 descontos).
+
+Deploy conferido do jeito certo (baixando o arquivo do site, não pelo "build passou"): o chunk
+`DriverPayTab-qCeJOE1g.js` traz o aviso novo, **não** traz o antigo, e tem as três marcas do código
+da correção (`Nao foi possivel enviar a prova`, `Nao foi possivel remover provas antigas`,
+`Upload da prova de desconto`). ⚠️ `DiscountModal` mora nesse chunk — procurar no `index-*.js` dá
+falso negativo.
