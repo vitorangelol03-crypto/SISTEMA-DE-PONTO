@@ -651,3 +651,29 @@ Apareceram no meio da sessão `DiscountModal.tsx` alterado + `utils/discountProo
 `tests/unit/discountProofs.spec.ts` e `tests/66-...spec.ts` — **não eram meus**. Ele confirmou que
 estava em outro terminal. **Passei a commitar arquivo por arquivo, nominalmente, nunca `git add -A`.**
 Os 4 erros de tipo do `DiscountModal` são do trabalho dele em andamento, não meus.
+
+### 13.6 🔴 O buraco que o Victor apontou — print antes da planilha (`e24fde7`)
+Da pra pedir o print **antes** de importar a planilha. Nesse momento não há quantidade pra comparar,
+então o print entra lido mas **sem veredito** e o espelho **não** é marcado — isso está certo. **O que
+faltava: quando a planilha chegava, NADA fechava essa conta.** O print ficava `recebido` pra sempre.
+
+⚠️ **E a janela de solicitar JÁ PROMETIA isso** ("a conferência da quantidade acontece sozinha quando
+você importar a planilha"). O sistema prometia algo que não fazia.
+
+**Como eu deixei passar:** construí e testei `statusPorQuantidade` (5 testes comparando com o
+`runProofCheck` da edge fn) mas **nunca liguei na importação** — ficou só nos testes. Achei ao olhar
+o print do **CAIO em produção**: lido 1808, período ok, esperado vazio, fora da fila.
+
+**`reconferirPrintsComPlanilha`** agora roda logo depois da importação:
+- usa o número que a IA **já leu** — não baixa foto, não chama IA, não entra na fila (pode rodar em
+  89 prints sem gastar cota);
+- só mexe em print já lido, com **período aprovado** e **sem decisão humana**;
+- marca o espelho com a **mesma regra da edge fn** (respeita o liga/desliga, não passa por cima de
+  humano);
+- avisa o placar no fim; falha ali **não** estraga a importação, que já terminou.
+
+**Provado contra o banco real, 3 casos:** bate → validado + espelho marcado · não bate → divergente,
+espelho não marcado · sem pacote → intocado. **Banco idêntico antes/depois.**
+
+**LIÇÃO:** função pura testada ≠ feature entregue. Faltou o fio entre a conta e o gatilho, e os
+testes unitários não pegam isso — só olhar o dado em produção pegou.
