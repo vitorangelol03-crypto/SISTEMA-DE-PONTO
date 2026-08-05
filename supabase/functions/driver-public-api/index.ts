@@ -491,6 +491,31 @@ async function buildValueCandidates(
     cands.liquido_grupo = netSum(groupIds);
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // A MESMA SOMA, COM VALE/PERDA ABATIDO  (05/08/2026 — urgente, gente travada)
+  //
+  // `somaCnpj_*` soma os pacotes daquele CNPJ SEM abater desconto. Mas o espelho
+  // IMPRIME o total ja abatido: com os PNR lancados em 04/08, o PDF do Oliur passou
+  // a dizer R$ 6.090,41 (= 6.119,40 - 28,99) e ele emitiu a nota nesse valor — e a
+  // conferencia recusava, cobrando os R$ 6.119,40. Mesma coisa com o Fabricio
+  // (7.574,10 = 7.602,00 - 27,90). A regra do projeto e "a nota segue o total
+  // IMPRESSO no espelho", entao esse valor precisa ser candidato.
+  //
+  // ADITIVO de proposito: o candidato antigo CONTINUA valendo. Quem baixou o espelho
+  // ANTES do desconto entrar tem um PDF com o valor cheio, e a nota dele nao pode
+  // passar a ser recusada. Sem desconto os dois candidatos sao iguais e nada muda.
+  // ══════════════════════════════════════════════════════════════════════════
+  const abatidoIndividual = round2(cands.somaCnpj_individual - deductionsSum([driverId]));
+  if (abatidoIndividual !== cands.somaCnpj_individual && abatidoIndividual > 0) {
+    cands.somaCnpj_individual_abatido = abatidoIndividual;
+  }
+  if (groupIds.length > 1) {
+    const abatidoGrupo = round2(cands.somaCnpj_grupo - deductionsSum(groupIds));
+    if (abatidoGrupo !== cands.somaCnpj_grupo && abatidoGrupo > 0) {
+      cands.somaCnpj_grupo_abatido = abatidoGrupo;
+    }
+  }
+
   const { data: pubs } = await supabase.from('driverpay_mirror_publications')
     .select('scope, platform_filter, include_deductions').eq('driver_id', driverId).eq('period_id', periodId);
   for (const pub of pubs ?? []) {
