@@ -34,6 +34,9 @@ interface DriverFiltersProps {
   /** Filtro por espelho CONFERIDO (o print da Shopee): '' todos | 'ok' | 'pending'. */
   conferidoFilter: string;
   onConferido: (value: string) => void;
+  /** Pagos × não pagos: '' todos | 'pago' | 'nao_pago' (parcial entra em não pago). */
+  pagamentoFilter: string;
+  onPagamento: (value: 'pago' | 'nao_pago' | '') => void;
   view: 'list' | 'groups';
   onView: (view: 'list' | 'groups') => void;
 }
@@ -63,12 +66,14 @@ export const DriverFilters: React.FC<DriverFiltersProps> = ({
   platformOptions,
   conferidoFilter,
   onConferido,
+  pagamentoFilter,
+  onPagamento,
   view,
   onView,
 }) => {
   return (
     <div className="p-3 sm:p-4 border-b border-gray-200 space-y-3">
-      {/* 7 filtros num grid simétrico (3 col no desktop) */}
+      {/* 8 filtros num grid simétrico (3 col no desktop) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <div className="flex flex-col gap-1">
           <label className={LABEL}>Pesquisar (nome, rota ou grupo)</label>
@@ -131,6 +136,25 @@ export const DriverFilters: React.FC<DriverFiltersProps> = ({
           onToggle={onPlat}
           onClear={onClearPlat}
         />
+
+        {/* Pagos × não pagos (05/08/2026) — lê a mesma tag "pagamento concluído" da grade.
+            PARCIAL entra em "falta pagar": quem recebeu só a SHOPEE ainda tem a receber, e
+            somê-lo aos pagos faria alguém ser esquecido. Está escrito no rótulo. */}
+        <div className="flex flex-col gap-1">
+          <label className={LABEL}>
+            Pagamento <span className="font-normal text-gray-400">· parcial conta como não pago</span>
+          </label>
+          <select
+            value={pagamentoFilter}
+            onChange={(e) => onPagamento(e.target.value as 'pago' | 'nao_pago' | '')}
+            data-testid="filtro-pagamento"
+            className={FIELD}
+          >
+            <option value="">Todos</option>
+            <option value="pago">Já pagos</option>
+            <option value="nao_pago">Falta pagar</option>
+          </select>
+        </div>
 
         <div className="flex flex-col gap-1">
           {/* 05/08: era "Espelho conferido (print)". O "(print)" saiu junto com a coluna

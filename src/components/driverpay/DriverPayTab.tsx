@@ -71,6 +71,8 @@ import {
   planejarPublicacao,
   seloDoBotao,
   printsRepetidos,
+  passaNoFiltroDePagamento,
+  type FiltroDePagamento,
   proofPrecisaAtencao,
   toggleValorDeFiltro,
   temTodasAsRotas,
@@ -185,6 +187,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [espelhoFilter, setEspelhoFilter] = useState(''); // '' | 'published' | 'unpublished'
   const [platFilter, setPlatFilter] = useState<string[]>([]); // vazio = todas
   const [conferidoFilter, setConferidoFilter] = useState(''); // '' | 'ok' | 'pending'
+  const [pagamentoFilter, setPagamentoFilter] = useState<FiltroDePagamento>(''); // '' | 'pago' | 'nao_pago'
   const [view, setView] = useState<'list' | 'groups'>('list');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Seleção para "Espelhos da seleção" (grupos marcados + drivers avulsos).
@@ -576,6 +579,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     setEspelhoFilter('');
     setPlatFilter([]);
     setConferidoFilter('');
+    setPagamentoFilter('');
     setView('list');
     setExpanded(new Set());
     setFormModal(null);
@@ -1404,6 +1408,17 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     [publishedGroups, publishedDriverIds],
   );
 
+  /** Índice `driver|plataforma` -> data do pagamento. */
+  const indiceMarcas = useMemo(() => indexarMarcas(paymentMarks), [paymentMarks]);
+
+  /** Situação de pagamento de cada linha, pra tag na grade e pro filtro. */
+  const pagamentoPorPagamento = useMemo(() => {
+    const nomes = platforms.map((p) => p.name);
+    const m = new Map<string, ReturnType<typeof pagamentoDoDriver>>();
+    for (const r of rows) m.set(r.paymentId, pagamentoDoDriver(r, nomes, indiceMarcas));
+    return m;
+  }, [rows, platforms, indiceMarcas]);
+
   const filteredRows = useMemo(
     () =>
       rows.filter((r) => {
@@ -1436,9 +1451,12 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         // Espelho CONFERIDO = o print da Shopee batendo com a planilha (≠ espelho no app).
         if (conferidoFilter === 'ok' && !r.espelhoConferido) return false;
         if (conferidoFilter === 'pending' && r.espelhoConferido) return false;
+        // Pagos × não pagos (parcial conta como NÃO pago: ainda falta dinheiro).
+        if (!passaNoFiltroDePagamento(pagamentoPorPagamento.get(r.paymentId)?.estado, pagamentoFilter)) return false;
         return true;
       }),
-    [rows, search, routeFilter, groupFilter, nfFilter, espelhoFilter, platFilter, conferidoFilter, nfProgressByPayment, isRowPublished],
+    [rows, search, routeFilter, groupFilter, nfFilter, espelhoFilter, platFilter, conferidoFilter,
+     pagamentoFilter, pagamentoPorPagamento, nfProgressByPayment, isRowPublished],
   );
 
   // Contagem do botão "Espelhos da seleção": grupos marcados + drivers avulsos
@@ -1507,16 +1525,6 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     return m;
   }, [rows, nfFiles, publications]);
 
-  /** Índice `driver|plataforma` -> data do pagamento. */
-  const indiceMarcas = useMemo(() => indexarMarcas(paymentMarks), [paymentMarks]);
-
-  /** Situação de pagamento de cada linha, pra tag na grade e pro filtro. */
-  const pagamentoPorPagamento = useMemo(() => {
-    const nomes = platforms.map((p) => p.name);
-    const m = new Map<string, ReturnType<typeof pagamentoDoDriver>>();
-    for (const r of rows) m.set(r.paymentId, pagamentoDoDriver(r, nomes, indiceMarcas));
-    return m;
-  }, [rows, platforms, indiceMarcas]);
 
   /**
    * Quem, no escopo do relatório, JÁ foi pago nas plataformas escolhidas — com a data.
@@ -1726,6 +1734,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           onClearPlat={() => setPlatFilter([])}
           conferidoFilter={conferidoFilter}
           onConferido={setConferidoFilter}
+          pagamentoFilter={pagamentoFilter}
+          onPagamento={setPagamentoFilter}
           onPlat={(v) => setPlatFilter((cur) => toggleValorDeFiltro(cur, v))}
           platformOptions={platforms.map((p) => p.name)}
           view={view}

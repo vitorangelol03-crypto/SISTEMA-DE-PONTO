@@ -1290,6 +1290,26 @@ export function buildSelectionMirrorData(
   return { groups, singles };
 }
 
+// ── FILTRO "PAGOS × NÃO PAGOS" (05/08/2026, pedido do Victor) ───────────────
+// A tag "pagamento concluído" já existia na grade; faltava poder filtrar por ela.
+//
+// ⚠️ Duas decisões que evitam erro de dinheiro:
+//  · PARCIAL entra em "não pagos" — quem recebeu só a SHOPEE ainda tem dinheiro a
+//    receber, e some-lo dos "pagos" faria alguém ser esquecido;
+//  · quem NÃO TEM PACOTE fica fora dos dois — não há o que pagar, e ele só encheria
+//    a lista de "não pagos" com gente que não devia estar lá.
+
+export type FiltroDePagamento = '' | 'pago' | 'nao_pago';
+
+export function passaNoFiltroDePagamento(
+  estado: PagamentoDoDriver['estado'] | undefined,
+  filtro: FiltroDePagamento,
+): boolean {
+  if (!filtro) return true;
+  if (estado === 'sem_pacote' || estado === undefined) return false;
+  return filtro === 'pago' ? estado === 'concluido' : estado !== 'concluido';
+}
+
 // ── QUANTOS JÁ E QUANTOS FALTAM, nos botões de ordenar (05/08/2026) ─────────
 // "coloca os numerozinhos aqui também: quantos já validou e quantos ainda falta".
 //
