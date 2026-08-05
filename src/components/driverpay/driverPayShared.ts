@@ -1276,6 +1276,47 @@ export function buildSelectionMirrorData(
   return { groups, singles };
 }
 
+// ── QUANTOS JÁ E QUANTOS FALTAM, nos botões de ordenar (05/08/2026) ─────────
+// "coloca os numerozinhos aqui também: quantos já validou e quantos ainda falta".
+//
+// ⚠️ Tem que usar EXATAMENTE a regra dos selos que já aparecem no cabeçalho de cada grupo,
+// senão o botão diz um número e a lista mostra outro:
+//   · NF ............. só conta grupo que ESPERA nota (expected > 0); verde = `complete`;
+//   · espelho no app . verde se QUALQUER membro recebeu — no grupo o espelho vai só pro
+//                      líder (decisão "Opção A", 24/07), exigir todos daria sempre zero;
+//   · print conferido  verde só quando TODOS os membros estão conferidos (é por driver).
+
+export interface ContagemDoCriterio {
+  feitos: number;
+  faltam: number;
+}
+
+export function contagemDoCriterio(
+  grupos: ReadonlyArray<{ rows: DriverRowData[] }>,
+  key: 'nf' | 'espelho' | 'espelhoApp',
+  nfProgress?: ReadonlyMap<string, { expected: number; complete: boolean }>,
+  publicados?: ReadonlySet<string>,
+): ContagemDoCriterio {
+  let feitos = 0;
+  let faltam = 0;
+  for (const g of grupos) {
+    if (g.rows.length === 0) continue;
+    if (key === 'nf') {
+      const nf = nfProgress?.get(g.rows[0].paymentId);
+      if (!nf || nf.expected === 0) continue; // não espera nota: não entra na conta
+      if (nf.complete) feitos += 1;
+      else faltam += 1;
+    } else if (key === 'espelhoApp') {
+      if (g.rows.some((r) => publicados?.has(r.driverId))) feitos += 1;
+      else faltam += 1;
+    } else {
+      if (g.rows.every((r) => r.espelhoConferido)) feitos += 1;
+      else faltam += 1;
+    }
+  }
+  return { feitos, faltam };
+}
+
 // ── OS NUMEROZINHOS DOS BOTÕES DO CABEÇALHO (05/08/2026, pedido do Victor) ──
 // "coloca o numerozinho do lado de Notas recebidas e Espelhos recebidos, igual o
 //  Despublicar todos. Se tiver pendência, mostra quantas faltam validar; não tendo

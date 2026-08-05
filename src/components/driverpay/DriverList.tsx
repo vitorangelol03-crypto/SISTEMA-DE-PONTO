@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   selecaoDoArrasto,
   togglesNecessarios,
@@ -30,6 +30,7 @@ import { DriverRow } from './DriverRow';
 import {
   compararPorCriterios,
   toggleSortCriteria,
+  contagemDoCriterio,
   type SortCriterion,
   DriverRowData,
   RowHandlers,
@@ -336,6 +337,28 @@ export const DriverList: React.FC<DriverListProps> = ({
       return d !== 0 ? d : a.name.localeCompare(b.name, 'pt-BR');
     });
   };
+  /**
+   * Contagem "quantos já / quantos faltam" dos critérios de validação (05/08/2026).
+   * Agrupa aqui dentro em vez de chamar `groupsOrdered()`: aquela função nasce de novo a
+   * cada render, então como dependência ela derrubaria a memória a cada troca de tecla.
+   * A ordem não importa pra contar — só o conteúdo dos grupos.
+   */
+  const contagens = useMemo(() => {
+    const porGrupo = new Map<string, DriverRowData[]>();
+    for (const row of rows) {
+      const k = row.groupName ?? NO_GROUP;
+      const b = porGrupo.get(k);
+      if (b) b.push(row);
+      else porGrupo.set(k, [row]);
+    }
+    const gs = [...porGrupo.values()].map((rs) => ({ rows: rs }));
+    return {
+      nf: contagemDoCriterio(gs, 'nf', nfProgressByPayment),
+      espelho: contagemDoCriterio(gs, 'espelho'),
+      espelhoApp: contagemDoCriterio(gs, 'espelhoApp', undefined, publishedDriverIds),
+    };
+  }, [rows, nfProgressByPayment, publishedDriverIds]);
+
   const groupSortBtn = (key: string, label: string, color?: string | null) => {
     const atual = groupSort.find((c) => c.key === key);
     const activeDir = atual?.dir ?? null;
@@ -352,6 +375,36 @@ export const DriverList: React.FC<DriverListProps> = ({
         <span className={color && !activeDir ? 'font-bold' : ''} style={color && !activeDir ? { color } : undefined}>
           {label}
         </span>
+        {(() => {
+          const c = key === 'nf' ? contagens.nf
+            : key === 'espelho' ? contagens.espelho
+            : key === 'espelhoApp' ? contagens.espelhoApp
+            : null;
+          if (!c || c.feitos + c.faltam === 0) return null;
+          // Ativo o botão fica azul: as pílulas precisam de fundo claro pra continuar lendo.
+          return (
+            <span className="inline-flex items-center gap-0.5 ml-0.5 tabular-nums">
+              <span
+                className={`text-[10px] font-bold px-1 py-0.5 rounded ${
+                  activeDir ? 'bg-white/25 text-white' : 'bg-green-100 text-green-700'
+                }`}
+                title={`${c.feitos} grupo(s) já`}
+              >
+                {c.feitos}
+              </span>
+              {c.faltam > 0 && (
+                <span
+                  className={`text-[10px] font-bold px-1 py-0.5 rounded ${
+                    activeDir ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-800'
+                  }`}
+                  title={`falta ${c.faltam} grupo(s)`}
+                >
+                  falta {c.faltam}
+                </span>
+              )}
+            </span>
+          );
+        })()}
         {activeDir === 'asc' ? (
           <ArrowUp className="w-3.5 h-3.5" />
         ) : activeDir === 'desc' ? (
