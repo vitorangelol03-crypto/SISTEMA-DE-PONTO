@@ -1871,3 +1871,30 @@ contra o banco**, usando o grupo do Lucas Aredes (R$ 10 de PNR do Luan):
 Está **certo**: o desconto sai uma vez só, no relatório das outras plataformas — nos dois seria
 cobrar em dobro. O próprio arquivo da eMile avisa isso no cabeçalho. ℹ️ O nome que sai é o do
 **recebedor** quando existe (Lucas aparece como "LUILA AREDES MARTINS VIEIRA").
+
+## 28. Relatório simples no formato da planilha do banco (`3d8f77f`) — 05/08
+
+Pedido dele, com o print do template do banco aberto: *"quero que a planilha simples, o
+relatório simples, saia nesse padrão dessas colunas: A nome sem acento, B chave pix, C valor,
+D data, E descrição"*.
+
+🔑 **A ordem passa a ser a DO BANCO, não a nossa.** O template diz "Não altere o template
+deste arquivo" — o caminho é copiar A:E e colar lá, e uma coluna fora de ordem paga o valor
+errado pra pessoa errada. Antes saía `A nome | B valor | C chave | D obs`.
+
+Colunas: **A** "Nome do funcionario" · **B** "Chave ou codigo Pix" · **C** "Valor" ·
+**D** "Data de pagamento" · **E** "Descricao" — os rótulos são os do próprio banco.
+
+### Decisões que preenchi (fáceis de mudar)
+| Campo | O que vai | Por quê |
+|---|---|---|
+| **Data** | hoje, DD/MM/AAAA | é o que ele digitaria; virou campo `dataPagamento` no meta, pra dar pra agendar sem editar a planilha |
+| **Descrição** | nome da quinzena (+ plataforma quando o pagamento é filtrado) | é o que aparece no comprovante do entregador (o template avisa); sem a plataforma, dois pagamentos da mesma quinzena ficam iguais no extrato dele |
+
+Sem acento nas três colunas de texto (o `sanitizeWorkbookAscii` passa no arquivo inteiro), e a
+chave PIX segue no `sanitizePixKey`: CPF/CNPJ só com números, **e-mail/telefone/aleatória
+intactos** — limpar quebraria o pagamento. O valor continua **número**, não texto, senão o
+banco não soma.
+
+**Validado:** 9 unit novos travando a ordem · 1121 unit (72 arquivos) · typecheck 61 =
+baseline · build · arquivo de exemplo gerado e conferido célula a célula (mandei pra ele).

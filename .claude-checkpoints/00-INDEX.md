@@ -442,6 +442,17 @@ prova, se o **relatório simples** estava com desconto: o de LOGGI+SHOPEE+ANJUN+
 **18.636,80** contra bruto 18.646,80 (desconto aplicado) e o da **eMile** saiu cheio — está certo, o
 desconto sai uma vez só, e o próprio arquivo avisa isso no cabeçalho.
 
+**Sessão 05/08 (fecho) — relatório simples no formato do banco (`3d8f77f`, local):** ele mandou
+o print do template do banco e pediu as colunas naquela ordem — **A nome · B chave PIX · C
+valor · D data · E descrição**, sem acento. A ordem agora é a DO BANCO (o template dele diz
+"não altere este arquivo", então o caminho é copiar A:E e colar lá; coluna fora de ordem =
+valor errado pra pessoa errada). Antes saía `A nome | B valor | C chave | D obs`. Preenchi
+duas lacunas: **data = hoje** (virou campo, dá pra agendar) e **descrição = nome da quinzena**
+(+ plataforma quando o pagamento é filtrado — é o que aparece no comprovante do entregador).
+Chave PIX segue com CPF/CNPJ só números e e-mail/aleatória intactos; valor continua número, não
+texto. Validado: 9 unit novos travando a ordem · 1121 unit · typecheck 61 = baseline · build ·
+exemplo conferido célula a célula.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
