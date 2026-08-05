@@ -1276,6 +1276,65 @@ export function buildSelectionMirrorData(
   return { groups, singles };
 }
 
+// ── ESPELHO É SEMPRE DO GRUPO, SEMPRE PRO LÍDER (04/08/2026) ─────────────────
+// Decisão do Victor: "o espelho nunca vai ser lançado por driver, sempre por grupo e
+// sempre para líder do grupo".
+//
+// POR QUÊ existe esta função: a mesma regra precisa valer em DOIS lugares — no que a tela
+// AVISA antes de publicar e no que a publicação FAZ. Quando eram dois códigos, a prévia
+// mostrava o espelho do grupo e a publicação mandava um individual por pessoa. Uma função
+// só = impossível divergirem de novo.
+//
+// Quem NÃO está em grupo continua recebendo o seu: não há líder pra quem mandar.
+
+export interface GrupoAPublicar {
+  groupName: string;
+  groupId: string | null;
+  /** Destinatário: o líder do CADASTRO, mesmo que ele não esteja entre os membros da lista. */
+  leaderId: string;
+  /** Quem entra nos números do PDF (só quem está no relatório). */
+  membros: DriverRowData[];
+}
+
+export interface PlanoDePublicacao {
+  grupos: GrupoAPublicar[];
+  /** Recebem espelho individual — não estão em grupo nenhum. */
+  avulsos: DriverRowData[];
+  /** Grupos sem líder definido: NÃO são publicados, viram aviso na tela. */
+  semLider: string[];
+}
+
+export function planejarPublicacao(
+  rows: DriverRowData[],
+  groups: ReadonlyArray<{ id: string; name: string; leader_driver_id: string | null }>,
+): PlanoDePublicacao {
+  const porGrupo = new Map<string, DriverRowData[]>();
+  const avulsos: DriverRowData[] = [];
+  for (const r of rows) {
+    if (!r.groupName) {
+      avulsos.push(r);
+      continue;
+    }
+    const lista = porGrupo.get(r.groupName) ?? [];
+    lista.push(r);
+    porGrupo.set(r.groupName, lista);
+  }
+
+  const gruposOut: GrupoAPublicar[] = [];
+  const semLider: string[] = [];
+  for (const [groupName, membros] of porGrupo) {
+    const g = groups.find((x) => x.name === groupName);
+    if (!g?.leader_driver_id) {
+      semLider.push(groupName);
+      continue;
+    }
+    gruposOut.push({ groupName, groupId: g.id, leaderId: g.leader_driver_id, membros });
+  }
+  gruposOut.sort((a, b) => a.groupName.localeCompare(b.groupName, 'pt-BR'));
+  semLider.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  return { grupos: gruposOut, avulsos, semLider };
+}
+
 /** Deriva as linhas do relatorio geral (plataformas dinamicas + totais). */
 export function buildReportRows(rows: DriverRowData[], platforms: DriverPlatform[]): DriverReportRow[] {
   return rows.map((row) => {

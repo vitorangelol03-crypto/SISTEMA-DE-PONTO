@@ -61,6 +61,7 @@ import {
   buildDriverMirrorData,
   buildGroupMirrorData,
   buildSelectionMirrorData,
+  planejarPublicacao,
   buildLeaderReportRows,
   buildSimpleReportRows,
   planRateReapply,
@@ -956,9 +957,33 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         return;
       }
 
+      // ESPELHO É SEMPRE DO GRUPO, SEMPRE PRO LÍDER (decisão do Victor, 04/08/2026).
+      // A regra mora em `planejarPublicacao` — a MESMA função que monta o aviso da tela,
+      // pra prévia e publicação nunca mais discordarem.
+      const plano = planejarPublicacao(targets, groups);
+
       let ok = 0;
       let fail = 0;
-      for (const row of targets) {
+
+      for (const g of plano.grupos) {
+        try {
+          const data = buildGroupMirrorData(
+            g.groupName, g.membros, platformsRef.current, company, selectedPeriod, allowedSet, includeDeductions,
+          );
+          const blob = await generateDriverGroupMirrorPdf(data, { compact: false });
+          await publishDriverMirror({
+            companyId: company.id, periodId: selectedPeriod.id, driverId: g.leaderId,
+            scope: 'group', groupId: g.groupId,
+            platformFilter: filter, includeDeductions, nfDueAt, pdf: blob, userId,
+          });
+          ok += 1;
+        } catch (e) {
+          fail += 1;
+          console.error('Falha ao publicar espelho do grupo', g.groupName, e);
+        }
+      }
+
+      for (const row of plano.avulsos) {
         try {
           const data = buildDriverMirrorData(
             row, platformsRef.current, company, selectedPeriod, allowedSet, includeDeductions,
@@ -968,7 +993,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             companyId: company.id,
             periodId: selectedPeriod.id,
             driverId: row.driverId,
-            scope: publishScope,
+            scope: 'individual',
             platformFilter: filter,
             includeDeductions,
             nfDueAt,
@@ -981,12 +1006,27 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           console.error('Falha ao publicar espelho de', row.name, e);
         }
       }
-      if (ok > 0) toast.success(`${ok} espelho(s) publicado(s) no app${fail ? ` (${fail} falharam)` : ''}`);
-      else toast.error('Não consegui publicar. Tente de novo.');
+      if (plano.semLider.length > 0) {
+        toast.error(
+          `${plano.semLider.length} grupo(s) SEM LÍDER definido não foram publicados: ` +
+          `${plano.semLider.join(', ')}. Defina o líder em "Gerenciar grupos".`,
+          { duration: 12000 },
+        );
+      }
+      if (ok > 0) {
+        toast.success(
+          `${ok} espelho(s) publicado(s): ${plano.grupos.length} de grupo (vão pro líder)` +
+          `${plano.avulsos.length ? ` e ${plano.avulsos.length} individual(is) de quem não tem grupo` : ''}` +
+          `${fail ? ` · ${fail} falharam` : ''}.`,
+          { duration: 10000 },
+        );
+      } else if (plano.semLider.length === 0) {
+        toast.error('Não consegui publicar. Tente de novo.');
+      }
       if (ok > 0) await reloadPublished(selectedPeriod.id);
       if (fail === 0) setMirror(null);
     },
-    [company, selectedPeriod, publishRows, publishScope, publishGroupInfo, userId, reloadPublished],
+    [company, selectedPeriod, publishRows, publishScope, publishGroupInfo, userId, reloadPublished, groups],
   );
 
   // Despublica o espelho ABERTO no diálogo (individual = o driver; grupo = o líder).
@@ -1427,6 +1467,24 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     },
     [company, selectedPeriod, mirror, publishRows, publishGroupInfo, filteredRows, selGroups, selDrivers],
   );
+
+  /**
+   * O que a publicação vai fazer — a MESMA regra do `onPublish`, só que contada antes.
+   * Escopo 'group' já é 1 PDF pro líder; os demais caem na regra "grupo vira 1 PDF pro
+   * líder, quem não tem grupo recebe o seu".
+   */
+  const publishPlan = useMemo(() => {
+    if (!mirror || publishRows.length === 0) return null;
+    if (publishScope === 'group') {
+      return {
+        grupos: publishGroupInfo?.leaderId ? 1 : 0,
+        avulsos: 0,
+        semLider: publishGroupInfo?.leaderId ? [] : [publishGroupInfo?.groupName ?? 'grupo'],
+      };
+    }
+    const plano = planejarPublicacao(publishRows, groups);
+    return { grupos: plano.grupos.length, avulsos: plano.avulsos.length, semLider: plano.semLider };
+  }, [mirror, publishRows, publishScope, publishGroupInfo, groups]);
 
   const discountRow = discountRowId ? rows.find((r) => r.paymentId === discountRowId) ?? null : null;
   const valeRow = valeRowId ? rows.find((r) => r.paymentId === valeRowId) ?? null : null;
@@ -1938,6 +1996,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             companyId={company?.id}
             userId={userId}
             onPublish={canMirror ? onPublish : undefined}
+            publishPlan={publishPlan}
             alreadyPublished={!!recipientId && publishedDriverIds.has(recipientId)}
             publishedKeys={new Set((pubsByDriver.get(recipientId ?? '') ?? []).map((p) => p.platformKey))}
             onUnpublish={canMirror && singleRecipient ? onUnpublishCurrent : undefined}

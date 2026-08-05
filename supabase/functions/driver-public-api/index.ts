@@ -291,16 +291,12 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
   const periodId = String(body.periodId ?? '').trim();
   if (!periodId) return json({ error: 'periodId ausente' }, 400);
 
-  // Grupo: se este driver e LIDER de um grupo, ele anexa as notas do GRUPO inteiro — entao
-  // os CNPJs esperados vem dos pacotes de TODOS os membros (nao so dele). Senao, so dele.
-  const { data: ledGroup } = await supabase.from('driverpay_groups')
-    .select('id').eq('leader_driver_id', claims.driver_id).eq('company_id', claims.company_id).maybeSingle();
-  let driverIds = [claims.driver_id];
-  if (ledGroup?.id) {
-    const { data: members } = await supabase.from('driverpay_group_members')
-      .select('driver_id').eq('group_id', ledGroup.id);
-    driverIds = [...new Set([claims.driver_id, ...(members ?? []).map((m) => m.driver_id as string)])];
-  }
+  // Grupo: se este driver e LIDER, ele anexa as notas do GRUPO inteiro — entao os CNPJs
+  // esperados vem dos pacotes de TODOS os membros (nao so dele). Se ele esta num grupo mas
+  // NAO e o lider, nao anexa nada: a mesma regra do espelho e do print (04/08/2026).
+  // Quem nao esta em grupo nenhum continua anexando a sua.
+  const driverIds = await driversQuePossoEnviar(claims);
+  if (driverIds.length === 0) return json({ slots: [] });
 
   const { data: pays } = await supabase.from('driverpay_payments')
     .select('id').eq('period_id', periodId).in('driver_id', driverIds);
@@ -720,10 +716,29 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 async function driversQuePossoEnviar(claims: DriverClaims): Promise<string[]> {
   const { data: ledGroup } = await supabase.from('driverpay_groups')
     .select('id').eq('leader_driver_id', claims.driver_id).eq('company_id', claims.company_id).maybeSingle();
-  if (!ledGroup?.id) return [claims.driver_id];
-  const { data: members } = await supabase.from('driverpay_group_members')
-    .select('driver_id').eq('group_id', ledGroup.id);
-  return [...new Set([claims.driver_id, ...(members ?? []).map((m) => m.driver_id as string)])];
+  if (ledGroup?.id) {
+    const { data: members } = await supabase.from('driverpay_group_members')
+      .select('driver_id').eq('group_id', ledGroup.id);
+    return [...new Set([claims.driver_id, ...(members ?? []).map((m) => m.driver_id as string)])];
+  }
+
+  // ⚠️ SO O LIDER ANEXA (decisao do Victor, 04/08/2026). Quem esta num grupo mas NAO e o
+  // lider dele nao envia nada: o lider ja recebe um cartao por membro e manda por todos.
+  // Antes, o membro via o proprio cartao e podia mandar tambem — dois caminhos pro mesmo
+  // print, e o painel do lider continuava cobrando. Quem NAO esta em grupo nenhum segue
+  // enviando o seu: nao ha lider pra quem passar.
+  const { data: souMembro } = await supabase.from('driverpay_group_members')
+    .select('group_id').eq('driver_id', claims.driver_id).maybeSingle();
+  if (souMembro?.group_id) {
+    // EXCECAO: grupo SEM LIDER definido. Bloquear aqui deixaria o driver sem conseguir
+    // anexar nada e sem ninguem pra anexar por ele (caso real: "Vermelho Novo - ROGERIO",
+    // 1 membro, sem lider). Entao ele volta a enviar o proprio — ninguem fica travado.
+    const { data: g } = await supabase.from('driverpay_groups')
+      .select('leader_driver_id').eq('id', souMembro.group_id).maybeSingle();
+    if (g?.leader_driver_id) return [];
+  }
+
+  return [claims.driver_id];
 }
 
 /** Plataformas com print solicitado nesta quinzena. Vazio = nao pede nada. */

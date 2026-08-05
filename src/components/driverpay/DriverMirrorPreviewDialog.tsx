@@ -63,6 +63,12 @@ interface DriverMirrorPreviewDialogProps {
    * (null=todas); `includeDeductions`=abateu os vales/perdas (false = pagamento parcial).
    */
   onPublish?: (allowed: string[] | null, includeDeductions: boolean, nfDueAt: string | null) => Promise<void>;
+  /**
+   * O que a PUBLICAÇÃO vai fazer de verdade — mostrado ANTES do clique (04/08/2026).
+   * Existe porque a prévia mostrava o espelho do grupo e a publicação mandava individual:
+   * a tela dizia uma coisa e fazia outra. Agora ela declara o resultado.
+   */
+  publishPlan?: { grupos: number; avulsos: number; semLider: string[] } | null;
   /** Já existe publicação no app pro destinatário deste espelho (individual/líder do grupo). */
   alreadyPublished?: boolean;
   /**
@@ -405,6 +411,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   companyId,
   userId,
   onPublish,
+  publishPlan,
   alreadyPublished,
   publishedKeys,
   onUnpublish,
@@ -654,6 +661,12 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
             <button
               type="button"
               onClick={handlePublish}
+              title={
+                publishPlan
+                  ? `Vai publicar ${publishPlan.grupos + publishPlan.avulsos} PDF(s): ` +
+                    `${publishPlan.grupos} de grupo (só pro líder) e ${publishPlan.avulsos} individual(is).`
+                  : undefined
+              }
               disabled={publishing || generating || unpublishing || !canGenerate}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium inline-flex items-center gap-2 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -676,6 +689,37 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       }
     >
       <div className="space-y-4">
+        {/* ── O que "Publicar no app" vai fazer DE VERDADE (04/08/2026) ──
+            A prévia acima é o PAPEL. Aqui embaixo fica o que sai no APP, porque as duas
+            coisas não são iguais: o espelho publicado é sempre do GRUPO e vai só pro LÍDER. */}
+        {onPublish && publishPlan && (publishPlan.grupos > 0 || publishPlan.avulsos > 0 || publishPlan.semLider.length > 0) && (
+          <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-sm text-blue-900">
+            <p className="font-medium">
+              Publicar no app vai gerar {publishPlan.grupos + publishPlan.avulsos} espelho(s):
+            </p>
+            <ul className="mt-1 ml-4 list-disc space-y-0.5">
+              {publishPlan.grupos > 0 && (
+                <li>
+                  <strong>{publishPlan.grupos}</strong> de grupo — cada um com os números de
+                  todos os membros, entregue <strong>só ao líder</strong>.
+                </li>
+              )}
+              {publishPlan.avulsos > 0 && (
+                <li>
+                  <strong>{publishPlan.avulsos}</strong> individual(is) — só para quem
+                  <strong> não está em grupo nenhum</strong>.
+                </li>
+              )}
+            </ul>
+            {publishPlan.semLider.length > 0 && (
+              <p className="mt-2 text-red-700 font-medium">
+                ⚠️ {publishPlan.semLider.length} grupo(s) SEM LÍDER não vão ser publicados:{' '}
+                {publishPlan.semLider.join(', ')}. Defina o líder em "Gerenciar grupos".
+              </p>
+            )}
+          </div>
+        )}
+
         {/* ── Já publicado no app: aviso + o que os botões fazem ── */}
         {esteEspelhoPublicado && (
           <div className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-md px-3 py-2 text-sm text-green-800">
