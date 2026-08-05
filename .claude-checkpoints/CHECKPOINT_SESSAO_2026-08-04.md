@@ -1013,3 +1013,39 @@ com os **mesmos 2 erros pré-existentes**, nenhum novo.
 **Nada disso está no ar.** A edge function `driver-public-api` precisa ser deployada pelo CLI (o MCP
 é bloqueado pelo classificador). Enquanto não for, o comportamento em produção segue o antigo:
 reconferência destrava print recusado e não há limite de 1 por entregador.
+
+---
+
+## 16. Abas nos espelhos, trava do print repetido, lentidão e busca de grupo
+
+### 16.1 Abas em "Espelhos recebidos" (`638d416`)
+Com 79 prints, a chavinha "só o que precisa de atenção" não deixava ver **só os conferidos**. Virou
+aba com contador: **Precisam de você (15) · Conferidos · Na fila (3) · Todos (79)**.
+
+### 16.2 🔴 Trava do print repetido — risco de pagar a pessoa errada
+A tela dele mostrava: *"Ray Augusto — planilha 484 · print 2907 · este print é IDÊNTICO ao de
+MAURICIO DE SOUZA COELHO"*, e logo abaixo o botão **"Usar 2907 (do print)"** que eu tinha feito —
+gravaria **+R$ 4.846** pro Ray com base na foto de outra pessoa. **O botão não sabia do duplicado.**
+
+Agora, quando o print é idêntico ao de outro: aviso âmbar dentro do bloco, botão laranja com ⚠, e o
+clique pede **confirmação dizendo de quem é a foto repetida**. Continua possível — a decisão é dele —
+mas não mais às cegas.
+
+### 16.3 🔴 Lentidão ("está demorando demais") — causa minha, medida
+Cada correção de contagem chamava a reconferência da **quinzena inteira**.
+**Medido em produção: 76 prints × 3 idas ao banco = ~228 consultas sequenciais por clique.**
+Corrigir um driver não muda a contagem de ninguém mais, então a reconferência passou a aceitar um
+`driverId`. **Medido depois: 3 consultas, 49ms.** A varredura completa continua valendo pra depois
+da importação da planilha, que é quando faz sentido.
+
+### 16.4 Busca de grupo (`ffcf5a3`)
+Com ~50 grupos, achar um rolando era trabalho. Campo fixo no topo, filtra conforme digita, contador
+"19 de 50", limpar e mensagem própria. **Ignora acento reusando o `normalizeSearch` que já existia**
+no arquivo (busca de driver) em vez de criar um segundo que poderia divergir.
+Provado com cliques: `caratinga` → 19 de 50 · `agua` → acha "Pingo-D'Água" · inexistente → mensagem ·
+limpar → volta aos 50.
+
+### 16.5 Release
+Push dos 3 commits (2 dele + 1 meu) e **deploy da edge function**, conferido por sha256:
+`2c20d6659b299294` no ar = no repositório. Antes de deployar, rodei `deno check` (mesmos 2 erros
+pré-existentes) e os **65 testes** de `proofCheck`/`proofRecusa` do trabalho dele.
