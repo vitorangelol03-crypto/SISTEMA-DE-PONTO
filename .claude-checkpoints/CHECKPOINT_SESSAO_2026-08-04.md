@@ -1187,3 +1187,46 @@ Antigos e de outras abas: **35** em `DataManagementTab` (o mesmo `item is of typ
 repetido), ~10 de import/variável não usados, **2 reais** (`company_id` não existe no tipo
 `Employee`, resto da refatoração multi-empresa) e o resto `any` implícito. Não entram no build.
 Fora do escopo — não toquei.
+
+## 20. Selecionar arrastando o mouse — grupos e lista (`f439272`, `6785cb3`)
+
+Pedido dele: *"segurar clique do mouse e ir descendo, o sistema ir selecionando de forma automática,
+podendo subir para cima para desselecionar"*. São dezenas de caixinhas; marcar uma a uma no dia do
+fechamento é lento.
+
+### A decisão que define se presta: FAIXA, não pincel
+Vale o intervalo entre a caixinha onde o clique começou (**âncora**) e onde o mouse está agora.
+**Encolher a faixa devolve os de fora ao estado anterior** — é isso que faz "subir pra cima"
+desmarcar. No pincel (marca tudo por onde passa e pronto), voltar não desfaz, e quem passasse do
+ponto teria que sair do arrasto e desmarcar na mão: exatamente o que ele pediu pra evitar.
+
+### O que decide se funciona na prática
+- **alvo é a LINHA INTEIRA** (cabeçalho do grupo / `<tr>` da lista), não a caixinha de 16px — mirar
+  em cada quadradinho anularia o ganho;
+- **quem já estava marcado antes é preservado** ao encolher a faixa;
+- **selecionado que o filtro escondeu nunca é perdido** — o operador não viu, não decidiu;
+- começar numa caixinha **já marcada** faz o contrário (a faixa desmarca);
+- **`select-none`** durante o arrasto, senão o navegador vai pintando o texto e parece defeito;
+- soltar em **qualquer lugar** encerra (`mouseup` e `blur` no window) — sem isso o arrasto fica
+  grudado e a lista marca sozinha depois;
+- ⚠️ na Lista, **quem já entra pelo GRUPO fica de fora**: a caixinha dele está desabilitada, e
+  alternar por baixo dos panos faria a seleção mentir sobre o que sai no espelho;
+- a ordem que o arrasto enxerga é a **mesma da tela** (`sortRows(subset)`) — usar outra faria a faixa
+  pegar linha errada quando o operador ordena por outra coluna.
+
+⚠️ O clique simples segue no `onChange`; o `mousedown` **só guarda a âncora**. Marcar no mousedown
+também faria o clique simples alternar duas vezes e voltar ao lugar — o mesmo erro já cometido nesta
+tela em 04/08 (o `<details>`/`preventDefault`).
+
+O card do **celular** segue com clique simples: ali seria toque, outro evento, e o pedido era pra tela
+do computador.
+
+**Validado:** 12 unit da regra pura (inclui voltar, já-marcado e item escondido por filtro) ·
+**960 unit** · typecheck 61 (baseline) · eslint · build · **arrasto REAL no navegador**: nos grupos
+desceu 5 → 5 marcados, voltou pro 2º → 2, soltou → 2; na lista desceu 6 → 6, voltou pro 3º → 3.
+
+### ⚠️ Armadilha de TESTE (não de código), custou duas rodadas
+As primeiras tentativas deram "0 marcados" e pareciam bug. Não eram: as linhas seguintes ficavam
+**abaixo da janela**, e `page.mouse.move` para fora da viewport **não dispara evento nenhum**. Em
+teste de arrasto, rolar a lista pro alto antes é obrigatório — e conferir a posição (`boundingBox().y`)
+contra a altura da janela antes de concluir qualquer coisa.
