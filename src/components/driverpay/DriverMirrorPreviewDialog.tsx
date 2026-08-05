@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { FileText, Eye, Download, Printer, Loader2, AlarmClock, Send, Trash2, CheckCircle2 } from 'lucide-react';
 import { mirrorPlatformKey, prazoNfPadrao } from './driverPayShared';
 import toast from 'react-hot-toast';
@@ -462,19 +462,31 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   const [cutoffTime, setCutoffTime] = useState(padraoPrazo.time);
   const [cutoffDate, setCutoffDate] = useState(padraoPrazo.date);
   const [lateDate, setLateDate] = useState('');
+  /**
+   * 🔴 CONSERTO (05/08/2026) — o prazo que o Victor digitava NUNCA VOLTAVA.
+   *
+   * A regra antiga era "só preenche campo que ainda está vazio", pra um fetch lento não
+   * apagar o que ele estava digitando. Isso funcionava enquanto os campos nasciam VAZIOS.
+   * Quando o corte virou data/hora de verdade (04/08) eles passaram a nascer com o PADRÃO
+   * (2 dias, 18:00) — e aí, nunca estando vazios, o valor salvo era descartado pra sempre:
+   * ele punha 23:59 do dia 31/12, gerava, reabria, e via 18:00 de novo.
+   * Pego pelo E2E 60 ("prova do auto-save").
+   *
+   * A prioridade certa é: **o que ele digitou AGORA > o que está salvo > o padrão**.
+   * Por isso a marca de "ele mexeu" em vez de "está vazio".
+   */
+  const usuarioMexeuNoPrazo = useRef(false);
   useEffect(() => {
     if (!companyId) return;
     getMirrorCutoffNotice(companyId)
       .then((n) => {
-        if (!n) return;
-        // Fetch lento não pode APAGAR o que o usuário já digitou enquanto ele
-        // estava no ar — só preenche campo que ainda está vazio.
-        // O valor salvo pode ser do formato ANTIGO (texto livre tipo "14:00" / "20/07").
-        // Hora no formato HH:MM o input aceita; data antiga nao tem ano, entao e descartada
-        // e o padrao (2 dias, 18:00) entra no lugar — melhor um padrao do que um campo torto.
-        if (/^\d{2}:\d{2}$/.test(n.cutoff_time ?? '')) setCutoffTime((cur) => (cur.trim() ? cur : n.cutoff_time));
-        if (/^\d{4}-\d{2}-\d{2}$/.test(n.cutoff_date ?? '')) setCutoffDate((cur) => (cur.trim() ? cur : n.cutoff_date));
-        setLateDate((cur) => (cur.trim() ? cur : n.late_payment_date));
+        if (!n || usuarioMexeuNoPrazo.current) return;
+        // Data ANTIGA (dd/mm, sem ano) é descartada de propósito: sem o ano não dá pra
+        // afirmar o prazo, e chutar o ano num campo que hoje MEDE atraso seria pior que
+        // o padrão. A partir daqui o que se grava é sempre o formato completo.
+        if (/^\d{2}:\d{2}$/.test(n.cutoff_time ?? '')) setCutoffTime(n.cutoff_time);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(n.cutoff_date ?? '')) setCutoffDate(n.cutoff_date);
+        if ((n.late_payment_date ?? '').trim()) setLateDate(n.late_payment_date);
       })
       .catch((e) => console.error('Erro ao carregar aviso de corte:', e));
   }, [companyId]);
@@ -527,10 +539,12 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     try {
       // Salva o aviso de corte como novo padrão (pedido do Victor: fica salvo até alterar).
       if (cutoff && companyId && userId) {
+        // ⚠️ Grava a data COMPLETA (2026-12-31), não a curta impressa no espelho (31/12):
+        // sem o ano, a leitura recusava o valor e o campo voltava sempre no padrão.
         await saveMirrorCutoffNotice(companyId, {
-          cutoff_time: cutoff.time,
-          cutoff_date: cutoff.date,
-          late_payment_date: cutoff.lateDate,
+          cutoff_time: cutoffTime.trim(),
+          cutoff_date: cutoffDate.trim(),
+          late_payment_date: lateDate.trim(),
         }, userId).catch((e) => console.error('Erro ao salvar aviso de corte:', e));
       }
       const req = withCutoff();
@@ -823,7 +837,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
               <input
                 type="time"
                 value={cutoffTime}
-                onChange={(e) => setCutoffTime(e.target.value)}
+                onChange={(e) => { usuarioMexeuNoPrazo.current = true; setCutoffTime(e.target.value); }}
                 data-testid="cutoff-time"
                 className="mt-0.5 w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
               />
@@ -833,7 +847,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
               <input
                 type="date"
                 value={cutoffDate}
-                onChange={(e) => setCutoffDate(e.target.value)}
+                onChange={(e) => { usuarioMexeuNoPrazo.current = true; setCutoffDate(e.target.value); }}
                 data-testid="cutoff-date"
                 className="mt-0.5 w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
               />
@@ -843,7 +857,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
               <input
                 type="text"
                 value={lateDate}
-                onChange={(e) => setLateDate(e.target.value)}
+                onChange={(e) => { usuarioMexeuNoPrazo.current = true; setLateDate(e.target.value); }}
                 placeholder="27/07"
                 className="mt-0.5 w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
               />

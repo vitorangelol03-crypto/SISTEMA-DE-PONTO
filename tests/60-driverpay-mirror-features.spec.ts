@@ -163,9 +163,12 @@ test.describe('Pagamentos Driver — 4 features dos espelhos', () => {
     // ── ESPELHO INDIVIDUAL: corte + destaque + aviso, na prévia e no PDF ──
     await driverRow(page).getByTitle('Ver / gerar espelho').click();
     await expect(modal(page).getByText('Espelho individual')).toBeVisible({ timeout: 10_000 });
-    // Feature 2: preencher o corte (salva ao gerar)
-    await modal(page).getByPlaceholder('14:00').fill('23:59');
-    await modal(page).getByPlaceholder('20/07').fill('31/12');
+    // Feature 2: preencher o corte (salva ao gerar).
+    // 04/08/2026 — hora e data do corte deixaram de ser texto solto e viraram <input
+    // type=time/date> (o prazo da nota passou a ser medido de verdade, não lido por
+    // humano). O "pagamento se exceder" segue texto livre.
+    await modal(page).getByTestId('cutoff-time').fill('23:59');
+    await modal(page).getByTestId('cutoff-date').fill('2026-12-31');
     await modal(page).getByPlaceholder('27/07').fill('05/01');
     // prévia ao vivo: faixa de corte + aviso da plataforma + linha destacada
     await expect(modal(page).getByText(/as notas deverão ser enviadas até as/i).first()).toBeVisible({ timeout: 10_000 });
@@ -185,8 +188,8 @@ test.describe('Pagamentos Driver — 4 features dos espelhos', () => {
     // ── Feature 2 (prova do AUTO-SAVE): reabrir → campos vêm preenchidos ──
     await driverRow(page).getByTitle('Ver / gerar espelho').click();
     await expect(modal(page).getByText('Espelho individual')).toBeVisible({ timeout: 10_000 });
-    await expect(modal(page).getByPlaceholder('14:00')).toHaveValue('23:59', { timeout: 10_000 });
-    await expect(modal(page).getByPlaceholder('20/07')).toHaveValue('31/12');
+    await expect(modal(page).getByTestId('cutoff-time')).toHaveValue('23:59', { timeout: 10_000 });
+    await expect(modal(page).getByTestId('cutoff-date')).toHaveValue('2026-12-31');
     await expect(modal(page).getByPlaceholder('27/07')).toHaveValue('05/01');
     await modal(page).getByRole('button', { name: /Fechar/ }).click();
     await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 5_000 });
@@ -207,7 +210,10 @@ test.describe('Pagamentos Driver — 4 features dos espelhos', () => {
 
     // visão Grupos → Espelho do grupo
     await page.getByRole('button', { name: /^Grupos$/ }).click();
-    const groupHeader = page.locator('summary').filter({ hasText: GROUP }).first();
+    // 04/08/2026 — o cabeçalho do grupo deixou de ser <summary> (a caixa de marcar vivia
+    // dentro dele e o preventDefault cancelava o próprio marcar). Virou um botão de abrir.
+    const groupHeader = page.getByRole('button').filter({ hasText: GROUP })
+      .filter({ has: page.locator('span.font-semibold') }).first();
     await expect(groupHeader).toBeVisible({ timeout: 10_000 });
     await groupHeader.getByRole('button', { name: /Espelho do grupo/ }).click();
     await expect(modal(page).getByText(`Espelho do grupo — ${GROUP}`)).toBeVisible({ timeout: 10_000 });
