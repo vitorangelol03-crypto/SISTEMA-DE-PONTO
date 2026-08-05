@@ -1276,6 +1276,51 @@ export function buildSelectionMirrorData(
   return { groups, singles };
 }
 
+// ── TRIAGEM DOS PRINTS RECEBIDOS (05/08/2026) ────────────────────────────────
+// "já está conferida e validada mas não sai daqui" — o print do Meirivaldo ficava preso
+// em "Precisam de você" mesmo com o selo verde "confere ✓" ao lado.
+//
+// CAUSA: a triagem olhava só o `checkStatus`. Ele foi lido quando a planilha ainda dizia
+// 1401 (o print dizia 1402), ficou gravado 'divergente' — e ninguém apaga esse carimbo.
+// A planilha depois foi corrigida pra 1402, o operador validou na mão, e mesmo assim o
+// carimbo velho continuava mandando na tela. Uma vez divergente, divergente pra sempre.
+//
+// REGRA: **validação humana encerra o assunto.** Se uma pessoa abriu a foto e disse
+// "confere", nenhum carimbo antigo pode segurar o print na fila de pendências. Só a
+// RECUSA continua pedindo atenção, porque aí o entregador precisa mandar de novo.
+
+/** Só o que a triagem precisa saber — `DeliveryProofRow` encaixa aqui por estrutura. */
+export interface ProofParaTriagem {
+  id: string;
+  /** 'recebido' | 'validado' | 'rejeitado'. */
+  status: string;
+  /** 'ok' | 'divergente' | 'periodo_errado' | 'ilegivel' | 'pendente' | null. */
+  checkStatus: string | null;
+  /** Quem validou: id do usuário = PESSOA; null = o sistema sozinho. */
+  validatedBy: string | null;
+  /** Tem releitura agendada? Então está na fila, não é pendência do operador. */
+  nextCheckAt: string | null;
+}
+
+/** Uma pessoa olhou a foto e aprovou (≠ aprovação automática, que grava null). */
+export function validadoPorPessoa(p: ProofParaTriagem): boolean {
+  return p.status === 'validado' && !!p.validatedBy;
+}
+
+export function proofPrecisaAtencao(
+  p: ProofParaTriagem,
+  repetidos: ReadonlySet<string> = new Set(),
+): boolean {
+  // Recusado sempre pede ação: o entregador tem que mandar outro print.
+  if (p.status === 'rejeitado') return true;
+  // 🎯 O conserto: gente > carimbo.
+  if (validadoPorPessoa(p)) return false;
+  if (p.checkStatus === 'divergente') return true;
+  // Nem validado nem na fila = parado esperando alguém.
+  if (p.status !== 'validado' && !p.nextCheckAt) return true;
+  return repetidos.has(p.id);
+}
+
 // ── ORDEM E FILTRO COMBINADOS (05/08/2026, pedido do Victor) ─────────────────
 // "quero as duas possibilidades": empilhar CRITÉRIOS DE ORDEM e marcar VÁRIOS VALORES
 // no mesmo filtro. As duas coisas moram aqui porque a tela do painel e a visão de grupos

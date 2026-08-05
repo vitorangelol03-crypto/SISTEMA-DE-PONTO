@@ -24,7 +24,10 @@ import {
   aplicarCorrecaoDePacotes,
   type DeliveryProofRow,
 } from '../../services/driverPay';
-import { platformPackages, planejarCorrecaoDePacotes, formatBRL, type DriverRowData } from './driverPayShared';
+import {
+  platformPackages, planejarCorrecaoDePacotes, formatBRL, proofPrecisaAtencao,
+  type DriverRowData,
+} from './driverPayShared';
 import { ModalShell } from './ModalShell';
 
 interface EspelhosRecebidosModalProps {
@@ -266,9 +269,10 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
     return out;
   }, [proofs]);
 
+  // A regra mora em driverPayShared (testada): validação HUMANA encerra o assunto, senão
+  // um print que já foi divergente uma vez ficaria preso aqui pra sempre.
   const precisaAtencao = (p: DeliveryProofRow): boolean =>
-    p.status === 'rejeitado' || p.checkStatus === 'divergente'
-    || (p.status !== 'validado' && !p.nextCheckAt) || repetidos.has(p.id);
+    proofPrecisaAtencao(p, new Set(repetidos.keys()));
 
   /** Conferido = o sistema aprovou (ou você validou) e não há nada pendente nele. */
   const jaConferido = (p: DeliveryProofRow): boolean =>
@@ -480,10 +484,28 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
                         </div>
 
                         {mudou && (
-                          <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 flex items-start gap-1.5">
+                          /* Se a planilha mudou e AGORA bate com o print, o aviso tem que dizer
+                             isso — senão parece pendência (foi o susto do print do Meirivaldo:
+                             1401 → 1402, igual ao print, e o texto ainda soava a problema). */
+                          <p
+                            className={`mt-2 text-xs rounded px-2 py-1 flex items-start gap-1.5 border ${
+                              p.readPackages === hoje
+                                ? 'text-green-800 bg-green-50 border-green-200'
+                                : 'text-amber-800 bg-amber-50 border-amber-200'
+                            }`}
+                          >
                             <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                            Quando conferimos, a planilha dizia <strong>{p.expectedPackages}</strong>; hoje diz{' '}
-                            <strong>{hoje}</strong> — a planilha mudou depois deste print.
+                            {p.readPackages === hoje ? (
+                              <>
+                                Quando conferimos, a planilha dizia <strong>{p.expectedPackages}</strong>; hoje diz{' '}
+                                <strong>{hoje}</strong> — <strong>igual ao print</strong>. Nada a fazer.
+                              </>
+                            ) : (
+                              <>
+                                Quando conferimos, a planilha dizia <strong>{p.expectedPackages}</strong>; hoje diz{' '}
+                                <strong>{hoje}</strong> — a planilha mudou depois deste print.
+                              </>
+                            )}
                           </p>
                         )}
 

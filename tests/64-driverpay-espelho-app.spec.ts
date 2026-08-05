@@ -268,8 +268,15 @@ test.describe('Espelho do app da Shopee — painel (04/08/2026)', () => {
         .poll(async () => img.evaluate((el) => (el as HTMLImageElement).naturalWidth), { timeout: 20_000 })
         .toBeGreaterThan(0);
 
-      // ══ 5. Validar na mão → a linha fica verde ═══════════════════════════
+      // ══ 5. Validar na mão → SAI de "Precisam de você" e entra em "Conferidos" ══
+      // 05/08/2026 — antes o cartão CONTINUAVA na aba de pendências depois de validado
+      // (a triagem olhava só o carimbo `check_status`, que ninguém apaga). O print do
+      // Meirivaldo ficou preso lá com um "confere ✓" verde do lado, e o Victor viu.
+      // Agora validação humana encerra o assunto: o cartão muda de aba.
       await modal(page).getByTitle(/Aceitar este print/).click();
+      await expect(modal(page).getByRole('button', { name: /Precisam de voce \(0\)/ }))
+        .toBeVisible({ timeout: 15_000 });
+      await modal(page).getByRole('button', { name: /Conferidos \(1\)/ }).click();
       await expect(modal(page).getByText('confere ✓')).toBeVisible({ timeout: 15_000 });
       await closeModal(page);
 
