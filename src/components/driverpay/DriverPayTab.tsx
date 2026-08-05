@@ -49,10 +49,13 @@ import {
   markPaymentDone,
   listProofRequests,
   listDeliveryProofs,
+  platformsWithProofHistory,
+  requestProofForDrivers,
   type MirrorPublicationRow,
 } from '../../services/driverPay';
 import { contemSemAcento } from '../../utils/buscaTexto';
 import { pagamentosParaMarcarPorDispensa } from '../../utils/espelhoDispensa';
+import { driversParaPedirPrint, plataformasQuePedemPrint } from '../../utils/proofAuto';
 import { exportDriverGeneralReportExcel, exportDriverSimpleReportExcel } from '../../utils/driverReport';
 import { generateDriverMirrorPdf, generateDriverGroupMirrorPdf } from '../../utils/driverMirrorPdf';
 import {
@@ -89,6 +92,7 @@ import {
   type PaymentMark,
   proofForaPorSemGrupo,
   proofDispensadoSemPacote,
+  platformPackages,
   expectedProofPlatforms,
   melhorEstado,
   proofStateFromRow,
@@ -441,6 +445,49 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       const marcados = await marcarEspelhoPorDispensa(company.id, paraMarcar, userId);
       if (marcados > 0) {
         toast.success(`${marcados} entregador(es) sem entrega na plataforma — espelho marcado sozinho.`, { duration: 7000 });
+      }
+
+      // ── Quem TEM pacote e não mandou print já é cobrado sozinho (05/08/2026) ──
+      // Pedido do Victor: "quando subir a planilha da shopee, todo usuário que tiver
+      // pacote da shopee e ainda não tiver mandado o print, o sistema pedir de forma
+      // automática". Antes, alguém tinha que lembrar de clicar em "Solicitar espelho"
+      // depois de cada importação — e quem entrasse na planilha DEPOIS do clique ficava
+      // sem pedido nenhum: nem o app pedia, nem o painel cobrava.
+      const [pedidosAgora, printsAgora, historico] = await Promise.all([
+        listProofRequests(company.id, periodId),
+        listDeliveryProofs(company.id, periodId),
+        platformsWithProofHistory(company.id),
+      ]);
+      const comPlanilha = platformsRef.current
+        .map((p) => p.name)
+        .filter((nome) => !semPlanilhaAgora.has(nome));
+      let pedidosCriados = 0;
+      for (const plat of plataformasQuePedemPrint(comPlanilha, historico)) {
+        const temPedidoGeral = pedidosAgora.some((r) => r.platformName === plat && r.driverId === null);
+        const jaPedidoIndividual = new Set(
+          pedidosAgora.filter((r) => r.platformName === plat && r.driverId).map((r) => r.driverId as string),
+        );
+        const jaMandaram = new Set(
+          printsAgora.filter((p) => p.platformName === plat).map((p) => p.driverId),
+        );
+        const ids = driversParaPedirPrint(
+          rowsRef.current,
+          (row) => platformPackages(row, plat) > 0,
+          // ⚠️ Quem NÃO está em grupo continua de fora, igual ao pedido "pra todos"
+          // (decisão dele em 04/08: quem anexa é o líder). O automático não é lugar
+          // de mudar essa regra por conta própria.
+          (row) => row.groupName === null
+            || (temPedidoGeral ? row.groupName !== null : jaPedidoIndividual.has(row.driverId)),
+          (row) => jaMandaram.has(row.driverId),
+        );
+        pedidosCriados += await requestProofForDrivers(company.id, periodId, plat, ids, userId);
+      }
+      if (pedidosCriados > 0) {
+        toast.success(
+          `${pedidosCriados} entregador(es) com pacote e sem print — o app já está pedindo o espelho deles.`,
+          { duration: 8000 },
+        );
+        await reloadProofs(periodId);
       }
 
       const r = await reconferirPrintsComPlanilha(company.id, periodId, userId);

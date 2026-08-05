@@ -932,9 +932,22 @@ function proximaTentativa(
 /**
  * Marca "espelho conferido" no pagamento do driver, se autorizado.
  *
- * Trava anti-remarcacao: se um humano ja mexeu neste check (marcou e depois
- * desmarcou), o automatico NAO passa por cima. So marca o que nunca foi tocado,
- * ou o que ja tinha sido marcado pelo proprio automatico.
+ * ⚠️ MUDANCA 05/08/2026 (pedido do Victor: *"o Adriano nao ficou marcado como espelho
+ * conferido automaticamente; deve marcar automatico quando o espelho esta conferido"*).
+ *
+ * Existia aqui uma trava anti-remarcacao: se um humano ja tivesse mexido no check, o
+ * automatico nao passava por cima nunca mais. Na pratica ela travou o caso certo — o
+ * ADRIANO teve o espelho desmarcado por gente ANTES de mandar o print; quando o print
+ * chegou e bateu (902 lidos = 902 da planilha, periodo certo), o sistema conferiu tudo e
+ * mesmo assim deixou o botao apagado, obrigando alguem a clicar na mao.
+ *
+ * O motivo da trava era guardar a decisao humana, mas ela nao dava pra separar "desmarquei
+ * porque nao quero validar" de "desmarquei antes de existir print" — a desmarcacao nem
+ * guarda data (`espelho_conferido_at` vira null). Entre travar a conferencia certa e
+ * remarcar uma desmarcacao, ele escolheu remarcar: o print conferido e um FATO NOVO, e
+ * quem quiser desfazer desmarca de novo.
+ *
+ * Continua valendo: o liga/desliga `proof_auto_confirm`, e nao mexer no que ja esta marcado.
  */
 async function marcarEspelhoConferido(paymentId: string, companyId: string): Promise<boolean> {
   const { data: settings } = await supabase.from('driverpay_settings')
@@ -942,9 +955,8 @@ async function marcarEspelhoConferido(paymentId: string, companyId: string): Pro
   if (settings?.proof_auto_confirm === false) return false; // sem linha = ligado (padrao)
 
   const { data: atual } = await supabase.from('driverpay_payments')
-    .select('espelho_conferido, espelho_conferido_by').eq('id', paymentId).maybeSingle();
-  const nuncaTocadoPorHumano = !atual?.espelho_conferido_by || atual.espelho_conferido_by === 'auto';
-  if (atual?.espelho_conferido || !nuncaTocadoPorHumano) return false;
+    .select('espelho_conferido').eq('id', paymentId).maybeSingle();
+  if (atual?.espelho_conferido) return false; // ja esta marcado: nada a fazer
 
   await supabase.from('driverpay_payments').update({
     espelho_conferido: true,

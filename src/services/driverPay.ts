@@ -2291,6 +2291,64 @@ export const requestProof = async (
 };
 
 /**
+ * Plataformas que **já tiveram print** nesta empresa — pedido ou recebido, em qualquer
+ * quinzena. É o que decide onde o pedido automático pós-importação vale (ver
+ * `plataformasQuePedemPrint`), em vez de "SHOPEE" escrito no código.
+ *
+ * Olha as DUAS fontes de propósito: cancelar a solicitação APAGA a linha de pedido, então
+ * só ela esqueceria a Shopee no dia em que a quinzena fechasse. Print recebido não é
+ * apagado — essa parte é a memória durável.
+ */
+export const platformsWithProofHistory = async (companyId: string): Promise<Set<string>> => {
+  const [{ data: pedidos }, { data: recebidos }] = await Promise.all([
+    supabase.from('driverpay_proof_requests').select('platform_name').eq('company_id', companyId),
+    supabase.from('driverpay_delivery_proofs').select('platform_name').eq('company_id', companyId),
+  ]);
+  const nomes = new Set<string>();
+  for (const r of pedidos ?? []) nomes.add(String(r.platform_name));
+  for (const r of recebidos ?? []) nomes.add(String(r.platform_name));
+  return nomes;
+};
+
+/**
+ * Pede o print de VÁRIOS entregadores de uma vez (um pedido individual por pessoa).
+ *
+ * Usado pelo automático de depois da importação. Individual de propósito: o pedido "pra
+ * todos" voltaria a cobrar print de quem a equipe já validou na mão — decisão do Victor,
+ * *"quem já está validado continua validado, já passou dessa parte"*.
+ *
+ * Devolve quantos entraram de fato. Repetir é inofensivo (23505 = já existe).
+ */
+export const requestProofForDrivers = async (
+  companyId: string, periodId: string, platformName: string,
+  driverIds: readonly string[], userId: string,
+): Promise<number> => {
+  if (driverIds.length === 0) return 0;
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const linha = (driverId: string) => ({
+    company_id: companyId, period_id: periodId, platform_name: platformName,
+    driver_id: driverId, requested_by: userId,
+  });
+
+  // Tenta de uma vez só. ⚠️ No Postgres, UMA linha repetida derruba o lote inteiro — e
+  // `upsert` não serve aqui (a unicidade vem de índices PARCIAIS; o PostgREST responde
+  // 42P10, o mesmo tropeço que o E2E 64 pegou em 04/08). Então, se bater repetido, cai
+  // pro um a um, que é o caminho lento mas exato.
+  const { data, error } = await supabase
+    .from('driverpay_proof_requests').insert(driverIds.map(linha)).select('id');
+  if (!error) return (data ?? []).length;
+  if (error.code !== '23505') throwDbError(error);
+
+  let entraram = 0;
+  for (const driverId of driverIds) {
+    const { error: e1 } = await supabase.from('driverpay_proof_requests').insert(linha(driverId));
+    if (!e1) entraram += 1;
+    else if (e1.code !== '23505') throwDbError(e1);
+  }
+  return entraram;
+};
+
+/**
  * Fecha a torneira. Os prints já enviados FICAM — só para de pedir novos.
  * `driverId` null apaga SÓ o pedido geral; `'*'` apaga tudo daquela plataforma
  * (geral + individuais), que é o que o botão "Cancelar solicitação" faz.
@@ -2395,13 +2453,16 @@ export const reconferirPrintsComPlanilha = async (
 
     if (ok) {
       conferidos += 1;
-      // Marca o espelho com a MESMA regra da edge function: respeita o liga/desliga e
-      // nunca passa por cima de quem foi tocado por um humano.
+      // Marca o espelho com a MESMA regra da edge function (05/08/2026): print que
+      // bateu MARCA, mesmo que um humano tenha desmarcado antes — foi o pedido do
+      // Victor depois do caso do ADRIANO, que ficou apagado com a conferência toda
+      // verde. As duas pontas TÊM que decidir igual: se só uma remarcasse, o botão
+      // mudaria de estado dependendo de o print ter vindo pelo app ou pela planilha.
+      // Continua respeitando o liga/desliga e não mexe no que já está marcado.
       if (autoConfirmar && pr.payment_id) {
         const { data: pay } = await supabase.from('driverpay_payments')
-          .select('espelho_conferido, espelho_conferido_by').eq('id', pr.payment_id).maybeSingle();
-        const soAuto = !pay?.espelho_conferido_by || pay.espelho_conferido_by === 'auto';
-        if (!pay?.espelho_conferido && soAuto) {
+          .select('espelho_conferido').eq('id', pr.payment_id).maybeSingle();
+        if (!pay?.espelho_conferido) {
           await supabase.from('driverpay_payments').update({
             espelho_conferido: true,
             espelho_conferido_at: new Date().toISOString(),
