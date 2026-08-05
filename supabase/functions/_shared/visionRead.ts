@@ -92,25 +92,45 @@ export function visionConfigFromEnv(env: Record<string, string | undefined>): Vi
 // ─── Pedido ao modelo (partes puras, testáveis sem rede) ─────────────────────
 
 /**
- * O texto do pedido. Escrito contra a tela real: a armadilha aqui é a aba
- * "Em Rota (0)" ao lado de "Encerrado (1808)" — sem o aviso explícito o modelo
- * pode pegar o número errado.
+ * O texto do pedido. Escrito contra a tela real, com duas armadilhas medidas:
+ *
+ * 1. a aba "Em Rota (0)" fica ao lado de "Encerrado (1808)" — sem o aviso explícito o
+ *    modelo pega o número errado;
+ * 2. **o app tem DUAS telas que servem** (achado em 04/08, com um print da Natália que
+ *    falhou 2× na leitura): a lista "Entrega" com a aba `Encerrado (N)`, e a tela de
+ *    resumo "Data escolhida" com `Pedidos entregues N`. A segunda não tem a palavra
+ *    "Encerrado" em lugar nenhum — com o texto antigo, o modelo devolvia "não consegui
+ *    ler" num print que estava perfeito.
  */
 export const PROOF_PROMPT = `Esta imagem e uma foto (ou captura) da tela do aplicativo de entregas da Shopee, usado por um motorista entregador.
 
+O aplicativo tem DUAS telas diferentes que servem, e voce deve aceitar QUALQUER UMA das duas:
+
+TELA A — lista de entregas ("Entrega"), com abas no topo:
+   "Em Rota (N)" · "Ocorrencia" · "Encerrado (N)", e logo abaixo o intervalo de datas.
+TELA B — resumo do periodo ("Data escolhida"), com:
+   o intervalo de datas no topo e a linha "Pedidos entregues" seguida de um numero.
+
 Extraia EXATAMENTE tres informacoes:
 
-1. "entregues": o numero inteiro que aparece entre parenteses ao lado da aba "Encerrado".
-   Exemplo: se a tela mostra "Encerrado (1808)", o valor e 1808.
-   ATENCAO: NAO confunda com a aba "Em Rota (N)" nem com "Ocorrencia". Use somente "Encerrado".
+1. "entregues": a quantidade de entregas concluidas no periodo.
+   - Na TELA A: o numero entre parenteses ao lado da aba "Encerrado".
+     Exemplo: "Encerrado (1808)" -> 1808.
+     ATENCAO: NAO confunda com "Em Rota (N)" nem com "Ocorrencia". Use somente "Encerrado".
+   - Na TELA B: o numero ao lado de "Pedidos entregues".
+     Exemplo: "Pedidos entregues   19" -> 19.
+     ATENCAO: NAO confunda com "Taxa de sucesso de entrega", que e uma porcentagem (ex.: 100.00%)
+     e NUNCA deve ser usada como quantidade.
 
-2. "periodoInicio" e "periodoFim": as duas datas do intervalo de datas selecionado, que aparece
-   logo abaixo das abas, ao lado do botao "Selecionar data".
-   Exemplo: se a tela mostra "2026/07/01 - 2026/07/15", entao periodoInicio = "2026-07-01"
+2. "periodoInicio" e "periodoFim": as duas datas do intervalo selecionado.
+   - Na TELA A: aparece logo abaixo das abas, ao lado do botao "Selecionar data".
+   - Na TELA B: aparece no topo, ao lado do icone de relogio.
+   Exemplo: "2026/07/01 - 2026/07/15" ou "01/07/2026 - 15/07/2026" -> periodoInicio = "2026-07-01"
    e periodoFim = "2026-07-15". Devolva SEMPRE no formato AAAA-MM-DD, e nada alem da data.
+   ATENCAO ao formato: "01/07/2026" e dia/mes/ano (1 de julho), nao mes/dia/ano.
 
 3. "legivel": true se voce conseguiu ler com confianca os tres valores acima; false se a imagem
-   esta borrada, cortada, escura demais, ou nao e a tela do app de entregas.
+   esta borrada, cortada, escura demais, ou nao e nenhuma das duas telas descritas acima.
 
 Se voce nao conseguir ler algum valor com certeza, deixe o campo nulo e ponha legivel = false.
 NUNCA adivinhe ou estime um numero.`;
