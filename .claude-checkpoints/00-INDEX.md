@@ -306,6 +306,16 @@ matei em 04/08** ao tirar o `<details>` — corrigidos. Validado: **30 unit novo
 os 58 workers (erro de infra, não de teste) — **rodar em lotes de ~15**; e `pkill -f vite` mata o
 próprio shell.
 
+**Sessão 05/08 — 🔴 print validado na mão não saía de "Precisam de você" (`53f5588`, local):**
+o do MEIRIVALDO ficava na aba de pendências **com selo verde "confere ✓" ao lado**. Banco:
+`status=validado · check_status=divergente · validated_by=2626 · lido 1402 · esperado gravado 1401 ·
+planilha hoje 1402`. A triagem olhava só o `check_status`, carimbado quando a planilha ainda dizia
+1401 — e **ninguém apaga esse carimbo**. Regra nova: **validação humana encerra o assunto**; só a
+RECUSA continua pedindo ação. `validated_by` separa pessoa (id) de automático (null, por causa da FK
+com `users`). Regra virou função pura testada; o aviso "a planilha mudou" fica **verde** quando o
+número de hoje já é igual ao do print. Validado: **14 unit novos · E2E 64 atualizado (o cartão SAI
+pra "Conferidos (1)") · tsc 61 = baseline · build**.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |

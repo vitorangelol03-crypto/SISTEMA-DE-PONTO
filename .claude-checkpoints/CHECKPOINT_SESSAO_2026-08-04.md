@@ -1336,3 +1336,39 @@ texto livre. Os três corrigidos.
 - `npx vitest run` inteiro **não abre os 58 workers** neste WSL ("Timeout waiting for worker"):
   40-51 erros de infra, nenhum de teste. **Rodar em lotes de ~15** resolve.
 - O `page.goto` do primeiro spec estoura 15s se o Vite subir frio — **aquecer o servidor antes**.
+
+---
+
+## 22. Print validado na mão continuava preso em "Precisam de você"  ·  `53f5588`
+
+### 22.1 O que ele viu
+"já está conferida e validada mas não sai daqui" — o print do **MEIRIVALDO** na aba de pendências
+**com um selo verde "confere ✓" do lado**. A tela se contradizendo.
+
+### 22.2 A causa (lida no banco, o registro dele)
+```
+status: validado · check_status: divergente · validated_by: 2626
+lido 1402 · esperado GRAVADO 1401 · planilha hoje 1402
+```
+A triagem olhava **só o `check_status`**. Ele foi carimbado `divergente` quando a planilha ainda
+dizia 1401; depois a planilha virou 1402 (= o print) e o Victor validou na mão — mas **ninguém apaga
+aquele carimbo**. Uma vez divergente, divergente pra sempre.
+
+### 22.3 A regra nova
+**Validação humana encerra o assunto.** Carimbo antigo não segura mais o print na fila. Só a
+**RECUSA** continua pedindo ação (o entregador tem que mandar outro print).
+`validated_by` separa sem ambiguidade: **id do usuário = pessoa**, **null = o sistema sozinho** — é
+assim que a edge fn grava (FK pra `users`, então o automático não tem como preencher).
+A regra saiu do componente e virou função pura em `driverPayShared`, testada.
+
+### 22.4 De quebra
+O aviso "a planilha mudou depois deste print" ficava **âmbar** mesmo quando o número de hoje passou
+a ser **igual ao do print** — parecia pendência. Agora, nesse caso, fica **verde**: "igual ao print.
+Nada a fazer."
+
+### 22.5 Validação
+- 14 unit novos (caso Meirivaldo; "recusado ainda pede ação"; "validado pelo sistema ≠ por pessoa";
+  repetido decidido por gente sai da fila).
+- **E2E 64 atualizado e passando**: ao aceitar, o cartão **sai** de "Precisam de você (0)" e aparece
+  em "Conferidos (1)" — asserção mais forte que a antiga, que só olhava o selo.
+- tsc **61 = baseline** · eslint · build.
