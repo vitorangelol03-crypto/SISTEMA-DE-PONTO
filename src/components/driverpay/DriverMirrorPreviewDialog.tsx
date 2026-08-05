@@ -537,16 +537,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     }
     setGenerating(true);
     try {
-      // Salva o aviso de corte como novo padrão (pedido do Victor: fica salvo até alterar).
-      if (cutoff && companyId && userId) {
-        // ⚠️ Grava a data COMPLETA (2026-12-31), não a curta impressa no espelho (31/12):
-        // sem o ano, a leitura recusava o valor e o campo voltava sempre no padrão.
-        await saveMirrorCutoffNotice(companyId, {
-          cutoff_time: cutoffTime.trim(),
-          cutoff_date: cutoffDate.trim(),
-          late_payment_date: lateDate.trim(),
-        }, userId).catch((e) => console.error('Erro ao salvar aviso de corte:', e));
-      }
+      await salvarPrazoComoPadrao();
       const req = withCutoff();
       if (req.mode === 'individual') {
         const file = `espelho-driver-${sanitizeFile(req.data.driver.name)}-${sanitizeFile(req.data.period.label)}.pdf`;
@@ -592,6 +583,26 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       return next;
     });
 
+  /**
+   * Guarda o prazo como novo padrão (pedido do Victor: "fica salvo até você alterar").
+   *
+   * 🔴 05/08/2026 — isto SÓ acontecia no "Gerar PDF". Quem publica no app sem baixar o
+   * papel — que é o fluxo normal dele — digitava a data e ela se perdia toda vez:
+   * "não está ficando salva e eu tenho que ficar alterando toda hora". Agora os DOIS
+   * caminhos salvam.
+   *
+   * ⚠️ Grava a data COMPLETA (2026-12-31), não a curta impressa no espelho (31/12): sem o
+   * ano a leitura recusa o valor e o campo volta sempre no padrão.
+   */
+  const salvarPrazoComoPadrao = async (): Promise<void> => {
+    if (!cutoff || !companyId || !userId) return;
+    await saveMirrorCutoffNotice(companyId, {
+      cutoff_time: cutoffTime.trim(),
+      cutoff_date: cutoffDate.trim(),
+      late_payment_date: lateDate.trim(),
+    }, userId).catch((e) => console.error('Erro ao salvar aviso de corte:', e));
+  };
+
   const handlePublish = async () => {
     if (!onPublish) return;
     // Todas marcadas => null (todas); subconjunto => só as marcadas (D3 filtra linhas E total).
@@ -605,6 +616,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     }
     setPublishing(true);
     try {
+      await salvarPrazoComoPadrao();
       await onPublish(allowed, includeDeductions, nfDueAt);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao publicar no app');
