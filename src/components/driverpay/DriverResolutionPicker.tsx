@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, Search, UserPlus, Ban, Link2 } from 'lucide-react';
 import type { DriverCandidate } from '../../utils/driverNameMatch';
 import type { ImportResolution } from '../../utils/driverImportApply';
+import { contemSemAcento } from '../../utils/buscaTexto';
 
 interface DriverResolutionPickerProps {
   drivers: DriverCandidate[];
@@ -42,8 +43,9 @@ export const DriverResolutionPicker: React.FC<DriverResolutionPickerProps> = ({
   const btnRef = useRef<HTMLButtonElement>(null);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const base = q ? drivers.filter((d) => d.name.toLowerCase().includes(q)) : drivers;
+    // Sem acento: "jose" acha "José" (mesma regra da busca da grade, 04/08/2026).
+    const q = query.trim();
+    const base = q ? drivers.filter((d) => contemSemAcento(d.name, q)) : drivers;
     return base.slice(0, 60);
   }, [drivers, query]);
 

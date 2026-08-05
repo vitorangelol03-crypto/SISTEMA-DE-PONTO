@@ -22,6 +22,7 @@ import {
 } from '../../services/driverPay';
 import { expectedProofPlatforms, proofForaPorSemGrupo, type DriverRowData, type ProofRequest } from './driverPayShared';
 import { ModalShell } from './ModalShell';
+import { contemSemAcento } from '../../utils/buscaTexto';
 
 interface SolicitarEspelhoModalProps {
   companyId: string;
@@ -117,9 +118,10 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
 
   /** Entregadores desta quinzena, filtrados pela busca (a lista tem ~90 nomes). */
   const driversDisponiveis = useMemo(() => {
-    const q = buscaDriver.trim().toLowerCase();
+    // Sem acento: "jose" acha "José" (mesma regra da busca da grade, 04/08/2026).
+    const q = buscaDriver.trim();
     return rows
-      .filter((r) => !q || r.name.toLowerCase().includes(q) || (r.groupName ?? '').toLowerCase().includes(q))
+      .filter((r) => !q || contemSemAcento(r.name, q) || contemSemAcento(r.groupName, q))
       .map((r) => ({ driverId: r.driverId, name: r.name, groupName: r.groupName }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [rows, buscaDriver]);

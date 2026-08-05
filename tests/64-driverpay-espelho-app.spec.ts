@@ -248,8 +248,13 @@ test.describe('Espelho do app da Shopee — painel (04/08/2026)', () => {
       await expect(modal(page).getByText('Espelhos recebidos')).toBeVisible({ timeout: 10_000 });
 
       // A comparação, em português, com os DOIS números e o tamanho da diferença.
-      await expect(modal(page).getByText(String(PKGS_PLANILHA))).toBeVisible({ timeout: 10_000 });
-      await expect(modal(page).getByText(String(PKGS_PRINT))).toBeVisible();
+      // ⚠️ `.first()`: os números aparecem em vários elementos ANINHADOS (a linha da
+      // comparação e, dentro dela, o bloco da correção). `getByText` casa com todos os
+      // ancestrais, então sem o `.first()` isto quebra por "strict mode violation" a cada
+      // mudança de layout — sem nada ter deixado de funcionar. O que importa aqui é que o
+      // número ESTEJA na tela.
+      await expect(modal(page).getByText(String(PKGS_PLANILHA)).first()).toBeVisible({ timeout: 10_000 });
+      await expect(modal(page).getByText(String(PKGS_PRINT)).first()).toBeVisible();
       await expect(modal(page).getByText(/58 a mais no print/)).toBeVisible();
       await expect(modal(page).getByText('quantidade diferente')).toBeVisible();
 

@@ -49,6 +49,7 @@ import {
   listDeliveryProofs,
   type MirrorPublicationRow,
 } from '../../services/driverPay';
+import { contemSemAcento } from '../../utils/buscaTexto';
 import { exportDriverGeneralReportExcel, exportDriverSimpleReportExcel } from '../../utils/driverReport';
 import { generateDriverMirrorPdf, generateDriverGroupMirrorPdf } from '../../utils/driverMirrorPdf';
 import {
@@ -1195,12 +1196,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     () =>
       rows.filter((r) => {
         if (search.trim()) {
-          const q = search.trim().toLowerCase();
-          const inName = r.name.toLowerCase().includes(q);
+          // Sem acento dos DOIS lados: "jose" acha "José", "cha" acha "Chalé",
+          // "conceicao" acha "Conceição" (pedido do Victor, 04/08/2026).
+          const q = search.trim();
+          const inName = contemSemAcento(r.name, q);
           const inRoute =
-            (r.route ?? '').toLowerCase().includes(q) ||
-            r.routes.some((rl) => (rl.route ?? '').toLowerCase().includes(q));
-          const inGroup = (r.groupName ?? '').toLowerCase().includes(q);
+            contemSemAcento(r.route, q) || r.routes.some((rl) => contemSemAcento(rl.route, q));
+          const inGroup = contemSemAcento(r.groupName, q);
           if (!inName && !inRoute && !inGroup) return false;
         }
         if (routeFilter) {

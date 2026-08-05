@@ -394,9 +394,15 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
     // O líder vê a seção do grupo e o cartão do membro, com o NOME dele.
     await expect(page.getByText(/Do seu grupo/i)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(`${PREF}Membro ${RUN}`)).toBeVisible();
-    // Dois lugares de envio: o dele e o do membro — "um print por driver".
     await print(page, 'G-lider-ve-um-cartao-por-membro');
-    await expect(page.locator('input[type="file"]')).toHaveCount(2);
+    // ⚠️ ATUALIZADO em 04/08/2026 pela regra "UM PRINT POR ENTREGADOR". Antes aqui se
+    // exigia 2 campos de arquivo (o do líder + o do membro), porque o cartão de quem já
+    // enviou trazia um "trocar" que reenviava por cima. Esse "trocar" SAIU: o servidor
+    // agora recusa (409) enquanto houver print valendo. O líder vem do teste E, onde ele
+    // JÁ ENVIOU — então ele aparece como enviado e SEM lugar de enviar, e só o membro
+    // (que não mandou nada) tem campo. Isto prova a regra melhor do que a contagem antiga.
+    await expect(page.getByText(/Já enviados/i)).toBeVisible();
+    await expect(page.locator('input[type="file"]')).toHaveCount(1);
     // E continua sem número nenhum na tela.
     await expect(page.getByText('900')).toHaveCount(0);
   });
