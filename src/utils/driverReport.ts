@@ -66,6 +66,12 @@ export interface DriverReportMeta {
   platforms: string[];
   /** Data/hora de geração (default: agora, fuso America/Sao_Paulo). */
   generatedAt?: string;
+  /**
+   * Data que vai na coluna "Data de pagamento" do relatório simples, em DD/MM/AAAA
+   * (05/08/2026). Ausente = HOJE. Fica como campo pra dar pra agendar o pagamento sem
+   * ter que editar a planilha na mão depois — hoje ninguém passa, e o padrão resolve.
+   */
+  dataPagamento?: string;
   /** Rótulo da entidade no rodapé/meta (default 'driver'; ex.: 'recebedor(es)' no relatório do líder). */
   entityLabel?: string;
   /**
@@ -696,7 +702,20 @@ export async function exportDriverGeneralReportExcel(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// EXCEL — RELATÓRIO SIMPLES (A nome · B valor total · C chave PIX · D obs = quinzena)
+// EXCEL — RELATÓRIO SIMPLES, no formato da planilha do BANCO (05/08/2026)
+//
+// Pedido do Victor, com o print do template aberto: *"quero que a planilha simples, o
+// relatório simples, saia nesse padrão dessas colunas: A nome sem acento, B chave pix,
+// C valor, D data, E descrição"*.
+//
+// 🔑 A ORDEM DAS COLUNAS É A DO BANCO, não a nossa. O template dele diz "Não altere o
+// template deste arquivo" — então o caminho é copiar A:E daqui e colar lá. Qualquer coluna
+// a mais, a menos ou fora de ordem quebra a colagem e vira pagamento errado.
+//
+// Sem acento nas TRÊS colunas de texto (nome, chave e descrição): o `sanitizeWorkbookAscii`
+// já passa no arquivo inteiro no fim, e a chave PIX ainda passa pelo `sanitizePixKey`
+// (CPF/CNPJ só com os números — e-mail e chave aleatória ficam intactos, senão o
+// pagamento quebra).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /** Uma linha do relatório simples: nome (sem acento) + total a receber + chave PIX do recebedor. */
@@ -707,7 +726,17 @@ export interface SimpleExportRow {
   pix?: string | null;
 }
 
-function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX.WorkSheet {
+/** Data de hoje em DD/MM/AAAA — é o que o campo "Data de pagamento" do banco espera. */
+export function dataDePagamentoHoje(agora: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(agora.getDate())}/${p(agora.getMonth() + 1)}/${agora.getFullYear()}`;
+}
+
+/**
+ * Exportado só pro teste: a ORDEM DAS COLUNAS é a única coisa que não pode quebrar aqui
+ * (colar fora de ordem na planilha do banco = pagar valor errado pra pessoa errada).
+ */
+export function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX.WorkSheet {
   const generatedAt = meta.generatedAt || nowBR();
   const R_TITLE = 0;
   const R_META = 1;
@@ -715,15 +744,20 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
   const R_DATA = 4;
   const n = rows.length;
   const R_TOTAL = R_DATA + n;
-  const lastCol = 3; // A NOME | B VALOR TOTAL | C CHAVE PIX | D OBS
+  // A NOME | B CHAVE PIX | C VALOR | D DATA | E DESCRICAO — a ordem do banco (05/08/2026).
+  const C_NOME = 0, C_PIX = 1, C_VALOR = 2, C_DATA = 3, C_DESC = 4;
+  const lastCol = C_DESC;
 
-  const blank = (): any[] => ['', '', '', ''];
+  const blank = (): any[] => ['', '', '', '', ''];
   const data: any[][] = [];
 
   const warning = deductionsWarning(meta);
   const platformLabel = (meta.platformFilterLabel ?? '').trim();
-  // OBS = nome da quinzena; filtrado, leva a plataforma junto pra não pagar o arquivo errado.
+  // DESCRIÇÃO = o que aparece no comprovante do entregador (o template do banco avisa
+  // isso). Vai o nome da quinzena; filtrado, leva a plataforma junto — senão dois
+  // pagamentos da mesma quinzena ficam iguais no extrato dele.
   const obs = platformLabel ? `${meta.periodLabel} — ${platformLabel}` : meta.periodLabel;
+  const dataPagamento = meta.dataPagamento ?? dataDePagamentoHoje(new Date());
 
   const title = blank();
   title[0] = `RELATÓRIO SIMPLES — ${meta.companyName} — ${meta.periodLabel}${platformSuffix(meta)}`;
@@ -736,29 +770,32 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
   data[R_META] = metaRow;
   data[2] = blank();
 
+  // Os rótulos são os do template do banco, pra bater o olho e ver que é a mesma coluna.
   const head = blank();
-  head[0] = 'NOME';
-  head[1] = 'VALOR TOTAL';
-  head[2] = 'CHAVE PIX';
-  head[3] = 'OBS';
+  head[C_NOME] = 'Nome do funcionario';
+  head[C_PIX] = 'Chave ou codigo Pix';
+  head[C_VALOR] = 'Valor';
+  head[C_DATA] = 'Data de pagamento';
+  head[C_DESC] = 'Descricao';
   data[R_HEAD] = head;
 
   rows.forEach((r, j) => {
     const line = blank();
-    line[0] = r.name;
-    line[1] = r.total;
-    line[2] = sanitizePixKey(r.pix);
-    line[3] = obs;
+    line[C_NOME] = r.name;
+    line[C_PIX] = sanitizePixKey(r.pix);
+    line[C_VALOR] = r.total;
+    line[C_DATA] = dataPagamento;
+    line[C_DESC] = obs;
     data[R_DATA + j] = line;
   });
 
   const totalRow = blank();
-  totalRow[0] = 'TOTAL GERAL';
-  totalRow[1] = n > 0 ? { f: `SUM(B${R_DATA + 1}:B${R_DATA + n})` } : 0;
+  totalRow[C_NOME] = 'TOTAL GERAL';
+  totalRow[C_VALOR] = n > 0 ? { f: `SUM(C${R_DATA + 1}:C${R_DATA + n})` } : 0;
   data[R_TOTAL] = totalRow;
 
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{ wch: 36 }, { wch: 18 }, { wch: 24 }, { wch: 30 }];
+  ws['!cols'] = [{ wch: 36 }, { wch: 26 }, { wch: 16 }, { wch: 18 }, { wch: 30 }];
   ws['!rows'] = [{ hpx: 26 }];
 
   applyCellStyle(ws[XLSX.utils.encode_cell({ r: R_TITLE, c: 0 })], {
@@ -777,7 +814,7 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
     applyCellStyle(ws[XLSX.utils.encode_cell({ r: R_HEAD, c })], {
       font: { bold: true, sz: 11, color: { rgb: XL_TEXT_LIGHT } },
       fill: { fgColor: { rgb: XL_HEADER_FILL } },
-      alignment: { horizontal: c === 1 ? 'right' : 'left', vertical: 'center' },
+      alignment: { horizontal: c === C_VALOR ? 'right' : 'left', vertical: 'center' },
       border: applyBorder('medium'),
     });
   }
@@ -790,15 +827,15 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
       const style: any = {
         fill: { fgColor: { rgb: bg } },
         border: applyBorder(),
-        alignment: { vertical: 'center', horizontal: c === 1 ? 'right' : 'left' },
+        alignment: { vertical: 'center', horizontal: c === C_VALOR ? 'right' : 'left' },
         font: { sz: 10, color: { rgb: XL_INK } },
       };
-      if (c === 0) style.font = { sz: 10, bold: true, color: { rgb: XL_INK } };
-      if (c === 1) {
+      if (c === C_NOME) style.font = { sz: 10, bold: true, color: { rgb: XL_INK } };
+      if (c === C_VALOR) {
         cell.z = BRL_FMT;
         style.font = { sz: 10, bold: true, color: { rgb: rows[j].total < 0 ? XL_RED : XL_INK } };
       }
-      if (c === 3) style.font = { sz: 10, color: { rgb: XL_INK_MUTED } };
+      if (c === C_DESC) style.font = { sz: 10, color: { rgb: XL_INK_MUTED } };
       applyCellStyle(cell, style);
     }
   }
@@ -809,9 +846,9 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
       font: { bold: true, sz: 11, color: { rgb: XL_INK } },
       fill: { fgColor: { rgb: XL_TOTAL_FILL } },
       border: applyBorder('medium'),
-      alignment: { vertical: 'center', horizontal: c === 1 ? 'right' : 'left' },
+      alignment: { vertical: 'center', horizontal: c === C_VALOR ? 'right' : 'left' },
     };
-    if (c === 1) {
+    if (c === C_VALOR) {
       cell.z = BRL_FMT;
       style.font = { bold: true, sz: 12, color: { rgb: XL_GREEN } };
     }
@@ -823,11 +860,11 @@ function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta): XLSX
     { s: { r: R_META, c: 0 }, e: { r: R_META, c: lastCol } },
   ];
   ws['!freeze'] = { xSplit: 0, ySplit: R_DATA };
-  if (n > 0) ws['!autofilter'] = { ref: `A${R_HEAD + 1}:D${R_DATA + n}` };
+  if (n > 0) ws['!autofilter'] = { ref: `A${R_HEAD + 1}:E${R_DATA + n}` };
   return ws;
 }
 
-/** Gera e baixa o relatório SIMPLES (.xlsx): A nome (sem acento) · B valor total · C chave PIX · D obs (quinzena). */
+/** Gera e baixa o relatório SIMPLES (.xlsx) no formato do banco: A nome · B chave PIX · C valor · D data · E descrição. */
 export async function exportDriverSimpleReportExcel(
   rows: SimpleExportRow[],
   meta: DriverReportMeta,
