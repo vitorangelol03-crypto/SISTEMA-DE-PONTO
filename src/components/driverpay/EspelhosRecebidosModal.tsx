@@ -26,7 +26,7 @@ import {
   type DeliveryProofRow,
 } from '../../services/driverPay';
 import {
-  platformPackages, planejarCorrecaoDePacotes, formatBRL, proofPrecisaAtencao,
+  platformPackages, planejarCorrecaoDePacotes, formatBRL, proofPrecisaAtencao, printsRepetidos,
   type DriverRowData,
 } from './driverPayShared';
 import { ModalShell } from './ModalShell';
@@ -253,25 +253,9 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
   }, [rows]);
 
   /** Prints cujo arquivo é idêntico ao de OUTRO driver (o app não mostra o nome na tela). */
-  const repetidos = useMemo(() => {
-    const porHash = new Map<string, Set<string>>();
-    for (const p of proofs) {
-      if (!p.fileSha256) continue;
-      const s = porHash.get(p.fileSha256) ?? new Set<string>();
-      s.add(p.driverId);
-      porHash.set(p.fileSha256, s);
-    }
-    const out = new Map<string, string[]>();
-    for (const p of proofs) {
-      if (!p.fileSha256) continue;
-      const donos = porHash.get(p.fileSha256);
-      if (donos && donos.size > 1) {
-        out.set(p.id, proofs.filter((o) => o.fileSha256 === p.fileSha256 && o.driverId !== p.driverId)
-          .map((o) => o.driverName));
-      }
-    }
-    return out;
-  }, [proofs]);
+  // A MESMA função usada pelo numerozinho do botão no cabeçalho — dois cálculos
+  // parecidos acabariam divergindo, e o número de fora não bateria com o de dentro.
+  const repetidos = useMemo(() => printsRepetidos(proofs), [proofs]);
 
   // A regra mora em driverPayShared (testada): validação HUMANA encerra o assunto, senão
   // um print que já foi divergente uma vez ficaria preso aqui pra sempre.

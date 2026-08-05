@@ -52,6 +52,7 @@ import {
   platformsWithProofHistory,
   requestProofForDrivers,
   type MirrorPublicationRow,
+  type DeliveryProofRow,
 } from '../../services/driverPay';
 import { contemSemAcento } from '../../utils/buscaTexto';
 import { pagamentosParaMarcarPorDispensa } from '../../utils/espelhoDispensa';
@@ -67,6 +68,9 @@ import {
   buildGroupMirrorData,
   buildSelectionMirrorData,
   planejarPublicacao,
+  seloDoBotao,
+  printsRepetidos,
+  proofPrecisaAtencao,
   toggleValorDeFiltro,
   temTodasAsRotas,
   temTodasAsPlataformas,
@@ -226,6 +230,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // Notas do período por driver: CNPJs (emitterIds) com nota validada / recebida-não-rejeitada.
   // Alimenta a coluna NF (validadas/esperadas). Recarrega ao validar/recusar/excluir nota.
   const [nfByDriver, setNfByDriver] = useState<Map<string, { validated: Set<string>; received: Set<string> }>>(new Map());
+  /** Linhas cruas dos prints — alimentam o numerozinho do botão "Espelhos recebidos". */
+  const [proofRows, setProofRows] = useState<DeliveryProofRow[]>([]);
   /** Notas cruas da quinzena — só o filtro de PRAZO dos relatórios usa (04/08/2026). */
   const [nfFiles, setNfFiles] = useState<NotaFiscalFileRow[]>([]);
   /** Quem JA RECEBEU nesta quinzena, por (entregador, plataforma) — a tag de pago. */
@@ -387,6 +393,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     async (periodId: string | null) => {
       if (!company?.id || !periodId) {
         setProofRequests([]);
+        setProofRows([]);
         setProofStates(new Map());
         return;
       }
@@ -403,6 +410,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           porSlot.set(k, lista);
         }
         setProofRequests(solicitadas);
+        setProofRows(prints);
         setProofStates(new Map([...porSlot].map(([k, v]) => [k, melhorEstado(v)])));
       } catch (e) {
         console.error('Erro ao carregar os espelhos do app:', e);
@@ -1332,6 +1340,25 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     [proofProgressByPayment],
   );
 
+  /**
+   * Os numerozinhos do cabeçalho (05/08/2026, pedido do Victor): tendo pendência, mostra
+   * QUANTAS faltam validar; não tendo, mostra em verde o total já validado.
+   * Usa exatamente as mesmas regras das telas que os botões abrem, pra o número de fora
+   * nunca discordar do de dentro.
+   */
+  const seloNotas = useMemo(() => {
+    const pendentes = nfFiles.filter((f) => f.status !== 'validada').length;
+    const validadas = nfFiles.filter((f) => f.status === 'validada').length;
+    return seloDoBotao(pendentes, validadas);
+  }, [nfFiles]);
+
+  const seloPrints = useMemo(() => {
+    const repetidos = new Set(printsRepetidos(proofRows).keys());
+    const pendentes = proofRows.filter((p) => proofPrecisaAtencao(p, repetidos)).length;
+    const conferidos = proofRows.filter((p) => p.status === 'validado' && !proofPrecisaAtencao(p, repetidos)).length;
+    return seloDoBotao(pendentes, conferidos);
+  }, [proofRows]);
+
   const nfProgressByPayment = useMemo(
     () => computeNfProgressByPayment(rows, platforms, nfByDriver, pubsByDriver),
     [rows, platforms, nfByDriver, pubsByDriver],
@@ -1566,6 +1593,20 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     return { grupos: plano.grupos.length, avulsos: plano.avulsos.length, semLider: plano.semLider };
   }, [mirror, publishRows, publishScope, publishGroupInfo, groups]);
 
+  /** O numerozinho ao lado do texto do botão — âmbar quando falta, verde quando fechou. */
+  const Selo: React.FC<{ selo: { numero: number; estado: string } }> = ({ selo }) => {
+    if (selo.estado === 'vazio') return null;
+    return (
+      <span
+        className={`text-xs font-bold px-1.5 py-0.5 rounded-full tabular-nums ${
+          selo.estado === 'pendente' ? 'bg-amber-200 text-amber-900' : 'bg-green-200 text-green-900'
+        }`}
+      >
+        {selo.numero}
+      </span>
+    );
+  };
+
   const discountRow = discountRowId ? rows.find((r) => r.paymentId === discountRowId) ?? null : null;
   const valeRow = valeRowId ? rows.find((r) => r.paymentId === valeRowId) ?? null : null;
   const zapexRow = zapexRowId ? rows.find((r) => r.paymentId === zapexRowId) ?? null : null;
@@ -1696,9 +1737,17 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             <button
               type="button"
               onClick={() => setShowNotas(true)}
+              title={
+                seloNotas.estado === 'pendente'
+                  ? `${seloNotas.numero} nota(s) esperando você validar`
+                  : seloNotas.estado === 'ok'
+                    ? `${seloNotas.numero} nota(s) validada(s) — nada pendente`
+                    : 'Nenhuma nota recebida ainda'
+              }
               className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
             >
               Notas recebidas
+              <Selo selo={seloNotas} />
             </button>
           )}
           {/* Espelho do app da Shopee (print da tela) — 04/08/2026 */}
@@ -1716,14 +1765,21 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             <button
               type="button"
               onClick={() => setShowEspelhosRecebidos(true)}
-              title="Ver os prints recebidos, com a foto ao lado do que a planilha diz"
+              title={
+                seloPrints.estado === 'pendente'
+                  ? `${seloPrints.numero} print(s) precisando da sua atenção`
+                  : seloPrints.estado === 'ok'
+                    ? `${seloPrints.numero} print(s) conferido(s) — nada pendente`
+                    : 'Ver os prints recebidos, com a foto ao lado do que a planilha diz'
+              }
               className={`px-3 py-2 text-sm font-medium rounded-md inline-flex items-center gap-1.5 min-h-[40px] ${
                 proofAtencao > 0
                   ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
                   : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
               }`}
             >
-              Espelhos recebidos{proofAtencao > 0 ? ` (${proofAtencao})` : ''}
+              Espelhos recebidos
+              <Selo selo={seloPrints} />
             </button>
           )}
           {selectedPeriod && canMirror && publishedDriverIds.size > 0 && (

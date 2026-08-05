@@ -1276,6 +1276,56 @@ export function buildSelectionMirrorData(
   return { groups, singles };
 }
 
+// ── OS NUMEROZINHOS DOS BOTÕES DO CABEÇALHO (05/08/2026, pedido do Victor) ──
+// "coloca o numerozinho do lado de Notas recebidas e Espelhos recebidos, igual o
+//  Despublicar todos. Se tiver pendência, mostra quantas faltam validar; não tendo
+//  pendência, mostra em verdinho o total já validado."
+//
+// ⚠️ O número do botão TEM que ser o mesmo que aparece dentro da tela ao abrir. Por isso
+// a contagem dos prints usa a MESMA `proofPrecisaAtencao` da aba "Precisam de você", e os
+// repetidos saem da MESMA função — dois cálculos parecidos acabariam divergindo.
+
+export interface SeloDeBotao {
+  numero: number;
+  /** 'pendente' = falta gente validar (âmbar) · 'ok' = tudo validado (verde) · 'vazio' = sem selo. */
+  estado: 'pendente' | 'ok' | 'vazio';
+}
+
+export function seloDoBotao(pendentes: number, concluidos: number): SeloDeBotao {
+  if (pendentes > 0) return { numero: pendentes, estado: 'pendente' };
+  if (concluidos > 0) return { numero: concluidos, estado: 'ok' };
+  return { numero: 0, estado: 'vazio' };
+}
+
+/**
+ * Prints que são o MESMO arquivo em drivers diferentes → id do print ➜ nomes dos outros.
+ * O app da Shopee não mostra o nome do entregador na tela, então o sistema não tem como
+ * saber de quem é a foto: ele avisa, não trava.
+ */
+export function printsRepetidos(
+  proofs: readonly { id: string; driverId: string; driverName: string; fileSha256: string | null }[],
+): Map<string, string[]> {
+  const porHash = new Map<string, Set<string>>();
+  for (const p of proofs) {
+    if (!p.fileSha256) continue;
+    const s = porHash.get(p.fileSha256) ?? new Set<string>();
+    s.add(p.driverId);
+    porHash.set(p.fileSha256, s);
+  }
+  const out = new Map<string, string[]>();
+  for (const p of proofs) {
+    if (!p.fileSha256) continue;
+    const donos = porHash.get(p.fileSha256);
+    if (donos && donos.size > 1) {
+      out.set(
+        p.id,
+        proofs.filter((o) => o.fileSha256 === p.fileSha256 && o.driverId !== p.driverId).map((o) => o.driverName),
+      );
+    }
+  }
+  return out;
+}
+
 // ── QUAL VALOR ESPERAR NA NOTA (05/08/2026, pedido do Victor) ────────────────
 // "coloca para aparecer o valor do espelho na tagzinha, assim já sabemos qual valor
 // esperar na nota". Hoje esse número só aparecia DENTRO da mensagem de recusa — ou seja,
