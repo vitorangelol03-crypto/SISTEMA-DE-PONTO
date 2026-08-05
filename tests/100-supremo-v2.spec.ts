@@ -508,30 +508,37 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
       await s.from('attendance').delete().eq('employee_id', empId).eq('date', today);
       await insertAttendance(empId, today, { status: 'present' });
 
-      await loginAs(page, ADMIN);
-      await gotoPontoFresh(page);
-      await page.getByRole('button', { name: /^Bonificação$/ }).click();
-      await expect(page.getByRole('heading', { name: /Bonificação do Dia/ })).toBeVisible();
+      // ⚠️ 05/08/2026 — TUDO dentro de try/finally. Antes o restore era a última
+      // linha, DEPOIS do `expect`: qualquer asserção que falhasse (ou timeout da UI)
+      // pulava a limpeza e deixava o bônus do teste em funcionário REAL. Foi assim
+      // que 20 pessoas da Caratinga ficaram com R$ 10 em 04/08 — e a rodada seguinte
+      // fotografou o lixo como estado legítimo, tornando-o permanente.
+      try {
+        await loginAs(page, ADMIN);
+        await gotoPontoFresh(page);
+        await page.getByRole('button', { name: /^Bonificação$/ }).click();
+        await expect(page.getByRole('heading', { name: /Bonificação do Dia/ })).toBeVisible();
 
-      const typeBSpan = page.getByText('Tipo B', { exact: true });
-      const blockB = typeBSpan.locator(
-        'xpath=ancestor::div[contains(@class, "rounded-lg") and contains(@class, "border")][1]',
-      );
-      await blockB.locator('input[type="number"]').fill('10');
-      await page.getByRole('button', { name: 'Aplicar B', exact: true }).click();
-      await expect(page.getByText(/Bonificação B aplicada com sucesso/i)).toBeVisible({ timeout: 30_000 });
-      await page.getByRole('button', { name: /^Fechar$/ }).click();
+        const typeBSpan = page.getByText('Tipo B', { exact: true });
+        const blockB = typeBSpan.locator(
+          'xpath=ancestor::div[contains(@class, "rounded-lg") and contains(@class, "border")][1]',
+        );
+        await blockB.locator('input[type="number"]').fill('10');
+        await page.getByRole('button', { name: 'Aplicar B', exact: true }).click();
+        await expect(page.getByText(/Bonificação B aplicada com sucesso/i)).toBeVisible({ timeout: 30_000 });
+        await page.getByRole('button', { name: /^Fechar$/ }).click();
 
-      const { data: pay } = await s
-        .from('payments')
-        .select('bonus_b')
-        .eq('employee_id', empId)
-        .eq('date', today)
-        .single();
-      expect(Number(pay?.bonus_b)).toBe(10);
-
-      // RESTORE imediato — não confia em afterAll que pode ser skipped
-      await restoreRealPayments(s, snapshot);
+        const { data: pay } = await s
+          .from('payments')
+          .select('bonus_b')
+          .eq('employee_id', empId)
+          .eq('date', today)
+          .single();
+        expect(Number(pay?.bonus_b)).toBe(10);
+      } finally {
+        // RESTORE sempre — passando ou falhando o teste.
+        await restoreRealPayments(s, snapshot);
+      }
     });
 
     test('C3. Remover bônus individual via ícone trash + obs ≥10 chars', async ({ page }) => {

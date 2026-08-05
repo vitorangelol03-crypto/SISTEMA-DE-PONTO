@@ -33,6 +33,18 @@ export async function snapshotRealPayments(
   companyId: string,
   date: string
 ): Promise<BonusSnapshot> {
+  // ⚠️ 05/08/2026 — LIMPA FANTASMA ANTES DE FOTOGRAFAR.
+  //
+  // Se uma rodada anterior deixou bônus fantasma (restore pulado por asserção que
+  // falhou), o snapshot desta rodada o capturaria como estado LEGÍTIMO e o restore
+  // o recolocaria — o fantasma vira permanente. Aconteceu em 04/08: 20 funcionários
+  // reais da Caratinga com bonus_b=10 e diária ZERO, e o `updated_at` deles mostra
+  // uma rodada seguinte "restaurando" o próprio lixo 4h depois.
+  //
+  // A assinatura do fantasma é estreita de propósito (bônus SEM diária, criado pelo
+  // login dos testes, valor exato do teste): bônus de verdade sempre vem com diária
+  // ou por outro usuário, e não é tocado aqui.
+  await limparBonusFantasma(s, companyId, date);
   const { data: realEmpRows } = await s
     .from('employees')
     .select('id')
@@ -52,6 +64,41 @@ export async function snapshotRealPayments(
     companyId,
     date,
   };
+}
+
+/**
+ * Apaga pagamento que SÓ tem bônus do teste, em funcionário REAL.
+ *
+ * Assinatura estreita de propósito — precisa dos QUATRO sinais juntos:
+ *   diária ZERO · bônus > 0 · `created_by = '9999'` (login ADMIN dos testes) ·
+ *   funcionário real naquela empresa/data.
+ * Bônus de verdade vem com diária no mesmo dia, ou lançado por supervisor (ex.: o
+ * de 06/11/2025, do usuário `01`), e por isso não é tocado.
+ */
+export async function limparBonusFantasma(
+  s: SupabaseClient,
+  companyId: string,
+  date: string
+): Promise<number> {
+  const { data: realEmpRows } = await s
+    .from('employees')
+    .select('id')
+    .eq('company_id', companyId)
+    .not('name', 'ilike', 'PW Test%')
+    .not('name', 'ilike', 'Demo PN%');
+  const realIds = ((realEmpRows ?? []) as Array<{ id: string }>).map((r) => r.id);
+  if (realIds.length === 0) return 0;
+
+  const { data: apagados } = await s
+    .from('payments')
+    .delete()
+    .eq('date', date)
+    .eq('daily_rate', 0)
+    .eq('created_by', '9999')
+    .gt('bonus', 0)
+    .in('employee_id', realIds)
+    .select('id');
+  return (apagados ?? []).length;
 }
 
 /**
