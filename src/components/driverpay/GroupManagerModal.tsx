@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Tag, Plus, Trash2, Edit2, Users, Save, X, Info } from 'lucide-react';
+import { Tag, Plus, Trash2, Edit2, Users, Save, X, Info, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   Driver,
@@ -45,6 +45,8 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [memberSearch, setMemberSearch] = useState('');
+  /** Busca do GRUPO na lista (04/08/2026): filtra conforme digita, ignorando acento. */
+  const [groupSearch, setGroupSearch] = useState('');
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [newName, setNewName] = useState('');
@@ -197,6 +199,11 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
 
+  /** Grupos que casam com a busca — reusa o MESMO normalizador da busca de driver. */
+  const gruposVisiveis = groups.filter((g) =>
+    !groupSearch.trim() || normalizeSearch(g.name).includes(normalizeSearch(groupSearch.trim())),
+  );
+
   const filteredDrivers = (group: DriverGroup, members: string[]): Driver[] => {
     // Driver ja vinculado a OUTRO grupo nao aparece aqui (evita vinculo duplo);
     // quem ja e membro DESTE grupo continua na lista para poder ser desmarcado.
@@ -236,7 +243,43 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
           <p className="text-sm text-gray-500">Nenhum grupo criado ainda.</p>
         ) : (
           <div className="space-y-2">
-            {groups.map((group) => {
+            {/* Busca do grupo (04/08/2026): com ~50 grupos, achar um rolando a lista
+                era trabalho. Ignora acento — "sao" acha "São". */}
+            <div className="sticky top-0 z-10 bg-white pb-2">
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={groupSearch}
+                  onChange={(e) => setGroupSearch(e.target.value)}
+                  placeholder="Buscar grupo pelo nome..."
+                  data-testid="buscar-grupo"
+                  className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-md text-sm min-h-[40px]"
+                />
+                {groupSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setGroupSearch('')}
+                    title="Limpar"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none px-1"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              {groupSearch.trim() && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {gruposVisiveis.length} de {groups.length} grupo(s)
+                </p>
+              )}
+            </div>
+
+            {gruposVisiveis.length === 0 && (
+              <p className="text-sm text-gray-500 py-6 text-center">
+                Nenhum grupo com esse nome.
+              </p>
+            )}
+            {gruposVisiveis.map((group) => {
               const members = membersByGroup[group.id] ?? [];
               const isExpanded = expandedGroupId === group.id;
               const isEditing = editingGroupId === group.id;
