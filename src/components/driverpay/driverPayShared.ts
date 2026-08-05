@@ -353,14 +353,28 @@ export function computeNfProgressByPayment(
 
   const out = new Map<string, NfProgress>();
   for (const unitRows of units.values()) {
+    // ══════════════════════════════════════════════════════════════════════════
+    // As publicacoes do GRUPO valem pra unidade inteira (05/08/2026).
+    //
+    // 🔴 O comentario abaixo sempre disse isso, mas o codigo passava a publicacao de CADA
+    // LINHA. No grupo so o LIDER tem publicacao — entao cada membro caia no ramo "sem
+    // espelho" e gerava a vaga CORINGA `*|CNPJ`, enquanto a nota do lider chegava com a
+    // chave do espelho dele (`|CNPJ`). Duas vagas para a MESMA nota: a do lider, coberta, e
+    // a coringa dos membros, que nada cobria.
+    //
+    // Caso que denunciou (grupo Alvarenga): o lider OTHON tem 0 pacote, entao a unica vaga
+    // era a coringa dos membros — a nota dele estava validada e a grade dizia "0/1". Nos
+    // grupos em que o lider tambem entrega, o efeito era o numero inflado que aparecia na
+    // tela: "NF 1/2 — falta 1", "NF 2/4 — falta 2".
+    // ══════════════════════════════════════════════════════════════════════════
+    const pubsDaUnidade = unitRows.flatMap((r) => [...(pubsByDriver?.get(r.driverId) ?? [])]);
+
     const expectedSlots = new Set<string>();
     const validatedKeys = new Set<string>();
     const receivedKeys = new Set<string>();
     let manual = false;
     for (const row of unitRows) {
-      // No grupo, quem recebe o espelho e anexa a nota e o LIDER — as publicacoes dele
-      // valem pra unidade inteira (mesma regra ja usada pelos CNPJs esperados).
-      for (const slot of expectedNfSlotKeys(row, platforms, pubsByDriver?.get(row.driverId) ?? [])) {
+      for (const slot of expectedNfSlotKeys(row, platforms, pubsDaUnidade)) {
         expectedSlots.add(slot);
       }
       const nf = notesByDriver.get(row.driverId);
@@ -1573,11 +1587,22 @@ export function compararPorCriterios<T>(
   a: T,
   b: T,
   criterios: readonly SortCriterion[],
-  metrica: (item: T, key: string) => number | string,
+  metrica: (item: T, key: string) => number | string | null,
 ): number {
   for (const c of criterios) {
     const va = metrica(a, c.key);
     const vb = metrica(b, c.key);
+    // `null` = "não se aplica" → vai SEMPRE pro fim, nos dois sentidos (05/08/2026).
+    //
+    // Relato do Victor: ordenando por nota validada, "está subindo pessoas sem notas
+    // primeiro que pessoal com nota validada". Quem não tem nota a mandar (0 pacote na
+    // quinzena) valia o mesmo que "tudo validado" e subia junto — e a lista respondia a
+    // pergunta errada. Não é "pronto" nem "falta": é OUTRA COISA, e por isso não inverte
+    // com a direção — invertendo, ele voltaria a atrapalhar, agora no topo do "quem falta".
+    if (va === null || vb === null) {
+      if (va === null && vb === null) continue; // empatou: quem desempata é o próximo critério
+      return va === null ? 1 : -1;
+    }
     const d =
       typeof va === 'string' || typeof vb === 'string'
         ? String(va).localeCompare(String(vb), 'pt-BR')

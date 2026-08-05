@@ -121,6 +121,57 @@ describe('compararPorCriterios — o 2º só desempata o 1º', () => {
     expect(compararPorCriterios(dados[0], dados[1], [], metrica)).toBe(0);
   });
 
+  /**
+   * 🔴 05/08/2026 — "está subindo pessoas sem notas primeiro que pessoal com nota validada".
+   *
+   * Ordenando os grupos por NOTA VALIDADA, quem não tem nota a mandar (0 pacote na quinzena)
+   * valia o mesmo que "tudo validado" e subia junto com eles. Não é "pronto" nem "devendo":
+   * está FORA da pergunta — e agora a métrica devolve `null` pra dizer isso.
+   */
+  describe('null = "não se aplica" (05/08/2026)', () => {
+    interface N { nome: string; nf: number | null }
+    const mNf = (g: N) => g.nf;
+    const ordenarNf = (list: N[], dir: 'asc' | 'desc') =>
+      [...list].sort((a, b) => compararPorCriterios(a, b, [{ key: 'nf', dir }], mNf) || a.nome.localeCompare(b.nome))
+        .map((g) => g.nome);
+
+    const grupos: N[] = [
+      { nome: 'ValidouTudo', nf: 2 },
+      { nome: 'SemNota', nf: null },
+      { nome: 'Parcial', nf: 1 },
+      { nome: 'NadaValidado', nf: 0 },
+    ];
+
+    it('🎯 "validados primeiro": quem não tem nota vai pro FIM, não pro topo', () => {
+      expect(ordenarNf(grupos, 'desc')).toEqual(['ValidouTudo', 'Parcial', 'NadaValidado', 'SemNota']);
+    });
+
+    it('🔴 invertendo, ele CONTINUA no fim — não vira o topo do "quem falta"', () => {
+      // Se o null obedecesse à direção, o problema só mudaria de lugar: quem não deve nada
+      // encabeçaria a lista de quem está devendo.
+      expect(ordenarNf(grupos, 'asc')).toEqual(['NadaValidado', 'Parcial', 'ValidouTudo', 'SemNota']);
+    });
+
+    it('dois "não se aplica" empatam e caem pro próximo critério', () => {
+      const a = { nome: 'A', nf: null };
+      const b = { nome: 'B', nf: null };
+      expect(compararPorCriterios(a, b, [{ key: 'nf', dir: 'desc' }], mNf)).toBe(0);
+    });
+
+    it('null não atrapalha quem tem número no critério seguinte', () => {
+      interface M { nome: string; nf: number | null; valor: number }
+      const m = (g: M, k: string) => (k === 'nf' ? g.nf : g.valor);
+      const lista: M[] = [
+        { nome: 'SemNotaRico', nf: null, valor: 999 },
+        { nome: 'ValidouPobre', nf: 2, valor: 1 },
+      ];
+      const r = [...lista]
+        .sort((a, b) => compararPorCriterios(a, b, [{ key: 'nf', dir: 'desc' }, { key: 'valor', dir: 'desc' }], m))
+        .map((g) => g.nome);
+      expect(r).toEqual(['ValidouPobre', 'SemNotaRico']);
+    });
+  });
+
   it('empate total devolve 0 — quem chama é que desempata', () => {
     const x = { nome: 'X', espelho: 1, valor: 10 };
     const y = { nome: 'Y', espelho: 1, valor: 10 };

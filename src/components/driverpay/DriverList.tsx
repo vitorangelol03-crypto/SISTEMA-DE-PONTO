@@ -294,14 +294,21 @@ export const DriverList: React.FC<DriverListProps> = ({
 
   // ── Ordenar GRUPOS (visao "Grupos"): mesma mecânica de 3 cliques, por métrica do grupo ──
   const toggleGroupSort = (key: string) => setGroupSort((cur) => toggleSortCriteria(cur, key));
-  const groupMetric = (list: DriverRowData[], key: string): number => {
+  const groupMetric = (list: DriverRowData[], key: string): number | null => {
     if (key.startsWith('pl:')) return list.reduce((s, r) => s + platformPackages(r, key.slice(3)), 0);
     if (key === 'packages') return list.reduce((s, r) => s + computeRowTotals(r).totalPackages, 0);
     if (key === 'nf') {
-      // Status da NF do grupo: 2 = tudo validado (ou sem nota esperada), 1 = parcial, 0 = nada validado.
-      // desc = validados primeiro; asc = quem falta validar primeiro. (todos os membros compartilham o progresso)
+      // Status da NF do grupo: 2 = tudo validado, 1 = parcial, 0 = nada validado.
+      // desc = validados primeiro; asc = quem falta validar primeiro. (todos os membros
+      // compartilham o progresso)
+      //
+      // ⚠️ 05/08/2026 — quem NÃO TEM NOTA A MANDAR (0 pacote na quinzena) devolve `null`:
+      // "não se aplica", vai sempre pro fim. Antes valia 2, o mesmo que "tudo validado", e
+      // subia junto com eles — foi o que o Victor viu ("está subindo pessoas sem notas
+      // primeiro que pessoal com nota validada"). Grupo sem pacote não está pronto nem
+      // devendo: está fora da pergunta.
       const nf = nfProgressByPayment?.get(list[0]?.paymentId);
-      if (!nf || nf.expected === 0) return 2;
+      if (!nf || nf.expected === 0) return null;
       return nf.complete ? 2 : nf.validated > 0 ? 1 : 0;
     }
     if (key === 'espelhoApp') {

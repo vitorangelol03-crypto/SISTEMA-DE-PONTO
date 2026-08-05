@@ -115,3 +115,82 @@ describe('computeNfProgressByPayment — GRUPO (só o líder anexa; valida o gru
     expect(m.get('pX')).toMatchObject({ expected: 1, validated: 0, complete: false });
   });
 });
+
+/**
+ * 🔴 05/08/2026 — "ele não está detectando notas já validadas, igual a do Othon".
+ *
+ * Caso REAL (grupo Alvarenga): o líder OTHON tem **0 pacote**, recebeu o espelho do grupo
+ * (`platform_key = ''`) e mandou a nota — validada, valor/CNPJ/nome verdes. A grade
+ * mostrava **NF 0/1**.
+ *
+ * A causa: as vagas eram montadas com a publicação DE CADA LINHA. Só o líder tem
+ * publicação, então cada MEMBRO caía no ramo "sem espelho" e gerava a vaga CORINGA
+ * `*|CNPJ`, enquanto a nota do líder chegava com a chave do espelho dele (`|CNPJ`). Nada
+ * cobria a coringa.
+ *
+ * Nos grupos em que o líder também entrega, o mesmo defeito inflava o número na tela:
+ * "NF 1/2 — falta 1", "NF 2/4 — falta 2" — uma vaga do líder + uma coringa por membro,
+ * todas para a MESMA nota.
+ */
+describe('GRUPO com espelho publicado: a publicação do líder vale pra unidade (05/08/2026)', () => {
+  const notas = (chave: string) =>
+    new Map([['lider', { validated: new Set([chave]), received: new Set([chave]) }]]);
+
+  it('🎯 caso do Othon: líder sem pacote, membros com pacote, nota do líder = 1/1 validada', () => {
+    const rows = [
+      row('p-lider', 'lider', 'Alvarenga', {}),
+      row('p-m1', 'm1', 'Alvarenga', { SHOPEE: 1752 }),
+      row('p-m2', 'm2', 'Alvarenga', { SHOPEE: 430 }),
+    ];
+    const pubs = new Map([['lider', [{ platformKey: '', platformFilter: null }]]]);
+    const p = computeNfProgressByPayment(rows, PLATFORMS, notas(`|${B}`), pubs).get('p-lider')!;
+    expect(p.expected).toBe(1);
+    expect(p.validated).toBe(1);
+    expect(p.complete).toBe(true);
+  });
+
+  it('🔴 líder QUE TAMBÉM ENTREGA não infla o número (era o "NF 1/2 — falta 1")', () => {
+    const rows = [
+      row('p-lider', 'lider', 'BomJesus', { SHOPEE: 500 }),
+      row('p-m1', 'm1', 'BomJesus', { SHOPEE: 300 }),
+    ];
+    const pubs = new Map([['lider', [{ platformKey: '', platformFilter: null }]]]);
+    const p = computeNfProgressByPayment(rows, PLATFORMS, notas(`|${B}`), pubs).get('p-m1')!;
+    expect(p.expected, '1 CNPJ = 1 nota, não uma por membro').toBe(1);
+    expect(p.complete).toBe(true);
+  });
+
+  it('dois CNPJs continuam pedindo duas notas', () => {
+    const rows = [
+      row('p-lider', 'lider', 'G', { SHOPEE: 100 }),
+      row('p-m1', 'm1', 'G', { eMile: 50 }),
+    ];
+    const pubs = new Map([['lider', [{ platformKey: '', platformFilter: null }]]]);
+    const p = computeNfProgressByPayment(rows, PLATFORMS, notas(`|${B}`), pubs).get('p-lider')!;
+    expect(p.expected).toBe(2);
+    expect(p.validated).toBe(1);
+    expect(p.complete).toBe(false);
+  });
+
+  it('espelho POR PLATAFORMA segue pedindo a nota daquele espelho', () => {
+    // Pagou só LOGGI: a vaga é do espelho LOGGI, e a nota da quinzena inteira não cobre.
+    const rows = [
+      row('p-lider', 'lider', 'G', { LOGGI: 20 }),
+      row('p-m1', 'm1', 'G', { LOGGI: 80 }),
+    ];
+    const pubs = new Map([['lider', [{ platformKey: 'LOGGI', platformFilter: ['LOGGI'] }]]]);
+    const p = computeNfProgressByPayment(rows, PLATFORMS, notas(`LOGGI|${B}`), pubs).get('p-m1')!;
+    expect(p.expected).toBe(1);
+    expect(p.complete).toBe(true);
+  });
+
+  it('grupo SEM espelho publicado continua como antes (vaga coringa por CNPJ)', () => {
+    const rows = [
+      row('p-lider', 'lider', 'G', { SHOPEE: 100 }),
+      row('p-m1', 'm1', 'G', { SHOPEE: 200 }),
+    ];
+    const p = computeNfProgressByPayment(rows, PLATFORMS, notas(`*|${B}`), new Map()).get('p-m1')!;
+    expect(p.expected).toBe(1);
+    expect(p.complete).toBe(true);
+  });
+});
