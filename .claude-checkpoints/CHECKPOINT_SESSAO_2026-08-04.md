@@ -1765,3 +1765,38 @@ deles foi devolvido por cima. 🔴 **O código em andamento deles quebra a aba**
 (useMemo novo) chama `groupsOrdered()` antes da declaração — `Cannot access 'groupsOrdered'
 before initialization`, tela de erro no lugar da grade. **Não está commitado** e eu **não
 mexi** (é deles); fica o aviso.
+
+---
+
+## 26. Numerozinhos nos botões de ordenar + ⚠️ dois terminais no mesmo arquivo  ·  `b40b6a6`
+
+### 26.1 O pedido
+"coloca os numerozinhos aqui também: quantos já validou e quantos ainda falta" — nos botões da
+faixa **ORDENAR GRUPOS POR**. Verde = grupos que fecharam · âmbar = quantos faltam.
+
+### 26.2 A parte que exige cuidado
+O número do botão tem que usar **a mesma régua dos selos do cabeçalho de cada grupo**, senão o botão
+diz um número e a lista mostra outro. E as três réguas são **diferentes entre si**, cada uma por um
+motivo:
+| Critério | Regra | Por quê |
+|---|---|---|
+| NF validada | só grupo que **espera** nota (`expected > 0`) | incluir quem não espera inflaria o "já" |
+| Espelho no app | basta **UM** membro | no grupo o espelho vai só pro líder (Opção A, 24/07) |
+| Print conferido | precisa de **TODOS** | o print é por driver; grupo pela metade é FALTA |
+
+**Provado na tela real:** selos nos cabeçalhos `NF ok=22 falta=29 · app publicado=48 não=5`;
+botões `"NF validada 22 falta 29"` e `"Espelho no app 48 falta 5"`. Bate.
+
+### 26.3 ⚠️ DOIS TERMINAIS NO MESMO ARQUIVO — o susto do dia
+Escrevi os números às **15:10**. Às **15:16** a outra sessão salvou o `DriverList.tsx` por cima (ela
+estava removendo a coluna "Print") e **meu trabalho sumiu do arquivo** — não é conflito de git, é
+sobrescrita: o último que salva ganha.
+
+**O que fiz:** parei de editar qualquer arquivo do driverpay, avisei o Victor, e deixei um **vigia**
+em segundo plano esperando dois sinais — a outra sessão commitar, ou ficar 8 min sem tocar em nada e
+sem bateria rodando. Ele decidiu: *"espera ele terminar e vc continua"*. O vigia apitou, a outra
+sessão tinha commitado (`07b96b8`, `50d2d8a`) e — melhor ainda — a versão final dela já trazia meu
+código de volta (ela leu o arquivo depois da minha edição).
+
+**Regra pra próxima vez:** com duas sessões no mesmo projeto, ou uma espera, ou cada uma numa branch.
+Só o git não protege: a perda acontece no arquivo, antes de qualquer commit.

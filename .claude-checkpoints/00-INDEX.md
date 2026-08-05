@@ -409,6 +409,16 @@ pra cobrar a tela de hoje). ⚠️ `DriverList.tsx` está com as duas sessões e
 levou só os meus hunks e o trabalho deles voltou por cima — e o WIP deles **quebra a aba**
 (`Cannot access 'groupsOrdered' before initialization`), não commitado, não mexi.
 
+**Sessão 05/08 (fim) — numerozinhos nos botões de ordenar (`b40b6a6`, local):** cada critério mostra
+**quantos grupos já** (verde) e **quantos faltam** (âmbar), usando a MESMA régua dos selos do
+cabeçalho — provado na tela: selos `NF ok=22 falta=29 · app 48/5` e botões `"NF validada 22 falta
+29"`, `"Espelho no app 48 falta 5"`. As três réguas são diferentes de propósito (NF só conta quem
+espera nota; espelho no app basta o líder; print conferido exige todos).
+⚠️ **DOIS TERMINAIS NO MESMO ARQUIVO:** a outra sessão salvou `DriverList.tsx` por cima do meu
+trabalho às 15:16 — sobrescrita de arquivo, que o git não protege. Parei tudo, avisei, e esperei com
+um vigia até ela commitar (`07b96b8`, `50d2d8a`); a versão final dela já trazia meu código de volta.
+**Regra nova: com duas sessões, uma espera ou cada uma numa branch.**
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
