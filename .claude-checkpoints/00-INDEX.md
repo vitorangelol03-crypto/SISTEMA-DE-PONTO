@@ -433,6 +433,15 @@ nos dois sentidos. Validado: 1100 unit · sentinela provando os 3 testes novos �
 baseline · build. ⚠️ O vitest com jsdom parou de subir nesta máquina (worker estoura 60s em
 qualquer spec); a suíte roda com config mínima em ambiente `node`.
 
+**Sessão 05/08 (noite) — filtro "pagos × não pagos" (`aa89fa9`, local):** faltava filtrar pela tag
+"pagamento concluído" que já existia. **PARCIAL entra em "falta pagar"** (quem recebeu só a SHOPEE
+ainda tem a receber) e **quem não tem pacote fica fora dos dois lados** — as duas regras escritas no
+rótulo. Medido: `109 linhas · 93 pagos · 7 faltando · soma 100`, e os 9 que sobram são exatamente os
+sem pacote (conferido no banco); as 93 linhas trazem 93 etiquetas "pago". ℹ️ Também respondi, com
+prova, se o **relatório simples** estava com desconto: o de LOGGI+SHOPEE+ANJUN+Coleta saiu
+**18.636,80** contra bruto 18.646,80 (desconto aplicado) e o da **eMile** saiu cheio — está certo, o
+desconto sai uma vez só, e o próprio arquivo avisa isso no cabeçalho.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |

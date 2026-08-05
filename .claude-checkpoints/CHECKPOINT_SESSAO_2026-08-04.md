@@ -1837,3 +1837,37 @@ A partir das ~16h o worker do vitest passou a estourar 60s **em qualquer spec** 
 nos que rodaram de manhã. Não é o código: com uma config mínima em ambiente `node` a suíte
 inteira roda em 48s (70/70 verdes). Se reaparecer, é esse o caminho: `environment: 'node'`,
 sem o setup do jsdom.
+
+---
+
+## 27. Filtro "pagos × não pagos"  ·  `aa89fa9`
+
+A tag "pagamento concluído" já existia na grade; faltava **filtrar** por ela — a pergunta prática é
+*"quem ainda tenho que pagar?"*.
+
+### 27.1 Duas decisões que evitam erro de dinheiro (as duas escritas na tela)
+- **PARCIAL entra em "falta pagar".** Quem recebeu só a SHOPEE ainda tem a receber; juntá-lo aos
+  pagos faria alguém ser esquecido no pagamento das demais plataformas. O rótulo diz
+  *"parcial conta como não pago"*.
+- **Quem não tem pacote fica fora dos DOIS lados.** Não há o que pagar, e ele só encheria a lista de
+  "falta pagar" com gente que não devia estar lá.
+
+### 27.2 Medido na quinzena real
+`109 linhas · pagos 93 · falta pagar 7 · soma 100` — os **9** que sobram são exatamente os sem
+pacote (conferido no banco: 109 pagamentos, 9 sem nenhum). E as 93 linhas do filtro "pagos" trazem
+**93 etiquetas "pago"** na tela: o filtro e a etiqueta contam a mesma coisa.
+
+ℹ️ `indiceMarcas` e `pagamentoPorPagamento` subiram no arquivo pra ficarem antes do filtro (useMemo
+sobre estado; a ordem não muda o resultado).
+
+### 27.3 ℹ️ Sobre a pergunta do relatório simples (mesma leva)
+Ele gerou dois relatórios e não lembrava se os descontos tinham saído. **Conferido nos arquivos e
+contra o banco**, usando o grupo do Lucas Aredes (R$ 10 de PNR do Luan):
+| Arquivo | Bruto | No arquivo | Veredito |
+|---|---|---|---|
+| LOGGI+SHOPEE+ANJUN+Coleta | 18.646,80 | **18.636,80** | desconto **saiu** |
+| eMile | 1.997,60 | **1.997,60** | valor cheio, **sem** desconto |
+
+Está **certo**: o desconto sai uma vez só, no relatório das outras plataformas — nos dois seria
+cobrar em dobro. O próprio arquivo da eMile avisa isso no cabeçalho. ℹ️ O nome que sai é o do
+**recebedor** quando existe (Lucas aparece como "LUILA AREDES MARTINS VIEIRA").
