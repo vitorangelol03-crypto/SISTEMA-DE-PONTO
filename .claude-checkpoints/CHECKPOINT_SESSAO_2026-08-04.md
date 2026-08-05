@@ -1230,3 +1230,50 @@ As primeiras tentativas deram "0 marcados" e pareciam bug. Não eram: as linhas 
 **abaixo da janela**, e `page.mouse.move` para fora da viewport **não dispara evento nenhum**. Em
 teste de arrasto, rolar a lista pro alto antes é obrigatório — e conferir a posição (`boundingBox().y`)
 contra a altura da janela antes de concluir qualquer coisa.
+
+## 21. 🔴 Bonificação fantasma: origem provada e as duas travas do teste (`8b00907`)
+
+O Victor viu bonificação que não lançou e perguntou de onde vinha. **Ele confirmou: não foi ele.**
+
+### O que estava lá
+**20 funcionários REAIS da Caratinga com Bônus B de R$ 10 (R$ 200) e diária ZERO em 04/08.**
+Removido, backup completo em `backups/2026-08-05-bonus-fantasma/`.
+
+### Origem PROVADA
+`tests/100-supremo-v2.spec.ts` → *"C2. Aplicar B=10 → payment.bonus_b=10 nos presentes"*, que roda
+**na Caratinga** e clica "Aplicar B" com **10**. `applyBonusToAllPresent` aplica em **todos que
+bateram ponto no dia** — não distingue `PW Test` de gente real.
+
+⚠️ **Cuidado com o diagnóstico:** cheguei a *descartar* a hipótese de teste porque não havia
+funcionário `PW Test` criado naquele horário — **refutação fraca**, o spec usa funcionário de teste
+que já existe. O que fechou foi achar o teste que aplica **10 na Caratinga** (o spec 04, que também
+usa 10, roda em **Ponte Nova** e por isso não era ele).
+
+### Os DOIS buracos da proteção que já existia
+O spec tinha `snapshotRealPayments`/`restoreRealPayments` desde o incidente de 18/05. Falhavam assim:
+1. o restore era a **última linha, depois do `expect`** — asserção que falha pulava a limpeza.
+   **Corrigido:** teste inteiro em `try/finally`.
+2. 🔑 o que tornava **permanente**: sobrevivendo um fantasma, a rodada **seguinte** o fotografava
+   como estado legítimo e o **recolocava**. O `updated_at` das 20 linhas (4h depois da criação) é
+   isso acontecendo. **Corrigido:** `snapshotRealPayments` chama `limparBonusFantasma` **antes** de
+   fotografar.
+
+### A assinatura do fantasma (quatro sinais juntos)
+diária **ZERO** · bônus > 0 · `created_by = '9999'` (login ADMIN dos testes) · funcionário real.
+**Simulado contra produção antes de mexer:** apagaria **9** linhas (resíduo de maio, R$ 90) e
+**preserva as 30 bonificações legítimas** — inclusive as de R$ 30 lançadas pelo próprio 9999, porque
+essas vêm **com diária** no mesmo dia. É a diária que separa.
+
+### Mapa do que existe hoje (bônus sem diária, em gente real)
+| data | quem | valor | veredito |
+|---|---|---|---|
+| 04/08/2026 | 20 da Caratinga | R$ 200 | 🗑 **removido** (fantasma) |
+| 01–12/05/2026 | Alexsandro lombardo alves, 9 dias | R$ 90 | ⏳ **aguarda decisão** (mesma digital) |
+| 06/11/2025 | 13 Caratinga + 2 PN | R$ 450 | ✅ **legítimo** (supervisor `01`, R$ 30) |
+
+### ⏳ ABERTO — a trava no APP que ele pediu
+A raiz no produto: **"Bonificação" aplica a todos que bateram ponto no dia, ignorando a busca/filtro
+da tela e sem mostrar quem vai receber** (`applyBonusToAllPresent(..., undefined, ...)` —
+`excludeEmployeeIds` sempre vazio). **É o mesmo defeito do "Reset Geral" corrigido em 29/07.**
+Propus repetir a solução aprovada lá: respeitar a busca · confirmação dizendo quantos e quem ·
+aviso quando o valor digitado diferir do configurado (R$ 10 × R$ 15). **Aguarda o OK dele.**
