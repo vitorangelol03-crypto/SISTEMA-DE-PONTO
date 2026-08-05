@@ -1575,3 +1575,46 @@ no mesmo caso (3 recusas por nome). **Decisão do Victor, pendente:** cadastrar 
 **Validado:** 703 unit (48 arquivos, 22 novos) · typecheck **61 = baseline** · build limpo ·
 E2E H verde. ⚠️ **A edge fn `driver-public-api` NÃO está deployada** — o deploy é o Victor no CLI.
 Até lá o portal funciona igual a antes (sem os contadores, o botão mostra o texto de sempre).
+
+---
+
+## 24. Notas: valor esperado, botão do espelho, simetria + Vite polling  ·  `cb167f6` `7d8499a`
+
+### 24.1 Vite servindo pacote velho — resolvido de vez
+Causa: o inotify do Linux **não atravessa o 9p do `/mnt/c`**, então o watcher nunca é avisado
+quando o projeto vive no disco do Windows. Isso enganou o desenvolvimento **5 vezes num dia**.
+**Medido em A/B** (mesmo arquivo, mesma edição, servidor aquecido antes):
+| | servidor entrega a versão nova? |
+|---|---|
+| sem polling | **não** (grep da marca: 0) |
+| com polling | **sim**, ~5s (grep: 1) |
+Só liga quando `cwd` está em `/mnt/*`; build de produção não usa `server`, nada muda no site.
+
+### 24.2 Três pedidos na tela de notas
+1. **Valor esperado na tagzinha** — o número existia só dentro da mensagem de recusa (aparecia
+   depois de dar errado). Agora fica ao lado dos selos: verde quando bateu, azul quando é o que
+   deveria ter.
+2. **Botão pra ver o espelho** direto da nota, usando a chave do espelho de onde ela nasceu.
+3. **Linha simétrica** — os botões viraram coluna própria; texto um pouco maior.
+
+### 24.3 ⚠️ O achado que mudou o desenho (e quase virou bug meu)
+Na validação, a MESMA nota mostrava **tag R$ 18.885,87** e **recusa "esperado: R$ 4.338,10"**.
+Investiguei os dois: **os dois estão certos e são coisas diferentes** —
+- 18.885,87 = `espelho_group_cheio`, o espelho do **grupo** (o que a nota do líder deve ter);
+- 4.338,10 = `somaCnpj_individual_abatido`, escolhido pela recusa porque é o candidato **mais
+  próximo do valor que o entregador digitou** (R$ 1.748) — é uma dica de erro, não "o esperado".
+
+Mostrar só o número faria a tela se contradizer e alguém validar errado. Então a tag passou a
+carregar o **rótulo em português** ("espelho do GRUPO (valor cheio)", "soma dele neste CNPJ, com
+abate") e a dica avisa explicitamente dessa diferença.
+
+### 24.4 Sobre abrir o PDF em aba nova
+Tentei abrir a aba **antes** do `await` (pra escapar de bloqueador de pop-up) e ficou **pior**: o
+PDF assinado volta como *download*, então sobrava uma aba em branco. Voltei ao mesmo caminho do
+"ver a nota" ao lado, que é o padrão do app inteiro e funciona no navegador dele.
+No E2E não dá pra checar o endereço da aba (Chromium deixa `about:blank` quando é download) — o
+teste passou a provar o que importa: **o sistema busca o link assinado do espelho no storage (200)**.
+
+### 24.5 Validação
+16 unit novos (com o caso real dos dois números) · 125 unit driverpay · E2E 69 (2 testes) verde ·
+tsc **61 = baseline** · eslint · build.

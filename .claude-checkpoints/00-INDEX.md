@@ -352,6 +352,17 @@ nome de outra pessoa e ele (como o GESSILEY) **não tem recebedor cadastrado**. 
 Victor:** cadastrar o recebedor dos dois + **deploy da edge fn pelo CLI**. Validado: 703 unit (22
 novos) · typecheck 61 = baseline · build · E2E H do portal verde no chromium e no mobile.
 
+**Sessão 05/08 (noite) — notas mais úteis + Vite polling (`cb167f6`, `7d8499a`, local):** a tela de
+notas ganhou **o valor esperado na tagzinha** (antes só aparecia dentro da mensagem de recusa),
+**botão pra ver o espelho** direto da nota e **linha simétrica**. ⚠️ **Achado que mudou o desenho:**
+a mesma nota mostrava tag **R$ 18.885,87** e recusa **"esperado: R$ 4.338,10"** — os dois certos e
+diferentes (o 1º é o espelho do GRUPO; o 2º é o candidato mais PRÓXIMO do que o entregador digitou,
+que a recusa usa só pra explicar o erro). A tag passou a dizer **de qual valor está falando**, senão
+a tela se contradiz e alguém valida errado. **Vite servindo pacote velho: resolvido** — o inotify não
+atravessa o 9p do `/mnt/c`; `usePolling` ligado só quando o projeto roda em `/mnt/*`, com A/B medido
+(sem polling entrega a versão ANTIGA; com polling, a nova em ~5s). Validado: 16 unit novos · 125 unit
+driverpay · E2E 69 (2 testes) · tsc 61 = baseline · build.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
