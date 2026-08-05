@@ -2307,6 +2307,28 @@ export const aplicarCorrecaoDePacotes = async (
 };
 
 /** Quem JA RECEBEU nesta quinzena, por (entregador, plataforma). */
+/**
+ * Desmarca o pagamento de um entregador nesta quinzena (pedido do Victor, 04/08/2026).
+ *
+ * A marca é gravada AUTOMATICAMENTE ao gerar relatório — inclusive numa geração feita
+ * só pra conferir o layout. Sem isto, desfazer só por SQL. Apaga as marcas de TODAS as
+ * plataformas dele no período: "desmarcar pagamento" é uma coisa só na cabeça de quem usa.
+ *
+ * Devolve quantas marcas saíram (0 = não havia nada, e a tela avisa em vez de mentir).
+ */
+export const unmarkPayment = async (
+  companyId: string, periodId: string, driverId: string, userId: string,
+): Promise<number> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { data, error } = await supabase
+    .from('driverpay_payment_marks')
+    .delete()
+    .eq('company_id', companyId).eq('period_id', periodId).eq('driver_id', driverId)
+    .select('id');
+  if (error) throwDbError(error);
+  return (data ?? []).length;
+};
+
 export const listPaymentMarks = async (
   companyId: string, periodId: string,
 ): Promise<PaymentMark[]> => {

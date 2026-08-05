@@ -237,6 +237,15 @@ export const DriverList: React.FC<DriverListProps> = ({
       if (!nf || nf.expected === 0) return 2;
       return nf.complete ? 2 : nf.validated > 0 ? 1 : 0;
     }
+    if (key === 'espelhoApp') {
+      // Espelho PUBLICADO no app (o PDF que o entregador baixa) — não confundir com
+      // "espelho conferido", que é o print da Shopee batendo com a planilha.
+      // ⚠️ Usa a MESMA regra do selo do cartão (`some`): no grupo só o LÍDER recebe o
+      // espelho (decisão "Opção A", 24/07), então exigir todos daria sempre "não publicado".
+      // desc = publicados primeiro; asc = quem falta publicar na frente.
+      if (list.length === 0) return 0;
+      return list.some((r) => publishedDriverIds?.has(r.driverId)) ? 1 : 0;
+    }
     if (key === 'espelho') {
       // Espelho conferido do GRUPO, mesma escala do NF: 2 = todos os membros
       // conferidos, 1 = parte, 0 = nenhum. desc = conferidos primeiro; asc = quem
@@ -678,6 +687,7 @@ export const DriverList: React.FC<DriverListProps> = ({
             {groupSortBtn('net', 'Total a receber')}
             {groupSortBtn('nf', 'NF validada')}
             {groupSortBtn('espelho', 'Espelho conferido')}
+            {groupSortBtn('espelhoApp', 'Espelho no app')}
           </div>
           <button
             type="button"

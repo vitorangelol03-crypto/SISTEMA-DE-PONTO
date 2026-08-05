@@ -44,6 +44,7 @@ import {
   type NotaFiscalFileRow,
   reconferirPrintsComPlanilha,
   listPaymentMarks,
+  unmarkPayment,
   markPaymentDone,
   listProofRequests,
   listDeliveryProofs,
@@ -688,6 +689,36 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     [company?.id, hasPermission, userId, reloadPayments],
   );
 
+  /**
+   * Desfaz a marca de "pago" (04/08/2026, pedido do Victor).
+   *
+   * A marca nasce sozinha ao gerar relatório — foi assim que a MARIZE apareceu como paga
+   * numa geração feita só pra conferir o layout. Pede confirmação porque, ao contrário do
+   * espelho conferido, isto é registro de DINHEIRO: apagar sem querer faz o entregador
+   * parecer não pago no fechamento.
+   */
+  const onDesmarcarPagamento = useCallback(
+    async (driverId: string, driverName: string) => {
+      if (!company?.id || !selectedPeriod || !hasPermission('driverpay.editDriver')) return;
+      const ok = window.confirm(
+        `Desmarcar o pagamento de ${driverName} nesta quinzena?\n\n` +
+          'A etiqueta "pago" some e ele volta a aparecer como não pago. ' +
+          'O valor a receber e os lançamentos NÃO mudam — isto é só a marca de que ele já saiu.',
+      );
+      if (!ok) return;
+      try {
+        const n = await unmarkPayment(company.id, selectedPeriod.id, driverId, userId);
+        if (n === 0) toast('Este entregador já não estava marcado como pago.', { icon: 'ℹ️' });
+        else toast.success(`Pagamento de ${driverName} desmarcado.`);
+        setPaymentMarks(await listPaymentMarks(company.id, selectedPeriod.id));
+      } catch (e) {
+        console.error('Erro ao desmarcar pagamento:', e);
+        toast.error(e instanceof Error ? e.message : 'Erro ao desmarcar pagamento');
+      }
+    },
+    [company?.id, selectedPeriod, hasPermission, userId],
+  );
+
   const onToggleEspelho = useCallback(
     async (paymentId: string, current: boolean) => {
       if (!company?.id || !hasPermission('driverpay.editDriver')) return;
@@ -763,6 +794,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onRateBlur,
       onToggleNota,
       onToggleEspelho,
+      onDesmarcarPagamento,
       onConfigDriver,
       onDiscount,
       onVale,
@@ -781,6 +813,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onRateBlur,
       onToggleNota,
       onToggleEspelho,
+      onDesmarcarPagamento,
       onConfigDriver,
       onDiscount,
       onVale,

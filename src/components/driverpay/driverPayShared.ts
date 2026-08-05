@@ -135,6 +135,8 @@ export interface RowHandlers {
   onToggleNota: (paymentId: string, current: boolean) => void;
   /** Alterna o check de "espelho conferido" deste pagamento (current = valor atual). */
   onToggleEspelho: (paymentId: string, current: boolean) => void;
+  /** Desfaz a marca de "pago" deste entregador na quinzena (04/08/2026). */
+  onDesmarcarPagamento: (driverId: string, driverName: string) => void;
   onConfigDriver: (row: DriverRowData) => void;
   onDiscount: (row: DriverRowData) => void;
   onVale: (row: DriverRowData) => void;
