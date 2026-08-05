@@ -2188,21 +2188,33 @@ export const cancelProofRequest = async (
  */
 export const reconferirPrintsComPlanilha = async (
   companyId: string, periodId: string, userId: string,
+  /**
+   * Reconferir SO os prints deste entregador. (04/08/2026)
+   * Sem isto, corrigir a contagem de UM driver reconferia os ~79 prints da quinzena, com 3
+   * idas ao banco cada — quase 240 consultas pra resolver um clique, e a tela travava. A
+   * varredura completa continua valendo pra depois da importacao da planilha, que e quando
+   * ela faz sentido.
+   */
+  soDoDriverId?: string,
 ): Promise<{ conferidos: number; divergentes: number; semBase: number }> => {
   await ensurePerm(userId, 'driverpay.editDriver');
 
-  const { data: proofs, error: pErr } = await supabase
+  let q = supabase
     .from('driverpay_delivery_proofs')
     .select('id, driver_id, payment_id, platform_name, read_packages, check_periodo, status, validated_by')
     .eq('company_id', companyId).eq('period_id', periodId)
     .not('read_packages', 'is', null)
     .neq('status', 'rejeitado');
+  if (soDoDriverId) q = q.eq('driver_id', soDoDriverId);
+  const { data: proofs, error: pErr } = await q;
   if (pErr) throwDbError(pErr);
   if (!proofs?.length) return { conferidos: 0, divergentes: 0, semBase: 0 };
 
-  // Quantidade da planilha por (driver, plataforma) — uma consulta so pra quinzena toda.
-  const { data: pays } = await supabase.from('driverpay_payments')
+  // Quantidade da planilha por (driver, plataforma). Com `soDoDriverId`, so o dele.
+  let qPays = supabase.from('driverpay_payments')
     .select('id, driver_id').eq('company_id', companyId).eq('period_id', periodId);
+  if (soDoDriverId) qPays = qPays.eq('driver_id', soDoDriverId);
+  const { data: pays } = await qPays;
   const driverDoPagamento = new Map((pays ?? []).map((p) => [p.id as string, p.driver_id as string]));
   const { data: pks } = await supabase.from('driverpay_payment_packages')
     .select('payment_id, platform_name, packages').in('payment_id', (pays ?? []).map((p) => p.id));
@@ -2287,7 +2299,11 @@ export const aplicarCorrecaoDePacotes = async (
   for (const a of ajustes) {
     await upsertPackage(companyId, paymentId, platformName, a.route, a.para, a.rate, userId);
   }
-  return reconferirPrintsComPlanilha(companyId, periodId, userId);
+  // So o print DESTE entregador precisa ser reconferido — corrigir a contagem de um nao
+  // muda a de ninguem mais. (Sem isto a tela travava: ~240 consultas por clique.)
+  const { data: pay } = await supabase.from('driverpay_payments')
+    .select('driver_id').eq('id', paymentId).maybeSingle();
+  return reconferirPrintsComPlanilha(companyId, periodId, userId, pay?.driver_id as string | undefined);
 };
 
 /** Quem JA RECEBEU nesta quinzena, por (entregador, plataforma). */

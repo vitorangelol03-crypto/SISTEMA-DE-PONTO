@@ -59,8 +59,10 @@ const CorrigirContagem: React.FC<{
   doPrint: number;
   daPlanilha: number;
   aplicando: boolean;
+  /** Nomes de quem mandou um print IDENTICO a este (o app da Shopee nao mostra o dono). */
+  printRepetidoDe?: string[];
   onAplicar: (novoTotal: number) => void;
-}> = ({ row, platformName, doPrint, daPlanilha, aplicando, onAplicar }) => {
+}> = ({ row, platformName, doPrint, daPlanilha, aplicando, printRepetidoDe, onAplicar }) => {
   const [outro, setOutro] = useState('');
   const alvo = outro.trim() ? Number(outro.trim()) : doPrint;
   const plano = useMemo(
@@ -70,19 +72,39 @@ const CorrigirContagem: React.FC<{
 
   if (!row) return null;
   const rotas = plano?.ajustes.length ?? 0;
+  const repetido = (printRepetidoDe?.length ?? 0) > 0;
 
   return (
     <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2" data-testid="corrigir-contagem">
       <p className="text-xs font-semibold text-blue-900 mb-1.5">
         Corrigir a contagem deste entregador (a planilha diz {daPlanilha})
       </p>
+      {repetido && (
+        <p className="text-xs text-amber-900 bg-amber-100 border border-amber-300 rounded px-2 py-1 mb-1.5">
+          ⚠ <b>Cuidado:</b> este print e identico ao de <b>{printRepetidoDe!.join(', ')}</b> — o numero{' '}
+          <b>{doPrint}</b> pode nao ser deste entregador.
+        </p>
+      )}
       <div className="flex items-center gap-2 flex-wrap">
+        {/* ⚠️ PRINT REPETIDO: a foto e identica a de outro entregador, entao o numero
+             dela pode nao ser deste driver. Gravar as cegas aqui paga a pessoa errada —
+             por isso o botao sai do caminho e vira uma confirmacao explicita. */}
         <button
           type="button" disabled={aplicando} data-testid="usar-do-print"
-          onClick={() => onAplicar(doPrint)}
-          className="px-2.5 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          onClick={() => {
+            if (repetido && !window.confirm(
+              `ATENCAO: este print e IDENTICO ao de ${printRepetidoDe!.join(', ')}.\n\n` +
+              `O app da Shopee nao mostra o nome do entregador na tela, entao o sistema nao tem ` +
+              `como saber de quem e a foto — o numero ${doPrint} pode nao ser deste driver.\n\n` +
+              `Gravar ${doPrint} para ${row.name} mesmo assim?`,
+            )) return;
+            onAplicar(doPrint);
+          }}
+          className={`px-2.5 py-1.5 text-xs font-medium rounded-md disabled:opacity-50 ${
+            repetido ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
         >
-          Usar {doPrint} (do print)
+          {repetido ? '⚠ ' : ''}Usar {doPrint} (do print)
         </button>
         <span className="text-xs text-gray-500">ou</span>
         <input
@@ -179,7 +201,11 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
   const [carregando, setCarregando] = useState(true);
   const [proofs, setProofs] = useState<DeliveryProofRow[]>([]);
   const [ocupado, setOcupado] = useState<string | null>(null);
-  const [soAtencao, setSoAtencao] = useState(true);
+  /**
+   * Aba da lista (04/08/2026, pedido do Victor): dá pra ver só os conferidos ou só os que
+   * ainda faltam, em vez de rolar 79 prints atrás dos que importam.
+   */
+  const [aba, setAba] = useState<'atencao' | 'conferidos' | 'fila' | 'todos'>('atencao');
   const [autoConfirm, setAutoConfirm] = useState(true);
   const [urls, setUrls] = useState<Record<string, string>>({});
 
@@ -244,9 +270,18 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
     p.status === 'rejeitado' || p.checkStatus === 'divergente'
     || (p.status !== 'validado' && !p.nextCheckAt) || repetidos.has(p.id);
 
-  const visiveis = soAtencao ? proofs.filter(precisaAtencao) : proofs;
+  /** Conferido = o sistema aprovou (ou você validou) e não há nada pendente nele. */
+  const jaConferido = (p: DeliveryProofRow): boolean =>
+    p.status === 'validado' && !precisaAtencao(p);
+
   const naFila = proofs.filter((p) => p.nextCheckAt).length;
   const atencao = proofs.filter(precisaAtencao).length;
+  const conferidos = proofs.filter(jaConferido).length;
+  const visiveis =
+    aba === 'atencao' ? proofs.filter(precisaAtencao)
+    : aba === 'conferidos' ? proofs.filter(jaConferido)
+    : aba === 'fila' ? proofs.filter((p) => p.nextCheckAt)
+    : proofs;
 
   const agir = async (fn: () => Promise<void>, id: string, ok: string) => {
     setOcupado(id);
@@ -355,16 +390,40 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
                 <span className="text-green-700">Tudo conferido.</span>
               )}
             </div>
-            <label className="text-sm text-gray-600 flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={soAtencao} onChange={(e) => setSoAtencao(e.target.checked)} />
-              So o que precisa de atencao
-            </label>
+          </div>
+
+          {/* ── Abas (04/08/2026) — antes era uma chavinha "so o que precisa de atencao",
+               que nao deixava ver SO os conferidos. Com 79 prints, rolar tudo atras dos
+               que importam nao era possivel. ── */}
+          <div className="flex items-center gap-1 flex-wrap border-b border-gray-200">
+            {([
+              ['atencao', `Precisam de voce (${atencao})`],
+              ['conferidos', `Conferidos (${conferidos})`],
+              ['fila', `Na fila (${naFila})`],
+              ['todos', `Todos (${proofs.length})`],
+            ] as const).map(([id, rotulo]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setAba(id)}
+                data-testid={`aba-${id}`}
+                className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  aba === id
+                    ? 'border-blue-600 text-blue-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {rotulo}
+              </button>
+            ))}
           </div>
 
           {visiveis.length === 0 ? (
             <p className="text-sm text-gray-500 py-8 text-center">
               {proofs.length === 0
                 ? 'Nenhum print recebido nesta quinzena ainda.'
+                : aba === 'conferidos' ? 'Nenhum print conferido ainda.'
+                : aba === 'fila' ? 'Nada na fila — o sistema ja leu todos.'
                 : 'Nada precisando de atencao — todos os prints bateram.'}
             </p>
           ) : (
@@ -454,6 +513,7 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
                             doPrint={p.readPackages}
                             daPlanilha={hoje}
                             aplicando={ocupado === p.id}
+                            printRepetidoDe={iguais}
                             onAplicar={(novoTotal) => aplicarContagem(p, novoTotal)}
                           />
                         )}
