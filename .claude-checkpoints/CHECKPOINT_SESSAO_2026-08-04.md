@@ -976,3 +976,40 @@ usava** na quinzena, pra não criar linha duplicada na grade. Total do pagamento
 ⚠️ **Quase-colisão pra ficar de olho:** existem `FILIPE AUGUSTO PENA DA SILVEIRA` e `Fillipe Augusto
 Dos Santos Emidio` (um "L" de diferença). Casaram certo — 354 e 69 — mas é o tipo de par que uma
 mudança na normalização quebraria.
+
+## 17. Recusa de print: a causa do caso GESSILEY, corrigida (`26bfc7b`) — FALTA DEPLOY
+
+Fecha a decisão que estava aberta na §16. Decisões do Victor: **(B)** recusa na hora, apaga só com
+confirmação · **1 print por entregador** · **recusado libera a vaga**.
+
+### 🔴 A causa
+`reconferirPrint` tinha `status: confirmado ? 'validado' : 'recebido'` **fixo**, com o comentário
+*"reconferência nunca vira 'rejeitado'"*, e **não tocava em `reject_reason`**. Um print recusado no
+envio era **destravado sozinho** pela fila minutos depois: virava "recebido" e ainda mostrava a
+mensagem vermelha da recusa antiga. É o cartão que ele fotografou. **Conferido na função NO AR**
+(via `get_edge_function`), não só no repositório.
+
+### 🔑 Por que não apaga na primeira leitura
+A IA leu a **mesma foto** do Gessiley duas vezes com respostas **diferentes**: 1ª → 4049 pacotes,
+período 16-31/07 (data errada); 2ª → 3733, período 01-15/07 (data certa). A planilha esperava
+**3734**, então a 2ª é a correta e **a 1ª foi invenção**. Apagar na 1ª teria destruído um print bom.
+A contagem vive em `check_details.dataErradaSeguidas`; **qualquer** outro veredito zera — inclusive
+`pendente`, porque falha nossa não é prova sobre a foto. **Ilegível recusa e NÃO apaga.**
+
+### 📌 Um print por entregador
+Trava no `proof-upload`, **antes** do upload (não deixa imagem órfã no bucket): existindo print com
+status ≠ `rejeitado` naquele (quinzena, entregador, plataforma), responde **409**. O **"trocar"** do
+portal **saiu** — com a regra nova ele só daria erro.
+
+### ⚠️ Teste antigo ATUALIZADO, não afrouxado
+`proofCheck.spec` afirmava *"problema da FOTO não volta pra fila"*. Isso valia quando nada era
+apagado; agora data errada precisa da 2ª leitura. Dividido em dois: ilegível segue sem voltar, e data
+errada ganhou asserção própria dos dois estados (volta com 1 confirmação, sai com 2).
+
+**Validado:** 16 unit novos · **924 unit** · typecheck 61 (baseline) · eslint · build · `deno check`
+com os **mesmos 2 erros pré-existentes**, nenhum novo.
+
+### ⏭️ PENDENTE: DEPLOY
+**Nada disso está no ar.** A edge function `driver-public-api` precisa ser deployada pelo CLI (o MCP
+é bloqueado pelo classificador). Enquanto não for, o comportamento em produção segue o antigo:
+reconferência destrava print recusado e não há limite de 1 por entregador.
