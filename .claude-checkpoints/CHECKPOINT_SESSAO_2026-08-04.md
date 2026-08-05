@@ -1480,3 +1480,38 @@ acabou de ser mexido. Foi um teste meu que derrubou o cadastro dele hoje.
 Clicar de novo **não duplica nem desfaz** o que já foi enviado: o pedido é só uma chavinha, não
 dispara mensagem pra ninguém. ℹ️ JUSSIMAR **não tem CPF** (não entra no portal) — irrelevante
 agora, já que quem anexa é o líder.
+
+## 23. Nota escaneada lida pela IA (`e382305`) — NO AR
+
+Pedido do Victor ("faz o caminho 3"), com a regra dita por ele: a IA entra **só nas que o sistema não
+conseguir ler automático**.
+
+### O caso, medido
+O **LUCAS AREDES** emite, imprime, escaneia e manda o scan. No PDF dele: **zero objetos de fonte** e
+**zero caracteres** extraíveis, 675 KB de imagem embrulhada em PDF — e **byte a byte idêntico** ao que
+chegou no servidor (não foi corrupção de envio). A ausência de fontes é o sinal decisivo: um PDF não
+desenha texto sem fonte declarada. Das **69 notas do dia**, só as **2 dele** caíram nesse motivo.
+
+### O desenho
+🔑 **A IA só TRANSCREVE, não decide.** Quem confere valor/CNPJ/nome continua sendo o `runNfCheck`,
+com as mesmas regras. Se a IA devolvesse "o valor é X", existiriam **duas conferências de dinheiro**
+no sistema e uma ficaria para trás na primeira mudança de regra.
+
+Travas: gatilho é o **mesmo critério da recusa** (`nfTextoIlegivel`, exportado do `nfCheck` pra não
+existirem dois números) — PDF com texto não gasta cota · o prompt manda transcrever e **proíbe
+inventar número** · `legivel=false` **nunca** passa, mesmo vindo texto junto · temperatura 0 · não deu
+nem com IA? recusa como antes, **nunca valida no escuro** · reusa o rodízio de chaves/modelos do print
+· grava `check_details.lidoPorIa` pra auditar depois quais notas dependeram da leitura automática.
+
+### Provado contra a API EM PRODUÇÃO, com o PDF real
+Entregador descartável em **Ponte Nova** (empresa vazia, apagada depois):
+- **antes:** *"Não conseguimos ler o conteúdo do PDF"*;
+- **agora:** `lidoPorIa=true`, valores `[1997.60, 16.02, 0]`, CNPJs `[56194348000111, 53824315000110]`
+  — o segundo é **exatamente o da iMile**;
+- a recusa que sobrou foi CNPJ/nome não baterem com o **emitente de teste**, que é o comportamento
+  certo. Resposta em **24s**.
+
+Conferido depois: **Ponte Nova zerada, Caratinga intacta**.
+
+**Validado:** 15 unit novos · **1052 unit** (67 arquivos) · `deno check` com os mesmos 2 erros
+pré-existentes · **deployado**.
