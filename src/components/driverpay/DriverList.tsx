@@ -172,6 +172,29 @@ export const DriverList: React.FC<DriverListProps> = ({
       onToggleSelGroup(nome);
     }
   }, [selGroups, onToggleSelGroup]);
+
+  // ── O mesmo arrasto na visão LISTA (por entregador) ──────────────────────
+  const iniciarArrastoDriver = useCallback((indice: number, jaMarcado: boolean) => {
+    arrasto.current = { ancora: indice, valor: !jaMarcado, antes: new Set(selDrivers ?? []) };
+    setArrastando(true);
+  }, [selDrivers]);
+
+  /**
+   * `bloqueados` = quem já entra pelo grupo selecionado. A caixinha dele está
+   * DESABILITADA na tela; alternar por baixo dos panos deixaria a seleção mentindo.
+   */
+  const arrastarAteDriver = useCallback(
+    (ids: readonly string[], indice: number, bloqueados: ReadonlySet<string>) => {
+      const a = arrasto.current;
+      if (!a || !onToggleSelDriver) return;
+      const desejada = selecaoDoArrasto(ids, a, indice);
+      for (const id of togglesNecessarios(ids, selDrivers ?? new Set(), desejada)) {
+        if (bloqueados.has(id)) continue;
+        onToggleSelDriver(id);
+      }
+    },
+    [selDrivers, onToggleSelDriver],
+  );
   const onToggleGroup = (name: string, isOpen: boolean) =>
     setOpenGroups((prev) => {
       const next = new Set(prev);
@@ -346,8 +369,12 @@ export const DriverList: React.FC<DriverListProps> = ({
     // Print do app: conta quem tem print esperado E ja conferido.
     const printEsperado = subset.filter((r) => (proofProgressByPayment?.get(r.paymentId)?.expected ?? 0) > 0).length;
     const printOk = subset.filter((r) => proofProgressByPayment?.get(r.paymentId)?.complete).length;
+    // Ordem que o arrasto enxerga: a MESMA da tela, senão a faixa pegaria linha errada.
+    const linhasVisiveis = sortRows(subset);
+    const idsVisiveis = linhasVisiveis.map((r) => r.paymentId);
+    const bloqueados = new Set(linhasVisiveis.filter(rowGroupSelected).map((r) => r.paymentId));
     return (
-      <div className="overflow-x-auto">
+      <div className={`overflow-x-auto ${arrastando ? 'select-none' : ''}`}>
         <table className="min-w-full border-collapse">
           <thead className="bg-gray-50">
             <tr>
@@ -395,7 +422,7 @@ export const DriverList: React.FC<DriverListProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {sortRows(subset).map((row, index) => (
+            {linhasVisiveis.map((row, index) => (
               <DriverRow
                 key={row.paymentId}
                 row={row}
@@ -418,6 +445,8 @@ export const DriverList: React.FC<DriverListProps> = ({
                 selected={selDrivers?.has(row.paymentId)}
                 selectionLocked={rowGroupSelected(row)}
                 onToggleSelect={onToggleSelDriver}
+                onSelArrastoInicio={() => iniciarArrastoDriver(index, !!selDrivers?.has(row.paymentId))}
+                onSelArrastoSobre={() => arrastarAteDriver(idsVisiveis, index, bloqueados)}
               />
             ))}
           </tbody>

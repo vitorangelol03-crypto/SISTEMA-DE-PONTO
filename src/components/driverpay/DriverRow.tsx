@@ -60,6 +60,10 @@ interface DriverRowProps {
   selected?: boolean;
   /** Driver já coberto por um GRUPO selecionado: checkbox marcado e travado. */
   selectionLocked?: boolean;
+  /** Clique começou nesta linha: guarda a âncora do arrasto de seleção (04/08/2026). */
+  onSelArrastoInicio?: () => void;
+  /** Mouse passou por esta linha com o botão preso. */
+  onSelArrastoSobre?: () => void;
   onToggleSelect?: (paymentId: string) => void;
 }
 
@@ -98,6 +102,8 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   pagamento,
   selected,
   selectionLocked,
+  onSelArrastoInicio,
+  onSelArrastoSobre,
   onToggleSelect,
 }) => {
   const multi = isMultiRoute(row);
@@ -132,7 +138,11 @@ export const DriverRow: React.FC<DriverRowProps> = ({
 
   return (
     <>
-      <tr className={`group ${rowBg} transition-colors ${rowHover}`}>
+      <tr
+        // Arrasto de seleção: a LINHA INTEIRA é alvo, não só a caixinha de 16px.
+        onMouseEnter={(e) => { if (e.buttons === 1) onSelArrastoSobre?.(); }}
+        className={`group ${rowBg} transition-colors ${rowHover}`}
+      >
         {/* Driver / Rota — coluna "grudada" (sticky) ao rolar na horizontal */}
         <td
           className={`sticky left-0 z-10 border-r border-gray-200 px-3 py-3 align-middle ${rowBg} ${stickyHover}`}
@@ -142,10 +152,15 @@ export const DriverRow: React.FC<DriverRowProps> = ({
               {onToggleSelect && (
                 <input
                   type="checkbox"
+                  data-testid="check-driver"
                   checked={!!selected || !!selectionLocked}
                   disabled={!!selectionLocked}
                   onChange={() => onToggleSelect(row.paymentId)}
-                  title={selectionLocked ? 'Já incluído pelo grupo selecionado' : 'Selecionar para espelho'}
+                  // O clique simples segue no `onChange`; aqui só guarda a âncora.
+                  onMouseDown={() => { if (!selectionLocked) onSelArrastoInicio?.(); }}
+                  title={selectionLocked
+                    ? 'Já incluído pelo grupo selecionado'
+                    : 'Selecionar para espelho — segure e arraste para marcar vários'}
                   className="w-4 h-4 text-blue-600 rounded border-gray-300 flex-shrink-0 disabled:opacity-60"
                 />
               )}
