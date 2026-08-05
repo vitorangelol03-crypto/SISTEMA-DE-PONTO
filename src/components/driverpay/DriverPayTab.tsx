@@ -62,13 +62,16 @@ import {
   buildGroupMirrorData,
   buildSelectionMirrorData,
   planejarPublicacao,
+  toggleValorDeFiltro,
+  temTodasAsRotas,
+  temTodasAsPlataformas,
+  estaEmAlgumGrupo,
   buildLeaderReportRows,
   buildSimpleReportRows,
   planRateReapply,
   computeNfProgressByPayment,
   nfSlotKey,
   type MirrorPubForNf,
-  platformPackages,
   deductionsOf,
   alreadyDeductedDrivers,
   formatBRL,
@@ -162,11 +165,14 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [loading, setLoading] = useState(false);
 
   const [search, setSearch] = useState('');
-  const [routeFilter, setRouteFilter] = useState('');
-  const [groupFilter, setGroupFilter] = useState('');
+  // Filtros de MARCAR VÁRIOS (05/08/2026). NÃO ficam salvos — recarregou, volta ao normal
+  // (decisão do Victor): filtro grudado é a causa nº 1 de "sumiu gente da tela".
+  const [routeFilter, setRouteFilter] = useState<string[]>([]);
+  const [groupFilter, setGroupFilter] = useState<string[]>([]);
   const [nfFilter, setNfFilter] = useState(''); // '' | 'pending' | 'ok'
   const [espelhoFilter, setEspelhoFilter] = useState(''); // '' | 'published' | 'unpublished'
-  const [platFilter, setPlatFilter] = useState(''); // '' | nome da plataforma
+  const [platFilter, setPlatFilter] = useState<string[]>([]); // vazio = todas
+  const [conferidoFilter, setConferidoFilter] = useState(''); // '' | 'ok' | 'pending'
   const [view, setView] = useState<'list' | 'groups'>('list');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Seleção para "Espelhos da seleção" (grupos marcados + drivers avulsos).
@@ -478,11 +484,12 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     setSelectedPeriodId(null);
     selectedPeriodIdRef.current = null;
     setSearch('');
-    setRouteFilter('');
-    setGroupFilter('');
+    setRouteFilter([]);
+    setGroupFilter([]);
     setNfFilter('');
     setEspelhoFilter('');
-    setPlatFilter('');
+    setPlatFilter([]);
+    setConferidoFilter('');
     setView('list');
     setExpanded(new Set());
     setFormModal(null);
@@ -1278,17 +1285,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           const inGroup = contemSemAcento(r.groupName, q);
           if (!inName && !inRoute && !inGroup) return false;
         }
-        if (routeFilter) {
-          const match = (r.route ?? '') === routeFilter || r.routes.some((rl) => rl.route === routeFilter);
-          if (!match) return false;
-        }
-        if (groupFilter) {
-          if (groupFilter === GROUP_NONE) {
-            if (r.groupName) return false;
-          } else if (r.groupName !== groupFilter) {
-            return false;
-          }
-        }
+        // Rota e grupo: vários marcados de uma vez. As regras (TODAS × QUALQUER UM) moram em
+        // driverPayShared, testadas — e estão escritas na tela, ao lado do rótulo.
+        if (!temTodasAsRotas(r, routeFilter)) return false;
+        if (!estaEmAlgumGrupo(r, groupFilter, GROUP_NONE)) return false;
         // Filtro por status da NF (ciente de grupo, via nfProgressByPayment).
         if (nfFilter) {
           const nf = nfProgressByPayment.get(r.paymentId);
@@ -1299,11 +1299,14 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         // Filtro por espelho publicado (grupo = publicado se o líder recebeu).
         if (espelhoFilter === 'published' && !isRowPublished(r)) return false;
         if (espelhoFilter === 'unpublished' && isRowPublished(r)) return false;
-        // Filtro por plataforma (tem pacote nela).
-        if (platFilter && platformPackages(r, platFilter) <= 0) return false;
+        // Plataforma: marcou SHOPEE + LOGGI, passa SÓ quem tem as duas (decisão do Victor).
+        if (!temTodasAsPlataformas(r, platFilter)) return false;
+        // Espelho CONFERIDO = o print da Shopee batendo com a planilha (≠ espelho no app).
+        if (conferidoFilter === 'ok' && !r.espelhoConferido) return false;
+        if (conferidoFilter === 'pending' && r.espelhoConferido) return false;
         return true;
       }),
-    [rows, search, routeFilter, groupFilter, nfFilter, espelhoFilter, platFilter, nfProgressByPayment, isRowPublished],
+    [rows, search, routeFilter, groupFilter, nfFilter, espelhoFilter, platFilter, conferidoFilter, nfProgressByPayment, isRowPublished],
   );
 
   // Contagem do botão "Espelhos da seleção": grupos marcados + drivers avulsos
@@ -1562,17 +1565,22 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           search={search}
           onSearch={setSearch}
           routeFilter={routeFilter}
-          onRoute={setRouteFilter}
+          onClearRoute={() => setRouteFilter([])}
+          onRoute={(v) => setRouteFilter((cur) => toggleValorDeFiltro(cur, v))}
           routeOptions={routeOptions}
           groupFilter={groupFilter}
-          onGroup={setGroupFilter}
+          onClearGroup={() => setGroupFilter([])}
+          onGroup={(v) => setGroupFilter((cur) => toggleValorDeFiltro(cur, v))}
           groupOptions={groupOptions}
           nfFilter={nfFilter}
           onNf={setNfFilter}
           espelhoFilter={espelhoFilter}
           onEspelho={setEspelhoFilter}
           platFilter={platFilter}
-          onPlat={setPlatFilter}
+          onClearPlat={() => setPlatFilter([])}
+          conferidoFilter={conferidoFilter}
+          onConferido={setConferidoFilter}
+          onPlat={(v) => setPlatFilter((cur) => toggleValorDeFiltro(cur, v))}
           platformOptions={platforms.map((p) => p.name)}
           view={view}
           onView={setView}

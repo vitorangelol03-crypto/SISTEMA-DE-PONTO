@@ -1,16 +1,24 @@
 import React from 'react';
 import { Search, List, Grid3x3 } from 'lucide-react';
+import { MultiSelectFilter } from './MultiSelectFilter';
 
 export const GROUP_NONE = '__none__';
 
 interface DriverFiltersProps {
   search: string;
   onSearch: (value: string) => void;
-  routeFilter: string;
+  /**
+   * Filtros de MARCAR VÁRIOS (05/08/2026). Rota e plataforma são "tem que ter TODAS as
+   * marcadas" (decisão do Victor); grupo é "qualquer um dos marcados", porque um entregador
+   * está em um grupo só e exigir dois daria lista vazia sempre.
+   */
+  routeFilter: string[];
   onRoute: (value: string) => void;
+  onClearRoute: () => void;
   routeOptions: string[];
-  groupFilter: string;
+  groupFilter: string[];
   onGroup: (value: string) => void;
+  onClearGroup: () => void;
   groupOptions: string[];
   /** Filtro por status da NF: '' todas | 'pending' falta nota | 'ok' validada/completa. */
   nfFilter: string;
@@ -18,10 +26,14 @@ interface DriverFiltersProps {
   /** Filtro por espelho no app: '' todos | 'published' publicado | 'unpublished' não. */
   espelhoFilter: string;
   onEspelho: (value: string) => void;
-  /** Filtro por plataforma (só quem tem pacote nela): '' todas | nome da plataforma. */
-  platFilter: string;
+  /** Filtro por plataforma: passa quem tem pacote em TODAS as marcadas. */
+  platFilter: string[];
   onPlat: (value: string) => void;
+  onClearPlat: () => void;
   platformOptions: string[];
+  /** Filtro por espelho CONFERIDO (o print da Shopee): '' todos | 'ok' | 'pending'. */
+  conferidoFilter: string;
+  onConferido: (value: string) => void;
   view: 'list' | 'groups';
   onView: (view: 'list' | 'groups') => void;
 }
@@ -35,9 +47,11 @@ export const DriverFilters: React.FC<DriverFiltersProps> = ({
   onSearch,
   routeFilter,
   onRoute,
+  onClearRoute,
   routeOptions,
   groupFilter,
   onGroup,
+  onClearGroup,
   groupOptions,
   nfFilter,
   onNf,
@@ -45,13 +59,16 @@ export const DriverFilters: React.FC<DriverFiltersProps> = ({
   onEspelho,
   platFilter,
   onPlat,
+  onClearPlat,
   platformOptions,
+  conferidoFilter,
+  onConferido,
   view,
   onView,
 }) => {
   return (
     <div className="p-3 sm:p-4 border-b border-gray-200 space-y-3">
-      {/* 6 filtros num grid simétrico (3 col no desktop = 2 linhas de 3) */}
+      {/* 7 filtros num grid simétrico (3 col no desktop) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <div className="flex flex-col gap-1">
           <label className={LABEL}>Pesquisar (nome, rota ou grupo)</label>
@@ -67,30 +84,25 @@ export const DriverFilters: React.FC<DriverFiltersProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label className={LABEL}>Rota</label>
-          <select value={routeFilter} onChange={(e) => onRoute(e.target.value)} className={FIELD}>
-            <option value="">Todas as rotas</option>
-            {routeOptions.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </div>
+        <MultiSelectFilter
+          label="Rota"
+          regra="quem roda TODAS as marcadas"
+          vazio="Todas as rotas"
+          options={routeOptions}
+          selected={routeFilter}
+          onToggle={onRoute}
+          onClear={onClearRoute}
+        />
 
-        <div className="flex flex-col gap-1">
-          <label className={LABEL}>Grupo</label>
-          <select value={groupFilter} onChange={(e) => onGroup(e.target.value)} className={FIELD}>
-            <option value="">Todos os grupos</option>
-            {groupOptions.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-            <option value={GROUP_NONE}>Sem grupo</option>
-          </select>
-        </div>
+        <MultiSelectFilter
+          label="Grupo"
+          regra="qualquer um dos marcados"
+          vazio="Todos os grupos"
+          options={[...groupOptions, GROUP_NONE]}
+          selected={groupFilter}
+          onToggle={onGroup}
+          onClear={onClearGroup}
+        />
 
         <div className="flex flex-col gap-1">
           <label className={LABEL}>Nota fiscal</label>
@@ -110,15 +122,22 @@ export const DriverFilters: React.FC<DriverFiltersProps> = ({
           </select>
         </div>
 
+        <MultiSelectFilter
+          label="Plataforma"
+          regra="quem tem TODAS as marcadas"
+          vazio="Todas as plataformas"
+          options={platformOptions}
+          selected={platFilter}
+          onToggle={onPlat}
+          onClear={onClearPlat}
+        />
+
         <div className="flex flex-col gap-1">
-          <label className={LABEL}>Plataforma</label>
-          <select value={platFilter} onChange={(e) => onPlat(e.target.value)} className={FIELD}>
-            <option value="">Todas as plataformas</option>
-            {platformOptions.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
+          <label className={LABEL}>Espelho conferido (print)</label>
+          <select value={conferidoFilter} onChange={(e) => onConferido(e.target.value)} className={FIELD}>
+            <option value="">Todos</option>
+            <option value="ok">Conferido</option>
+            <option value="pending">Falta conferir</option>
           </select>
         </div>
       </div>

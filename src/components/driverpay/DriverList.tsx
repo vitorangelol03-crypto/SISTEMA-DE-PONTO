@@ -28,6 +28,9 @@ import {
 import type { DriverPlatform } from '../../services/driverPay';
 import { DriverRow } from './DriverRow';
 import {
+  compararPorCriterios,
+  toggleSortCriteria,
+  type SortCriterion,
   DriverRowData,
   RowHandlers,
   computeRowTotals,
@@ -128,10 +131,13 @@ export const DriverList: React.FC<DriverListProps> = ({
     !!selGroups?.has(row.groupName ?? NO_GROUP);
   // Ordenacao pelo cabecalho: 1 clique = maior→menor (desc), 2 cliques = menor→maior
   // (asc), 3 cliques = desativa. So reordena (mostra todos), nao esconde ninguem.
-  type SortDir = 'asc' | 'desc';
-  const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(null);
+  //
+  // 05/08/2026 — ORDEM COMBINADA (pedido do Victor): virou uma PILHA. Clicar noutro botao
+  // nao troca o criterio, EMPILHA: o 1o manda, o 2o desempata, e assim por diante. O numero
+  // (1o, 2o…) aparece no botao pra nunca ficar duvida do que esta valendo.
+  const [sort, setSort] = useState<SortCriterion[]>([]);
   // Ordenacao dos GRUPOS (visao "Grupos") por metrica agregada do grupo (pacotes/plataforma/total).
-  const [groupSort, setGroupSort] = useState<{ key: string; dir: SortDir } | null>(null);
+  const [groupSort, setGroupSort] = useState<SortCriterion[]>([]);
 
   // Visao "Grupos": as gavetas abrem FECHADAS; o botao "Abrir/Fechar todas" alterna todas.
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
@@ -203,13 +209,24 @@ export const DriverList: React.FC<DriverListProps> = ({
       return next;
     });
 
-  // 1 clique: maior→menor (desc). 2 cliques: menor→maior (asc). 3 cliques: desativa.
-  const toggleSort = (key: string) =>
-    setSort((cur) => {
-      if (cur?.key !== key) return { key, dir: 'desc' };
-      if (cur.dir === 'desc') return { key, dir: 'asc' };
-      return null;
-    });
+  // 1 clique: maior→menor (desc). 2 cliques: menor→maior (asc). 3 cliques: sai da pilha.
+  const toggleSort = (key: string) => setSort((cur) => toggleSortCriteria(cur, key));
+
+  /** Posição do critério na pilha (1, 2, 3…) ou null se não está valendo. */
+  const posicaoNaPilha = (pilha: readonly SortCriterion[], key: string): number | null => {
+    const i = pilha.findIndex((c) => c.key === key);
+    return i < 0 ? null : i + 1;
+  };
+  /** Só mostra o "1º/2º" quando há MAIS DE UM — com um só, o número é ruído. */
+  const selo = (pilha: readonly SortCriterion[], key: string) => {
+    const pos = posicaoNaPilha(pilha, key);
+    if (pos === null || pilha.length < 2) return null;
+    return (
+      <span className="text-[10px] font-bold leading-none px-1 py-0.5 rounded bg-white/25 tabular-nums">
+        {pos}º
+      </span>
+    );
+  };
 
   const sortValue = (row: DriverRowData, key: string): number | string => {
     if (key === 'name') return row.name.toLowerCase();
@@ -245,35 +262,35 @@ export const DriverList: React.FC<DriverListProps> = ({
   };
 
   const sortRows = (list: DriverRowData[]): DriverRowData[] => {
-    if (!sort) return list;
-    const mul = sort.dir === 'asc' ? 1 : -1;
+    if (sort.length === 0) return list;
     return list
       .map((row, i) => ({ row, i }))
       .sort((a, b) => {
-        const va = sortValue(a.row, sort.key);
-        const vb = sortValue(b.row, sort.key);
-        const cmp =
-          typeof va === 'string' || typeof vb === 'string'
-            ? String(va).localeCompare(String(vb), 'pt-BR')
-            : (va as number) - (vb as number);
-        return cmp !== 0 ? cmp * mul : a.i - b.i; // desempate estavel = ordem original
+        const d = compararPorCriterios(a.row, b.row, sort, sortValue);
+        return d !== 0 ? d : a.i - b.i; // desempate estavel = ordem original
       })
       .map((x) => x.row);
   };
 
   /** Conteudo clicavel de um cabecalho: label + seta (↑/↓ quando ativo, ↕ quando nao). */
   const sortBtn = (key: string, label: string, color?: string | null) => {
-    const activeDir = sort && sort.key === key ? sort.dir : null;
+    const atual = sort.find((c) => c.key === key);
+    const activeDir = atual?.dir ?? null;
     return (
       <button
         type="button"
         onClick={() => toggleSort(key)}
-        title="Ordenar: 1x maior→menor · 2x menor→maior · 3x desativa"
+        title="Ordenar: 1x maior→menor · 2x menor→maior · 3x desativa. Clique em outra coluna para combinar (a 1ª manda, a 2ª desempata)."
         className={`group/sort inline-flex items-center gap-1 hover:text-gray-800 ${activeDir ? 'text-blue-600' : ''}`}
       >
         <span className={color ? 'font-bold' : ''} style={color ? { color } : undefined}>
           {label}
         </span>
+        {sort.length > 1 && posicaoNaPilha(sort, key) !== null && (
+          <span className="text-[10px] font-bold leading-none px-1 rounded bg-blue-100 text-blue-700 tabular-nums">
+            {posicaoNaPilha(sort, key)}º
+          </span>
+        )}
         {activeDir === 'asc' ? (
           <ArrowUp className="w-3.5 h-3.5" />
         ) : activeDir === 'desc' ? (
@@ -286,12 +303,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   };
 
   // ── Ordenar GRUPOS (visao "Grupos"): mesma mecânica de 3 cliques, por métrica do grupo ──
-  const toggleGroupSort = (key: string) =>
-    setGroupSort((cur) => {
-      if (cur?.key !== key) return { key, dir: 'desc' };
-      if (cur.dir === 'desc') return { key, dir: 'asc' };
-      return null;
-    });
+  const toggleGroupSort = (key: string) => setGroupSort((cur) => toggleSortCriteria(cur, key));
   const groupMetric = (list: DriverRowData[], key: string): number => {
     if (key.startsWith('pl:')) return list.reduce((s, r) => s + platformPackages(r, key.slice(3)), 0);
     if (key === 'packages') return list.reduce((s, r) => s + computeRowTotals(r).totalPackages, 0);
@@ -329,24 +341,25 @@ export const DriverList: React.FC<DriverListProps> = ({
   const sortGroups = (
     list: Array<{ name: string; rows: DriverRowData[] }>,
   ): Array<{ name: string; rows: DriverRowData[] }> => {
-    if (!groupSort) return list;
-    const mul = groupSort.dir === 'asc' ? 1 : -1;
+    if (groupSort.length === 0) return list;
     return [...list].sort((a, b) => {
-      const d = (groupMetric(a.rows, groupSort.key) - groupMetric(b.rows, groupSort.key)) * mul;
+      const d = compararPorCriterios(a, b, groupSort, (g: { rows: DriverRowData[] }, k: string) => groupMetric(g.rows, k));
       return d !== 0 ? d : a.name.localeCompare(b.name, 'pt-BR');
     });
   };
   const groupSortBtn = (key: string, label: string, color?: string | null) => {
-    const activeDir = groupSort && groupSort.key === key ? groupSort.dir : null;
+    const atual = groupSort.find((c) => c.key === key);
+    const activeDir = atual?.dir ?? null;
     return (
       <button
         type="button"
         onClick={() => toggleGroupSort(key)}
-        title="Ordenar os grupos: 1x maior→menor · 2x menor→maior · 3x desativa"
+        title="Ordenar os grupos: 1x maior→menor · 2x menor→maior · 3x desativa. Pode clicar em vários: o 1º manda, o 2º desempata."
         className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-xs font-medium transition-colors ${
           activeDir ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
         }`}
       >
+        {selo(groupSort, key)}
         <span className={color && !activeDir ? 'font-bold' : ''} style={color && !activeDir ? { color } : undefined}>
           {label}
         </span>
@@ -761,6 +774,15 @@ export const DriverList: React.FC<DriverListProps> = ({
             {groupSortBtn('nf', 'NF validada')}
             {groupSortBtn('espelho', 'Espelho conferido')}
             {groupSortBtn('espelhoApp', 'Espelho no app')}
+            {groupSort.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setGroupSort([])}
+                className="px-2 py-1 rounded-md border border-gray-300 bg-white text-xs font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Limpar ordem{groupSort.length > 1 ? ` (${groupSort.length})` : ''}
+              </button>
+            )}
           </div>
           <button
             type="button"

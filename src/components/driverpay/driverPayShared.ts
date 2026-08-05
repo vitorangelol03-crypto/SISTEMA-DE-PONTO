@@ -1276,6 +1276,99 @@ export function buildSelectionMirrorData(
   return { groups, singles };
 }
 
+// ── ORDEM E FILTRO COMBINADOS (05/08/2026, pedido do Victor) ─────────────────
+// "quero as duas possibilidades": empilhar CRITÉRIOS DE ORDEM e marcar VÁRIOS VALORES
+// no mesmo filtro. As duas coisas moram aqui porque a tela do painel e a visão de grupos
+// usam a mesma mecânica — e porque regra que decide o que some da tela merece teste.
+
+export type SortDir = 'asc' | 'desc';
+export interface SortCriterion {
+  key: string;
+  dir: SortDir;
+}
+
+/**
+ * Mesma mecânica de 3 cliques de sempre, agora empilhando:
+ * 1º clique entra no FIM da pilha (maior→menor) · 2º inverte SEM sair do lugar · 3º remove.
+ *
+ * Inverter sem mudar de posição é o que faz a coisa ser previsível: se "Total a receber" é
+ * o 2º critério, apertar de novo pra inverter não pode promovê-lo a 1º e reordenar a tela
+ * inteira sem o Victor pedir.
+ */
+export function toggleSortCriteria(
+  atual: readonly SortCriterion[],
+  key: string,
+): SortCriterion[] {
+  const i = atual.findIndex((c) => c.key === key);
+  if (i < 0) return [...atual, { key, dir: 'desc' }];
+  if (atual[i].dir === 'desc') {
+    const out = [...atual];
+    out[i] = { key, dir: 'asc' };
+    return out;
+  }
+  return atual.filter((c) => c.key !== key);
+}
+
+/**
+ * Compara em cascata: o 1º critério manda; empatou, o 2º desempata; e assim por diante.
+ * Devolve 0 se empatou em TODOS — quem chama aplica o desempate estável dele (índice
+ * original ou nome), pra a lista nunca "tremer" entre renders.
+ */
+export function compararPorCriterios<T>(
+  a: T,
+  b: T,
+  criterios: readonly SortCriterion[],
+  metrica: (item: T, key: string) => number | string,
+): number {
+  for (const c of criterios) {
+    const va = metrica(a, c.key);
+    const vb = metrica(b, c.key);
+    const d =
+      typeof va === 'string' || typeof vb === 'string'
+        ? String(va).localeCompare(String(vb), 'pt-BR')
+        : (va as number) - (vb as number);
+    if (d !== 0) return c.dir === 'asc' ? d : -d;
+  }
+  return 0;
+}
+
+/** Marcar/desmarcar um valor num filtro de múltipla escolha. */
+export function toggleValorDeFiltro(atual: readonly string[], valor: string): string[] {
+  return atual.includes(valor) ? atual.filter((v) => v !== valor) : [...atual, valor];
+}
+
+/**
+ * PLATAFORMA — decisão do Victor (05/08): marcando SHOPEE e LOGGI aparece **só quem tem as
+ * duas**; quem tem uma só some, e grupo que ficou sem ninguém some da tela junto.
+ * Nada marcado = não filtra nada.
+ */
+export function temTodasAsPlataformas(row: DriverRowData, nomes: readonly string[]): boolean {
+  if (nomes.length === 0) return true;
+  return nomes.every((n) => platformPackages(row, n) > 0);
+}
+
+/** ROTA — mesma régua da plataforma: marcou duas, tem que rodar as duas. */
+export function temTodasAsRotas(row: DriverRowData, rotas: readonly string[]): boolean {
+  if (rotas.length === 0) return true;
+  const minhas = new Set<string>([...(row.route ? [row.route] : []), ...row.routes.map((r) => r.route)]);
+  return rotas.every((r) => minhas.has(r));
+}
+
+/**
+ * GRUPO — aqui é "QUALQUER UM dos marcados", e NÃO "todos", porque um entregador está em
+ * **um grupo só**: exigir dois daria lista vazia sempre. A tela diz isso escrito, pro
+ * comportamento não ser adivinhação.
+ */
+export function estaEmAlgumGrupo(
+  row: DriverRowData,
+  grupos: readonly string[],
+  rotuloSemGrupo: string,
+): boolean {
+  if (grupos.length === 0) return true;
+  if (!row.groupName) return grupos.includes(rotuloSemGrupo);
+  return grupos.includes(row.groupName);
+}
+
 // ── ESPELHO É SEMPRE DO GRUPO, SEMPRE PRO LÍDER (04/08/2026) ─────────────────
 // Decisão do Victor: "o espelho nunca vai ser lançado por driver, sempre por grupo e
 // sempre para líder do grupo".

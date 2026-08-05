@@ -234,7 +234,10 @@ test.describe('Pagamentos Driver — multi-rota sem média + valor separado do t
     await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 5_000 });
 
     await page.getByRole('button', { name: /^Grupos$/ }).click();
-    const groupHeader = page.locator('summary').filter({ hasText: GROUP }).first();
+    // 04/08/2026 — o cabeçalho do grupo deixou de ser <summary> (a caixa de marcar vivia
+    // dentro dele e o preventDefault cancelava o próprio marcar). Virou um botão de abrir.
+    const groupHeader = page.getByRole('button').filter({ hasText: GROUP })
+      .filter({ has: page.locator('span.font-semibold') }).first();
     await expect(groupHeader).toBeVisible({ timeout: 10_000 });
     await groupHeader.getByRole('button', { name: /Espelho do grupo/ }).click();
     await expect(modal(page).getByText(`Espelho do grupo — ${GROUP}`)).toBeVisible({ timeout: 10_000 });

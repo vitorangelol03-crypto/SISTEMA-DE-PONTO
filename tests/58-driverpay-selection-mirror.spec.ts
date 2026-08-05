@@ -76,8 +76,12 @@ test.describe('Pagamentos Driver — Espelhos da seleção', () => {
     await page.getByRole('button', { name: /^Grupos$/ }).click();
     const groupCheck = page.getByTitle('Selecionar o grupo inteiro para espelho').first();
     await expect(groupCheck).toBeVisible({ timeout: 15_000 });
-    const firstSummary = page.locator('summary').first();
-    const groupName = (await firstSummary.locator('span.font-semibold').first().innerText()).trim();
+    // 04/08/2026 — o cabeçalho do grupo DEIXOU de ser <details>/<summary>: a caixa de
+    // marcar vivia dentro do <summary> e o preventDefault() necessário pra não abrir a
+    // gaveta cancelava o próprio marcar (a tela ficava um passo atrás). Agora é um <div>
+    // com a caixa FORA do botão que abre. O nome do grupo mora no botão de abrir.
+    const firstHeader = page.getByRole('button', { expanded: false }).filter({ has: page.locator('span.font-semibold') }).first();
+    const groupName = (await firstHeader.locator('span.font-semibold').first().innerText()).trim();
     await groupCheck.click();
     await expect(page.getByRole('button', { name: /Espelhos da seleção \(1\)/ })).toBeEnabled({ timeout: 10_000 });
 
