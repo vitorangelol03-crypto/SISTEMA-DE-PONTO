@@ -1049,3 +1049,48 @@ limpar → volta aos 50.
 Push dos 3 commits (2 dele + 1 meu) e **deploy da edge function**, conferido por sha256:
 `2c20d6659b299294` no ar = no repositório. Antes de deployar, rodei `deno check` (mesmos 2 erros
 pré-existentes) e os **65 testes** de `proofCheck`/`proofRecusa` do trabalho dele.
+
+## 18. Deploy da recusa NO AR + busca sem acento (`342ed2c`)
+
+### 18.1 Edge function deployada — a correção da §17 está valendo
+`driver-public-api` **v23 ACTIVE**. Conferido pelo caminho certo (`get_edge_function` + sha256 dos
+4 arquivos): **idênticos ao local**, e os marcadores das regras novas estão lá
+(`UM PRINT POR ENTREGADOR`, `alreadySent`, `proofDeveApagar`, `dataErradaSeguidas`).
+
+⚠️ **Antes de deployar eu comparei o AR com o repo** (extraindo os 4 arquivos do
+`get_edge_function`): estavam **idênticos**, então o deploy só acrescentou o que eu fiz — não
+reverteu nada. Essa checagem é obrigatória aqui, porque o repo já esteve atrasado em relação ao ar.
+
+**Fumaça em produção:** login com CPF inválido → **401** em 0,42s (não 500); ação sem token → 401.
+**E2E contra a fn no ar: 65 6/6 e 64 1/1.**
+
+### 18.2 Busca sem acento (pedido dele)
+`contemSemAcento` (puro) tira acento e caixa dos dois lados, nas **três** buscas de entregador do
+painel: grade, "Solicitar espelho" e o seletor do import. ⚠️ **Não reusei `normalizeDriverName`**: ele
+também remove prefixo numérico, parênteses e "XPT" (serve pra CASAR planilha com cadastro) — numa
+busca livre, procurar "xpt", "dutra" ou pelo código deixaria de achar. Há teste fixando isso.
+**Conferido na tela:** `paixao`→Paixão · `mario`→MÁRIO · `chale`→Chalé · `conceicao`→Conceição ·
+`caique`→Caíque · `joao`→7 resultados.
+
+### 18.3 Dois E2E ajustados (não afrouxados)
+- **65 cenário G** exigia 2 campos de arquivo. O "trocar" saiu com a regra "um print por entregador",
+  e o líder vem do cenário E onde ele **já enviou** — então não tem mais onde enviar. A asserção passou
+  a provar isso (1 campo + seção "Já enviados"), guardando a regra nova melhor que a contagem antiga.
+- **64**: `getByText('1750')` quebrou por *strict mode* (3 elementos) quando a lista de rotas aninhou
+  mais um `div`. Virou `.first()` — o que importa é o número estar na tela.
+
+### 18.4 Perguntas dele, respondidas com evidência
+- **"A próxima planilha já identifica as coletas sozinha?"** Sim. O leitor sempre separou
+  `COLETA`→`Coleta Shopee`; o que faltava era a plataforma existir. Agora existe com **R$ 1,00**, e se
+  vier plataforma nova não cadastrada o import **trava** em vez de deixar entrar zerada.
+- **"As configurações se mantêm de uma quinzena pra outra?"** Sim — `driverpay_platforms`,
+  `driverpay_platform_rates` (entregador × plataforma) e `driverpay_groups` **não têm `period_id`**.
+  O que nasce vazio por quinzena: pacotes, descontos, vales, publicações e pedido de print.
+  ⚠️ **`rate_snapshot` congela no import**: mudar a taxa depois NÃO altera o que já entrou (foi por
+  isso que os 1.600 pacotes de coleta precisaram de acerto na mão).
+
+### ⚠️ Armadilha de ambiente
+A bateria `vitest run` foi **morta pelo WSL** (memória) duas vezes rodando em segundo plano, e uma
+terceira falhou por eu ter usado `--reporter=basic`, que **não existe** nesta versão — a saída
+parecia falha de teste e não era. Rodando em primeiro plano e sem flag: **936 passam, 59 arquivos,
+zero falha**. O "1 failed" visto antes era o flaky conhecido dos testes que tocam o banco.
