@@ -363,6 +363,19 @@ atravessa o 9p do `/mnt/c`; `usePolling` ligado só quando o projeto roda em `/m
 (sem polling entrega a versão ANTIGA; com polling, a nova em ~5s). Validado: 16 unit novos · 125 unit
 driverpay · E2E 69 (2 testes) · tsc 61 = baseline · build.
 
+**Sessão 05/08 (fecho) — 🔴 ESPELHO enviado no lugar da NOTA (`7c32710`, NO AR; `70f7fed`, local):**
+"por que o do Thiago tem 3 notas?" virou achado sério — **abri e li os 62 PDFs da quinzena** e
+**4 arquivos, de 2 entregadores (Romario e Thiago), não são nota: são o PDF do espelho reenviado** —
+e a conferência **validou os quatro sozinha**. Passa porque ela procura nome, CNPJ e valor, e o
+espelho tem os três (é o nosso documento). Consertado com `ehNossoEspelho()`, que recusa antes de
+tudo pelo cabeçalho `ESPELHO DE GRUPO/PAGAMENTO` — marca que só o nosso gerador produz. Os 4 foram
+apagados com o OK dele (62 → 58; backup em `backups/2026-08-05/`). **Edge fn deployada e conferida
+no ar.** Também: **numerozinho** em "Notas recebidas"/"Espelhos recebidos" (âmbar = falta validar,
+verde = total fechado), com a MESMA regra de dentro do modal — medido: botão 87 = "Conferidos (87)".
+ℹ️ **Os filtros NÃO estão quebrados** (ele suspeitou): medido em produção, NF validada devolve 18 sem
+nenhum "falta", espelho no app 101+8=109, plataforma eMile 57 e eMile+LOGGI 26. O que ele usou foi a
+**ordenação**, que mostra todo mundo — prova: os grupos CARATINGA vieram depois de Ubaporanga.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |

@@ -1618,3 +1618,56 @@ teste passou a provar o que importa: **o sistema busca o link assinado do espelh
 ### 24.5 Validação
 16 unit novos (com o caso real dos dois números) · 125 unit driverpay · E2E 69 (2 testes) verde ·
 tsc **61 = baseline** · eslint · build.
+
+---
+
+## 25. 🔴 O ESPELHO enviado no lugar da NOTA + numerozinho nos botões  ·  `7c32710` `70f7fed`
+
+### 25.1 A pergunta que virou achado
+"por que o do Thiago tem 3 notas?" → **abri e li os 62 PDFs da quinzena**. Quatro arquivos, de
+dois entregadores, **não são nota**: são o **PDF do espelho** que eles receberam no app,
+reenviado como se fosse a nota. E a conferência **validou os quatro sozinha**.
+
+| Entregador | Arquivos | Quando |
+|---|---|---|
+| Romario Alves Dornelas | 2 | 05/08 13:08 e 13:09 |
+| THIAGO DE OLIVEIRA INACIO | 2 | 05/08 13:10 e 13:16 |
+
+**Por que passou:** a conferência procura NOME, CNPJ e VALOR dentro do PDF — e o espelho tem os
+três, porque é **o nosso documento**, com o nome dele e o nosso CNPJ. Tanto que bateu com **todos**
+os candidatos de uma vez (`somaCnpj`, `liquido`, `espelho`…); nota de verdade bate com um só.
+**Nota "validada" que não existe = pagamento liberado sem nota fiscal.**
+
+⚠️ **Meu primeiro filtro errou** e disse "só 2": procurei por "NOTA FISCAL" pra excluir — mas o
+próprio espelho contém essas palavras no aviso do eMile. A marca decisiva é o **cabeçalho**
+`ESPELHO DE GRUPO` / `ESPELHO DE PAGAMENTO`, que só o nosso gerador produz.
+
+### 25.2 Conserto
+`ehNossoEspelho()` recusa **antes de qualquer outra checagem**, com explicação pro entregador
+("use o espelho só pra saber o valor; emita a NOTA e mande o PDF dela"). Sem risco de recusar nota
+legítima — nenhuma prefeitura emite NFS-e com esse título.
+Os 4 arquivos foram apagados com o OK dele (**62 → 58 notas**); PDF + linha em
+`backups/2026-08-05/espelhos-enviados-como-nota/`.
+
+### 25.3 Numerozinho nos botões do cabeçalho
+Âmbar = quantas esperam você · verde = total já fechado · nada quando não chegou nada.
+⚠️ O número de **fora** tem que ser o mesmo de **dentro** — senão ele confia no botão e deixa nota
+sem validar. Por isso a contagem dos prints usa a **mesma** `proofPrecisaAtencao` da aba, e a
+detecção de print repetido virou `printsRepetidos`, uma função só usada pelo botão **e** pelo modal.
+Medido na tela: botão "Espelhos recebidos **87**" e, ao abrir, "Precisam de você (0) · Conferidos
+(87)".
+
+### 25.4 Os filtros — ele achou que o de NF estava quebrado
+**Não está.** Medido na quinzena real (109 entregadores):
+| Filtro | Resultado |
+|---|---|
+| NF validada | 18 linhas, **zero** mostrando "falta" |
+| NF pendente | 88 |
+| Espelho no app | 101 publicado + 8 não = 109 |
+| Espelho conferido | 102 + 7 = 109 |
+| Plataforma eMile | 57 · eMile **+** LOGGI = 26 (regra "as duas") |
+| Limpar tudo | volta 109 |
+
+O que ele viu era a **ordenação** "NF validada" (grupos validados primeiro, os que faltam no fim) —
+ordenar mostra todo mundo. Prova na própria foto: os grupos **CARATINGA** apareceram **depois** de
+Ubaporanga, ou seja, fora da ordem alfabética.
