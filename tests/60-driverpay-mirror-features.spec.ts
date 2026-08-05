@@ -191,6 +191,28 @@ test.describe('Pagamentos Driver — 4 features dos espelhos', () => {
     await expect(modal(page).getByTestId('cutoff-time')).toHaveValue('23:59', { timeout: 10_000 });
     await expect(modal(page).getByTestId('cutoff-date')).toHaveValue('2026-12-31');
     await expect(modal(page).getByPlaceholder('27/07')).toHaveValue('05/01');
+
+    // 🔴 05/08/2026 — o prazo tem que ficar salvo PUBLICANDO tambem, nao so gerando PDF.
+    // Quem publica no app sem baixar o papel (o fluxo normal do Victor) via a data se
+    // perder toda vez: "nao esta ficando salva e eu tenho que ficar alterando toda hora".
+    await modal(page).getByTestId('cutoff-time').fill('07:07');
+    await modal(page).getByTestId('cutoff-date').fill('2026-11-11');
+    // O botão fica "Publicar no app" na 1ª vez e "Republicar (atualiza)" depois.
+    await modal(page).getByRole('button', { name: /Publicar no app|Republicar \(atualiza\)/ })
+      .click({ timeout: 20_000 });
+    // Espera o EFEITO, não o avisinho: o toast some sozinho e o teste ficava numa corrida.
+    // Com o espelho no ar, o painel passa a oferecer "Despublicar todos (1)".
+    await expect(page.getByRole('button', { name: /Despublicar todos/ }))
+      .toBeVisible({ timeout: 40_000 });
+    // Publicar fecha o diálogo sozinho quando dá certo; só fecha na mão se ainda estiver aberto.
+    if (await page.locator(MODAL).count()) {
+      await modal(page).getByRole('button', { name: /Fechar/ }).click();
+    }
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 15_000 });
+
+    await driverRow(page).getByTitle('Ver / gerar espelho').click();
+    await expect(modal(page).getByTestId('cutoff-time')).toHaveValue('07:07', { timeout: 15_000 });
+    await expect(modal(page).getByTestId('cutoff-date')).toHaveValue('2026-11-11');
     await modal(page).getByRole('button', { name: /Fechar/ }).click();
     await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 5_000 });
 
@@ -217,8 +239,10 @@ test.describe('Pagamentos Driver — 4 features dos espelhos', () => {
     await expect(groupHeader).toBeVisible({ timeout: 10_000 });
     await groupHeader.getByRole('button', { name: /Espelho do grupo/ }).click();
     await expect(modal(page).getByText(`Espelho do grupo — ${GROUP}`)).toBeVisible({ timeout: 10_000 });
-    // corte veio salvo; seção de descontos do grupo com código+PNR+obs+valor+driver
-    await expect(modal(page).getByText(/23:59H do dia 31\/12/).first()).toBeVisible({ timeout: 10_000 });
+    // Corte veio salvo — e agora o valor que vale é o que foi salvo PUBLICANDO (07:07 de
+    // 11/11), não o do "Gerar PDF" anterior. Prova que a gravação no publicar chega até o
+    // espelho de grupo, não só até o campo da tela.
+    await expect(modal(page).getByText(/07:07H do dia 11\/11/).first()).toBeVisible({ timeout: 10_000 });
     await expect(modal(page).getByText('Descontos do grupo')).toBeVisible();
     await expect(modal(page).getByText('PWPKG60')).toBeVisible();
     await expect(modal(page).getByText('PNR', { exact: true }).first()).toBeVisible();

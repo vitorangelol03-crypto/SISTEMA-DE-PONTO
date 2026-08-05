@@ -11,9 +11,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Image as ImageIcon, Eye, Loader2, Check, X, Trash2, AlertTriangle,
-  Clock, RefreshCw, Copy,
+  Clock, RefreshCw, Copy, Search,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { contemSemAcento } from '../../utils/buscaTexto';
 import {
   listDeliveryProofs,
   proofFileUrl,
@@ -209,6 +210,9 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
    * ainda faltam, em vez de rolar 79 prints atrás dos que importam.
    */
   const [aba, setAba] = useState<'atencao' | 'conferidos' | 'fila' | 'todos'>('atencao');
+  // Busca por nome (05/08/2026, pedido do Victor): com 84 prints, achar um entregador
+  // rolando a lista não é possível. Filtra enquanto digita e IGNORA ACENTO.
+  const [busca, setBusca] = useState('');
   const [autoConfirm, setAutoConfirm] = useState(true);
   const [urls, setUrls] = useState<Record<string, string>>({});
 
@@ -281,11 +285,15 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
   const naFila = proofs.filter((p) => p.nextCheckAt).length;
   const atencao = proofs.filter(precisaAtencao).length;
   const conferidos = proofs.filter(jaConferido).length;
-  const visiveis =
+  const daAba =
     aba === 'atencao' ? proofs.filter(precisaAtencao)
     : aba === 'conferidos' ? proofs.filter(jaConferido)
     : aba === 'fila' ? proofs.filter((p) => p.nextCheckAt)
     : proofs;
+  // A busca vale DENTRO da aba escolhida — os contadores das abas seguem contando tudo,
+  // senão procurar um nome faria parecer que as pendências sumiram.
+  const q = busca.trim();
+  const visiveis = q ? daAba.filter((p) => contemSemAcento(p.driverName, q)) : daAba;
 
   const agir = async (fn: () => Promise<void>, id: string, ok: string) => {
     setOcupado(id);
@@ -394,6 +402,38 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
                 <span className="text-green-700">Tudo conferido.</span>
               )}
             </div>
+          </div>
+
+          {/* Busca por nome — fica ACIMA das abas porque vale dentro da aba escolhida. */}
+          <div>
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                data-testid="print-busca"
+                placeholder="Procurar pelo nome do entregador…"
+                className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
+              />
+              {busca && (
+                <button
+                  type="button"
+                  onClick={() => setBusca('')}
+                  aria-label="Limpar busca"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-gray-100 text-gray-500"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            {q && (
+              <p className="mt-1 text-xs text-gray-500">
+                {visiveis.length === 0
+                  ? 'Ninguém com esse nome nesta aba — tente a aba "Todos".'
+                  : `${visiveis.length} print(s) nesta aba.`}
+              </p>
+            )}
           </div>
 
           {/* ── Abas (04/08/2026) — antes era uma chavinha "so o que precisa de atencao",

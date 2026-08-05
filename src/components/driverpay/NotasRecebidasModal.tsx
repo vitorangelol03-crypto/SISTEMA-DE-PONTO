@@ -8,8 +8,9 @@
  * pro driver reenviar (Excluir apaga o registro; Recusar guarda o motivo que o driver vê).
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileText, Download, Eye, Loader2, Package, Check, X, Trash2 } from 'lucide-react';
+import { FileText, Download, Eye, Loader2, Package, Check, X, Trash2, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { contemSemAcento } from '../../utils/buscaTexto';
 import JSZip from 'jszip';
 import {
   listNotaFiscalFiles,
@@ -188,6 +189,11 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
   // Numera as notas repetidas do mesmo (driver, CNPJ) e pré-calcula o nome do arquivo
   // (numeração SEMPRE sobre a lista completa — o filtro não muda o nome), depois
   // agrupa por driver (todas as notas de um entregador juntas).
+  // Busca por nome (05/08/2026, pedido do Victor): com 61 notas de 20 entregadores, rolar
+  // atrás de um vira o trabalho. Filtra enquanto digita e IGNORA ACENTO — "caique" acha
+  // "Caíque", que é exatamente onde ele se perdia (o mesmo nome aparece com e sem acento).
+  const [busca, setBusca] = useState('');
+
   const { groups, allNamed } = useMemo(() => {
     const seen: Record<string, number> = {};
     const named = (files ?? []).map((r) => {
@@ -208,6 +214,14 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
     }));
     let visible = soAtencao ? comPrazo.filter((it) => it.row.status !== 'validada') : comPrazo;
     if (filtroPrazo) visible = visible.filter((it) => it.prazo === filtroPrazo);
+    // Procura no nome do entregador E no do recebedor — quem manda a nota nem sempre é
+    // quem entrega, e ele busca pelos dois.
+    const q = busca.trim();
+    if (q) {
+      visible = visible.filter(
+        (it) => contemSemAcento(it.row.driverName, q) || contemSemAcento(it.row.recebedorNome, q),
+      );
+    }
     const byDriver = new Map<string, { driverName: string; recebedorNome: string | null; items: typeof comPrazo }>();
     for (const it of visible) {
       const g = byDriver.get(it.row.driverId);
@@ -219,7 +233,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       // O .zip "Baixar todas" baixa TODAS mesmo com o filtro ligado.
       allNamed: named,
     };
-  }, [files, periodLabel, soAtencao, filtroPrazo, publicacoes]);
+  }, [files, periodLabel, soAtencao, filtroPrazo, publicacoes, busca]);
 
   const handleView = async (row: NotaFiscalFileRow) => {
     try {
@@ -335,6 +349,38 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
 
       {files !== null && total > 0 && (
         <div className="space-y-4">
+          {/* Busca por nome — grudada no topo pra continuar à mão depois de rolar a lista. */}
+          <div className="sticky top-0 z-10 -mt-1 pt-1 pb-2 bg-white">
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                data-testid="nf-busca"
+                placeholder="Procurar pelo nome do entregador…"
+                className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
+              />
+              {busca && (
+                <button
+                  type="button"
+                  onClick={() => setBusca('')}
+                  aria-label="Limpar busca"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-gray-100 text-gray-500"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            {busca.trim() && (
+              <p className="mt-1 text-xs text-gray-500">
+                {groups.length === 0
+                  ? 'Nenhum entregador com esse nome.'
+                  : `${groups.length} entregador(es) · ${groups.reduce((n, g) => n + g.items.length, 0)} nota(s).`}
+              </p>
+            )}
+          </div>
+
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <p className="text-xs text-gray-500">
               {total} nota(s). <b className="text-green-700">Validar</b> deixa a NF do driver/grupo verde no painel ·{' '}
@@ -402,7 +448,10 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
           )}
           {groups.map((g) => (
             <div key={g.driverName} className="rounded-lg border border-gray-200 overflow-hidden">
-              <div className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800 border-b border-gray-200 flex items-center gap-2 flex-wrap">
+              <div
+                data-testid="nf-grupo-driver"
+                className="bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800 border-b border-gray-200 flex items-center gap-2 flex-wrap"
+              >
                 {g.driverName}
                 <span className="text-xs font-normal text-gray-500">{g.items.length} nota(s)</span>
                 {/* Recebedor configurado: a NOTA deste driver vem no nome de outra pessoa (confira ao validar). */}
