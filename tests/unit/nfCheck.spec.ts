@@ -10,6 +10,7 @@ import {
   nameMatches,
   normText,
   runNfCheck,
+  ehNossoEspelho,
 } from '../../supabase/functions/driver-public-api/nfCheck';
 
 const CNPJ_CD = '11802464000138';
@@ -230,5 +231,68 @@ describe('mirrorExpectedValue — valor que a nota tem que ter', () => {
         grossInScope: 238.005, deductions: 0.001, netFull: 0, hasPlatformFilter: true, includeDeductions: true,
       }),
     ).toBe(238);
+  });
+});
+
+// ── O ESPELHO enviado no lugar da nota (05/08/2026) ─────────────────────────
+// 🔴 ACHADO EM PRODUÇÃO: 4 arquivos de 2 entregadores (Romario e Thiago) eram o PDF do
+// ESPELHO reenviado como se fosse a nota — e a conferência VALIDOU OS QUATRO sozinha.
+// Faz sentido: ela procura nome, CNPJ e valor no PDF, e o espelho tem os três (é o nosso
+// documento, com o nome dele e o nosso CNPJ). Tanto que bateu com TODOS os candidatos de
+// uma vez; nota de verdade bate com um só.
+//
+// ⚠️ Isto é dinheiro: nota "validada" que não existe = pagamento liberado sem nota.
+describe('ehNossoEspelho — recusar o próprio espelho como nota', () => {
+  // `baseInput` do outro bloco não alcança aqui — este é o mesmo cenário, local.
+  const entrada = {
+    expectedCnpj: CNPJ_CD,
+    expectedCnpjLabel: 'Shopee/Anjun/Loggi',
+    driverName: 'Romario Alves Dornelas',
+    recebedorNome: null as string | null,
+    valueCandidates: { espelho_selection_LOGGI: 42.5 },
+  };
+  const espelhoDeGrupo =
+    'CD LOGISTICA Caratinga, MG · CNPJ 11.802.464/0001-38 ESPELHO DE GRUPO ' +
+    'CARATINGA - Romario Alves Dornelas 1 quinzena de julho AVISO EMILE: A NOTA FISCAL DEVE SER GERADA';
+
+  it('🎯 o texto real do espelho de grupo é reconhecido', () => {
+    expect(ehNossoEspelho(espelhoDeGrupo)).toBe(true);
+  });
+
+  it('espelho individual também', () => {
+    expect(ehNossoEspelho('espelho de pagamento — 1 quinzena de julho')).toBe(true);
+  });
+
+  it('⚠️ nota fiscal de verdade NÃO é confundida', () => {
+    expect(ehNossoEspelho('PREFEITURA MUNICIPAL NOTA FISCAL DE SERVICOS ELETRONICA NFS-e ' +
+      'PRESTADOR TOMADOR VALOR TOTAL DA NOTA R$ 4.850,00')).toBe(false);
+  });
+
+  it('quebra de linha entre as palavras não engana', () => {
+    expect(ehNossoEspelho('ESPELHO\n  DE\nGRUPO')).toBe(true);
+  });
+
+  it('texto vazio/nulo não é espelho', () => {
+    expect(ehNossoEspelho('')).toBe(false);
+    expect(ehNossoEspelho(null)).toBe(false);
+    expect(ehNossoEspelho(undefined)).toBe(false);
+  });
+
+  it('🎯 runNfCheck RECUSA antes de qualquer conferência — e explica o que fazer', () => {
+    const r = runNfCheck({ ...entrada, text: espelhoDeGrupo });
+    expect(r.status).toBe('divergente');
+    expect(r.reasons.join(' ')).toMatch(/ESPELHO que a gente te mandou/i);
+    expect(r.reasons.join(' ')).toMatch(/emita a NOTA/i);
+    // não pode "validar por engano" nenhum dos campos
+    expect(r.matchedCandidates).toEqual([]);
+    expect(r.cnpjOk).toBeNull();
+    expect(r.nomeOk).toBeNull();
+  });
+
+  it('⚠️ nem mesmo com o valor certo dentro dele o espelho passa', () => {
+    const comValor = espelhoDeGrupo + ' TOTAL A RECEBER R$ 42,50';
+    const r = runNfCheck({ ...entrada, text: comValor });
+    expect(r.status).toBe('divergente');
+    expect(r.matchedCandidates).toEqual([]);
   });
 });

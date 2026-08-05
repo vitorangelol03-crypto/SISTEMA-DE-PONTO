@@ -157,6 +157,24 @@ export function nameMatches(name: string | null | undefined, normalizedText: str
   return false;
 }
 
+/**
+ * O PDF enviado é o NOSSO ESPELHO em vez da nota fiscal? (05/08/2026)
+ *
+ * 🔴 ACHADO EM PRODUÇÃO: 4 arquivos de 2 entregadores (Romario e Thiago) eram o PDF do
+ * espelho reenviado como se fosse a nota — e a conferência **validou os quatro sozinha**.
+ * Faz sentido: ela procura o NOME, o CNPJ e o VALOR dentro do PDF, e o espelho tem
+ * exatamente as três coisas (é o nosso documento, com o nome dele e o nosso CNPJ). Tanto
+ * que bateu com TODOS os valores candidatos de uma vez — nota de verdade bate com um só.
+ *
+ * O cabeçalho "ESPELHO DE GRUPO" / "ESPELHO DE PAGAMENTO" é gerado só por nós
+ * (utils/driverMirrorPdf), então não há risco de recusar nota legítima: nenhuma prefeitura
+ * emite NFS-e com esse título.
+ */
+export function ehNossoEspelho(text: string | null | undefined): boolean {
+  const t = (text ?? '').toUpperCase().replace(/\s+/g, ' ');
+  return /ESPELHO DE (GRUPO|PAGAMENTO)/.test(t);
+}
+
 export function runNfCheck(input: NfCheckInput): NfCheckResult {
   const tolerance = (input.toleranceCents ?? 2) / 100;
   const base: Omit<NfCheckResult, 'status' | 'reasons'> = {
@@ -172,6 +190,20 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
       reasons: [
         'Não conseguimos ler o conteúdo do PDF (parece foto ou documento escaneado). ' +
         'Envie o PDF original da nota, gerado pelo site/app do emissor.',
+      ],
+    };
+  }
+
+  // ⚠️ Antes de qualquer conferência: o espelho passaria em TODAS elas (tem o nome, o
+  // nosso CNPJ e o valor). Recusa na hora, com a explicação do que fazer.
+  if (ehNossoEspelho(text)) {
+    return {
+      ...base,
+      status: 'divergente',
+      reasons: [
+        'Este arquivo é o ESPELHO que a gente te mandou, não a sua nota fiscal. ' +
+        'Use o espelho só para saber o valor: emita a NOTA no site da prefeitura ' +
+        'e envie aqui o PDF dela.',
       ],
     };
   }
