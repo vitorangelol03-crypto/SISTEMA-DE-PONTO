@@ -36,6 +36,7 @@ import {
   renameRoutePackages,
   setNotaFiscal,
   setEspelhoConferido,
+  marcarEspelhoPorDispensa,
   publishDriverMirror,
   listMirrorPublications,
   unpublishDriverMirror,
@@ -51,6 +52,7 @@ import {
   type MirrorPublicationRow,
 } from '../../services/driverPay';
 import { contemSemAcento } from '../../utils/buscaTexto';
+import { pagamentosParaMarcarPorDispensa } from '../../utils/espelhoDispensa';
 import { exportDriverGeneralReportExcel, exportDriverSimpleReportExcel } from '../../utils/driverReport';
 import { generateDriverMirrorPdf, generateDriverGroupMirrorPdf } from '../../utils/driverMirrorPdf';
 import {
@@ -87,6 +89,7 @@ import {
   type PaymentMark,
   proofForaPorSemGrupo,
   proofDispensadoSemPacote,
+  expectedProofPlatforms,
   melhorEstado,
   proofStateFromRow,
   type ProofState,
@@ -230,6 +233,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const driverRatesRef = useRef<Record<string, Record<string, number>>>({});
   const periodsRef = useRef<DriverPaymentPeriod[]>([]);
   const rowsRef = useRef<DriverRowData[]>([]);
+  const proofRequestsRef = useRef<ProofRequest[]>([]);
   const selectedPeriodIdRef = useRef<string | null>(null);
   const isReadOnlyRef = useRef(false);
 
@@ -242,6 +246,11 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   useEffect(() => {
     rowsRef.current = rows;
   }, [rows]);
+  // Pedidos de print numa ref: a marcação pós-importação roda dentro de um
+  // `useCallback` e não pode depender do estado sem se recriar a cada render.
+  useEffect(() => {
+    proofRequestsRef.current = proofRequests;
+  }, [proofRequests]);
   useEffect(() => {
     selectedPeriodIdRef.current = selectedPeriodId;
   }, [selectedPeriodId]);
@@ -413,6 +422,27 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     const periodId = selectedPeriodIdRef.current;
     if (!company?.id || !periodId) return;
     try {
+      // ── Quem NÃO ENTREGA na plataforma já entra como conferido (05/08/2026) ──
+      // Com a planilha importada, quem ficou com ZERO pacote não manda print — e o
+      // Victor decidiu que isso CONTA como validado, senão a equipe fica marcando um
+      // por um. Usa a MESMA regra do selo "não entrega": se divergissem, o painel
+      // diria "não entrega" e ainda assim cobraria o espelho.
+      // `semPlanilha` sai das MESMAS fontes do memo da tela (linhas + plataformas),
+      // recalculado aqui porque este callback lê tudo por ref.
+      const semPlanilhaAgora = plataformasSemPlanilha(
+        rowsRef.current,
+        platformsRef.current.map((p) => p.name),
+      );
+      const paraMarcar = pagamentosParaMarcarPorDispensa(
+        rowsRef.current,
+        (row) => expectedProofPlatforms(row, proofRequestsRef.current, semPlanilhaAgora),
+        (row) => proofDispensadoSemPacote(row, proofRequestsRef.current, semPlanilhaAgora),
+      );
+      const marcados = await marcarEspelhoPorDispensa(company.id, paraMarcar, userId);
+      if (marcados > 0) {
+        toast.success(`${marcados} entregador(es) sem entrega na plataforma — espelho marcado sozinho.`, { duration: 7000 });
+      }
+
       const r = await reconferirPrintsComPlanilha(company.id, periodId, userId);
       if (r.conferidos > 0 || r.divergentes > 0) {
         toast.success(

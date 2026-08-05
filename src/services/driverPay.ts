@@ -1285,6 +1285,57 @@ export const setNotaFiscal = async (
  * Fiscal: registra quem marcou (espelho_conferido_by) e o timestamp (espelho_conferido_at,
  * limpo ao desmarcar). Nao mexe nos totais. Pode ser marcado inclusive apos a conclusao.
  */
+/**
+ * Marca "espelho conferido" de quem NÃO ENTREGA na plataforma cobrada (05/08/2026).
+ *
+ * Decisão do Victor: com a planilha importada, quem ficou com ZERO pacote na plataforma
+ * já não manda print — e isso **conta como validado**, senão a equipe fica clicando um por
+ * um toda quinzena.
+ *
+ * Assina `'auto'` igual às outras marcações automáticas, e por isso **nunca passa por cima
+ * de quem um humano tocou** (a trava é a mesma da edge function). Devolve quantos marcou.
+ */
+export const marcarEspelhoPorDispensa = async (
+  companyId: string,
+  paymentIds: readonly string[],
+  userId: string,
+): Promise<number> => {
+  if (paymentIds.length === 0) return 0;
+  await ensurePerm(userId, 'driverpay.editDriver');
+
+  // Respeita o liga/desliga da confirmação automática — mesma chave da conferência do print.
+  const { data: settings } = await supabase
+    .from('driverpay_settings')
+    .select('proof_auto_confirm')
+    .eq('company_id', companyId)
+    .maybeSingle();
+  if (settings?.proof_auto_confirm === false) return 0; // sem linha = ligado (padrão)
+
+  // Só quem NUNCA foi tocado por humano: `espelho_conferido_by` nulo ou 'auto'.
+  const { data: atuais } = await supabase
+    .from('driverpay_payments')
+    .select('id, espelho_conferido, espelho_conferido_by')
+    .eq('company_id', companyId)
+    .in('id', [...paymentIds]);
+  const alvos = (atuais ?? [])
+    .filter((p) => !p.espelho_conferido)
+    .filter((p) => !p.espelho_conferido_by || p.espelho_conferido_by === 'auto')
+    .map((p) => p.id as string);
+  if (alvos.length === 0) return 0;
+
+  const { error } = await supabase
+    .from('driverpay_payments')
+    .update({
+      espelho_conferido: true,
+      espelho_conferido_at: new Date().toISOString(),
+      espelho_conferido_by: 'auto',
+    })
+    .eq('company_id', companyId)
+    .in('id', alvos);
+  if (error) throwDbError(error);
+  return alvos.length;
+};
+
 export const setEspelhoConferido = async (
   companyId: string,
   paymentId: string,
