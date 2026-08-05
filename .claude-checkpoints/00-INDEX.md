@@ -376,6 +376,26 @@ verde = total fechado), com a MESMA regra de dentro do modal — medido: botão 
 nenhum "falta", espelho no app 101+8=109, plataforma eMile 57 e eMile+LOGGI 26. O que ele usou foi a
 **ordenação**, que mostra todo mundo — prova: os grupos CARATINGA vieram depois de Ubaporanga.
 
+**Sessão 05/08 (noite) — print sozinho, espelho remarcável e 🔴 valor por pacote destravado
+(`19eb546`, `2c3d6ca`, local; edge fn no ar v29):** (1) depois da planilha, quem tem pacote e
+não mandou print **passa a ser cobrado sozinho** — antes dependia de alguém lembrar de clicar,
+e quem entrasse na planilha depois do clique ficava invisível; quem já está validado fica de
+fora, e a plataforma sai da história de print da empresa, não de "SHOPEE" escrito no código.
+(2) A trava anti-remarcação do "espelho conferido" caiu: o ADRIANO teve o print conferido
+(902 = 902, período certo) e o botão continuou apagado porque alguém tinha desmarcado ANTES
+de existir print — agora print conferido é fato novo e marca, nas duas pontas. (3) 🔴 **O
+valor por pacote não alterava de jeito nenhum**: config 2,50, grupo 2,50, linha da LOGGI presa
+em 2,00. O sistema só refazia o carimbo da linha que ainda estava no valor antigo (tratando
+qualquer outro como preço combinado da rota) e o "Aplicar" do grupo nem olhava os pacotes
+quando a config já estava no valor aplicado. **12 linhas de LOGGI presas em R$ 2,00 = R$ 300,00
+a menos numa quinzena.** Conserto: grupo com valor fixo manda; perfil mostra e pergunta (rota
+por rota) — porque salvar um PIX não pode atropelar os 3 preços combinados por rota que
+existem de verdade. ⚠️ **Nenhum dado foi corrigido, a pedido dele** ("não corrija
+automaticamente, você não sabe o valor; corrija para poder editar"). Validado: 24 unit novos ·
+typecheck 61 = baseline · **E2E 70 provado pelos dois lados** (falha com as travas antigas,
+passa com o conserto). ⏳ Falta: push dos 2 commits; destravar as 12 linhas (decisão dele);
+cadastrar `recebedor_nome` de LUCAS, GESSILEY e GUSTAVO.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |

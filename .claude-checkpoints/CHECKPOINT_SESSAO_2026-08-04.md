@@ -1671,3 +1671,61 @@ Medido na tela: botão "Espelhos recebidos **87**" e, ao abrir, "Precisam de voc
 O que ele viu era a **ordenação** "NF validada" (grupos validados primeiro, os que faltam no fim) —
 ordenar mostra todo mundo. Prova na própria foto: os grupos **CARATINGA** apareceram **depois** de
 Ubaporanga, ou seja, fora da ordem alfabética.
+
+## 25. Print pedido sozinho + espelho remarcável + valor destravado (`19eb546`, `2c3d6ca`) — 05/08
+
+### 25.1 Print automático depois da planilha
+Pedido dele: *"quando subir a planilha da shopee, todo usuário que tiver pacote da shopee e
+ainda não tiver mandado o print, o sistema pedir de forma automática"*. Antes alguém tinha
+que lembrar de clicar em "Solicitar espelho" DEPOIS de cada importação — e quem entrasse na
+planilha depois do clique ficava invisível: nem o app pedia, nem o painel cobrava.
+
+- Quem já está com **espelho conferido fica de fora**, mesmo sem print (a outra fala dele:
+  *"quem já está validado continua validado, já passou dessa parte"*). Sem isso, reimportar
+  voltaria a cobrar print de 87 pessoas.
+- 🔑 A plataforma **não é "SHOPEE" no código**: é a que já tem história de print na empresa
+  (pedido ou recebido, em qualquer quinzena) **e** veio nesta importação.
+- Pedido **individual**, não "pra todos" — o "pra todos" voltaria a cobrar de quem foi
+  validado na mão. Quem não está em grupo segue de fora (decisão de 04/08).
+
+### 25.2 "Espelho conferido" volta a poder ser remarcado
+Caso do ADRIANO: espelho desmarcado por gente ANTES de existir print; quando o print chegou
+e bateu (902 lidos = 902 da planilha, período certo), a trava anti-remarcação deixou o botão
+apagado. A trava não sabia separar "desmarquei porque não quero validar" de "desmarquei
+antes do print" — a desmarcação nem guarda data. Decisão dele: **print conferido é fato novo
+e marca**; quem quiser desfazer desmarca de novo. Mudado nas DUAS pontas (edge fn + painel).
+
+### 25.3 🔴 O valor por pacote que não alterava de jeito nenhum
+*"na config está 2.50, no grupo 2.5, mas está 2 reais a LOGGI e não altera"* (RODRIGO).
+
+**Causa:** o valor é carimbado na linha quando a planilha entra (certo — é o que congela o
+histórico). O errado era decidir quando refazer o carimbo: só mexia na linha que ainda
+estava no valor ANTIGO, tratando qualquer outro valor como preço combinado da rota. Linha em
+2,00 + config já 2,50 = "isso foi combinado", preservado pra sempre. E o "Aplicar" do grupo
+tinha `if (oldRate === rate) continue`: com a config já no valor aplicado, nem olhava os
+pacotes. **Não havia caminho nenhum.**
+
+**Tamanho:** 12 linhas de LOGGI presas em R$ 2,00 (o padrão da plataforma) contra config de
+2,20/2,50/3,00 = **R$ 300,00 a menos** numa quinzena (Lucas Aredes 75,60 · Tiago 56,50 ·
+Vanusa 39,00 · Gessiley 35,60 · Claudiomar 24,20 · Mário 15,50 · Oliur 14,20 · Adriano 12,00
+· Fernando 10,40 · Rodrigo 10,00 · Mikael 6,50 · Igor 0,50).
+
+**Conserto, com pesos diferentes de propósito:** grupo com valor fixo **manda** (regra dita
+por ele; conferido que os 3 preços combinados por rota reais — "Dom Lara", "Coleta", "LOGGI
+QUARTEL" — vivem em grupos SEM valor fixo, então não passam por ali); o perfil **mostra e
+pergunta**, listando rota por rota, porque salvar um PIX não pode atropelar preço combinado.
+
+⚠️ **NENHUM dado foi corrigido** — ele foi explícito: *"não corrija automaticamente o do
+pessoal, você não sabe o valor; quero que você corrija para poder editar"*. Mudou a
+FERRAMENTA; a decisão de valor continua dele.
+
+**Validado:** 12 unit novos (rateSync) + 11 de regressão do `planRateReapply` · typecheck 61
+= baseline · **E2E 70 novo provado pelos dois lados**: com as travas antigas ele FALHA (linha
+continua 2,00) e com o conserto passa (vira 2,50, com o total recalculado).
+
+### 25.4 Pendências desta leva
+- **Push** dos commits `19eb546` e `2c3d6ca` (a edge fn do 19eb546 **já está no ar**, v29).
+- As 12 linhas de LOGGI **continuam travadas nos dados** — agora dá pra destravar pelo grupo
+  ou pelo perfil, mas quem decide o valor é ele.
+- LUCAS, GESSILEY e GUSTAVO seguem sem `recebedor_nome`: a nota deles sai no nome de outra
+  pessoa e é recusada por nome mesmo estando certa no valor e no CNPJ.
