@@ -316,6 +316,20 @@ com `users`). Regra virou função pura testada; o aviso "a planilha mudou" fica
 número de hoje já é igual ao do print. Validado: **14 unit novos · E2E 64 atualizado (o cartão SAI
 pra "Conferidos (1)") · tsc 61 = baseline · build**.
 
+**Sessão 05/08 (tarde) — busca nos modais + 🔴 cadastro duplicando (`c76a98f`, `0256f84`, local):**
+busca por nome em "Espelhos recebidos" e "Notas recebidas", filtrando a cada tecla e **ignorando
+acento** (notas procuram no entregador E no recebedor; espelhos filtram dentro da aba, com os
+contadores das abas intactos). 🔴 **Ele não conseguia cadastrar entregador:** um E2E **meu** criou e
+apagou uma plataforma "PW Test" **em produção enquanto ele trabalhava**, a aba dele ficou com a
+plataforma fantasma na memória e o cadastro batia na chave estrangeira. A causa de verdade era o
+cadastro ser **dois passos soltos** — o entregador era gravado ANTES das taxas, então cada nova
+tentativa criava outro: **o Othon virou 3 cadastros** (2 apagados com o OK dele, backup em
+`backups/2026-08-05/`). Agora `createDriverWithRates` é **tudo-ou-nada**: peneira as plataformas que
+existem e, falhando, desfaz taxas → pagamentos → driver (a única ordem que as FKs aceitam).
+⚠️ **REGRA NOVA DELE: "testa só o que for implementado agora"** — nada de bateria completa contra
+produção. Validado: 7 unit da peneira · 290 unit driverpay · **rollback provado no banco real**
+(110/316/394 → 111/318/395 → 110/316/394) · E2E 69 novo · tsc 61 = baseline · build.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |

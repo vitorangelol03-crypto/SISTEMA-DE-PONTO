@@ -1426,3 +1426,57 @@ Os 3 itens aprovados por ele (respeitar a busca · confirmação com quantos e q
 diferente do configurado) estão **implementados com 17 unit passando**, mas **não commitados**: não
 consegui ver a confirmação na tela porque o botão "Aplicar B" estava desabilitado (ninguém bateu ponto
 ainda hoje). Falta a prova visual antes de commitar mudança numa tela usada todo dia.
+
+---
+
+## 23. Busca nos modais + 🔴 cadastro que duplicava (o Othon virou 3)  ·  `c76a98f` `0256f84`
+
+### 23.1 Busca por nome (pedido dele)
+"pode ir escrevendo e já vai aparecendo, ignorar os acentos" — nos dois modais.
+- **Notas:** procura no nome do entregador **E do recebedor** (quem emite a nota nem sempre é
+  quem entrega). Campo grudado no topo.
+- **Espelhos:** vale **dentro da aba** escolhida; os contadores das abas continuam contando tudo,
+  senão procurar um nome faria parecer que as pendências sumiram.
+- Reusa o `contemSemAcento` que já existia. "caique" acha "Caíque" — é onde ele se perdia.
+
+### 23.2 🔴 Não conseguia cadastrar entregador
+Mensagem crua do banco na tela:
+`insert or update on "driverpay_platform_rates" violates foreign key ..._platform_id_fkey`
+
+**Causa imediata: minha.** Um E2E MEU criou e apagou uma plataforma "PW Test" **em produção
+enquanto ele trabalhava**. A aba dele estava aberta desde antes e ficou com a plataforma fantasma
+na memória; ao cadastrar, o sistema tentou gravar o valor por pacote dela.
+
+**Causa de verdade (a que fez estrago):** eram **dois passos soltos** — criava o entregador (e os
+pagamentos das quinzenas abertas) e **depois** gravava as taxas. Falhando o 2º, o 1º já estava
+gravado: erro na tela, ele clica de novo, e cada clique cria outro cadastro.
+**"Othon Saraiva Freitas" virou 3 entregadores**, todos zerados. Apagados 2 com o OK dele
+(backup em `backups/2026-08-05/othon-duplicados-antes-de-apagar.json`).
+
+### 23.3 O conserto — `createDriverWithRates`
+1. peneira as taxas contra as plataformas que existem **agora** no banco (mata a causa imediata) e
+   avisa em português quantas foram ignoradas;
+2. falhando, **desfaz** o que criou — **taxas → pagamentos → driver**, a única ordem que as FKs
+   aceitam (a ordem errada foi exatamente o que me barrou ao apagar os duplicados na mão);
+3. mensagem em português no lugar do texto do banco.
+
+### 23.4 ⚠️ REGRA NOVA DELE (05/08)
+> "para os teste, testa só o que for implementado agora"
+
+**Nada de bateria completa contra produção enquanto ele está no painel.** Só o escopo do que
+acabou de ser mexido. Foi um teste meu que derrubou o cadastro dele hoje.
+
+### 23.5 Validação
+- 7 unit da peneira (com o caso exato do Othon) · **290 unit driverpay**.
+- **Rollback provado contra o banco REAL** com cadastro descartável:
+  110/316/394 → 111/318/395 → **110/316/394**, idêntico.
+- E2E 69 novo (busca, só leitura, na quinzena de verdade) · spec 60 verde · tsc **61 = baseline**
+  · eslint · build.
+
+### 23.6 Dúvida dele, respondida com o banco na mão
+"o Othon virou líder; preciso clicar pra solicitar espelho?" → **Não.** Já existe pedido de
+**04/08 22:40, SHOPEE, para TODOS** — e "todos" cobre quem entrar depois. Ao logar, o Othon já vê
+2 cartões (JUSSIMAR 430 e Regiane 1752) e **nenhum pra ele** (0 pacotes SHOPEE = "não entrega").
+Clicar de novo **não duplica nem desfaz** o que já foi enviado: o pedido é só uma chavinha, não
+dispara mensagem pra ninguém. ℹ️ JUSSIMAR **não tem CPF** (não entra no portal) — irrelevante
+agora, já que quem anexa é o líder.
