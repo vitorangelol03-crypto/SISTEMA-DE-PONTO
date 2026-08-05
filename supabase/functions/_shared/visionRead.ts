@@ -210,7 +210,7 @@ export function attemptOrder(cfg: VisionConfig): Array<{ apiKey: string; model: 
   return out;
 }
 
-const GEMINI_URL = (model: string) =>
+export const GEMINI_URL = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
 /**

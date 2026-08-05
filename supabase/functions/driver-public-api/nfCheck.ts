@@ -71,6 +71,18 @@ export interface NfCheckResult {
 }
 
 /** Remove acentos, colapsa espaços, caixa alta. */
+/**
+ * O PDF veio sem texto legivel? (05/08/2026)
+ *
+ * MESMO limite que decide a recusa por "parece foto ou documento escaneado" logo
+ * abaixo — exportado pra que o caminho que chama a IA use exatamente o mesmo
+ * criterio. Se fossem dois numeros diferentes, existiria a faixa absurda em que a
+ * IA nao e chamada e mesmo assim a nota e recusada por ilegivel.
+ */
+export function nfTextoIlegivel(text: string | null | undefined): boolean {
+  return normText(text ?? '').length < 30;
+}
+
 export function normText(s: string): string {
   return (s || '')
     .normalize('NFD')
@@ -130,7 +142,7 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
   };
 
   const text = input.text ?? '';
-  if (normText(text).length < 30) {
+  if (nfTextoIlegivel(text)) {
     return {
       ...base,
       status: 'ilegivel',

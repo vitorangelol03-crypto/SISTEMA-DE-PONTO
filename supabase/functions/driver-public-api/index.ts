@@ -24,7 +24,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
 import { extractText, getDocumentProxy } from 'npm:unpdf@1.8.0';
-import { runNfCheck, mirrorExpectedValue, type NfCheckResult } from './nfCheck.ts';
+import { runNfCheck, mirrorExpectedValue, nfTextoIlegivel, type NfCheckResult } from './nfCheck.ts';
 import {
   proofContarDataErrada,
   proofDeveApagar,
@@ -36,6 +36,7 @@ import {
   type ProofCheckResult,
 } from '../_shared/proofCheck.ts';
 import { readProofImage, visionConfigFromEnv } from '../_shared/visionRead.ts';
+import { readNotaFiscalTexto } from '../_shared/nfVisionRead.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -582,14 +583,45 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   // 'pendente' (conferir manualmente) — jamais bloqueia o envio por falha nossa.
   let check: NfCheckResult | null = null;
   let candidates: Record<string, number> = {};
+  /** A transcricao veio da IA? Vai pro check_details, pra dar pra auditar depois. */
+  let lidoPorIa = false;
   try {
     const pdf = await getDocumentProxy(new Uint8Array(bytes));
     const { text } = await extractText(pdf, { mergePages: true });
+
+    // ══════════════════════════════════════════════════════════════════════
+    // PDF SEM TEXTO -> a IA TRANSCREVE  (05/08/2026, pedido do Victor)
+    //
+    // Nota impressa e escaneada nao tem uma letra dentro do arquivo (medido no PDF
+    // do LUCAS: zero fontes, zero caracteres, 675 KB de imagem). Antes disso virar
+    // recusa, a IA le o documento — mesma leitora e mesmo rodizio de cota do print
+    // da Shopee, so que com o Gemini recebendo o PDF direto.
+    //
+    // 🔑 A IA so TRANSCREVE. Quem confere valor/CNPJ/nome continua sendo o
+    // `runNfCheck`, com as mesmas regras: nao existe uma segunda conferencia de
+    // dinheiro que possa divergir da primeira.
+    //
+    // ⚠️ So entra quando a leitura normal falhou (`nfTextoIlegivel`, o MESMO
+    // criterio da recusa). Nao deu pra ler nem com IA? Segue recusando como antes —
+    // nunca valida no escuro.
+    // ══════════════════════════════════════════════════════════════════════
+    let textoFinal = text ?? '';
+    if (nfTextoIlegivel(textoFinal)) {
+      const transcrito = await readNotaFiscalTexto(
+        pure, 'application/pdf', visionConfigFromEnv(Deno.env.toObject()),
+        (m) => console.log(`[nf-ocr ${emitterId}] ${m}`),
+      );
+      if (transcrito) {
+        textoFinal = transcrito;
+        lidoPorIa = true;
+      }
+    }
+
     const { data: driver } = await supabase.from('driverpay_drivers')
       .select('name, recebedor_nome').eq('id', claims.driver_id).maybeSingle();
     candidates = await buildValueCandidates(claims.driver_id, claims.company_id, periodId, emitterId);
     check = runNfCheck({
-      text: text ?? '',
+      text: textoFinal,
       expectedCnpj: String(em.cnpj ?? '').replace(/\D/g, ''),
       expectedCnpjLabel: em.label ?? '',
       driverName: driver?.name ?? '',
@@ -647,6 +679,10 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
       autoValidateSkipped: checksAllGreen && !autoValidateEnabled,
       foundValues: check.foundValues, foundCnpjs: check.foundCnpjs,
       matchedCandidates: check.matchedCandidates, candidates, reasons: check.reasons,
+      // O PDF veio sem texto e quem leu foi a IA. Fica gravado pra dar pra
+      // auditar depois: se um dia um valor lido errado passar, dá pra achar
+      // exatamente quais notas dependeram da leitura automática.
+      lidoPorIa,
     } : null,
     checked_at: new Date().toISOString(),
   }]);
