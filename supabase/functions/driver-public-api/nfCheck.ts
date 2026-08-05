@@ -83,6 +83,29 @@ export function nfTextoIlegivel(text: string | null | undefined): boolean {
   return normText(text ?? '').length < 30;
 }
 
+/**
+ * UMA NOTA POR VAGA (05/08/2026) — quais notas já enviadas ocupam a vaga do envio.
+ *
+ * Vaga = (espelho × CNPJ). O chamador já filtrou pelo CNPJ; aqui decide o espelho.
+ *
+ * A regra da nota LEGADA (`mirror_platform_key = null`, de antes de existir nota por
+ * espelho) é a mesma do `nfSlots`: ela conta como enviada em QUALQUER espelho daquele
+ * CNPJ. Tem que ser igual nos dois lados — se a tela dissesse "já enviada" e o envio
+ * deixasse passar (ou o contrário), a nota apareceria em um lugar e sumiria no outro.
+ *
+ * ⚠️ Nota RECUSADA também ocupa: decisão do Victor ("eles só vão poder anexar outra
+ * quando a atual for excluída"), diferente do print, onde recusado libera a vaga.
+ */
+export function notasQueOcupamVaga<T extends { mirror_platform_key: string | null }>(
+  jaEnviadas: T[], mirrorKeyDoEnvio: string | null,
+): T[] {
+  return jaEnviadas.filter((f) => {
+    const k = f.mirror_platform_key ?? null;
+    if (k === mirrorKeyDoEnvio) return true;
+    return mirrorKeyDoEnvio !== null && k === null;
+  });
+}
+
 export function normText(s: string): string {
   return (s || '')
     .normalize('NFD')

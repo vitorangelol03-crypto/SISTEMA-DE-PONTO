@@ -15,6 +15,7 @@ import {
   DriverApiError, type DriverMirror, type NfSlot, type NfFile,
   type ProofSlot,
 } from '../../services/driverApp';
+import { estadoBotaoNota } from '../../utils/notaBotao';
 
 type Screen = 'login' | 'change' | 'mirrors' | 'nf' | 'proof';
 
@@ -140,6 +141,8 @@ export function DriverApp() {
   // ⚠️ Nada aqui guarda quantidade: o driver so anexa a foto.
   /** Quantos prints ainda faltam — alimenta a faixa no topo da lista. */
   const [proofPendentes, setProofPendentes] = useState(0);
+  /** De QUAL app é o print pedido (05/08) — a faixa precisa dizer, não só contar. */
+  const [proofApp, setProofApp] = useState<string | null>(null);
   const [proofSlots, setProofSlots] = useState<ProofSlot[] | null>(null);
   const [proofUploading, setProofUploading] = useState<string | null>(null);
 
@@ -157,8 +160,13 @@ export function DriverApp() {
       setMirrors(mirrors);
       // Quantos prints a CD está esperando. Independe de haver espelho publicado.
       driverProofSlots(undefined, tk)
-        .then(({ slots }) => setProofPendentes(slots.filter((s) => s.sent === 0).length))
-        .catch(() => setProofPendentes(0));
+        .then(({ slots }) => {
+          const faltando = slots.filter((s) => s.sent === 0);
+          setProofPendentes(faltando.length);
+          const apps = [...new Set(faltando.map((s) => s.platformName).filter(Boolean))];
+          setProofApp(apps.length === 1 ? apps[0] : null);
+        })
+        .catch(() => { setProofPendentes(0); setProofApp(null); });
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else { setMirrors([]); toast.error(errMsg(e, 'Nao consegui carregar os espelhos.')); }
@@ -275,7 +283,10 @@ export function DriverApp() {
       // próprios cartões já mostram) — uma requisição a menos no celular.
       const { slots } = await driverProofSlots(periodId ?? '', token);
       setProofSlots(slots);
-      setProofPendentes(slots.filter((s) => s.sent === 0).length);
+      const faltando = slots.filter((s) => s.sent === 0);
+      setProofPendentes(faltando.length);
+      const apps = [...new Set(faltando.map((s) => s.platformName).filter(Boolean))];
+      setProofApp(apps.length === 1 ? apps[0] : null);
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else { setProofSlots([]); toast.error(errMsg(e, 'Nao consegui carregar os espelhos.')); }
@@ -379,13 +390,23 @@ export function DriverApp() {
       if (res.validated) toast.success('Nota enviada e validada! ✓ Valor, CNPJ e nome conferidos.', { duration: 6000 });
       else toast.success('Nota enviada! Ela será conferida.');
       await loadNf(nfCtx.periodId);
+      // O card lá da lista mostra "Nota enviada" — mas só se a lista for relida.
+      loadMirrors(token);
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else if (errStatus(e) === 422) {
-        // Nota RECUSADA pela conferência automática: mostra o motivo exato e
-        // recarrega os slots (o CNPJ reabre com "recusada: <motivo>, envie outra").
+        // Nota RECUSADA pela conferência automática: mostra o motivo e recarrega os
+        // slots (o CNPJ passa a mostrar o motivo + "peça à CD para excluir").
         toast.error(errMsg(e, 'Nota recusada na conferência.'), { duration: 12000 });
         await loadNf(nfCtx.periodId);
+        loadMirrors(token);
+      }
+      else if (errStatus(e) === 409) {
+        // Já tem nota nesta vaga (05/08). Acontece de verdade com o app aberto em duas
+        // abas ou com bundle antigo em cache — recarregar mostra o estado de verdade.
+        toast.error(errMsg(e, 'Você já enviou a nota deste CNPJ.'), { duration: 10000 });
+        await loadNf(nfCtx.periodId);
+        loadMirrors(token);
       }
       else toast.error(errMsg(e, 'Nao consegui enviar a nota.'));
     } finally { setNfUploading(null); }
@@ -486,6 +507,14 @@ export function DriverApp() {
     const quinzenas = [...new Set(todos.map((s) => s.periodLabel).filter(Boolean))];
     const umaQuinzenaSo = quinzenas.length === 1;
 
+    // 05/08 (pedido do Victor): a tela tem que dizer com todas as letras QUAL app é.
+    // "Aplicativo de entregas" era vago — driver que faz iMile e Shopee mandava print
+    // do app errado, e o print errado é recusa garantida na conferência.
+    // O nome sai do próprio pedido da CD (`platformName`), não de texto fixo: se um
+    // dia pedirem print de outra plataforma, a tela acompanha em vez de mentir.
+    const plataformas = [...new Set(todos.map((s) => s.platformName).filter(Boolean))];
+    const appDoPrint = plataformas.length === 1 ? plataformas[0] : null;
+
     const cartao = (s: ProofSlot) => {
       const chave = `${s.driverId}|${s.platformName}`;
       const enviando = proofUploading === chave;
@@ -495,7 +524,7 @@ export function DriverApp() {
           <div className="min-w-0">
             <div className="font-semibold text-gray-900 break-words">{s.driverName}</div>
             <div className="text-xs text-gray-500 mt-0.5">
-              Entregas {s.platformName}{umaQuinzenaSo ? '' : ` · ${s.periodLabel}`}
+              Print do app <strong>{s.platformName}</strong>{umaQuinzenaSo ? '' : ` · ${s.periodLabel}`}
             </div>
           </div>
 
@@ -512,7 +541,7 @@ export function DriverApp() {
             }`}
           >
             {enviando ? <Spinner /> : <Upload size={16} />}
-            {enviando ? 'Enviando...' : 'Enviar print do app'}
+            {enviando ? 'Enviando...' : `Enviar print do app ${s.platformName}`}
             <input
               // ⚠️ SEM `capture`: com ele o celular abre a CAMERA direto e o entregador nao
               // consegue escolher o print que ja esta na galeria — e print de tela nasce
@@ -556,8 +585,12 @@ export function DriverApp() {
             <ChevronLeft size={22} />
           </button>
           <div className="leading-tight">
-            <div className="font-semibold text-sm">Espelho do app</div>
-            <div className="text-blue-100 text-xs">Print da tela do aplicativo</div>
+            <div className="font-semibold text-sm">
+              {appDoPrint ? `Espelho do app ${appDoPrint}` : 'Espelho do app'}
+            </div>
+            <div className="text-blue-100 text-xs">
+              {appDoPrint ? `Print da tela do app da ${appDoPrint}` : 'Print da tela do aplicativo'}
+            </div>
           </div>
         </header>
 
@@ -606,10 +639,25 @@ export function DriverApp() {
                 )}
               </div>
 
+              {/* 05/08, pedido do Victor: "bem específico que o espelho é somente da
+                  Shopee". Fica ANTES do passo a passo — quem não entrega naquele app
+                  para de ler aqui e não manda print do app errado. */}
+              {appDoPrint && (
+                <div className="bg-amber-100 border-2 border-amber-400 rounded-xl p-3 text-sm text-amber-950">
+                  <p className="font-bold">
+                    Atenção: é o print do app da {appDoPrint.toUpperCase()}.
+                  </p>
+                  <p className="text-xs mt-1">
+                    Só quem entrega {appDoPrint} manda este print. Print de outro
+                    aplicativo não vale — a conferência recusa.
+                  </p>
+                </div>
+              )}
+
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900">
                 <p className="font-medium mb-1">Como tirar o print</p>
                 <ol className="list-decimal list-inside space-y-0.5 text-xs">
-                  <li>Abra o app de entregas e vá em <strong>Entrega</strong>.</li>
+                  <li>Abra o app da <strong>{appDoPrint ?? 'plataforma'}</strong> e vá em <strong>Entrega</strong>.</li>
                   <li>Toque em <strong>Selecionar data</strong> e escolha o período desta quinzena.</li>
                   <li>Deixe aparecendo a aba <strong>Encerrado</strong> com o número do lado.</li>
                   <li>Tire o print pelo próprio celular e envie aqui.</li>
@@ -697,18 +745,32 @@ export function DriverApp() {
               </div>
               {s.sent === 0 && s.rejected > 0 && (
                 <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                  <b>Nota recusada.</b>{s.rejectReason ? ` Motivo: ${s.rejectReason}.` : ''} Envie outra, por favor.
+                  <b>Nota recusada.</b>{s.rejectReason ? ` Motivo: ${s.rejectReason}.` : ''}
+                  {' '}Peça à CD para excluir esta nota — assim que ela sair, o envio libera de novo.
                 </div>
               )}
-              <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
-                {nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? <Spinner /> : <><Upload size={16} /> {s.sent === 0 && s.rejected > 0 ? 'Reenviar nota (PDF)' : s.sent > 0 ? 'Enviar outro PDF' : 'Enviar PDF da nota'}</>}
-                <input
-                  type="file" accept="application/pdf" className="hidden"
-                  disabled={nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}`}
-                  onChange={(e) => { handleNfFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
-                />
-              </label>
-              <p className="mt-1.5 text-[11px] text-gray-400 text-center">Somente arquivo PDF — foto não é aceita.</p>
+              {/* UMA NOTA POR VAGA (05/08). Com nota no lugar — boa ou recusada — o
+                  botão some: a edge fn recusa o envio com 409, e um botão que só dá
+                  erro é pior do que botão nenhum. O caminho passa a ser a CD. */}
+              {s.sent > 0 || s.rejected > 0 ? (
+                <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs text-gray-600 text-center">
+                  {s.sent > 0
+                    ? <><b className="text-green-700">Nota enviada.</b> Precisa trocar? Peça à CD para excluir a atual.</>
+                    : <>Só dá pra enviar outra depois que a CD excluir a recusada.</>}
+                </div>
+              ) : (
+                <>
+                  <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
+                    {nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? <Spinner /> : <><Upload size={16} /> Enviar PDF da nota</>}
+                    <input
+                      type="file" accept="application/pdf" className="hidden"
+                      disabled={nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}`}
+                      onChange={(e) => { handleNfFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
+                    />
+                  </label>
+                  <p className="mt-1.5 text-[11px] text-gray-400 text-center">Somente arquivo PDF — foto não é aceita.</p>
+                </>
+              )}
             </div>
           ))}
 
@@ -759,11 +821,13 @@ export function DriverApp() {
               <div className="min-w-0">
                 <div className="font-semibold text-amber-900 text-sm">
                   {proofPendentes === 1
-                    ? 'A CD está esperando 1 espelho do app'
-                    : `A CD está esperando ${proofPendentes} espelhos do app`}
+                    ? `A CD está esperando 1 espelho do app${proofApp ? ` ${proofApp}` : ''}`
+                    : `A CD está esperando ${proofPendentes} espelhos do app${proofApp ? ` ${proofApp}` : ''}`}
                 </div>
                 <div className="text-xs text-amber-800 mt-0.5">
-                  Toque aqui pra enviar o print da tela do aplicativo de entregas.
+                  {proofApp
+                    ? `Toque aqui pra enviar o print da tela do app da ${proofApp} — só de quem entrega ${proofApp}.`
+                    : 'Toque aqui pra enviar o print da tela do aplicativo de entregas.'}
                 </div>
               </div>
             </div>
@@ -820,10 +884,23 @@ export function DriverApp() {
                 className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-60 text-sm font-medium rounded-lg px-3 py-2">
                 {downloadingId === m.id ? <Spinner /> : <><Download size={16} /> Baixar</>}
               </button>
-              <button onClick={() => openNf(m)}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-blue-600 text-blue-700 hover:bg-blue-50 text-sm font-medium rounded-lg px-3 py-2">
-                <Upload size={16} /> Anexar nota
-              </button>
+              {(() => {
+                // 05/08: o botão mostra a SITUAÇÃO da nota, não um convite eterno a
+                // mandar outra. Continua clicável nos três estados — é por ele que o
+                // driver abre a tela e lê o motivo da recusa.
+                const nf = estadoBotaoNota(m);
+                const cor = nf.tom === 'ok'
+                  ? 'bg-green-50 border-green-600 text-green-700 hover:bg-green-100'
+                  : nf.tom === 'recusada'
+                    ? 'bg-red-50 border-red-500 text-red-700 hover:bg-red-100'
+                    : 'bg-white border-blue-600 text-blue-700 hover:bg-blue-50';
+                return (
+                  <button onClick={() => openNf(m)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 border text-sm font-medium rounded-lg px-3 py-2 ${cor}`}>
+                    {nf.tom === 'ok' ? <CheckCircle2 size={16} /> : <Upload size={16} />} {nf.texto}
+                  </button>
+                );
+              })()}
             </div>
 
           </div>

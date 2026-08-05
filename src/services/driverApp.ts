@@ -82,6 +82,14 @@ export interface DriverMirror {
   platformFilter: string[] | null;
   deliveredAt: string;
   viewedAt: string | null;
+  /**
+   * Situação da NOTA deste espelho (05/08/2026). Vem da mesma conta da tela de anexar.
+   * `undefined` = edge fn antiga em cache: aí o botão volta ao texto de sempre em vez
+   * de mentir "nota enviada" sem saber.
+   */
+  nfVagas?: number;
+  nfEnviadas?: number;
+  nfRecusadas?: number;
 }
 
 /**

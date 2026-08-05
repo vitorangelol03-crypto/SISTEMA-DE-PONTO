@@ -47,6 +47,7 @@ const CPF = {
   outraQuinzena: '99911100033',
   lider: '99911100044',
   membro: '99911100055',
+  soShopee: '99911100066',
 };
 
 /** Senha que o portal obriga a criar no 1o acesso (nao pode ser 1234). */
@@ -143,7 +144,10 @@ const faixaPrint = (page: Page) => page.getByRole('button', { name: /est[áa] es
 
 async function abrirEspelho(page: Page) {
   await faixaPrint(page).click();
-  await expect(page.getByText('Print da tela do aplicativo')).toBeVisible({ timeout: 15_000 });
+  // 05/08: o subtítulo passou a dizer QUAL app ("Print da tela do app da SHOPEE") a
+  // pedido do Victor. O regex casa com as duas formas — o teste prova que a tela
+  // abriu, não a redação dela (quem cobra a redação é o cenário H).
+  await expect(page.getByText(/Print da tela do app/i).first()).toBeVisible({ timeout: 15_000 });
 }
 
 /** Guarda um print da tela pro Victor ver o que o entregador enxerga. */
@@ -405,5 +409,39 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
     await expect(page.locator('input[type="file"]')).toHaveCount(1);
     // E continua sem número nenhum na tela.
     await expect(page.getByText('900')).toHaveCount(0);
+  });
+  /**
+   * 05/08/2026, pedido do Victor: *"coloque no painel do driver bem específico que o
+   * espelho que eles têm que mandar é somente da Shopee, que é para somente
+   * entregadores da Shopee"*.
+   *
+   * O texto antigo dizia "aplicativo de entregas" — quem roda Shopee E iMile no mesmo
+   * dia mandava print do app errado, e print errado é recusa na certa.
+   *
+   * Não envia nada: é tela, não conferência. Custo zero de cota do Gemini.
+   */
+  test('H. a tela diz com todas as letras que o print é do app da SHOPEE', async ({ page }) => {
+    test.setTimeout(180_000);
+    const { periodId } = await cenario({
+      label: 'SoShopee', cpf: CPF.soShopee, nome: 'SoShopee',
+      inicio: FOTO_INI, fim: FOTO_FIM, pacotes: 500,
+    });
+    expect(periodId).toBeTruthy();
+
+    await entrarNoPortal(page, CPF.soShopee);
+
+    // 1) A faixa da lista já nomeia o app — antes só contava "1 espelho do app".
+    await expect(faixaPrint(page)).toContainText(/SHOPEE/i, { timeout: 20_000 });
+    await expect(faixaPrint(page)).toContainText(/s[óo] de quem entrega SHOPEE/i);
+    await print(page, 'H-faixa-diz-shopee');
+
+    // 2) Dentro, o aviso em destaque e o passo a passo falam o nome do app.
+    await abrirEspelho(page);
+    await expect(page.getByText(/[ée] o print do app da SHOPEE/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/S[óo] quem entrega SHOPEE manda este print/i)).toBeVisible();
+    await expect(page.getByText(/Abra o app da/i)).toBeVisible();
+    // 3) E o botão de enviar também — é o último lugar onde dá pra errar de app.
+    await expect(page.getByText(/Enviar print do app SHOPEE/i).first()).toBeVisible();
+    await print(page, 'H-tela-diz-shopee');
   });
 });
