@@ -1276,6 +1276,93 @@ export function buildSelectionMirrorData(
   return { groups, singles };
 }
 
+// ── QUAL VALOR ESPERAR NA NOTA (05/08/2026, pedido do Victor) ────────────────
+// "coloca para aparecer o valor do espelho na tagzinha, assim já sabemos qual valor
+// esperar na nota". Hoje esse número só aparecia DENTRO da mensagem de recusa — ou seja,
+// só depois de dar errado. Agora aparece sempre, do lado dos selos.
+//
+// De onde vem: a conferência automática já guarda em `check_details.candidates` todos os
+// valores que a nota PODIA ter (o do espelho publicado, o líquido, a soma por CNPJ) e, em
+// `matchedCandidates`, qual deles a nota bateu.
+
+export interface ValorEsperadoDaNota {
+  valor: number;
+  /** true = a nota bateu com este valor; false = é o valor que se espera dela. */
+  bateu: boolean;
+  /** Veio do espelho publicado (o número que o entregador viu no app). */
+  doEspelho: boolean;
+  /** A chave crua do candidato (`espelho_group_cheio`, …) — vira o texto da dica. */
+  origem: string;
+  /** De onde saiu o número, em português, pra dica da tela. */
+  rotulo: string;
+}
+
+/**
+ * Traduz a chave do candidato pra português.
+ *
+ * ⚠️ ISTO PRECISA APARECER NA TELA. Um mesmo entregador tem VÁRIOS valores possíveis ao
+ * mesmo tempo — o dele, o do grupo, com e sem os vales abatidos, por CNPJ. Mostrar só o
+ * número deixa a tag brigando com a mensagem de recusa (que escolhe o candidato mais
+ * PRÓXIMO do que o entregador digitou, só pra explicar o erro). Medido em produção: tag
+ * dizendo R$ 18.885,87 e recusa dizendo R$ 4.338,10 — os dois certos, coisas diferentes.
+ */
+export function rotuloDoCandidato(chave: string): string {
+  if (chave.startsWith('espelho_')) {
+    const resto = chave.slice('espelho_'.length);
+    if (resto.startsWith('group')) {
+      return resto.includes('abatido')
+        ? 'espelho do GRUPO, com vales/perdas já abatidos'
+        : 'espelho do GRUPO (valor cheio)';
+    }
+    if (resto.startsWith('individual')) {
+      return resto.includes('abatido')
+        ? 'espelho individual, com vales/perdas já abatidos'
+        : 'espelho individual (valor cheio)';
+    }
+    if (resto.startsWith('selection_')) return `espelho só de ${resto.slice('selection_'.length)}`;
+    return 'espelho publicado';
+  }
+  if (chave === 'liquido_grupo') return 'total líquido do grupo';
+  if (chave === 'liquido_individual') return 'total líquido do entregador';
+  if (chave.startsWith('somaCnpj_grupo')) {
+    return chave.includes('abatido') ? 'soma do grupo neste CNPJ, com abate' : 'soma do grupo neste CNPJ';
+  }
+  if (chave.startsWith('somaCnpj_individual')) {
+    return chave.includes('abatido') ? 'soma dele neste CNPJ, com abate' : 'soma dele neste CNPJ';
+  }
+  return chave;
+}
+
+export function valorEsperadoDaNota(
+  checkDetails: Record<string, unknown> | null | undefined,
+): ValorEsperadoDaNota | null {
+  const cands = checkDetails?.candidates;
+  if (!cands || typeof cands !== 'object') return null;
+  const mapa = cands as Record<string, number>;
+  const matched = Array.isArray(checkDetails?.matchedCandidates)
+    ? (checkDetails.matchedCandidates as string[])
+    : [];
+
+  // 1) Bateu: mostra o valor que bateu — é a verdade do que aconteceu.
+  const bateu = matched.find((k) => typeof mapa[k] === 'number');
+  if (bateu) {
+    return {
+      valor: Number(mapa[bateu]), bateu: true, doEspelho: bateu.startsWith('espelho'),
+      origem: bateu, rotulo: rotuloDoCandidato(bateu),
+    };
+  }
+  // 2) Não bateu (ou nem foi conferida): mostra o valor DO ESPELHO, que é o que o
+  // entregador viu no app e o que a nota dele deveria ter.
+  const doEspelho = Object.keys(mapa).find((k) => k.startsWith('espelho') && typeof mapa[k] === 'number');
+  if (doEspelho) {
+    return {
+      valor: Number(mapa[doEspelho]), bateu: false, doEspelho: true,
+      origem: doEspelho, rotulo: rotuloDoCandidato(doEspelho),
+    };
+  }
+  return null;
+}
+
 // ── CADASTRO DE ENTREGADOR: só as taxas de plataforma QUE EXISTEM (05/08/2026) ──
 // O painel ficou com uma plataforma na memória que já tinha sido apagada no banco (a tela
 // estava aberta desde antes). Ao cadastrar, o sistema tentou gravar o valor por pacote

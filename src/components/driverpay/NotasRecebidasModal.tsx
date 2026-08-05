@@ -20,8 +20,9 @@ import {
   getNfAutoValidate,
   setNfAutoValidate,
   type NotaFiscalFileRow,
+  mirrorPdfUrl,
 } from '../../services/driverPay';
-import { notaFiscalFileName, nfPrazoStatus, nfAtrasoLabel } from './driverPayShared';
+import { notaFiscalFileName, nfPrazoStatus, nfAtrasoLabel, valorEsperadoDaNota, formatBRL } from './driverPayShared';
 import { ModalShell } from './ModalShell';
 
 interface NotasRecebidasModalProps {
@@ -193,6 +194,33 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
   // atrás de um vira o trabalho. Filtra enquanto digita e IGNORA ACENTO — "caique" acha
   // "Caíque", que é exatamente onde ele se perdia (o mesmo nome aparece com e sem acento).
   const [busca, setBusca] = useState('');
+  const [abrindoEspelho, setAbrindoEspelho] = useState<string | null>(null);
+
+  /**
+   * Abre o PDF do espelho DAQUELE entregador numa aba nova (05/08/2026).
+   * Pedido do Victor: conferir a nota contra o espelho sem sair da tela.
+   * Usa o `mirrorPlatformKey` da nota, que é o espelho de onde ela nasceu — pagando por
+   * plataforma, o mesmo entregador tem mais de um espelho na quinzena.
+   */
+  const handleVerEspelho = async (row: NotaFiscalFileRow): Promise<void> => {
+    // Mesmo caminho do "ver a nota" logo ao lado (`handleView`), que é o padrão usado em
+    // todo o app pra abrir arquivo do storage — e que funciona no navegador do Victor.
+    // Tentei abrir a aba antes do await pra escapar de bloqueador de pop-up e ficou pior:
+    // o PDF assinado vem como download, então sobrava uma aba em branco na tela.
+    setAbrindoEspelho(row.id);
+    try {
+      const url = await mirrorPdfUrl(companyId, periodId, row.driverId, row.mirrorPlatformKey ?? null);
+      if (!url) {
+        toast.error('Este entregador ainda não tem espelho publicado nesta quinzena.');
+        return;
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não consegui abrir o espelho');
+    } finally {
+      setAbrindoEspelho(null);
+    }
+  };
 
   const { groups, allNamed } = useMemo(() => {
     const seen: Record<string, number> = {};
@@ -468,12 +496,41 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
                 {g.items.map(({ row, filename, prazo, atraso }) => {
                   const isActing = acting === row.id;
                   return (
-                    <div key={row.id} className="flex items-center gap-2 p-2.5">
+                    /* 05/08/2026 — linha SIMÉTRICA: os botões viram uma coluna de largura fixa,
+                       então todos ficam alinhados de cima a baixo mesmo com selos de tamanhos
+                       diferentes. Antes cada linha empurrava os ícones pra um lugar. */
+                    <div key={row.id} className="flex items-center gap-3 p-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-medium text-gray-700 truncate">{row.emitterLabel} · {row.emitterCnpj}</span>
+                          <span className="text-[13px] font-medium text-gray-700 truncate">{row.emitterLabel} · {row.emitterCnpj}</span>
                           <StatusBadge status={row.status} reason={row.rejectReason} auto={row.checkDetails?.autoValidated === true} />
                           <CheckBadges row={row} />
+                          {/* Quanto a nota TEM que ter (05/08/2026). Antes esse número só
+                              aparecia dentro da mensagem de recusa — ou seja, só depois de
+                              dar errado. Agora dá pra conferir antes. */}
+                          {(() => {
+                            const esperado = valorEsperadoDaNota(row.checkDetails);
+                            if (!esperado) return null;
+                            return (
+                              <span
+                                className={`text-[12px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
+                                  esperado.bateu ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                                }`}
+                                title={
+                                  (esperado.bateu
+                                    ? `A nota bateu com este valor (${esperado.rotulo}).`
+                                    : `Valor do ${esperado.rotulo} — é o que a nota deve ter.`) +
+                                  '\n\nAtenção: a mensagem de recusa pode mostrar OUTRO número. ' +
+                                  'Ela escolhe, entre os valores possíveis, o mais PRÓXIMO do que o ' +
+                                  'entregador colocou — só pra explicar o erro pra ele.'
+                                }
+                                data-testid="nf-valor-esperado"
+                              >
+                                {esperado.bateu ? '✓ ' : 'espelho '}
+                                {formatBRL(esperado.valor)}
+                              </span>
+                            );
+                          })()}
                           {/* Prazo do espelho daquele driver (04/08/2026). "sem prazo" = espelho
                               publicado antes da feature — nao da pra cobrar horario que ninguem combinou. */}
                           {prazo === 'atrasada' && (
@@ -491,8 +548,20 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-gray-400 truncate" title={filename}>{filename}</div>
+                        <div className="text-[11px] text-gray-400 truncate mt-0.5" title={filename}>{filename}</div>
                       </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleVerEspelho(row)}
+                        disabled={abrindoEspelho === row.id}
+                        title="Ver o espelho deste entregador (o PDF que ele recebeu no app)"
+                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg disabled:opacity-50"
+                      >
+                        {abrindoEspelho === row.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <FileText className="w-4 h-4" />}
+                      </button>
                       <button type="button" onClick={() => handleView(row)} title="Ver a nota" className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
                         <Eye className="w-4 h-4" />
                       </button>
@@ -522,6 +591,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      </div>
                     </div>
                   );
                 })}

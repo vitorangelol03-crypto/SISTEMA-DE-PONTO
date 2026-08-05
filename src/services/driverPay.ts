@@ -1630,6 +1630,39 @@ export interface MirrorPublicationRow {
  * "ja publicado" no dialogo e o aviso anti-desconto-duplo). Escopado por empresa+periodo
  * (RLS confirma).
  */
+/**
+ * Link temporario pro PDF do espelho publicado de um entregador (05/08/2026).
+ * Pedido do Victor: "coloque um botão para ver o espelho do driver direto daqui da nota" —
+ * pra conferir a nota contra o espelho sem sair da tela e sem procurar o entregador na grade.
+ *
+ * Devolve null quando nao ha espelho publicado (nao e erro: muita nota chega antes).
+ */
+export const mirrorPdfUrl = async (
+  companyId: string,
+  periodId: string,
+  driverId: string,
+  platformKey: string | null,
+  expiresSec = 300,
+): Promise<string | null> => {
+  let q = supabase
+    .from('driverpay_mirror_publications')
+    .select('pdf_path, platform_key, delivered_at')
+    .eq('company_id', companyId)
+    .eq('period_id', periodId)
+    .eq('driver_id', driverId);
+  // A nota nasce de UM espelho (o conjunto de plataformas dela); sem isso, pega o mais recente.
+  if (platformKey !== null) q = q.eq('platform_key', platformKey);
+  const { data, error } = await q.order('delivered_at', { ascending: false }).limit(1);
+  if (error) throwDbError(error);
+  const path = (data ?? [])[0]?.pdf_path as string | undefined;
+  if (!path) return null;
+  const { data: signed, error: e2 } = await supabase.storage
+    .from(DRIVER_MIRRORS_BUCKET)
+    .createSignedUrl(path, expiresSec);
+  if (e2) throwDbError(e2);
+  return signed?.signedUrl ?? null;
+};
+
 export const listMirrorPublications = async (
   companyId: string,
   periodId: string,
