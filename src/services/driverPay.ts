@@ -2675,7 +2675,7 @@ export const setProofStatus = async (
   userId: string, rejectReason?: string,
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.editDriver');
-  const { error } = await supabase
+  const { data: atualizado, error } = await supabase
     .from('driverpay_delivery_proofs')
     .update({
       status,
@@ -2684,8 +2684,30 @@ export const setProofStatus = async (
       validated_by: status === 'validado' ? userId : null,
       next_check_at: null,
     })
-    .eq('id', proofId).eq('company_id', companyId);
+    .eq('id', proofId).eq('company_id', companyId)
+    .select('payment_id')
+    .maybeSingle();
   if (error) throwDbError(error);
+
+  // 🔴 O botão SEMPRE prometeu isto — o title dele é "Aceitar este print (marca o espelho
+  // conferido)" — mas o espelho não era marcado. Ficou invisível enquanto existia a coluna
+  // "Print" mostrando 1/1 do lado; com a coluna fora (05/08), aceitar o print não mexia em
+  // nada na grade e a promessa virava mentira na cara de quem clica.
+  //
+  // Aqui é decisão HUMANA (alguém olhou a foto e aceitou), então não passa pelo liga/desliga
+  // da confirmação automática e fica gravada no nome de quem clicou.
+  if (status === 'validado' && atualizado?.payment_id) {
+    const { data: pay } = await supabase.from('driverpay_payments')
+      .select('espelho_conferido').eq('id', atualizado.payment_id).maybeSingle();
+    if (pay && !pay.espelho_conferido) {
+      const { error: mErr } = await supabase.from('driverpay_payments').update({
+        espelho_conferido: true,
+        espelho_conferido_at: new Date().toISOString(),
+        espelho_conferido_by: userId,
+      }).eq('id', atualizado.payment_id).eq('company_id', companyId);
+      if (mErr) throwDbError(mErr);
+    }
+  }
 };
 
 export const deleteDeliveryProof = async (

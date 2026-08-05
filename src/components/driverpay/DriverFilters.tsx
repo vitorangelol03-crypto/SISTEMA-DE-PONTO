@@ -133,7 +133,9 @@ export const DriverFilters: React.FC<DriverFiltersProps> = ({
         />
 
         <div className="flex flex-col gap-1">
-          <label className={LABEL}>Espelho conferido (print)</label>
+          {/* 05/08: era "Espelho conferido (print)". O "(print)" saiu junto com a coluna
+              Print — ela e o Espelho contavam a mesma história, e o Victor pediu uma só. */}
+          <label className={LABEL}>Espelho conferido</label>
           <select value={conferidoFilter} onChange={(e) => onConferido(e.target.value)} className={FIELD}>
             <option value="">Todos</option>
             <option value="ok">Conferido</option>

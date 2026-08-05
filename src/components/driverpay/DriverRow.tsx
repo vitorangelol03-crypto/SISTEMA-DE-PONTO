@@ -52,8 +52,6 @@ interface DriverRowProps {
   proofProgress?: ProofProgress;
   /** Plataformas em que ele ficou de fora do pedido geral por nao ter grupo. */
   semGrupoFora?: string[];
-  /** Plataformas em que ele NAO precisa mandar print: a planilha chegou e ele nao tem pacote. */
-  dispensadoSemPacote?: string[];
   /** Situacao de PAGAMENTO deste driver (tag "pago"/"parcial"). */
   pagamento?: PagamentoDoDriver;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkbox. */
@@ -98,7 +96,6 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   nfProgress,
   proofProgress,
   semGrupoFora = [],
-  dispensadoSemPacote = [],
   pagamento,
   selected,
   selectionLocked,
@@ -109,8 +106,9 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   const multi = isMultiRoute(row);
   const totals = computeRowTotals(row);
   // driver+grupo (2) + plataformas + 5 totais (pacotes, ZAPEX, desconto, vale, receber)
-  // + NF (1) + Print (1) + Espelho (1) + acoes (1)
-  const totalCols = 2 + platforms.length + 5 + 1 + 1 + 1 + 1;
+  // + NF (1) + Espelho (1) + acoes (1). A coluna "Print" saiu em 05/08 — virou selo
+  // dentro do Espelho; se o colspan nao acompanhasse, a linha das rotas desalinharia.
+  const totalCols = 2 + platforms.length + 5 + 1 + 1 + 1;
   const inputsDisabled = readOnly || !canEdit;
   // Ganho Zapex do driver: qtd de itens x valor unitario individual (soma no total a receber).
   const zapexCount = row.zapex.length;
@@ -398,71 +396,21 @@ export const DriverRow: React.FC<DriverRowProps> = ({
           )}
         </td>
 
-        {/* Espelho do app (print da tela da Shopee) — 04/08/2026.
-            Verde = o print bate com a planilha (periodo e quantidade). Ambar = chegou
-            mas a quantidade NAO bate: e o que voce precisa olhar em "Espelhos recebidos".
-            Cinza = ninguem mandou ainda. Vazio = print nao foi solicitado nesta quinzena. */}
-        <td className="px-2 py-3 text-center align-middle">
-          {proofProgress && proofProgress.expected > 0 ? (
-            <span
-              title={
-                proofProgress.complete
-                  ? 'Print do app confere com a planilha'
-                  : proofProgress.needsAttention
-                  ? 'O print chegou mas a quantidade NAO bate com a planilha — veja em "Espelhos recebidos"'
-                  : proofProgress.rejected > 0
-                  ? 'Print recusado (data errada ou ilegivel) — o entregador precisa reenviar'
-                  : proofProgress.pending > 0
-                  ? 'Print recebido, esperando conferencia'
-                  : 'Print ainda nao enviado'
-              }
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-bold tabular-nums border ${
-                proofProgress.complete
-                  ? 'bg-green-100 text-green-700 border-green-300'
-                  : proofProgress.needsAttention || proofProgress.rejected > 0
-                  ? 'bg-amber-100 text-amber-700 border-amber-300'
-                  : 'bg-gray-100 text-gray-500 border-gray-300'
-              }`}
-            >
-              {proofProgress.complete
-                ? <CheckCircle2 className="w-4 h-4" />
-                : proofProgress.needsAttention || proofProgress.rejected > 0
-                ? <AlertTriangle className="w-4 h-4" />
-                : <Circle className="w-4 h-4" />}
-              {proofProgress.confirmed}/{proofProgress.expected}
-            </span>
-          ) : dispensadoSemPacote.length > 0 ? (
-            /* Pedido do Victor (04/08): quando a planilha entra, quem nao tem pacote naquela
-               plataforma PARA de ser cobrado — o lider nao fica cacando print de quem nao roda
-               Shopee. Mas em vez de virar um traco mudo, ganha marca propria: da pra distinguir
-               "nao precisava" de "nao foi pedido". ⚠️ Resolve so o PRINT, nao o espelho conferido. */
-            <span
-              title={`Nao precisa mandar print: a planilha de ${dispensadoSemPacote.join(', ')} ja foi importada e este entregador nao tem pacote nela nesta quinzena.`}
-              data-testid="print-dispensado"
-              className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border bg-slate-100 text-slate-600 border-slate-300"
-            >
-              <CheckCircle2 className="w-3 h-3" />
-              nao entrega
-            </span>
-          ) : semGrupoFora.length > 0 ? (
-            /* Regra de logistica (04/08/2026): o pedido "pra todos" nao cobra quem esta sem
-               grupo. Ele NAO entra no contador (senao nunca fecharia) — fica com selo
-               proprio, porque o motivo e outro: falta GRUPO, nao falta print. */
-            <span
-              title={`Nao foi pedido: este entregador nao esta em nenhum grupo (${semGrupoFora.join(', ')}). Coloque-o num grupo ou peca o print so dele.`}
-              data-testid="print-sem-grupo"
-              className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border bg-gray-50 text-gray-500 border-gray-300"
-            >
-              <Circle className="w-3 h-3" />
-              sem grupo
-            </span>
-          ) : (
-            <span className="text-gray-300 text-xs">—</span>
-          )}
-        </td>
+        {/* ══════════════════════════════════════════════════════════════════════
+            ESPELHO — UMA COLUNA SÓ (05/08/2026, pedido do Victor)
+            *"esses dois são a mesma coisa […] remove o do print e deixa somente do
+            espelho"*. Existiam "Print" e "Espelho" lado a lado contando a MESMA
+            história: o print é o meio, o espelho conferido é o fim. Duas colunas pro
+            mesmo assunto viravam dúvida ("qual eu olho?").
 
-        {/* Espelho conferido — quando marcado, a linha inteira do driver fica verde.
-            Abaixo, o selo "no app" quando o espelho já foi publicado pro app do driver. */}
+            Agora: verde = conferido — não importa se foi o print que bateu, se ele não
+            entrega Shopee (o sistema marca sozinho) ou se alguém marcou na mão.
+
+            O aviso do print sobrou aqui **só quando exige ação**: recusado ou quantidade
+            que não bate. Isso não podia sumir com a coluna — é o único lugar da grade
+            que mostra que tem entregador esperando resposta. O resto (quantos, quem,
+            quando) continua em "Espelhos recebidos".
+            ══════════════════════════════════════════════════════════════════════ */}
         <td className="px-2 py-3 text-center align-middle">
           <div className="inline-flex flex-col items-center gap-1">
             <button
@@ -479,6 +427,33 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 <Clipboard className="w-6 h-6 text-gray-500" />
               )}
             </button>
+            {!row.espelhoConferido && proofProgress && (proofProgress.needsAttention || proofProgress.rejected > 0) && (
+              <span
+                title={
+                  proofProgress.rejected > 0
+                    ? 'Print recusado (data errada ou ilegivel) — o entregador precisa reenviar'
+                    : 'O print chegou mas a quantidade NAO bate com a planilha — veja em "Espelhos recebidos"'
+                }
+                data-testid="espelho-atencao"
+                className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold border bg-amber-100 text-amber-700 border-amber-300 whitespace-nowrap"
+              >
+                <AlertTriangle className="w-3 h-3" />
+                {proofProgress.rejected > 0 ? 'recusado' : 'não bate'}
+              </span>
+            )}
+            {!row.espelhoConferido && semGrupoFora.length > 0 && (
+              /* Regra de logistica (04/08/2026): o pedido "pra todos" nao cobra quem esta
+                 sem grupo. Sem este selo, ele viraria um cadeado mudo — cinza pra sempre e
+                 sem ninguem entender por que o print nunca chega. */
+              <span
+                title={`Nao foi pedido: este entregador nao esta em nenhum grupo (${semGrupoFora.join(', ')}). Coloque-o num grupo ou peca o print so dele.`}
+                data-testid="espelho-sem-grupo"
+                className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold border bg-gray-50 text-gray-500 border-gray-300 whitespace-nowrap"
+              >
+                <Circle className="w-3 h-3" />
+                sem grupo
+              </span>
+            )}
             {publishedInApp && (
               <span
                 title="Espelho publicado no app do driver"

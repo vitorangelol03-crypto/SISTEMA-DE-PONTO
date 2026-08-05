@@ -11,7 +11,7 @@ import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
  * O que este teste prova, na ordem em que a equipe usa:
  *   1) "Solicitar espelho" EXIGE as datas da quinzena e avisa quando a duração
  *      está estranha (foi o erro achado em produção hoje: quinzena de 45 dias);
- *   2) depois de solicitar, a coluna "Print" aparece na grade;
+ *   2) depois de solicitar, a grade tem UMA coluna do assunto ("Espelho");
  *   3) chegando um print com quantidade DIFERENTE da planilha, o painel mostra a
  *      FOTO ao lado da comparação em português ("58 a mais no print");
  *   4) validar na mão deixa a linha verde.
@@ -204,9 +204,14 @@ test.describe('Espelho do app da Shopee — painel (04/08/2026)', () => {
       await botaoSolicitar.click();
       await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 15_000 });
 
-      // ══ 2. A coluna "Print" aparece na grade, ainda vazia (0/1) ══════════
-      await expect(page.locator('thead').getByText('Print')).toBeVisible({ timeout: 10_000 });
-      await expect(driverRow(page)).toContainText('0/1', { timeout: 10_000 });
+      // ══ 2. A grade tem UMA coluna só pro assunto: "Espelho" ══════════════
+      // ⚠️ ATUALIZADO em 05/08/2026: a coluna "Print" SAIU. Ela e o "Espelho" contavam a
+      // mesma história (o print é o meio, o espelho conferido é o fim) e o Victor pediu
+      // uma só: *"remove o do print e deixa somente do espelho"*. Então o contador 0/1
+      // deixou de existir — o que a grade mostra agora é o estado final, e o aviso do
+      // print só aparece quando exige ação (testado no passo 5).
+      await expect(page.locator('thead').getByText('Espelho', { exact: true })).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('thead').getByText('Print')).toHaveCount(0);
 
       // ══ 3. Chega um print DIVERGENTE (a foto real: 1808 × planilha 1750) ══
       // Inserido como a edge fn gravaria — o envio pelo portal depende do deploy.
@@ -242,8 +247,11 @@ test.describe('Espelho do app da Shopee — painel (04/08/2026)', () => {
       await expect(driverRow(page)).toBeVisible({ timeout: 15_000 });
 
       // O botão fica âmbar com o número de quem precisa de atenção.
+      // ⚠️ 05/08/2026: o número saiu do texto "(1)" e virou SELO ao lado ("Espelhos
+      // recebidos" + 1). A asserção segue o que a tela mostra hoje.
       const botaoRecebidos = page.getByRole('button', { name: /Espelhos recebidos/ });
-      await expect(botaoRecebidos).toContainText('(1)', { timeout: 10_000 });
+      await expect(botaoRecebidos).toContainText('1', { timeout: 10_000 });
+      await expect(botaoRecebidos).toHaveAttribute('title', /precisando da sua aten/i);
       await botaoRecebidos.click();
       await expect(modal(page).getByText('Espelhos recebidos')).toBeVisible({ timeout: 10_000 });
 
@@ -280,7 +288,9 @@ test.describe('Espelho do app da Shopee — painel (04/08/2026)', () => {
       await expect(modal(page).getByText('confere ✓')).toBeVisible({ timeout: 15_000 });
       await closeModal(page);
 
-      await expect(driverRow(page)).toContainText('1/1', { timeout: 15_000 });
+      // Aceito na mão: o espelho do driver fica CONFERIDO (é o que a coluna mostra agora).
+      await expect(driverRow(page).getByTitle('Espelho conferido (bate com a planilha)'))
+        .toBeVisible({ timeout: 15_000 });
     } finally {
       // ── Limpeza: print, arquivo e quinzena ───────────────────────────────
       if (proofId) await db.from('driverpay_delivery_proofs').delete().eq('id', proofId);

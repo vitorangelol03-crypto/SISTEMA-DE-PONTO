@@ -63,8 +63,6 @@ interface DriverListProps {
   proofProgressByPayment?: ReadonlyMap<string, ProofProgress>;
   /** paymentId -> plataformas em que ele ficou de fora do pedido geral por nao ter grupo. */
   semGrupoForaByPayment?: ReadonlyMap<string, string[]>;
-  /** paymentId -> plataformas em que ele NAO precisa mandar print (planilha chegou, sem pacote). */
-  dispensadoByPayment?: ReadonlyMap<string, string[]>;
   /** paymentId -> situacao de PAGAMENTO (tag "pago" / "parcial" / "pendente"). */
   pagamentoByPayment?: ReadonlyMap<string, PagamentoDoDriver>;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkboxes. */
@@ -119,7 +117,6 @@ export const DriverList: React.FC<DriverListProps> = ({
   nfProgressByPayment,
   proofProgressByPayment,
   semGrupoForaByPayment,
-  dispensadoByPayment,
   pagamentoByPayment,
   selGroups,
   selDrivers,
@@ -246,14 +243,6 @@ export const DriverList: React.FC<DriverListProps> = ({
         return t.net;
       case 'nf':
         return row.notaFiscal ? 1 : 0;
-      case 'print': {
-        // Ordena pelo que exige acao: quem precisa de atencao vem primeiro (0),
-        // depois quem falta mandar (1), e por ultimo o que ja bateu (2).
-        const p = proofProgressByPayment?.get(row.paymentId);
-        if (!p || p.expected === 0) return 3;
-        if (p.needsAttention || p.rejected > 0) return 0;
-        return p.complete ? 2 : 1;
-      }
       case 'espelho':
         return row.espelhoConferido ? 1 : 0;
       default:
@@ -379,9 +368,6 @@ export const DriverList: React.FC<DriverListProps> = ({
     // NF "completa" = todas as CNPJs esperadas validadas (ciente de grupo) OU marcada na mão.
     const nfCount = subset.filter((r) => nfProgressByPayment?.get(r.paymentId)?.complete).length;
     const espelhoCount = subset.filter((r) => r.espelhoConferido).length;
-    // Print do app: conta quem tem print esperado E ja conferido.
-    const printEsperado = subset.filter((r) => (proofProgressByPayment?.get(r.paymentId)?.expected ?? 0) > 0).length;
-    const printOk = subset.filter((r) => proofProgressByPayment?.get(r.paymentId)?.complete).length;
     // Ordem que o arrasto enxerga: a MESMA da tela, senão a faixa pegaria linha errada.
     const linhasVisiveis = sortRows(subset);
     const idsVisiveis = linhasVisiveis.map((r) => r.paymentId);
@@ -423,9 +409,11 @@ export const DriverList: React.FC<DriverListProps> = ({
               <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('nf', 'NF')}
               </th>
-              <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {sortBtn('print', 'Print')}
-              </th>
+              {/* 05/08/2026: a coluna "Print" SAIU. Ela e o "Espelho" contavam a mesma
+                  história (a conferência do espelho da Shopee) e o Victor pediu uma só:
+                  *"remova o do print e deixa somente do espelho"*. O que era o print virou
+                  selo dentro do Espelho — verde quando conferiu, e o aviso só aparece
+                  quando exige ação. */}
               <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 {sortBtn('espelho', 'Espelho')}
               </th>
@@ -454,7 +442,6 @@ export const DriverList: React.FC<DriverListProps> = ({
                 proofProgress={proofProgressByPayment?.get(row.paymentId)}
                 pagamento={pagamentoByPayment?.get(row.paymentId)}
                 semGrupoFora={semGrupoForaByPayment?.get(row.paymentId)}
-                dispensadoSemPacote={dispensadoByPayment?.get(row.paymentId)}
                 selected={selDrivers?.has(row.paymentId)}
                 selectionLocked={rowGroupSelected(row)}
                 onToggleSelect={onToggleSelDriver}
@@ -483,9 +470,6 @@ export const DriverList: React.FC<DriverListProps> = ({
                 </td>
                 <td className="px-2 py-3.5 text-center text-xs font-bold text-gray-700 whitespace-nowrap">
                   NF {nfCount}/{totals.drivers}
-                </td>
-                <td className="px-2 py-3.5 text-center text-xs font-bold text-gray-700 whitespace-nowrap">
-                  {printEsperado > 0 ? `Print ${printOk}/${printEsperado}` : '—'}
                 </td>
                 <td className="px-2 py-3.5 text-center text-xs font-bold text-green-700 whitespace-nowrap">
                   Espelho {espelhoCount}/{totals.drivers}
