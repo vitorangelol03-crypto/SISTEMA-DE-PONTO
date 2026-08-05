@@ -1,4 +1,9 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  selecaoDoArrasto,
+  togglesNecessarios,
+  type ArrastoSelecao,
+} from '../../utils/arrastoSelecao';
 import {
   MapPin,
   Settings,
@@ -130,6 +135,43 @@ export const DriverList: React.FC<DriverListProps> = ({
 
   // Visao "Grupos": as gavetas abrem FECHADAS; o botao "Abrir/Fechar todas" alterna todas.
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+
+  // ── Selecionar ARRASTANDO o mouse (04/08/2026, pedido do Victor) ──────────
+  // Segura o clique numa caixinha e desce: vai marcando. Volta pra cima: desmarca
+  // o que acabou de marcar. Em `ref` porque o mouse dispara muito e re-render a
+  // cada movimento deixaria a lista travada.
+  const arrasto = useRef<ArrastoSelecao | null>(null);
+  const [arrastando, setArrastando] = useState(false);
+
+  // Solta em QUALQUER lugar encerra — inclusive fora da lista ou fora da janela.
+  // Sem isto o arrasto ficaria "grudado" e a lista marcaria sozinha depois.
+  useEffect(() => {
+    if (!arrastando) return;
+    const fim = () => { arrasto.current = null; setArrastando(false); };
+    window.addEventListener('mouseup', fim);
+    window.addEventListener('blur', fim);
+    return () => {
+      window.removeEventListener('mouseup', fim);
+      window.removeEventListener('blur', fim);
+    };
+  }, [arrastando]);
+
+  /** Começou o arrasto nesta caixinha. `valor` = o que a faixa vai receber. */
+  const iniciarArrasto = useCallback((indice: number, jaMarcado: boolean) => {
+    arrasto.current = { ancora: indice, valor: !jaMarcado, antes: new Set(selGroups ?? []) };
+    setArrastando(true);
+  }, [selGroups]);
+
+  /** Mouse passou por esta caixinha com o botão pressionado. */
+  const arrastarAte = useCallback((nomes: readonly string[], indice: number) => {
+    const a = arrasto.current;
+    if (!a || !onToggleSelGroup) return;
+    const desejada = selecaoDoArrasto(nomes, a, indice);
+    // A tela só sabe alternar um por vez; alterna só o que realmente muda.
+    for (const nome of togglesNecessarios(nomes, selGroups ?? new Set(), desejada)) {
+      onToggleSelGroup(nome);
+    }
+  }, [selGroups, onToggleSelGroup]);
   const onToggleGroup = (name: string, isOpen: boolean) =>
     setOpenGroups((prev) => {
       const next = new Set(prev);
@@ -675,7 +717,9 @@ export const DriverList: React.FC<DriverListProps> = ({
     const allNames = groups.map((g) => g.name);
     const allOpen = allNames.length > 0 && allNames.every((n) => openGroups.has(n));
     return (
-      <div className="p-2 sm:p-3 space-y-3">
+      // `select-none` durante o arrasto: sem isso o navegador vai pintando o texto
+      // dos nomes enquanto o mouse desce, e a tela fica com cara de defeito.
+      <div className={`p-2 sm:p-3 space-y-3 ${arrastando ? 'select-none' : ''}`}>
         {/* Ordenar grupos sem abrir as gavetas — por total de pacotes, por plataforma, ou pelo total a receber */}
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -698,7 +742,7 @@ export const DriverList: React.FC<DriverListProps> = ({
             {allOpen ? 'Fechar todas' : 'Abrir todas'}
           </button>
         </div>
-        {groups.map(({ name, rows: groupRows }) => {
+        {groups.map(({ name, rows: groupRows }, indiceGrupo) => {
           const t = sumTotals(groupRows);
           const packages = groupRows.reduce((s, r) => s + computeRowTotals(r).totalPackages, 0);
           // Cabecalho do grupo fica verde quando TODOS os drivers dele ja tem o espelho conferido.
@@ -724,14 +768,25 @@ export const DriverList: React.FC<DriverListProps> = ({
               className="border border-gray-200 rounded-lg overflow-hidden"
             >
               <div
+                // Alvo do arrasto é a LINHA INTEIRA, não só a caixinha de 16px: passar o
+                // mouse com o botão preso em qualquer ponto do cabeçalho já conta. Sem
+                // isso o operador teria que mirar em cada quadradinho, e o recurso não
+                // adiantaria nada.
+                onMouseEnter={(e) => { if (e.buttons === 1) arrastarAte(allNames, indiceGrupo); }}
                 className={`px-3 py-3 flex items-center gap-3 ${allEspelho ? 'bg-green-200' : 'bg-gray-50'}`}
               >
                 {onToggleSelGroup && (
                   <input
                     type="checkbox"
+                    data-testid="check-grupo"
                     checked={!!selGroups?.has(name)}
                     onChange={() => onToggleSelGroup(name)}
-                    title="Selecionar o grupo inteiro para espelho"
+                    // ⚠️ O clique normal segue no `onChange` — o arrasto só GUARDA a âncora
+                    // aqui. Se marcasse no mousedown também, o clique simples marcaria duas
+                    // vezes e voltaria ao lugar (o mesmo erro que já aconteceu nesta tela).
+                    onMouseDown={() => iniciarArrasto(indiceGrupo, !!selGroups?.has(name))}
+                    onMouseEnter={(e) => { if (e.buttons === 1) arrastarAte(allNames, indiceGrupo); }}
+                    title="Selecionar o grupo inteiro para espelho — segure e arraste para marcar vários"
                     className="w-4 h-4 text-blue-600 rounded border-gray-300 flex-shrink-0 cursor-pointer"
                   />
                 )}
