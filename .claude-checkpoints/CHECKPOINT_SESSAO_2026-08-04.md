@@ -1094,3 +1094,40 @@ A bateria `vitest run` foi **morta pelo WSL** (memória) duas vezes rodando em s
 terceira falhou por eu ter usado `--reporter=basic`, que **não existe** nesta versão — a saída
 parecia falha de teste e não era. Rodando em primeiro plano e sem flag: **936 passam, 59 arquivos,
 zero falha**. O "1 failed" visto antes era o flaky conhecido dos testes que tocam o banco.
+
+## 19. Desmarcar pagamento + ordenar grupos por espelho no app (`8aeaf61`)
+
+### 19.1 🔑 A marca de "pago" nasce sozinha ao gerar relatório
+Descoberto respondendo a pergunta dele sobre a etiqueta: a **MARIZE** apareceu como paga sem ter
+sido. Não foi teste automatizado nem coisa minha — foi **ele**, às **22:35**, com o login **2626**,
+gerando o **Relatório simples** só pra ver a etiqueta (`report_kind: 'simples'`). **Gerar relatório
+carimba como pago todo mundo que sai no arquivo.** Vale saber antes de gerar "só pra conferir".
+
+Marca de teste **removida a pedido dele**, com backup/rollback em
+`backups/2026-08-04-marca-pagamento-teste/`.
+
+### 19.2 Botão de desmarcar (o pedido que veio disso)
+A etiqueta virou **botão**: clica → confirma → a marca sai. Pede confirmação porque, diferente do
+"espelho conferido", isto é registro de **dinheiro**. Apaga as marcas de **todas** as plataformas
+dele no período — "desmarcar pagamento" é uma coisa só pra quem usa. Se não havia marca, avisa em
+vez de mentir que desfez.
+
+### 19.3 Ordenar grupos por "Espelho no app"
+Terceira régua da visão Grupos, ao lado de "NF validada" e "Espelho conferido".
+⚠️ **Não confundir os dois espelhos:** *no app* = o PDF publicado; *conferido* = o print da Shopee
+batendo com a planilha. Usa a **mesma regra do selo do cartão** (`some`): no grupo só o **líder**
+recebe o espelho (decisão "Opção A", 24/07), então exigir todos daria sempre "não publicado" e a
+ordenação discordaria do selo ao lado.
+
+### Validação — aqui o que vale é a TELA, não função pura
+- **Desmarcar:** recoloquei a marca, cliquei no selo, a confirmação veio com o nome certo, e a
+  etiqueta sumiu **da tela E do banco** (0 marcas restantes).
+- **Ordenar:** 1º clique põe os 6 primeiros grupos como "no app"; 2º clique inverte pra "não
+  publicado". Antes vinham misturados.
+- typecheck 61 (baseline, zero nos tocados) · eslint · build.
+
+### ℹ️ Onde a etiqueta de pagamento aparece (dúvida dele)
+Do lado do **nome**, na coluna "Driver / Rota". **Não existe etiqueta de "pendente"**: quem não foi
+pago fica sem nada — numa quinzena de 98, marcar todos seria ruído. Só há
+`pago SHOPEE+LOGGI` (parcial, âmbar) e `✓ pago DD/MM/AAAA` (completo, roxo), mais a etiqueta
+vermelha **"vale a descontar"** quando ele foi pago sem o desconto sair.
