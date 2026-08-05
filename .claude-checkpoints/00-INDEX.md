@@ -271,6 +271,24 @@ Driverpay em produção segue como na sessão da manhã (espelhos com valor sepa
 + multi-rota; eMile ligada; Tales unificado).
 Último checkpoint: `CHECKPOINT_SESSAO_2026-07-20-noite.md`.
 
+**Sessão 04/08 (fecho) — 🔴 ESPELHO IA POR DRIVER EM VEZ DE POR GRUPO (`aecb210`, NO AR + push):**
+o Victor marcou os grupos, a tela mostrou o espelho **do grupo** e a publicação mandou **1 individual
+por pessoa** — o líder recebia só os números dele. **Não foi ele usando errado:** dentro do MESMO
+diálogo, "Gerar PDF" montava o espelho do grupo e "Publicar no app" caía num `else` que gerava
+individual (o comentário no código dizia isso com todas as letras). Decisão dele: **"o espelho nunca
+vai ser lançado por driver, sempre por grupo e sempre para líder do grupo"** + **"somente o líder ver
+os espelhos, anexar os espelhos e anexar notas"**. A regra virou **uma função pura**
+(`planejarPublicacao`) usada pela **prévia E pela publicação** — com dois códigos elas divergiram,
+com um não têm como. Publicar agora agrupa: 1 PDF por grupo pro **líder do cadastro** (mesmo que ele
+não esteja na seleção); sem grupo recebe o seu; **grupo sem líder não publica**, vira aviso vermelho;
+e a tela **declara antes do clique** quantos PDFs saem e pra quem. Na edge fn, **só o líder anexa
+print E nota** (`nfSlots` passou a usar o mesmo `driversQuePossoEnviar`). ⚠️ **Medido antes de subir:**
+havia **1 grupo sem líder** ("Vermelho Novo - ROGERIO", 1 membro) que ficaria **sem conseguir anexar
+nada** — pus a exceção (sem líder → o membro envia o próprio); depois o Victor definiu o Rogério como
+líder, **50 grupos / 0 sem líder**. Ele **já despublicou** os espelhos individuais errados. Validado:
+**12 unit novos · 948 no total · tsc 61 = os MESMOS 61 do baseline** (medido com `git stash`, nenhum
+em driverpay) · build · deploy **conferido no ar** via `get_edge_function`.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |

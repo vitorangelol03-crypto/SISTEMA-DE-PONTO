@@ -1131,3 +1131,59 @@ Do lado do **nome**, na coluna "Driver / Rota". **Não existe etiqueta de "pende
 pago fica sem nada — numa quinzena de 98, marcar todos seria ruído. Só há
 `pago SHOPEE+LOGGI` (parcial, âmbar) e `✓ pago DD/MM/AAAA` (completo, roxo), mais a etiqueta
 vermelha **"vale a descontar"** quando ele foi pago sem o desconto sair.
+
+---
+
+## 20. Espelho é sempre do GRUPO e sempre pro LÍDER  ·  `aecb210` (no ar)
+
+### 20.1 O que ele viu
+"os espelhos dos líderes dos grupos estão indo somente com espelho deles, não dos agregados."
+Ele marcou os grupos e clicou **Publicar no app**.
+
+### 20.2 A causa — NÃO foi ele usando errado
+Dentro do MESMO diálogo, os dois botões faziam coisas diferentes:
+- **Gerar PDF** → `downloadDriverSelectionMirrorPdf(groups, singles)` = espelho **do grupo**;
+- **Publicar no app** → caía no `else` do `onPublish`, que percorria `targets` chamando
+  `buildDriverMirrorData` = **1 espelho individual por pessoa**, inclusive pro líder.
+
+O comentário no código dizia isso com todas as letras:
+`// Publicar = 1 espelho individual por driver coberto`. **A prévia mostrava uma coisa e a
+publicação fazia outra** — a armadilha era da tela, não dele. `handleMassMirror` tinha o mesmo
+defeito (`setPublishScope('individual')`).
+
+### 20.3 A decisão dele
+> "vamos corrigir — o espelho nunca vai ser lançado por driver, sempre por grupo e sempre para
+> líder do grupo" · "e somente o líder ver os espelhos, anexar os espelhos e anexar notas"
+
+### 20.4 O que mudou
+- **A regra virou UMA função pura**: `planejarPublicacao(rows, groups)` em `driverPayShared.ts`,
+  usada pela **prévia E pela publicação**. Era isso que faltava — com dois códigos, eles
+  divergiram; com um, não têm como.
+- Publicar agrupa antes: **1 PDF por grupo, pro líder do CADASTRO** — mesmo que o líder não esteja
+  na seleção (líder sem pacote na quinzena continua sendo o destinatário). Sem grupo → recebe o seu.
+- **Grupo sem líder não publica**: vira aviso vermelho com o nome, em vez de espelho endereçado
+  errado.
+- A tela **declara antes do clique**: "vai gerar N espelhos: X de grupo (só pro líder) e Y
+  individuais". Fim do "mostra uma coisa, faz outra".
+- **Só o líder anexa** (edge fn): print E **nota fiscal**. Membro de grupo não vê slot nenhum —
+  `nfSlots` passou a usar o mesmo `driversQuePossoEnviar` do print, em vez da cópia própria dele.
+- `myMirrors` já filtrava por `driver_id` — publicando só pro líder, só ele vê. Nada a mudar.
+
+### 20.5 ⚠️ O que quase quebrou (medido ANTES de subir)
+Consultei produção: **1 grupo sem líder** — "Vermelho Novo - ROGERIO", 1 membro. Com a regra crua,
+ele ficaria **sem conseguir anexar nada e sem ninguém pra anexar por ele**. Pus a exceção: grupo sem
+líder → o membro volta a enviar o próprio. Depois disso o Victor definiu o Rogério como líder do
+grupo dele — **50 grupos, 0 sem líder** hoje. A exceção fica como rede de segurança.
+
+### 20.6 Validação
+- 12 unit novos (`driverPayPublicacaoPorGrupo.spec.ts`): líder fora da seleção, grupo sem líder,
+  grupo fantasma, ninguém publicado duas vezes. **948 testes passando** no total.
+- `tsc` **61 erros — os MESMOS 61 do baseline** (medido com `git stash`); nenhum em driverpay.
+- build limpo · `deno check` da edge fn sem erro novo (2 pré-existentes de tipos de lib).
+- **Deploy conferido no ar**: as 3 marcas do código de hoje presentes no `get_edge_function`.
+
+### 20.7 Sobre os "61 erros" (ele perguntou)
+Antigos e de outras abas: **35** em `DataManagementTab` (o mesmo `item is of type 'unknown'`
+repetido), ~10 de import/variável não usados, **2 reais** (`company_id` não existe no tipo
+`Employee`, resto da refatoração multi-empresa) e o resto `any` implícito. Não entram no build.
+Fora do escopo — não toquei.
