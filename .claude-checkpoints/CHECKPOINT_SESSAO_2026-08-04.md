@@ -1800,3 +1800,40 @@ código de volta (ela leu o arquivo depois da minha edição).
 
 **Regra pra próxima vez:** com duas sessões no mesmo projeto, ou uma espera, ou cada uma numa branch.
 Só o git não protege: a perda acontece no arquivo, antes de qualquer commit.
+
+## 27. 🔴 A nota validada do grupo que não contava (`8a9c2d3`) — 05/08
+
+Dois relatos do Victor na mesma tela.
+
+### 27.1 "Ele não está detectando notas já validadas, igual a do Othon"
+A nota do OTHON estava **validada** (valor, CNPJ e nome verdes, R$ 6.392,71) e a grade dizia
+**NF 0/1**.
+
+**Causa:** as vagas de nota eram montadas com a publicação **de cada linha**. Num grupo só o
+**líder** tem publicação — então cada MEMBRO caía no ramo "sem espelho" e gerava a vaga
+**coringa** `*|CNPJ`, enquanto a nota do líder chega com a chave do espelho dele (`|CNPJ`).
+Nada cobria a coringa. 🔑 O comentário do código **já dizia** que a publicação do líder vale
+pra unidade inteira; o código é que não fazia.
+
+O grupo Alvarenga denunciou porque o líder tem **0 pacote** — a única vaga era a coringa dos
+membros. Nos grupos em que o líder também entrega, o mesmo defeito **inflava** o número: era
+o "NF 1/2 — falta 1" do Bom Jesus e o "NF 2/4 — falta 2" do CARATINGA-FABRICIO.
+
+**Tamanho medido em produção:** **25 dos 52 grupos** (80 entregadores) têm mais de um membro
++ espelho publicado — todos contando errado. Os **27 grupos de 1 pessoa** nunca mostraram o
+defeito: é por isso que passou despercebido desde 28/07.
+
+### 27.2 "Está subindo pessoas sem notas primeiro que pessoal com nota validada"
+Ordenando por nota validada, quem **não tem nota a mandar** (0 pacote) valia o mesmo que
+"tudo validado" e subia junto. Agora a métrica devolve `null` = "não se aplica", e o
+comparador manda `null` pro fim **nos dois sentidos** — invertendo, ele voltaria a atrapalhar,
+agora no topo do "quem falta".
+
+**Validado:** 1100 unit (70 arquivos; 5 novos no NF + 4 na ordem) · os 3 novos do NF provados
+pela **sentinela** (falham sem o conserto) · typecheck 61 = baseline · build limpo.
+
+### ⚠️ Infra: o vitest com jsdom parou de subir nesta máquina
+A partir das ~16h o worker do vitest passou a estourar 60s **em qualquer spec** — inclusive
+nos que rodaram de manhã. Não é o código: com uma config mínima em ambiente `node` a suíte
+inteira roda em 48s (70/70 verdes). Se reaparecer, é esse o caminho: `environment: 'node'`,
+sem o setup do jsdom.

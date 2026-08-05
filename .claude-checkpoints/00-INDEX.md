@@ -419,6 +419,20 @@ trabalho às 15:16 — sobrescrita de arquivo, que o git não protege. Parei tud
 um vigia até ela commitar (`07b96b8`, `50d2d8a`); a versão final dela já trazia meu código de volta.
 **Regra nova: com duas sessões, uma espera ou cada uma numa branch.**
 
+**Sessão 05/08 (noite) — 🔴 nota validada do grupo não contava (`8a9c2d3`, local):** a nota do
+OTHON estava validada e a grade dizia **NF 0/1**. As vagas de nota eram montadas com a
+publicação DE CADA LINHA — mas num grupo **só o líder tem publicação**, então cada membro
+gerava a vaga coringa `*|CNPJ` e a nota do líder (`|CNPJ`) não cobria nenhuma. O comentário do
+código já dizia que a publicação do líder vale pra unidade; o código não fazia. O Alvarenga
+denunciou porque o líder tem 0 pacote (a única vaga era a coringa); nos grupos em que o líder
+entrega, o defeito **inflava** o número — era o "NF 1/2" e o "NF 2/4" que apareciam na tela.
+**Medido: 25 dos 52 grupos (80 entregadores) contavam errado**; os 27 grupos de 1 pessoa nunca
+mostraram, e foi por isso que passou desde 28/07. Junto: ordenando por nota validada, quem não
+tem nota a mandar subia junto com os validados — virou `null` ("não se aplica") e vai pro fim
+nos dois sentidos. Validado: 1100 unit · sentinela provando os 3 testes novos · typecheck 61 =
+baseline · build. ⚠️ O vitest com jsdom parou de subir nesta máquina (worker estoura 60s em
+qualquer spec); a suíte roda com config mínima em ambiente `node`.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
