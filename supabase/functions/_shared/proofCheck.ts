@@ -308,6 +308,35 @@ export function proofShouldReject(result: ProofCheckResult): boolean {
 }
 
 /**
+ * Quantas leituras SEGUIDAS de "data errada" são precisas para APAGAR o print.
+ *
+ * 🔑 Por que não basta uma: em 04/08/2026 a IA leu a MESMA foto (do GESSILEY) duas
+ * vezes com respostas diferentes — na 1ª disse 4049 pacotes no período 16-31/07
+ * (data errada), na 2ª disse 3733 no período 01-15/07 (data certa). A planilha
+ * esperava 3734, ou seja, a 2ª leitura era a correta e a 1ª foi invenção. Apagar
+ * na primeira leitura teria destruído um print BOM.
+ *
+ * Decisão do Victor: recusa na hora (o entregador já é avisado e pode reenviar),
+ * mas só apaga quando uma SEGUNDA leitura confirmar a data errada.
+ */
+export const PROOF_CONFIRMACOES_PARA_APAGAR = 2;
+
+/**
+ * Quantas leituras seguidas disseram "data errada", contando esta.
+ * Qualquer outro veredito ZERA a contagem — inclusive 'pendente', porque falha
+ * nossa (cota/rede) não é prova de nada sobre a foto.
+ */
+export function proofContarDataErrada(seguidasAntes: number, result: ProofCheckResult): number {
+  const base = Number.isFinite(seguidasAntes) && seguidasAntes > 0 ? Math.floor(seguidasAntes) : 0;
+  return result.status === 'periodo_errado' ? base + 1 : 0;
+}
+
+/** Já dá pra apagar? Só com data errada confirmada por leituras independentes. */
+export function proofDeveApagar(result: ProofCheckResult, seguidasIncluindoEsta: number): boolean {
+  return result.status === 'periodo_errado' && seguidasIncluindoEsta >= PROOF_CONFIRMACOES_PARA_APAGAR;
+}
+
+/**
  * O print está 100% conferido — é o que autoriza marcar "espelho conferido"
  * sozinho. Exige os DOIS positivos de verdade: `null` (sem base pra conferir)
  * não vale, do mesmo jeito que a conferência de NF só auto-valida com os três
@@ -351,6 +380,10 @@ export function proofRetryDelayMinutes(attempts: number): number | null {
  *   ilegivel / periodo_errado -> o problema é a foto, quem resolve é o driver
  *                                reenviando (tentar de novo daria o mesmo).
  */
-export function proofShouldRequeue(result: ProofCheckResult | null): boolean {
-  return result === null || result.status === 'pendente';
+export function proofShouldRequeue(result: ProofCheckResult | null, dataErradaSeguidas = 0): boolean {
+  if (result === null || result.status === 'pendente') return true;
+  // Data errada volta pra fila até uma SEGUNDA leitura confirmar — é o que autoriza
+  // apagar. Sem isto, uma leitura ruim sozinha decidiria o destino do print.
+  if (result.status === 'periodo_errado' && dataErradaSeguidas < PROOF_CONFIRMACOES_PARA_APAGAR) return true;
+  return false;
 }

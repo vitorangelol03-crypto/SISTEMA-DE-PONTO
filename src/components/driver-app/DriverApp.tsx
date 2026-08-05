@@ -525,26 +525,26 @@ export function DriverApp() {
       );
     };
 
-    /** Já resolvido: fica apagado e discreto, pra não competir com quem falta. */
+    /**
+     * Já resolvido: fica apagado e discreto, pra não competir com quem falta.
+     *
+     * ⚠️ Aqui existia um "trocar" que reenviava por cima. Ele SAIU em 04/08/2026,
+     * quando o Victor decidiu **um print por entregador**: o servidor passa a
+     * recusar (409) enquanto houver um print valendo. Deixar o link seria oferecer
+     * um caminho que dá erro — pior que não ter. Print RECUSADO libera a vaga
+     * sozinho, e aí o cartão volta a ser o de enviar.
+     */
     const cartaoPronto = (s: ProofSlot) => {
       const chave = `${s.driverId}|${s.platformName}`;
-      const enviando = proofUploading === chave;
       return (
         <div key={chave} className="bg-white/60 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-2">
             <CheckCircle2 size={18} className="text-green-600 flex-shrink-0" />
             <span className="text-sm text-gray-600 break-words">{s.driverName}</span>
           </div>
-          <label className="text-xs text-blue-700 underline whitespace-nowrap cursor-pointer flex-shrink-0">
-            {enviando ? 'enviando...' : 'trocar'}
-            <input
-              // ⚠️ SEM `capture`: com ele o celular abre a CAMERA direto e o entregador nao
-              // consegue escolher o print que ja esta na galeria — e print de tela nasce
-              // na galeria. Sem o atributo, o proprio celular oferece as duas opcoes.
-              type="file" accept="image/*" className="hidden" disabled={enviando}
-              onChange={(e) => { handleProofFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
-            />
-          </label>
+          <span className="text-xs text-gray-500 whitespace-nowrap flex-shrink-0">
+            enviado
+          </span>
         </div>
       );
     };

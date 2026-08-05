@@ -346,12 +346,23 @@ describe('FILA de reconferencia — "se a API cair, espera ela voltar"', () => {
     })))).toBe(false);
   });
 
-  it('problema da FOTO nao volta pra fila — quem resolve e o driver reenviando', () => {
+  it('print ILEGIVEL nao volta pra fila — quem resolve e o driver reenviando', () => {
     // Tentar ler de novo a mesma foto ruim daria o mesmo resultado e so queimaria cota.
     expect(proofShouldRequeue(runProofCheck(entrada({ reading: { legivel: false } })))).toBe(false);
-    expect(proofShouldRequeue(runProofCheck(entrada({
+  });
+
+  it('DATA ERRADA volta pra fila UMA vez — a 2a leitura e que autoriza apagar (04/08/2026)', () => {
+    // ⚠️ MUDANCA DE REGRA, decisao do Victor (opcao B). Antes data errada tambem saia
+    // da fila na hora. Motivo da mudanca, medido em producao no caso GESSILEY: a IA leu
+    // a MESMA foto duas vezes com respostas diferentes (1a: 4049 pacotes, periodo
+    // 16-31/07; 2a: 3733, periodo 01-15/07 — a planilha esperava 3734, entao a 2a era a
+    // certa). Como agora "data errada confirmada" APAGA o print, uma leitura sozinha
+    // nao pode decidir: a recusa e imediata, o apagar espera a confirmacao.
+    const dataErrada = runProofCheck(entrada({
       reading: { legivel: true, entregues: 1808, periodoInicio: '2026/07/16', periodoFim: '2026/07/31' },
-    })))).toBe(false);
+    }));
+    expect(proofShouldRequeue(dataErrada, 1)).toBe(true);   // 1a leitura: volta pra confirmar
+    expect(proofShouldRequeue(dataErrada, 2)).toBe(false);  // ja confirmada: sai (vai ser apagada)
   });
 
   it('a espera cresce e atravessa a virada do dia (quando a cota reseta)', () => {

@@ -26,6 +26,8 @@ import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
 import { extractText, getDocumentProxy } from 'npm:unpdf@1.8.0';
 import { runNfCheck, mirrorExpectedValue, type NfCheckResult } from './nfCheck.ts';
 import {
+  proofContarDataErrada,
+  proofDeveApagar,
   proofIsFullyConfirmed,
   proofRetryDelayMinutes,
   proofShouldReject,
@@ -741,9 +743,17 @@ async function pacotesEsperados(periodId: string, driverId: string, platformName
   return (pks ?? []).reduce((s, p) => s + (p.packages ?? 0), 0);
 }
 
-/** Quando o print deve ser tentado de novo. null = sai da fila (conferiu ou desistiu). */
-function proximaTentativa(check: ProofCheckResult | null, tentativasJaFeitas: number): string | null {
-  if (!proofShouldRequeue(check)) return null;
+/**
+ * Quando o print deve ser tentado de novo. null = sai da fila (conferiu ou desistiu).
+ * `dataErradaSeguidas` = leituras seguidas de "data errada" (contando a atual): com 1
+ * volta pra fila para a 2a leitura confirmar; com 2 sai da fila porque vai ser apagado.
+ */
+function proximaTentativa(
+  check: ProofCheckResult | null,
+  tentativasJaFeitas: number,
+  dataErradaSeguidas = 0,
+): string | null {
+  if (!proofShouldRequeue(check, dataErradaSeguidas)) return null;
   const minutos = proofRetryDelayMinutes(tentativasJaFeitas);
   if (minutos === null) return null; // desistiu: fica so a conferencia manual
   return new Date(Date.now() + minutos * 60_000).toISOString();
@@ -787,7 +797,8 @@ async function reconferirPrint(row: {
   id: string; company_id: string; period_id: string; driver_id: string;
   payment_id: string | null; platform_name: string; file_path: string;
   file_type: string | null; check_attempts: number;
-}): Promise<'conferido' | 'divergente' | 'na-fila' | 'desistiu' | 'erro'> {
+  check_details?: Record<string, unknown> | null;
+}): Promise<'conferido' | 'divergente' | 'na-fila' | 'desistiu' | 'erro' | 'apagado' | 'recusado'> {
   const tentativas = (row.check_attempts ?? 0) + 1;
   try {
     const { data: per } = await supabase.from('driverpay_periods')
@@ -822,11 +833,33 @@ async function reconferirPrint(row: {
     });
 
     const confirmado = proofIsFullyConfirmed(check);
-    const next = proximaTentativa(check, tentativas);
+    const recusar = proofShouldReject(check);
+    // Leituras SEGUIDAS de data errada, contando esta. Qualquer outro veredito zera.
+    const seguidasAntes = Number((row.check_details as { dataErradaSeguidas?: number } | null)?.dataErradaSeguidas ?? 0);
+    const dataErradaSeguidas = proofContarDataErrada(seguidasAntes, check);
+
+    // ══ APAGAR: so com a data errada CONFIRMADA por 2 leituras ══════════════
+    // Decisao do Victor (04/08/2026), depois do caso GESSILEY: a IA leu a mesma foto
+    // duas vezes com respostas diferentes, e a 1a estava errada. Apagar na primeira
+    // leitura destruiria print bom. Aqui a 2a leitura ja concordou.
+    if (proofDeveApagar(check, dataErradaSeguidas)) {
+      await supabase.storage.from(PROOF_BUCKET).remove([row.file_path]);
+      await supabase.from('driverpay_delivery_proofs').delete().eq('id', row.id);
+      console.log(`[fila ${row.id}] data errada confirmada 2x — print apagado`);
+      return 'apagado';
+    }
+
+    const next = proximaTentativa(check, tentativas, dataErradaSeguidas);
 
     await supabase.from('driverpay_delivery_proofs').update({
-      // O print ja foi aceito no envio: reconferencia nunca vira 'rejeitado'.
-      status: confirmado ? 'validado' : 'recebido',
+      // ⚠️ ANTES isto era `confirmado ? 'validado' : 'recebido'` fixo, com o comentario
+      // "reconferencia nunca vira rejeitado" — e por isso um print RECUSADO no envio
+      // era DESTRAVADO sozinho pela fila, virando "recebido" com a data errada. Era a
+      // causa do caso GESSILEY. Agora a reconferencia recusa igual ao envio.
+      status: recusar ? 'rejeitado' : (confirmado ? 'validado' : 'recebido'),
+      // Limpa o motivo antigo quando a nova leitura absolve: cartao "recebido"
+      // exibindo recusa de uma leitura passada e mentira na tela.
+      reject_reason: recusar ? `[automático] ${check.driverReasons.join(' ')}` : null,
       validated_at: confirmado ? new Date().toISOString() : null,
       check_status: check.status,
       check_qtd: check.qtdOk,
@@ -840,6 +873,7 @@ async function reconferirPrint(row: {
         driverReasons: check.driverReasons,
         internalReasons: check.internalReasons,
         reconferido: true,
+        dataErradaSeguidas,
       },
       checked_at: new Date().toISOString(),
       check_attempts: tentativas,
@@ -850,6 +884,9 @@ async function reconferirPrint(row: {
 
     if (confirmado) return 'conferido';
     if (check.status === 'pendente') return next ? 'na-fila' : 'desistiu';
+    // Recusado: fica visivel pro entregador reenviar. Data errada ainda volta pra
+    // fila (a 2a leitura e que decide se apaga); ilegivel para por aqui.
+    if (recusar) return 'recusado';
     return 'divergente';
   } catch (err) {
     console.error(`[fila ${row.id}] falhou:`, err);
@@ -869,7 +906,9 @@ async function reconferirPrint(row: {
  */
 async function processarFila(companyId: string | null, limite: number): Promise<Record<string, number>> {
   let q = supabase.from('driverpay_delivery_proofs')
-    .select('id, company_id, period_id, driver_id, payment_id, platform_name, file_path, file_type, check_attempts')
+    // check_details carrega `dataErradaSeguidas` — sem ele a contagem reinicia a cada
+    // rodada e o print de data errada nunca chegaria na 2a confirmacao pra ser apagado.
+    .select('id, company_id, period_id, driver_id, payment_id, platform_name, file_path, file_type, check_attempts, check_details')
     .not('next_check_at', 'is', null)
     .lte('next_check_at', new Date().toISOString());
   // null = TODAS as empresas (e o caso do agendador, que nao tem empresa).
@@ -1097,6 +1136,31 @@ async function proofUpload(req: Request, body: Body): Promise<Response> {
   const plataformas = await plataformasSolicitadas(claims.company_id, periodId);
   if (!plataformas.includes(platformName)) return json({ error: 'Nao ha espelho solicitado para esta plataforma' }, 400);
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // UM PRINT POR ENTREGADOR  (04/08/2026, decisao do Victor)
+  //
+  // Enquanto existir um print VALENDO deste entregador nesta quinzena/plataforma, o
+  // proximo e barrado — quem quiser trocar tem que excluir o anterior. Print
+  // RECUSADO **libera a vaga** (decisao dele): senao o entregador que tomou "nao"
+  // ficaria travado esperando alguem apagar na mao.
+  //
+  // Vem ANTES de subir o arquivo pra nao deixar imagem orfa no bucket.
+  // ══════════════════════════════════════════════════════════════════════════
+  const { data: jaTem } = await supabase.from('driverpay_delivery_proofs')
+    .select('id, status')
+    .eq('company_id', claims.company_id)
+    .eq('period_id', periodId)
+    .eq('driver_id', alvoId)
+    .eq('platform_name', platformName)
+    .neq('status', 'rejeitado')
+    .limit(1);
+  if ((jaTem ?? []).length > 0) {
+    return json({
+      error: 'Ja existe um espelho enviado deste entregador nesta quinzena. Para mandar outro, o anterior precisa ser excluido.',
+      alreadySent: true,
+    }, 409);
+  }
+
   const pure = b64raw.includes(',') ? b64raw.slice(b64raw.indexOf(',') + 1) : b64raw;
   let bytes: Uint8Array;
   try { bytes = Uint8Array.from(atob(pure), (c) => c.charCodeAt(0)); }
@@ -1194,6 +1258,8 @@ async function proofUpload(req: Request, body: Body): Promise<Response> {
 
     const recusar = check !== null && proofShouldReject(check);
     const confirmado = check !== null && proofIsFullyConfirmed(check);
+    // 1a leitura do print: se disser data errada, esta e a 1a confirmacao (nunca apaga aqui).
+    const dataErradaSeguidas = check !== null ? proofContarDataErrada(0, check) : 0;
 
     const { error: updErr } = await supabase.from('driverpay_delivery_proofs').update({
       status: recusar ? 'rejeitado' : (confirmado ? 'validado' : 'recebido'),
@@ -1213,12 +1279,14 @@ async function proofUpload(req: Request, body: Body): Promise<Response> {
         autoConfirmed: confirmado,
         driverReasons: check.driverReasons,
         internalReasons: check.internalReasons,
+        dataErradaSeguidas,
       } : null,
       checked_at: new Date().toISOString(),
-      // FILA: a leitura falhou por culpa nossa (cota/rede/API fora)? Volta depois,
-      // sozinho. Se conferiu — ou se o problema e a foto — sai da fila na hora.
+      // FILA: volta sozinho quando a leitura falhou por culpa nossa (cota/rede/API
+      // fora) E TAMBEM quando deu data errada — nesse caso pra uma 2a leitura
+      // confirmar antes de apagar. Conferido ou ilegivel sai da fila na hora.
       check_attempts: 1,
-      next_check_at: proximaTentativa(check, 1),
+      next_check_at: proximaTentativa(check, 1, dataErradaSeguidas),
     }).eq('id', proofId).eq('company_id', claims.company_id);
     if (updErr) console.error('[proof-check] nao gravei o resultado (segue na fila):', updErr);
 
