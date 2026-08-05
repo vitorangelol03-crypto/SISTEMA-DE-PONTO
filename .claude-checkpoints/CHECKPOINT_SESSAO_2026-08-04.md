@@ -1372,3 +1372,57 @@ Nada a fazer."
 - **E2E 64 atualizado e passando**: ao aceitar, o cartão **sai** de "Precisam de você (0)" e aparece
   em "Conferidos (1)" — asserção mais forte que a antiga, que só olhava o selo.
 - tsc **61 = baseline** · eslint · build.
+
+---
+
+## 22. Sessão 05/08 — NF recusada pelo desconto, e espelho de quem não entrega
+
+### 22.1 🔴 URGENTE, resolvido: nota recusada porque a conferência não abatia o PNR (`83cc292`)
+Entregadores travados sem conseguir mandar nota. O espelho **imprime** o total já com vale/perda
+abatido; depois dos PNR de 04/08 o PDF do Oliur passou a dizer **R$ 6.090,41** e ele emitiu a nota
+nesse valor — mas a conferência cobrava **R$ 6.119,40** (sem o desconto) e recusava.
+
+**Causa:** o candidato `somaCnpj_*` soma os pacotes do CNPJ **sem abater** vale/perda, contra a regra
+do projeto de que *"a nota segue o total impresso no espelho"*. Faltava o candidato abatido.
+Conferido com dado real: `6119,40 − 28,99 = 6090,41` (Oliur) e `7602,00 − 27,90 = 7574,10` (Fabricio)
+— exatamente as notas deles.
+
+⚠️ **Aditivo de propósito:** o candidato antigo **continua valendo**. Quem baixou o espelho ANTES do
+desconto entrar tem PDF com o valor cheio, e a nota dessa pessoa não pode passar a ser recusada.
+
+🔴 **Segunda causa, também minha:** a plataforma **"Coleta Shopee"** que criei em 04/08 ficou **sem
+CNPJ vinculado** (`nota_emitter_id` nulo) — todas as outras tinham. As coletas entravam no total do
+espelho mas **não** na soma do CNPJ: a nota do **BRUNO FERRARI** dava R$ 238,00 de diferença,
+exatamente as 238 coletas dele. Vinculada ao CNPJ da SHOPEE.
+
+**Deployado** (v26 ACTIVE, sha idêntico ao local, marcadores conferidos no ar).
+
+### 22.2 Espelho de quem NÃO ENTREGA na plataforma (`23efdf9`)
+**Decisão do Victor:** *"isso deve ficar como validado, pq senão temos depois que ficar clicando pra
+validar manualmente"*.
+
+⚠️ **A investigação desmentiu a suspeita inicial dele.** Ele achou que a lógica de 04/08 estava
+marcando espelho sozinho para quem não tem Shopee. **Não estava:** os 8 casos tinham
+`espelho_conferido_by = '2626'` — **clique humano**. Os dois caminhos automáticos assinam **`'auto'`**,
+e dos 78 que eles marcaram **nenhum** estava sem Shopee. O que ficava verde após a planilha era a
+coluna **Print** ("não entrega"), não o espelho. Daí ele decidiu que o espelho também deve contar.
+
+Implementado com a **mesma regra do selo** (`expectedProofPlatforms` + `proofDispensadoSemPacote`) —
+se divergissem, o painel diria "não entrega" e ainda cobraria o espelho. Travas mantidas: assina
+`'auto'`, **nunca** passa por cima de humano, respeita `proof_auto_confirm`, idempotente, e **quem
+nunca foi cobrado NÃO entra** (marcar espelho de quem ninguém pediu seria inventar conferência).
+
+**Dado:** 6 entregadores reais já dispensados e sem marca foram marcados agora (a regra nova só roda
+na próxima importação). Os 3 de fora **não estão em grupo** — o pedido "pra todos" não os alcança.
+
+**Validado:** 9 unit novos · **1017 unit** (64 arquivos) · typecheck 61 · eslint · build.
+
+### ⚠️ Resíduo de teste achado em produção (NÃO é meu, não mexi)
+Dois entregadores **`PW Test Driver M60 …`** vivos em `driverpay_payments` da quinzena de julho.
+Ficaram de fora da marcação. Vale limpar.
+
+### ⏳ Pendente: a trava da bonificação
+Os 3 itens aprovados por ele (respeitar a busca · confirmação com quantos e quem · aviso de valor
+diferente do configurado) estão **implementados com 17 unit passando**, mas **não commitados**: não
+consegui ver a confirmação na tela porque o botão "Aplicar B" estava desabilitado (ninguém bateu ponto
+ainda hoje). Falta a prova visual antes de commitar mudança numa tela usada todo dia.
