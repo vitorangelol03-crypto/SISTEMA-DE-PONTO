@@ -28,6 +28,21 @@ export default defineConfig({
     headers: {
       'Permissions-Policy': 'camera=*, microphone=*',
     },
+    /**
+     * WSL + projeto no disco do Windows (/mnt/c): o watcher NÃO recebe os avisos de
+     * alteração do arquivo, porque o inotify do Linux não atravessa o 9p do /mnt.
+     * Resultado: você salva, o Vite não recompila, e o navegador continua servindo o
+     * PACOTE VELHO. Em 05/08/2026 isso enganou o desenvolvimento CINCO vezes num dia —
+     * teste "falhando" por código que já estava consertado, e "consertos" que na verdade
+     * não tinham subido.
+     *
+     * `usePolling` faz o Vite PERGUNTAR pelos arquivos em vez de esperar o aviso. Custa um
+     * pouco de CPU, então só liga onde o problema existe: projeto rodando em /mnt/*.
+     * Em Linux nativo, Mac, Windows puro e no build de produção, nada muda.
+     */
+    watch: process.cwd().startsWith('/mnt/')
+      ? { usePolling: true, interval: 300 }
+      : undefined,
   },
   optimizeDeps: {
     exclude: ['lucide-react'],
