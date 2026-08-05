@@ -1277,3 +1277,62 @@ da tela e sem mostrar quem vai receber** (`applyBonusToAllPresent(..., undefined
 `excludeEmployeeIds` sempre vazio). **É o mesmo defeito do "Reset Geral" corrigido em 29/07.**
 Propus repetir a solução aprovada lá: respeitar a busca · confirmação dizendo quantos e quem ·
 aviso quando o valor digitado diferir do configurado (R$ 10 × R$ 15). **Aguarda o OK dele.**
+
+---
+
+## 21. Ordem e filtro combinados + 🔴 o prazo da nota que nunca voltava  ·  `e827677` `e4406fd`
+
+### 21.1 O pedido
+"implemente a possibilidade de usar mais de um filtro ao mesmo tempo combinados" — apontando a faixa
+**ORDENAR GRUPOS POR**. Ao conferir o código, metade já existia: os **filtros já se combinavam entre
+si** (rota + grupo + NF + espelho + plataforma são aplicados juntos). Faltava (a) empilhar critérios
+de **ordem** e (b) marcar **mais de um valor no mesmo campo**. Ele pediu as duas.
+
+### 21.2 Decisões dele
+| Pergunta | Resposta |
+|---|---|
+| Marcando 2 plataformas | **só quem tem as duas** — "se for em grupo, o grupo some" |
+| Fica salvo? | **não** — recarregou, volta ao normal |
+| Fazer agora? | sim, o outro terminal soltou o `DriverList.tsx` |
+
+⚠️ **Exceção que eu levantei antes de codar:** GRUPO não pode ser "as duas" — um entregador está em
+**um grupo só**, então exigir dois daria lista vazia sempre. Ficou "qualquer um dos marcados", com a
+regra **escrita ao lado do rótulo** (não adivinhada). Plataforma e rota seguem "as duas".
+
+### 21.3 O que mudou
+- `sort`/`groupSort` viraram **pilha**. 3 cliques de sempre: entra no fim → inverte **sem sair do
+  lugar** → sai. (Promover ao inverter reordenaria a tela inteira sem ninguém pedir.)
+- Selo **1º/2º** no botão (só com 2+; com um só é ruído) e **"Limpar ordem (N)"**.
+- `MultiSelectFilter` novo — `<select>` nativo só aceita um valor e `multiple` é intragável no
+  celular.
+- Filtro novo **"Espelho conferido (print)"**: existia como ordem, não como filtro.
+
+### 21.4 🔴 O bug que caiu no colo (e era sério)
+O E2E 60 quebrou e destravou isto: **o prazo da nota que o Victor digitava nunca voltava**. Ele punha
+23:59 do dia 31/12, gerava, reabria — e via **18:00 e a data padrão**. Duas causas, as duas minhas,
+de 04/08:
+1. **o padrão bloqueava o salvo** — a regra era "só preenche campo vazio" (proteção contra fetch
+   lento apagar o que ele digita); com o padrão preenchendo na montagem, o salvo nunca entrava.
+   Virou marca de **"ele mexeu"**, mantendo a proteção: *digitado agora > salvo > padrão*;
+2. **gravava `31/12` e lia exigindo `2026-12-31`** — nunca casava. Produção confirmou:
+   `cutoff_date = "07/08"`. Passa a gravar a data completa (coluna é texto, sem migration).
+
+**Por que importa:** esse prazo virou medida de verdade ("quem atrasou a nota"). Espelho publicado
+com prazo errado é cobrança errada.
+
+### 21.5 De quebra: 3 specs apontavam pra marcação que EU matei
+58, 60 e 61 procuravam `<summary>` no cabeçalho do grupo — que deixou de existir quando tirei o
+`<details>` pra consertar a caixinha de marcar (04/08). O 60 ainda usava os campos de corte como
+texto livre. Os três corrigidos.
+
+### 21.6 Validação
+- **30 unit novos** · **957 unit no total** (59 arquivos) · **E2E 68 novo passando** com cliques reais
+  · 58, 60, 61 verdes de novo · tsc **61 = baseline** · eslint · build.
+- 🎯 O 68 prova o "as duas" **por aritmética**: marcando SHOPEE+LOGGI o total nunca passa de cada uma
+  sozinha. Se fosse "qualquer uma", passaria. Não depende de dado fixo.
+
+### 21.7 ⚠️ Armadilhas da máquina (custaram tempo hoje)
+- `pkill -f vite` **mata o próprio shell** (o comando contém "vite"). Matar por PID.
+- `npx vitest run` inteiro **não abre os 58 workers** neste WSL ("Timeout waiting for worker"):
+  40-51 erros de infra, nenhum de teste. **Rodar em lotes de ~15** resolve.
+- O `page.goto` do primeiro spec estoura 15s se o Vite subir frio — **aquecer o servidor antes**.

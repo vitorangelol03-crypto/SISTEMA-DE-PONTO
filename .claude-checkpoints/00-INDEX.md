@@ -289,6 +289,23 @@ líder, **50 grupos / 0 sem líder**. Ele **já despublicou** os espelhos indivi
 **12 unit novos · 948 no total · tsc 61 = os MESMOS 61 do baseline** (medido com `git stash`, nenhum
 em driverpay) · build · deploy **conferido no ar** via `get_edge_function`.
 
+**Sessão 05/08 (madrugada) — ordem/filtro combinados + 🔴 prazo da nota que nunca voltava
+(`e827677`, `e4406fd`, local):** ele pediu "usar mais de um filtro ao mesmo tempo combinados". Metade
+já existia (os filtros já se somavam entre si); faltava **empilhar critérios de ORDEM** (pilha com
+selo 1º/2º e "Limpar ordem") e **marcar vários valores no mesmo campo** (componente novo
+`MultiSelectFilter`). Decisões dele: **plataforma/rota = "só quem tem as duas"**, **grupo = "qualquer
+um"** (exceção obrigatória: entregador está em UM grupo só, "todos" daria lista vazia — regra escrita
+na tela), **nada fica salvo**. Filtro novo **"Espelho conferido (print)"**, que existia como ordem
+mas não como filtro. 🔴 **O E2E 60 quebrou e destravou um bug sério:** o prazo da nota que ele
+digitava **nunca voltava** — o padrão (18:00) bloqueava o valor salvo (regra "só preenche campo
+vazio", que só funcionava enquanto os campos nasciam vazios) e a data era gravada como `31/12` e lida
+exigindo `2026-12-31`. Produção confirmou `cutoff_date="07/08"`. Consertado: prioridade *digitado
+agora > salvo > padrão* e data completa. ⚠️ **3 specs (58/60/61) apontavam pra `<summary>` que EU
+matei em 04/08** ao tirar o `<details>` — corrigidos. Validado: **30 unit novos · 957 no total · E2E
+68 novo · 58/60/61 verdes · tsc 61 = baseline · build**. ⚠️ Neste WSL o `vitest run` inteiro não abre
+os 58 workers (erro de infra, não de teste) — **rodar em lotes de ~15**; e `pkill -f vite` mata o
+próprio shell.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
