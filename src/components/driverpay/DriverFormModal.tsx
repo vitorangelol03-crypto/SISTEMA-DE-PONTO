@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import {
   Driver,
   DriverPlatform,
-  createDriver,
+  createDriverWithRates,
   updateDriver,
   upsertDriverRate,
   getDriverRates,
@@ -144,9 +144,22 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
         recebedor_pix: recebedorPix.trim() || null,
       };
 
+      // 05/08/2026 — CADASTRO É TUDO OU NADA. Antes o entregador era gravado e as taxas
+      // vinham depois; falhando as taxas, ficava um cadastro pela metade e cada nova
+      // tentativa criava outro (o Othon virou 3). Agora o serviço desfaz sozinho.
       if (mode === 'create') {
-        const created = await createDriver(companyId, userId, payload);
+        const taxas = canConfigRate
+          ? platforms.map((pl) => ({ platformId: pl.id, rate: parseRate(rates[pl.id] ?? String(pl.default_rate)) }))
+          : [];
+        const { driver: created, fantasmas } = await createDriverWithRates(companyId, userId, payload, taxas);
         driverId = created.id;
+        if (fantasmas > 0) {
+          toast(
+            `${fantasmas} plataforma(s) da tela já não existem no sistema e foram ignoradas. ` +
+            'Atualize a página (F5) para ver a lista certa.',
+            { duration: 10000, icon: '⚠️' },
+          );
+        }
       } else if (driver) {
         await updateDriver(driver.id, userId, payload);
         driverId = driver.id;
@@ -159,7 +172,8 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
       if (canConfigRate) {
         for (const pl of platforms) {
           const rate = parseRate(rates[pl.id] ?? String(pl.default_rate));
-          if (rate > 0) await upsertDriverRate(companyId, driverId, pl.id, rate, userId);
+          // No cadastro as taxas já foram gravadas junto (tudo ou nada); aqui só a edição.
+          if (rate > 0 && mode !== 'create') await upsertDriverRate(companyId, driverId, pl.id, rate, userId);
           // So marca como mudanca quando a taxa DE FATO mudou (compara em centavos,
           // robusto a float). Alimenta a reaplicacao seletiva no periodo aberto.
           const oldRate = originalRatesRef.current[pl.id] ?? pl.default_rate;

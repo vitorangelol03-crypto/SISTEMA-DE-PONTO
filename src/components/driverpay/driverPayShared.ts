@@ -1276,6 +1276,38 @@ export function buildSelectionMirrorData(
   return { groups, singles };
 }
 
+// ── CADASTRO DE ENTREGADOR: só as taxas de plataforma QUE EXISTEM (05/08/2026) ──
+// O painel ficou com uma plataforma na memória que já tinha sido apagada no banco (a tela
+// estava aberta desde antes). Ao cadastrar, o sistema tentou gravar o valor por pacote
+// dela → o banco recusou pela chave estrangeira, e a mensagem crua apareceu pro Victor:
+// "violates foreign key constraint driverpay_platform_rates_platform_id_fkey".
+//
+// Pior: o entregador já tinha sido gravado antes do erro, então cada nova tentativa criava
+// outro. O Othon virou 3 cadastros.
+//
+// Aqui a peneira: só passa taxa de plataforma que ainda existe no banco AGORA.
+
+export interface TaxaDeCadastro {
+  platformId: string;
+  rate: number;
+}
+
+export function taxasDePlataformasQueExistem(
+  taxas: readonly TaxaDeCadastro[],
+  plataformasNoBanco: readonly { id: string }[],
+): { validas: TaxaDeCadastro[]; fantasmas: string[] } {
+  const existe = new Set(plataformasNoBanco.map((p) => p.id));
+  const validas: TaxaDeCadastro[] = [];
+  const fantasmas: string[] = [];
+  for (const t of taxas) {
+    // Taxa zerada não é gravada (é o "usa o valor padrão da plataforma") — nem entra na conta.
+    if (!(t.rate > 0)) continue;
+    if (existe.has(t.platformId)) validas.push(t);
+    else fantasmas.push(t.platformId);
+  }
+  return { validas, fantasmas };
+}
+
 // ── TRIAGEM DOS PRINTS RECEBIDOS (05/08/2026) ────────────────────────────────
 // "já está conferida e validada mas não sai daqui" — o print do Meirivaldo ficava preso
 // em "Precisam de você" mesmo com o selo verde "confere ✓" ao lado.

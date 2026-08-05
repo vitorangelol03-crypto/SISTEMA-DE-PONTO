@@ -17,7 +17,7 @@ import type { ImportResolvedItem, ImportApplyResult } from '../utils/driverImpor
 import { missingImportPlatforms } from '../utils/driverImportApply';
 import { mirrorPlatformKey, sanitizeMirrorKeyForPath } from '../components/driverpay/driverPayShared';
 import type { ProofRequest, PaymentMark } from '../components/driverpay/driverPayShared';
-import { statusPorQuantidade } from '../components/driverpay/driverPayShared';
+import { statusPorQuantidade, taxasDePlataformasQueExistem } from '../components/driverpay/driverPayShared';
 import { orphanProofPaths, proofFileName, isKeptProof, type ProofSlot } from '../utils/discountProofs';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -366,6 +366,62 @@ export const createDriver = async (
   // Entra automaticamente nos períodos abertos (pacotes zerados) pra aparecer na grade já.
   await ensureDriverInOpenPeriods(companyId, driver.id, driver.name, driver.route);
   return driver;
+};
+
+/**
+ * Cadastra o entregador E as taxas dele como UMA COISA SÓ: ou grava tudo, ou não grava nada.
+ *
+ * 🔴 POR QUE EXISTE (05/08/2026): antes eram dois passos soltos — criava o entregador e
+ * DEPOIS gravava as taxas num laço. Quando o 2º passo falhava, o 1º já estava gravado: a
+ * tela mostrava erro, o Victor clicava de novo, e cada clique criava outro cadastro.
+ * O Othon Saraiva Freitas virou **3 entregadores**. (A falha em si: o painel estava com uma
+ * plataforma na memória que já não existia no banco.)
+ *
+ * DUAS PROTEÇÕES:
+ *  1) peneira as taxas contra as plataformas que existem AGORA no banco — mata a causa;
+ *  2) se ainda assim algo falhar, DESFAZ o que acabou de criar (taxas → pagamentos →
+ *     entregador), pra a tela voltar exatamente ao estado de antes do clique. Assim,
+ *     clicar de novo nunca duplica.
+ *
+ * O desfazer é seguro porque o entregador acabou de nascer: os pagamentos que o
+ * `ensureDriverInOpenPeriods` cria vêm zerados, sem pacote, desconto ou vale.
+ */
+export const createDriverWithRates = async (
+  companyId: string,
+  userId: string,
+  data: Parameters<typeof createDriver>[2],
+  taxas: readonly { platformId: string; rate: number }[],
+): Promise<{ driver: Driver; fantasmas: number }> => {
+  // 1) A verdade do banco AGORA — não o que a tela tem na memória desde ontem.
+  const plataformas = await getPlatforms(companyId, false);
+  const { validas, fantasmas } = taxasDePlataformasQueExistem(taxas, plataformas);
+
+  const driver = await createDriver(companyId, userId, data);
+  try {
+    for (const t of validas) {
+      await upsertDriverRate(companyId, driver.id, t.platformId, t.rate, userId);
+    }
+  } catch (e) {
+    // 2) Desfaz o que acabou de ser criado. Se o desfazer falhar, avisa dos DOIS problemas —
+    // esconder um cadastro órfão seria pior que a mensagem feia.
+    try {
+      await supabase.from('driverpay_platform_rates').delete().eq('driver_id', driver.id);
+      await supabase.from('driverpay_payments').delete().eq('driver_id', driver.id);
+      await supabase.from('driverpay_drivers').delete().eq('id', driver.id);
+    } catch (limpeza) {
+      console.error('Falha ao desfazer o cadastro incompleto:', limpeza);
+      throw new Error(
+        'Não consegui salvar os valores por pacote e também não consegui desfazer o cadastro. ' +
+        `O entregador "${driver.name}" pode ter ficado sem os valores — confira antes de cadastrar de novo.`,
+      );
+    }
+    console.error('Erro ao salvar as taxas do driver:', e);
+    throw new Error(
+      'Não consegui salvar os valores por pacote, então o cadastro foi desfeito (nada ficou pela metade). ' +
+      'Atualize a página (F5) e tente de novo — a lista de plataformas pode estar desatualizada.',
+    );
+  }
+  return { driver, fantasmas: fantasmas.length };
 };
 
 export const updateDriver = async (
