@@ -396,6 +396,19 @@ typecheck 61 = baseline · **E2E 70 provado pelos dois lados** (falha com as tra
 passa com o conserto). ⏳ Falta: push dos 2 commits; destravar as 12 linhas (decisão dele);
 cadastrar `recebedor_nome` de LUCAS, GESSILEY e GUSTAVO.
 
+**Sessão 05/08 (fecho) — uma coluna só pro espelho (`07b96b8`, local):** *"esses dois são a
+mesma coisa"* — "Print" e "Espelho" contavam a mesma história (o print é o meio, o espelho
+conferido é o fim) e viraram **uma coluna**: verde = conferido, venha do print que bateu, de
+não entregar Shopee (marca sozinho) ou da mão. O que era o print virou selo dentro do Espelho
+e **só quando exige ação** ("recusado" / "não bate") — sem isso sumiria o único lugar da grade
+que mostra entregador esperando resposta. 🔴 **Achado no caminho:** o botão "Aceitar este
+print" prometia no title "(marca o espelho conferido)" e **não marcava nada** — invisível
+enquanto a coluna Print mostrava 1/1 do lado; consertado junto, no nome de quem clica. Quem
+pegou foi o E2E, não a leitura. Validado: typecheck 61 = baseline · E2E 64 verde (atualizado
+pra cobrar a tela de hoje). ⚠️ `DriverList.tsx` está com as duas sessões editando: meu commit
+levou só os meus hunks e o trabalho deles voltou por cima — e o WIP deles **quebra a aba**
+(`Cannot access 'groupsOrdered' before initialization`), não commitado, não mexi.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |

@@ -1729,3 +1729,39 @@ continua 2,00) e com o conserto passa (vira 2,50, com o total recalculado).
   ou pelo perfil, mas quem decide o valor é ele.
 - LUCAS, GESSILEY e GUSTAVO seguem sem `recebedor_nome`: a nota deles sai no nome de outra
   pessoa e é recusada por nome mesmo estando certa no valor e no CNPJ.
+
+## 26. Uma coluna só pro espelho (`07b96b8`) — 05/08
+
+Pedido do Victor, com print: *"esses dois são a mesma coisa […] remove o do print e deixa
+somente do espelho; aí quando espelho já tiver sido conferido ele já fica verdinho validado,
+e se não tiver Shopee ele fica validado também"*.
+
+"Print" e "Espelho" contavam a **mesma história** — o print é o meio, o espelho conferido é o
+fim — e duas colunas pro mesmo assunto viravam dúvida ("qual eu olho?"). Ficou uma: **verde =
+conferido**, seja porque o print bateu, porque ele não entrega Shopee (marca sozinho) ou
+porque alguém marcou na mão.
+
+O que era o print virou **selo dentro do Espelho, e só quando exige ação**: "recusado" ou "não
+bate". Isso não podia sumir junto — é o único lugar da grade que mostra entregador esperando
+resposta. O selo "sem grupo" também ficou: sem ele, quem está fora do pedido viraria cadeado
+mudo. O resto (quantos, quem, quando) segue em "Espelhos recebidos". O filtro perdeu o
+"(print)" no nome.
+
+### 🔴 Achado no caminho, consertado junto
+O botão **"Aceitar este print"** tem o title *"(marca o espelho conferido)"* e **não marcava
+nada**. Ficou invisível enquanto a coluna Print mostrava 1/1 do lado; sem ela, aceitar o print
+não mexia em nada na grade — a promessa do botão virava mentira na cara de quem clica. Agora
+marca, no nome de quem clicou (é decisão humana, então não passa pelo liga/desliga da
+confirmação automática). **Foi o E2E que pegou**, não a leitura do código.
+
+**Validado:** typecheck 61 = baseline · E2E 64 verde com clique real e a foto real (atualizado:
+cobrava a coluna que saiu; agora cobra que o cabeçalho tem "Espelho" e NÃO tem "Print", e que
+aceitar o print deixa o espelho conferido) · conferido na tela.
+
+### ⚠️ Sobre a outra janela
+A `DriverList.tsx` está sendo editada pelas duas sessões. Meu commit levou **só os meus
+hunks** (reconstruídos a partir do HEAD, conferidos linha a linha) e o trabalho em andamento
+deles foi devolvido por cima. 🔴 **O código em andamento deles quebra a aba**: `contagens`
+(useMemo novo) chama `groupsOrdered()` antes da declaração — `Cannot access 'groupsOrdered'
+before initialization`, tela de erro no lugar da grade. **Não está commitado** e eu **não
+mexi** (é deles); fica o aviso.
