@@ -57,6 +57,7 @@ import {
 import { contemSemAcento } from '../../utils/buscaTexto';
 import { pagamentosParaMarcarPorDispensa } from '../../utils/espelhoDispensa';
 import { driversParaPedirPrint, plataformasQuePedemPrint } from '../../utils/proofAuto';
+import { linhasForaDaConfig, diferencaEmReais } from '../../utils/rateSync';
 import { exportDriverGeneralReportExcel, exportDriverSimpleReportExcel } from '../../utils/driverReport';
 import { generateDriverMirrorPdf, generateDriverGroupMirrorPdf } from '../../utils/driverMirrorPdf';
 import {
@@ -936,6 +937,47 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             }
           } catch (e) {
             console.error('Erro ao aplicar novas taxas ao período:', e);
+          }
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // VALOR QUE NÃO ALTERAVA DE JEITO NENHUM (05/08/2026)
+      //
+      // Relato do Victor: *"na config está 2.50, no grupo 2.5, mas está 2 reais a
+      // LOGGI e não altera"*. A reaplicação acima só mexe no que MUDOU no cadastro e
+      // só onde a rota ainda estava no valor antigo — então uma linha que ficou pra
+      // trás (veio da planilha com o padrão da plataforma e depois a config subiu)
+      // não era alcançada por caminho nenhum: nem perfil, nem grupo. Eram 12 linhas
+      // de LOGGI presas em R$ 2,00.
+      //
+      // Aqui a divergência é MOSTRADA e ele decide. Sincronizar sozinho seria pior:
+      // salvar um PIX passaria por cima dos preços combinados por rota que existem
+      // de verdade (rotas "Dom Lara", "Coleta", "LOGGI QUARTEL").
+      // ══════════════════════════════════════════════════════════════════════
+      if (company?.id && !isReadOnlyRef.current) {
+        const row = rowsRef.current.find((r) => r.driverId === driverId);
+        const fora = row ? linhasForaDaConfig(row.routes, row.ratesByPlatform) : [];
+        if (row && fora.length > 0) {
+          const dif = diferencaEmReais(fora);
+          const linhas = [
+            `O valor gravado nesta quinzena está diferente do cadastro de ${row.name}:`,
+            '',
+            ...fora.map((l) => `• ${l.platformName}${l.route ? ` (${l.route})` : ''}: ${l.packages} pacote(s) a ${formatBRL(l.de)} → ${formatBRL(l.para)}`),
+            '',
+            `Atualizar? O total a receber dele ${dif >= 0 ? 'sobe' : 'cai'} ${formatBRL(Math.abs(dif))}.`,
+            'Se algum desses valores foi combinado pra aquela rota, clique em Cancelar.',
+          ];
+          if (window.confirm(linhas.join('\n'))) {
+            try {
+              for (const l of fora) {
+                await upsertPackage(company.id, row.paymentId, l.platformName, l.route, l.packages, l.para, userId);
+              }
+              toast.success(`Valor atualizado em ${fora.length} linha(s).`);
+            } catch (e) {
+              console.error('Erro ao sincronizar o valor por pacote:', e);
+              toast.error('Não consegui atualizar o valor dos pacotes.');
+            }
           }
         }
       }

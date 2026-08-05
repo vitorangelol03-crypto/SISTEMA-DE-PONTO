@@ -1039,25 +1039,13 @@ export const applyGroupRate = async (
   const memberIds = await getGroupMembers(groupId);
   if (memberIds.length === 0) return 0;
 
-  // Taxa efetiva ANTIGA de cada membro (config individual ?? default da plataforma).
   const { data: platRow, error: platErr } = await supabase
     .from('driverpay_platforms')
-    .select('name, default_rate')
+    .select('name')
     .eq('id', platformId)
     .single();
   if (platErr) throwDbError(platErr);
   const platformName = (platRow as { name: string }).name;
-  const platformDefault = num((platRow as { default_rate: unknown }).default_rate);
-  const { data: oldRows, error: oldErr } = await supabase
-    .from('driverpay_platform_rates')
-    .select('driver_id, rate')
-    .eq('company_id', companyId)
-    .eq('platform_id', platformId)
-    .in('driver_id', memberIds);
-  if (oldErr) throwDbError(oldErr);
-  const oldByDriver = new Map<string, number>(
-    (oldRows || []).map((r: Record<string, unknown>) => [r.driver_id as string, num(r.rate)])
-  );
 
   // Grava a config nova de todos os membros + o default do grupo.
   const rows = memberIds.map((driverId) => ({ company_id: companyId, driver_id: driverId, platform_id: platformId, rate, updated_by: userId }));
@@ -1065,10 +1053,29 @@ export const applyGroupRate = async (
   if (error) throwDbError(error);
   await updateGroup(groupId, userId, { default_rate: rate });
 
-  // Reflete nos pacotes já lançados das quinzenas abertas (rotas na taxa antiga).
+  // ══════════════════════════════════════════════════════════════════════════
+  // Reflete nos pacotes já lançados das quinzenas ABERTAS.
+  //
+  // ⚠️ MUDANÇA 05/08/2026 (relato do Victor: *"na config está 2.50, no grupo 2.5, mas
+  // está 2 reais a LOGGI e não altera"*).
+  //
+  // Antes havia duas travas aqui, e as duas prendiam o caso certo:
+  //  1. `if (oldRate === rate) continue` — se a config do membro JÁ estava no valor que
+  //     você está aplicando, nem olhava os pacotes. Era exatamente o RODRIGO: config
+  //     2,50, linha 2,00, apertar "Aplicar" não fazia nada;
+  //  2. `.eq('rate_snapshot', oldRate)` — só trocava a linha que ainda estava no valor
+  //     antigo, tratando qualquer outro valor como preço combinado daquela rota. Uma
+  //     linha que ficou pra trás (veio da planilha no padrão da plataforma e depois a
+  //     config subiu) não batia com nada e ficava presa pra sempre.
+  //
+  // Regra nova, dita por ele: **grupo com valor fixo manda em todas as plataformas dos
+  // membros**. O botão "Aplicar" é uma ação explícita — quem aperta está declarando o
+  // preço do grupo. Os preços combinados por rota que existem de verdade vivem em grupos
+  // SEM valor fixo (conferido em produção: "Dom Lara", "Coleta", "LOGGI QUARTEL" — os
+  // três em grupos com `default_rate` nulo), então nada deles passa por aqui.
+  // ══════════════════════════════════════════════════════════════════════════
+  let linhasAtualizadas = 0;
   for (const driverId of memberIds) {
-    const oldRate = oldByDriver.get(driverId) ?? platformDefault;
-    if (oldRate === rate) continue;
     const { data: pays, error: payErr } = await supabase
       .from('driverpay_payments')
       .select('id, driverpay_periods!inner(status)')
@@ -1078,16 +1085,21 @@ export const applyGroupRate = async (
     if (payErr) throwDbError(payErr);
     for (const pay of pays || []) {
       const paymentId = (pay as { id: string }).id;
-      const { error: pkErr } = await supabase
+      const { data: mudadas, error: pkErr } = await supabase
         .from('driverpay_payment_packages')
         .update({ rate_snapshot: rate })
         .eq('payment_id', paymentId)
         .eq('platform_name', platformName)
-        .eq('rate_snapshot', oldRate);
+        .neq('rate_snapshot', rate) // não reescreve o que já está certo
+        .select('id');
       if (pkErr) throwDbError(pkErr);
-      await recomputePaymentTotals(paymentId);
+      linhasAtualizadas += (mudadas ?? []).length;
+      if ((mudadas ?? []).length > 0) await recomputePaymentTotals(paymentId);
     }
   }
+  console.info(
+    `[grupo] ${platformName} a ${rate}: ${rows.length} membro(s), ${linhasAtualizadas} linha(s) de pacote atualizada(s).`,
+  );
   return rows.length;
 };
 
