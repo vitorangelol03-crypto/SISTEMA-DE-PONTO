@@ -2,7 +2,7 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-08-04**.
+> Última atualização: **2026-08-05**.
 
 ## 🎯 Estado atual (1 parágrafo)
 
@@ -330,11 +330,33 @@ existem e, falhando, desfaz taxas → pagamentos → driver (a única ordem que 
 produção. Validado: 7 unit da peneira · 290 unit driverpay · **rollback provado no banco real**
 (110/316/394 → 111/318/395 → 110/316/394) · E2E 69 novo · tsc 61 = baseline · build.
 
+**Sessão 05/08 (fim de tarde) — uma nota por vaga + "Nota enviada" + print só da Shopee (`b33fe88`,
+local, edge fn NÃO deployada):** três pedidos dele. (1) 🔴 **"Está ficando com muitas notas no
+sistema"** — medido: **23 notas recusadas empilhadas** em produção, o GESSILEY sozinho com **7 numa
+quinzena**. Agora vale **uma nota por vaga (espelho × CNPJ)**, com a MESMA chave do `nfSlots`
+(inclusive a regra da nota legada de chave nula — duas contas parecidas fariam a tela dizer "livre" e
+o envio recusar). ⚠️ **Diferente do print, aqui a RECUSADA também segura o lugar** até a CD excluir
+("eles só vão poder anexar outra quando a atual for excluída"): o botão de enviar some do cartão que
+já tem nota, porque botão que só dá erro é pior que botão nenhum. Guard **antes do upload**, pra não
+sobrar PDF órfão no bucket. (2) **"Após enviado o botão muda para: Nota enviada"** — `my-mirrors`
+passou a devolver vagas/enviadas/recusadas por espelho; 🔑 **espelho de 2 CNPJs com 1 nota NÃO diz
+"enviada"** (diria que acabou), e sem os contadores (app antigo em cache) volta ao texto de sempre em
+vez de afirmar o que não sabe. (3) **"O espelho é somente da Shopee"** — "aplicativo de entregas" era
+vago e quem roda Shopee + iMile mandava print do app errado; faixa, cabeçalho, aviso, passo a passo e
+botão agora dizem o nome do app, **tirado do pedido da CD**, não de texto fixo. **Limpeza autorizada
+em prod:** as 23 linhas `rejeitada` apagadas (backup em `backups/2026-08-05-notas-rejeitadas/`; **o
+PDF continua no bucket**) — voltaram a poder enviar LUCAS AREDES, GESSILEY, Fabricio Maia e RODRIGO
+TATIBANA. 🔑 **A leitura por IA funcionou em produção**: a nota escaneada do Lucas (05/08 14:26) veio
+`lidoPorIa=true` com **valor e CNPJ certos** — a recusa que sobrou foi **nome**, porque a nota sai no
+nome de outra pessoa e ele (como o GESSILEY) **não tem recebedor cadastrado**. ⏳ **Pendente do
+Victor:** cadastrar o recebedor dos dois + **deploy da edge fn pelo CLI**. Validado: 703 unit (22
+novos) · typecheck 61 = baseline · build · E2E H do portal verde no chromium e no mobile.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-08-04.md` | **Mais recente.** Espelho do app da Shopee conferido sozinho — backend do driver (`cb460b8`, **só local, nada no ar**) · conferência pura + fila de reconferência · leitora com provedor trocável (Gemini grátis; sem chave = modo manual) · migration **escrita e não aplicada** · medições reais com a foto do Victor (teste negativo 4/4; cota 20/dia **por modelo**) · datas das quinzenas corrigidas em prod · release completo no ar (migrations + edge fn + cron + push) · **tela do líder de grupo grande revista** (`4abdad7`) com E2E 6/6 em chromium e mobile | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-04.md` | **Mais recente** (a sessão atravessou a virada do dia; as levas de 05/08 continuam neste arquivo, §§21-24). Espelho do app da Shopee conferido sozinho — backend do driver (`cb460b8`, **só local, nada no ar**) · conferência pura + fila de reconferência · leitora com provedor trocável (Gemini grátis; sem chave = modo manual) · migration **escrita e não aplicada** · medições reais com a foto do Victor (teste negativo 4/4; cota 20/dia **por modelo**) · datas das quinzenas corrigidas em prod · release completo no ar (migrations + edge fn + cron + push) · **tela do líder de grupo grande revista** (`4abdad7`) com E2E 6/6 em chromium e mobile · **05/08:** NF x desconto PNR, espelho de quem não entrega, busca nos modais, cadastro tudo-ou-nada, **nota escaneada lida pela IA** e **uma nota por vaga + print só da Shopee** (§24) | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-29.md` | Caça ao que apagava ponto real. Caça ao que apagava ponto real: causa = "Reset Geral" ignorando a busca, clicado pelo spec 04 dentro de Ponte Nova · corrigido no botão (`attendancesToReset`, puro) + modal que diz quantos/quem + teste de regressão no próprio spec 04 (`fc41a09`, **só local**) · método das sentinelas | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-28.md` | fn v11 e **v12** no ar (deploy via CLI) · conferência da NF provada com nota real 7/7 · valida o que faltava (app, ciclo inteiro com o PDF lido, grupo sem abate, relatórios reais) · **relatórios 100% ASCII + PIX só números** (`e662fca`, no ar) · **espelho POR PLATAFORMA: 2 espelhos separados no app + 1 nota por espelho** (`31ef70f`, no ar) · spec 57 consertado · achado dos funcionários `PW Test` no cleanup | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-27.md` | Filtro por plataforma nos relatórios + "Descontar vales e perdas" no espelho e nos relatórios (commit `a385b43`) · conserta furo latente da conferência de NF em espelho filtrado · **RELEASE COMPLETO: migration ✅ + push/Vercel ✅ + fn v11 ✅** (deploy via CLI — MCP é bloqueado) · visual em prod com prints · teste real da NF 7/7 · spec 57 quebrado desde 23/07 (pré-existente) | 🟢 ATIVO |

@@ -1515,3 +1515,63 @@ Conferido depois: **Ponte Nova zerada, Caratinga intacta**.
 
 **Validado:** 15 unit novos · **1052 unit** (67 arquivos) · `deno check` com os mesmos 2 erros
 pré-existentes · **deployado**.
+
+## 24. Uma nota por vaga + "Nota enviada" + print só da Shopee (`b33fe88`) — 05/08
+
+Três pedidos do Victor na mesma leva, todos no portal do entregador. **Commit local, sem push.**
+
+### 24.1 Uma nota por vaga (a queixa: "está ficando com muitas notas no sistema")
+
+Medido antes de mexer: **23 notas recusadas empilhadas** em produção — o GESSILEY sozinho com **7
+numa quinzena** (4 num CNPJ, 3 no outro), o Fabricio Maia com a mesma nota 2×, o GERSON idem.
+
+Regra dele, com todas as letras: *"eles só vão poder anexar outra quando a atual for excluída"*.
+⚠️ **Diferente do print**, onde recusado libera a vaga: aqui a nota **recusada também segura o
+lugar** até a CD excluir. A consequência é real e foi aceita — quem mandou errado espera a CD.
+
+- Vaga = **(espelho × CNPJ)**, a MESMA chave do `nfSlots`, **inclusive a regra da nota legada**
+  (`mirror_platform_key` nulo vale pra qualquer espelho). Duas contas parecidas fariam a tela
+  dizer "livre" e o envio recusar. A regra virou `notasQueOcupamVaga` no `nfCheck.ts` (puro, 8 unit).
+- O guard vem **antes do upload** — senão sobra PDF órfão no bucket a cada 409.
+- No portal, o botão de enviar **some** do cartão que já tem nota: botão que só dá erro é pior
+  que botão nenhum. A tela passa a mandar pedir a exclusão pra CD.
+
+### 24.2 "Após enviado o botão muda para: Nota enviada"
+
+`my-mirrors` agora devolve `nfVagas` / `nfEnviadas` / `nfRecusadas` por espelho, e o card mostra o
+estado (verde "Nota enviada", vermelho "Nota recusada", ou quantas faltam).
+
+🔑 **Espelho de 2 CNPJs com 1 nota NÃO diz "enviada"** — diria pro driver que acabou e a segunda
+nunca chegaria. Sem os contadores (edge fn antiga em cache no celular) volta ao texto de sempre:
+não afirma o que não sabe. Regra pura em `src/utils/notaBotao.ts` (10 unit).
+
+Junto veio a refatoração `vagasDeNotaPorPeriodo`: a mesma conta agora serve as duas telas, **em
+lote** (6 queries, independente de quantos espelhos) — uma rodada por espelho cresceria pra sempre,
+já que o driver acumula um por quinzena.
+
+### 24.3 "O espelho que eles têm que mandar é somente da Shopee"
+
+"Aplicativo de entregas" era vago — quem roda Shopee **e** iMile mandava print do app errado, e
+print errado é recusa na certa. Faixa, cabeçalho, aviso em destaque, passo a passo e botão agora
+dizem o nome do app. **O nome sai do pedido da CD (`platformName`), não de texto fixo:** se um dia
+pedirem outra plataforma, a tela acompanha em vez de mentir. E2E H no chromium + mobile, com
+clique real, sem gastar cota (é tela, não conferência).
+
+### 24.4 Limpeza autorizada em produção
+
+*"excluir esses excesso de notas, que deram errado"* → apagadas as **23 linhas `rejeitada`**
+(21 na 1ª quinzena de julho + 1 na 2ª de junho + 1 que chegou durante a operação). Nada `validada`
+ou `recebida` foi tocado. Backup em `backups/2026-08-05-notas-rejeitadas/` — e **o PDF continua no
+bucket** (a exclusão apaga só o registro, igual ao botão do painel já fazia). Voltaram a poder
+enviar: LUCAS AREDES (2 CNPJs), GESSILEY (Shopee), Fabricio Maia, RODRIGO TATIBANA.
+
+### 24.5 🔑 A leitura por IA funcionou em produção — e sobrou um problema de cadastro
+
+Nota do LUCAS de **05/08 14:26**: `lidoPorIa: true`, valor **18.636,80** batendo com
+`somaCnpj_grupo_abatido`, **CNPJ ok**. Recusada só no **nome**: a nota sai no nome de outra pessoa
+(CNPJ emitente `56194348000111`) e ele **não tem `recebedor_nome` cadastrado**. O **GESSILEY** está
+no mesmo caso (3 recusas por nome). **Decisão do Victor, pendente:** cadastrar o recebedor dos dois.
+
+**Validado:** 703 unit (48 arquivos, 22 novos) · typecheck **61 = baseline** · build limpo ·
+E2E H verde. ⚠️ **A edge fn `driver-public-api` NÃO está deployada** — o deploy é o Victor no CLI.
+Até lá o portal funciona igual a antes (sem os contadores, o botão mostra o texto de sempre).
