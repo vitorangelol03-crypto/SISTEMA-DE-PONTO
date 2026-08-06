@@ -2,9 +2,28 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-08-05**.
+> Última atualização: **2026-08-06**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 06/08 — notas atrasadas passam a se anunciar (`d7f2142`, só local):** ele pediu *"um filtro
+em notas recebidas para ver quem enviou as notas atrasadas"* — e o filtro **já existia** desde 04/08,
+aparecendo no próprio print dele (`Prazo: Todas`). 🔑 **O que faltava era a tela DIZER que tem
+atrasada:** com 75 notas e 3 atrasadas, quem não desconfia nunca abre o filtro. Agora cada opção
+mostra o número (`Todas (75)` · `Só no prazo (72)` · `Só atrasadas (3)` · `Sem prazo (0)`, as três
+somam o total) e, havendo atrasada, sai uma **faixa laranja com atalho**: *"⏰ 3 nota(s) atrasada(s)
+de 2 entregador(es) — Ver quem"*. Conta **pessoas** além de notas (a pergunta é "quem") e o filtro
+sem resultado **explica o vazio** em vez de deixar a tela em branco. Medido em produção: **3 notas,
+2 entregadores** — Willkerson 38 min e FERNANDO 4h05 (2 notas) —, e **conferido que o atraso é
+justo** (os dois receberam o espelho de manhã, prazo às 18:00; nenhum dos 48 espelhos foi publicado
+depois do próprio prazo). Validado: 5 unit novos · **1190 unit** · typecheck 61 = baseline · eslint ·
+build · **E2E `tests/71` novo com cliques reais na quinzena real (só leitura), 1 passed** + prints.
+🔴 **ACHADO NÃO CONSERTADO (decisão dele):** o espelho do grupo do **CLAUDIOMAR** está com prazo
+**05/11/2026 07:07** — aquele grupo **nunca aparece como atrasado** e o papel do driver anuncia data
+errada. Muito provavelmente resíduo do `tests/60`, que preenche o corte com `07:07` e **grava no
+aviso de corte de PRODUÇÃO** (uma linha por empresa, a mesma que a tela real usa) — ou seja, **o
+próximo espelho publicado depois da bateria herda o corte do teste**. Ver
+`CHECKPOINT_SESSAO_2026-08-06.md`.
 
 **Sessão 04/08 — espelho do app da Shopee conferido sozinho (backend do driver pronto,
 `cb460b8`, só local, NADA no ar):** a planilha da Shopee pode vir com a quantidade de pacotes
@@ -477,7 +496,8 @@ build.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-08-04.md` | **Mais recente** (a sessão atravessou a virada do dia; as levas de 05/08 continuam neste arquivo, §§21-24). Espelho do app da Shopee conferido sozinho — backend do driver (`cb460b8`, **só local, nada no ar**) · conferência pura + fila de reconferência · leitora com provedor trocável (Gemini grátis; sem chave = modo manual) · migration **escrita e não aplicada** · medições reais com a foto do Victor (teste negativo 4/4; cota 20/dia **por modelo**) · datas das quinzenas corrigidas em prod · release completo no ar (migrations + edge fn + cron + push) · **tela do líder de grupo grande revista** (`4abdad7`) com E2E 6/6 em chromium e mobile · **05/08:** NF x desconto PNR, espelho de quem não entrega, busca nos modais, cadastro tudo-ou-nada, **nota escaneada lida pela IA** e **uma nota por vaga + print só da Shopee** (§24) | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-06.md` | **Mais recente.** Notas atrasadas passam a se anunciar (`d7f2142`, local): o filtro de prazo já existia — o que faltava era o número e o atalho (`Só atrasadas (3)` + faixa "⏰ 3 nota(s) de 2 entregador(es) — Ver quem") · retrato de produção medido (75 · 72 · 3) e atraso conferido como justo · E2E `tests/71` novo com cliques reais · 🔴 espelho do CLAUDIOMAR com prazo em **novembro** (resíduo do `tests/60`, que grava o corte no banco de produção) — **não consertado**, espera decisão | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-04.md` | (a sessão atravessou a virada do dia; as levas de 05/08 continuam neste arquivo, §§21-24). Espelho do app da Shopee conferido sozinho — backend do driver (`cb460b8`, **só local, nada no ar**) · conferência pura + fila de reconferência · leitora com provedor trocável (Gemini grátis; sem chave = modo manual) · migration **escrita e não aplicada** · medições reais com a foto do Victor (teste negativo 4/4; cota 20/dia **por modelo**) · datas das quinzenas corrigidas em prod · release completo no ar (migrations + edge fn + cron + push) · **tela do líder de grupo grande revista** (`4abdad7`) com E2E 6/6 em chromium e mobile · **05/08:** NF x desconto PNR, espelho de quem não entrega, busca nos modais, cadastro tudo-ou-nada, **nota escaneada lida pela IA** e **uma nota por vaga + print só da Shopee** (§24) | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-29.md` | Caça ao que apagava ponto real. Caça ao que apagava ponto real: causa = "Reset Geral" ignorando a busca, clicado pelo spec 04 dentro de Ponte Nova · corrigido no botão (`attendancesToReset`, puro) + modal que diz quantos/quem + teste de regressão no próprio spec 04 (`fc41a09`, **só local**) · método das sentinelas | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-28.md` | fn v11 e **v12** no ar (deploy via CLI) · conferência da NF provada com nota real 7/7 · valida o que faltava (app, ciclo inteiro com o PDF lido, grupo sem abate, relatórios reais) · **relatórios 100% ASCII + PIX só números** (`e662fca`, no ar) · **espelho POR PLATAFORMA: 2 espelhos separados no app + 1 nota por espelho** (`31ef70f`, no ar) · spec 57 consertado · achado dos funcionários `PW Test` no cleanup | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-27.md` | Filtro por plataforma nos relatórios + "Descontar vales e perdas" no espelho e nos relatórios (commit `a385b43`) · conserta furo latente da conferência de NF em espelho filtrado · **RELEASE COMPLETO: migration ✅ + push/Vercel ✅ + fn v11 ✅** (deploy via CLI — MCP é bloqueado) · visual em prod com prints · teste real da NF 7/7 · spec 57 quebrado desde 23/07 (pré-existente) | 🟢 ATIVO |
