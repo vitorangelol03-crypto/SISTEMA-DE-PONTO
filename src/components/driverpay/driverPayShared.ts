@@ -714,14 +714,25 @@ export function jaPagosNoRelatorio(
   platformNames: readonly string[],
   indice: ReadonlyMap<string, PaymentMark>,
   allowed?: ReadonlySet<string>,
-): Array<{ driverId: string; name: string; platformName: string; paidAt: string; deductionsApplied?: boolean | null }> {
+): Array<{
+  driverId: string; name: string; platformName: string; paidAt: string;
+  deductionsApplied?: boolean | null; valeOuPerda: number;
+}> {
   const nomeDe = new Map(rows.map((r) => [r.driverId, r.name]));
-  const out: Array<{ driverId: string; name: string; platformName: string; paidAt: string; deductionsApplied?: boolean | null }> = [];
+  // 05/08/2026: o valor de vale/perda vem junto porque o aviso de "desconto pendente"
+  // precisa saber se existe o que descontar — sem isso ele listava 38 pessoas que não
+  // devem nada (ver src/utils/descontoPendente.ts).
+  const valeDe = new Map(rows.map((r) => [r.driverId, deductionsOf(r)]));
+  const out: Array<{
+    driverId: string; name: string; platformName: string; paidAt: string;
+    deductionsApplied?: boolean | null; valeOuPerda: number;
+  }> = [];
   for (const { driverId, platformName } of marcasDoRelatorio(rows, platformNames, allowed)) {
     const m = indice.get(`${driverId}|${platformName}`);
     if (m) {
       out.push({ driverId, name: nomeDe.get(driverId) ?? '', platformName,
-                 paidAt: m.paidAt, deductionsApplied: m.deductionsApplied });
+                 paidAt: m.paidAt, deductionsApplied: m.deductionsApplied,
+                 valeOuPerda: valeDe.get(driverId) ?? 0 });
     }
   }
   return out;
@@ -1288,6 +1299,59 @@ export function buildSelectionMirrorData(
     .filter((r) => selectedDrivers.has(r.paymentId) && !selectedGroups.has(groupOf(r)))
     .map((r) => buildDriverMirrorData(r, platforms, company, period, allowedPlatformNames, includeDeductions));
   return { groups, singles };
+}
+
+// ── O QUE A ETIQUETA "PAGO" DIZ (05/08/2026, pedido do Victor) ──────────────
+// "altera a TAG de pago e especifica quais plataformas foram pagas".
+//
+// Antes: pagamento COMPLETO mostrava só a data ("✓ pago 05/08/2026") e as plataformas
+// ficavam escondidas na dica; só o PARCIAL nomeava ("pago SHOPEE+LOGGI"). Agora os dois
+// nomeiam — a pergunta na hora de pagar é "o que já saiu pra ele?", não "que dia foi".
+//
+// ⚠️ Com 5 plataformas o texto estoura a coluna do nome, então a etiqueta mostra até 3 e
+// resume o resto ("+2"). A LISTA COMPLETA continua na dica: encurtar é problema de espaço,
+// esconder seria problema de dinheiro.
+
+const MAX_PLATAFORMAS_NA_ETIQUETA = 3;
+
+export function resumirPlataformas(nomes: readonly string[], max = MAX_PLATAFORMAS_NA_ETIQUETA): string {
+  if (nomes.length === 0) return '';
+  if (nomes.length <= max) return nomes.join('+');
+  return `${nomes.slice(0, max).join('+')}+${nomes.length - max}`;
+}
+
+/** Data curta (05/08) — o ano é o da quinzena, e a etiqueta é apertada. */
+function dataCurtaBr(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** O texto da etiqueta na linha do entregador. */
+export function rotuloDaEtiquetaDePagamento(p: PagamentoDoDriver): string {
+  const plats = resumirPlataformas(p.pagas);
+  if (p.estado === 'concluido') {
+    const data = dataCurtaBr(p.ultimoPagamento);
+    return `✓ pago ${plats}${data ? ` · ${data}` : ''}`;
+  }
+  return `pago ${plats}`;
+}
+
+/**
+ * Plataformas pagas de um GRUPO. Só dá pra nomear quando TODOS os membros foram pagos nas
+ * mesmas — se um recebeu SHOPEE e outro SHOPEE+LOGGI, dizer "SHOPEE+LOGGI" mentiria sobre o
+ * primeiro, e dizer "SHOPEE" esconderia o segundo. Aí a etiqueta fica genérica e a dica
+ * explica.
+ */
+export function plataformasPagasDoGrupo(
+  situacoes: readonly PagamentoDoDriver[],
+): { iguais: boolean; plataformas: string[] } {
+  if (situacoes.length === 0) return { iguais: false, plataformas: [] };
+  const chave = (p: PagamentoDoDriver) => [...p.pagas].sort().join('|');
+  const primeira = chave(situacoes[0]);
+  const iguais = situacoes.every((p) => chave(p) === primeira);
+  const uniao = [...new Set(situacoes.flatMap((p) => p.pagas))].sort();
+  return { iguais, plataformas: iguais ? [...situacoes[0].pagas] : uniao };
 }
 
 // ── FILTRO "PAGOS × NÃO PAGOS" (05/08/2026, pedido do Victor) ───────────────

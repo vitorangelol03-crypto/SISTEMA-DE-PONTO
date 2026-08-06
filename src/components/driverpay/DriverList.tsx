@@ -30,6 +30,8 @@ import { DriverRow } from './DriverRow';
 import {
   compararPorCriterios,
   toggleSortCriteria,
+  plataformasPagasDoGrupo,
+  resumirPlataformas,
   contagemDoCriterio,
   type SortCriterion,
   DriverRowData,
@@ -922,7 +924,16 @@ export const DriverList: React.FC<DriverListProps> = ({
                             todos ? 'bg-purple-100 text-purple-800' : 'bg-purple-50 text-purple-700 border border-purple-200'
                           }`}
                         >
-                          {todos ? '✓ pagamento concluído' : `pago ${pagos}/${sits.length}`}
+                          {/* 05/08/2026 — nomeia as plataformas quando TODOS os membros
+                              foram pagos nas mesmas; se variar entre eles, dizer um nome só
+                              mentiria sobre alguém, então fica genérico e a dica explica. */}
+                          {(() => {
+                            if (!todos) return `pago ${pagos}/${sits.length}`;
+                            const { iguais, plataformas } = plataformasPagasDoGrupo(sits);
+                            return iguais && plataformas.length > 0
+                              ? `✓ pago ${resumirPlataformas(plataformas)}`
+                              : '✓ pagamento concluído';
+                          })()}
                         </span>
                       );
                     })()}

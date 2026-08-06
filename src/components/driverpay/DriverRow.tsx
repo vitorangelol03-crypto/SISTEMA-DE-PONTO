@@ -29,6 +29,7 @@ import {
   type NfProgress,
   type ProofProgress,
   type PagamentoDoDriver,
+  rotuloDaEtiquetaDePagamento,
 } from './driverPayShared';
 
 interface DriverRowProps {
@@ -185,17 +186,17 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                   data-testid="row-selo-pago"
                   onClick={() => handlers.onDesmarcarPagamento(row.driverId, row.name)}
                   title={`${pagamento.estado === 'concluido'
-                    ? `Pagamento concluído em ${pagamento.ultimoPagamento ? new Date(pagamento.ultimoPagamento).toLocaleDateString('pt-BR') : ''} — ${pagamento.pagas.join(', ')}.`
-                    : `Pago: ${pagamento.pagas.join(', ')}. Ainda falta: ${pagamento.faltando.join(', ')}.`} Clique para DESMARCAR.`}
+                    ? `Pagamento concluído em ${pagamento.ultimoPagamento ? new Date(pagamento.ultimoPagamento).toLocaleDateString('pt-BR') : ''}.\nPlataformas pagas: ${pagamento.pagas.join(', ')}.`
+                    : `Plataformas pagas: ${pagamento.pagas.join(', ')}.\nAinda falta: ${pagamento.faltando.join(', ')}.`}\n\nClique para DESMARCAR.`}
                   className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap cursor-pointer hover:line-through hover:opacity-80 ${
                     pagamento.estado === 'concluido'
                       ? 'bg-purple-100 text-purple-800'
                       : 'bg-purple-50 text-purple-700 border border-purple-200'
                   }`}
                 >
-                  {pagamento.estado === 'concluido'
-                    ? `✓ pago ${pagamento.ultimoPagamento ? new Date(pagamento.ultimoPagamento).toLocaleDateString('pt-BR') : ''}`
-                    : `pago ${pagamento.pagas.join('+')}`}
+                  {/* 05/08/2026 — a etiqueta agora NOMEIA as plataformas também no pagamento
+                      completo (antes só mostrava a data). A dica traz a lista inteira. */}
+                  {rotuloDaEtiquetaDePagamento(pagamento)}
                 </button>
               )}
               {/* Pagou, mas o vale/perda NAO foi descontado: fica pendente e some fácil (04/08/2026) */}
