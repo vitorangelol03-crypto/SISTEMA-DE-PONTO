@@ -1898,3 +1898,28 @@ banco não soma.
 
 **Validado:** 9 unit novos travando a ordem · 1121 unit (72 arquivos) · typecheck 61 =
 baseline · build · arquivo de exemplo gerado e conferido célula a célula (mandei pra ele).
+
+---
+
+## 28. A etiqueta "pago" diz QUAIS plataformas saíram  ·  `4aec86f`
+
+Antes, o pagamento **completo** mostrava só a data (`✓ pago 05/08/2026`) e as plataformas ficavam
+escondidas na dica — só o *parcial* nomeava. Mas na hora de pagar a pergunta é **"o que já saiu pra
+ele?"**, não "que dia foi". Agora: `✓ pago eMile+LOGGI+SHOPEE · 05/08`.
+
+### 28.1 ⚠️ A armadilha do grupo
+Os membros podem ter sido pagos em plataformas **diferentes**. Nomear uma só mentiria sobre quem
+recebeu mais; nomear a união mentiria sobre quem recebeu menos. Então o grupo **só nomeia quando
+todos batem** — senão continua `✓ pagamento concluído`, com o detalhe na dica.
+Visto na tela: **4 grupos nomeados e 1 genérico**, e o genérico é exatamente o de membros com
+pagamentos diferentes.
+
+### 28.2 Espaço × informação
+Com 5 plataformas o texto estourava a coluna do nome: a etiqueta mostra **até 3** e resume o resto
+(`+2`); a **lista completa continua na dica**. Encurtar é problema de layout; esconder seria problema
+de dinheiro.
+
+### 28.3 Validação
+11 unit novos · medido na tela real (`✓ pago SHOPEE · 05/08`, `✓ pago eMile+LOGGI+SHOPEE · 05/08` nas
+linhas; `✓ pago LOGGI+SHOPEE` e `✓ pagamento concluído` nos grupos) · tsc **61 = baseline** · eslint ·
+build.

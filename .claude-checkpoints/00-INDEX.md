@@ -453,6 +453,14 @@ Chave PIX segue com CPF/CNPJ só números e e-mail/aleatória intactos; valor co
 texto. Validado: 9 unit novos travando a ordem · 1121 unit · typecheck 61 = baseline · build ·
 exemplo conferido célula a célula.
 
+**Sessão 05/08 (etiqueta) — "pago" agora nomeia as plataformas (`4aec86f`, local):** o pagamento
+completo mostrava só a data; passou a mostrar `✓ pago eMile+LOGGI+SHOPEE · 05/08`. ⚠️ **No grupo só
+nomeia quando TODOS os membros foram pagos nas mesmas plataformas** — nomear uma só mentiria sobre
+quem recebeu mais, a união mentiria sobre quem recebeu menos; quando varia fica `✓ pagamento
+concluído` e o detalhe vai pra dica (visto na tela: 4 nomeados, 1 genérico). Etiqueta mostra até 3
+plataformas e resume o resto (`+2`), com a lista completa na dica. 11 unit novos · tsc 61 = baseline
+· build.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
