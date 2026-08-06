@@ -18,12 +18,18 @@ sem resultado **explica o vazio** em vez de deixar a tela em branco. Medido em p
 justo** (os dois receberam o espelho de manhã, prazo às 18:00; nenhum dos 48 espelhos foi publicado
 depois do próprio prazo). Validado: 5 unit novos · **1190 unit** · typecheck 61 = baseline · eslint ·
 build · **E2E `tests/71` novo com cliques reais na quinzena real (só leitura), 1 passed** + prints.
-🔴 **ACHADO NÃO CONSERTADO (decisão dele):** o espelho do grupo do **CLAUDIOMAR** está com prazo
-**05/11/2026 07:07** — aquele grupo **nunca aparece como atrasado** e o papel do driver anuncia data
-errada. Muito provavelmente resíduo do `tests/60`, que preenche o corte com `07:07` e **grava no
-aviso de corte de PRODUÇÃO** (uma linha por empresa, a mesma que a tela real usa) — ou seja, **o
-próximo espelho publicado depois da bateria herda o corte do teste**. Ver
-`CHECKPOINT_SESSAO_2026-08-06.md`.
+🔴 **Achado no caminho, CORRIGIDO com OK dele (`6853a98`):** o espelho do grupo do **CLAUDIOMAR**
+estava com prazo **05/11/2026 07:07** — aquele grupo **nunca aparecia como atrasado** e o papel do
+driver anunciava data errada. Veio do `tests/60`, que digita `07:07` e **grava no aviso de corte de
+PRODUÇÃO** (uma linha por empresa, a mesma que a tela real usa). ⚠️ O spec **já tinha** snapshot +
+restore; 🔑 **a raiz era o laço**: corrida morta antes do `afterAll` (worker do WSL, Ctrl-C) deixava
+o valor de teste salvo, e a corrida seguinte **fotografava o lixo como se fosse a config do Victor**
+e o restaurava pra sempre. Agora a foto do começo **reconhece o próprio lixo** (cai pra cópia em
+`.test-state/`, fora do `test-results/` que o Playwright limpa; sem cópia, apaga a linha e a tela
+volta ao padrão são) e o corte real **volta no meio do teste**, não só no fim. Prazo do espelho
+corrigido em prod (backup em `backups/2026-08-06/`; retrato segue 72+3, **ninguém mudou de lado**).
+Provado **ao contrário**: plantei o lixo em produção, rodei o 60, ele avisou e devolveu o valor
+real. Ver `CHECKPOINT_SESSAO_2026-08-06.md`.
 
 **Sessão 04/08 — espelho do app da Shopee conferido sozinho (backend do driver pronto,
 `cb460b8`, só local, NADA no ar):** a planilha da Shopee pode vir com a quantidade de pacotes
@@ -496,7 +502,7 @@ build.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-08-06.md` | **Mais recente.** Notas atrasadas passam a se anunciar (`d7f2142`, local): o filtro de prazo já existia — o que faltava era o número e o atalho (`Só atrasadas (3)` + faixa "⏰ 3 nota(s) de 2 entregador(es) — Ver quem") · retrato de produção medido (75 · 72 · 3) e atraso conferido como justo · E2E `tests/71` novo com cliques reais · 🔴 espelho do CLAUDIOMAR com prazo em **novembro** (resíduo do `tests/60`, que grava o corte no banco de produção) — **não consertado**, espera decisão | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-06.md` | **Mais recente.** Notas atrasadas passam a se anunciar (`d7f2142`, local): o filtro de prazo já existia — o que faltava era o número e o atalho (`Só atrasadas (3)` + faixa "⏰ 3 nota(s) de 2 entregador(es) — Ver quem") · retrato de produção medido (75 · 72 · 3) e atraso conferido como justo · E2E `tests/71` novo com cliques reais · 🔴 espelho do CLAUDIOMAR com prazo em **novembro** (resíduo do `tests/60`, que grava o corte no banco de produção): prazo **corrigido** em prod com backup e o **laço fechado** no teste (`6853a98`), provado ao contrário | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-04.md` | (a sessão atravessou a virada do dia; as levas de 05/08 continuam neste arquivo, §§21-24). Espelho do app da Shopee conferido sozinho — backend do driver (`cb460b8`, **só local, nada no ar**) · conferência pura + fila de reconferência · leitora com provedor trocável (Gemini grátis; sem chave = modo manual) · migration **escrita e não aplicada** · medições reais com a foto do Victor (teste negativo 4/4; cota 20/dia **por modelo**) · datas das quinzenas corrigidas em prod · release completo no ar (migrations + edge fn + cron + push) · **tela do líder de grupo grande revista** (`4abdad7`) com E2E 6/6 em chromium e mobile · **05/08:** NF x desconto PNR, espelho de quem não entrega, busca nos modais, cadastro tudo-ou-nada, **nota escaneada lida pela IA** e **uma nota por vaga + print só da Shopee** (§24) | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-29.md` | Caça ao que apagava ponto real. Caça ao que apagava ponto real: causa = "Reset Geral" ignorando a busca, clicado pelo spec 04 dentro de Ponte Nova · corrigido no botão (`attendancesToReset`, puro) + modal que diz quantos/quem + teste de regressão no próprio spec 04 (`fc41a09`, **só local**) · método das sentinelas | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-28.md` | fn v11 e **v12** no ar (deploy via CLI) · conferência da NF provada com nota real 7/7 · valida o que faltava (app, ciclo inteiro com o PDF lido, grupo sem abate, relatórios reais) · **relatórios 100% ASCII + PIX só números** (`e662fca`, no ar) · **espelho POR PLATAFORMA: 2 espelhos separados no app + 1 nota por espelho** (`31ef70f`, no ar) · spec 57 consertado · achado dos funcionários `PW Test` no cleanup | 🟢 ATIVO |

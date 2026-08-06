@@ -55,29 +55,49 @@ volta pra "Todas". Prints em `test-results/notas-atrasadas/`.
 
 ---
 
-## 2. 🔴 Achado paralelo: um espelho com prazo em NOVEMBRO (não consertado — decisão do Victor)
+## 2. 🔴 Um espelho com prazo em NOVEMBRO — corrigido, e o vazamento fechado  ·  `6853a98`
 
 **Espelho do grupo do CLAUDIOMAR BORGES SILVA** (1ª quinzena de julho, publicado 05/08 10:23) está
 com `nf_due_at` = **05/11/2026 07:07**. Efeito: **aquele grupo nunca vai aparecer como atrasado**
 (o prazo só vence em novembro), e o papel que os drivers receberam anuncia uma data errada.
 Os outros 47 espelhos da quinzena estão com 05/08 18:00 (44) e 07/08 18:00 (3).
 
-**De onde muito provavelmente veio:** `tests/60` preenche o corte com **07:07** e `2026-11-11` e
-**salva no banco de produção** — o aviso de corte é **uma linha por empresa**, a mesma que a tela
-real carrega. O horário `07:07` do espelho é exatamente o do teste. A data ficou `05/11` (teste usa
-`11/11`), o que bate com alguém corrigindo **só o dia** num campo que já estava em novembro.
+**De onde veio:** `tests/60` preenche o corte com **07:07** e `2026-11-11` e **grava no banco de
+produção** — o aviso de corte é **uma linha por empresa**, a mesma que a tela real carrega. O
+horário `07:07` do espelho é exatamente o do teste. A data ficou `05/11` (o teste usa `11/11`), o
+que bate com alguém corrigindo **só o dia** num campo que já estava em novembro.
 
-⚠️ **Isso repete:** depois de rodar a bateria, o **próximo espelho publicado herda o corte que o
-teste deixou salvo**, a menos que alguém repare e troque na mão.
+⚠️ **CORREÇÃO do que eu tinha escrito antes:** o spec **já tinha** snapshot no `beforeAll` e restore
+no `afterAll` — não era "teste sem cuidado nenhum". 🔑 **A raiz é outra e pior:** o restore só
+protege quando a corrida **chega** no `afterAll`. Corrida morta no meio (worker do WSL, Ctrl-C,
+timeout — isso já aconteceu várias vezes neste projeto) deixa o valor de teste salvo; e aí a corrida
+**seguinte fotografava esse lixo como se fosse a config do Victor** e o restaurava fielmente pra
+sempre. Era esse **laço** que perpetuava.
 
-**Duas decisões pendentes do Victor:** (a) corrigir o prazo daquele espelho no banco; (b) blindar o
-`tests/60` pra não escrever no aviso de corte de produção (salvar e restaurar o valor real no fim).
+### 2.1 O que foi feito (com OK dele)
+**(a) Prazo corrigido em produção:** a linha `be6957b7…` foi de `2026-11-05 07:07` para
+**05/08/2026 18:00**, igual aos outros 44. Backup + rollback em `backups/2026-08-06/`. Conferido
+depois: o retrato segue **72 no prazo + 3 atrasadas** — a nota do Claudiomar chegou 05/08 10:59,
+então **ninguém mudou de lado**; só fechou o buraco na medição. O PDF já entregue **não** foi
+regerado (decisão dele: corrigir sem republicar).
+
+**(b) Vazamento fechado, três travas** (`6853a98`):
+1. a foto do começo **reconhece os pares que o próprio arquivo digita** e não os canoniza — cai pra
+   última foto boa guardada em `.test-state/` (fora do `test-results/`, que o Playwright limpa a
+   cada corrida) ou apaga a linha, e a tela volta ao **padrão são** (2 dias, 18:00);
+2. a última foto **boa** fica em disco, pra sobreviver a uma morte no meio;
+3. o corte real volta **assim que a última prova que precisa dele passa** — a janela de exposição
+   cai do teste inteiro (~2 min) pra alguns segundos. O `afterAll` continua como rede.
+
+**Validado:** spec 60 **1/1** com o banco conferido antes e depois (18:00 · 2026-08-05 · 14/08
+intactos) **E provado ao contrário** — plantei o lixo (`07:07` · `2026-11-11`) em produção, rodei, o
+teste avisou *"corte de TESTE encontrado salvo em produção"* e **devolveu o valor real**.
 
 ---
 
 ## 3. Estado do repo ao fim da sessão
 
-- `d7f2142` **commitado local** (nada de push).
+- `d7f2142` (filtro) + `6853a98` (blindagem do teste) + checkpoints — **tudo local, nada de push**.
 - Continua **não commitada** a **trava da bonificação** (`src/utils/bonusScope.ts`,
   `tests/unit/bonusScope.spec.ts`, `AttendanceTab.tsx`) — 17 unit passando, esperando a prova
   visual (o botão "Aplicar B" precisa de alguém com ponto no dia). Não toquei nela.
