@@ -230,6 +230,44 @@ export function nfAtrasoLabel(uploadedAt: string, dueAt: string | null | undefin
   return restoH ? `${dias} dia(s) e ${restoH} h depois` : `${dias} dia(s) depois`;
 }
 
+/** Uma nota, no mínimo que a contagem por prazo precisa saber. */
+export interface NotaComPrazo {
+  prazo: NfPrazoStatus;
+  driverId: string;
+}
+
+/** Quantas notas em cada situação de prazo — os números que a tela mostra no filtro. */
+export interface ContagemPrazo {
+  no_prazo: number;
+  atrasada: number;
+  sem_prazo: number;
+  total: number;
+  /** Quantas PESSOAS diferentes atrasaram (uma pessoa pode ter mandado 2 notas atrasadas). */
+  atrasadosDrivers: number;
+}
+
+/**
+ * Conta as notas por situação de prazo (06/08/2026, pedido do Victor: *"filtro em notas
+ * recebidas para ver quem enviou as notas atrasadas"*).
+ *
+ * 🔑 O filtro já existia — o que faltava era ele DIZER que tem atrasada. Com 75 notas na
+ * tela e 3 atrasadas, quem não desconfia nunca abre o filtro. O número aparece antes de
+ * procurar; a lista de nomes continua sendo o filtro.
+ *
+ * Conta PESSOAS além de notas porque a pergunta dele é "quem", não "quantas": 3 notas
+ * atrasadas podem ser de 1 entregador só.
+ */
+export function contaPorPrazo(itens: readonly NotaComPrazo[]): ContagemPrazo {
+  const atrasados = new Set<string>();
+  const c: ContagemPrazo = { no_prazo: 0, atrasada: 0, sem_prazo: 0, total: itens.length, atrasadosDrivers: 0 };
+  for (const i of itens) {
+    c[i.prazo] += 1;
+    if (i.prazo === 'atrasada') atrasados.add(i.driverId);
+  }
+  c.atrasadosDrivers = atrasados.size;
+  return c;
+}
+
 /**
  * Prazo padrão sugerido ao publicar um espelho: **2 dias depois, às 18:00** (decisão do
  * Victor, 04/08 — "sim, com padrão, muda se quiser"). Devolve no formato que os campos

@@ -13,6 +13,8 @@ import {
   nfPrazoStatus,
   nfAtrasoLabel,
   prazoNfPadrao,
+  contaPorPrazo,
+  type NotaComPrazo,
 } from '../../src/components/driverpay/driverPayShared';
 
 const PRAZO = '2026-08-03T18:00:00-03:00';
@@ -66,6 +68,46 @@ describe('nfAtrasoLabel — explica o selo sem precisar abrir nada', () => {
   it('quem está no prazo (ou sem prazo) não ganha rótulo nenhum', () => {
     expect(nfAtrasoLabel('2026-08-03T10:00:00-03:00', PRAZO)).toBeNull();
     expect(nfAtrasoLabel('2027-01-01T00:00:00-03:00', null)).toBeNull();
+  });
+});
+
+/**
+ * 06/08/2026 — "vamos colocar um filtro em notas recebidas para ver quem enviou as notas
+ * atrasadas". O filtro existia desde 04/08; o que faltava era a tela DIZER que tem atrasada
+ * (75 notas, 3 atrasadas: sem o número ninguém abre o filtro pra descobrir).
+ */
+describe('contaPorPrazo — o número que faz o filtro ser encontrado', () => {
+  const n = (prazo: NotaComPrazo['prazo'], driverId: string): NotaComPrazo => ({ prazo, driverId });
+
+  it('conta cada situação separada', () => {
+    const c = contaPorPrazo([n('no_prazo', 'a'), n('atrasada', 'b'), n('sem_prazo', 'c'), n('no_prazo', 'd')]);
+    expect(c).toEqual({ no_prazo: 2, atrasada: 1, sem_prazo: 1, total: 4, atrasadosDrivers: 1 });
+  });
+
+  it('🎯 2 notas atrasadas do MESMO entregador = 1 pessoa (a pergunta é "quem")', () => {
+    const c = contaPorPrazo([n('atrasada', 'fernando'), n('atrasada', 'fernando')]);
+    expect(c.atrasada).toBe(2);
+    expect(c.atrasadosDrivers).toBe(1);
+  });
+
+  it('sem nota nenhuma: tudo zero (a faixa laranja não aparece)', () => {
+    expect(contaPorPrazo([])).toEqual({ no_prazo: 0, atrasada: 0, sem_prazo: 0, total: 0, atrasadosDrivers: 0 });
+  });
+
+  it('as três situações sempre somam o total (o que está na tela)', () => {
+    const c = contaPorPrazo([n('no_prazo', 'a'), n('atrasada', 'b'), n('sem_prazo', 'c')]);
+    expect(c.no_prazo + c.atrasada + c.sem_prazo).toBe(c.total);
+  });
+
+  it('retrato da produção em 06/08/2026: 75 notas, 72 no prazo, 3 atrasadas de 2 pessoas', () => {
+    const itens: NotaComPrazo[] = [
+      ...Array.from({ length: 72 }, (_, i) => n('no_prazo', `d${i}`)),
+      n('atrasada', 'willkerson'),
+      n('atrasada', 'fernando'),
+      n('atrasada', 'fernando'),
+    ];
+    const c = contaPorPrazo(itens);
+    expect(c).toEqual({ no_prazo: 72, atrasada: 3, sem_prazo: 0, total: 75, atrasadosDrivers: 2 });
   });
 });
 

@@ -22,7 +22,10 @@ import {
   type NotaFiscalFileRow,
   mirrorPdfUrl,
 } from '../../services/driverPay';
-import { notaFiscalFileName, nfPrazoStatus, nfAtrasoLabel, valorEsperadoDaNota, formatBRL } from './driverPayShared';
+import {
+  notaFiscalFileName, nfPrazoStatus, nfAtrasoLabel, contaPorPrazo,
+  valorEsperadoDaNota, formatBRL,
+} from './driverPayShared';
 import { ModalShell } from './ModalShell';
 
 interface NotasRecebidasModalProps {
@@ -222,7 +225,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
     }
   };
 
-  const { groups, allNamed } = useMemo(() => {
+  const { groups, allNamed, contagem } = useMemo(() => {
     const seen: Record<string, number> = {};
     const named = (files ?? []).map((r) => {
       const key = `${r.driverId}|${r.emitterId}`;
@@ -241,7 +244,6 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       atraso: nfAtrasoLabel(it.row.uploadedAt, prazoDe(it.row)),
     }));
     let visible = soAtencao ? comPrazo.filter((it) => it.row.status !== 'validada') : comPrazo;
-    if (filtroPrazo) visible = visible.filter((it) => it.prazo === filtroPrazo);
     // Procura no nome do entregador E no do recebedor — quem manda a nota nem sempre é
     // quem entrega, e ele busca pelos dois.
     const q = busca.trim();
@@ -250,6 +252,11 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
         (it) => contemSemAcento(it.row.driverName, q) || contemSemAcento(it.row.recebedorNome, q),
       );
     }
+    // Os números do filtro contam o que está À VISTA (já com "só atenção" e busca), mas
+    // ANTES do filtro de prazo — senão "Só atrasadas (3)" viraria "(3)" de si mesmo e o
+    // resto zeraria. Assim os quatro números sempre somam o que está na tela.
+    const contagem = contaPorPrazo(visible.map((it) => ({ prazo: it.prazo, driverId: it.row.driverId })));
+    if (filtroPrazo) visible = visible.filter((it) => it.prazo === filtroPrazo);
     const byDriver = new Map<string, { driverName: string; recebedorNome: string | null; items: typeof comPrazo }>();
     for (const it of visible) {
       const g = byDriver.get(it.row.driverId);
@@ -260,6 +267,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       groups: [...byDriver.values()].sort((a, b) => a.driverName.localeCompare(b.driverName, 'pt-BR')),
       // O .zip "Baixar todas" baixa TODAS mesmo com o filtro ligado.
       allNamed: named,
+      contagem,
     };
   }, [files, periodLabel, soAtencao, filtroPrazo, publicacoes, busca]);
 
@@ -432,13 +440,36 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
                 data-testid="nf-filtro-prazo"
                 className="border border-gray-300 rounded-md px-2 py-1 text-xs"
               >
-                <option value="">Todas</option>
-                <option value="no_prazo">Só no prazo</option>
-                <option value="atrasada">Só atrasadas</option>
-                <option value="sem_prazo">Sem prazo definido</option>
+                <option value="">Todas ({contagem.total})</option>
+                <option value="no_prazo">Só no prazo ({contagem.no_prazo})</option>
+                <option value="atrasada">Só atrasadas ({contagem.atrasada})</option>
+                <option value="sem_prazo">Sem prazo definido ({contagem.sem_prazo})</option>
               </select>
             </label>
           </div>
+
+          {/* Atalho das atrasadas (06/08/2026, pedido do Victor: "ver quem enviou as notas
+              atrasadas"). O filtro já existia; o que faltava era ELE avisar. Com 75 notas na
+              tela e 3 atrasadas, quem não desconfia nunca abre o filtro. Só aparece quando
+              existe atrasada — sem atrasada nenhuma, nada de faixa laranja à toa. */}
+          {contagem.atrasada > 0 && filtroPrazo !== 'atrasada' && (
+            <button
+              type="button"
+              onClick={() => setFiltroPrazo('atrasada')}
+              data-testid="nf-atalho-atrasadas"
+              className="w-full text-left rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-xs text-orange-900 hover:bg-orange-100"
+            >
+              ⏰ <b>{contagem.atrasada} nota(s) atrasada(s)</b> de{' '}
+              <b>{contagem.atrasadosDrivers} entregador(es)</b> — chegaram depois do prazo do espelho.{' '}
+              <span className="underline">Ver quem</span>
+            </button>
+          )}
+          {filtroPrazo === 'atrasada' && groups.length > 0 && (
+            <p className="text-xs text-orange-900 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+              Mostrando <b>só as {contagem.atrasada} atrasada(s)</b>, de {contagem.atrasadosDrivers}{' '}
+              entregador(es). Volte o filtro para "Todas" pra ver o resto.
+            </p>
+          )}
           {/* Liga/desliga da auto-validação. DESLIGADA, a conferência continua
               inteira (selos + recusa de nota errada) — só a nota certa espera você. */}
           <div className={`rounded-lg border px-3 py-2.5 flex items-start justify-between gap-3 flex-wrap ${
@@ -469,9 +500,23 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
             </button>
           </div>
 
-          {soAtencao && groups.length === 0 && (
+          {soAtencao && !filtroPrazo && groups.length === 0 && (
             <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
               ✓ Nenhuma nota precisando de atenção — todas validadas.
+            </p>
+          )}
+          {/* Lista vazia POR CAUSA do filtro de prazo: sem isto a tela ficava em branco e
+              parecia que as notas sumiram. Diz qual é o caso, com o filtro ligado à vista. */}
+          {filtroPrazo && groups.length === 0 && (
+            <p
+              data-testid="nf-filtro-vazio"
+              className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2"
+            >
+              {filtroPrazo === 'atrasada'
+                ? '✓ Ninguém enviou nota atrasada aqui — todas chegaram dentro do prazo do espelho.'
+                : filtroPrazo === 'sem_prazo'
+                  ? 'Nenhuma nota sem prazo: todo espelho desta lista foi publicado com prazo.'
+                  : 'Nenhuma nota no prazo nesta lista.'}
             </p>
           )}
           {groups.map((g) => (
