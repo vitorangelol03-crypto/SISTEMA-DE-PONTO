@@ -24,6 +24,8 @@ dist-ssr
 *.sw?
 .env
 test-results/
+# Ultima foto BOA do aviso de corte (tests/60) — sobrevive a corrida morta no meio.
+.test-state/
 playwright-report/
 coverage/
 teste-espelho.pdf

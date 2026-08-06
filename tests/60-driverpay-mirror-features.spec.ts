@@ -1,3 +1,5 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { test, expect, Page, Locator } from '@playwright/test';
 import { MASTER_2626, loginAs, goToTab } from './helpers';
 import { TEST_EMPLOYEE_NAME_PREFIX, getClient } from './cleanup';
@@ -22,6 +24,64 @@ const PLAT = `${TEST_EMPLOYEE_NAME_PREFIX}PlatM60 ${RUN}`;
 const PERIOD = `${TEST_EMPLOYEE_NAME_PREFIX}QuinzM60 ${RUN}`;
 const GROUP = `${TEST_EMPLOYEE_NAME_PREFIX}GrupoM60 ${RUN}`;
 const AVISO = 'Conferir os pacotes antes de assinar o recibo';
+
+/**
+ * 🔴 06/08/2026 — O CORTE DE TESTE VAZOU PRA PRODUÇÃO.
+ *
+ * Achado: o espelho do grupo do CLAUDIOMAR (quinzena real) ficou com prazo de nota em
+ * **05/11/2026 07:07** — e `07:07` é exatamente o que este teste digita. Efeito real:
+ * aquele grupo nunca aparecia no filtro de "notas atrasadas" e o PDF do driver anunciava
+ * uma data errada.
+ *
+ * O snapshot/restore abaixo já existia — mas ele só protege quando a corrida CHEGA no
+ * `afterAll`. Corrida morta no meio (worker do WSL, Ctrl-C, timeout) deixa o valor de
+ * teste salvo; e aí a corrida SEGUINTE fotografava esse lixo como se fosse a config do
+ * Victor e o "restaurava" fielmente pra sempre. Era esse laço que perpetuava.
+ *
+ * Três travas agora:
+ *   1) a foto do começo RECONHECE o próprio lixo (os pares que este arquivo digita) e não
+ *      o canoniza — usa a última foto boa guardada em disco, ou apaga a linha (a tela volta
+ *      ao padrão "daqui a 2 dias, 18:00", que é uma data sã);
+ *   2) a última foto BOA fica guardada fora de `test-results/` (que o Playwright limpa a
+ *      cada corrida), pra sobreviver a uma morte no meio;
+ *   3) o corte real volta assim que a última prova que precisa dele passa — a janela de
+ *      exposição cai do teste inteiro pra alguns segundos.
+ */
+const CORTES_DE_TESTE: ReadonlyArray<{ time: string; date: string }> = [
+  { time: '23:59', date: '2026-12-31' },
+  { time: '07:07', date: '2026-11-11' },
+];
+const CUTOFF_BACKUP_FILE = '.test-state/cutoff-notice.json';
+
+const pareceCorteDeTeste = (n: Record<string, unknown> | null): boolean =>
+  !!n && CORTES_DE_TESTE.some((c) => c.time === n.cutoff_time && c.date === n.cutoff_date);
+
+const lerBackupEmDisco = (): Record<string, unknown> | null => {
+  try {
+    return JSON.parse(readFileSync(CUTOFF_BACKUP_FILE, 'utf8')) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+const guardarBackupEmDisco = (n: Record<string, unknown>): void => {
+  try {
+    mkdirSync(dirname(CUTOFF_BACKUP_FILE), { recursive: true });
+    writeFileSync(CUTOFF_BACKUP_FILE, JSON.stringify(n, null, 2));
+  } catch {
+    // guardar é rede de segurança: não pode derrubar o teste se o disco reclamar.
+  }
+};
+
+/** Devolve o corte real (ou apaga a linha, se não houver foto boa nenhuma). */
+async function restaurarCorteReal(): Promise<void> {
+  const s = getClient();
+  if (cutoffSnapshot) {
+    await s.from('driverpay_mirror_notice').upsert([cutoffSnapshot], { onConflict: 'company_id' });
+  } else {
+    await s.from('driverpay_mirror_notice').delete().eq('company_id', caratingaId);
+  }
+}
 
 const modal = (page: Page): Locator => page.locator(MODAL).last();
 const driverRow = (page: Page): Locator => page.locator('tbody tr').filter({ hasText: DRIVER }).first();
@@ -56,18 +116,24 @@ test.describe('Pagamentos Driver — 4 features dos espelhos', () => {
     if (!ct) throw new Error('Caratinga não encontrada');
     caratingaId = (ct as { id: string }).id;
     const { data } = await s.from('driverpay_mirror_notice').select('*').eq('company_id', caratingaId).maybeSingle();
-    cutoffSnapshot = (data as Record<string, unknown> | null) ?? null;
-  });
+    const noBanco = (data as Record<string, unknown> | null) ?? null;
 
-  test.afterAll(async () => {
-    // Restaura a config de corte real do Victor (ou remove a de teste).
-    const s = getClient();
-    if (cutoffSnapshot) {
-      await s.from('driverpay_mirror_notice').upsert([cutoffSnapshot], { onConflict: 'company_id' });
+    if (pareceCorteDeTeste(noBanco)) {
+      // Sobra de uma corrida que morreu antes de restaurar. NÃO vira "a config do Victor":
+      // cai pra última foto boa em disco; sem ela, o afterAll apaga a linha e a tela volta
+      // ao padrão são (daqui a 2 dias, 18:00) em vez de guardar novembro pra sempre.
+      cutoffSnapshot = lerBackupEmDisco();
+      console.warn(
+        '[60] corte de TESTE encontrado salvo em produção (corrida anterior morreu antes de restaurar). ' +
+        (cutoffSnapshot ? 'Restaurando pela cópia em disco.' : 'Sem cópia em disco — a linha será apagada no fim.'),
+      );
     } else {
-      await s.from('driverpay_mirror_notice').delete().eq('company_id', caratingaId);
+      cutoffSnapshot = noBanco;
+      if (noBanco) guardarBackupEmDisco(noBanco);
     }
   });
+
+  test.afterAll(restaurarCorteReal);
 
   test.beforeEach(async ({ page }) => {
     page.on('dialog', (d) => d.accept());
@@ -256,6 +322,12 @@ test.describe('Pagamentos Driver — 4 features dos espelhos', () => {
     expect(pdf2.suggestedFilename()).toMatch(/^espelho-grupo-.*\.pdf$/);
     await pdf2.saveAs(`test-results/prints-espelhos/espelho-grupo-${RUN}.pdf`);
     await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 15_000 });
+
+    // Acabaram as provas que precisam do corte de teste — e este foi o último clique que
+    // GRAVA o corte (o "Gerar PDF" acima). O corte real volta AGORA, não daqui a alguns
+    // minutos no afterAll: se o teste morrer da linha de baixo pra frente, produção já
+    // está limpa. O afterAll continua como rede de segurança.
+    await restaurarCorteReal();
 
     // ── REGRA DE PRESENÇA: espelho de um driver SEM a plataforma → sem aviso ──
     await page.getByRole('button', { name: /^Lista$/ }).click();
