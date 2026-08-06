@@ -1923,3 +1923,34 @@ de dinheiro.
 11 unit novos · medido na tela real (`✓ pago SHOPEE · 05/08`, `✓ pago eMile+LOGGI+SHOPEE · 05/08` nas
 linhas; `✓ pago LOGGI+SHOPEE` e `✓ pagamento concluído` nos grupos) · tsc **61 = baseline** · eslint ·
 build.
+
+## 29. 🔴 O aviso de desconto pendente que assustava à toa (`325979c`) — 05/08
+
+Pergunta dele olhando a janela do relatório: *"se eu aplicar os descontos agora, vão ser
+aplicados somente os descontos faltantes?"*.
+
+**Resposta: NÃO.** A caixa "Descontar vales e perdas" é **tudo-ou-nada** — desconta de todo
+mundo que estiver no relatório. E o aviso vermelho estava empurrando pra marcar.
+
+### Medido no banco, na hora da pergunta
+| | |
+|---|---|
+| Aviso listava | **55** entregadores "pagos SEM o desconto" |
+| Desses, sem vale nem perda | **38** — não havia nada a descontar |
+| Os outros | **17**, que **já abateram na outra plataforma** (sem abate na eMile, com abate na Shopee/LOGGI) — ex.: WINGLISON R$ 211,06, GUSTAVO R$ 196,77 |
+| **Pendente de verdade** | **ZERO** |
+| Se marcasse a caixa | cobraria de novo de **25 pessoas: R$ 1.885,14 em dobro** |
+
+### O conserto
+O aviso agora só lista quem **tem valor a descontar** E foi pago **sem abater** E **não
+abateu em nenhum outro lugar** (outra plataforma ou espelho publicado). Mostra o valor de
+cada um e o total, do maior pro menor — sem número ninguém decide olhando.
+
+Regra pura em `src/utils/descontoPendente.ts`, com o retrato de produção (38 sem vale + 17 já
+abatidos = 0 pendentes) fixado em teste.
+
+⚠️ **Dois terminais no mesmo arquivo de novo:** a mudança que isto precisava no
+`jaPagosNoRelatorio` (levar o vale/perda junto) entrou no commit `4aec86f`, **da outra
+janela**. Está commitada e correta — fica o registro pra quem ler o histórico.
+
+**Validado:** 10 unit novos · 1142 unit (74 arquivos) · typecheck 61 = baseline · build.

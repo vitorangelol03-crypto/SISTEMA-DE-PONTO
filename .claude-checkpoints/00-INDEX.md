@@ -461,6 +461,18 @@ concluído` e o detalhe vai pra dica (visto na tela: 4 nomeados, 1 genérico). E
 plataformas e resume o resto (`+2`), com a lista completa na dica. 11 unit novos · tsc 61 = baseline
 · build.
 
+**Sessão 05/08 (noite) — 🔴 o aviso de desconto pendente assustava à toa (`325979c`, local):**
+ele perguntou *"se eu aplicar os descontos agora, vão ser aplicados somente os faltantes?"* —
+e **não**: a caixa é tudo-ou-nada. Medido no banco na hora: dos **55** listados como "pagos
+sem desconto", **38 não tinham vale nem perda** e os **17** restantes **já tinham abatido na
+outra plataforma**; pendente de verdade era **ZERO**, e marcar a caixa cobraria de novo de 25
+pessoas — **R$ 1.885,14 em dobro**. Agora o aviso só mostra quem tem valor E foi pago sem
+abater E não abateu em lugar nenhum, com o valor de cada um e o total. Regra pura em
+`src/utils/descontoPendente.ts` com o retrato de produção fixado em teste. ⚠️ A mudança
+que isso exigia no `jaPagosNoRelatorio` entrou no commit `4aec86f` da OUTRA janela (dois
+terminais no mesmo arquivo). Validado: 10 unit novos · 1142 unit · typecheck 61 = baseline ·
+build.
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
