@@ -113,7 +113,12 @@ describe('jaPagosNoRelatorio — o aviso antes de baixar', () => {
 
   it('🎯 acusa quem ja foi pago NAQUELA plataforma, com a data', () => {
     const r = jaPagosNoRelatorio([row('caio', { SHOPEE: 100 })], PLATS, idx);
-    expect(r).toEqual([{ driverId: 'caio', name: 'CAIO', platformName: 'SHOPEE', paidAt: '2026-08-04T12:00:00Z' }]);
+    // 05/08/2026: passou a vir `valeOuPerda` junto — o aviso de desconto pendente precisa
+    // saber se existe o que descontar (antes ele listava quem nao devia nada).
+    expect(r).toEqual([{
+      driverId: 'caio', name: 'CAIO', platformName: 'SHOPEE',
+      paidAt: '2026-08-04T12:00:00Z', deductionsApplied: undefined, valeOuPerda: 0,
+    }]);
   });
 
   it('🎯 NAO acusa nas OUTRAS plataformas — elas ainda podem ser pagas', () => {

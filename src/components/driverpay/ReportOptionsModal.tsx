@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Download, Loader2, FileSpreadsheet } from 'lucide-react';
 import { ModalShell } from './ModalShell';
 import { formatBRL, type AlreadyDeductedDriver, type ChecksFilterOptions, type ChecksFilterResult } from './driverPayShared';
+import { descontosPendentes, totalPendente } from '../../utils/descontoPendente';
 
 /** Escolhas do operador na hora de baixar o relatório. */
 export interface ReportOptions {
@@ -39,7 +40,13 @@ interface ReportOptionsModalProps {
    * conforme o operador mexe nas plataformas e tira gente da lista.
    */
   jaPagos: (allowed: string[] | null, excluirDriverIds: readonly string[]) =>
-    Array<{ driverId: string; name: string; platformName: string; paidAt: string; deductionsApplied?: boolean | null }>;
+    Array<{
+      driverId: string; name: string; platformName: string; paidAt: string;
+      deductionsApplied?: boolean | null;
+      /** Vales + perdas dele na quinzena (05/08/2026) — o aviso de pendência precisa saber
+          se existe o que descontar; sem isso ele listava quem não deve nada. */
+      valeOuPerda?: number;
+    }>;
   onClose: () => void;
   onConfirm: (opts: ReportOptions) => Promise<void>;
 }
@@ -102,25 +109,53 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
   );
   /** Um driver pode aparecer em 2 plataformas; a lista de remoção é por PESSOA. */
   const pessoasEmConflito = useMemo(() => {
-    const m = new Map<string, { name: string; plats: string[]; paidAt: string; semDesconto: boolean }>();
+    const m = new Map<string, {
+      name: string; plats: string[]; paidAt: string;
+      semDesconto: boolean; comDesconto: boolean; valeOuPerda: number;
+    }>();
     for (const c of conflitos) {
       const e = m.get(c.driverId);
-      // `false` explícito = o pagamento saiu SEM descontar vale/perda; o desconto ficou pendente.
+      // `false` explícito = aquele pagamento saiu SEM descontar vale/perda.
       const semDesconto = c.deductionsApplied === false;
+      const comDesconto = c.deductionsApplied === true;
       if (e) {
         e.plats.push(c.platformName);
         if (c.paidAt > e.paidAt) e.paidAt = c.paidAt;
         e.semDesconto = e.semDesconto || semDesconto;
+        e.comDesconto = e.comDesconto || comDesconto;
       } else {
-        m.set(c.driverId, { name: c.name, plats: [c.platformName], paidAt: c.paidAt, semDesconto });
+        m.set(c.driverId, {
+          name: c.name, plats: [c.platformName], paidAt: c.paidAt,
+          semDesconto, comDesconto, valeOuPerda: c.valeOuPerda ?? 0,
+        });
       }
     }
     return [...m].map(([driverId, v]) => ({ driverId, ...v }));
   }, [conflitos]);
-  /** Quem já foi pago mas com o vale/perda AINDA por descontar (04/08/2026). */
-  const semDescontoAnterior = useMemo(
-    () => pessoasEmConflito.filter((p) => p.semDesconto),
-    [pessoasEmConflito],
+
+  /**
+   * Quem ficou devendo o desconto DE VERDADE (05/08/2026).
+   *
+   * 🔴 Antes este aviso listava todo mundo que tivesse sido pago sem abater, e assustava à
+   * toa: medido no dia em que o Victor perguntou, dos 55 listados **38 não tinham vale nem
+   * perda nenhum** e os outros 17 **já tinham abatido na outra plataforma** — pendente de
+   * verdade era ZERO. E o aviso empurrava pra marcar "Descontar vales e perdas", o que
+   * cobraria de novo de 25 pessoas (R$ 1.885,14 em dobro).
+   */
+  const abatidosEmEspelho = useMemo(
+    () => new Set(alreadyDeducted.map((d) => d.driverId)),
+    [alreadyDeducted],
+  );
+  const pendentes = useMemo(
+    () => descontosPendentes(pessoasEmConflito.map((p) => ({
+      driverId: p.driverId,
+      name: p.name,
+      pagoSemDesconto: p.semDesconto,
+      pagoComDesconto: p.comDesconto,
+      valeOuPerda: p.valeOuPerda,
+      abatidoEmEspelho: abatidosEmEspelho.has(p.driverId),
+    }))),
+    [pessoasEmConflito, abatidosEmEspelho],
   );
 
   const toggle = (name: string) =>
@@ -426,20 +461,21 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
         {/* ── Desconto que ficou pendente de um pagamento anterior (04/08/2026) ──
              Quando o pagamento sai PARCIAL, o vale/perda não é abatido e fica pra sair no
              pagamento das demais plataformas. Se ninguém lembrar, o desconto some. */}
-        {semDescontoAnterior.length > 0 && (
+        {pendentes.length > 0 && (
           <div
             className="border-2 border-red-300 bg-red-50 rounded-md p-3 text-sm text-red-900"
             data-testid="report-desconto-pendente"
           >
             <p className="font-bold">
-              ⚠ {semDescontoAnterior.length} entregador(es) já foram pagos SEM o desconto de vale/perda
+              ⚠ {pendentes.length} entregador(es) com desconto de vale/perda PENDENTE
+              {' '}({formatBRL(totalPendente(pendentes))})
             </p>
             <p className="text-xs mt-1">
-              {semDescontoAnterior.map((p) => p.name).join(', ')}.
+              {pendentes.map((p) => `${p.name} (${formatBRL(p.valor)})`).join(', ')}.
             </p>
             <p className="text-xs mt-1">
-              O desconto deles ficou <b>pendente</b> — era pra sair no pagamento das demais
-              plataformas.{' '}
+              Foram pagos sem abater e o desconto <b>não saiu em nenhuma outra plataforma</b> —
+              era pra sair no pagamento das demais.{' '}
               {includeDeductions
                 ? <b>Como "Descontar vales e perdas" está MARCADO, ele sai agora.</b>
                 : <b className="text-red-800">Com a caixa abaixo DESMARCADA, ele continua pendente.</b>}
