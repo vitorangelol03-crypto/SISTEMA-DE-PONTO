@@ -42,8 +42,15 @@ Colunas nascem NULL, então publicação antiga segue pela fórmula e **nenhuma 
 recusada**. Corrigido no caminho: `onPublish` sem o livro nas dependências podia publicar com
 **saldo velho**. Validado: 1.215 unit / 79 arquivos · **E2E 72 com 3ª rodada que publica de
 verdade** · regressão 54/58/61/63 4/4 · banco idêntico e sem sobra.
-🔴 **PRA IR PRO AR, NESTA ORDEM: migration (✅ feita) → edge fn `driver-public-api` → Vercel.**
-Inverter abre uma janela em que o painel publica com abate parcial e a fn velha recusa nota certa.
+✅ **RELEASE COMPLETO NO AR, na ordem obrigatória** (inverter abriria janela de recusa indevida):
+migrations → **edge fn v31 ACTIVE** (CLI, na mão dele) → **PUSH autorizado** (`c853bc1..f1a1137`,
+4 commits) → **Vercel conferida POR CONTEÚDO**: o pacote `DriverPayTab-DHhouo_4.js` do site tem os
+7 marcadores, e *"Descontar só de quem ainda não foi descontado"* aparece **2×** (relatório +
+espelho); em `c853bc1` esses textos existiam em **0 arquivos**. 🔑 **Seguro mesmo tudo no ar de
+uma vez:** os 78 espelhos já publicados têm `printed_total` vazio, então para **100% dos dados de
+hoje** a fn segue a fórmula de sempre — o caminho novo só vale pra espelho publicado daqui pra
+frente. ⚠️ Spec 64 deu **flaky 2× no mesmo clique de montagem** e passou limpo na 3ª de primeira;
+causa **não provada**, fica como flake de carga.
 ⏸️ **Passe visual parado num ponto limpo** (ele escolheu **Inter**,
 fotos "antes" tiradas, **zero código mudado**): o app **não carrega fonte nenhuma**, tem 71 textos
 em 10–11px e ~200 emojis em 47 arquivos desenhados pelo sistema operacional.

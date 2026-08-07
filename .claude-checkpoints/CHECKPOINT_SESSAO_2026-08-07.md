@@ -134,24 +134,35 @@ dois modos**, que independe de como as plataformas estão configuradas.
 
 ---
 
-## 3. ⏳ O QUE FALTA PRA ISSO IR PRO AR — e a ordem importa
+## 3. RELEASE COMPLETO — **NO AR**, na ordem certa
 
-**migration → edge function → Vercel.** As duas migrations **já estão em produção**. Falta:
+**migration → edge function → Vercel**, exatamente nessa ordem (inverter abriria uma janela em
+que o painel publica com abate parcial e a fn velha **recusa nota certa**).
 
-1. **Deploy da edge fn `driver-public-api`** (na mão dele — o MCP é barrado pelo classificador);
-2. **push + Vercel**.
+1. ✅ **Migrations** `20260807120000` + `20260807140000` aplicadas, com OK dele.
+2. ✅ **Edge fn `driver-public-api` v31 ACTIVE** — deploy pelo CLI, na mão dele.
+3. ✅ **PUSH autorizado** (*"pode fazer o push"*): `c853bc1..f1a1137`, 4 commits, 16 arquivos,
+   +1799/−96. Conferido que **nenhum arquivo da outra janela** entrou.
+4. ✅ **Vercel conferida POR CONTEÚDO** (não por fé): o pacote `DriverPayTab-DHhouo_4.js` que o
+   site serve tem os 7 marcadores da mudança — e *"Descontar só de quem ainda não foi
+   descontado"* aparece **2×**, que é o esperado (relatório + espelho). Provado que são novos:
+   em `c853bc1` esses textos existiam em **0 arquivos**.
 
-🔴 **Não inverter:** a fn nova é compatível com o passado (coluna vazia = fórmula antiga), mas o
-**site novo com a fn VELHA** abriria uma janela em que o painel publica espelho com desconto
-parcial e a fn **recusa a nota certa** do entregador.
+🔑 **Por que este release é seguro mesmo com tudo no ar de uma vez:** os 78 espelhos já
+publicados têm `printed_total` **vazio**, e a fn só usa o número guardado quando ele existe —
+então, para **100% dos dados de hoje**, ela segue a fórmula de sempre. O caminho novo só passa a
+valer para espelhos publicados daqui pra frente.
+
+⚠️ **Spec 64 deu flaky 2× seguidas** no mesmo clique de montagem ("Novo driver"), e passou
+**limpo na 3ª rodada, de primeira**. As duas falhas vieram com a máquina carregada (logo após
+build + outra bateria), e o próprio spec tem comentário sobre o Vite subir frio no WSL. **Não
+consegui provar a causa** — fica registrado como flake de carga, não como resolvido.
 
 ---
 
 ## 4. Estado do repo ao fim da sessão
 
-- `d1b1e75` + `d2df543` — **só local, nada no ar**. O código novo depende das duas migrations,
-  que **já estão em produção**; o site segue rodando a versão anterior, que ignora as colunas e
-  a tabela novas (elas são aditivas).
+- `d1b1e75` · `6957bcb` · `d2df543` · `f1a1137` — **NO AR** (push + Vercel + edge fn v31).
 - ⏸️ **Passe visual (fonte/ícones/emojis "HD")** parado num ponto limpo: ele escolheu **Inter**,
   eu tirei as **fotos "antes"** das 12 abas em 2 larguras, e **nenhuma linha de código foi
   mudada**. Diagnóstico já feito: o app **não carrega fonte nenhuma** (cada aparelho desenha com
