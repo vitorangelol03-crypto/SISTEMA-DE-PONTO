@@ -85,24 +85,73 @@ qualquer jeito), agora exige o **rádio marcado**.
 
 ---
 
-## 2. ⏳ Leva B — o espelho (decidida por ele, NÃO começada)
+## 2. Leva B — o espelho segue o saldo, e a nota lê o total impresso · `d2df543` · **só local**
 
-O espelho tem a **mesma caixinha** e precisa da mesma regra, senão o papel que o entregador
-recebe não bate com o que foi pago.
+O espelho é o **papel que o entregador recebe**. Se ele abatesse de novo o vale que já saiu no
+pagamento anterior, o papel diria um número e o pagamento diria outro — e a conferência
+automática da nota usa justamente o valor do espelho.
 
-🔴 **E ela obriga mexer na edge function:** `mirrorExpectedValue` (em
-`supabase/functions/driver-public-api/nfCheck.ts`) **recalcula** o valor esperado da nota por
-fórmula (`bruto − vales`). Com desconto **parcial** ela passaria a **RECUSAR nota certa**.
-A raiz é recalcular em vez de ler: o plano é **gravar o total impresso na publicação** e a fn
-passar a ler esse número — o que também impede o espelho e a conferência de discordarem no futuro.
-⚠️ Deploy de edge fn é **na mão dele** (o MCP é barrado pelo classificador).
+### 2.1 🔴 O achado que obrigou mexer na edge function
+`mirrorExpectedValue` (`driver-public-api/nfCheck.ts`) **não lia** o valor do espelho: ela
+**RECALCULAVA** por fórmula (`bruto − vales`). Funcionava enquanto o abate era tudo-ou-nada.
+Com o desconto por **saldo**, o espelho pode abater só um **pedaço** — e a fórmula continuaria
+esperando o abate cheio, **RECUSANDO a nota certa** do entregador, com o motivo errado.
+
+🔑 **A raiz não era a fórmula estar errada: era ela RECALCULAR em vez de LER.** Agora a
+publicação guarda o **total impresso** e a fn usa esse número. Espelho e conferência deixam de
+poder discordar — hoje e em qualquer regra futura. Provado em unit: sem guardar, a fn esperaria
+**R$ 110** enquanto o PDF do driver diz **R$ 172**.
+
+### 2.2 O que mudou
+- espelho com as **mesmas 3 opções** do relatório, padrão *"só de quem ainda não foi
+  descontado"*, decidindo **por pessoa** (no grupo, membro a membro);
+- colunas `printed_total` e `deducted_amount` em `driverpay_mirror_publications`, as duas
+  **NULL por padrão** — publicação antiga (e o PDF que o driver já baixou) segue conferida pela
+  fórmula de sempre, então **nenhuma nota já aceita passa a ser recusada**;
+- publicar **lança** no livro-caixa · **despublicar ESTORNA** · republicar **SUBSTITUI** o
+  lançamento em vez de somar em cima;
+- 🔑 a identidade do lançamento de espelho é `plataformas#driver da publicação` — só
+  `platform_key` se repete (todo mundo tem espelho "SHOPEE") e apagaria o lançamento dos outros.
+
+**Corrigido no caminho:** `onPublish` não tinha o livro-caixa nas dependências e podia publicar
+com **saldo velho**, descontando de novo de quem já pagou. (Achado pelo eslint, não por sorte.)
+
+### 2.3 Migration — **APLICADA** com OK dele (*"pode aplicar"*)
+`20260807140000`. Depois de aplicar: 78 espelhos, **todos com as colunas novas vazias** — que é
+o desenho. Nada mais mudou no banco.
+
+### 2.4 Validação
+typecheck **61 = baseline** · eslint 0 · build · **1.215 unit / 79 arquivos, 0 falha** (sem
+worker morto desta vez) · **E2E `tests/72` estendido com uma 3ª rodada** que abre o espelho,
+prova que ele **não abate de novo** e **PUBLICA de verdade** · regressão **54/58/61/63 4/4** ·
+banco conferido depois: idêntico e **sem sobra** (316/50/173/78/3 · livro 25 linhas · 0 driver
+`PW Test`).
+
+⚠️ **Tropeço meu:** o E2E do espelho falhou na primeira vez porque afirmei o valor **absoluto**
+do "TOTAL A RECEBER", esquecendo que plataforma com **"valor separado"** (regra de 20/07) sai
+**fora** dele — o spec 63 já avisava isso num comentário. A prova virou a **diferença entre os
+dois modos**, que independe de como as plataformas estão configuradas.
 
 ---
 
-## 3. Estado do repo ao fim desta leva
+## 3. ⏳ O QUE FALTA PRA ISSO IR PRO AR — e a ordem importa
 
-- `d1b1e75` — **só local, nada no ar**. O código novo depende da migration, que **já está em
-  produção**; o site em produção segue rodando a versão anterior, que ignora a tabela nova.
+**migration → edge function → Vercel.** As duas migrations **já estão em produção**. Falta:
+
+1. **Deploy da edge fn `driver-public-api`** (na mão dele — o MCP é barrado pelo classificador);
+2. **push + Vercel**.
+
+🔴 **Não inverter:** a fn nova é compatível com o passado (coluna vazia = fórmula antiga), mas o
+**site novo com a fn VELHA** abriria uma janela em que o painel publica espelho com desconto
+parcial e a fn **recusa a nota certa** do entregador.
+
+---
+
+## 4. Estado do repo ao fim da sessão
+
+- `d1b1e75` + `d2df543` — **só local, nada no ar**. O código novo depende das duas migrations,
+  que **já estão em produção**; o site segue rodando a versão anterior, que ignora as colunas e
+  a tabela novas (elas são aditivas).
 - ⏸️ **Passe visual (fonte/ícones/emojis "HD")** parado num ponto limpo: ele escolheu **Inter**,
   eu tirei as **fotos "antes"** das 12 abas em 2 larguras, e **nenhuma linha de código foi
   mudada**. Diagnóstico já feito: o app **não carrega fonte nenhuma** (cada aparelho desenha com

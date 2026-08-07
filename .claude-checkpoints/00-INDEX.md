@@ -30,10 +30,21 @@ o banco confirmou exatamente isso, e tudo que já existia ficou idêntico). Vali
 **1.211 unit** · typecheck 61 = baseline · eslint · build · **E2E `tests/72` NOVO com cliques
 reais lendo os `.xlsx`**, provando o ciclo inteiro (na 2ª rodada quem entrega as duas sai com o
 valor **CHEIO**, quem só entrega a 2ª **toma o desconto**, e a **sobra** do terceiro sai agora) ·
-regressão 52/58/63 4/4 · banco sem sobra depois do teste. 🔴 **Leva B obriga mexer na edge fn:**
-`mirrorExpectedValue` **recalcula** o valor esperado da nota (`bruto − vales`) e com desconto
-**parcial** passaria a **recusar nota certa** — o plano é gravar o **total impresso** na publicação
-e a fn **ler** esse número. ⏸️ **Passe visual parado num ponto limpo** (ele escolheu **Inter**,
+regressão 52/58/63 4/4 · banco sem sobra depois do teste. **Leva B (`d2df543`, migration
+`20260807140000` também APLICADA):** o espelho ganhou as mesmas 3 opções e decide por pessoa
+(no grupo, membro a membro). 🔴 **E ela desenterrou um furo sério:** `mirrorExpectedValue`
+**não lia** o valor do espelho — **recalculava** por fórmula (`bruto − vales`), o que com abate
+**parcial** passaria a **RECUSAR a nota certa** do entregador (provado em unit: a fn esperaria
+**R$ 110** enquanto o PDF diz **R$ 172**). 🔑 A raiz era **recalcular em vez de ler**: a publicação
+passa a guardar o **`printed_total`** e a fn lê esse número — espelho e conferência não têm mais
+como discordar. Publicar **lança** no livro, **despublicar ESTORNA**, republicar **substitui**.
+Colunas nascem NULL, então publicação antiga segue pela fórmula e **nenhuma nota já aceita é
+recusada**. Corrigido no caminho: `onPublish` sem o livro nas dependências podia publicar com
+**saldo velho**. Validado: 1.215 unit / 79 arquivos · **E2E 72 com 3ª rodada que publica de
+verdade** · regressão 54/58/61/63 4/4 · banco idêntico e sem sobra.
+🔴 **PRA IR PRO AR, NESTA ORDEM: migration (✅ feita) → edge fn `driver-public-api` → Vercel.**
+Inverter abre uma janela em que o painel publica com abate parcial e a fn velha recusa nota certa.
+⏸️ **Passe visual parado num ponto limpo** (ele escolheu **Inter**,
 fotos "antes" tiradas, **zero código mudado**): o app **não carrega fonte nenhuma**, tem 71 textos
 em 10–11px e ~200 emojis em 47 arquivos desenhados pelo sistema operacional.
 Ver `CHECKPOINT_SESSAO_2026-08-07.md`.
