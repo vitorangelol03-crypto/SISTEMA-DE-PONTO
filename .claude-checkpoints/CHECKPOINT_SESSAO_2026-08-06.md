@@ -169,9 +169,27 @@ mede as abas (`w-0 overflow-hidden`) — ela já não causava estouro, mas ficav
 18/18 + 2 skip)** e **45 (6/6)** depois da última mexida · conferido no navegador que a medição
 das abas continua certa (notebook = 8 na barra + "Mais"; celular = 12 rolando, sem menu).
 
-### 4.5 ⏳ Falta desta empreitada
-1. **Passe fino por aba** nas outras 9 — elas já ganharam o esqueleto novo, os campos
-   padronizados e passaram na varredura de estouro, mas não a revisão de layout uma a uma.
+### 4.5 Leva 3 — passe fino, aba a aba  ·  `7caa4c5`
+
+Conferidas uma a uma no notebook: **Relatórios**, **Pagamento C6** e **Usuários** já estavam
+certas depois do esqueleto novo (cartões alinhados, filtros fechando, campos padronizados) —
+não mexi no que não precisava.
+
+**Erros** tinha dois defeitos reais, corrigidos:
+- as **3 sub-abas acendiam em três cores diferentes** (laranja, azul, roxo) pro mesmo tipo de
+  botão, e nenhuma batia com a cor da área. Agora todas acendem no **vermelho de "Erros"**,
+  igual à pílula da aba lá em cima — a pessoa aprende o lugar pela cor;
+- os cartões de ranking ficavam um **retângulo branco mudo** quando não havia dado no período:
+  não dava pra saber se estava carregando, se quebrou ou se estava vazio. Agora dizem o que
+  houve **e o que fazer** ("mude as datas acima").
+
+ℹ️ O eslint aponta 1 erro nesse arquivo (linha 30, `errorRecords` não usado): **pré-existente**,
+provado dando `stash` na minha mudança e lintando o original. Não mexi — fora do pedido.
+
+### 4.6 ⏳ Falta desta empreitada
+1. **Passe fino** ainda não feito em: **Funcionários, Configurações, Gerenciamento, Ajuda e
+   Admin** (as outras já foram conferidas ou corrigidas). Todas já têm o esqueleto novo, os
+   campos padronizados e passaram na varredura de estouro.
 2. `AttendanceTab.tsx` **não foi tocado de propósito**: tem trabalho não commitado da outra
    janela (a trava da bonificação) e mexer ali misturaria as duas coisas.
 3. **Nada disso foi pro ar** — muda a cara de todas as telas, espera o OK dele.

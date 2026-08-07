@@ -522,8 +522,7 @@ tamanho da **maior opção**; corrigido com `min-w-0` **+ trava global `max-widt
 nativos · cartão do celular com 5 plataformas deixava a última **órfã** e cortava o nome →
 ímpar ocupa a linha inteira · ⚠️ **correção**: os cartões do celular **já existiam**, listei como
 pendente por engano · **varredura automática de estouro: 12 abas × 3 larguras = 0px em todas as
-36 telas** (medido, não olhado) · E2E financeiro 18/18 e 45 6/6 depois. ⏳ Falta: passe fino nas
-outras 9 abas e `AttendanceTab` (intocado de propósito — tem trabalho não commitado da outra
+36 telas** (medido, não olhado) · E2E financeiro 18/18 e 45 6/6 depois. **Leva 3 (`7caa4c5`):** conferidas uma a uma — Relatórios, C6 e Usuários já estavam certas depois do esqueleto (não mexi no que não precisava); **Erros** tinha as 3 sub-abas acendendo em **três cores diferentes** (laranja/azul/roxo) e nenhuma batia com a cor da área → todas no vermelho de "Erros", e os cartões de ranking, que ficavam **brancos e mudos** sem dado, agora dizem o que houve e o que fazer. ⏳ Falta: passe fino em Funcionários, Configurações, Gerenciamento, Ajuda e Admin, e `AttendanceTab` (intocado de propósito — tem trabalho não commitado da outra
 janela). **Nada foi pro ar** — espera o OK dele.
 
 ## 📚 Mapa dos checkpoints
