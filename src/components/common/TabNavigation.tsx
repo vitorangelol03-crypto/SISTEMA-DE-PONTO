@@ -188,10 +188,13 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
     <div className="bg-white shadow-sm mb-4 sm:mb-6 sticky top-14 sm:top-16 z-30 border-b border-gray-200">
       {/* Linha invisível só pra medir a largura de cada aba (aria-hidden: não
           entra na árvore de acessibilidade, então não duplica seletor nenhum). */}
+      {/* `w-0 overflow-hidden`: a linha de medição não pode, em hipótese nenhuma, esticar a
+          página pro lado. Medir continua funcionando — `offsetWidth` do filho não muda por
+          causa do corte do pai. */}
       <div
         ref={medidorRef}
         aria-hidden="true"
-        className="pointer-events-none absolute -z-10 flex gap-2 opacity-0"
+        className="pointer-events-none absolute -z-10 flex gap-2 opacity-0 w-0 h-0 overflow-hidden"
         style={{ visibility: 'hidden' }}
       >
         {tabs.map((tab) => {
