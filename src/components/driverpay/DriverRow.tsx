@@ -271,7 +271,21 @@ export const DriverRow: React.FC<DriverRowProps> = ({
               </span>
               <div className="inline-flex flex-col items-center gap-0.5">
                 {multi ? (
-                  <span className="min-w-[40px] text-right font-bold text-gray-700 tabular-nums" title="soma das rotas">
+                  /*
+                    06/08/2026 — a linha de multi-rota mostrava NÚMERO SOLTO enquanto as
+                    outras mostravam caixinha: as colunas das plataformas não alinhavam de
+                    uma linha pra outra (dá pra ver no print do Victor). Agora ela usa a
+                    MESMA caixa, com a MESMA borda colorida da plataforma — só tracejada e
+                    com fundo cinza, que é como a tela diz "aqui não se digita, some as
+                    rotas". Nada mudou no valor nem em quem pode editar.
+                  */
+                  <span
+                    title="soma das rotas — para editar, abra as rotas"
+                    style={plColor ? { borderColor: plColor } : undefined}
+                    className={`w-12 inline-block text-right rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums bg-gray-50 text-gray-600 ${
+                      plColor ? 'border-2 border-dashed' : 'border border-dashed border-gray-300'
+                    }`}
+                  >
                     {formatInt(sum)}
                   </span>
                 ) : (

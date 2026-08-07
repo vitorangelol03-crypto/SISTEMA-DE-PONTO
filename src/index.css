@@ -1,3 +1,129 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Identidade visual (06/08/2026, pedido do Victor: "cores vivas e bonito",
+ * "didático e fácil de entender e de usar", "adaptado para qualquer tela").
+ *
+ * Regra de ouro desta camada: ela muda APARÊNCIA, nunca comportamento. Nenhum
+ * texto de botão, nenhum data-testid e nenhuma função dependem daqui.
+ *
+ * A ideia didática: CADA ÁREA TEM UMA COR. Quem usa aprende pela cor antes de
+ * ler ("verde é dinheiro, vermelho é erro, índigo é entregador"), e a ação
+ * principal de cada tela é sempre a mais colorida da tela.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+@layer base {
+  :root {
+    /* Marca — o índigo/violeta que manda no app */
+    --ui-brand: #4f46e5;
+    --ui-brand-strong: #4338ca;
+    --ui-brand-soft: #eef2ff;
+    --ui-accent: #7c3aed;
+
+    /* Significado (didático: a cor diz o que é, antes de ler) */
+    --ui-ok: #059669;        /* dinheiro a receber, confirmado */
+    --ui-warn: #d97706;      /* atenção, pendente */
+    --ui-danger: #e11d48;    /* erro, desconto, apagar */
+    --ui-info: #0284c7;      /* informação, neutro-ativo */
+
+    /* Superfícies */
+    --ui-bg: #f4f6fb;
+    --ui-card: #ffffff;
+    --ui-line: #e5e7eb;
+
+    --ui-radius: 0.875rem;
+    --ui-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px -12px rgb(15 23 42 / 0.18);
+    --ui-shadow-lift: 0 2px 4px rgb(15 23 42 / 0.06), 0 16px 32px -16px rgb(79 70 229 / 0.35);
+  }
+
+  body {
+    background-color: var(--ui-bg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+    Campos nativos (select/date/time) apareciam CINZA DO NAVEGADOR ao lado dos
+    campos brancos do app — na mesma tela pareciam de sistemas diferentes.
+    Aqui eles passam a ter a mesma altura, borda e canto dos outros. Só pintura:
+    o <select> continua sendo <select>, com o mesmo value e os mesmos eventos.
+  */
+  select:not([multiple]):not([size]),
+  input[type='date'],
+  input[type='time'],
+  input[type='datetime-local'] {
+    background-color: #fff;
+    border: 1px solid var(--ui-line);
+    border-radius: 0.625rem;
+    min-height: 2.625rem;
+    color: #111827;
+  }
+
+  select:not([multiple]):not([size]):focus,
+  input[type='date']:focus,
+  input[type='time']:focus,
+  input[type='datetime-local']:focus {
+    outline: none;
+    border-color: var(--ui-brand);
+    box-shadow: 0 0 0 3px rgb(79 70 229 / 0.18);
+  }
+
+  select:disabled,
+  input:disabled {
+    background-color: #f3f4f6;
+    color: #9ca3af;
+  }
+}
+
+@layer components {
+  /* Cartão padrão: branco, canto arredondado e sombra suave (não "flat demais"). */
+  .ui-card {
+    background: var(--ui-card);
+    border: 1px solid var(--ui-line);
+    border-radius: var(--ui-radius);
+    box-shadow: var(--ui-shadow);
+  }
+
+  /* Faixa colorida no topo do cartão — é o que dá "personalidade" sem poluir. */
+  .ui-card-accent {
+    position: relative;
+    overflow: hidden;
+  }
+  .ui-card-accent::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--ui-brand), var(--ui-accent));
+  }
+
+  /* Cabeçalho do app: gradiente vivo em vez de barra branca. */
+  .ui-appbar {
+    background: linear-gradient(100deg, #4338ca 0%, #4f46e5 45%, #7c3aed 100%);
+    color: #fff;
+  }
+
+  /* Grade de formulário que NUNCA deixa buraco: as colunas se ajustam sozinhas
+     ao tamanho da tela, e o último campo ocupa o espaço que sobrar. */
+  .ui-form-grid {
+    display: grid;
+    gap: 0.875rem 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  }
+
+  /* Barra de ações: quebra sozinha, com espaçamento igual em qualquer largura. */
+  .ui-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Tabela larga: rola DENTRO do próprio quadro, nunca empurra a página. */
+  .ui-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

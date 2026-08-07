@@ -28,7 +28,9 @@ export default function EmploymentTypeFilter({
         value={value}
         onChange={(e) => onChange(e.target.value as EmploymentType)}
         data-testid="employment-type-filter"
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        /* 06/08/2026: min-w garante que "Todos os Funcionários" caiba inteiro —
+           no Ponto o campo vinha estreito e saía "Todos os Funcionári⌄". */
+        className="w-full min-w-[13rem] px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
         <option value="all">Todos os Funcionários</option>
         <option value="Diarista">Diaristas</option>

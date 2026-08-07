@@ -40,7 +40,7 @@ export const CompanySwitcher: React.FC<CompanySwitcherProps> = ({ onCompanyChang
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition-colors min-h-[44px]"
+        className="flex items-center gap-2 px-3 py-2 text-sm bg-white/20 hover:bg-white/30 text-white ring-1 ring-white/30 rounded-lg transition-colors min-h-[44px] font-medium"
         aria-haspopup="listbox"
         aria-expanded={open}
       >

@@ -73,8 +73,13 @@ export const DriverFilters: React.FC<DriverFiltersProps> = ({
 }) => {
   return (
     <div className="p-3 sm:p-4 border-b border-gray-200 space-y-3">
-      {/* 8 filtros num grid simétrico (3 col no desktop) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/*
+        8 filtros — a grade agora FECHA CERTINHO em toda largura (06/08/2026):
+        1 coluna no celular, 2 no tablet e **4 no computador** = duas linhas
+        cheias, sem o buraco que sobrava com 3 colunas (8 não divide por 3).
+        Números batem: 8 = 8×1 = 4×2 = 2×4.
+      */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 items-end">
         <div className="flex flex-col gap-1">
           <label className={LABEL}>Pesquisar (nome, rota ou grupo)</label>
           <div className="relative">
@@ -168,8 +173,16 @@ export const DriverFilters: React.FC<DriverFiltersProps> = ({
         </div>
       </div>
 
-      {/* Alternância de visão — alinhada à direita, largura própria */}
-      <div className="flex justify-end">
+      {/*
+        06/08/2026 — a linha do "Lista × Grupos" era um botão solto num vazio.
+        Agora ela carrega, do lado esquerdo, a explicação do que cada visão faz
+        (didático, sem clique nenhum a mais) e a linha deixa de ficar torta.
+      */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-xs text-gray-500 min-w-0">
+          Os filtros acima valem todos juntos · <b className="text-gray-700">Lista</b> mostra um
+          entregador por linha; <b className="text-gray-700">Grupos</b> junta por grupo.
+        </p>
         <div className="flex gap-1 rounded-lg bg-gray-100 p-1 w-full sm:w-auto">
           <button
             type="button"

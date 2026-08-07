@@ -606,7 +606,17 @@ export const DriverList: React.FC<DriverListProps> = ({
                   <span className="text-[11px] text-gray-700 font-semibold">{formatBRL(rate)}/pc</span>
                 </div>
                 {multi ? (
-                  <span className="text-sm font-bold text-gray-700 tabular-nums">{formatInt(sum)}</span>
+                  /* Mesma caixa do campo editável (tracejada = "não se digita aqui"), pra
+                     as colunas alinharem também no celular. */
+                  <span
+                    title="soma das rotas"
+                    style={pl.color ? { borderColor: pl.color } : undefined}
+                    className={`w-16 inline-block text-right rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums bg-gray-100 text-gray-600 ${
+                      pl.color ? 'border-2 border-dashed' : 'border border-dashed border-gray-300'
+                    }`}
+                  >
+                    {formatInt(sum)}
+                  </span>
                 ) : (
                   <input
                     type="text"

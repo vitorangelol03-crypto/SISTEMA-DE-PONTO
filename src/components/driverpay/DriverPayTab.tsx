@@ -1742,13 +1742,24 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           onView={setView}
         />
 
-        <div className="px-3 sm:px-4 py-3 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2 bg-gray-50/60">
-          <div className="flex flex-wrap items-center gap-2">
+        {/*
+          06/08/2026 — barra de ações DIDÁTICA (pedido dele: "fácil de entender e de usar").
+          Antes eram ~13 botões iguais, todos azuis, quebrando em linhas desiguais: nada
+          dizia o que era rotina, o que era conferência e o que gerava arquivo.
+          Agora há DOIS grupos com nome ("Organizar e conferir" × "Gerar e baixar"), e a
+          cor virou significado: branco = secundário, colorido = ação que produz algo,
+          vermelho = tira do ar. Mesmos botões, mesmos textos, mesmos cliques — só a
+          leitura mudou.
+        */}
+        <div className="px-3 sm:px-4 py-3 border-b border-gray-200 flex flex-wrap items-start justify-between gap-x-6 gap-y-3 bg-gray-50/60">
+          <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-1.5">Organizar e conferir</p>
+          <div className="ui-toolbar">
           {hasPermission('driverpay.manageGroups') && (
             <button
               type="button"
               onClick={() => setShowGroups(true)}
-              className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+              className="px-3 py-2 text-sm font-semibold bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 inline-flex items-center gap-1.5 min-h-[40px] transition-colors"
             >
               <Tag className="w-4 h-4" /> Gerenciar grupos
             </button>
@@ -1757,7 +1768,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             <button
               type="button"
               onClick={() => setShowPlatform(true)}
-              className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+              className="px-3 py-2 text-sm font-semibold bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 inline-flex items-center gap-1.5 min-h-[40px] transition-colors"
             >
               <Plus className="w-4 h-4" /> Adicionar plataforma
             </button>
@@ -1766,7 +1777,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             <button
               type="button"
               onClick={() => setShowEmitters(true)}
-              className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+              className="px-3 py-2 text-sm font-semibold bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 inline-flex items-center gap-1.5 min-h-[40px] transition-colors"
             >
               CNPJs / Notas
             </button>
@@ -1782,7 +1793,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
                     ? `${seloNotas.numero} nota(s) validada(s) — nada pendente`
                     : 'Nenhuma nota recebida ainda'
               }
-              className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+              className="px-3 py-2 text-sm font-semibold bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 inline-flex items-center gap-1.5 min-h-[40px] transition-colors"
             >
               Notas recebidas
               <Selo selo={seloNotas} />
@@ -1794,7 +1805,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               type="button"
               onClick={() => setShowSolicitarEspelho(true)}
               title="Pedir aos entregadores o print da tela do app (aba Encerrado), pra conferir a quantidade da planilha"
-              className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+              className="px-3 py-2 text-sm font-semibold bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 inline-flex items-center gap-1.5 min-h-[40px] transition-colors"
             >
               Solicitar espelho
             </button>
@@ -1810,10 +1821,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
                     ? `${seloPrints.numero} print(s) conferido(s) — nada pendente`
                     : 'Ver os prints recebidos, com a foto ao lado do que a planilha diz'
               }
-              className={`px-3 py-2 text-sm font-medium rounded-md inline-flex items-center gap-1.5 min-h-[40px] ${
+              className={`px-3 py-2 text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 min-h-[40px] transition-colors ${
                 proofAtencao > 0
-                  ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                  ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 border border-amber-300'
+                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400'
               }`}
             >
               Espelhos recebidos
@@ -1835,14 +1846,14 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               <button
                 type="button"
                 onClick={() => setFormModal({ mode: 'create', driver: null })}
-                className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+                className="px-3 py-2 text-sm font-semibold bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 inline-flex items-center gap-1.5 min-h-[40px] transition-colors"
               >
                 <Plus className="w-4 h-4" /> Novo driver
               </button>
               <button
                 type="button"
                 onClick={() => setShowImport(true)}
-                className="px-3 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1.5 min-h-[40px]"
+                className="px-3 py-2 text-sm font-semibold bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 inline-flex items-center gap-1.5 min-h-[40px] transition-colors"
               >
                 <Upload className="w-4 h-4" /> Importar Excel
               </button>
@@ -1857,8 +1868,11 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           )}
 
           </div>
+          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-1.5">Gerar e baixar</p>
+          <div className="ui-toolbar">
           <button
             type="button"
             onClick={() => setShowDiscountSearch(true)}
@@ -1910,7 +1924,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
                     ? 'Relatório detalhado só dos grupos/drivers marcados (escolha as plataformas na próxima tela)'
                     : 'Relatório detalhado de todos (escolha as plataformas na próxima tela)'
                 }
-                className="px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 inline-flex items-center gap-1.5 min-h-[40px]"
+                className="px-3 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm inline-flex items-center gap-1.5 min-h-[40px] transition-colors"
               >
                 <Download className="w-4 h-4" /> {selCount > 0 ? `Relatório da seleção (${selCount})` : 'Relatório geral'}
               </button>
@@ -1924,6 +1938,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               </button>
             </>
           )}
+          </div>
           </div>
         </div>
 

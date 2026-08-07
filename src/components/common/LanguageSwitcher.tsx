@@ -41,7 +41,7 @@ export const LanguageSwitcher: React.FC = () => {
         aria-expanded={open}
         aria-label={t('header.language')}
         title={t('header.language')}
-        className="flex items-center gap-1.5 px-2.5 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors min-h-[44px]"
+        className="flex items-center gap-1.5 px-2.5 py-2 text-sm text-white/90 hover:text-white hover:bg-white/15 rounded-lg transition-colors min-h-[44px]"
       >
         <Globe className="w-4 h-4" />
         <span className="hidden sm:inline font-medium">{currentOpt.label}</span>

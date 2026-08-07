@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Clock,
@@ -13,6 +13,7 @@ import {
   Database,
   BookOpen,
   Shield,
+  MoreHorizontal,
 } from 'lucide-react';
 
 export type TabType =
@@ -35,6 +36,28 @@ interface TabNavigationProps {
   userRole: 'admin' | 'supervisor';
   hasPermission: (permission: string) => boolean;
 }
+
+/**
+ * Cor de cada área (06/08/2026, pedido do Victor: "cores vivas", "didático").
+ * A cor é a MESMA em toda a aba (aba ativa, títulos, botão principal), então
+ * quem usa aprende o lugar pela cor antes de ler o nome.
+ */
+const TAB_COLOR: Record<TabType, string> = {
+  attendance: '#0284c7',      // ponto — azul
+  employees: '#7c3aed',       // pessoas — violeta
+  reports: '#d97706',         // relatórios — âmbar
+  financial: '#059669',       // dinheiro — verde
+  c6payment: '#0891b2',       // banco — ciano
+  driverpay: '#4f46e5',       // entregadores — índigo
+  errors: '#e11d48',          // erro — vermelho
+  settings: '#475569',        // ajustes — chumbo
+  users: '#c026d3',           // usuários — fúcsia
+  datamanagement: '#0d9488',  // dados — teal
+  tutorial: '#ea580c',        // ajuda — laranja
+  admin: '#b91c1c',           // admin — vermelho escuro
+};
+
+const LARGURA_BOTAO_MAIS = 104; // px reservados pro botão "Mais" quando ele existe
 
 export const TabNavigation: React.FC<TabNavigationProps> = ({
   activeTab,
@@ -61,38 +84,157 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
 
   const tabs = allTabs.filter((tab) => !tab.permission || hasPermission(tab.permission));
 
-  /*
-    Nav horizontal sempre visível (mobile + desktop). Em mobile fica scrollable
-    horizontalmente — todas as tabs presentes no DOM e clicáveis por
-    getByRole('button', { name: 'NomeAba' }) sem dependência de hamburger.
-    Desktop ganha gaps maiores via classes responsivas.
-  */
+  /**
+   * Quantas abas cabem na largura de hoje (decisão dele: o que não couber vai
+   * pro menu "Mais"). As larguras são medidas numa linha invisível `aria-hidden`
+   * — invisível pro leitor de tela E pros seletores dos testes, então continua
+   * existindo UM só botão por aba no app inteiro.
+   *
+   * Se a medição falhar por qualquer motivo, o padrão é MOSTRAR TUDO (a barra
+   * volta a rolar de lado, como era antes): nenhuma aba pode sumir por acidente.
+   */
+  const barraRef = useRef<HTMLDivElement>(null);
+  const medidorRef = useRef<HTMLDivElement>(null);
+  const [visiveis, setVisiveis] = useState<number>(tabs.length);
+  const [menuAberto, setMenuAberto] = useState(false);
+
+  const medir = useCallback(() => {
+    const barra = barraRef.current;
+    const medidor = medidorRef.current;
+    if (!barra || !medidor) return;
+    // 📱 Celular e tablet NÃO têm menu "Mais": lá a barra rola de lado e qualquer
+    // aba continua a UM toque. Medido: em 393px caberiam 2 abas e em 820px caberiam
+    // 4 — o menu engoliria o resto e trocar de tela viraria dois toques, o oposto
+    // do que ele pediu. O menu só entra no computador (≥1024px), onde ele guarda
+    // no máximo 2 abas.
+    if (barra.clientWidth < 1024) { setVisiveis(tabs.length); return; }
+    const larguras = Array.from(medidor.children).map((c) => (c as HTMLElement).offsetWidth + 8);
+    if (larguras.length === 0 || larguras.some((l) => l <= 8)) return; // ainda não pintou
+    const disponivel = barra.clientWidth - 8;
+    let usado = 0;
+    let cabem = 0;
+    for (const l of larguras) {
+      if (usado + l > disponivel) break;
+      usado += l;
+      cabem += 1;
+    }
+    // Sobrou aba de fora? Então o botão "Mais" também precisa de lugar.
+    if (cabem < larguras.length) {
+      while (cabem > 0 && usado + LARGURA_BOTAO_MAIS > disponivel) {
+        cabem -= 1;
+        usado -= larguras[cabem];
+      }
+    }
+    setVisiveis(Math.max(1, cabem));
+  }, [tabs.length]);
+
+  useLayoutEffect(() => {
+    medir();
+    const barra = barraRef.current;
+    if (!barra || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => medir());
+    ro.observe(barra);
+    return () => ro.disconnect();
+  }, [medir, tabs.length]);
+
+  useEffect(() => {
+    if (!menuAberto) return;
+    const fechar = (e: MouseEvent): void => {
+      if (!(e.target as HTMLElement).closest('[data-menu-mais]')) setMenuAberto(false);
+    };
+    document.addEventListener('mousedown', fechar);
+    return () => document.removeEventListener('mousedown', fechar);
+  }, [menuAberto]);
+
+  const naBarra = tabs.slice(0, visiveis);
+  const noMenu = tabs.slice(visiveis);
+  // A aba aberta nunca fica escondida: se ela caiu no "Mais", troca de lugar com
+  // a última visível — senão a pessoa perde de vista onde está.
+  if (noMenu.some((tb) => tb.id === activeTab) && naBarra.length > 0) {
+    const i = noMenu.findIndex((tb) => tb.id === activeTab);
+    const ultima = naBarra[naBarra.length - 1];
+    naBarra[naBarra.length - 1] = noMenu[i];
+    noMenu[i] = ultima;
+  }
+
+  const botao = (tab: (typeof tabs)[number], dentroDoMenu: boolean): React.ReactElement => {
+    const Icon = tab.icon;
+    const isActive = activeTab === tab.id;
+    const cor = TAB_COLOR[tab.id];
+    return (
+      <button
+        key={tab.id}
+        onClick={() => { onTabChange(tab.id); setMenuAberto(false); }}
+        aria-label={tab.name}
+        aria-current={isActive ? 'page' : undefined}
+        style={
+          isActive
+            ? { background: `linear-gradient(135deg, ${cor}, ${cor}dd)`, boxShadow: `0 6px 16px -6px ${cor}` }
+            : undefined
+        }
+        className={`${
+          isActive ? 'text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+        } ${
+          dentroDoMenu ? 'w-full justify-start' : ''
+        } whitespace-nowrap rounded-xl px-3 py-2 font-semibold text-xs sm:text-sm flex items-center gap-2 transition-all min-h-[44px] flex-shrink-0`}
+      >
+        <Icon className="w-4 h-4 flex-shrink-0" style={isActive ? undefined : { color: cor }} />
+        <span>{tab.name}</span>
+      </button>
+    );
+  };
+
   return (
     <div className="bg-white shadow-sm mb-4 sm:mb-6 sticky top-14 sm:top-16 z-30 border-b border-gray-200">
-      <nav
-        className="-mb-px flex gap-1 sm:gap-4 lg:gap-8 px-2 sm:px-4 overflow-x-auto"
-        aria-label="Navegação principal"
+      {/* Linha invisível só pra medir a largura de cada aba (aria-hidden: não
+          entra na árvore de acessibilidade, então não duplica seletor nenhum). */}
+      <div
+        ref={medidorRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute -z-10 flex gap-2 opacity-0"
+        style={{ visibility: 'hidden' }}
       >
         {tabs.map((tab) => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
           return (
-            <button
+            <span
               key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              aria-label={tab.name}
-              aria-current={isActive ? 'page' : undefined}
-              className={`${
-                isActive
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-3 sm:py-4 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 transition-colors min-h-[44px] flex-shrink-0`}
+              className="whitespace-nowrap rounded-xl px-3 py-2 font-semibold text-xs sm:text-sm flex items-center gap-2 min-h-[44px] flex-shrink-0"
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
               <span>{tab.name}</span>
-            </button>
+            </span>
           );
         })}
+      </div>
+
+      <nav
+        ref={barraRef}
+        className="flex items-center gap-2 px-2 sm:px-4 py-2 overflow-x-auto sm:overflow-visible"
+        aria-label="Navegação principal"
+      >
+        {naBarra.map((tab) => botao(tab, false))}
+
+        {noMenu.length > 0 && (
+          <div className="relative flex-shrink-0" data-menu-mais>
+            <button
+              type="button"
+              onClick={() => setMenuAberto((v) => !v)}
+              aria-label="Mais abas"
+              aria-expanded={menuAberto}
+              data-testid="abas-mais"
+              className="whitespace-nowrap rounded-xl px-3 py-2 font-semibold text-xs sm:text-sm flex items-center gap-2 min-h-[44px] text-gray-600 hover:bg-gray-100 hover:text-gray-900 border border-dashed border-gray-300"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+              <span>Mais ({noMenu.length})</span>
+            </button>
+            {menuAberto && (
+              <div className="absolute right-0 top-full mt-1 z-40 w-56 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl">
+                {noMenu.map((tab) => botao(tab, true))}
+              </div>
+            )}
+          </div>
+        )}
       </nav>
     </div>
   );

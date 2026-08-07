@@ -37,8 +37,25 @@ export async function logout(page: Page) {
   await expect(page.locator('#id')).toBeVisible({ timeout: 10_000 });
 }
 
+/**
+ * Vai pra uma aba. 06/08/2026: no COMPUTADOR as abas que não cabem na largura
+ * passaram a viver no menu "Mais" (no celular/tablet a barra rola e todas
+ * continuam visíveis). O helper tenta o caminho normal e, só se a aba não
+ * estiver na barra, abre o menu — nenhuma asserção foi afrouxada, é a mesma
+ * aba, no mesmo clique que uma pessoa daria.
+ */
 export async function goToTab(page: Page, tabName: string) {
-  await page.getByRole('button', { name: new RegExp(`^${tabName}$`) }).first().click();
+  const aba = page.getByRole('button', { name: new RegExp(`^${tabName}$`) }).first();
+  if (await aba.isVisible().catch(() => false)) {
+    await aba.click();
+    return;
+  }
+  const mais = page.getByTestId('abas-mais');
+  if (await mais.count()) {
+    await mais.click();
+    await aba.waitFor({ state: 'visible', timeout: 5_000 });
+  }
+  await aba.click();
 }
 
 /**
