@@ -399,7 +399,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
             onClick={() => setActiveSubTab('individual')}
             className={`w-1/3 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors min-h-[44px] ${
               activeSubTab === 'individual'
-                ? 'bg-orange-600 text-white'
+                ? 'bg-rose-600 text-white shadow-sm'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -412,7 +412,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
               onClick={() => setActiveSubTab('triage')}
               className={`w-1/3 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors min-h-[44px] ${
                 activeSubTab === 'triage'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-rose-600 text-white shadow-sm'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -424,7 +424,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
             onClick={() => setActiveSubTab('periods')}
             className={`w-1/3 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors min-h-[44px] ${
               activeSubTab === 'periods'
-                ? 'bg-purple-600 text-white'
+                ? 'bg-rose-600 text-white shadow-sm'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -700,6 +700,13 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                 </div>
               </div>
             ))}
+            {/* 07/08/2026 — o cartão ficava um retângulo BRANCO MUDO quando não havia
+                ninguém: quem olha não sabe se está carregando, se quebrou ou se está vazio. */}
+            {best.length === 0 && (
+              <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-3">
+                Ninguém com dias trabalhados no período escolhido — mude as datas acima pra ver o ranking.
+              </p>
+            )}
           </div>
         </div>
 
@@ -726,6 +733,11 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                 </div>
               </div>
             ))}
+            {worst.length === 0 && (
+              <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-3">
+                ✓ Ninguém com erro registrado no período escolhido.
+              </p>
+            )}
           </div>
         </div>
       </div>
