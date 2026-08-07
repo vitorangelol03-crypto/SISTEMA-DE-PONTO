@@ -95,9 +95,23 @@ teste avisou *"corte de TESTE encontrado salvo em produção"* e **devolveu o va
 
 ---
 
-## 3. Estado do repo ao fim da sessão
+## 3. Release — NO AR (push autorizado por ele: *"FAZ OS PUSH"*)
 
-- `d7f2142` (filtro) + `6853a98` (blindagem do teste) + checkpoints — **tudo local, nada de push**.
+`e4e12bc..739f4e4` no `origin/main` (4 commits, só os meus — o trabalho da outra janela não estava
+commitado). Vercel confirmada **por conteúdo, não por fé**: o chunk `DriverPayTab-QB_3_CCF.js`
+baixado do site tem os 5 marcadores da mudança (`nota(s) atrasada(s)`, `Ver quem`, `Mostrando`,
+`Ninguém enviou nota atrasada`, `Sem prazo definido`), e nenhum deles existia no commit anterior
+(`e4e12bc` = 0 ocorrências).
+
+⚠️ **Aprendizado de conferência:** comparar **sha256 do build local com o do site NÃO serve** —
+a Vercel gera hashes de chunk diferentes dos meus (`index-Dqu434XW` local × `index-Dnedus-f` no ar).
+E pedir o chunk **pelo nome do build local** devolve **HTTP 200 com o index.html** (fallback de SPA),
+o que parece "está no ar" quando na verdade o arquivo não existe. O caminho certo: ler o
+`index-*.js` do site, tirar dele o nome do chunk e procurar o **texto** da mudança.
+
+## 4. Estado do repo ao fim da sessão
+
+- `d7f2142` (filtro) + `6853a98` (blindagem do teste) + checkpoints — **no ar**.
 - Continua **não commitada** a **trava da bonificação** (`src/utils/bonusScope.ts`,
   `tests/unit/bonusScope.spec.ts`, `AttendanceTab.tsx`) — 17 unit passando, esperando a prova
   visual (o botão "Aplicar B" precisa de alguém com ponto no dia). Não toquei nela.

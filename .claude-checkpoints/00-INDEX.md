@@ -6,7 +6,7 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Sessão 06/08 — notas atrasadas passam a se anunciar (`d7f2142`, só local):** ele pediu *"um filtro
+**Sessão 06/08 — notas atrasadas passam a se anunciar (`d7f2142`, **NO AR**):** ele pediu *"um filtro
 em notas recebidas para ver quem enviou as notas atrasadas"* — e o filtro **já existia** desde 04/08,
 aparecendo no próprio print dele (`Prazo: Todas`). 🔑 **O que faltava era a tela DIZER que tem
 atrasada:** com 75 notas e 3 atrasadas, quem não desconfia nunca abre o filtro. Agora cada opção
@@ -29,7 +29,11 @@ e o restaurava pra sempre. Agora a foto do começo **reconhece o próprio lixo**
 volta ao padrão são) e o corte real **volta no meio do teste**, não só no fim. Prazo do espelho
 corrigido em prod (backup em `backups/2026-08-06/`; retrato segue 72+3, **ninguém mudou de lado**).
 Provado **ao contrário**: plantei o lixo em produção, rodei o 60, ele avisou e devolveu o valor
-real. Ver `CHECKPOINT_SESSAO_2026-08-06.md`.
+real. **PUSH autorizado por ele** (*"FAZ OS PUSH"*): `e4e12bc..739f4e4` no `origin/main`, **Vercel no
+ar conferida por conteúdo** (o chunk `DriverPayTab` do site tem os 5 textos novos; nenhum existia em
+`e4e12bc`). ⚠️ **sha256 local × site NÃO bate** — a Vercel gera outros hashes de chunk; e pedir o
+chunk pelo nome do build local devolve **200 com o index.html** (fallback de SPA), que parece "no ar"
+sem estar. Ver `CHECKPOINT_SESSAO_2026-08-06.md`.
 
 **Sessão 04/08 — espelho do app da Shopee conferido sozinho (backend do driver pronto,
 `cb460b8`, só local, NADA no ar):** a planilha da Shopee pode vir com a quantidade de pacotes
