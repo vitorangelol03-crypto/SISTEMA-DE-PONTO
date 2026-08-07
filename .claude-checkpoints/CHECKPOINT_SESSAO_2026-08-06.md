@@ -109,7 +109,53 @@ E pedir o chunk **pelo nome do build local** devolve **HTTP 200 com o index.html
 o que parece "está no ar" quando na verdade o arquivo não existe. O caminho certo: ler o
 `index-*.js` do site, tirar dele o nome do chunk e procurar o **texto** da mudança.
 
-## 4. Estado do repo ao fim da sessão
+## 4. Passe visual — leva 1 (esqueleto + Pagamentos Driver)  ·  `c346b62` (local)
+
+Pedidos dele, em sequência: *"melhore a simetria de todas as abas e páginas… bem adaptado
+para qualquer tela"* · *"melhore a parte das plataformas, mas mantenha o destaque e a cor de
+cada uma"* · *"muito cuidado para não quebrar nenhuma função"* · *"não faça nada genérico e
+claro demais, quero cores vivas e bonito"* · *"visual didático e fácil de usar"* · *"não quero
+algo que precise de vários cliques"*.
+
+**Decisões dele (perguntadas antes de programar):** redesign visual (não só estrutura) ·
+grade vira **cartões no celular** · abas que não cabem vão pro **menu "Mais"** · plataformas
+**mantêm a borda colorida**, só padronizar.
+
+### 4.1 Método (o que evitou quebrar coisa)
+**40 fotos do app em 4 resoluções ANTES de tocar em código** (1920 · 1366 · 820 · 393), e de
+novo a cada rodada — v1 (antes), v2, v3, v4. Regra da leva: **só aparência**; nenhum texto de
+botão, `data-testid`, handler ou consulta mudou.
+
+### 4.2 Corrigido
+Barra de abas cortada no notebook → pílulas **com a cor de cada área** + menu "Mais" ·
+cabeçalho estourando no celular ("Sistema de Pon" com "Administrador" por cima) ·
+campos nativos cinza do navegador × campos brancos do app na mesma tela ·
+filtros do DriverPay com **meia linha vazia** (8 campos em 3 colunas) → 1/2/**4** colunas,
+alinhados pela base · ~13 botões azuis iguais → **dois grupos com nome** e cor com significado ·
+**colunas das plataformas desalinhadas** (linha multi-rota mostrava número solto) → mesma caixa,
+mesma borda colorida, tracejada = "aqui não se digita" · `Todos os Funcionári⌄` cortado no Ponto.
+
+🔑 **Achado no meio do caminho:** o menu "Mais" que ele escolheu, aplicado no celular, jogaria
+**10 das 12 abas** pra dentro do menu — dois toques pra trocar de tela, o oposto do que ele
+pediu na mensagem seguinte. Corrigido: menu só no computador (≥1024px); celular e tablet
+rolam a barra e mantêm **toda aba a um toque**. Medido nas fotos, não suposto.
+
+### 4.3 Validação
+typecheck **61 = baseline** · eslint 0 · build · **34 E2E com cliques reais**: 43+45 (13/13,
+inclusive as abas que agora vivem no menu "Mais") · 52/68/70/71 (5/5 + 2 skip) · 03/13/46
+(16/16). O único arquivo de teste tocado foi o helper `goToTab`, que passou a abrir o menu
+quando a aba não está na barra — mesma aba, mesmo clique de uma pessoa, nenhuma asserção
+afrouxada.
+
+### 4.4 ⏳ Falta desta empreitada (não começado)
+1. **Cartões no celular** para a grade do DriverPay (decisão dele) — hoje ela ainda rola de lado.
+2. **Passe por aba** nas outras 9 (Relatórios, Financeiro, C6, Erros, Configurações, Usuários,
+   Gerenciamento, Ajuda, Admin) — elas já ganharam o esqueleto e os campos padronizados, mas
+   não a revisão de layout uma a uma.
+3. `AttendanceTab.tsx` **não foi tocado de propósito**: tem trabalho não commitado da outra
+   janela (a trava da bonificação) e mexer ali misturaria as duas coisas.
+
+## 5. Estado do repo ao fim da sessão
 
 - `d7f2142` (filtro) + `6853a98` (blindagem do teste) + checkpoints — **no ar**.
 - Continua **não commitada** a **trava da bonificação** (`src/utils/bonusScope.ts`,

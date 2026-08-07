@@ -502,6 +502,23 @@ que isso exigia no `jaPagosNoRelatorio` entrou no commit `4aec86f` da OUTRA jane
 terminais no mesmo arquivo). Validado: 10 unit novos · 1142 unit · typecheck 61 = baseline ·
 build.
 
+**Sessão 06/08 (noite) — passe visual, leva 1 (`c346b62`, só local):** ele pediu simetria em
+todas as abas, adaptado a qualquer tela, **cores vivas**, **didático**, **sem clique a mais** e
+*"muito cuidado para não quebrar nenhuma função"*. Método: **40 fotos em 4 resoluções antes de
+tocar em código** (1920·1366·820·393) e refotografado a cada rodada. Corrigidos, com prova em
+foto: barra de abas **cortada** no notebook → pílulas com **a cor de cada área** + menu "Mais" ·
+cabeçalho **estourando** no celular ("Sistema de Pon" com "Administrador" por cima) · campos
+nativos cinza ao lado dos brancos · filtros do DriverPay com **meia linha vazia** (8 em 3 colunas
+→ 4 colunas, alinhados pela base) · ~13 botões azuis iguais → **dois grupos com nome** e cor com
+significado · **colunas das plataformas desalinhadas** (multi-rota mostrava número solto) → mesma
+caixa e **mesma borda colorida**, decisão dele. 🔑 **O menu "Mais" que ele escolheu, aplicado no
+celular, jogaria 10 das 12 abas pra dentro dele** — dois toques pra trocar de tela; corrigido pra
+menu só no computador, celular/tablet rolam com **toda aba a um toque**. ⚠️ Só aparência: nenhum
+texto, `data-testid` ou função mudou; o único arquivo de teste tocado foi o helper `goToTab`.
+Validado: typecheck 61 = baseline · eslint · build · **34 E2E com cliques reais**. ⏳ Falta:
+cartões no celular pra grade, passe nas outras 9 abas, e `AttendanceTab` (intocado de propósito —
+tem trabalho não commitado da outra janela).
+
 ## 📚 Mapa dos checkpoints
 
 | Arquivo | O que cobre | Status |
