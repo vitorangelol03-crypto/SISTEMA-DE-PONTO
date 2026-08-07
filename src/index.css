@@ -59,6 +59,9 @@
     border-radius: 0.625rem;
     min-height: 2.625rem;
     color: #111827;
+    /* Trava contra o campo que estoura a tela: um <select> tenta nascer do tamanho
+       da MAIOR opção dele, e no celular isso empurrava a página pro lado. */
+    max-width: 100%;
   }
 
   select:not([multiple]):not([size]):focus,

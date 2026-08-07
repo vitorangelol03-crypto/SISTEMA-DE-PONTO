@@ -714,7 +714,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                   <select
                     value={selectedPeriodId}
                     onChange={(e) => setSelectedPeriodId(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
+                    /* 07/08/2026 — `min-w-0`: sem isto o campo ficava do tamanho da MAIOR
+                       opção ("01/07/2026 a 15/07/2026 · 1 quinzena de julho") e ESTOURAVA a
+                       tela do celular (item flex nasce com min-width:auto). */
+                    className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
                   >
                     <option value="">— Sem período (datas livres) —</option>
                     {periods.map(p => (

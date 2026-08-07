@@ -590,7 +590,13 @@ export const DriverList: React.FC<DriverListProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 mb-2">
+        {/*
+          07/08/2026 — cartão do celular: com 5 plataformas a última ficava ÓRFÃ em meia
+          linha (buraco do lado) e o nome saía cortado ("Coleta Sh..."). Agora, quando a
+          quantidade é ímpar, a última ocupa a linha inteira: sem buraco e com espaço pro
+          nome. Cada plataforma mantém a sua cor, que foi a decisão dele.
+        */}
+        <div className="grid grid-cols-2 gap-2 mb-2 [&>*:last-child:nth-child(odd)]:col-span-2">
           {platforms.map((pl) => {
             const sum = platformPackages(row, pl.name);
             const rate = row.ratesByPlatform[pl.name] ?? pl.default_rate;
