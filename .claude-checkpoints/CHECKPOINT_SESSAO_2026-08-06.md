@@ -147,13 +147,34 @@ inclusive as abas que agora vivem no menu "Mais") · 52/68/70/71 (5/5 + 2 skip) 
 quando a aba não está na barra — mesma aba, mesmo clique de uma pessoa, nenhuma asserção
 afrouxada.
 
-### 4.4 ⏳ Falta desta empreitada (não começado)
-1. **Cartões no celular** para a grade do DriverPay (decisão dele) — hoje ela ainda rola de lado.
-2. **Passe por aba** nas outras 9 (Relatórios, Financeiro, C6, Erros, Configurações, Usuários,
-   Gerenciamento, Ajuda, Admin) — elas já ganharam o esqueleto e os campos padronizados, mas
-   não a revisão de layout uma a uma.
-3. `AttendanceTab.tsx` **não foi tocado de propósito**: tem trabalho não commitado da outra
+### 4.4 Leva 2 — celular e varredura de estouro  ·  `71d0253` `b7a3b07`
+
+⚠️ **Correção do que eu tinha escrito:** os **cartões do celular JÁ EXISTIAM** (`renderMobileCard`
+em `DriverList`) — listei como pendente por engano. O que faltava era acabamento.
+
+**🔴 Achado no celular (Financeiro):** o campo *"Período de pagamento"* **passava da borda da
+tela**. Causa raiz: item flex nasce com `min-width:auto`, então o `<select>` ficava do tamanho da
+**maior opção** ("01/07/2026 a 15/07/2026 · 1 quinzena de julho") e empurrava a página pro lado.
+Consertado com `min-w-0` no campo **+ trava global `max-width:100%`** nos campos nativos, pra a
+classe do erro não voltar em outra tela.
+
+**Cartão do celular:** com 5 plataformas a última ficava **órfã** em meia linha e o nome saía
+cortado ("Coleta Sh…"). Agora, em quantidade ímpar, a última ocupa a linha inteira.
+
+**Varredura automática** (12 abas × 3 larguras = 36 telas): **estouro 0px em todas**, medido por
+`scrollWidth` e por borda de elemento, não por olho. Depois disso, higiene na linha invisível que
+mede as abas (`w-0 overflow-hidden`) — ela já não causava estouro, mas ficava 1152px fora da tela.
+
+**Validado:** typecheck 61 = baseline · eslint 0 erros · build · **E2E 07/14/16 (financeiro,
+18/18 + 2 skip)** e **45 (6/6)** depois da última mexida · conferido no navegador que a medição
+das abas continua certa (notebook = 8 na barra + "Mais"; celular = 12 rolando, sem menu).
+
+### 4.5 ⏳ Falta desta empreitada
+1. **Passe fino por aba** nas outras 9 — elas já ganharam o esqueleto novo, os campos
+   padronizados e passaram na varredura de estouro, mas não a revisão de layout uma a uma.
+2. `AttendanceTab.tsx` **não foi tocado de propósito**: tem trabalho não commitado da outra
    janela (a trava da bonificação) e mexer ali misturaria as duas coisas.
+3. **Nada disso foi pro ar** — muda a cara de todas as telas, espera o OK dele.
 
 ## 5. Estado do repo ao fim da sessão
 

@@ -515,9 +515,16 @@ caixa e **mesma borda colorida**, decisão dele. 🔑 **O menu "Mais" que ele es
 celular, jogaria 10 das 12 abas pra dentro dele** — dois toques pra trocar de tela; corrigido pra
 menu só no computador, celular/tablet rolam com **toda aba a um toque**. ⚠️ Só aparência: nenhum
 texto, `data-testid` ou função mudou; o único arquivo de teste tocado foi o helper `goToTab`.
-Validado: typecheck 61 = baseline · eslint · build · **34 E2E com cliques reais**. ⏳ Falta:
-cartões no celular pra grade, passe nas outras 9 abas, e `AttendanceTab` (intocado de propósito —
-tem trabalho não commitado da outra janela).
+Validado: typecheck 61 = baseline · eslint · build · **34 E2E com cliques reais**.
+**Leva 2 (`71d0253`, `b7a3b07`):** 🔴 no celular o campo *"Período de pagamento"* do Financeiro
+**passava da borda** — raiz: item flex nasce com `min-width:auto`, então o `<select>` ficava do
+tamanho da **maior opção**; corrigido com `min-w-0` **+ trava global `max-width:100%`** nos campos
+nativos · cartão do celular com 5 plataformas deixava a última **órfã** e cortava o nome →
+ímpar ocupa a linha inteira · ⚠️ **correção**: os cartões do celular **já existiam**, listei como
+pendente por engano · **varredura automática de estouro: 12 abas × 3 larguras = 0px em todas as
+36 telas** (medido, não olhado) · E2E financeiro 18/18 e 45 6/6 depois. ⏳ Falta: passe fino nas
+outras 9 abas e `AttendanceTab` (intocado de propósito — tem trabalho não commitado da outra
+janela). **Nada foi pro ar** — espera o OK dele.
 
 ## 📚 Mapa dos checkpoints
 
