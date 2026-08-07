@@ -50,13 +50,16 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+    <main className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[linear-gradient(135deg,#4338ca_0%,#4f46e5_45%,#7c3aed_100%)]">
+      {/* 07/08/2026 — a porta de entrada era uma pagina branca sem personalidade.
+          Agora: fundo no gradiente da marca e o formulario num cartao branco
+          flutuante. Mesmos campos, mesmos ids, mesmos textos. */}
+      <div className="max-w-md w-full space-y-6 bg-white rounded-2xl shadow-2xl p-7 sm:p-9">
         <div>
-          <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-blue-100">
-            <LogIn className="h-6 w-6 text-blue-600" />
+          <div className="mx-auto h-14 w-14 flex items-center justify-center rounded-2xl shadow-lg bg-[linear-gradient(135deg,#4f46e5,#7c3aed)]">
+            <LogIn className="h-7 w-7 text-white" />
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <h2 className="mt-5 text-center text-3xl font-extrabold tracking-tight text-gray-900">
             {t('app.name')}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
@@ -87,7 +90,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                   const value = e.target.value.replace(/\D/g, '');
                   setId(value);
                 }}
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className="mt-1 appearance-none relative block w-full px-3 py-2.5 min-h-[44px] border border-gray-300 placeholder-gray-400 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:z-10 text-sm"
                 placeholder={t('login.id_placeholder')}
                 required
               />
@@ -103,7 +106,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none relative block w-full px-3 py-2 pr-10 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                  className="appearance-none relative block w-full px-3 py-2.5 pr-10 min-h-[44px] border border-gray-300 placeholder-gray-400 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:z-10 text-sm"
                   placeholder={t('login.password_placeholder')}
                   required
                 />
@@ -127,7 +130,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="group relative w-full flex justify-center py-3 px-4 min-h-[48px] items-center border border-transparent text-base font-bold rounded-xl text-white shadow-lg bg-[linear-gradient(135deg,#4f46e5,#7c3aed)] hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               {loading ? t('login.submitting') : t('login.submit')}
             </button>
@@ -147,14 +150,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
             <button
               type="button"
               onClick={() => window.location.href = '/?mode=clock'}
-              className="w-full py-2 px-4 border-2 border-blue-600 text-blue-600 text-sm font-medium rounded-md hover:bg-blue-50 transition-colors"
+              className="w-full py-2.5 px-4 min-h-[44px] border-2 border-indigo-600 text-indigo-700 text-sm font-semibold rounded-xl hover:bg-indigo-50 transition-colors"
             >
               {t('login.employee_button')}
             </button>
             <button
               type="button"
               onClick={() => window.location.href = '/?mode=erros'}
-              className="w-full py-2 px-4 border-2 border-orange-700 text-orange-700 text-sm font-medium rounded-md hover:bg-orange-50 transition-colors"
+              className="w-full py-2.5 px-4 min-h-[44px] border-2 border-orange-600 text-orange-700 text-sm font-semibold rounded-xl hover:bg-orange-50 transition-colors"
             >
               {t('login.errors_button')}
             </button>
