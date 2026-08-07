@@ -251,7 +251,29 @@ confirmação (`page.once('dialog', d => d.accept())`) — é o que uma pessoa f
 `Mais (`, `abas-mais` e o gradiente do login; o pedaço `DriverPayTab-Z9ZfpV6Z.js` tem
 "Organizar e conferir", "Gerar e baixar", "nota(s) atrasada(s)" e a frase nova dos filtros.
 
-### 4.9 ⏳ Falta desta empreitada
+### 4.9 Leva 6 — os três pedidos com print (grade do DriverPay)  ·  `5793a17` — NO AR
+
+**(1) "Quero os nomes das plataformas aparecendo":** o nome só aparecia **ao passar o mouse** —
+quem rolava a lista perdia de vista qual coluna era qual. Agora aparece **sempre**, em cima da
+caixinha, **na cor da própria plataforma**. ⚠️ Sem MAIÚSCULA de propósito: "COLETA SHOPEE" não
+cabia e saía `COLETA SHO…`; "Coleta Shopee" cabe inteiro no mesmo espaço (visto na foto, corrigido
+na hora).
+
+**(2) "Deixe os nomes mais simétricos, está muito feio":** nome, etiquetas e cidade dividiam **uma
+linha flex só**, então nome comprido se picava em 4 pedaços e as etiquetas caíam num lugar
+diferente a cada linha. Agora **toda linha tem a mesma anatomia**: caixinha+seta presas no topo à
+esquerda · **nome sozinho** · etiquetas na linha de baixo · cidade/rota por último. Coluna com
+largura mínima de 17rem.
+
+**(3) "Os canto também":** os ícones de ação ficavam espremidos (sem área de clique) e
+desalinhados. Agora cada um tem área própria com fundo no hover, e o bloco fica encostado à
+direita, alinhado com o resto da linha.
+
+**Validado:** typecheck 61 · eslint 0 · build · **E2E 52/58/59/61/68/70 → 7/7 (+2 skip)** com
+cliques reais (marcar linha, arrastar seleção, editar pacote, aplicar valor de grupo, gerar
+espelho da seleção) · **no ar e conferido por conteúdo** no pacote `DriverPayTab-BH9w6R7H.js`.
+
+### 4.10 ⏳ Falta desta empreitada
 1. ✅ **Passe fino: TODAS as abas conferidas** (só o Ponto ficou de fora, ver item 2).
 2. `AttendanceTab.tsx` **não foi tocado de propósito**: tem trabalho não commitado da outra
    janela (a trava da bonificação) e mexer ali misturaria as duas coisas.
