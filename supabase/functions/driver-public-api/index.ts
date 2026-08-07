@@ -571,7 +571,8 @@ async function buildValueCandidates(
   }
 
   const { data: pubs } = await supabase.from('driverpay_mirror_publications')
-    .select('scope, platform_filter, include_deductions').eq('driver_id', driverId).eq('period_id', periodId);
+    .select('scope, platform_filter, include_deductions, printed_total')
+    .eq('driver_id', driverId).eq('period_id', periodId);
   for (const pub of pubs ?? []) {
     const filter = Array.isArray(pub.platform_filter) && pub.platform_filter.length
       ? (pub.platform_filter as string[])
@@ -581,12 +582,19 @@ async function buildValueCandidates(
     // vales/perdas mas NÃO abate — a nota vem pelo bruto. Coluna nova (default true):
     // publicação antiga/sem a coluna segue como sempre.
     const includeDeductions = pub.include_deductions !== false;
+    // 07/08: se a publicação guardou o TOTAL IMPRESSO, é ele que vale — a nota segue o
+    // papel que o driver recebeu. Sem isso, o desconto por SALDO (abate parcial) faria a
+    // fórmula esperar o abate cheio e RECUSAR a nota certa.
+    const printedTotal = pub.printed_total === null || pub.printed_total === undefined
+      ? null
+      : Number(pub.printed_total);
     const value = mirrorExpectedValue({
       grossInScope: round2(platformSum(ids, filter, false) + zapexSum(ids, filter)),
       deductions: deductionsSum(ids),
       netFull: netSum(ids),
       hasPlatformFilter: filter !== null,
       includeDeductions,
+      printedTotal,
     });
     const key = `espelho_${pub.scope}${filter ? '_' + filter.join('+') : '_cheio'}${
       includeDeductions ? '' : '_sem_abate'

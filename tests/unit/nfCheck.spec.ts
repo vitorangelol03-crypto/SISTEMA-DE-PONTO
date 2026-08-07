@@ -184,6 +184,47 @@ describe('runNfCheck', () => {
  * vales+perdas 80 → total_net 220.
  */
 describe('mirrorExpectedValue — valor que a nota tem que ter', () => {
+  // ── 07/08/2026: o TOTAL IMPRESSO manda ────────────────────────────────────
+  // A fn RECALCULAVA o valor esperado por fórmula. Com o desconto por SALDO o espelho
+  // pode abater um PEDAÇO (só o que cabe no que a pessoa recebe), e a fórmula — que
+  // sempre desconta tudo — passaria a RECUSAR a nota certa do entregador.
+  it('🔑 com total impresso guardado, é ELE que vale (a nota segue o papel na mão)', () => {
+    expect(
+      mirrorExpectedValue({
+        // A fórmula daria 200 − 90 = 110; o espelho abateu só os 28 que cabiam e imprimiu 172.
+        grossInScope: 200, deductions: 90, netFull: 210,
+        hasPlatformFilter: true, includeDeductions: true, printedTotal: 172,
+      }),
+    ).toBe(172);
+  });
+
+  it('🔴 sem o total impresso, o abate parcial recusaria a nota certa (o bug evitado)', () => {
+    const semGuardar = mirrorExpectedValue({
+      grossInScope: 200, deductions: 90, netFull: 210, hasPlatformFilter: true, includeDeductions: true,
+    });
+    expect(semGuardar).toBe(110);        // o que a fórmula esperaria...
+    expect(semGuardar).not.toBe(172);    // ...e o que o PDF do driver realmente diz.
+  });
+
+  it('total impresso ausente/null: cai na fórmula de sempre (publicação antiga)', () => {
+    const base = {
+      grossInScope: 200, deductions: 80, netFull: 220,
+      hasPlatformFilter: true, includeDeductions: true,
+    };
+    expect(mirrorExpectedValue({ ...base, printedTotal: null })).toBe(120);
+    expect(mirrorExpectedValue({ ...base, printedTotal: undefined })).toBe(120);
+    expect(mirrorExpectedValue(base)).toBe(120);
+  });
+
+  it('total impresso 0 ou negativo NÃO manda (espelho zerado não gera nota)', () => {
+    const base = {
+      grossInScope: 200, deductions: 80, netFull: 220,
+      hasPlatformFilter: true, includeDeductions: true,
+    };
+    expect(mirrorExpectedValue({ ...base, printedTotal: 0 })).toBe(120);
+    expect(mirrorExpectedValue({ ...base, printedTotal: -5 })).toBe(120);
+  });
+
   it('espelho cheio COM abate: o líquido persistido (comportamento antigo)', () => {
     expect(
       mirrorExpectedValue({

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { FileText, Eye, Download, Printer, Loader2, AlarmClock, Send, Trash2, CheckCircle2 } from 'lucide-react';
 import { mirrorPlatformKey, prazoNfPadrao } from './driverPayShared';
+import type { ModoDesconto } from '../../utils/descontoSaldo';
 import toast from 'react-hot-toast';
 import {
   downloadDriverMirrorPdf,
@@ -60,9 +61,9 @@ interface DriverMirrorPreviewDialogProps {
   userId?: string;
   /**
    * Publicar no app do entregador (1 PDF por driver). `allowed`=plataformas incluídas
-   * (null=todas); `includeDeductions`=abateu os vales/perdas (false = pagamento parcial).
+   * (null=todas); `modo`=como abater vale/perda (07/08/2026: pessoa a pessoa por padrão).
    */
-  onPublish?: (allowed: string[] | null, includeDeductions: boolean, nfDueAt: string | null) => Promise<void>;
+  onPublish?: (allowed: string[] | null, modo: ModoDesconto, nfDueAt: string | null) => Promise<void>;
   /**
    * O que a PUBLICAÇÃO vai fazer de verdade — mostrado ANTES do clique (04/08/2026).
    * Existe porque a prévia mostrava o espelho do grupo e a publicação mandava individual:
@@ -79,8 +80,8 @@ interface DriverMirrorPreviewDialogProps {
   publishedKeys?: ReadonlySet<string>;
   /** Despublicar (tirar do app) — só faz sentido pro destinatário único (individual/grupo). */
   onUnpublish?: () => Promise<void>;
-  /** Reconstrói o espelho com o filtro de plataforma (chips) + o abate — prévia e PDF seguem. */
-  onRebuild?: (allowed: string[] | null, includeDeductions: boolean) => MirrorRequest | null;
+  /** Reconstrói o espelho com o filtro de plataforma (chips) + o modo de desconto. */
+  onRebuild?: (allowed: string[] | null, modo: ModoDesconto) => MirrorRequest | null;
   /**
    * Drivers deste espelho que JÁ tiveram vales/perdas abatidos noutra publicação do período
    * (aviso anti-desconto-duplo — decisão do Victor, 2026-07-27).
@@ -438,20 +439,23 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     return publishedKeys.has(mirrorPlatformKey(allowedFromSelection));
   }, [publishedKeys, alreadyPublished, allowedFromSelection]);
 
-  // Pagamento PARCIAL por plataforma (2026-07-27, decisão do Victor): marcado (padrão) =
-  // abate vales/perdas como sempre; desmarcado = eles saem listados mas fora do total, pra
-  // não descontar de novo no pagamento das demais plataformas.
-  const [includeDeductions, setIncludeDeductions] = useState(true);
+  /**
+   * Como descontar (07/08/2026, decisão do Victor: "mesma regra do relatório aqui").
+   * Padrão `pendentes`: decide PESSOA POR PESSOA, pra o espelho não abater de novo de quem
+   * já foi descontado — o papel que o entregador recebe precisa bater com o que foi pago.
+   */
+  const [modoDesconto, setModoDesconto] = useState<ModoDesconto>('pendentes');
   const deductionsTotal = useMemo(() => deductionsTotalOf(request), [request]);
   const alreadyDeductedList = alreadyDeducted ?? [];
 
-  // Prévia + "Gerar PDF" seguem os chips E o abate: reconstrói o espelho só com as
-  // plataformas marcadas (mesma regra do envio ao app). Sem filtro e com abate => original.
+  // Prévia + "Gerar PDF" seguem os chips E o modo de desconto: reconstrói o espelho só com
+  // as plataformas marcadas (mesma regra do envio ao app). ⚠️ `pendentes` SEMPRE reconstrói:
+  // o abate dele depende do saldo de cada pessoa, então o espelho original (que abate tudo)
+  // não serve nem quando não há filtro de plataforma.
   const activeRequest = useMemo<MirrorRequest>(() => {
-    const needsRebuild = allowedFromSelection !== null || !includeDeductions;
-    if (!onRebuild || !needsRebuild) return request;
-    return onRebuild(allowedFromSelection, includeDeductions) ?? request;
-  }, [onRebuild, allowedFromSelection, includeDeductions, request]);
+    if (!onRebuild) return request;
+    return onRebuild(allowedFromSelection, modoDesconto) ?? request;
+  }, [onRebuild, allowedFromSelection, modoDesconto, request]);
   const [includeReceipts, setIncludeReceipts] = useState(true);
   // Aviso de corte (2026-07-19): pré-carrega o último salvo; salva automático ao gerar.
   // ⚠️ Desde 04/08 estes dois sao data/hora DE VERDADE (antes eram texto livre: "14:00",
@@ -617,7 +621,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     setPublishing(true);
     try {
       await salvarPrazoComoPadrao();
-      await onPublish(allowed, includeDeductions, nfDueAt);
+      await onPublish(allowed, modoDesconto, nfDueAt);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao publicar no app');
     } finally {
@@ -757,36 +761,81 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
           </div>
         )}
 
-        {/* ── Pagamento parcial (2026-07-27): descontar ou não os vales/perdas ── */}
+        {/* ── Como descontar vale/perda (07/08/2026) ──
+             Mesma regra do relatório, decisão dele. O padrão decide PESSOA POR PESSOA: o
+             espelho é o papel que o entregador recebe, então ele tem que mostrar o mesmo
+             que foi pago — nem abater de novo de quem já foi descontado, nem esquecer quem
+             ainda não foi. */}
         {deductionsTotal > 0 && (
           <div
             className={`border rounded-md p-3 ${
-              includeDeductions ? 'border-gray-200 bg-gray-50' : 'border-amber-300 bg-amber-50'
+              modoDesconto === 'nenhum' ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-gray-50'
             }`}
             data-testid="mirror-deductions-box"
           >
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={includeDeductions}
-                onChange={(e) => setIncludeDeductions(e.target.checked)}
-                className="w-4 h-4 mt-0.5 text-blue-600 rounded border-gray-300"
-                data-testid="mirror-deductions-toggle"
-              />
-              <span className="text-sm text-gray-800">
-                <b>Descontar vales e perdas neste espelho</b> ({formatBRL(deductionsTotal)})
-                <span className="block text-xs text-gray-600 mt-0.5">
-                  {includeDeductions
-                    ? 'Marcado: o total já sai com os vales e perdas abatidos (como sempre foi).'
-                    : 'Desmarcado: pagamento PARCIAL — o espelho lista os vales e perdas mas NÃO abate do total (eles saem no pagamento das demais plataformas).'}
-                </span>
-              </span>
-            </label>
+            <p className="text-xs font-semibold text-gray-700 mb-2">
+              Vales e perdas deste espelho{' '}
+              <span className="font-normal text-gray-500">({formatBRL(deductionsTotal)} no total)</span>
+            </p>
+            <div className="space-y-1.5" role="radiogroup" aria-label="Como descontar vales e perdas">
+              {([
+                {
+                  modo: 'pendentes' as const,
+                  testid: 'mirror-deductions-modo-pendentes',
+                  titulo: 'Descontar só de quem ainda não foi descontado',
+                  recomendado: true,
+                  ajuda: 'Cada pessoa é conferida: quem já teve o desconto num pagamento anterior sai sem, quem ainda não teve sai com — e nunca abate mais do que ela recebe neste espelho.',
+                },
+                {
+                  modo: 'todos' as const,
+                  testid: 'mirror-deductions-modo-todos',
+                  titulo: 'Descontar de todo mundo',
+                  recomendado: false,
+                  ajuda: 'O valor cheio de cada um, mesmo de quem já foi descontado antes. Pode descontar em dobro.',
+                },
+                {
+                  modo: 'nenhum' as const,
+                  testid: 'mirror-deductions-modo-nenhum',
+                  titulo: 'Não descontar de ninguém',
+                  recomendado: false,
+                  ajuda: 'Pagamento PARCIAL: o espelho lista os vales e perdas mas NÃO abate do total (eles saem no pagamento das demais plataformas).',
+                },
+              ]).map((op) => (
+                <label
+                  key={op.modo}
+                  className={`flex items-start gap-2 cursor-pointer rounded-md p-2 border ${
+                    modoDesconto === op.modo ? 'border-blue-400 bg-white' : 'border-transparent hover:bg-white/60'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="modo-desconto-espelho"
+                    checked={modoDesconto === op.modo}
+                    onChange={() => setModoDesconto(op.modo)}
+                    className="w-4 h-4 mt-0.5 text-blue-600 border-gray-300"
+                    data-testid={op.testid}
+                  />
+                  <span className="text-sm text-gray-800">
+                    <b>{op.titulo}</b>
+                    {op.recomendado && (
+                      <span className="ml-1.5 text-[11px] font-semibold text-blue-700 bg-blue-100 rounded px-1.5 py-0.5">
+                        recomendado
+                      </span>
+                    )}
+                    <span className="block text-xs text-gray-600 mt-0.5">{op.ajuda}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-gray-600">
+              O valor que sair aqui é o que a conferência automática da nota vai esperar.
+            </p>
           </div>
         )}
 
-        {/* ── Aviso anti-desconto-duplo: já saiu noutra publicação deste período ── */}
-        {includeDeductions && alreadyDeductedList.length > 0 && (
+        {/* ── Aviso anti-desconto-duplo ──
+             Só no modo "todos": no padrão o próprio sistema já pula essa gente. */}
+        {modoDesconto === 'todos' && alreadyDeductedList.length > 0 && (
           <div
             className="border-2 border-amber-400 bg-amber-50 rounded-md p-3 text-sm text-amber-900"
             data-testid="mirror-already-deducted-warning"
@@ -800,8 +849,9 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
               ))}
             </ul>
             <p className="mt-1 text-xs">
-              Se publicar assim, o valor é descontado de novo. Desmarque "Descontar vales e perdas" se este for o
-              pagamento das demais plataformas.
+              Se publicar assim, o valor é descontado de novo. Escolha
+              "Descontar só de quem ainda não foi descontado" — ou "Não descontar de ninguém", se este
+              for o pagamento das demais plataformas.
             </p>
           </div>
         )}

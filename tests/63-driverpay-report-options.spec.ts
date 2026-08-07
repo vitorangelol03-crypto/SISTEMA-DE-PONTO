@@ -268,7 +268,10 @@ test.describe('Pagamentos Driver — filtro de plataforma e abate nos relatório
     // o que se afirma aqui é a DIFERENÇA: sem abate ele sobe exatamente o valor do vale.
     const comAbateTotal = await mirrorTotal(page);
     await expect(modal(page).getByText(/Vales \/ adiantamentos$/).first()).toBeVisible();
-    await modal(page).getByTestId('mirror-deductions-toggle').uncheck();
+    // 07/08/2026: a caixa de marcar do espelho virou 3 opções, igual a do relatório.
+    // Mesma intenção — "este espelho NÃO abate" — no clique que uma pessoa daria hoje.
+    await modal(page).getByTestId('mirror-deductions-modo-nenhum').check();
+    await expect(modal(page).getByTestId('mirror-deductions-modo-nenhum')).toBeChecked();
     await expect(modal(page).getByText(/NÃO.*foram descontados deste pagamento/)).toBeVisible({ timeout: 10_000 });
     const semAbateTotal = await mirrorTotal(page);
     expect(semAbateTotal - comAbateTotal).toBeCloseTo(VALE, 2);

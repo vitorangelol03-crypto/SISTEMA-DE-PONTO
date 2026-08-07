@@ -26,6 +26,12 @@ import { TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
  *     · SO_B   -> nunca foi descontado: sai com 100 − 50 = 50 🔑
  *     · CAP    -> sai com 200 − 70 (a sobra da rodada 1) = 130 🔑
  *
+ *   Rodada 3 — o ESPELHO (decisão dele: "mesma regra lá"), porque é o papel que o
+ *   entregador recebe e o que a conferência automática da nota usa como referência:
+ *     · espelho do AMBOS NÃO abate de novo (já foi descontado na rodada 1) 🔑
+ *     · o modo "todos" abate os R$ 60 cheios — a diferença entre os dois prova a regra
+ *     · publicar de verdade grava `printed_total`/`deducted_amount` na publicação
+ *
  * Segurança de produção: tudo dentro de uma quinzena de teste descartável com drivers
  * "PW Test …" e as plataformas REAIS (nenhuma plataforma é criada). A quinzena é excluída
  * pela própria UI no fim — o FK cascade leva junto pacotes, vales e as linhas do livro-caixa.
@@ -139,6 +145,20 @@ function totalDe(rows: string[][], nome: string): number {
   const linha = linhaDe(rows, nome);
   expect(linha, `linha de ${nome} no arquivo`).toBeTruthy();
   return valorDaCelula(linha![colTotalAReceber(rows)]);
+}
+
+/** "R$ 1.234,56" -> 1234.56 */
+function parseBRL(text: string): number {
+  const m = text.match(/-?[\d.]+,\d{2}/);
+  expect(m, `valor em R$ no texto "${text}"`).toBeTruthy();
+  return Number(m![0].replace(/\./g, '').replace(',', '.'));
+}
+
+/** Valor da faixa verde "TOTAL A RECEBER" na prévia do espelho. */
+async function mirrorTotal(page: Page): Promise<number> {
+  const banner = modal(page).locator('div.bg-green-700').filter({ hasText: 'TOTAL A RECEBER' }).first();
+  await expect(banner).toBeVisible({ timeout: 10_000 });
+  return parseBRL(await banner.locator('span').last().innerText());
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -283,6 +303,47 @@ test.describe('Pagamentos Driver — desconto por pessoa, com saldo', () => {
 
     // 🔑 E a sobra do CAP sai agora: 200 − 70 (o que não coube na rodada 1).
     expect(totalDe(r2.rows, CAP), 'CAP = 200 − 70 (sobra da rodada 1)').toBe(130);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // RODADA 3 — O ESPELHO segue a mesma regra (decisão dele: "mesma regra lá")
+    //
+    // O espelho é o papel que o entregador recebe. Se ele abatesse de novo os R$ 60 que
+    // já saíram na rodada 1, o papel diria um número e o pagamento diria outro — e a
+    // conferência automática da nota usa justamente o valor do espelho.
+    // ═══════════════════════════════════════════════════════════════════════
+    await rowOfDriver(page, AMBOS).getByTitle('Ver / gerar espelho').click();
+    await expect(modal(page).getByText('Espelho individual')).toBeVisible({ timeout: 10_000 });
+
+    // O modo novo também é o padrão aqui.
+    await expect(modal(page).getByTestId('mirror-deductions-modo-pendentes')).toBeChecked();
+
+    // ⚠️ O total EXIBIDO no espelho pode EXCLUIR plataforma marcada como "valor separado"
+    // (regra de 20/07 — ela sai num destaque próprio, fora do TOTAL A RECEBER). Por isso a
+    // prova aqui é a DIFERENÇA entre os dois modos, que não depende dessa configuração:
+    //
+    //   · "pendentes" -> AMBOS já foi descontado na rodada 1, então NÃO abate nada;
+    //   · "todos"     -> abate os R$ 60 cheios, como a regra velha fazia sempre.
+    //
+    // A diferença tem que ser exatamente o vale. Se o espelho descontasse de novo em
+    // "pendentes", os dois valores seriam IGUAIS e a diferença daria zero.
+    const espelhoPendentes = await mirrorTotal(page);
+    await modal(page).getByTestId('mirror-deductions-modo-todos').check();
+    const espelhoTodos = await mirrorTotal(page);
+    expect(espelhoPendentes - espelhoTodos,
+      'espelho do AMBOS não pode abater de novo o vale que já saiu na rodada 1')
+      .toBeCloseTo(60, 2);
+    await modal(page).getByTestId('mirror-deductions-modo-pendentes').check();
+    expect(await mirrorTotal(page), 'e volta ao valor sem abate ao reescolher o padrão')
+      .toBeCloseTo(espelhoPendentes, 2);
+
+    // Publicar de verdade: o insert grava `printed_total`/`deducted_amount`. Se as colunas
+    // não existissem, ou o insert falhasse, o botão não viraria "Republicar".
+    await modal(page).getByRole('button', { name: /^Publicar no app$/ }).click();
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 30_000 });
+    await rowOfDriver(page, AMBOS).getByTitle('Ver / gerar espelho').click();
+    await expect(modal(page).getByRole('button', { name: /^Republicar \(atualiza\)$/ }))
+      .toBeVisible({ timeout: 15_000 });
+    await closeModal(page);
 
     // ── Limpeza: a quinzena leva junto pacotes, vales e o livro-caixa (FK cascade) ──
     await deleteCurrentPeriod(page);

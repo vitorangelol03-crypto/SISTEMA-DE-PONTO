@@ -1198,9 +1198,15 @@ export function buildDriverMirrorData(
   period: DriverPaymentPeriod,
   allowedPlatformNames?: ReadonlySet<string>,
   includeDeductions = true,
+  /**
+   * Quanto abater DESTE driver neste espelho (07/08/2026). Manda em cima do
+   * `includeDeductions`: e o valor que a regra de saldo decidiu — 0 pra quem ja foi
+   * descontado, ou um pedaco pra quem o desconto nao cabia inteiro.
+   */
+  deductionOverride?: number,
 ): DriverMirrorData {
   const isAllowed = (name: string) => !allowedPlatformNames || allowedPlatformNames.has(name);
-  const totals = computeRowTotals(row, allowedPlatformNames, includeDeductions);
+  const totals = computeRowTotals(row, allowedPlatformNames, includeDeductions, deductionOverride);
   // Ganho Zapex (R$) do driver: entra como uma "plataforma" no espelho e soma no packagesValue.
   const includeZapex = isAllowed('Zapex');
   const zapexAmount = includeZapex ? row.zapex.length * row.zapexRate : 0;
@@ -1302,9 +1308,14 @@ export function buildGroupMirrorData(
   period: DriverPaymentPeriod,
   allowedPlatformNames?: ReadonlySet<string>,
   includeDeductions = true,
+  /** Quanto abater de cada membro (driverId -> R$), pela regra de saldo. */
+  deductionByDriver?: ReadonlyMap<string, number>,
 ): DriverGroupMirrorData {
   const drivers = rows.map((r) =>
-    buildDriverMirrorData(r, platforms, company, period, allowedPlatformNames, includeDeductions),
+    buildDriverMirrorData(
+      r, platforms, company, period, allowedPlatformNames, includeDeductions,
+      deductionByDriver?.get(r.driverId),
+    ),
   );
   const groupTotals = drivers.reduce(
     (acc, d) => ({
@@ -1344,6 +1355,8 @@ export function buildSelectionMirrorData(
   period: DriverPaymentPeriod,
   allowedPlatformNames?: ReadonlySet<string>,
   includeDeductions = true,
+  /** Quanto abater de cada pessoa (driverId -> R$), pela regra de saldo. */
+  deductionByDriver?: ReadonlyMap<string, number>,
 ): { groups: DriverGroupMirrorData[]; singles: DriverMirrorData[] } {
   const groupOf = (r: DriverRowData): string => r.groupName ?? NO_GROUP_LABEL;
   const groups = Array.from(selectedGroups)
@@ -1351,13 +1364,19 @@ export function buildSelectionMirrorData(
     .map((name) => {
       const groupRows = rows.filter((r) => groupOf(r) === name);
       return groupRows.length > 0
-        ? buildGroupMirrorData(name, groupRows, platforms, company, period, allowedPlatformNames, includeDeductions)
+        ? buildGroupMirrorData(
+            name, groupRows, platforms, company, period, allowedPlatformNames,
+            includeDeductions, deductionByDriver,
+          )
         : null;
     })
     .filter((g): g is DriverGroupMirrorData => g !== null);
   const singles = rows
     .filter((r) => selectedDrivers.has(r.paymentId) && !selectedGroups.has(groupOf(r)))
-    .map((r) => buildDriverMirrorData(r, platforms, company, period, allowedPlatformNames, includeDeductions));
+    .map((r) => buildDriverMirrorData(
+      r, platforms, company, period, allowedPlatformNames, includeDeductions,
+      deductionByDriver?.get(r.driverId),
+    ));
   return { groups, singles };
 }
 

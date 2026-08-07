@@ -60,7 +60,7 @@ import { contemSemAcento } from '../../utils/buscaTexto';
 import { pagamentosParaMarcarPorDispensa } from '../../utils/espelhoDispensa';
 import { driversParaPedirPrint, plataformasQuePedemPrint } from '../../utils/proofAuto';
 import { linhasForaDaConfig, diferencaEmReais } from '../../utils/rateSync';
-import type { PessoaDesconto } from '../../utils/descontoSaldo';
+import { abaterAgora, type ModoDesconto, type PessoaDesconto } from '../../utils/descontoSaldo';
 import { exportDriverGeneralReportExcel, exportDriverSimpleReportExcel } from '../../utils/driverReport';
 import { generateDriverMirrorPdf, generateDriverGroupMirrorPdf } from '../../utils/driverMirrorPdf';
 import {
@@ -365,6 +365,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       }
       try {
         setPublications(await listMirrorPublications(company.id, periodId));
+        // Publicar/despublicar espelho lança e estorna no livro-caixa (07/08/2026), então
+        // o saldo precisa ser relido junto — senão a próxima tela decide pelo valor velho.
+        setDeductionLedger(await listDeductionLedger(company.id, periodId));
       } catch (e) {
         console.error('Erro ao carregar publicações do app:', e);
       }
@@ -1061,13 +1064,38 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     setMirror({ mode: 'selection', groups, singles });
   };
 
+  /**
+   * Quanto abater de cada pessoa (driverId -> R$) num conjunto de linhas (07/08/2026).
+   *
+   * Usa o livro-caixa: quem ja foi descontado vem com 0, quem deve vem com o que CABE no
+   * que ele recebe nas plataformas do escopo. Mesma regra pura do relatorio — o espelho e o
+   * papel que o entregador recebe, entao os dois numeros tem que nascer do mesmo lugar.
+   */
+  const mapaDeAbate = useCallback(
+    (linhas: DriverRowData[], allowedSet: Set<string> | undefined, modo: ModoDesconto) => {
+      const m = new Map<string, number>();
+      for (const r of linhas) {
+        // includeDeductions=false: aqui interessa o BRUTO das plataformas do escopo.
+        const t = computeRowTotals(r, allowedSet, false);
+        m.set(r.driverId, abaterAgora(
+          modo,
+          { total: deductionsOf(r), jaAbatido: deductionLedger.get(r.driverId) ?? 0 },
+          t.packagesAmount + t.zapex,
+        ));
+      }
+      return m;
+    },
+    [deductionLedger],
+  );
+
   // Publica no app do driver: 1 PDF INDIVIDUAL por driver coberto (cada um ve o seu).
   // `allowed` = plataformas incluidas (filtro D3); null/vazio = todas.
-  // `includeDeductions` = abateu vales/perdas (false = pagamento parcial por plataforma).
-  // A escolha vai GRAVADA na publicacao: a conferencia automatica da NF calcula o valor
-  // esperado por ela (espelho sem abate => o driver emite a nota pelo valor cheio).
+  // `modo` = como abater vale/perda (07/08/2026): `pendentes` decide PESSOA POR PESSOA.
+  // A escolha vai GRAVADA na publicacao, junto com o TOTAL IMPRESSO — a conferencia
+  // automatica da NF passa a LER esse total em vez de recalcular por formula (com abate
+  // parcial a formula esperaria o abate cheio e recusaria a nota certa).
   const onPublish = useCallback(
-    async (allowed: string[] | null, includeDeductions: boolean, nfDueAt: string | null) => {
+    async (allowed: string[] | null, modo: ModoDesconto, nfDueAt: string | null) => {
       if (!company || !selectedPeriod) return;
       const targets = publishRows;
       if (targets.length === 0) {
@@ -1076,6 +1104,12 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       }
       const allowedSet = allowed && allowed.length > 0 ? new Set(allowed) : undefined;
       const filter = allowed && allowed.length > 0 ? allowed : null;
+      const includeDeductions = modo !== 'nenhum';
+      const abate = mapaDeAbate(targets, allowedSet, modo);
+      // As linhas do livro-caixa de UMA publicacao: so quem realmente teve abate.
+      const abatesDe = (linhas: DriverRowData[]) => linhas
+        .map((r) => ({ driverId: r.driverId, amount: abate.get(r.driverId) ?? 0 }))
+        .filter((d) => d.amount > 0);
 
       // Fase 4: envio de GRUPO = 1 PDF do grupo, só pro LÍDER (regra do Victor).
       if (publishScope === 'group') {
@@ -1086,12 +1120,14 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         }
         try {
           const data = buildGroupMirrorData(
-            info.groupName, targets, platformsRef.current, company, selectedPeriod, allowedSet, includeDeductions,
+            info.groupName, targets, platformsRef.current, company, selectedPeriod, allowedSet,
+            includeDeductions, abate,
           );
           const blob = await generateDriverGroupMirrorPdf(data, { compact: false });
           await publishDriverMirror({
             companyId: company.id, periodId: selectedPeriod.id, driverId: info.leaderId,
             scope: 'group', groupId: info.groupId, platformFilter: filter, includeDeductions, nfDueAt,
+            printedTotal: data.groupTotals.toReceive, deductions: abatesDe(targets),
             pdf: blob, userId,
           });
           toast.success('Espelho do grupo publicado para o líder.');
@@ -1115,13 +1151,16 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       for (const g of plano.grupos) {
         try {
           const data = buildGroupMirrorData(
-            g.groupName, g.membros, platformsRef.current, company, selectedPeriod, allowedSet, includeDeductions,
+            g.groupName, g.membros, platformsRef.current, company, selectedPeriod, allowedSet,
+            includeDeductions, abate,
           );
           const blob = await generateDriverGroupMirrorPdf(data, { compact: false });
           await publishDriverMirror({
             companyId: company.id, periodId: selectedPeriod.id, driverId: g.leaderId,
             scope: 'group', groupId: g.groupId,
-            platformFilter: filter, includeDeductions, nfDueAt, pdf: blob, userId,
+            platformFilter: filter, includeDeductions, nfDueAt,
+            printedTotal: data.groupTotals.toReceive, deductions: abatesDe(g.membros),
+            pdf: blob, userId,
           });
           ok += 1;
         } catch (e) {
@@ -1134,6 +1173,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         try {
           const data = buildDriverMirrorData(
             row, platformsRef.current, company, selectedPeriod, allowedSet, includeDeductions,
+            abate.get(row.driverId),
           );
           const blob = await generateDriverMirrorPdf(data);
           await publishDriverMirror({
@@ -1144,6 +1184,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             platformFilter: filter,
             includeDeductions,
             nfDueAt,
+            printedTotal: data.totals.toReceive,
+            deductions: abatesDe([row]),
             pdf: blob,
             userId,
           });
@@ -1173,7 +1215,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       if (ok > 0) await reloadPublished(selectedPeriod.id);
       if (fail === 0) setMirror(null);
     },
-    [company, selectedPeriod, publishRows, publishScope, publishGroupInfo, userId, reloadPublished, groups],
+    // `mapaDeAbate` na lista de propósito: ele carrega o livro-caixa. Sem isso, publicar
+    // depois de um pagamento usaria o saldo VELHO e descontaria de novo de quem já pagou.
+    [company, selectedPeriod, publishRows, publishScope, publishGroupInfo, userId, reloadPublished, groups, mapaDeAbate],
   );
 
   // Despublica o espelho ABERTO no diálogo (individual = o driver; grupo = o líder).
@@ -1640,16 +1684,25 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // Reconstrói o espelho ABERTO aplicando o filtro de plataforma (chips) — usado pela prévia
   // e pelo "Gerar PDF" pra mostrarem os valores só das plataformas marcadas (mesma regra do envio ao app).
   const rebuildMirror = useCallback(
-    (allowed: string[] | null, includeDeductions: boolean): MirrorRequest | null => {
+    (allowed: string[] | null, modo: ModoDesconto): MirrorRequest | null => {
       if (!company || !selectedPeriod || !mirror) return null;
       const allowedSet = allowed && allowed.length > 0 ? new Set(allowed) : undefined;
       const plats = platformsRef.current;
+      const includeDeductions = modo !== 'nenhum';
+      // A prévia tem que mostrar o MESMO número que a publicação vai gravar — por isso o
+      // mapa de abate é o mesmo, e o escopo é o mesmo (`selection` olha a lista filtrada).
+      const abate = mapaDeAbate(
+        mirror.mode === 'selection' ? filteredRows : publishRows, allowedSet, modo,
+      );
       if (mirror.mode === 'individual') {
         const row = publishRows[0];
         if (!row) return null;
         return {
           mode: 'individual',
-          data: buildDriverMirrorData(row, plats, company, selectedPeriod, allowedSet, includeDeductions),
+          data: buildDriverMirrorData(
+            row, plats, company, selectedPeriod, allowedSet, includeDeductions,
+            abate.get(row.driverId),
+          ),
         };
       }
       if (mirror.mode === 'group') {
@@ -1657,7 +1710,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         return {
           mode: 'group',
           data: buildGroupMirrorData(
-            publishGroupInfo.groupName, publishRows, plats, company, selectedPeriod, allowedSet, includeDeductions,
+            publishGroupInfo.groupName, publishRows, plats, company, selectedPeriod, allowedSet,
+            includeDeductions, abate,
           ),
         };
       }
@@ -1665,16 +1719,19 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         return {
           mode: 'mass',
           list: publishRows.map((r) =>
-            buildDriverMirrorData(r, plats, company, selectedPeriod, allowedSet, includeDeductions),
+            buildDriverMirrorData(
+              r, plats, company, selectedPeriod, allowedSet, includeDeductions, abate.get(r.driverId),
+            ),
           ),
         };
       }
       const sel = buildSelectionMirrorData(
-        filteredRows, selGroups, selDrivers, plats, company, selectedPeriod, allowedSet, includeDeductions,
+        filteredRows, selGroups, selDrivers, plats, company, selectedPeriod, allowedSet,
+        includeDeductions, abate,
       );
       return { mode: 'selection', groups: sel.groups, singles: sel.singles };
     },
-    [company, selectedPeriod, mirror, publishRows, publishGroupInfo, filteredRows, selGroups, selDrivers],
+    [company, selectedPeriod, mirror, publishRows, publishGroupInfo, filteredRows, selGroups, selDrivers, mapaDeAbate],
   );
 
   /**

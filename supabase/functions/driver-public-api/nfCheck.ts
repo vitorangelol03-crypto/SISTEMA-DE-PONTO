@@ -19,6 +19,17 @@ export interface MirrorExpectedValueInput {
   hasPlatformFilter: boolean;
   /** O espelho ABATEU os vales/perdas? (coluna include_deductions da publicação) */
   includeDeductions: boolean;
+  /**
+   * O "TOTAL A RECEBER" que saiu IMPRESSO no PDF (coluna printed_total, 07/08/2026).
+   *
+   * Quando existe, MANDA em tudo: a nota segue o papel que o entregador tem na mão, e
+   * não uma reconstituição dele. Foi o que destravou o desconto por SALDO — com abate
+   * PARCIAL (abate só o que cabe no que a pessoa recebe) a fórmula abaixo esperaria o
+   * abate cheio e recusaria a nota certa.
+   *
+   * null/ausente = publicação anterior a 07/08: cai na fórmula de sempre.
+   */
+  printedTotal?: number | null;
 }
 
 /**
@@ -31,9 +42,20 @@ export interface MirrorExpectedValueInput {
  *    desconto — hoje nenhum publicado tem, mas a regra passa a bater sempre);
  *  - sem abate (parcial)     -> bruto puro, com ou sem filtro: os vales/perdas saem
  *    listados no espelho mas não entram no total.
+ *
+ * 07/08/2026 — 🔑 quando a publicação guardou o TOTAL IMPRESSO (`printedTotal`), é ele que
+ * vale, e as regras acima viram só o caminho de compatibilidade das publicações antigas.
+ * O motivo: com desconto por SALDO o espelho pode abater um PEDAÇO do que a pessoa deve
+ * (só o que cabe no que ela recebe), e a fórmula — que sempre desconta tudo — recusaria a
+ * nota CERTA. Ler o número impresso em vez de reconstituí-lo fecha essa classe de erro.
  */
 export function mirrorExpectedValue(i: MirrorExpectedValueInput): number {
   const round2 = (v: number) => Math.round(v * 100) / 100;
+  // O papel que o entregador tem na mão manda. `> 0` de propósito: espelho zerado não
+  // gera nota, e 0 aqui seria indistinguível de "não guardado".
+  if (typeof i.printedTotal === 'number' && Number.isFinite(i.printedTotal) && i.printedTotal > 0) {
+    return round2(i.printedTotal);
+  }
   if (!i.includeDeductions) return round2(i.grossInScope);
   if (!i.hasPlatformFilter) return round2(i.netFull);
   return round2(i.grossInScope - i.deductions);

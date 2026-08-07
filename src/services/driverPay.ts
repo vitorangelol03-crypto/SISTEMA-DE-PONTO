@@ -1574,7 +1574,38 @@ export interface PublishMirrorInput {
   pdf: Blob;
   userId: string;
   groupId?: string | null;
+  /**
+   * O "TOTAL A RECEBER" que saiu IMPRESSO no PDF (07/08/2026). A conferencia da nota passa
+   * a usar ESTE numero em vez de recalcular por formula — sem isso, o desconto por saldo
+   * (abate parcial) faria a edge fn recusar a nota certa do entregador.
+   */
+  printedTotal?: number | null;
+  /**
+   * Quanto de vale/perda este espelho abateu, por pessoa (o grupo abate dos membros).
+   * Vira lancamento no livro-caixa; despublicar estorna exatamente estas linhas.
+   */
+  deductions?: ReadonlyArray<{ driverId: string; amount: number }>;
 }
+
+/**
+ * Identidade do espelho no livro-caixa: periodo + quem recebeu a publicacao + conjunto de
+ * plataformas. Precisa incluir o driver da publicacao porque `platform_key` sozinho se
+ * repete (todo mundo tem espelho "SHOPEE") e apagaria o lancamento dos outros.
+ */
+const mirrorLedgerRef = (driverId: string, platformKey: string): string =>
+  `${platformKey}#${driverId}`;
+
+/** Estorna os abates de UM espelho (usado ao republicar e ao despublicar). */
+const clearMirrorDeductions = async (
+  companyId: string, periodId: string, sourceRef: string,
+): Promise<void> => {
+  const { error } = await supabase
+    .from('driverpay_deduction_ledger')
+    .delete()
+    .eq('company_id', companyId).eq('period_id', periodId)
+    .eq('source', 'espelho').eq('source_ref', sourceRef);
+  if (error) throwDbError(error);
+};
 
 /**
  * Publica UM espelho (PDF ja gerado) pro app do driver: sobe o PDF no bucket privado
@@ -1617,10 +1648,26 @@ export const publishDriverMirror = async (i: PublishMirrorInput): Promise<void> 
     platform_key: platformKey,
     include_deductions: i.includeDeductions !== false,
     nf_due_at: i.nfDueAt ?? null,
+    printed_total: typeof i.printedTotal === 'number' && Number.isFinite(i.printedTotal)
+      ? Math.round(i.printedTotal * 100) / 100
+      : null,
+    deducted_amount: Math.round(
+      (i.deductions ?? []).reduce((s, d) => s + (Number.isFinite(d.amount) ? d.amount : 0), 0) * 100,
+    ) / 100,
     pdf_path: path,
     delivered_by: i.userId,
   }]);
   if (error) throwDbError(error);
+
+  // LIVRO-CAIXA (07/08/2026): o espelho que abate vale/perda lanca o abate, senao o
+  // relatorio das outras plataformas descontaria de novo a mesma gente.
+  // ⚠️ Estorna ANTES de lancar: republicar o mesmo espelho (corrigir um valor) tem que
+  // substituir o lancamento, nao somar em cima dele.
+  const ref = mirrorLedgerRef(i.driverId, platformKey);
+  await clearMirrorDeductions(i.companyId, i.periodId, ref);
+  if (i.deductions && i.deductions.length > 0) {
+    await recordDeductions(i.companyId, i.periodId, i.deductions, 'espelho', ref, i.userId);
+  }
 };
 
 /** Publicacao de espelho como o painel precisa dela (selo "no app" + aviso de desconto). */
@@ -1728,8 +1775,24 @@ export const unpublishDriverMirror = async (
     .eq('period_id', periodId)
     .eq('driver_id', driverId);
   if (platformFilter !== undefined) q = q.eq('platform_key', mirrorPlatformKey(platformFilter));
+
+  // Quais espelhos vao sair — preciso saber ANTES do delete pra estornar o livro-caixa.
+  let sel = supabase
+    .from('driverpay_mirror_publications')
+    .select('platform_key')
+    .eq('company_id', companyId).eq('period_id', periodId).eq('driver_id', driverId);
+  if (platformFilter !== undefined) sel = sel.eq('platform_key', mirrorPlatformKey(platformFilter));
+  const { data: saindo, error: selErr } = await sel;
+  if (selErr) throwDbError(selErr);
+
   const { error } = await q;
   if (error) throwDbError(error);
+
+  // O espelho saiu do app: o abate dele deixa de valer e a pessoa volta a dever.
+  for (const p of saindo ?? []) {
+    const key = String((p as { platform_key: string | null }).platform_key ?? '');
+    await clearMirrorDeductions(companyId, periodId, mirrorLedgerRef(driverId, key));
+  }
 };
 
 /**
@@ -1749,6 +1812,13 @@ export const unpublishAllMirrorsForPeriod = async (
     .eq('period_id', periodId)
     .select('id');
   if (error) throwDbError(error);
+  // Nenhum espelho do periodo continua no app: nenhum abate vindo de espelho continua
+  // valendo. Os abates de RELATORIO (o dinheiro que ja saiu de fato) ficam intactos.
+  const { error: ledErr } = await supabase
+    .from('driverpay_deduction_ledger')
+    .delete()
+    .eq('company_id', companyId).eq('period_id', periodId).eq('source', 'espelho');
+  if (ledErr) throwDbError(ledErr);
   return (data ?? []).length;
 };
 
