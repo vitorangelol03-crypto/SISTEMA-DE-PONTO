@@ -222,7 +222,7 @@ export const DriverList: React.FC<DriverListProps> = ({
     const pos = posicaoNaPilha(pilha, key);
     if (pos === null || pilha.length < 2) return null;
     return (
-      <span className="text-[10px] font-bold leading-none px-1 py-0.5 rounded bg-white/25 tabular-nums">
+      <span className="text-[11px] font-bold leading-none px-1 py-0.5 rounded bg-white/25 tabular-nums">
         {pos}º
       </span>
     );
@@ -279,7 +279,7 @@ export const DriverList: React.FC<DriverListProps> = ({
           {label}
         </span>
         {sort.length > 1 && posicaoNaPilha(sort, key) !== null && (
-          <span className="text-[10px] font-bold leading-none px-1 rounded bg-blue-100 text-blue-700 tabular-nums">
+          <span className="text-[11px] font-bold leading-none px-1 rounded bg-blue-100 text-blue-700 tabular-nums">
             {posicaoNaPilha(sort, key)}º
           </span>
         )}
@@ -394,7 +394,7 @@ export const DriverList: React.FC<DriverListProps> = ({
           return (
             <span className="inline-flex items-center gap-0.5 ml-0.5 tabular-nums">
               <span
-                className={`text-[10px] font-bold px-1 py-0.5 rounded ${
+                className={`text-[11px] font-bold px-1 py-0.5 rounded ${
                   activeDir ? 'bg-white/25 text-white' : 'bg-green-100 text-green-700'
                 }`}
                 title={`${c.feitos} grupo(s) já`}
@@ -403,7 +403,7 @@ export const DriverList: React.FC<DriverListProps> = ({
               </span>
               {c.faltam > 0 && (
                 <span
-                  className={`text-[10px] font-bold px-1 py-0.5 rounded ${
+                  className={`text-[11px] font-bold px-1 py-0.5 rounded ${
                     activeDir ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-800'
                   }`}
                   title={`falta ${c.faltam} grupo(s)`}
@@ -936,7 +936,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                           title={todos
                             ? 'Todos os membros deste grupo já foram pagos.'
                             : `${pagos} de ${sits.length} membros já foram pagos.`}
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                          className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
                             todos ? 'bg-purple-100 text-purple-800' : 'bg-purple-50 text-purple-700 border border-purple-200'
                           }`}
                         >

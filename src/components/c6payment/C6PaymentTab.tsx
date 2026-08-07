@@ -859,7 +859,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                             <span className="text-xs text-green-800 block">Valor líquido</span>
                             <span className="text-sm font-semibold text-green-700">R$ {row.amount.toFixed(2)}</span>
                             {(row.errorValueDiscount > 0 || row.triageDiscount > 0) && (
-                              <div className="text-[10px] text-gray-500 leading-tight mt-0.5">
+                              <div className="text-[11px] text-gray-500 leading-tight mt-0.5">
                                 <div>Bruto: R$ {row.grossAmount.toFixed(2)}</div>
                                 {row.errorValueDiscount > 0 && (
                                   <div className="text-red-600">-R$ {row.errorValueDiscount.toFixed(2)} erro</div>

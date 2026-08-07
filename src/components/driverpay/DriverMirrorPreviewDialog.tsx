@@ -386,7 +386,7 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
 
 const Field: React.FC<{ k: string; v: string }> = ({ k, v }) => (
   <div className="flex flex-col">
-    <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{k}</span>
+    <span className="text-[11px] font-bold uppercase tracking-wide text-gray-400">{k}</span>
     <span className="text-sm text-gray-900 break-words">{v}</span>
   </div>
 );

@@ -856,7 +856,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                               <div key={errorRecord.id} className="bg-white p-3 rounded border">
                                 <div className="flex items-center justify-between mb-1">
                                   <div className="text-sm font-medium">{formatDateBR(errorRecord.date)}</div>
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${
                                     isValue
                                       ? 'bg-red-100 text-red-700'
                                       : 'bg-blue-100 text-blue-700'
@@ -976,7 +976,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                       <div key={errorRecord.id} className="bg-gray-50 p-3 rounded border">
                         <div className="flex items-center justify-between mb-1">
                           <div className="text-sm font-medium">{formatDateBR(errorRecord.date)}</div>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${
                             isValue ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
                           }`}>
                             {isValue ? '💰 Valor' : '📦 Qtd'}

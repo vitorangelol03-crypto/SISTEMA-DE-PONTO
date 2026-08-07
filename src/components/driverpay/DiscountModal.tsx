@@ -28,7 +28,7 @@ const MAX_VIDEO = 50 * 1024 * 1024; // 50 MB por vídeo
 /** Selo da marca do pacote: PNR (roxo) / LOST (laranja). */
 export const DiscountStatusPill: React.FC<{ status: 'PNR' | 'LOST' }> = ({ status }) => (
   <span
-    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+    className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
       status === 'PNR' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'
     }`}
   >
@@ -423,7 +423,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
                     className="w-20 h-20 rounded-md border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-blue-400 hover:text-blue-500"
                   >
                     <ImagePlus className="w-5 h-5" />
-                    <span className="text-[10px]">Adicionar</span>
+                    <span className="text-[11px]">Adicionar</span>
                   </button>
                 )}
                 <input
@@ -468,7 +468,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
                     className="w-28 h-20 rounded-md border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-blue-400 hover:text-blue-500"
                   >
                     <Video className="w-5 h-5" />
-                    <span className="text-[10px]">Adicionar vídeo</span>
+                    <span className="text-[11px]">Adicionar vídeo</span>
                   </button>
                 )}
                 <input

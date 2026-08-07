@@ -1198,7 +1198,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
                     </div>
                     <div className="bg-white rounded p-2 border border-gray-100">
                       <span className="text-gray-500 block">Coordenadas</span>
-                      <span className="text-gray-800 font-mono text-[10px] break-all">
+                      <span className="text-gray-800 font-mono text-[11px] break-all">
                         {f.latitude != null ? `${Number(f.latitude).toFixed(4)}, ${Number(f.longitude).toFixed(4)}` : '-'}
                       </span>
                     </div>

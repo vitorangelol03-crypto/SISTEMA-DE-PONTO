@@ -1410,7 +1410,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                 <div key={errorRecord.id} className="bg-red-50 p-3 rounded border border-red-200">
                                   <div className="flex items-center justify-between mb-1">
                                     <div className="text-sm font-medium">{formatDateBR(errorRecord.date)}</div>
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${
                                       isValue ? 'bg-red-200 text-red-800' : 'bg-blue-100 text-blue-700'
                                     }`}>
                                       {isValue ? '💰 Valor' : '📦 Quantidade'}

@@ -45,6 +45,37 @@
   }
 
   /*
+    ── NÚMEROS DE LARGURA FIXA (07/08/2026, pedido do Victor: "deixe tudo nítido") ──
+
+    O problema, visível no print que ele mandou da grade: "1.126" e "902" ocupam larguras
+    DIFERENTES, então os números dançam de linha em linha e a coluna nunca fica alinhada —
+    o olho não consegue comparar valores em pé.
+
+    `tabular-nums` faz todo algarismo ocupar o MESMO espaço, então R$ 1.126,00 e R$ 902,00
+    ficam alinhados casa a casa. Aplicado nas tabelas (que é onde há coluna de número) e
+    nos campos onde se digita valor. Fora daí o texto corrido segue com o espaçamento
+    natural, que lê melhor.
+
+    ⚠️ Só desenho: não muda valor, formatação, nem o que é digitado.
+  */
+  table,
+  input[type='number'],
+  input[inputmode='decimal'],
+  input[inputmode='numeric'] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+    Inter tem alternativas de desenho pensadas pra tela. Ligamos as que separam caracteres
+    que se confundem em corpo pequeno — o "1" ganha base, e o zero fica distinto do "O".
+    Importa numa tela cheia de código de pacote, CPF, CNPJ e chave PIX.
+  */
+  html {
+    font-feature-settings: 'cv05' 1, 'cv08' 1, 'tnum' 0;
+    font-optical-sizing: auto;
+  }
+
+  /*
     Campos nativos (select/date/time) apareciam CINZA DO NAVEGADOR ao lado dos
     campos brancos do app — na mesma tela pareciam de sistemas diferentes.
     Aqui eles passam a ter a mesma altura, borda e canto dos outros. Só pintura:

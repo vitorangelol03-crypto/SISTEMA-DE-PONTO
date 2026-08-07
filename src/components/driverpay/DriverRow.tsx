@@ -194,7 +194,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                   title={`${pagamento.estado === 'concluido'
                     ? `Pagamento concluído em ${pagamento.ultimoPagamento ? new Date(pagamento.ultimoPagamento).toLocaleDateString('pt-BR') : ''}.\nPlataformas pagas: ${pagamento.pagas.join(', ')}.`
                     : `Plataformas pagas: ${pagamento.pagas.join(', ')}.\nAinda falta: ${pagamento.faltando.join(', ')}.`}\n\nClique para DESMARCAR.`}
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap cursor-pointer hover:line-through hover:opacity-80 ${
+                  className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap cursor-pointer hover:line-through hover:opacity-80 ${
                     pagamento.estado === 'concluido'
                       ? 'bg-purple-100 text-purple-800'
                       : 'bg-purple-50 text-purple-700 border border-purple-200'
@@ -210,7 +210,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 <span
                   data-testid="row-selo-sem-desconto"
                   title="Este entregador foi pago SEM o desconto de vale/perda — o desconto ficou pendente pro pagamento das demais plataformas."
-                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200 whitespace-nowrap"
+                  className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200 whitespace-nowrap"
                 >
                   vale a descontar
                 </span>
@@ -276,7 +276,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
               <div className="inline-flex flex-col items-center gap-0.5">
                 <span
                   title={pl.name}
-                  className="max-w-[6.5rem] truncate text-[10px] font-bold leading-none"
+                  className="max-w-[6.5rem] truncate text-[11px] font-bold leading-none"
                   style={{ color: plColor ?? '#4b5563' }}
                 >
                   {pl.name}
@@ -461,7 +461,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                     : 'O print chegou mas a quantidade NAO bate com a planilha — veja em "Espelhos recebidos"'
                 }
                 data-testid="espelho-atencao"
-                className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold border bg-amber-100 text-amber-700 border-amber-300 whitespace-nowrap"
+                className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold border bg-amber-100 text-amber-700 border-amber-300 whitespace-nowrap"
               >
                 <AlertTriangle className="w-3 h-3" />
                 {proofProgress.rejected > 0 ? 'recusado' : 'não bate'}
@@ -474,7 +474,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
               <span
                 title={`Nao foi pedido: este entregador nao esta em nenhum grupo (${semGrupoFora.join(', ')}). Coloque-o num grupo ou peca o print so dele.`}
                 data-testid="espelho-sem-grupo"
-                className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold border bg-gray-50 text-gray-500 border-gray-300 whitespace-nowrap"
+                className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold border bg-gray-50 text-gray-500 border-gray-300 whitespace-nowrap"
               >
                 <Circle className="w-3 h-3" />
                 sem grupo
@@ -483,7 +483,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
             {publishedInApp && (
               <span
                 title="Espelho publicado no app do driver"
-                className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap inline-flex items-center gap-0.5"
+                className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap inline-flex items-center gap-0.5"
               >
                 <Smartphone className="w-3 h-3" /> no app
               </span>
@@ -606,7 +606,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                     />
                     {/* Taxa (R$/pacote) DESTA rota — editavel por rota */}
                     <div className="relative">
-                      <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]">
+                      <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px]">
                         R$
                       </span>
                       <input
