@@ -144,10 +144,13 @@ export const DriverRow: React.FC<DriverRowProps> = ({
       >
         {/* Driver / Rota — coluna "grudada" (sticky) ao rolar na horizontal */}
         <td
-          className={`sticky left-0 z-10 border-r border-gray-200 px-3 py-3 align-middle ${rowBg} ${stickyHover}`}
+          /* 07/08/2026 — largura minima + alinhamento pelo TOPO: sem isso o nome longo
+             quebrava em 4 linhas e as etiquetas caiam em lugares diferentes a cada linha
+             ("esta muito feio", palavras dele). */
+          className={`sticky left-0 z-10 border-r border-gray-200 px-3 py-3 align-top min-w-[17rem] ${rowBg} ${stickyHover}`}
         >
-          <div className="flex flex-col gap-1">
-            <span className="font-semibold text-gray-900 flex items-center gap-2">
+          <div className="flex items-start gap-2">
+            <span className="flex items-center gap-1.5 pt-0.5 flex-shrink-0">
               {onToggleSelect && (
                 <input
                   type="checkbox"
@@ -175,7 +178,10 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                   />
                 </button>
               )}
-              <span className="break-words">{row.name}</span>
+            </span>
+            <div className="flex flex-col gap-1 min-w-0 flex-1">
+              <span className="font-semibold text-gray-900 leading-snug break-words">{row.name}</span>
+              <div className="flex flex-wrap items-center gap-1.5">
               {/* Tag de PAGAMENTO (04/08/2026) — some quando ele nao tem pacote nenhum. */}
               {pagamento && pagamento.estado !== 'sem_pacote' && pagamento.estado !== 'pendente' && (
                 /* CLICÁVEL desde 04/08/2026 (pedido do Victor): a marca é gravada sozinha
@@ -209,9 +215,9 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                   vale a descontar
                 </span>
               )}
-            </span>
-            <span className="text-sm text-gray-600 flex items-center gap-1 flex-wrap">
-              <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              </div>
+              <span className="text-sm text-gray-600 flex items-center gap-1 flex-wrap">
+                <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
               {multi ? (
                 <>
                   <span className="text-gray-900">{row.routes[0]?.route || '—'}</span>
@@ -233,7 +239,8 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                   )}
                 </>
               )}
-            </span>
+              </span>
+            </div>
           </div>
         </td>
 
@@ -260,16 +267,20 @@ export const DriverRow: React.FC<DriverRowProps> = ({
           const allSameRate = routeRates.every((r) => r === routeRates[0]);
           const plColor = pl.color;
           return (
-            <td key={pl.id} className="px-2 py-3 text-center align-middle relative">
-              {/* Mini-cabecalho: nome da plataforma acima do quadradinho, aparece ao passar
-                  o mouse na linha (util quando a pessoa esta longe do cabecalho da tabela). */}
-              <span
-                className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2 rounded px-2 py-0.5 text-[13px] font-bold text-white whitespace-nowrap shadow-md opacity-0 transition-opacity group-hover:opacity-100"
-                style={{ backgroundColor: plColor ?? '#374151' }}
-              >
-                {pl.name}
-              </span>
+            <td key={pl.id} className="px-2 py-3 text-center align-middle">
+              {/* 07/08/2026 — o nome da plataforma passou a aparecer SEMPRE, em cima da
+                  caixinha (pedido dele: "quero os nomes das plataformas aparecendo para
+                  ficar mais facil de identificar"). Antes so aparecia ao passar o mouse, e
+                  quem rolava a lista perdia de vista qual coluna era qual.
+                  Fica na cor da propria plataforma, entao a coluna se identifica sozinha. */}
               <div className="inline-flex flex-col items-center gap-0.5">
+                <span
+                  title={pl.name}
+                  className="max-w-[6.5rem] truncate text-[10px] font-bold leading-none"
+                  style={{ color: plColor ?? '#4b5563' }}
+                >
+                  {pl.name}
+                </span>
                 {multi ? (
                   /*
                     06/08/2026 — a linha de multi-rota mostrava NÚMERO SOLTO enquanto as
@@ -481,14 +492,17 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         </td>
 
         {/* Acoes */}
-        <td className="px-2 py-3 text-center align-middle">
-          <div className="inline-flex gap-2 justify-end">
+        {/* 07/08/2026 — acoes: os icones ficavam espremidos e desalinhados no canto.
+            Agora cada um tem area de clique propria e o bloco fica encostado a direita,
+            na mesma altura em todas as linhas. */}
+        <td className="px-2 py-3 text-right align-middle whitespace-nowrap">
+          <div className="inline-flex items-center gap-0.5 justify-end">
             {canConfig && (
               <button
                 type="button"
                 onClick={() => handlers.onConfigDriver(row)}
                 title="Configurar valores / PIX"
-                className="text-blue-600 hover:text-blue-800"
+                className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md p-1.5"
               >
                 <Settings className="w-4 h-4" />
               </button>
@@ -499,7 +513,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 onClick={() => handlers.onDiscount(row)}
                 disabled={readOnly}
                 title="Lançar desconto"
-                className="text-red-600 hover:text-red-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md p-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
                 <Minus className="w-4 h-4" />
               </button>
@@ -510,7 +524,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 onClick={() => handlers.onVale(row)}
                 disabled={readOnly}
                 title="Lançar vale"
-                className="text-amber-600 hover:text-amber-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-md p-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
                 <Wallet className="w-4 h-4" />
               </button>
@@ -521,7 +535,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 onClick={() => handlers.onZapex(row)}
                 disabled={readOnly}
                 title="Lançar Zapex"
-                className="text-indigo-600 hover:text-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-md p-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
                 <Zap className="w-4 h-4" />
               </button>
@@ -564,7 +578,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                     type="button"
                     onClick={() => handlers.onRemoveRoute(row.paymentId, ri)}
                     title="Remover rota"
-                    className="text-red-600 hover:text-red-800"
+                    className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md p-1.5"
                   >
                     <X className="w-4 h-4" />
                   </button>
