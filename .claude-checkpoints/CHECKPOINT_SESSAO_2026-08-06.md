@@ -211,7 +211,23 @@ passaram pra cor da área.
 (46+05) → 11/11 limpo, e o spec sozinho → 4/4. **Não reproduziu**; perdi o rastro porque a
 segunda rodada limpa `test-results/`. Fica o registro honesto: não consegui provar a causa.
 
-### 4.7 ⏳ Falta desta empreitada
+### 4.7 Leva 5 — a porta de entrada  ·  `c94ed38`
+
+A tela de **login** era uma página branca com um circulinho azul — a primeira coisa que a equipe
+vê todo dia e a mais sem personalidade do app. Agora: **fundo no gradiente da marca**, formulário
+num **cartão branco flutuante**, selo no lugar do círculo e o **"Entrar" como a coisa mais forte
+da tela** (gradiente, 48px) — didático: a ação principal se anuncia sozinha. As duas portas
+secundárias ("Sou funcionário" e "Ver meus erros") ganharam a mesma altura e canto do resto.
+
+⚠️ Nada de comportamento mudou: mesmos `#id`/`#password`, mesmos textos, mesmo fluxo.
+**Validado: E2E 01-auth + 02-clock 15/15** com cliques reais (login certo, senha errada, sessão,
+CPF/PIN do funcionário) · typecheck 61 · build · sem estouro em 1366/393.
+
+**Modal conferido** (Notas recebidas, no celular): a faixa laranja das atrasadas, o filtro com os
+números e os botões de ação cabem e funcionam na tela pequena. Único resíduo: o rótulo do CNPJ
+aparece cortado ("Shopee/Anjun/Lo…") — o nome do arquivo logo abaixo mostra o dado inteiro.
+
+### 4.8 ⏳ Falta desta empreitada
 1. ✅ **Passe fino: TODAS as abas conferidas** (só o Ponto ficou de fora, ver item 2).
 2. `AttendanceTab.tsx` **não foi tocado de propósito**: tem trabalho não commitado da outra
    janela (a trava da bonificação) e mexer ali misturaria as duas coisas.
