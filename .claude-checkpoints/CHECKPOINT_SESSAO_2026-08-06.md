@@ -227,7 +227,31 @@ CPF/PIN do funcionário) · typecheck 61 · build · sem estouro em 1366/393.
 números e os botões de ação cabem e funcionam na tela pequena. Único resíduo: o rótulo do CNPJ
 aparece cortado ("Shopee/Anjun/Lo…") — o nome do arquivo logo abaixo mostra o dado inteiro.
 
-### 4.8 ⏳ Falta desta empreitada
+### 4.8 RELEASE — o visual foi pro ar (autorizado: *"pode subir tudo"*)
+
+Antes de subir rodei o **spec 100 (supremo), o mais abrangente do projeto: 45 ✅ / 1 ❌**.
+
+🔴 **A falha NÃO é do visual — é da trava da bonificação que está NÃO COMMITADA na árvore
+(trabalho da outra janela).** Cadeia de evidência:
+1. o diff não commitado do `AttendanceTab` insere `if (!window.confirm(...)) return;` **antes** de
+   aplicar o bônus;
+2. o Playwright **descarta** caixas de confirmação por padrão, e esse teste **não trata diálogo**
+   (o único `page.once('dialog')` do arquivo está em outro teste, na linha 1088);
+3. o erro é exatamente *"toast 'Bonificação B aplicada com sucesso' nunca apareceu"* — o código
+   voltou antes de aplicar;
+4. **nenhum dos meus 12 commits toca `AttendanceTab` nem `bonusScope`** (conferido com
+   `git log -- src/components/attendance/`: vazio).
+⚠️ Tentei provar dando `stash` no arquivo deles e o classificador **bloqueou** (com razão, é
+trabalho não commitado alheio) — então a prova é a cadeia acima, não um experimento.
+📌 **Recado pra quem fechar a trava da bonificação:** o spec 100/C2 vai precisar aceitar a
+confirmação (`page.once('dialog', d => d.accept())`) — é o que uma pessoa faria ao clicar OK.
+
+**Push:** `3356bad..6baddd2`, 12 commits, 19 arquivos, +650/−100.
+**Vercel conferida por conteúdo** (não por fé): o pacote principal do site tem `ui-appbar`,
+`Mais (`, `abas-mais` e o gradiente do login; o pedaço `DriverPayTab-Z9ZfpV6Z.js` tem
+"Organizar e conferir", "Gerar e baixar", "nota(s) atrasada(s)" e a frase nova dos filtros.
+
+### 4.9 ⏳ Falta desta empreitada
 1. ✅ **Passe fino: TODAS as abas conferidas** (só o Ponto ficou de fora, ver item 2).
 2. `AttendanceTab.tsx` **não foi tocado de propósito**: tem trabalho não commitado da outra
    janela (a trava da bonificação) e mexer ali misturaria as duas coisas.
