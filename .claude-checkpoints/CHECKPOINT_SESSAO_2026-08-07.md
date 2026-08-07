@@ -160,9 +160,59 @@ consegui provar a causa** — fica registrado como flake de carga, não como res
 
 ---
 
-## 4. Estado do repo ao fim da sessão
+## 4. Passe visual — leva 7: a Inter entra · `58a68b0` · **só local**
 
-- `d1b1e75` · `6957bcb` · `d2df543` · `f1a1137` — **NO AR** (push + Vercel + edge fn v31).
+Pedido dele: *"melhore a fonte desenhos emblemas e emijis de todas as abas deixe tudo hd bem
+nitido"*. Fonte **escolhida por ele: Inter**.
+
+🔑 **O achado que explicava a sensação de "não ser HD": o app NÃO CARREGAVA FONTE NENHUMA.**
+Nem no `index.html`, nem no `tailwind.config` — valia a pilha padrão, ou seja **cada aparelho
+desenhava com a letra dele** (Segoe UI no Windows, Roboto no Android, San Francisco no iPhone).
+Ninguém tinha escolhido nada.
+
+**O que mudou:** Inter **embarcada** (nada de CDN — internet do galpão oscilando não pode trocar
+a letra no meio do expediente; o navegador baixa só o subset latino, **48 KB**, e cacheia) ·
+**números de largura fixa** nas tabelas e campos de valor, que era o defeito visível no próprio
+print dele (*"1.126"* e *"902"* ocupavam larguras diferentes e as colunas dançavam) · as
+alternativas de desenho da Inter que separam caracteres confundíveis em corpo pequeno · **10px
+→ 11px** nos 22 pontos onde havia texto miúdo.
+
+**Efeito colateral bom e medido:** a barra de abas passou a caber **uma aba a mais** (o
+*Usuários* saiu do menu "Mais") — a Inter é mais compacta na mesma altura.
+
+**Validado:** typecheck 61 = baseline · build · **varredura de estouro nas 12 abas × 3 larguras
+(1920/1366/393) = ZERO**, medido por `scrollWidth` · E2E 01/43/45/05 **22 passed** · 40 fotos
+antes/depois.
+
+⚠️ **eslint aponta 2 erros** (`clockGuards.ts` e `ErrorsTab.tsx:30`): **pré-existentes**, provado
+lintando a versão commitada sem as minhas mudanças. Fora do pedido, não mexi.
+⚠️ Spec 05 deu **1 flaky sob carga** e **4/4 isolado** — mesmo padrão já registrado em 06/08,
+causa não provada.
+⚠️ **Tropeço meu:** o `sed` do 10px→11px chegou a tocar 1 linha do `AttendanceTab.tsx` (arquivo
+da outra janela). **Desfeita** — o arquivo voltou ao diff original dele (46 inserções). Aquele
+único texto de 10px do Ponto sobe quando a trava da bonificação for commitada.
+
+### 4.1 ⏳ Leva 8 — emojis viram ícones (medida, NÃO começada)
+
+Contagem real dos ~200 emojis do `src`: **62 estão em comentário de código** (não aparecem na
+tela), **5 em mensagem** (toast/confirm — não viram SVG) e **155 aparecem de verdade pra quem
+usa**. Os mais frequentes: ⚠ (29) · ✅ (19) · ✕ (16) · ✓ (16) · ❌ (11) · 💰 (10) · 🟡 (8) · 📦 (8).
+
+🔴 **Dois obstáculos achados antes de programar:**
+1. **14 asserções de E2E dependem do emoji estar no texto** (specs 03, 10, 60, 61, 62) — ex.:
+   `getByText('📦 Por Quantidade')`, `getByText('💰 à parte')`, e um **botão de salvar cujo nome
+   inteiro é `💾`**. Trocar exige atualizar as 14 (legítimo: a tela muda de forma) — e de quebra
+   conserta acessibilidade, porque botão rotulado só com emoji não é lido por leitor de tela.
+2. **A aba Ponto tem 11 deles e está BLOQUEADA**: é o `AttendanceTab.tsx`, com a trava da
+   bonificação não commitada da outra janela. *"Todas as abas"* não fecha 100% enquanto aquilo
+   não for commitado.
+
+---
+
+## 5. Estado do repo ao fim da sessão
+
+- `d1b1e75` · `6957bcb` · `d2df543` · `f1a1137` · `bb5c2c9` — **NO AR** (push + Vercel + edge fn v31).
+- `58a68b0` (a Inter) — **só local**, aguardando o OK dele pra subir.
 - ⏸️ **Passe visual (fonte/ícones/emojis "HD")** parado num ponto limpo: ele escolheu **Inter**,
   eu tirei as **fotos "antes"** das 12 abas em 2 larguras, e **nenhuma linha de código foi
   mudada**. Diagnóstico já feito: o app **não carrega fonte nenhuma** (cada aparelho desenha com

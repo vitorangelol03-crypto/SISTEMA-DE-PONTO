@@ -51,7 +51,17 @@ uma vez:** os 78 espelhos já publicados têm `printed_total` vazio, então para
 hoje** a fn segue a fórmula de sempre — o caminho novo só vale pra espelho publicado daqui pra
 frente. ⚠️ Spec 64 deu **flaky 2× no mesmo clique de montagem** e passou limpo na 3ª de primeira;
 causa **não provada**, fica como flake de carga.
-⏸️ **Passe visual parado num ponto limpo** (ele escolheu **Inter**,
+🎨 **Passe visual — leva 7, a Inter (`58a68b0`, só local):** 🔑 o achado que explicava o "não
+parece HD" era que **o app NÃO CARREGAVA FONTE NENHUMA** — cada aparelho desenhava com a dele.
+Agora Inter **embarcada** (48 KB, sem CDN), **números de largura fixa** (era o defeito do próprio
+print dele: "1.126" e "902" com larguras diferentes faziam a coluna dançar) e 10px→11px em 22
+pontos. Efeito colateral bom: a barra de abas passou a caber **uma aba a mais**. Validado com
+**varredura de estouro nas 12 abas × 3 larguras = ZERO** + E2E 01/43/45/05 22 passed.
+⏳ **Leva 8 (emojis→ícones) medida e NÃO começada:** dos ~200 emojis, 62 são comentário de código,
+5 são mensagem e **155 aparecem na tela**. 🔴 Dois obstáculos: **14 asserções de E2E dependem do
+emoji estar no texto** (inclusive um botão cujo nome inteiro é `💾` — problema de acessibilidade),
+e **a aba Ponto está bloqueada** pelo `AttendanceTab.tsx` da outra janela.
+⏸️ **Trabalho anterior parado num ponto limpo** (ele escolheu **Inter**,
 fotos "antes" tiradas, **zero código mudado**): o app **não carrega fonte nenhuma**, tem 71 textos
 em 10–11px e ~200 emojis em 47 arquivos desenhados pelo sistema operacional.
 Ver `CHECKPOINT_SESSAO_2026-08-07.md`.
