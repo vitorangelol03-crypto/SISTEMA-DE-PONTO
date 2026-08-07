@@ -186,10 +186,33 @@ não mexi no que não precisava.
 ℹ️ O eslint aponta 1 erro nesse arquivo (linha 30, `errorRecords` não usado): **pré-existente**,
 provado dando `stash` na minha mudança e lintando o original. Não mexi — fora do pedido.
 
-### 4.6 ⏳ Falta desta empreitada
-1. **Passe fino** ainda não feito em: **Funcionários, Configurações, Gerenciamento, Ajuda e
-   Admin** (as outras já foram conferidas ou corrigidas). Todas já têm o esqueleto novo, os
-   campos padronizados e passaram na varredura de estouro.
+### 4.6 Leva 4 — as 5 abas que faltavam  ·  `f9bff45` `4ea3f7d`
+
+Fotografadas em notebook e celular, uma a uma. **Configurações**, **Admin** e **Ajuda** (fora a
+cor) já estavam certas — não mexi no que não precisava.
+
+**Funcionários:** a tabela mede **1428px num espaço de 1302px** (medido no navegador) — ela
+**sempre rolou**, mas nada avisava e "Cadastrado em" parecia cortado. Agora a beirada com coluna
+escondida ganha **sombra** que some ao chegar na ponta (truque só de CSS: gradiente com
+`background-attachment: local × scroll`, sem JS e **sem esconder coluna nenhuma**), e o respiro
+das células caiu de `px-6` pra `px-4`, o que já traz mais coluna pra dentro.
+
+**Gerenciamento:** os 5 cartões viviam em **duas grades** (3 + 2), então a segunda linha nascia
+com cartões **mais largos** e as colunas não batiam. Virou **uma grade só** (5 iguais no
+computador, 2 no tablet, 1 no celular). As 5 sub-abas acendiam em **azul** numa área verde-água →
+agora na cor da área, igual foi feito em Erros.
+
+**Ajuda:** a faixa "Central de Tutoriais" e os chips acendiam em **azul** numa aba laranja →
+passaram pra cor da área.
+
+**Validado:** typecheck 61 = baseline · eslint 0 · build · **E2E 46+05 11/11, 43 7/7** ·
+`scrollWidth` 1366/393 conferido de novo = zero estouro.
+⚠️ Na primeira rodada o spec 05 deu **1 flaky** (passou no retry). Repeti a **mesma combinação**
+(46+05) → 11/11 limpo, e o spec sozinho → 4/4. **Não reproduziu**; perdi o rastro porque a
+segunda rodada limpa `test-results/`. Fica o registro honesto: não consegui provar a causa.
+
+### 4.7 ⏳ Falta desta empreitada
+1. ✅ **Passe fino: TODAS as abas conferidas** (só o Ponto ficou de fora, ver item 2).
 2. `AttendanceTab.tsx` **não foi tocado de propósito**: tem trabalho não commitado da outra
    janela (a trava da bonificação) e mexer ali misturaria as duas coisas.
 3. **Nada disso foi pro ar** — muda a cara de todas as telas, espera o OK dele.
