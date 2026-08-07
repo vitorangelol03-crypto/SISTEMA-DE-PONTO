@@ -116,6 +116,13 @@ export interface RowTotals {
   zapex: number;
   discounts: number;
   vales: number;
+  /**
+   * Quanto de vale/perda foi REALMENTE abatido nesta conta (07/08/2026). Pode ser menos que
+   * `discounts + vales` quando o desconto por saldo so coube em parte, e 0 quando a pessoa
+   * ja tinha sido descontada num pagamento anterior. `discounts`/`vales` seguem mostrando os
+   * valores reais, que e o que as colunas da tela exibem.
+   */
+  deducted: number;
   net: number;
 }
 
@@ -961,6 +968,15 @@ export function computeRowTotals(
   row: DriverRowData,
   allowedPlatformNames?: ReadonlySet<string>,
   includeDeductions = true,
+  /**
+   * Quanto abater DESTE driver nesta conta, em R$ (07/08/2026, decisao do Victor).
+   *
+   * Quando informado, manda em cima do `includeDeductions`: e o valor que a regra de saldo
+   * (`descontoSaldo.ts`) decidiu pra esta pessoa neste pagamento — pode ser 0 (ja foi
+   * descontada antes) ou um pedaco do que ela deve (o desconto nao cabia no que ela recebe).
+   * Ausente = comportamento de sempre, tudo-ou-nada pelo `includeDeductions`.
+   */
+  deductionOverride?: number,
 ): RowTotals {
   const isAllowed = (name: string) => !allowedPlatformNames || allowedPlatformNames.has(name);
   let packagesAmount = 0;
@@ -979,13 +995,19 @@ export function computeRowTotals(
   const zapexAmount = isAllowed('Zapex') ? row.zapex.length * row.zapexRate : 0;
   const discounts = row.discounts.reduce((sum, d) => sum + d.amount, 0);
   const vales = row.vales.reduce((sum, v) => sum + v.amount, 0);
-  const deducted = includeDeductions ? discounts + vales : 0;
+  const temOverride = typeof deductionOverride === 'number'
+    && Number.isFinite(deductionOverride)
+    && deductionOverride >= 0;
+  const deducted = temOverride
+    ? (deductionOverride as number)
+    : (includeDeductions ? discounts + vales : 0);
   return {
     totalPackages,
     packagesAmount,
     zapex: zapexAmount,
     discounts,
     vales,
+    deducted,
     net: packagesAmount + zapexAmount - deducted,
   };
 }
@@ -2015,16 +2037,26 @@ export function unitRecipientInfo(unit: ReportUnit): { name: string; pix: string
 export interface ReportBuildOptions {
   allowedPlatformNames?: ReadonlySet<string>;
   includeDeductions?: boolean;
+  /**
+   * Quanto abater de CADA driver (driverId -> R$), decidido pela regra de saldo
+   * (`descontoSaldo.ts`, 07/08/2026). Presente = manda em cima do `includeDeductions`,
+   * driver a driver: quem ja foi descontado vem com 0, quem deve vem com o que cabe.
+   * Ausente = tudo-ou-nada pelo `includeDeductions`, como sempre foi.
+   */
+  deductionByDriver?: ReadonlyMap<string, number>;
 }
 
 /** Normaliza as opções: conjunto vazio = sem filtro (evita relatório vazio por engano). */
 function normalizeReportOptions(opts: ReportBuildOptions): {
   allowed?: ReadonlySet<string>;
   includeDeductions: boolean;
+  deductionByDriver?: ReadonlyMap<string, number>;
 } {
   const allowed =
     opts.allowedPlatformNames && opts.allowedPlatformNames.size > 0 ? opts.allowedPlatformNames : undefined;
-  return { allowed, includeDeductions: opts.includeDeductions !== false };
+  const deductionByDriver =
+    opts.deductionByDriver && opts.deductionByDriver.size > 0 ? opts.deductionByDriver : undefined;
+  return { allowed, includeDeductions: opts.includeDeductions !== false, deductionByDriver };
 }
 
 /** A unidade tem movimento nas plataformas do escopo? (pacotes ou itens Zapex). */
@@ -2125,7 +2157,7 @@ export function buildLeaderReportRows(
   leaderNameByGroup: ReadonlyMap<string, string>,
   opts: ReportBuildOptions = {},
 ): DriverReportRow[] {
-  const { allowed, includeDeductions } = normalizeReportOptions(opts);
+  const { allowed, includeDeductions, deductionByDriver } = normalizeReportOptions(opts);
   const scopedPlatforms = allowed ? platforms.filter((pl) => allowed.has(pl.name)) : platforms;
   const out: DriverReportRow[] = [];
   for (const unit of groupReportUnits(rows, leaderNameByGroup)) {
@@ -2137,7 +2169,7 @@ export function buildLeaderReportRows(
     const routeMap = new Map<string, Record<string, { packages: number; value: number }>>();
     const routeOrder: string[] = [];
     for (const row of unit.rows) {
-      const t = computeRowTotals(row, allowed, includeDeductions);
+      const t = computeRowTotals(row, allowed, includeDeductions, deductionByDriver?.get(row.driverId));
       discount += t.discounts;
       vale += t.vales;
       net += t.net;
@@ -2274,14 +2306,14 @@ export function buildSimpleReportRows(
   leaderNameByGroup: ReadonlyMap<string, string>,
   opts: ReportBuildOptions = {},
 ): SimpleReportRow[] {
-  const { allowed, includeDeductions } = normalizeReportOptions(opts);
+  const { allowed, includeDeductions, deductionByDriver } = normalizeReportOptions(opts);
   const out: SimpleReportRow[] = [];
   for (const unit of groupReportUnits(rows, leaderNameByGroup)) {
     const recipient = unitRecipientInfo(unit);
     let total = 0;
     let unitHasPackages = false;
     for (const row of unit.rows) {
-      const t = computeRowTotals(row, allowed, includeDeductions);
+      const t = computeRowTotals(row, allowed, includeDeductions, deductionByDriver?.get(row.driverId));
       total += t.net;
       if (hasPackagesInScope(t)) unitHasPackages = true;
     }

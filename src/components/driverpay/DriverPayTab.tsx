@@ -47,6 +47,8 @@ import {
   listPaymentMarks,
   unmarkPayment,
   markPaymentDone,
+  listDeductionLedger,
+  recordDeductions,
   listProofRequests,
   listDeliveryProofs,
   platformsWithProofHistory,
@@ -58,6 +60,7 @@ import { contemSemAcento } from '../../utils/buscaTexto';
 import { pagamentosParaMarcarPorDispensa } from '../../utils/espelhoDispensa';
 import { driversParaPedirPrint, plataformasQuePedemPrint } from '../../utils/proofAuto';
 import { linhasForaDaConfig, diferencaEmReais } from '../../utils/rateSync';
+import type { PessoaDesconto } from '../../utils/descontoSaldo';
 import { exportDriverGeneralReportExcel, exportDriverSimpleReportExcel } from '../../utils/driverReport';
 import { generateDriverMirrorPdf, generateDriverGroupMirrorPdf } from '../../utils/driverMirrorPdf';
 import {
@@ -240,6 +243,11 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [nfFiles, setNfFiles] = useState<NotaFiscalFileRow[]>([]);
   /** Quem JA RECEBEU nesta quinzena, por (entregador, plataforma) — a tag de pago. */
   const [paymentMarks, setPaymentMarks] = useState<PaymentMark[]>([]);
+  /**
+   * Quanto de vale/perda ja foi abatido de cada entregador nesta quinzena (livro-caixa,
+   * 07/08/2026). E o que faz pagar Shopee e depois eMile nao cobrar duas vezes.
+   */
+  const [deductionLedger, setDeductionLedger] = useState<Map<string, number>>(new Map());
 
   // Refs para leitura estavel em callbacks assincronos
   const driversRef = useRef<Driver[]>([]);
@@ -549,6 +557,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         setNfByDriver(map);
         setNfFiles(files);
         setPaymentMarks(await listPaymentMarks(company.id, periodId));
+        setDeductionLedger(await listDeductionLedger(company.id, periodId));
       } catch (e) {
         console.error('Erro ao carregar notas do período:', e);
       }
@@ -1256,7 +1265,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       return;
     }
     const allowedSet = opts.allowed && opts.allowed.length > 0 ? new Set(opts.allowed) : undefined;
-    const buildOpts = { allowedPlatformNames: allowedSet, includeDeductions: opts.includeDeductions };
+    // `deductionByDriver` (07/08/2026) manda em cima do `includeDeductions`, pessoa por
+    // pessoa: quem já foi descontado vem com 0, quem deve vem com o que cabe no que recebe.
+    const buildOpts = {
+      allowedPlatformNames: allowedSet,
+      includeDeductions: opts.includeDeductions,
+      deductionByDriver: opts.modoDesconto === 'pendentes' ? opts.deductionByDriver : undefined,
+    };
     const filterLabel = opts.allowed && opts.allowed.length > 0 ? opts.allowed.join(' + ') : null;
     const scopedPlatformNames = (opts.allowed && opts.allowed.length > 0
       ? platforms.filter((p) => allowedSet?.has(p.name))
@@ -1301,6 +1316,24 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           const pares = marcasDoRelatorio(scoped, platforms.map((p) => p.name), allowedSet);
           const n = await markPaymentDone(company.id, selectedPeriod.id, pares, kind, userId, opts.includeDeductions);
           setPaymentMarks(await listPaymentMarks(company.id, selectedPeriod.id));
+          // LIVRO-CAIXA (07/08/2026): registra QUANTO foi abatido de cada um nesta planilha,
+          // pra o próximo relatório saber quem já pagou e quem ainda deve. Só quem realmente
+          // saiu no arquivo entra — daí o cruzamento com `scoped`.
+          const noArquivo = new Set(scoped.map((r) => r.driverId));
+          const abates = [...opts.deductionByDriver]
+            .filter(([driverId, valor]) => valor > 0 && noArquivo.has(driverId))
+            .map(([driverId, amount]) => ({ driverId, amount }));
+          if (abates.length > 0) {
+            await recordDeductions(
+              company.id, selectedPeriod.id, abates, 'relatorio',
+              // Identidade desta rodada, só pra auditoria (de qual geração veio cada abate).
+              // ⚠️ NÃO é ela que impede abater duas vezes — quem impede é o SALDO: depois
+              // desta gravação o livro já mostra a pessoa quitada, então gerar o mesmo
+              // relatório de novo calcula 0 pra ela e não grava nada.
+              crypto.randomUUID(), userId,
+            );
+            setDeductionLedger(await listDeductionLedger(company.id, selectedPeriod.id));
+          }
           const pessoas = new Set(pares.map((p) => p.driverId)).size;
           toast.success(`${pessoas} entregador(es) marcados como PAGOS (${n} plataforma/entregador).`,
             { duration: 9000 });
@@ -1537,6 +1570,39 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       escopo, platforms.map((p) => p.name), indiceMarcas,
       allowed && allowed.length > 0 ? new Set(allowed) : undefined,
     );
+  };
+
+  /**
+   * Quem está no escopo do relatório, do ponto de vista do DESCONTO (07/08/2026).
+   *
+   * Devolve, por pessoa: quanto ela deve de vale/perda, quanto já foi abatido dela nesta
+   * quinzena (livro-caixa) e quanto ela recebe NAS plataformas escolhidas — que é o teto do
+   * que dá pra abater sem a linha virar negativa.
+   *
+   * ⚠️ Recebe os MESMOS filtros que o arquivo vai usar (plataformas, removidos à mão e os
+   * filtros de conferência). É a mesma função que alimenta a prévia da janela e a conta do
+   * arquivo: se fossem duas, a tela poderia mentir sobre dinheiro.
+   */
+  const pessoasDoDesconto = (
+    allowed: string[] | null,
+    excluir: readonly string[],
+    checks: ChecksFilterOptions,
+  ): PessoaDesconto[] => {
+    const fora = new Set(excluir);
+    const base = reportScopeRows().filter((r) => !fora.has(r.driverId));
+    const escopo = applyChecksFilter(base, nfCompleteByPayment, leaderNameByGroup, checks, nfNoPrazoByPayment).kept;
+    const allowedSet = allowed && allowed.length > 0 ? new Set(allowed) : undefined;
+    return escopo.map((r) => {
+      // includeDeductions=false: aqui interessa o BRUTO das plataformas do relatório.
+      const t = computeRowTotals(r, allowedSet, false);
+      return {
+        driverId: r.driverId,
+        name: r.name,
+        total: deductionsOf(r),
+        jaAbatido: deductionLedger.get(r.driverId) ?? 0,
+        brutoNoEscopo: t.packagesAmount + t.zapex,
+      };
+    });
   };
 
   /**
@@ -2212,6 +2278,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             }
             checksPreview={checksPreview}
             jaPagos={jaPagosDoRelatorio}
+            pessoasDesconto={pessoasDoDesconto}
             onClose={() => setReportModal(null)}
             onConfirm={handleGenerateReport}
           />

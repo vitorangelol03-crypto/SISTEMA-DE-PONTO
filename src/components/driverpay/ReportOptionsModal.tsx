@@ -3,13 +3,30 @@ import { Download, Loader2, FileSpreadsheet } from 'lucide-react';
 import { ModalShell } from './ModalShell';
 import { formatBRL, type AlreadyDeductedDriver, type ChecksFilterOptions, type ChecksFilterResult } from './driverPayShared';
 import { descontosPendentes, totalPendente } from '../../utils/descontoPendente';
+import {
+  resumoDesconto, abaterAgora,
+  type ModoDesconto, type PessoaDesconto,
+} from '../../utils/descontoSaldo';
 
 /** Escolhas do operador na hora de baixar o relatório. */
 export interface ReportOptions {
   /** Plataformas escolhidas; null = todas (relatório completo, como sempre foi). */
   allowed: string[] | null;
-  /** false = vales/perdas NÃO abatidos (pagamento parcial por plataforma). */
+  /**
+   * Como descontar vale/perda (07/08/2026, decisão do Victor). O padrão é `pendentes`:
+   * decide PESSOA POR PESSOA, pra pagar por plataforma sem cobrar duas vezes.
+   */
+  modoDesconto: ModoDesconto;
+  /**
+   * Derivado do modo, pra tudo que já existia continuar funcionando (o cabeçalho do
+   * arquivo e a marca de pagamento): false só no modo `nenhum`.
+   */
   includeDeductions: boolean;
+  /**
+   * Quanto abater de cada driver, decidido pela regra de saldo. Vazio no modo `nenhum`.
+   * É o que vira lançamento no livro-caixa depois que o arquivo é gerado.
+   */
+  deductionByDriver: Map<string, number>;
   /** Só quem está com o botão "Espelho conferido" marcado. */
   onlyEspelhoConferido: boolean;
   /** Só quem está com a nota validada (mesma regra da coluna NF da lista). */
@@ -47,9 +64,44 @@ interface ReportOptionsModalProps {
           se existe o que descontar; sem isso ele listava quem não deve nada. */
       valeOuPerda?: number;
     }>;
+  /**
+   * Quem está no escopo do relatório, do ponto de vista do desconto (07/08/2026): quanto
+   * cada um deve, quanto já foi abatido dele (livro-caixa) e quanto ele recebe NAS
+   * plataformas escolhidas. Recebe exatamente os mesmos filtros que o arquivo vai usar,
+   * pra prévia e arquivo nunca discordarem.
+   */
+  pessoasDesconto: (
+    allowed: string[] | null,
+    excluirDriverIds: readonly string[],
+    checks: ChecksFilterOptions,
+  ) => PessoaDesconto[];
   onClose: () => void;
   onConfirm: (opts: ReportOptions) => Promise<void>;
 }
+
+/**
+ * Uma linha da prévia do desconto: quantos, quanto, e os nomes a um clique.
+ *
+ * Os nomes ficam fechados de propósito — a faixa antiga despejava 25 nomes na cara e o
+ * número, que é o que decide, se perdia no meio.
+ */
+const ResumoLinha: React.FC<{
+  testid: string;
+  cor: string;
+  texto: string;
+  valor: number;
+  nomes: ReadonlyArray<{ driverId: string; name: string; valor: number }>;
+}> = ({ testid, cor, texto, valor, nomes }) => (
+  <details className="text-xs" data-testid={testid}>
+    <summary className={`cursor-pointer ${cor}`}>
+      <b>{texto}</b> — {formatBRL(valor)}{' '}
+      <span className="text-gray-500 font-normal">(ver nomes)</span>
+    </summary>
+    <p className="mt-1 ml-4 text-gray-600">
+      {nomes.map((n) => `${n.name} (${formatBRL(n.valor)})`).join(', ')}.
+    </p>
+  </details>
+);
 
 /**
  * Janela de opções dos relatórios (2026-07-27, decisões do Victor):
@@ -65,11 +117,18 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
   scopeLabel,
   checksPreview,
   jaPagos,
+  pessoasDesconto,
   onClose,
   onConfirm,
 }) => {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(platformOptions));
-  const [includeDeductions, setIncludeDeductions] = useState(true);
+  /**
+   * Padrão `pendentes` (07/08/2026): decide pessoa por pessoa. Era tudo-ou-nada, e as duas
+   * posições erravam ao pagar por plataforma — marcado cobrava em dobro de quem já tinha
+   * sido descontado, desmarcado deixava sem desconto quem nunca foi.
+   */
+  const [modoDesconto, setModoDesconto] = useState<ModoDesconto>('pendentes');
+  const includeDeductions = modoDesconto !== 'nenhum';
   // Desmarcados por padrão: sem tocar em nada, o arquivo sai igual ao de sempre.
   const [onlyEspelhoConferido, setOnlyEspelho] = useState(false);
   const [onlyNfValidada, setOnlyNf] = useState(false);
@@ -102,6 +161,22 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
     () => (selected.size >= platformOptions.length ? null : platformOptions.filter((p) => selected.has(p))),
     [selected, platformOptions],
   );
+
+  /**
+   * A conta do desconto, refeita a cada mexida nos filtros — a MESMA que o arquivo usa
+   * (mesmo escopo, mesmas plataformas, mesmos filtros de conferência). Se prévia e arquivo
+   * pudessem divergir, a tela mentiria justamente sobre dinheiro.
+   */
+  const pessoas = useMemo(
+    () => pessoasDesconto(allowed, [...excluidos], { onlyEspelhoConferido, onlyNfValidada, onlyNfNoPrazo }),
+    [pessoasDesconto, allowed, excluidos, onlyEspelhoConferido, onlyNfValidada, onlyNfNoPrazo],
+  );
+  const resumo = useMemo(() => resumoDesconto(modoDesconto, pessoas), [modoDesconto, pessoas]);
+  const deductionByDriver = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of pessoas) m.set(p.driverId, abaterAgora(modoDesconto, p, p.brutoNoEscopo));
+    return m;
+  }, [modoDesconto, pessoas]);
 
   const conflitos = useMemo(
     () => jaPagos(allowed, [...excluidos]),
@@ -172,7 +247,8 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
     setGenerating(true);
     try {
       await onConfirm({
-        allowed, includeDeductions, onlyEspelhoConferido, onlyNfValidada, onlyNfNoPrazo,
+        allowed, modoDesconto, includeDeductions, deductionByDriver,
+        onlyEspelhoConferido, onlyNfValidada, onlyNfNoPrazo,
         marcarComoPago, excluirDriverIds: [...excluidos],
       });
     } finally {
@@ -430,31 +506,133 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
           )}
         </div>
 
-        {/* ── Descontar (ou não) vales e perdas ── */}
+        {/* ── Como descontar vales e perdas (07/08/2026) ──
+             Era uma caixa de marcar (tudo-ou-nada). Pagando por plataforma as duas posições
+             erravam: marcada cobrava de novo de quem já tinha sido descontado, desmarcada
+             deixava sem desconto quem nunca foi. Agora são três escolhas, e a conta de cada
+             uma aparece ANTES de baixar. */}
         {deductionsTotal > 0 && (
           <div
             className={`border rounded-md p-3 ${
-              includeDeductions ? 'border-gray-200 bg-gray-50' : 'border-amber-300 bg-amber-50'
+              modoDesconto === 'nenhum' ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-gray-50'
             }`}
             data-testid="report-deductions-box"
           >
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={includeDeductions}
-                onChange={(e) => setIncludeDeductions(e.target.checked)}
-                className="w-4 h-4 mt-0.5 text-blue-600 rounded border-gray-300"
-                data-testid="report-deductions-toggle"
-              />
-              <span className="text-sm text-gray-800">
-                <b>Descontar vales e perdas neste relatório</b> ({formatBRL(deductionsTotal)})
-                <span className="block text-xs text-gray-600 mt-0.5">
-                  {includeDeductions
-                    ? 'Marcado: o total sai com os vales e perdas abatidos (como sempre foi).'
-                    : 'Desmarcado: pagamento PARCIAL — as colunas mostram os valores mas o total NÃO abate (eles saem no pagamento das demais plataformas).'}
-                </span>
-              </span>
-            </label>
+            <p className="text-xs font-semibold text-gray-700 mb-2">
+              Vales e perdas deste relatório{' '}
+              <span className="font-normal text-gray-500">({formatBRL(deductionsTotal)} no total)</span>
+            </p>
+
+            <div className="space-y-1.5" role="radiogroup" aria-label="Como descontar vales e perdas">
+              {([
+                {
+                  modo: 'pendentes' as const,
+                  testid: 'report-deductions-modo-pendentes',
+                  titulo: 'Descontar só de quem ainda não foi descontado',
+                  recomendado: true,
+                  ajuda: 'Cada pessoa é conferida: quem já teve o desconto num pagamento anterior sai sem, quem ainda não teve sai com. É o que evita cobrar duas vezes ao pagar plataforma por plataforma.',
+                },
+                {
+                  modo: 'todos' as const,
+                  testid: 'report-deductions-modo-todos',
+                  titulo: 'Descontar de todo mundo',
+                  recomendado: false,
+                  ajuda: 'O valor cheio de cada um, mesmo de quem já foi descontado antes. Pode cobrar em dobro — use só quando souber que ninguém foi descontado ainda.',
+                },
+                {
+                  modo: 'nenhum' as const,
+                  testid: 'report-deductions-modo-nenhum',
+                  titulo: 'Não descontar de ninguém',
+                  recomendado: false,
+                  ajuda: 'Pagamento PARCIAL: as colunas mostram os valores mas o total NÃO abate (eles saem no pagamento das demais plataformas).',
+                },
+              ]).map((op) => (
+                <label
+                  key={op.modo}
+                  className={`flex items-start gap-2 cursor-pointer rounded-md p-2 border ${
+                    modoDesconto === op.modo ? 'border-blue-400 bg-white' : 'border-transparent hover:bg-white/60'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="modo-desconto"
+                    checked={modoDesconto === op.modo}
+                    onChange={() => setModoDesconto(op.modo)}
+                    className="w-4 h-4 mt-0.5 text-blue-600 border-gray-300"
+                    data-testid={op.testid}
+                  />
+                  <span className="text-sm text-gray-800">
+                    <b>{op.titulo}</b>
+                    {op.recomendado && (
+                      <span className="ml-1.5 text-[11px] font-semibold text-blue-700 bg-blue-100 rounded px-1.5 py-0.5">
+                        recomendado
+                      </span>
+                    )}
+                    <span className="block text-xs text-gray-600 mt-0.5">{op.ajuda}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {/* ── A conta, antes de baixar ──
+                 Antes daqui a tela listava 25 nomes e mandava o operador conferir na mão. */}
+            {modoDesconto !== 'nenhum' && (
+              <div className="mt-3 pt-3 border-t border-gray-200 space-y-1.5" data-testid="report-deductions-preview">
+                {resumo.vaoDescontar.length > 0 && (
+                  <ResumoLinha
+                    testid="report-deducao-vao"
+                    cor="text-emerald-800"
+                    texto={`${resumo.vaoDescontar.length} vão ser descontados`}
+                    valor={resumo.totalDescontar}
+                    nomes={resumo.vaoDescontar}
+                  />
+                )}
+                {resumo.jaDescontados.length > 0 && (
+                  <ResumoLinha
+                    testid="report-deducao-ja"
+                    cor="text-gray-700"
+                    texto={`${resumo.jaDescontados.length} já foram descontados antes — saem sem desconto`}
+                    valor={resumo.totalJaDescontado}
+                    nomes={resumo.jaDescontados}
+                  />
+                )}
+                {resumo.sobrando.length > 0 && (
+                  <ResumoLinha
+                    testid="report-deducao-sobra"
+                    cor="text-amber-800"
+                    texto={`${resumo.sobrando.length} ficam devendo o resto pro próximo pagamento`}
+                    valor={resumo.totalSobrando}
+                    nomes={resumo.sobrando}
+                  />
+                )}
+                {resumo.vaoDescontar.length === 0
+                  && resumo.jaDescontados.length === 0
+                  && resumo.sobrando.length === 0 && (
+                  <p className="text-xs text-gray-600">
+                    Ninguém deste relatório tem vale ou perda a descontar.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── 🔴 Sem marcar como pago, o desconto se repete no próximo relatório ──
+             O sistema só sabe que alguém foi descontado se esta planilha for registrada
+             como o pagamento. Decisão dele (07/08): avisar em vermelho, não marcar sozinho. */}
+        {modoDesconto === 'pendentes' && !marcarComoPago && resumo.totalDescontar > 0 && (
+          <div
+            className="border-2 border-red-300 bg-red-50 rounded-md p-3 text-sm text-red-900"
+            data-testid="report-desconto-sem-marca"
+          >
+            <p className="font-bold">
+              ⚠ Marque &quot;esta planilha é o pagamento&quot; — senão o desconto se repete
+            </p>
+            <p className="text-xs mt-1">
+              O sistema só sabe que {resumo.vaoDescontar.length} pessoa(s) foram descontadas em{' '}
+              {formatBRL(resumo.totalDescontar)} <b>se esta planilha for registrada como o pagamento</b>.
+              Baixando sem marcar, o próximo relatório vai descontar essa mesma gente de novo.
+            </p>
           </div>
         )}
 
@@ -476,15 +654,17 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
             <p className="text-xs mt-1">
               Foram pagos sem abater e o desconto <b>não saiu em nenhuma outra plataforma</b> —
               era pra sair no pagamento das demais.{' '}
-              {includeDeductions
-                ? <b>Como "Descontar vales e perdas" está MARCADO, ele sai agora.</b>
-                : <b className="text-red-800">Com a caixa abaixo DESMARCADA, ele continua pendente.</b>}
+              {modoDesconto === 'nenhum'
+                ? <b className="text-red-800">Com &quot;Não descontar de ninguém&quot; escolhido, ele continua pendente.</b>
+                : <b>Do jeito escolhido acima, ele sai agora.</b>}
             </p>
           </div>
         )}
 
-        {/* ── Aviso anti-desconto-duplo ── */}
-        {includeDeductions && alreadyDeducted.length > 0 && (
+        {/* ── Aviso anti-desconto-duplo ──
+             Só no modo "todos": no modo "pendentes" o próprio sistema já pula essa gente,
+             então repetir o aviso ali seria assustar sem motivo (o erro do aviso de 05/08). */}
+        {modoDesconto === 'todos' && alreadyDeducted.length > 0 && (
           <div
             className="border-2 border-amber-400 bg-amber-50 rounded-md p-3 text-sm text-amber-900"
             data-testid="report-already-deducted-warning"

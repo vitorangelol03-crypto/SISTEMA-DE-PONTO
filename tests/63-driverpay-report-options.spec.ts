@@ -228,8 +228,13 @@ test.describe('Pagamentos Driver — filtro de plataforma e abate nos relatório
     // ═══ 3. Relatório geral SÓ da 2ª plataforma, SEM abate ═══════════════════
     await page.getByRole('button', { name: /^Relatório geral$/ }).click();
     await keepOnlyPlatform(page, platB.name);
-    await modal(page).getByTestId('report-deductions-toggle').uncheck();
-    await expect(modal(page).getByTestId('report-deductions-box')).toContainText('NÃO abate');
+    // 07/08/2026: a caixa de marcar virou 3 opções (só quem falta / todo mundo / ninguém).
+    // Mesma intenção de antes — "este pagamento NÃO abate" —, só que no clique que uma
+    // pessoa daria hoje. A prova ficou mais forte: antes bastava o texto "NÃO abate" estar
+    // na tela (hoje ele é o rótulo do rádio e estaria lá de qualquer jeito), agora exige o
+    // rádio REALMENTE marcado — além do conteúdo do .xlsx conferido logo abaixo.
+    await modal(page).getByTestId('report-deductions-modo-nenhum').check();
+    await expect(modal(page).getByTestId('report-deductions-modo-nenhum')).toBeChecked();
     const semAbate = await downloadSheet(page);
     const textoSemAbate = flat(semAbate.rows);
     // 28/07: o .xlsx sai 100% ASCII (o arquivo vai direto pro banco, que não aceita
@@ -246,7 +251,7 @@ test.describe('Pagamentos Driver — filtro de plataforma e abate nos relatório
     await page.getByRole('button', { name: /^Relatório simples$/ }).click();
     await expect(modal(page).getByText('Relatório simples — opções')).toBeVisible({ timeout: 10_000 });
     await keepOnlyPlatform(page, platB.name);
-    await modal(page).getByTestId('report-deductions-toggle').uncheck();
+    await modal(page).getByTestId('report-deductions-modo-nenhum').check();
     const simples = await downloadSheet(page);
     expect(simples.filename).toMatch(/^Relatorio_Simples_Driver_.*\.xlsx$/);
     expect(simples.filename).toContain(platB.name);

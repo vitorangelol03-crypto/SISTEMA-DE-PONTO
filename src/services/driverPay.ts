@@ -2586,6 +2586,72 @@ export const markPaymentDone = async (
   return pares.length;
 };
 
+// ────────────────────────────────────────────────────────────────────────────
+// LIVRO-CAIXA DO DESCONTO DE VALE/PERDA (07/08/2026)
+//
+// O desconto virou SALDO: cada pessoa deve (vales + perdas) na quinzena e cada pagamento
+// abate um pedaco, gravado aqui. Assim, pagar a Shopee e depois a eMile nao cobra duas
+// vezes de quem entrega as duas, e cobra de quem so entrega a eMile.
+// A regra de QUANTO abater e pura e mora em `src/utils/descontoSaldo.ts`.
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Quanto ja foi abatido de cada driver nesta quinzena (driverId -> R$ somados).
+ * Driver ausente do mapa = nada abatido ainda (deve tudo).
+ */
+export const listDeductionLedger = async (
+  companyId: string, periodId: string,
+): Promise<Map<string, number>> => {
+  const { data, error } = await supabase
+    .from('driverpay_deduction_ledger')
+    .select('driver_id, amount')
+    .eq('company_id', companyId).eq('period_id', periodId);
+  if (error) throwDbError(error);
+  const out = new Map<string, number>();
+  for (const r of data ?? []) {
+    const id = String((r as { driver_id: string }).driver_id);
+    const v = Number((r as { amount: number | string }).amount) || 0;
+    out.set(id, Math.round(((out.get(id) ?? 0) + v) * 100) / 100);
+  }
+  return out;
+};
+
+/**
+ * Registra os abates de UM evento (uma planilha de pagamento, uma publicacao de espelho).
+ *
+ * ⚠️ Idempotente pelo par (source, sourceRef): repetir o MESMO evento nao abate de novo.
+ * Pra relatorio o `sourceRef` e o id da rodada; pra espelho e a `platform_key` — assim
+ * despublicar e republicar refaz o lancamento em vez de duplicar.
+ *
+ * Linhas com valor <= 0 sao descartadas: o banco so aceita abate positivo (CHECK), e
+ * "abati zero" nao e um fato que precise existir.
+ */
+export const recordDeductions = async (
+  companyId: string,
+  periodId: string,
+  linhas: readonly { driverId: string; amount: number }[],
+  source: 'relatorio' | 'espelho',
+  sourceRef: string,
+  userId: string,
+): Promise<number> => {
+  await ensurePerm(userId, 'driverpay.exportReport');
+  const validas = linhas.filter((l) => Number.isFinite(l.amount) && l.amount > 0);
+  if (validas.length === 0) return 0;
+  // upsert com ignoreDuplicates (e nao insert): num INSERT em lote, UMA linha repetida
+  // derrubaria o lote inteiro e ninguem seria gravado. Assim a repetida e pulada e as
+  // outras entram — mesmo padrao do `markPaymentDone`.
+  const { error } = await supabase.from('driverpay_deduction_ledger').upsert(
+    validas.map((l) => ({
+      company_id: companyId, period_id: periodId, driver_id: l.driverId,
+      amount: Math.round(l.amount * 100) / 100,
+      source, source_ref: sourceRef, created_by: userId,
+    })),
+    { onConflict: 'company_id,period_id,driver_id,source,source_ref', ignoreDuplicates: true },
+  );
+  if (error) throwDbError(error);
+  return validas.length;
+};
+
 /** Um print recebido, com o driver resolvido, pro painel. */
 export interface DeliveryProofRow {
   id: string;
