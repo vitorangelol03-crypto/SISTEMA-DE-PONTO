@@ -382,7 +382,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
             onClick={() => setActiveSection('overview')}
             className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap min-h-[44px] ${
               activeSection === 'overview'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-teal-600 text-white shadow-sm'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -393,7 +393,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
             onClick={() => setActiveSection('retention')}
             className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap min-h-[44px] ${
               activeSection === 'retention'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-teal-600 text-white shadow-sm'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -404,7 +404,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
             onClick={() => setActiveSection('manual')}
             className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap min-h-[44px] ${
               activeSection === 'manual'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-teal-600 text-white shadow-sm'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -415,7 +415,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
             onClick={() => setActiveSection('automatic')}
             className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap min-h-[44px] ${
               activeSection === 'automatic'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-teal-600 text-white shadow-sm'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -426,7 +426,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
             onClick={() => setActiveSection('logs')}
             className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap min-h-[44px] ${
               activeSection === 'logs'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-teal-600 text-white shadow-sm'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -438,7 +438,11 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
 
       {activeSection === 'overview' && statistics && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 07/08/2026 — os 5 cartões viviam em DUAS grades (3 + 2), então a
+              segunda linha nascia com cartões mais largos e as colunas não batiam.
+              Agora é UMA grade só: 5 iguais lado a lado no computador, 2 por linha
+              no tablet e 1 no celular. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
@@ -484,9 +488,6 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
                 <Database className="w-8 h-8 text-blue-600" />
               </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>

@@ -129,4 +129,25 @@
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
+
+  /*
+    Sombra que AVISA que tem coluna escondida (07/08/2026). O problema real: a
+    tabela de Funcionários mede 1428px num espaço de 1302px, então ela rola — mas
+    nada dizia isso, e "Cadastrado em" parecia cortado/quebrado.
+    Truque só de CSS (sem JS): os dois gradientes brancos rolam JUNTO com o
+    conteúdo (background-attachment: local) e tapam a sombra quando você chega na
+    ponta; as duas sombras ficam paradas (scroll). Resultado: a sombra aparece
+    exatamente do lado que ainda tem coisa pra ver, e some quando acabou.
+  */
+  .ui-scroll-shadow {
+    background-image:
+      linear-gradient(to right, #fff 30%, rgba(255, 255, 255, 0)),
+      linear-gradient(to left, #fff 30%, rgba(255, 255, 255, 0)),
+      radial-gradient(farthest-side at 0 50%, rgba(15, 23, 42, 0.14), rgba(15, 23, 42, 0)),
+      radial-gradient(farthest-side at 100% 50%, rgba(15, 23, 42, 0.14), rgba(15, 23, 42, 0));
+    background-position: left center, right center, left center, right center;
+    background-repeat: no-repeat;
+    background-size: 40px 100%, 40px 100%, 14px 100%, 14px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
 }

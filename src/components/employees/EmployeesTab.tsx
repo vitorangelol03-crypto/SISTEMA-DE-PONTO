@@ -1160,8 +1160,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       )}
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        {/* Desktop View - Tabela */}
-        <div className="hidden md:block overflow-x-auto">
+        {/* Desktop View - Tabela.
+            07/08/2026: `ui-scroll-shadow` — a tabela é mais larga que a tela (1428px num
+            espaço de 1302px) e sempre rolou, mas nada avisava: "Cadastrado em" parecia
+            cortado. Agora a beirada com conteúdo escondido ganha sombra, e a sombra some
+            quando você chega na ponta. Nenhuma coluna foi escondida. */}
+        <div className="hidden md:block overflow-x-auto ui-scroll-shadow">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -1179,22 +1183,22 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                     />
                   </th>
                 )}
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Nome
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   CPF
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Tipo de Vínculo
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Chave PIX
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   PIN
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Cadastrado em
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1215,13 +1219,13 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                       />
                     </td>
                   )}
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{employee.name}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">{formatCPF(employee.cpf)}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-4 whitespace-nowrap">
                     {employee.employment_type ? (
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         employee.employment_type === 'Diarista'
@@ -1234,12 +1238,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                       <span className="text-sm text-gray-400">-</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">
                       {employee.pix_key || '-'}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       {employee.pin_configured ? (
                         <span className="text-sm font-medium text-green-700">Configurado ✓</span>
@@ -1268,12 +1272,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">
                       {new Date(employee.created_at).toLocaleDateString('pt-BR')}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
                       {hasPermission('employees.edit') && (
                         <button
