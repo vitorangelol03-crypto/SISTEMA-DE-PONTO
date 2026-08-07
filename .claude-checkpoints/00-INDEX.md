@@ -2,9 +2,41 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-08-06**.
+> Última atualização: **2026-08-07**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 07/08 — desconto de vale/perda por PESSOA, com saldo (`d1b1e75`, só local; migration
+JÁ EM PRODUÇÃO):** ele pediu, com print da janela do relatório, *"pagar todos os grupos somente
+shopee e aplicar os descontos, e depois gerar um pagamento da eMile … sem que o cara que entrega
+shopee e imille tome desconto duas vezes e o cara que entra imille tome seu desconto"*. 🔑 **O
+"Descontar vales e perdas" era um interruptor só, pra planilha inteira — e as DUAS posições
+erram:** marcado cobra de novo de quem já foi descontado na outra plataforma, desmarcado deixa
+sem desconto quem só entrega a outra. **Medido em produção antes de programar:** 25 pessoas com
+vale/perda na 1ª quinzena de julho somando **R$ 1.885,14** (o número do próprio print), **as 25
+já descontadas** → marcar cobraria **tudo em dobro**; pendente de verdade = **0**. A informação
+**já estava no banco** (`payment_marks.deductions_applied` + `mirror_publications.include_deductions`),
+só não era usada na conta. Agora o desconto virou **saldo**: tabela nova **`driverpay_deduction_ledger`**
+(uma linha por evento de abate; aditiva, rollback = `DROP TABLE`), a caixa virou **3 opções** com
+*"só de quem ainda não foi descontado"* como **padrão**, e a janela **mostra a conta antes de
+baixar** em vez de mandar conferir 25 nomes. **Decisões dele:** (a) *"guardar o que sobrou"* —
+nunca abate mais do que a pessoa RECEBE naquele pagamento (2 casos reais medidos sairiam
+**negativos** numa planilha de pagamento: JOÃO PEDRO 97,89×28,00 e Bruno Eduardo 59,99×34,00);
+(b) **aviso vermelho** quando o modo novo está escolhido sem marcar *"esta planilha é o
+pagamento"*, porque sem esse registro o desconto se repete; (c) **mesma regra no espelho** —
+Leva B, **não começada**. **Migration `20260807120000` APLICADA** com OK dele (*"pode aplicar"*),
+🔑 **provada ANTES** rodando o backfill como **leitura pura** (previu 25 quitados / 0 pendentes;
+o banco confirmou exatamente isso, e tudo que já existia ficou idêntico). Validado: 21 unit novos ·
+**1.211 unit** · typecheck 61 = baseline · eslint · build · **E2E `tests/72` NOVO com cliques
+reais lendo os `.xlsx`**, provando o ciclo inteiro (na 2ª rodada quem entrega as duas sai com o
+valor **CHEIO**, quem só entrega a 2ª **toma o desconto**, e a **sobra** do terceiro sai agora) ·
+regressão 52/58/63 4/4 · banco sem sobra depois do teste. 🔴 **Leva B obriga mexer na edge fn:**
+`mirrorExpectedValue` **recalcula** o valor esperado da nota (`bruto − vales`) e com desconto
+**parcial** passaria a **recusar nota certa** — o plano é gravar o **total impresso** na publicação
+e a fn **ler** esse número. ⏸️ **Passe visual parado num ponto limpo** (ele escolheu **Inter**,
+fotos "antes" tiradas, **zero código mudado**): o app **não carrega fonte nenhuma**, tem 71 textos
+em 10–11px e ~200 emojis em 47 arquivos desenhados pelo sistema operacional.
+Ver `CHECKPOINT_SESSAO_2026-08-07.md`.
 
 **Sessão 06/08 — notas atrasadas passam a se anunciar (`d7f2142`, **NO AR**):** ele pediu *"um filtro
 em notas recebidas para ver quem enviou as notas atrasadas"* — e o filtro **já existia** desde 04/08,
