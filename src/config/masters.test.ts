@@ -64,10 +64,19 @@ describe('masters config', () => {
       expect(isPontoEditPermission('attendance.reset')).toBe(true);
     });
 
-    it('NÃO inclui marcar presença/falta nem aprovar (continuam liberados a supervisores)', () => {
-      expect(isPontoEditPermission('attendance.mark')).toBe(false);
+    // 2026-08-13: marcar presente/falta virou exclusivo do 2626 (incidente de 04/08 —
+    // 3 presenças sem batida marcadas pelo 9999 e pagas como dia trabalhado).
+    it('inclui marcar presença/falta (exclusivo do 2626 desde 13/08)', () => {
+      expect(isPontoEditPermission('attendance.mark')).toBe(true);
+    });
+
+    it('NÃO inclui aprovar/ver (continuam liberados a supervisores)', () => {
       expect(isPontoEditPermission('attendance.approve')).toBe(false);
+      expect(isPontoEditPermission('attendance.reject')).toBe(false);
+      expect(isPontoEditPermission('attendance.bulkApprove')).toBe(false);
       expect(isPontoEditPermission('attendance.view')).toBe(false);
+      expect(isPontoEditPermission('attendance.viewHistory')).toBe(false);
+      expect(isPontoEditPermission('attendance.search')).toBe(false);
     });
 
     it('não confunde com permissões de outros módulos', () => {
@@ -75,11 +84,12 @@ describe('masters config', () => {
       expect(isPontoEditPermission('financial.editRate')).toBe(false);
     });
 
-    it('PONTO_EDIT_PERMISSIONS tem as 4 chaves esperadas', () => {
+    it('PONTO_EDIT_PERMISSIONS tem as 5 chaves esperadas', () => {
       expect([...PONTO_EDIT_PERMISSIONS].sort()).toEqual([
         'attendance.edit',
         'attendance.editHistory',
         'attendance.manualTime',
+        'attendance.mark',
         'attendance.reset',
       ]);
     });

@@ -11,14 +11,16 @@ import {
  * Controle de Ponto — MODERNIZADO 2026-07-19 (era de maio; quebrou quando a base
  * virou produção viva + regra de junho).
  *
- * Regra vigente (masters.ts, decisão do Victor em junho):
- *   - marcar Presente/Falta: 9999/supervisores COM permissão podem;
- *   - horários (manual/inline), editar histórico e Reset: SÓ o mestre 2626.
+ * Regra vigente (masters.ts):
+ *   - junho/2026: horários (manual/inline), editar histórico e Reset — SÓ o mestre 2626;
+ *   - 13/08/2026: marcar Presente/Falta TAMBÉM virou exclusivo do 2626. Motivo: marcar
+ *     pelo painel cria ponto SEM batida nenhuma, indistinguível na tela de quem bateu de
+ *     verdade, e o Financeiro paga como dia trabalhado. Em 04/08 o 9999 marcou 3 pessoas
+ *     que não trabalharam e as 3 receberam diária.
  *
- * Molde novo: o spec cria o PRÓPRIO funcionário (PW Test, via service role),
- * age só na linha dele (nunca na primeira linha real da base viva) e limpa o
- * ponto dele antes de cada teste. A regra de junho é testada dos dois lados
- * (2626 consegue; 9999 nem vê os controles).
+ * Molde: o spec cria o PRÓPRIO funcionário (PW Test, via service role), age só na linha
+ * dele (nunca na primeira linha real da base viva) e limpa o ponto dele antes de cada
+ * teste. A regra é testada dos DOIS lados: o 2626 consegue; o 9999 nem vê os controles.
  */
 
 const EMP_NAME = 'PW Test Ponto Spec03';
@@ -51,8 +53,8 @@ test.describe('Controle de Ponto', () => {
     await cleanupAllTestArtifacts(readSuiteStart());
   });
 
-  test('marcar Presente (como 9999) → linha vira "Presente" e contador incrementa', async ({ page }) => {
-    const row = await openPontoRow(page, ADMIN);
+  test('marcar Presente (como 2626) → linha vira "Presente" e contador incrementa', async ({ page }) => {
+    const row = await openPontoRow(page, MASTER_2626);
 
     const presentesCard = page
       .locator('.bg-green-50')
@@ -70,8 +72,8 @@ test.describe('Controle de Ponto', () => {
       .toBe(initial + 1);
   });
 
-  test('marcar Falta (como 9999) → linha vira "Falta"', async ({ page }) => {
-    const row = await openPontoRow(page, ADMIN);
+  test('marcar Falta (como 2626) → linha vira "Falta"', async ({ page }) => {
+    const row = await openPontoRow(page, MASTER_2626);
     await row.getByRole('button', { name: /^Falta$/ }).click();
     await expect(row.locator('span').filter({ hasText: /^Falta$/ }).first()).toBeVisible({ timeout: 10_000 });
   });
@@ -106,6 +108,41 @@ test.describe('Controle de Ponto', () => {
     await expect(row.locator('input[type="time"]')).toHaveCount(0);
     await expect(row.getByRole('button', { name: '💾' })).toHaveCount(0);
     await expect(row.getByRole('button', { name: /^Reset$/ })).toHaveCount(0);
+  });
+
+  /**
+   * Regressão do incidente de 04/08/2026: o 9999 marcou "Presente" em 3 pessoas que não
+   * trabalharam e o Financeiro pagou a diária das 3. Desde 13/08 registrar ponto é só do
+   * 2626 — e o banco recusa mesmo que alguém contorne a tela (gatilho
+   * enforce_ponto_master_only).
+   */
+  test('REGRA de 13/08: 9999 não consegue marcar Presente/Falta (botão morto, sem seleção em massa)', async ({ page }) => {
+    const row = await openPontoRow(page, ADMIN);
+
+    // Os botões continuam na tela, mas MORTOS e com o motivo no title — some seria pior,
+    // porque a equipe não saberia por que sumiu.
+    const btnPresente = row.getByRole('button', { name: /^Presente$/ });
+    const btnFalta = row.getByRole('button', { name: /^Falta$/ });
+    await expect(btnPresente).toBeDisabled();
+    await expect(btnFalta).toBeDisabled();
+    await expect(btnPresente).toHaveAttribute('title', /não tem permissão/i);
+
+    // Sem caixa de seleção na linha nem no cabeçalho => marcação em massa impossível.
+    await expect(row.locator('input[type="checkbox"]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Marcar como Presente/ })).toHaveCount(0);
+
+    // Clicar não muda nada: a linha continua "Não marcado" (beforeEach limpou o ponto).
+    await btnPresente.click({ force: true }).catch(() => {});
+    await expect(row.locator('span').filter({ hasText: /^Não marcado$/ }).first()).toBeVisible();
+  });
+
+  /** Contraprova do teste acima: os MESMOS botões estão vivos para o 2626. Separado em
+   *  outro teste porque dois logins no mesmo teste estouram o limite de 30s no WSL. */
+  test('REGRA de 13/08 (contraprova): para o 2626 os botões estão vivos', async ({ page }) => {
+    const row = await openPontoRow(page, MASTER_2626);
+    await expect(row.getByRole('button', { name: /^Presente$/ })).toBeEnabled();
+    await expect(row.getByRole('button', { name: /^Falta$/ })).toBeEnabled();
+    await expect(row.locator('input[type="checkbox"]')).toHaveCount(1);
   });
 
   test('2626: horário manual — 💾 desabilita até preencher entrada+saída e SALVA de verdade', async ({ page }) => {

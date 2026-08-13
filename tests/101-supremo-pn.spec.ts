@@ -26,7 +26,7 @@
  */
 import { execSync } from 'node:child_process';
 import { test, expect, Page, ConsoleMessage } from '@playwright/test';
-import { ADMIN, loginAs, goToTab, logout } from './helpers';
+import { ADMIN, MASTER_2626, loginAs, goToTab, logout } from './helpers';
 import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
 import { cleanupByPrefix } from './integrity-helpers';
 
@@ -296,7 +296,9 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
       // Cleanup attendance prévio
       await s.from('attendance').delete().eq('employee_id', emp.id).eq('date', todayBR());
 
-      await loginAs(page, ADMIN);
+      // 13/08/2026: registrar ponto pelo painel é exclusivo do mestre 2626 (que também
+      // é mestre cross-empresa, então continua enxergando Ponte Nova).
+      await loginAs(page, MASTER_2626);
       await switchToPN(page);
       await goToTab(page, 'Ponto');
       await page.getByRole('button', { name: /^Atualizar$/ }).click();

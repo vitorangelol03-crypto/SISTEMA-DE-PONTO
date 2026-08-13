@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { ADMIN, loginAs, goToTab } from './helpers';
+import { MASTER_2626, loginAs, goToTab } from './helpers';
 import { getClient } from './cleanup';
 import {
   createTestEmployee,
@@ -72,14 +72,18 @@ async function removeAllBonusesViaUI(page: Page): Promise<void> {
  * Reseta o status de presença de TODOS funcionários do dia via UI.
  * Útil pra limpar a `attendance` deixada pelo teste e evitar pollution.
  */
-async function resetAllAttendanceViaUI(page: Page): Promise<void> {
-  const resetGeral = page.getByRole('button', { name: /^Reset Geral$/ });
-  if (await resetGeral.isVisible().catch(() => false)) {
-    await resetGeral.click();
-    await page.getByRole('button', { name: /Confirmar Reset/ }).click();
-    await expect(page.getByRole('button', { name: /Confirmar Reset/ })).toBeHidden();
-  }
-}
+/**
+ * 🔴 REMOVIDO EM 13/08/2026 — `resetAllAttendanceViaUI`, que clicava no "Reset Geral".
+ *
+ * O Reset Geral apaga o ponto de TODO MUNDO que está visível na tela; sem busca ativa,
+ * isso é a empresa inteira no dia (por desenho — decisão do Victor em 29/07). Enquanto
+ * este spec entrava como 9999 o botão nem aparecia (é 2626-only desde junho) e a função
+ * era código morto. Ao trocar o login para 2626 (necessário porque marcar presença virou
+ * exclusivo dele em 13/08), a função ARMOU: apagou 27 pontos REAIS do dia.
+ *
+ * Limpeza de teste não pode usar botão que age fora do escopo do teste. Agora o afterEach
+ * usa `cleanup()`, que apaga só os funcionários com o prefixo deste spec, via service role.
+ */
 
 async function searchEmployee(page: Page, name: string): Promise<void> {
   // AttendanceTab faz query no mount com [company?.id]; employees criados via SQL
@@ -109,7 +113,10 @@ test.describe('Bonificação INDIVIDUAL via UI — aplica + remove em 1 funcion�
 
   test.beforeEach(async ({ page }) => {
     await cleanup();
-    await loginAs(page, ADMIN);
+    // 13/08/2026: marcar Presente virou exclusivo do 2626, e este spec precisa marcar
+    // presença pra ter em quem aplicar bonificação. O 2626 é mestre: tem as permissões
+    // de bônus iguais às do 9999.
+    await loginAs(page, MASTER_2626);
     await goToTab(page, 'Ponto');
     // Limpa quaisquer bonificações remanescentes ANTES de começar
     await removeAllBonusesViaUI(page).catch(() => {});
@@ -119,7 +126,8 @@ test.describe('Bonificação INDIVIDUAL via UI — aplica + remove em 1 funcion�
     // Limpa bonificações via UI (afeta a empresa toda) + reseta attendance pra
     // não deixar funcionários reais marcados como presente
     await removeAllBonusesViaUI(page).catch(() => {});
-    await resetAllAttendanceViaUI(page).catch(() => {});
+    // Escopado no prefixo deste spec — NUNCA "Reset Geral" (ver comentário acima).
+    await cleanup();
   });
 
   test('1. marcar Presente em PW Test → status "Presente" aparece na linha', async ({ page }) => {

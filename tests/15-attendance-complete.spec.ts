@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { ADMIN, loginAs, goToTab } from './helpers';
+import { MASTER_2626, loginAs, goToTab } from './helpers';
 import { getClient } from './cleanup';
 import {
   createTestEmployee,
@@ -50,7 +50,10 @@ test.describe('Attendance — fluxos completos', () => {
 
   test.beforeEach(async ({ page }) => {
     await cleanup();
-    await loginAs(page, ADMIN);
+    // 13/08/2026: registrar ponto pelo painel virou exclusivo do mestre 2626 (antes era
+    // do 9999 também). Este arquivo marca presença/falta, então entra como 2626 — que é
+    // mestre e tem as mesmas permissões de aprovação do 9999.
+    await loginAs(page, MASTER_2626);
   });
 
   test('marcar Presente em funcionário cria attendance status=present', async ({ page }) => {

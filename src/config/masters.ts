@@ -19,12 +19,21 @@ export const PONTO_EDITOR_ID = '2626';
 /**
  * Permissões cuja concessão é EXCLUSIVA do PONTO_EDITOR_ID, independentemente de
  * role/bypass. Espelha o trigger `enforce_ponto_master_only` no banco.
+ *
+ * 2026-08-13: `attendance.mark` entrou na lista. Até então marcar presente/falta pelo
+ * painel era liberado a supervisores e ao 9999 — e criava um registro de ponto SEM
+ * batida nenhuma, indistinguível na tela de quem bateu de verdade, que o Financeiro
+ * pagava como dia trabalhado. Em 04/08 o 9999 marcou 3 pessoas que não trabalharam e
+ * as 3 receberam diária. Decisão do Victor: só o 2626 registra ponto.
+ * (A batida do próprio funcionário na tela /clock NÃO passa por aqui — ela entra pela
+ * edge fn `clock-in-validated`, com chave de servidor, e segue liberada.)
  */
 export const PONTO_EDIT_PERMISSIONS: readonly string[] = [
   'attendance.edit',        // editar horário de saída (inline)
   'attendance.editHistory', // editar registros de dias anteriores
   'attendance.manualTime',  // inserir horário manual (entrada/saída)
   'attendance.reset',       // resetar/excluir registros de ponto
+  'attendance.mark',        // marcar presente/falta pelo painel (individual e em massa)
 ];
 
 /** True se o usuário é mestre (9999 ou 2626). */

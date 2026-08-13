@@ -37,6 +37,7 @@ import { test, expect, Page, ConsoleMessage } from '@playwright/test';
 import {
   ADMIN,
   SUPERVISOR,
+  MASTER_2626,
   loginAs,
   goToTab,
   switchCompany,
@@ -317,7 +318,8 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
       const s = getClient();
       await s.from('attendance').delete().eq('employee_id', empId).eq('date', today);
 
-      await loginAs(page, ADMIN);
+      // 13/08/2026: registrar ponto pelo painel é exclusivo do mestre 2626.
+      await loginAs(page, MASTER_2626);
       await gotoPontoFresh(page);
       const search = page.getByPlaceholder(/Buscar por nome ou CPF/);
       await search.fill(name);
@@ -342,7 +344,8 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
       const s = getClient();
       await s.from('attendance').delete().eq('employee_id', empId).eq('date', today);
 
-      await loginAs(page, ADMIN);
+      // 13/08/2026: registrar ponto pelo painel é exclusivo do mestre 2626.
+      await loginAs(page, MASTER_2626);
       await gotoPontoFresh(page);
       const search = page.getByPlaceholder(/Buscar por nome ou CPF/);
       await search.fill(name);
