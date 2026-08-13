@@ -2,9 +2,36 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-08-07**.
+> Última atualização: **2026-08-13**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 13/08 — registrar ponto pelo painel virou exclusivo do 2626 (`5ef68c0`, só local;
+migration JÁ EM PRODUÇÃO):** ele mandou print do Financeiro — *"não trabalhou no dia 4 mas
+apareceu no sistema… o sistema está permitindo colocar presença sem estar presente foi bug
+isso?"*. **Não era bug, era clique humano:** em 04/08, às 14:53 e 14:55, alguém com o mestre
+**9999** marcou "Presente" em 3 pessoas que não trabalharam (cliques individuais, 9s e 2min
+entre eles), e em 11/08 o pagamento da quinzena deu **R$ 150,00 pra cada**. 🔑 **A falha de
+produto:** marcar pelo painel cria ponto **sem batida nenhuma**, com o mesmo selo verde de
+quem bateu de verdade, e o Financeiro paga qualquer linha `present`. **Dados corrigidos com
+OK dele** (3 pontos + 3 pagamentos, −R$ 450,00; rollback em `backups/2026-08-13/`); o Bruno
+seguiu com 2 dias porque 07/08 e 10/08 têm batida real dele. **A trava (decisão dele:
+"bloqueia em todos os usuários"):** `attendance.mark` entrou em `PONTO_EDIT_PERMISSIONS` (na
+tela os botões ficam **desabilitados com o motivo no title** e a caixa de seleção some) e a
+migration `20260813120000` fez o gatilho recusar **INSERT de ponto** e **UPDATE de status**
+pra quem não é 2626/backend — 🔑 o buraco era exatamente esse, o gatilho de 27/06 só olhava
+data/horário. **Provado na função em produção, 6 casos, sem gravar nada:** 9999/supervisor
+bloqueados pra marcar; aprovar, **a batida do funcionário no /clock** e o 2626 passam. 🔴 **E
+eu apaguei 27 pontos REAIS de hoje no meio disso:** ao trocar o login do `tests/40` pra 2626
+(pra ele conseguir marcar), **armei** o `afterEach` que clicava em **"Reset Geral"** — código
+morto enquanto o spec era 9999, porque o botão é 2626-only. **Restaurados byte a byte** do
+backup (md5 do conteúdo da tabela inteira idêntico, 0 linhas diferentes), opção escolhida por
+ele (*"restaura igual estava antes"*), e a função foi **removida** do spec. 🔑 **Lição:
+promover o login de um teste pode armar caminho destrutivo morto por falta de permissão.**
+Validado: 78 arquivos unit 0 falha · typecheck 61 = baseline · eslint · build · E2E 03 8/8
+com regressão nova · banco conferido por hash de conteúdo. ⏳ Bateria E2E completa **não
+rodada** (banco de produção com gente batendo ponto — combinar horário).
+Ver `CHECKPOINT_SESSAO_2026-08-13.md`.
 
 **Sessão 07/08 — desconto de vale/perda por PESSOA, com saldo (`d1b1e75`, só local; migration
 JÁ EM PRODUÇÃO):** ele pediu, com print da janela do relatório, *"pagar todos os grupos somente
@@ -589,7 +616,9 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-08-06.md` | **Mais recente.** Notas atrasadas passam a se anunciar (`d7f2142`, local): o filtro de prazo já existia — o que faltava era o número e o atalho (`Só atrasadas (3)` + faixa "⏰ 3 nota(s) de 2 entregador(es) — Ver quem") · retrato de produção medido (75 · 72 · 3) e atraso conferido como justo · E2E `tests/71` novo com cliques reais · 🔴 espelho do CLAUDIOMAR com prazo em **novembro** (resíduo do `tests/60`, que grava o corte no banco de produção): prazo **corrigido** em prod com backup e o **laço fechado** no teste (`6853a98`), provado ao contrário | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-13.md` | **Mais recente.** Presença sem batida: apurado que o dia 4 foi clique humano do 9999 (não bug) e os 3 lançamentos + R$ 450,00 apagados com OK dele · **registrar ponto pelo painel virou exclusivo do 2626** (`5ef68c0` + migration `20260813120000` **em prod**, provada com 6 casos sem gravar nada) · 🔴 **27 pontos reais de hoje apagados por mim** ao promover o login do `tests/40` pra 2626 e armar o "Reset Geral" que era código morto — **restaurados byte a byte** e a função removida do spec | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-07.md` | Desconto de vale/perda **por pessoa, com saldo** (`driverpay_deduction_ledger`, 3 opções na caixa, padrão "só de quem ainda não foi descontado") · Leva B: espelho segue o saldo e a **nota passa a ler o `printed_total`** em vez de recalcular · **release completo no ar** na ordem migrations → edge fn v31 → Vercel (conferida por conteúdo) · passe visual leva 7: **a Inter entra** (o app não carregava fonte nenhuma) · leva 8 (emojis→ícones) medida e não começada | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-06.md` | Notas atrasadas passam a se anunciar (`d7f2142`, local): o filtro de prazo já existia — o que faltava era o número e o atalho (`Só atrasadas (3)` + faixa "⏰ 3 nota(s) de 2 entregador(es) — Ver quem") · retrato de produção medido (75 · 72 · 3) e atraso conferido como justo · E2E `tests/71` novo com cliques reais · 🔴 espelho do CLAUDIOMAR com prazo em **novembro** (resíduo do `tests/60`, que grava o corte no banco de produção): prazo **corrigido** em prod com backup e o **laço fechado** no teste (`6853a98`), provado ao contrário | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-04.md` | (a sessão atravessou a virada do dia; as levas de 05/08 continuam neste arquivo, §§21-24). Espelho do app da Shopee conferido sozinho — backend do driver (`cb460b8`, **só local, nada no ar**) · conferência pura + fila de reconferência · leitora com provedor trocável (Gemini grátis; sem chave = modo manual) · migration **escrita e não aplicada** · medições reais com a foto do Victor (teste negativo 4/4; cota 20/dia **por modelo**) · datas das quinzenas corrigidas em prod · release completo no ar (migrations + edge fn + cron + push) · **tela do líder de grupo grande revista** (`4abdad7`) com E2E 6/6 em chromium e mobile · **05/08:** NF x desconto PNR, espelho de quem não entrega, busca nos modais, cadastro tudo-ou-nada, **nota escaneada lida pela IA** e **uma nota por vaga + print só da Shopee** (§24) | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-29.md` | Caça ao que apagava ponto real. Caça ao que apagava ponto real: causa = "Reset Geral" ignorando a busca, clicado pelo spec 04 dentro de Ponte Nova · corrigido no botão (`attendancesToReset`, puro) + modal que diz quantos/quem + teste de regressão no próprio spec 04 (`fc41a09`, **só local**) · método das sentinelas | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-07-28.md` | fn v11 e **v12** no ar (deploy via CLI) · conferência da NF provada com nota real 7/7 · valida o que faltava (app, ciclo inteiro com o PDF lido, grupo sem abate, relatórios reais) · **relatórios 100% ASCII + PIX só números** (`e662fca`, no ar) · **espelho POR PLATAFORMA: 2 espelhos separados no app + 1 nota por espelho** (`31ef70f`, no ar) · spec 57 consertado · achado dos funcionários `PW Test` no cleanup | 🟢 ATIVO |
@@ -621,6 +650,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 ## ⚖️ Decisões ativas (não re-perguntar)
 
 - **Ponto:** editar/excluir ponto é SÓ do mestre **2626** (nem 9999); travado em frontend + RLS + trigger.
+- **Ponto (13/08, decisão do Victor "bloqueia em todos os usuários"):** **marcar Presente/Falta pelo painel também é SÓ do 2626** — supervisores e o 9999 perdem. Na tela os botões ficam **desabilitados com o motivo no `title`** (não somem, pra equipe saber por quê) e a **caixa de seleção some** (marcação em massa impossível). No banco, o gatilho `enforce_ponto_master_only` recusa **INSERT** de ponto e **UPDATE que mude status**. Seguem liberados: **aprovar/recusar** (só mexe em `approval_status`), o recálculo, e a **batida do próprio funcionário no /clock** (entra pela edge fn com `service_role`). Motivo: marcar pelo painel cria ponto sem batida nenhuma e o Financeiro paga como dia trabalhado.
 - **Driverpay:** namespace `driverpay_*`; 100% aditivo ao sistema de ponto; vários períodos abertos permitidos; import auto-detecta plataforma pelo cabeçalho; valor/pacote vem da taxa cadastrada (nunca da planilha); apelidos de entregador aprendidos em `driverpay_driver_aliases`; Shopee COLETA = plataforma "Coleta Shopee"; plataforma arquivada sai da soma; driver só pode estar em 1 grupo (vínculo exclusivo, 18/07).
 - **Git:** commit local sempre; **push é do Victor, na mão**; Conventional Commits.
 - **Espelhos (19/07):** destaque+aviso por plataforma com REGRA DE PRESENÇA (só onde há pacotes); aviso acoplado ao destaque; corte auto-salvo por empresa; descontos no grupo limite 12.
@@ -665,6 +695,17 @@ janela). **Nada foi pro ar** — espera o OK dele.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
+
+- 🔴 **Promover o login de um spec pode ARMAR caminho destrutivo morto** (13/08, aprendido
+  apagando 27 pontos reais): o `tests/40` entrava como 9999 e seu `afterEach` clicava em
+  **"Reset Geral"** — que o 9999 nem vê (2626-only desde junho), então era **código morto**.
+  Ao trocar o login pra 2626 (necessário pela regra nova de marcação), a chamada passou a
+  funcionar e apagou o ponto do dia da empresa inteira (Reset Geral **sem busca ativa** = todo
+  mundo, por desenho de 29/07). **Regra:** antes de trocar o usuário de um spec para um mais
+  poderoso, LER o que os `beforeEach`/`afterEach` dele fazem — e **limpeza de teste nunca usa
+  botão que age fora do escopo do teste** (usar cleanup por prefixo, via service role).
+  Antes de qualquer bateria: `create table backup_attendance_<data> as select * from
+  attendance` (a conferência que vale é o **md5 do conteúdo**, não só a contagem).
 
 - 🔴 **Teste NÃO pode lançar dado e esquecer de tirar — nem apagar dado real** (29/07): o
   spec 04 deixou **R$ 50 de bonificação em 5 funcionários REAIS** de PN (a bonificação do
