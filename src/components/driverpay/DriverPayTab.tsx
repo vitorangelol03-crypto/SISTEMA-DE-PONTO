@@ -1492,9 +1492,11 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const pagamentoPorPagamento = useMemo(() => {
     const nomes = platforms.map((p) => p.name);
     const m = new Map<string, ReturnType<typeof pagamentoDoDriver>>();
-    for (const r of rows) m.set(r.paymentId, pagamentoDoDriver(r, nomes, indiceMarcas));
+    for (const r of rows) {
+      m.set(r.paymentId, pagamentoDoDriver(r, nomes, indiceMarcas, deductionLedger.get(r.driverId) ?? 0));
+    }
     return m;
-  }, [rows, platforms, indiceMarcas]);
+  }, [rows, platforms, indiceMarcas, deductionLedger]);
 
   const filteredRows = useMemo(
     () =>

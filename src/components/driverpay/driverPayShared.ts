@@ -707,6 +707,12 @@ export function pagamentoDoDriver(
   row: DriverRowData,
   platformNames: readonly string[],
   indice: ReadonlyMap<string, PaymentMark>,
+  /**
+   * Quanto já foi abatido dele no livro-caixa (`driverpay_deduction_ledger`) nesta quinzena,
+   * por relatório OU espelho (14/08/2026). Sem isso o selo reacendia pra quem já tinha
+   * abatido pelo espelho — mesmo bug que o aviso do modal teve em 05/08.
+   */
+  jaAbatido = 0,
 ): PagamentoDoDriver {
   const comPacote = platformNames.filter((nome) => platformPackages(row, nome) > 0);
   if (comPacote.length === 0) {
@@ -715,7 +721,8 @@ export function pagamentoDoDriver(
   const pagas: string[] = [];
   const faltando: string[] = [];
   let ultimo: string | null = null;
-  let descontoPendente = false;
+  let pagoSemDesconto = false;
+  let pagoComDesconto = false;
   for (const nome of comPacote) {
     const m = indice.get(`${row.driverId}|${nome}`);
     if (m) {
@@ -723,13 +730,21 @@ export function pagamentoDoDriver(
       if (!ultimo || m.paidAt > ultimo) ultimo = m.paidAt;
       // `false` explícito = saiu parcial de propósito. `null`/undefined = marca antiga,
       // de antes de a gente registrar isso — não dá pra afirmar nada, então não acusa.
-      if (m.deductionsApplied === false) descontoPendente = true;
+      if (m.deductionsApplied === false) pagoSemDesconto = true;
+      if (m.deductionsApplied === true) pagoComDesconto = true;
     } else {
       faltando.push(nome);
     }
   }
   const estado: EstadoPagamento =
     pagas.length === 0 ? 'pendente' : faltando.length === 0 ? 'concluido' : 'parcial';
+  // 14/08/2026: mesma regra do aviso do modal (`descontosPendentes`, em descontoPendente.ts) —
+  // só acende quem TEM vale/perda de verdade, não foi compensado em OUTRA plataforma e não
+  // foi abatido pelo livro-caixa (espelho ou outro relatório). Antes bastava UMA plataforma
+  // com `deductionsApplied === false`, e isso acendia até pra quem não devia nada — mesmo
+  // falso-positivo que o aviso do modal teve em 05/08, só que sem o conserto.
+  const descontoPendente =
+    pagoSemDesconto && !pagoComDesconto && jaAbatido <= 0 && deductionsOf(row) > 0;
   return { estado, pagas, faltando, ultimoPagamento: ultimo, descontoPendente };
 }
 

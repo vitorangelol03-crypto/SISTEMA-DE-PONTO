@@ -24,11 +24,18 @@ import {
 
 const PLATS = ['SHOPEE', 'LOGGI', 'ANJUN'];
 
-function row(driverId: string, pacotes: Record<string, number>, groupName: string | null = null): DriverRowData {
+function row(
+  driverId: string,
+  pacotes: Record<string, number>,
+  groupName: string | null = null,
+  /** Vale/perda dele nesta quinzena, em R$ (14/08/2026: o selo só acende com valor real). */
+  vale = 0,
+): DriverRowData {
   return {
     paymentId: `pay-${driverId}`, driverId, name: driverId.toUpperCase(), route: null, groupName,
     routes: [{ route: 'R1', packages: pacotes, packageIds: {}, rates: {} }],
-    ratesByPlatform: {}, discounts: [], vales: [], pixKey: null, recebedorNome: null, recebedorPix: null,
+    ratesByPlatform: {}, discounts: [], vales: vale > 0 ? [{ amount: vale }] : [],
+    pixKey: null, recebedorNome: null, recebedorPix: null,
     cpf: null, phone: null, active: true, notaFiscal: false, espelhoConferido: false, zapex: [], zapexRate: 0,
   } as unknown as DriverRowData;
 }
@@ -148,28 +155,50 @@ describe('desconto pendente', () => {
 
   it('pago COM desconto: nada pendente', () => {
     const idx = indexarMarcas([comDesconto('caio', 'SHOPEE', '2026-08-04T12:00:00Z')]);
-    expect(pagamentoDoDriver(row('caio', { SHOPEE: 1 }), PLATS, idx).descontoPendente).toBe(false);
+    expect(pagamentoDoDriver(row('caio', { SHOPEE: 1 }, null, 50), PLATS, idx).descontoPendente).toBe(false);
   });
 
-  it('🎯 pago SEM desconto: acusa pendente', () => {
+  it('🎯 pago SEM desconto E com vale/perda de verdade: acusa pendente', () => {
     const idx = indexarMarcas([semDesconto('caio', 'SHOPEE', '2026-08-04T12:00:00Z')]);
-    expect(pagamentoDoDriver(row('caio', { SHOPEE: 1 }), PLATS, idx).descontoPendente).toBe(true);
+    expect(pagamentoDoDriver(row('caio', { SHOPEE: 1 }, null, 50), PLATS, idx).descontoPendente).toBe(true);
   });
 
-  it('basta UMA plataforma sem desconto pra acusar', () => {
+  it('basta UMA plataforma sem desconto pra acusar (tendo vale/perda)', () => {
     const idx = indexarMarcas([
       comDesconto('caio', 'SHOPEE', '2026-08-04T12:00:00Z'),
       semDesconto('caio', 'LOGGI', '2026-08-05T12:00:00Z'),
     ]);
-    const r = pagamentoDoDriver(row('caio', { SHOPEE: 1, LOGGI: 1 }), PLATS, idx);
+    const r = pagamentoDoDriver(row('caio', { SHOPEE: 1, LOGGI: 1 }, null, 50), PLATS, idx);
     expect(r.estado).toBe('concluido');
-    expect(r.descontoPendente).toBe(true);
+    // basta UMA das plataformas ter vindo COM desconto pra não acusar de novo (compensação).
+    expect(r.descontoPendente).toBe(false);
   });
 
   it('⚠️ marca ANTIGA (null) nao acusa — nao da pra afirmar o que aconteceu', () => {
     const antiga: PaymentMark = { driverId: 'caio', platformName: 'SHOPEE', paidAt: '2026-08-04T12:00:00Z' };
-    expect(pagamentoDoDriver(row('caio', { SHOPEE: 1 }), PLATS, indexarMarcas([antiga])).descontoPendente)
+    expect(pagamentoDoDriver(row('caio', { SHOPEE: 1 }, null, 50), PLATS, indexarMarcas([antiga])).descontoPendente)
       .toBe(false);
+  });
+
+  // ── 14/08/2026: falsos-positivos que confundiam o Victor na grade ──────────
+  it('🎯 pago SEM desconto mas SEM vale/perda nenhum: NÃO acusa (não devia nada)', () => {
+    const idx = indexarMarcas([semDesconto('caio', 'SHOPEE', '2026-08-04T12:00:00Z')]);
+    expect(pagamentoDoDriver(row('caio', { SHOPEE: 1 }), PLATS, idx).descontoPendente).toBe(false);
+  });
+
+  it('🎯 pago sem desconto numa plataforma, mas COM desconto em outra: NÃO acusa (já compensou)', () => {
+    const idx = indexarMarcas([
+      semDesconto('caio', 'SHOPEE', '2026-08-04T12:00:00Z'),
+      comDesconto('caio', 'LOGGI', '2026-08-05T12:00:00Z'),
+    ]);
+    const r = pagamentoDoDriver(row('caio', { SHOPEE: 1, LOGGI: 1 }, null, 50), PLATS, idx);
+    expect(r.descontoPendente).toBe(false);
+  });
+
+  it('🎯 tem vale, pago sem desconto, mas o livro-caixa já abateu (espelho): NÃO acusa', () => {
+    const idx = indexarMarcas([semDesconto('caio', 'SHOPEE', '2026-08-04T12:00:00Z')]);
+    const r = pagamentoDoDriver(row('caio', { SHOPEE: 1 }, null, 50), PLATS, idx, /* jaAbatido */ 50);
+    expect(r.descontoPendente).toBe(false);
   });
 
   it('o aviso do relatorio carrega o "sem desconto" junto', () => {
