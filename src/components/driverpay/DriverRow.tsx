@@ -44,6 +44,8 @@ interface DriverRowProps {
   canDiscount: boolean;
   canVale: boolean;
   canMirror: boolean;
+  /** Marcar como pago manualmente, sem gerar relatório (14/08/2026). */
+  canMarkPaid: boolean;
   handlers: RowHandlers;
   /** Espelho já publicado no app do driver (selo "no app"). */
   publishedInApp?: boolean;
@@ -92,6 +94,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   canDiscount,
   canVale,
   canMirror,
+  canMarkPaid,
   handlers,
   publishedInApp,
   nfProgress,
@@ -548,6 +551,17 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                 className="text-gray-500 hover:text-blue-600"
               >
                 <FileText className="w-4 h-4" />
+              </button>
+            )}
+            {canMarkPaid && pagamento && pagamento.estado !== 'sem_pacote' && pagamento.estado !== 'concluido' && (
+              <button
+                type="button"
+                onClick={() => handlers.onMarkPaid(row)}
+                disabled={readOnly}
+                title="Marcar como pago manualmente, sem gerar relatório"
+                className="text-green-600 hover:text-green-800 hover:bg-green-50 rounded-md p-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              >
+                <CheckCircle2 className="w-4 h-4" />
               </button>
             )}
           </div>

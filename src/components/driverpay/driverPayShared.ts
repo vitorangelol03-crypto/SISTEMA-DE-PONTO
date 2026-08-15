@@ -151,6 +151,8 @@ export interface RowHandlers {
   onZapex: (row: DriverRowData) => void;
   onMirror: (row: DriverRowData) => void;
   onToggleExpand: (paymentId: string) => void;
+  /** Marca este driver como pago SEM gerar relatório (14/08/2026). */
+  onMarkPaid: (row: DriverRowData) => void;
 }
 
 /** Total de pacotes de uma plataforma somando todas as rotas do driver. */

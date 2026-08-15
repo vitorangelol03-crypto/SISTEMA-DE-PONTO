@@ -121,6 +121,7 @@ import { DiscountModal } from './DiscountModal';
 import { DiscountSearchModal } from './DiscountSearchModal';
 import { ValeModal } from './ValeModal';
 import { ZapexModal } from './ZapexModal';
+import { MarkPaidModal } from './MarkPaidModal';
 import { GroupManagerModal } from './GroupManagerModal';
 import { PlatformModal } from './PlatformModal';
 import { EmittersModal } from './EmittersModal';
@@ -203,6 +204,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [discountRowId, setDiscountRowId] = useState<string | null>(null);
   const [valeRowId, setValeRowId] = useState<string | null>(null);
   const [zapexRowId, setZapexRowId] = useState<string | null>(null);
+  /** Driver (1 linha) ou grupo inteiro (N linhas) a marcar como pago manualmente (14/08/2026). */
+  const [markPaidTarget, setMarkPaidTarget] = useState<{ rows: DriverRowData[]; title: string } | null>(null);
   const [showGroups, setShowGroups] = useState(false);
   const [showPlatform, setShowPlatform] = useState(false);
   const [showEmitters, setShowEmitters] = useState(false);
@@ -892,6 +895,17 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     [company, selectedPeriod, groups],
   );
 
+  /** Abre o modal de "marcar pago manual" pra UM driver (14/08/2026). */
+  const onMarkPaid = useCallback(
+    (row: DriverRowData) => setMarkPaidTarget({ rows: [row], title: row.name }),
+    [],
+  );
+  /** Mesmo modal, mas cobrindo TODOS os membros do grupo de uma vez. */
+  const onGroupMarkPaid = useCallback(
+    (groupName: string, groupRows: DriverRowData[]) => setMarkPaidTarget({ rows: groupRows, title: groupName }),
+    [],
+  );
+
   const handlers: RowHandlers = useMemo(
     () => ({
       onPackageChange,
@@ -911,6 +925,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onZapex,
       onMirror,
       onToggleExpand,
+      onMarkPaid,
     }),
     [
       onPackageChange,
@@ -930,6 +945,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onZapex,
       onMirror,
       onToggleExpand,
+      onMarkPaid,
     ],
   );
 
@@ -2083,8 +2099,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             canDiscount={hasPermission('driverpay.manageDiscount')}
             canVale={hasPermission('driverpay.manageVale')}
             canMirror={canMirror}
+            canMarkPaid={canEditDriver}
             handlers={handlers}
             onGroupMirror={onGroupMirror}
+            onGroupMarkPaid={onGroupMarkPaid}
             publishedDriverIds={publishedDriverIds}
             nfProgressByPayment={nfProgressByPayment}
             proofProgressByPayment={proofProgressByPayment}
@@ -2148,6 +2166,23 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           hasPermission={hasPermission}
           onClose={() => setZapexRowId(null)}
           onChanged={reloadPayments}
+        />
+      )}
+
+      {markPaidTarget && company && selectedPeriod && (
+        <MarkPaidModal
+          rows={markPaidTarget.rows}
+          title={markPaidTarget.title}
+          platformNames={platforms.map((p) => p.name)}
+          deductionLedger={deductionLedger}
+          companyId={company.id}
+          periodId={selectedPeriod.id}
+          userId={userId}
+          onClose={() => setMarkPaidTarget(null)}
+          onChanged={async () => {
+            setPaymentMarks(await listPaymentMarks(company.id, selectedPeriod.id));
+            setDeductionLedger(await listDeductionLedger(company.id, selectedPeriod.id));
+          }}
         />
       )}
 

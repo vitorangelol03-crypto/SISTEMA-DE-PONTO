@@ -2637,7 +2637,8 @@ export const markPaymentDone = async (
   companyId: string,
   periodId: string,
   pares: readonly { driverId: string; platformName: string }[],
-  reportKind: 'geral' | 'simples',
+  /** 'manual' = marcado direto pelo botão da grade, sem gerar relatório (14/08/2026). */
+  reportKind: 'geral' | 'simples' | 'manual',
   userId: string,
   /** Os vales/perdas foram descontados NESTE pagamento? (04/08/2026) */
   deductionsApplied = true,

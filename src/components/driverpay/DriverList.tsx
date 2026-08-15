@@ -56,8 +56,12 @@ interface DriverListProps {
   canDiscount: boolean;
   canVale: boolean;
   canMirror: boolean;
+  /** Marcar como pago manualmente, sem gerar relatório (14/08/2026). */
+  canMarkPaid: boolean;
   handlers: RowHandlers;
   onGroupMirror: (groupName: string, rows: DriverRowData[]) => void;
+  /** Marca TODOS os membros do grupo como pagos de uma vez, sem gerar relatório. */
+  onGroupMarkPaid: (groupName: string, rows: DriverRowData[]) => void;
   /** driver_ids com espelho já publicado no app (alimenta o selo "no app"). */
   publishedDriverIds?: ReadonlySet<string>;
   /** Progresso da NF (validadas/esperadas) por paymentId — ciente de grupo. */
@@ -114,8 +118,10 @@ export const DriverList: React.FC<DriverListProps> = ({
   canDiscount,
   canVale,
   canMirror,
+  canMarkPaid,
   handlers,
   onGroupMirror,
+  onGroupMarkPaid,
   publishedDriverIds,
   nfProgressByPayment,
   proofProgressByPayment,
@@ -515,6 +521,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                 canDiscount={canDiscount}
                 canVale={canVale}
                 canMirror={canMirror}
+                canMarkPaid={canMarkPaid}
                 handlers={handlers}
                 publishedInApp={publishedDriverIds?.has(row.driverId)}
                 nfProgress={nfProgressByPayment?.get(row.paymentId)}
@@ -1022,6 +1029,22 @@ export const DriverList: React.FC<DriverListProps> = ({
                       className="px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1"
                     >
                       <FileText className="w-4 h-4" /> Espelho do grupo
+                    </button>
+                  )}
+                  {canMarkPaid && groupRows.some((r) => {
+                    const p = pagamentoByPayment?.get(r.paymentId);
+                    return p && p.estado !== 'sem_pacote' && p.estado !== 'concluido';
+                  }) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onGroupMarkPaid(name, groupRows);
+                      }}
+                      title="Marca TODOS os membros deste grupo como pagos, sem gerar relatório"
+                      className="px-3 py-1.5 text-xs font-medium bg-green-50 text-green-700 rounded-md hover:bg-green-100 inline-flex items-center gap-1"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Marcar grupo pago
                     </button>
                   )}
                   <span className={`font-bold ${t.net < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatBRL(t.net)}</span>
