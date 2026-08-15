@@ -19,6 +19,7 @@ import { mirrorPlatformKey, sanitizeMirrorKeyForPath } from '../components/drive
 import type { ProofRequest, PaymentMark } from '../components/driverpay/driverPayShared';
 import { statusPorQuantidade, taxasDePlataformasQueExistem } from '../components/driverpay/driverPayShared';
 import { orphanProofPaths, proofFileName, isKeptProof, type ProofSlot } from '../utils/discountProofs';
+import { saldoDevedorDoPeriodo, type SaldoQuinzenaFechada } from '../utils/descontoSaldo';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -2721,6 +2722,38 @@ export const recordDeductions = async (
   );
   if (error) throwDbError(error);
   return validas.length;
+};
+
+/**
+ * Saldo devedor de vale/perda em quinzenas JÁ FECHADAS (14/08/2026, sub-fase A do pedido
+ * do Victor "jogar pra próxima quinzena"). Antes disso não existia em lugar nenhum um jeito
+ * de ver quem ficou devendo depois que a quinzena fecha — o valor fica preso sem ninguém
+ * perceber, porque `saldoDevedor()` só era chamado pra quinzena aberta.
+ *
+ * Uma consulta por período fechado (getPayments + livro-caixa) — é ação sob demanda (botão),
+ * não algo carregado toda hora, então N+1 aqui é aceitável.
+ */
+export const listClosedPeriodsDebt = async (
+  companyId: string,
+  periods: readonly DriverPaymentPeriod[],
+): Promise<SaldoQuinzenaFechada[]> => {
+  const closed = periods.filter((p) => p.status === 'concluido');
+  const out: SaldoQuinzenaFechada[] = [];
+  for (const period of closed) {
+    const [payments, ledger] = await Promise.all([
+      getPayments(period.id, companyId),
+      listDeductionLedger(companyId, period.id),
+    ]);
+    const pessoas = payments.map((pay) => ({
+      driverId: pay.driver_id,
+      name: pay.driver_name_snapshot,
+      total: (pay.discounts ?? []).reduce((s, d) => s + d.amount, 0)
+        + (pay.vales ?? []).reduce((s, v) => s + v.amount, 0),
+      jaAbatido: ledger.get(pay.driver_id) ?? 0,
+    }));
+    out.push(...saldoDevedorDoPeriodo(period.id, period.label, pessoas));
+  }
+  return out.sort((a, b) => b.saldo - a.saldo);
 };
 
 /** Um print recebido, com o driver resolvido, pro painel. */

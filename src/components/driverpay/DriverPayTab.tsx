@@ -122,6 +122,7 @@ import { DiscountSearchModal } from './DiscountSearchModal';
 import { ValeModal } from './ValeModal';
 import { ZapexModal } from './ZapexModal';
 import { MarkPaidModal } from './MarkPaidModal';
+import { ClosedPeriodsDebtModal } from './ClosedPeriodsDebtModal';
 import { GroupManagerModal } from './GroupManagerModal';
 import { PlatformModal } from './PlatformModal';
 import { EmittersModal } from './EmittersModal';
@@ -226,6 +227,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [showImport, setShowImport] = useState(false);
   const [showPlatformImport, setShowPlatformImport] = useState(false);
   const [showDiscountSearch, setShowDiscountSearch] = useState(false);
+  /** Saldo devedor de quinzenas fechadas (14/08/2026, sub-fase A). */
+  const [showClosedDebt, setShowClosedDebt] = useState(false);
   const [mirror, setMirror] = useState<MirrorRequest | null>(null);
   // Drivers cobertos pelo espelho aberto — usados pra PUBLICAR no app (1 PDF por driver).
   const [publishRows, setPublishRows] = useState<DriverRowData[]>([]);
@@ -2021,6 +2024,16 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           >
             <Search className="w-4 h-4" /> Pacotes descontados
           </button>
+          {hasPermission('driverpay.manageDiscount') && (
+            <button
+              type="button"
+              onClick={() => setShowClosedDebt(true)}
+              title="Vale/perda lançado em quinzenas já fechadas que nunca foi descontado"
+              className="px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 inline-flex items-center gap-1.5 min-h-[40px]"
+            >
+              <Wallet className="w-4 h-4" /> Saldo de quinzenas fechadas
+            </button>
+          )}
           {canMirror && (
             <>
               <button
@@ -2310,6 +2323,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
       {showDiscountSearch && (
         <DiscountSearchModal companyId={company.id} onClose={() => setShowDiscountSearch(false)} />
+      )}
+
+      {showClosedDebt && (
+        <ClosedPeriodsDebtModal companyId={company.id} periods={periods} onClose={() => setShowClosedDebt(false)} />
       )}
 
       {showImport && (

@@ -119,6 +119,41 @@ export interface ResumoDesconto {
 const soma = (linhas: readonly LinhaResumo[]): number =>
   round2(linhas.reduce((s, l) => s + l.valor, 0));
 
+// ── SALDO DEVEDOR DE QUINZENAS JÁ FECHADAS (14/08/2026) ────────────────────
+// Pedido do Victor: "o que não tiver sido descontado nessa quinzena, jogar pra próxima".
+// Antes de mover dinheiro é preciso primeiro conseguir VER o buraco — hoje nenhum lugar
+// do sistema mostra isso: uma vez a quinzena fechada, `saldoDevedor()` nunca é chamado de
+// novo pra ela, e o valor fica preso sem ninguém perceber.
+
+/** Uma pessoa que ficou devendo, numa quinzena que já fechou. */
+export interface SaldoQuinzenaFechada {
+  periodId: string;
+  periodLabel: string;
+  driverId: string;
+  name: string;
+  saldo: number;
+}
+
+/**
+ * Quem, NUMA quinzena, ficou devendo vale/perda de verdade — mesma régua de `saldoDevedor`,
+ * só que aplicada a uma quinzena qualquer (aberta ou fechada), não só a atual.
+ *
+ * Quem não tem vale/perda, ou já foi totalmente abatido, não aparece — mesmo cuidado que
+ * evitou o aviso de 55 falsos-positivos em 05/08.
+ */
+export function saldoDevedorDoPeriodo(
+  periodId: string,
+  periodLabel: string,
+  pessoas: ReadonlyArray<SaldoDesconto & { driverId: string; name: string }>,
+): SaldoQuinzenaFechada[] {
+  const out: SaldoQuinzenaFechada[] = [];
+  for (const p of pessoas) {
+    const saldo = saldoDevedor(p);
+    if (saldo > 0) out.push({ periodId, periodLabel, driverId: p.driverId, name: p.name, saldo });
+  }
+  return out.sort((a, b) => b.saldo - a.saldo);
+}
+
 /**
  * Monta a prévia do desconto pro escopo inteiro.
  *

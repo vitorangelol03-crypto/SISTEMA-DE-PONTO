@@ -19,6 +19,7 @@ import {
   saldoDevedor,
   abaterAgora,
   resumoDesconto,
+  saldoDevedorDoPeriodo,
   type PessoaDesconto,
 } from '../../src/utils/descontoSaldo';
 
@@ -184,5 +185,35 @@ describe('resumoDesconto — a conta que a janela mostra antes de baixar', () =>
     expect(r.jaDescontados).toHaveLength(25);
     // 🔴 No modo antigo ("todos"), esses mesmos R$ 1.885,14 sairiam de novo.
     expect(resumoDesconto('todos', vinteECinco).totalDescontar).toBe(1885.14);
+  });
+});
+
+// ── Saldo devedor de quinzenas FECHADAS (14/08/2026) ────────────────────────
+// Pedido do Victor: "jogar pra próxima quinzena" o que não foi descontado. Antes de mover
+// dinheiro precisa dar pra VER o buraco — hoje nenhum lugar mostra isso depois que a
+// quinzena fecha.
+describe('saldoDevedorDoPeriodo', () => {
+  it('🎯 só entra quem realmente ficou devendo', () => {
+    const r = saldoDevedorDoPeriodo('per-1', '1ª quinzena de julho', [
+      { driverId: 'a', name: 'Ana', total: 100, jaAbatido: 40 }, // deve 60
+      { driverId: 'b', name: 'Bia', total: 100, jaAbatido: 100 }, // quitado
+      { driverId: 'c', name: 'Caio', total: 0, jaAbatido: 0 }, // nunca teve vale/perda
+    ]);
+    expect(r).toEqual([
+      { periodId: 'per-1', periodLabel: '1ª quinzena de julho', driverId: 'a', name: 'Ana', saldo: 60 },
+    ]);
+  });
+
+  it('ordena do maior saldo pro menor', () => {
+    const r = saldoDevedorDoPeriodo('per-1', 'X', [
+      { driverId: 'a', name: 'Ana', total: 50, jaAbatido: 0 },
+      { driverId: 'b', name: 'Bia', total: 200, jaAbatido: 0 },
+    ]);
+    expect(r.map((x) => x.driverId)).toEqual(['b', 'a']);
+  });
+
+  it('ninguém devendo: lista vazia', () => {
+    expect(saldoDevedorDoPeriodo('per-1', 'X', [{ driverId: 'a', name: 'Ana', total: 100, jaAbatido: 100 }]))
+      .toEqual([]);
   });
 });
