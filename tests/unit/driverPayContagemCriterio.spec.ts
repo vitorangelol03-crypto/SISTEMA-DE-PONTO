@@ -14,7 +14,11 @@
  * Roda com: npx vitest run driverPayContagemCriterio
  */
 import { describe, it, expect } from 'vitest';
-import { contagemDoCriterio, type DriverRowData } from '../../src/components/driverpay/driverPayShared';
+import {
+  contagemDoCriterio,
+  type DriverRowData,
+  type PagamentoDoDriver,
+} from '../../src/components/driverpay/driverPayShared';
 
 function row(driverId: string, conferido = false): DriverRowData {
   return {
@@ -25,6 +29,8 @@ function row(driverId: string, conferido = false): DriverRowData {
   } as unknown as DriverRowData;
 }
 const grupo = (...rows: DriverRowData[]) => ({ rows });
+const pagto = (estado: PagamentoDoDriver['estado']): PagamentoDoDriver =>
+  ({ estado, pagas: [], faltando: [], ultimoPagamento: null, descontoPendente: false });
 
 describe('contagemDoCriterio — NF', () => {
   it('🎯 conta grupos completos × faltando', () => {
@@ -80,6 +86,33 @@ describe('contagemDoCriterio — print conferido', () => {
   it('⚠️ parcial conta como FALTA, não como feito', () => {
     const parcial = grupo(row('a', true), row('b', false), row('c', false));
     expect(contagemDoCriterio([parcial], 'espelho')).toEqual({ feitos: 0, faltam: 1 });
+  });
+});
+
+describe('contagemDoCriterio — pagamento (14/08/2026)', () => {
+  it('🎯 precisa de TODOS os membros pagos (igual espelho, mas por status de pagamento)', () => {
+    const completo = grupo(row('a'), row('b'));
+    const parcial = grupo(row('c'), row('d'));
+    const pb = new Map([
+      ['pay-a', pagto('concluido')], ['pay-b', pagto('concluido')],
+      ['pay-c', pagto('concluido')], ['pay-d', pagto('pendente')],
+    ]);
+    expect(contagemDoCriterio([completo, parcial], 'pagamento', undefined, undefined, pb))
+      .toEqual({ feitos: 1, faltam: 1 });
+  });
+
+  it('⚠️ grupo sem pacote nenhum entra em FALTAM — decisão do Victor (14/08/2026)', () => {
+    const semPacote = grupo(row('a'));
+    const pb = new Map([['pay-a', pagto('sem_pacote')]]);
+    expect(contagemDoCriterio([semPacote], 'pagamento', undefined, undefined, pb))
+      .toEqual({ feitos: 0, faltam: 1 });
+  });
+
+  it('parcial conta como FALTA, não como feito', () => {
+    const parcial = grupo(row('a'), row('b'));
+    const pb = new Map([['pay-a', pagto('concluido')], ['pay-b', pagto('parcial')]]);
+    expect(contagemDoCriterio([parcial], 'pagamento', undefined, undefined, pb))
+      .toEqual({ feitos: 0, faltam: 1 });
   });
 });
 

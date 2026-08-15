@@ -322,6 +322,21 @@ export const DriverList: React.FC<DriverListProps> = ({
       if (list.length === 0) return 0;
       return list.some((r) => publishedDriverIds?.has(r.driverId)) ? 1 : 0;
     }
+    if (key === 'pagamento') {
+      // Status de pagamento do GRUPO, mesma escala 0/1/2 do NF e do Espelho (14/08/2026,
+      // pedido do Victor: ordenar por valor/pacotes escondia quem falta pagar no meio da
+      // lista — ele viu um grupo sem NENHUM pagamento cair entre dois grupos já pagos).
+      // asc = nada pago → parte pago → tudo pago (decisão dele nessa sessão).
+      // ⚠️ Diferente do NF/Espelho: quem não tem pacote na quinzena entra JUNTO com "nada
+      // pago" (decisão dele) em vez de ir pro fim como `null` — aqui não é progresso de
+      // conferência, é "queda no bolso de alguém", e ele quer ver esses grupos também.
+      const sits = list
+        .map((r) => pagamentoByPayment?.get(r.paymentId))
+        .filter((x): x is PagamentoDoDriver => !!x && x.estado !== 'sem_pacote');
+      if (sits.length === 0) return 0;
+      const pagos = sits.filter((x) => x.estado === 'concluido').length;
+      return pagos === sits.length ? 2 : pagos > 0 ? 1 : 0;
+    }
     if (key === 'espelho') {
       // Espelho conferido do GRUPO, mesma escala do NF: 2 = todos os membros
       // conferidos, 1 = parte, 0 = nenhum. desc = conferidos primeiro; asc = quem
@@ -365,8 +380,9 @@ export const DriverList: React.FC<DriverListProps> = ({
       nf: contagemDoCriterio(gs, 'nf', nfProgressByPayment),
       espelho: contagemDoCriterio(gs, 'espelho'),
       espelhoApp: contagemDoCriterio(gs, 'espelhoApp', undefined, publishedDriverIds),
+      pagamento: contagemDoCriterio(gs, 'pagamento', undefined, undefined, pagamentoByPayment),
     };
-  }, [rows, nfProgressByPayment, publishedDriverIds]);
+  }, [rows, nfProgressByPayment, publishedDriverIds, pagamentoByPayment]);
 
   const groupSortBtn = (key: string, label: string, color?: string | null) => {
     const atual = groupSort.find((c) => c.key === key);
@@ -388,6 +404,7 @@ export const DriverList: React.FC<DriverListProps> = ({
           const c = key === 'nf' ? contagens.nf
             : key === 'espelho' ? contagens.espelho
             : key === 'espelhoApp' ? contagens.espelhoApp
+            : key === 'pagamento' ? contagens.pagamento
             : null;
           if (!c || c.feitos + c.faltam === 0) return null;
           // Ativo o botão fica azul: as pílulas precisam de fundo claro pra continuar lendo.
@@ -833,6 +850,7 @@ export const DriverList: React.FC<DriverListProps> = ({
               <React.Fragment key={pl.id}>{groupSortBtn(`pl:${pl.name}`, pl.name, pl.color)}</React.Fragment>
             ))}
             {groupSortBtn('net', 'Total a receber')}
+            {groupSortBtn('pagamento', 'Pagamento')}
             {groupSortBtn('nf', 'NF validada')}
             {groupSortBtn('espelho', 'Espelho conferido')}
             {groupSortBtn('espelhoApp', 'Espelho no app')}

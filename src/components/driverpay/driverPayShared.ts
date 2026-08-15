@@ -1485,9 +1485,11 @@ export interface ContagemDoCriterio {
 
 export function contagemDoCriterio(
   grupos: ReadonlyArray<{ rows: DriverRowData[] }>,
-  key: 'nf' | 'espelho' | 'espelhoApp',
+  key: 'nf' | 'espelho' | 'espelhoApp' | 'pagamento',
   nfProgress?: ReadonlyMap<string, { expected: number; complete: boolean }>,
   publicados?: ReadonlySet<string>,
+  /** Só usado por `key === 'pagamento'` (14/08/2026). */
+  pagamentoByPayment?: ReadonlyMap<string, PagamentoDoDriver>,
 ): ContagemDoCriterio {
   let feitos = 0;
   let faltam = 0;
@@ -1500,6 +1502,14 @@ export function contagemDoCriterio(
       else faltam += 1;
     } else if (key === 'espelhoApp') {
       if (g.rows.some((r) => publicados?.has(r.driverId))) feitos += 1;
+      else faltam += 1;
+    } else if (key === 'pagamento') {
+      // Mesma regra do selo/ordenação do grupo: sem pacote nenhum entra junto com
+      // "nada pago" (decisão do Victor, 14/08/2026) — por isso soma em `faltam`.
+      const sits = g.rows
+        .map((r) => pagamentoByPayment?.get(r.paymentId))
+        .filter((x): x is PagamentoDoDriver => !!x && x.estado !== 'sem_pacote');
+      if (sits.length > 0 && sits.every((x) => x.estado === 'concluido')) feitos += 1;
       else faltam += 1;
     } else {
       if (g.rows.every((r) => r.espelhoConferido)) feitos += 1;
