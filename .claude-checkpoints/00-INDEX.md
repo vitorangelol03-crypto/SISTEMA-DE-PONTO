@@ -6,8 +6,8 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Sessão 15/08 — 4 commits na aba Pagamentos Driver, todos locais (`96fadb0`, `fa60b2e`,
-`7aa36cb`, `4a73238`):** ele reportou *"alguns drivers... marcados com desconto pendente, confundindo"*
+**Sessão 15/08 — 5 commits de feature na aba Pagamentos Driver, todos locais (`96fadb0`,
+`fa60b2e`, `7aa36cb`, `4a73238`, `30840cc`):** ele reportou *"alguns drivers... marcados com desconto pendente, confundindo"*
 — investigação achou que o selo da grade (`pagamentoDoDriver`) usava uma regra diferente
 (e mais fraca) do que o aviso do modal de relatório, que já tinha sido corrigido em 05/08;
 corrigido pra usar a mesma régua dos dois lados. No meio da sessão ele mandou print do
@@ -22,16 +22,21 @@ a régua de desconto do item corrigido primeiro pra não reabrir o mesmo bug. De
 confirmou o item 3 ("jogar pra próxima quinzena"): investigação achou que **nada no
 sistema mostra hoje** quem ficou devendo depois que a quinzena fecha, e que pode haver
 mais de uma quinzena aberta (sem "próxima" garantida) — virou 2 sub-fases, decisão dele.
-**Sub-fase A entregue** (`4a73238`, só leitura, zero migration): botão "Saldo de
-quinzenas fechadas" mostra quem deve, período por período. Validado: typecheck
-61=baseline em todas as levas · eslint baseline · build ok · **suíte unit inteira 76/76
-arquivos, 1186-1190 testes conforme a leva, 0 falha** (timeouts de worker do WSL, já
-documentado, isolados passam). ⏳ **Sub-fase B não começada**: o botão de migrar de
-verdade — precisa de migration nova (`driverpay_deduction_carryover`, decisão de schema
-já tomada: conceito próprio, não vale/desconto fake) + pedir OK antes de aplicar. ⏳ Push
-não feito (regra: só commit local, 4 commits no main). ⏳ Sem E2E dedicado ainda pras
-mudanças desta sessão — ele avisou pra ter cuidado com dado de teste gerado em produção.
-Segue intocada a trava de bonificação da outra janela (`bonusScope.ts`).
+**Sub-fase A** (`4a73238`, só leitura): botão "Saldo de quinzenas fechadas" mostra quem
+deve, período por período. **Sub-fase B** (`30840cc`): migration
+`driverpay_deduction_carryover` **mostrada e aprovada antes de aplicar** (pedido dele),
+**aplicada em produção** — tabela própria (não vale/desconto fake), trava idempotente por
+(quinzena origem, driver). 🔑 O saldo herdado entra em `deductionsOf()`, a MESMA função
+que já alimenta relatório/espelho/selo/marcar-pago — nenhuma tela precisou saber que
+carryover existe. **Testado ao vivo em produção** (localhost, sem clicar em confirmar):
+achou de verdade o Cícero Junior devendo R$ 7,79 de junho — prints mandados pro Victor.
+Validado: typecheck 61=baseline em todas as levas · eslint baseline · build ok · suíte
+unit completa 76/76 arquivos, 1186-1196 testes conforme a leva, 0 falha real. ⚠️ Rodar
+E2E/dev-server em paralelo com a suíte unit em background já gerou 29 timeouts de worker
+do WSL (falso alarme por contenção, não regressão — rerodar sozinho confirmou limpo);
+lição: nunca validar em paralelo com navegador aberto. ⏳ Push não feito (regra: só commit
+local, 6 commits no main). ⏳ Sem E2E dedicado ainda pras mudanças desta sessão. Segue
+intocada a trava de bonificação da outra janela (`bonusScope.ts`).
 Ver `CHECKPOINT_SESSAO_2026-08-15.md`.
 
 **Sessão 13/08 — registrar ponto pelo painel virou exclusivo do 2626 (`5ef68c0`, só local;

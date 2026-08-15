@@ -79,15 +79,46 @@ fechadas" abre modal que apura, período por período, quem deve — mesma régu
 Validado: 3 unit novos · 24/24 no arquivo · typecheck 61=baseline · eslint baseline ·
 build ok · **suíte unit inteira 76/76 arquivos, 1189 testes, 0 falha**.
 
-## 7. Pendências
+## 7. `30840cc` — item 3, sub-fase B: migrar de verdade
 
-- ⏳ **Sub-fase B NÃO começada**: o botão de fato migrar o saldo pra quinzena de destino
-  escolhida. Precisa de migration nova (tabela `driverpay_deduction_carryover` — decisão
-  já tomada, falta desenhar o schema exato e pedir OK antes de aplicar) + estender
-  `deductionsOf()` pra somar o saldo herdado (assim entra de graça em relatório/espelho/
-  selo/marcar-pago, sem tocar em cada tela).
-- ⏳ **Push não feito** (regra do projeto: só commit local). 4 commits novos no `main`
-  local: `96fadb0`, `fa60b2e`, `7aa36cb`, `4a73238`.
+Schema mostrado a ele ANTES de aplicar (pedido explícito: *"pode fazer, mas mostra o
+schema antes de aplicar"*) — aprovado, migration `20260815120000_driverpay_deduction_carryover`
+**aplicada em produção** (MCP Supabase, projeto `flcncdidxmmornkgkfbb`). Tabela própria
+(não vale/desconto fake, decisão da sessão anterior), `UNIQUE (company_id, from_period_id,
+driver_id)` trava migrar o mesmo saldo duas vezes.
+
+🔑 **Integração de graça:** o saldo herdado entra em `deductionsOf()`/`computeRowTotals()`
+— a MESMA função que já alimenta relatório, espelho, o selo "vale a descontar" e o
+"marcar pago" — então nenhuma dessas telas precisou saber que carryover existe. Selo novo
+"R$ X herdado" (indigo) na grade, separado do vale/desconto real (não polui `discounts`/
+`vales`, preservando a busca por código de pacote). O modal de "Saldo de quinzenas
+fechadas" ganhou o seletor de destino + botão "Migrar"; o que já foi migrado conta como
+abatido pra não reaparecer como pendente (reusa `saldoDevedorDoPeriodo`).
+
+**Testado ao vivo em produção** (localhost, dev server + Playwright, SEM clicar em
+"Marcar como pago"/"Migrar" — só fotografar): achou de verdade o **Cícero Junior devendo
+R$ 7,79** da quinzena de junho — caso real, não simulado. Prints mandados pro Victor:
+grade, barra "Ordenar grupos por" com o botão "Pagamento 45 falta 8", grupo do Willkerson
+(o do print original) com "Marcar grupo pago" no cabeçalho, e o `MarkPaidModal` aberto.
+
+⚠️ **Rodar E2E/dev server em paralelo com a suíte unit em background gerou 29 timeouts de
+worker do WSL** (contenção de CPU/memória) — falso alarme, não regressão: suíte
+rerodada sozinha logo depois deu **76/76 arquivos, 1196 testes, 0 falha real** (1 timeout
+isolado, mesmo padrão de sempre). Lição: nunca validar em paralelo com navegador/servidor
+de dev rodando.
+
+Validado: 7 unit novos (`driverPayCarryover.spec.ts`) · typecheck 61=baseline · eslint
+baseline · build ok · suíte unit completa limpa.
+
+## 8. Pendências
+
+- ⏳ **Push não feito** (regra do projeto: só commit local). 6 commits novos no `main`
+  local: `96fadb0`, `fa60b2e`, `7aa36cb`, `4a73238`, `30840cc` + 2 de checkpoint.
+- ⏳ **Sem E2E dedicado ainda** pra nenhuma das 4 mudanças da sessão (só unit + typecheck +
+  eslint + build + teste manual ao vivo do carryover). Se for confiar isso em produção sem
+  supervisão, vale um E2E de regressão antes.
+- ⏳ Segue não commitada a trava de bonificação da outra janela (`bonusScope.ts`,
+  `AttendanceTab.tsx`) — não toquei.
 - ⏳ **Sem E2E dedicado** pras 3 mudanças desta sessão — só unit + typecheck + eslint +
   build. Vale rodar E2E real (Playwright) antes do push, com cuidado de limpar dado de
   teste (ele avisou sobre isso nesta sessão).
