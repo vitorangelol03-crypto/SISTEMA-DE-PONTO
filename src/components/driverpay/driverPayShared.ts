@@ -107,6 +107,13 @@ export interface DriverRowData {
   zapex: DriverZapex[];
   /** Valor unitario individual do driver por item Zapex (driverpay_payments.zapex_rate; default 0). */
   zapexRate: number;
+  /**
+   * Saldo herdado de uma quinzena FECHADA anterior (15/08/2026) — vale/perda que ficou
+   * sem descontar lá e foi migrado pra cá. Conta como dívida igual vale/perda de verdade
+   * (entra em `deductionsOf`/`saldoDevedor`), mas NUNCA vira uma linha em `discounts`/
+   * `vales` — por isso é um campo à parte, e não um item a mais nesses arrays.
+   */
+  carryover: number;
 }
 
 export interface RowTotals {
@@ -116,11 +123,14 @@ export interface RowTotals {
   zapex: number;
   discounts: number;
   vales: number;
+  /** Saldo herdado de quinzena fechada (15/08/2026) — ver `DriverRowData.carryover`. */
+  carryover: number;
   /**
-   * Quanto de vale/perda foi REALMENTE abatido nesta conta (07/08/2026). Pode ser menos que
-   * `discounts + vales` quando o desconto por saldo so coube em parte, e 0 quando a pessoa
-   * ja tinha sido descontada num pagamento anterior. `discounts`/`vales` seguem mostrando os
-   * valores reais, que e o que as colunas da tela exibem.
+   * Quanto de vale/perda/herdado foi REALMENTE abatido nesta conta (07/08/2026). Pode ser
+   * menos que `discounts + vales + carryover` quando o desconto por saldo so coube em
+   * parte, e 0 quando a pessoa ja tinha sido descontada num pagamento anterior.
+   * `discounts`/`vales` seguem mostrando os valores reais, que e o que as colunas da tela
+   * exibem — `carryover` aparece a parte, nao entra nessas duas colunas.
    */
   deducted: number;
   net: number;
@@ -1012,28 +1022,34 @@ export function computeRowTotals(
   const zapexAmount = isAllowed('Zapex') ? row.zapex.length * row.zapexRate : 0;
   const discounts = row.discounts.reduce((sum, d) => sum + d.amount, 0);
   const vales = row.vales.reduce((sum, v) => sum + v.amount, 0);
+  const carryover = row.carryover ?? 0;
   const temOverride = typeof deductionOverride === 'number'
     && Number.isFinite(deductionOverride)
     && deductionOverride >= 0;
   const deducted = temOverride
     ? (deductionOverride as number)
-    : (includeDeductions ? discounts + vales : 0);
+    : (includeDeductions ? discounts + vales + carryover : 0);
   return {
     totalPackages,
     packagesAmount,
     zapex: zapexAmount,
     discounts,
     vales,
+    carryover,
     deducted,
     net: packagesAmount + zapexAmount - deducted,
   };
 }
 
-/** Vales + perdas (descontos) do driver neste pagamento, em R$. Puro/testavel. */
+/**
+ * Vales + perdas + saldo herdado de quinzena fechada (15/08/2026) — tudo que este driver
+ * deve nesta quinzena. Puro/testavel.
+ */
 export function deductionsOf(row: DriverRowData): number {
   return (
     row.discounts.reduce((sum, d) => sum + d.amount, 0) +
-    row.vales.reduce((sum, v) => sum + v.amount, 0)
+    row.vales.reduce((sum, v) => sum + v.amount, 0) +
+    (row.carryover ?? 0)
   );
 }
 
@@ -1096,6 +1112,8 @@ export function buildRows(
   driverRates: Record<string, Record<string, number>> = {},
   /** Periodo concluido: taxa congelada (rate_snapshot). Aberto: segue a config. */
   frozen = false,
+  /** driverId -> saldo herdado de quinzena fechada, chegando NESTE período (15/08/2026). */
+  carryoverByDriver: ReadonlyMap<string, number> = new Map(),
 ): DriverRowData[] {
   const driverById = new Map(drivers.map((d) => [d.id, d]));
   // Periodo ABERTO: pacotes de plataforma arquivada (fora de `platforms`, que so traz
@@ -1177,6 +1195,7 @@ export function buildRows(
       espelhoConferido: Boolean(p.espelho_conferido),
       zapex: p.zapex ?? [],
       zapexRate: Number(p.zapex_rate ?? 0),
+      carryover: carryoverByDriver.get(p.driver_id) ?? 0,
     };
   });
 }

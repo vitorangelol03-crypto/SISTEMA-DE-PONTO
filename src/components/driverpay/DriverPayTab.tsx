@@ -49,6 +49,7 @@ import {
   markPaymentDone,
   listDeductionLedger,
   recordDeductions,
+  listCarryoverTo,
   listProofRequests,
   listDeliveryProofs,
   platformsWithProofHistory,
@@ -304,9 +305,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         setRows([]);
         return;
       }
-      const [pays, gmap] = await Promise.all([getPayments(periodId, company.id), getDriverGroupMap(company.id)]);
+      const [pays, gmap, carryoverIn] = await Promise.all([
+        getPayments(periodId, company.id),
+        getDriverGroupMap(company.id),
+        listCarryoverTo(company.id, periodId),
+      ]);
       const frozen = periodsRef.current.find((p) => p.id === periodId)?.status === 'concluido';
-      setRows(buildRows(pays, driversRef.current, platformsRef.current, gmap, driverRatesRef.current, frozen));
+      setRows(buildRows(pays, driversRef.current, platformsRef.current, gmap, driverRatesRef.current, frozen, carryoverIn));
     },
     [company?.id],
   );
@@ -2326,7 +2331,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       )}
 
       {showClosedDebt && (
-        <ClosedPeriodsDebtModal companyId={company.id} periods={periods} onClose={() => setShowClosedDebt(false)} />
+        <ClosedPeriodsDebtModal
+          companyId={company.id}
+          periods={periods}
+          userId={userId}
+          onClose={() => setShowClosedDebt(false)}
+          onMigrated={reloadPayments}
+        />
       )}
 
       {showImport && (

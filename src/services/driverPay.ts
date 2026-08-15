@@ -2740,20 +2740,85 @@ export const listClosedPeriodsDebt = async (
   const closed = periods.filter((p) => p.status === 'concluido');
   const out: SaldoQuinzenaFechada[] = [];
   for (const period of closed) {
-    const [payments, ledger] = await Promise.all([
+    const [payments, ledger, carriedOut] = await Promise.all([
       getPayments(period.id, companyId),
       listDeductionLedger(companyId, period.id),
+      // Já migrado pra outra quinzena conta como "abatido" aqui — sem isso o mesmo saldo
+      // continuaria aparecendo como pendente depois de já ter sido movido (15/08/2026).
+      listCarryoverFrom(companyId, period.id),
     ]);
     const pessoas = payments.map((pay) => ({
       driverId: pay.driver_id,
       name: pay.driver_name_snapshot,
       total: (pay.discounts ?? []).reduce((s, d) => s + d.amount, 0)
         + (pay.vales ?? []).reduce((s, v) => s + v.amount, 0),
-      jaAbatido: ledger.get(pay.driver_id) ?? 0,
+      jaAbatido: (ledger.get(pay.driver_id) ?? 0) + (carriedOut.get(pay.driver_id) ?? 0),
     }));
     out.push(...saldoDevedorDoPeriodo(period.id, period.label, pessoas));
   }
   return out.sort((a, b) => b.saldo - a.saldo);
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// SALDO HERDADO ENTRE QUINZENAS (15/08/2026, sub-fase B do pedido do Victor)
+// Ver migration `20260815120000_driverpay_deduction_carryover.sql` pro porquê da tabela
+// própria. `listCarryoverFrom` mostra o que JÁ saiu de uma quinzena fechada (usado pra
+// não contar de novo como pendente em `listClosedPeriodsDebt`); `listCarryoverTo` mostra
+// o que CHEGOU numa quinzena aberta (usado por `buildRows` pra alimentar `deductionsOf`).
+// ────────────────────────────────────────────────────────────────────────────
+
+const somaPorDriver = (rows: readonly { driver_id: unknown; amount: unknown }[]): Map<string, number> => {
+  const out = new Map<string, number>();
+  for (const r of rows) {
+    const id = String(r.driver_id);
+    const v = Number(r.amount) || 0;
+    out.set(id, Math.round(((out.get(id) ?? 0) + v) * 100) / 100);
+  }
+  return out;
+};
+
+export const listCarryoverFrom = async (companyId: string, fromPeriodId: string): Promise<Map<string, number>> => {
+  const { data, error } = await supabase
+    .from('driverpay_deduction_carryover')
+    .select('driver_id, amount')
+    .eq('company_id', companyId).eq('from_period_id', fromPeriodId);
+  if (error) throwDbError(error);
+  return somaPorDriver(data ?? []);
+};
+
+export const listCarryoverTo = async (companyId: string, toPeriodId: string): Promise<Map<string, number>> => {
+  const { data, error } = await supabase
+    .from('driverpay_deduction_carryover')
+    .select('driver_id, amount')
+    .eq('company_id', companyId).eq('to_period_id', toPeriodId);
+  if (error) throwDbError(error);
+  return somaPorDriver(data ?? []);
+};
+
+/**
+ * Migra o saldo devedor de UM driver de uma quinzena fechada pra uma aberta.
+ *
+ * Idempotente pela UNIQUE (company_id, from_period_id, driver_id) — tentar migrar o mesmo
+ * saldo de novo (duplo clique, ou pra outro destino) dá erro claro em vez de duplicar.
+ */
+export const recordCarryover = async (
+  companyId: string,
+  fromPeriodId: string,
+  toPeriodId: string,
+  driverId: string,
+  amount: number,
+  userId: string,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.manageDiscount');
+  if (!(amount > 0)) throw new Error('Nada a migrar — saldo zerado.');
+  const { error } = await supabase.from('driverpay_deduction_carryover').insert({
+    company_id: companyId, from_period_id: fromPeriodId, to_period_id: toPeriodId,
+    driver_id: driverId, amount: Math.round(amount * 100) / 100, created_by: userId,
+  });
+  if (error) {
+    if (error.code === '23505') throw new Error('Esse saldo já foi migrado antes — não dá pra migrar de novo.');
+    throwDbError(error);
+  }
 };
 
 /** Um print recebido, com o driver resolvido, pro painel. */

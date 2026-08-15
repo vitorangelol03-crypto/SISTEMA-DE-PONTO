@@ -218,6 +218,17 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                   vale a descontar
                 </span>
               )}
+              {/* Saldo herdado de quinzena fechada (15/08/2026) — não se mistura com
+                  vale/perda de verdade, mas conta na mesma dívida (deductionsOf). */}
+              {row.carryover > 0 && (
+                <span
+                  data-testid="row-selo-herdado"
+                  title={`${formatBRL(row.carryover)} de vale/perda que ficou sem descontar numa quinzena fechada, migrado pra cá.`}
+                  className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 whitespace-nowrap"
+                >
+                  {formatBRL(row.carryover)} herdado
+                </span>
+              )}
               </div>
               <span className="text-sm text-gray-600 flex items-center gap-1 flex-wrap">
                 <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
