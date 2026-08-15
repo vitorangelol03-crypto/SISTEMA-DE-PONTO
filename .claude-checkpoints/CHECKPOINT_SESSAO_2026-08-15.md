@@ -58,13 +58,36 @@ marca de pagamento de verdade"). Validado: typecheck 61=baseline · eslint basel
 build ok · **suíte unit inteira 76/76 arquivos, 1186 testes, 0 falha** (1 timeout de
 worker do WSL — mesmo padrão já documentado em 13/08 — rodado isolado, passou).
 
-## 6. Pendências
+## 6. `4a73238` — item 3 ("jogar pra próxima quinzena"), sub-fase A: ver o buraco
 
-- ⏳ **Item 3 da lista dele NÃO começado**: "jogar pra próxima quinzena" o vale/perda que
-  não foi descontado nesta. Ele mesmo escolheu deixar por último (*"mais delicado, fazer
-  com calma"*) — precisa de plano + decisões antes de programar.
-- ⏳ **Push não feito** (regra do projeto: só commit local). 3 commits novos no `main`
-  local: `96fadb0`, `fa60b2e`, `7aa36cb`.
+Investigação (agente Explore) antes de programar: **nenhum lugar do sistema mostra hoje**
+quem ficou devendo vale/perda depois que a quinzena fecha — `saldoDevedor()` só era
+chamado pra quinzena aberta, e o período fechado congela `total_discounts`/`total_vales`
+como se a dívida tivesse sido 100% cobrada. Também achado: o sistema permite **mais de
+uma quinzena aberta ao mesmo tempo** e fechar não garante que a próxima já exista — então
+"a próxima quinzena" não tem destino óbvio e automático.
+
+Decisões dele (`AskUserQuestion`): (a) guardar o saldo migrado como **conceito próprio**
+("saldo herdado"), não como vale/desconto fake — mais trabalho, mas rastreável; (b)
+migração por **botão separado**, ele escolhe o destino, nada automático ao fechar; (c)
+fazer em 2 sub-fases, **A primeiro**.
+
+**Sub-fase A entregue** (só leitura, zero migration): botão "Saldo de quinzenas
+fechadas" abre modal que apura, período por período, quem deve — mesma régua de
+`saldoDevedor()`, nova função pura `saldoDevedorDoPeriodo()` em `descontoSaldo.ts` +
+`listClosedPeriodsDebt()` em `driverPay.ts` (N+1 aceitável, é botão sob demanda).
+Validado: 3 unit novos · 24/24 no arquivo · typecheck 61=baseline · eslint baseline ·
+build ok · **suíte unit inteira 76/76 arquivos, 1189 testes, 0 falha**.
+
+## 7. Pendências
+
+- ⏳ **Sub-fase B NÃO começada**: o botão de fato migrar o saldo pra quinzena de destino
+  escolhida. Precisa de migration nova (tabela `driverpay_deduction_carryover` — decisão
+  já tomada, falta desenhar o schema exato e pedir OK antes de aplicar) + estender
+  `deductionsOf()` pra somar o saldo herdado (assim entra de graça em relatório/espelho/
+  selo/marcar-pago, sem tocar em cada tela).
+- ⏳ **Push não feito** (regra do projeto: só commit local). 4 commits novos no `main`
+  local: `96fadb0`, `fa60b2e`, `7aa36cb`, `4a73238`.
 - ⏳ **Sem E2E dedicado** pras 3 mudanças desta sessão — só unit + typecheck + eslint +
   build. Vale rodar E2E real (Playwright) antes do push, com cuidado de limpar dado de
   teste (ele avisou sobre isso nesta sessão).

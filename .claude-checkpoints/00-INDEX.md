@@ -6,8 +6,8 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Sessão 15/08 — 3 commits na aba Pagamentos Driver, todos locais (`96fadb0`, `fa60b2e`,
-`7aa36cb`):** ele reportou *"alguns drivers... marcados com desconto pendente, confundindo"*
+**Sessão 15/08 — 4 commits na aba Pagamentos Driver, todos locais (`96fadb0`, `fa60b2e`,
+`7aa36cb`, `4a73238`):** ele reportou *"alguns drivers... marcados com desconto pendente, confundindo"*
 — investigação achou que o selo da grade (`pagamentoDoDriver`) usava uma regra diferente
 (e mais fraca) do que o aviso do modal de relatório, que já tinha sido corrigido em 05/08;
 corrigido pra usar a mesma régua dos dois lados. No meio da sessão ele mandou print do
@@ -18,15 +18,20 @@ nada→parte→tudo pago, com **grupo sem pacote nenhum entrando junto com "nada
 (decisão dele). Ele também pediu **marcar pago manualmente**, por driver ou grupo
 inteiro, sem gerar relatório — feature nova (`MarkPaidModal.tsx`), sem migration
 (reaproveita `report_kind` livre + livro-caixa com `source: 'relatorio'`), reaproveitando
-a régua de desconto do item corrigido primeiro pra não reabrir o mesmo bug. Validado:
-typecheck 61=baseline em todas as levas · eslint baseline · build ok · **suíte unit
-inteira 76/76 arquivos, 1186 testes, 0 falha** (1 timeout de worker do WSL, já
-documentado, isolado passou). ⏳ **Pendente, adiado por escolha dele** ("mais delicado,
-fazer com calma"): jogar pra próxima quinzena o vale/perda não descontado nesta —
-precisa de plano + decisões antes de programar. ⏳ Push não feito (regra: só commit
-local). ⏳ Sem E2E dedicado ainda pras 3 mudanças — ele avisou pra ter cuidado com dado
-de teste gerado em produção. Segue intocada a trava de bonificação da outra janela
-(`bonusScope.ts`).
+a régua de desconto do item corrigido primeiro pra não reabrir o mesmo bug. Depois ele
+confirmou o item 3 ("jogar pra próxima quinzena"): investigação achou que **nada no
+sistema mostra hoje** quem ficou devendo depois que a quinzena fecha, e que pode haver
+mais de uma quinzena aberta (sem "próxima" garantida) — virou 2 sub-fases, decisão dele.
+**Sub-fase A entregue** (`4a73238`, só leitura, zero migration): botão "Saldo de
+quinzenas fechadas" mostra quem deve, período por período. Validado: typecheck
+61=baseline em todas as levas · eslint baseline · build ok · **suíte unit inteira 76/76
+arquivos, 1186-1190 testes conforme a leva, 0 falha** (timeouts de worker do WSL, já
+documentado, isolados passam). ⏳ **Sub-fase B não começada**: o botão de migrar de
+verdade — precisa de migration nova (`driverpay_deduction_carryover`, decisão de schema
+já tomada: conceito próprio, não vale/desconto fake) + pedir OK antes de aplicar. ⏳ Push
+não feito (regra: só commit local, 4 commits no main). ⏳ Sem E2E dedicado ainda pras
+mudanças desta sessão — ele avisou pra ter cuidado com dado de teste gerado em produção.
+Segue intocada a trava de bonificação da outra janela (`bonusScope.ts`).
 Ver `CHECKPOINT_SESSAO_2026-08-15.md`.
 
 **Sessão 13/08 — registrar ponto pelo painel virou exclusivo do 2626 (`5ef68c0`, só local;
