@@ -2,9 +2,40 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-08-15**.
+> Última atualização: **2026-08-17**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 17/08 — push do pendente de 15/08 + os 61 erros de tipo pré-existentes zerados
+(`9c52028`, só local):** Victor pediu "faz o push de tudo que está pendente" — validado
+(typecheck 61=baseline · build · eslint · 1215 unit 0 falha, com o WIP da outra janela
+guardado em `git stash -u` durante a validação e restaurado depois) e subido
+`bb5c2c9..ed81085` em `origin/main` (os 12 commits do saldo herdado de 15/08), conferido
+**por conteúdo** na Vercel (bundle `DriverPayTab-CQ56-fjU.js` ao vivo com "Marcar grupo
+pago"/"Saldo de quinzenas fechadas"). No meio da validação ele viu o `typecheck 61=baseline`
+e pediu "vamos atacar esses 61 erros" — mapeados por causa raiz (nada de `as any`/
+`@ts-ignore`): 5× import de `React` morto (JSX transform novo), `DataManagementTab.tsx`
+(35 erros, 1 causa só — `rawData: unknown[]` genérico segurando 4 formatos diferentes
+fazia `.map()` perder o tipo), `Employee.company_id` que existe no banco
+(`UNIQUE(cpf,company_id)`) mas nunca tinha entrado na interface (`EmployeesTab.tsx` já
+contornava com cast manual — removido), `loginUser` que dizia `Promise<User|null>` mas
+nunca retorna null de verdade (todo caminho de falha lança), `permissions.ts` com
+merge/diff indexado por `keyof UserPermissions` resolvido com função genérica (padrão TS
+conhecido, sem cast solto), `permissions.test.ts` com mocks manuais desatualizados
+(faltava até a seção `driverpay` inteira num deles — os módulos de permissão cresceram
+nas últimas fases: aprovação em lote, bônus B/C1/C2, triagem, C6 em lote), `pushNotifications.ts`
+(stub FCM nunca ativado — faltava o pacote `firebase` instalado; import dinâmico + gated
+por env var, não pesa no bundle; `npm audit` acusou 14 vulnerabilidades **todas
+pré-existentes**, conferido no lockfile antes/depois do install) e o formatter do
+`LabelList` do `ErrorsTab.tsx` (tipo do recharts aceita valor ausente). ⚠️ **Não mexido, de
+propósito:** `AttendanceTab.tsx` tinha 2 desses 61 erros mas tem WIP não commitado de
+**outra sessão em paralelo** (trava de bonificação, `bonusScope.ts`) — pulado como sempre;
+commit só com `git add <arquivos>` explícitos (nunca `-A`, lição de 04/08). Validado:
+**typecheck 61→2** (só os do `AttendanceTab.tsx` intocado) · eslint 3→1 (sobrou o do edge
+fn, fora de escopo) · build limpo · **1232 unit passando (1215 antes), 0 falha**. ⏳ Push
+do `9c52028` não feito (toca `permissions.ts`, área sensível — vale revisão antes de
+subir). Segue intocada a trava de bonificação da outra janela (`bonusScope.ts`).
+Ver `CHECKPOINT_SESSAO_2026-08-17.md`.
 
 **Sessão 15/08 — 5 commits de feature na aba Pagamentos Driver, todos locais (`96fadb0`,
 `fa60b2e`, `7aa36cb`, `4a73238`, `30840cc`):** ele reportou *"alguns drivers... marcados com desconto pendente, confundindo"*
