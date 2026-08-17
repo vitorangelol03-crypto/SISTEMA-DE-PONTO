@@ -24,6 +24,13 @@ import {
 } from '../../services/database';
 import { useCompany } from '../../contexts/CompanyContext';
 import { attendancesToReset, resetIsFiltered } from '../../utils/attendanceReset';
+import {
+  bonusTargets,
+  bonusTargetNames,
+  bonusIsFiltered,
+  bonusExcludedIds,
+  bonusValorDivergente,
+} from '../../utils/bonusScope';
 import { supabase } from '../../lib/supabase';
 import { getBrazilDate, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
@@ -443,9 +450,47 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     }
 
     if (!company?.id) return;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // TRAVAS DA BONIFICAÇÃO (05/08/2026, decisões do Victor)
+    //
+    // O botão aplicava em TODOS que bateram ponto no dia, ignorando a busca e sem
+    // dizer quem ia receber. Foi assim que 20 funcionários reais ficaram com R$ 10
+    // que ninguém lançou. Mesmo defeito — e mesma solução — do "Reset Geral" (29/07).
+    // ══════════════════════════════════════════════════════════════════════
+    const alvos = bonusTargets(attendances, filteredEmployees);
+    if (alvos.length === 0) {
+      toast.error('Ninguém na lista visível bateu ponto neste dia — nada a bonificar.');
+      return;
+    }
+    const { nomes, total, restantes } = bonusTargetNames(attendances, filteredEmployees);
+    const comFiltro = bonusIsFiltered(attendances, filteredEmployees);
+    const configurado = bonusTypes.find((bt) => bt.code === code)?.default_value ?? null;
+    const divergente = bonusValorDivergente(amount, Number(configurado));
+
+    const linhas = [
+      `Aplicar Bonificação ${code} de R$ ${amount.toFixed(2).replace('.', ',')} para ${total} funcionário(s)?`,
+      '',
+      `${nomes.join(', ')}${restantes > 0 ? ` e mais ${restantes}` : ''}.`,
+    ];
+    if (comFiltro) {
+      linhas.push('', '⚠️ A BUSCA ESTÁ ATIVA: só quem aparece na tela recebe. Quem a busca escondeu fica de fora.');
+    }
+    if (divergente) {
+      linhas.push('', `⚠️ O Bônus ${code} desta empresa é R$ ${Number(configurado).toFixed(2).replace('.', ',')} — você digitou R$ ${amount.toFixed(2).replace('.', ',')}.`);
+    }
+    if (!window.confirm(linhas.join('\n'))) return;
+
     setApplyingBonus(prev => ({ ...prev, [code]: true }));
     try {
-      await applyBonusToAllPresent(selectedDate, amount, userId, code as BonusType, undefined, company.id);
+      // Quem tem ponto mas a busca escondeu entra na lista de exclusão — é o que
+      // faz a bonificação respeitar a tela em vez de pegar a empresa inteira.
+      const excluidos = bonusExcludedIds(attendances, filteredEmployees);
+      await applyBonusToAllPresent(
+        selectedDate, amount, userId, code as BonusType,
+        excluidos.length > 0 ? excluidos : undefined,
+        company.id,
+      );
       toast.success(`Bonificação ${code} aplicada com sucesso.`);
       setBonusAmounts(prev => ({ ...prev, [code]: '' }));
       await loadData(selectedDate);

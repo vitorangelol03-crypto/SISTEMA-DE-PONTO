@@ -112,6 +112,9 @@ test.describe('Bonificação INDIVIDUAL via UI — aplica + remove em 1 funcion�
   test.afterAll(cleanup);
 
   test.beforeEach(async ({ page }) => {
+    // 17/08/2026: aplicar bônus passou a pedir confirmação (window.confirm) —
+    // sem handler, Playwright descarta o dialog por padrão e o clique some sem aplicar.
+    page.on('dialog', (d) => d.accept());
     await cleanup();
     // 13/08/2026: marcar Presente virou exclusivo do 2626, e este spec precisa marcar
     // presença pra ter em quem aplicar bonificação. O 2626 é mestre: tem as permissões

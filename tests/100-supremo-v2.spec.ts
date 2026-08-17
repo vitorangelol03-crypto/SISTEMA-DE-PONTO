@@ -517,6 +517,9 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
       // que 20 pessoas da Caratinga ficaram com R$ 10 em 04/08 — e a rodada seguinte
       // fotografou o lixo como estado legítimo, tornando-o permanente.
       try {
+        // 17/08/2026: aplicar bônus passou a pedir confirmação (window.confirm) —
+        // sem handler, Playwright descarta o dialog por padrão e o clique some sem aplicar.
+        page.on('dialog', (d) => d.accept());
         await loginAs(page, ADMIN);
         await gotoPontoFresh(page);
         await page.getByRole('button', { name: /^Bonificação$/ }).click();

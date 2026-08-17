@@ -96,7 +96,10 @@ test.describe('Bloqueio de Bonificação (silencioso)', () => {
     }
   });
 
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ page }) => {
+    // 17/08/2026: aplicar bônus passou a pedir confirmação (window.confirm) —
+    // sem handler, Playwright descarta o dialog por padrão e o clique some sem aplicar.
+    page.on('dialog', (d) => d.accept());
     if (employeeId) {
       await supabase.from('payments').delete().eq('employee_id', employeeId);
       await supabase.from('attendance').delete().eq('employee_id', employeeId);

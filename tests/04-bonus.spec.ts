@@ -134,7 +134,10 @@ test.describe('Bonificações (B / C1 / C2) — em Ponte Nova, isolado', () => {
     await capturarPnPayments();
   });
 
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ page }) => {
+    // 17/08/2026: aplicar bônus passou a pedir confirmação (window.confirm) —
+    // sem handler, Playwright descarta o dialog por padrão e o clique some sem aplicar.
+    page.on('dialog', (d) => d.accept());
     await wipePnDayState();
   });
 

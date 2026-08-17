@@ -210,6 +210,10 @@ test.describe('SPEC 99 — Teste Supremo: fluxo completo Caratinga', () => {
     // PW Test. Restore no fim evita polução em prod (incidente 2026-05-18).
     const snapshot = await snapshotRealPayments(s, CARATINGA_ID, todayBR());
 
+    // 17/08/2026: aplicar bônus passou a pedir confirmação (window.confirm) —
+    // sem handler, Playwright descarta o dialog por padrão e o clique some sem aplicar.
+    page.on('dialog', (d) => d.accept());
+
     await loginAs(page, ADMIN);
     await goToTab(page, 'Ponto');
     await page.getByRole('button', { name: /^Atualizar$/ }).click();
