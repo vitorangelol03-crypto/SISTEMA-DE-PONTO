@@ -6,8 +6,32 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
+**Sessão 17/08 (continuação) — trava de bonificação da outra janela, finalizada
+(`cafea2d`, só local):** Victor pediu pra conferir se a outra janela (sessão idle há 2h,
+sem outro terminal aberto — sobra, não trabalho em andamento) tinha terminado a trava da
+"Bonificação do Dia" — mesmo defeito do "Reset Geral" (29/07): botão aplicava em TODOS
+que bateram ponto, ignorando a busca (caso real: 20 funcionários da Caratinga com R$ 10
+que ninguém lançou, 04/08). Parecia pronto (17/17 unit, typecheck/eslint limpos). Victor
+autorizou finalizar (*"pode finalizar sim mas cuidado com banco de dados"*). 🔑 **Achado
+antes de rodar qualquer coisa:** a nova confirmação (`window.confirm`) quebraria **5
+specs E2E existentes** que clicam "Aplicar B/C1/C2" sem handler de dialog (Playwright
+descarta dialog não tratado — sem risco de dado, o early-return é ANTES da escrita, mas
+o teste falha). Adicionado `page.on('dialog', d => d.accept())` nos 5 (`04-bonus`,
+`09-bonus-blocks`, `40-bonus-individual-ui`, `100-supremo-v2` C2, `99-supremo` teste 4),
+padrão já usado em outros 17+ specs. **Foto do banco ANTES de rodar qualquer coisa**
+(query direta, independente do snapshot do próprio teste): 0/0 baseline limpo. Rodado
+com dev server real: **40-bonus-individual-ui 5/5 · 09-bonus-blocks 3/3 (Caratinga real)
+· 100-supremo-v2 C2 1/1 · 99-supremo 3+4 2/2** — banco reconferido depois, **idêntico**.
+🔴 **Achado, não corrigido (fora de escopo):** `04-bonus.spec.ts` ainda loga como `9999`
+pra marcar presença via UI — exclusivo do 2626 desde 13/08, regressão anterior sem
+relação com hoje; decisão do Victor sobre o caminho. ⚠️ Rodar a suíte unit com o dev
+server ainda no ar gerou 12 erros de timeout de worker (mesma contenção do WSL já
+documentada, não regressão) — rerodada sozinha: **1232/1232, 0 falha**. ⏳ Push do
+`cafea2d` não feito (mexe em fluxo de dinheiro, pedir OK antes).
+Ver `CHECKPOINT_SESSAO_2026-08-17.md`.
+
 **Sessão 17/08 — push do pendente de 15/08 + os 61 erros de tipo pré-existentes zerados
-(`9c52028`, só local):** Victor pediu "faz o push de tudo que está pendente" — validado
+(`9c52028`, agora pushado):** Victor pediu "faz o push de tudo que está pendente" — validado
 (typecheck 61=baseline · build · eslint · 1215 unit 0 falha, com o WIP da outra janela
 guardado em `git stash -u` durante a validação e restaurado depois) e subido
 `bb5c2c9..ed81085` em `origin/main` (os 12 commits do saldo herdado de 15/08), conferido

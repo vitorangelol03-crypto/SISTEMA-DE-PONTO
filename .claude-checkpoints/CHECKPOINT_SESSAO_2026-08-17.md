@@ -78,13 +78,75 @@ Validado: **typecheck 61→2** (só os do `AttendanceTab.tsx` intocado) ·
 eslint 3→1 erro (o que sobrou é do edge fn `driver-public-api`, fora de
 escopo) · build limpo · **1232 unit passando (1215 antes), 0 falha**.
 
-## 3. Pendências
+Victor pediu push (*"pode fazer o push"*) — subido `ed81085..9f852e0` em
+`origin/main`, conferido isolado antes (WIP da outra janela guardado em
+`git stash -u` de novo, typecheck+build rodados sozinhos, restaurado
+depois) e confirmado ao vivo na Vercel por conteúdo (hash do bundle
+idêntico ao build local).
 
-- ⏳ **Push do commit `9c52028` não feito** — regra do projeto, só commit
-  local. Toca área sensível (`permissions.ts`), vale revisão antes de subir.
-- ⏳ Segue não commitada a trava de bonificação da outra janela
-  (`bonusScope.ts`, `tests/unit/bonusScope.spec.ts`, `AttendanceTab.tsx`) —
-  não toquei, como sempre.
+## 3. `cafea2d` — trava de bonificação da outra janela, finalizada
+
+Victor pediu pra eu conferir se a outra janela tinha terminado. `ListAgents`
+mostrou a sessão (`criador-de-at-fe`) **idle há 2h**, e ele confirmou que
+não tem outro terminal aberto — era sobra de sessão anterior, não trabalho
+em andamento. Investigado (só leitura): `bonusScope.ts` corrige o mesmo
+defeito que o "Reset Geral" teve (corrigido em 29/07) — o botão de
+bonificação aplicava em TODOS que bateram ponto, ignorando a busca; o
+comentário do próprio código registra o caso real (**20 funcionários da
+Caratinga com R$ 10 que ninguém lançou**, 04/08). 17/17 unit já passavam,
+typecheck/eslint limpos, função de banco já aceitava o parâmetro que o
+código novo usa — parecia pronto, só faltava clique real.
+
+Vitor autorizou finalizar (*"pode finalizar sim mas cuidado com banco de
+dados"*). 🔑 **Achado antes de rodar qualquer coisa:** a nova confirmação
+(`window.confirm`) quebraria **5 specs E2E existentes** que clicam
+"Aplicar B/C1/C2" sem handler de dialog — Playwright descarta dialog não
+tratado por padrão, o clique não aplicaria nada (sem risco, o early-return
+é ANTES de qualquer escrita, mas o teste falharia). Mapeado com grep antes
+de rodar qualquer coisa contra o banco real: `04-bonus.spec.ts`,
+`09-bonus-blocks.spec.ts`, `40-bonus-individual-ui.spec.ts`,
+`100-supremo-v2.spec.ts` (C2) e `99-supremo.spec.ts` (teste 4) — 3 deles
+rodam contra a **Caratinga real** (`snapshot`/`restoreRealPayments`, do
+incidente de 2026-05-18). Adicionado `page.on('dialog', d => d.accept())`
+nos 5, seguindo o padrão já usado em outros 17+ specs do projeto.
+
+**Foto do banco tirada ANTES de rodar qualquer coisa** (query direta via
+MCP, independente do snapshot que o próprio teste tira): 0 pagamento com
+bônus na Caratinga hoje, 0 linha em `bonuses` pra qualquer empresa hoje —
+baseline limpo. Rodado com dev server no ar (não estava, subi na mão):
+**40-bonus-individual-ui 5/5** (inclui aplicar bônus de verdade e conferir
+`payment.bonus_b` no banco) · **09-bonus-blocks 3/3** (Caratinga real) ·
+**100-supremo-v2 (C2) 1/1** · **99-supremo (testes 3+4) 2/2**. **Banco
+reconferido depois, idêntico à foto de antes** (0/0/0 funcionário PW Test
+sobrando).
+
+🔴 **Achado no caminho, NÃO corrigido (fora de escopo):** `04-bonus.spec.ts`
+ainda loga como `9999` pra marcar presença via UI, mas isso é exclusivo do
+mestre 2626 desde 13/08 — regressão de sessão anterior, sem relação com a
+mudança de hoje (o botão "Presente" aparece desabilitado pro 9999). Fica
+pendente pra quando Victor quiser (precisa decidir: trocar pra 2626 como o
+`40-bonus-individual-ui.spec.ts` já fez, ou inserir presença direto no
+banco pros testes que precisam continuar testando a visão do 9999
+especificamente).
+
+⚠️ **Rodar a suíte unit com o dev server ainda no ar** (esquecimento meu)
+gerou 12 erros de timeout de worker — mesmo padrão de contenção do WSL já
+documentado (não é regressão); derrubei o dev server e rerodei sozinha:
+**1232/1232, 0 falha**.
+
+Validado: typecheck (só os 2 erros de sempre, agora realmente do
+`AttendanceTab.tsx` que ficou pra trás) · eslint 0 nos arquivos tocados ·
+build limpo · 1232 unit · 5 specs E2E com clique real · banco conferido
+por query direta antes/depois.
+
+## 4. Pendências
+
+- ⏳ **Push do commit `cafea2d` não feito** — regra do projeto, só commit
+  local. Pedir OK do Victor antes (mexe na "Bonificação do Dia", fluxo de
+  dinheiro).
+- ⏳ **`04-bonus.spec.ts` quebrado** (login `9999` não consegue mais marcar
+  presença via UI desde 13/08) — achado nesta sessão, não corrigido, fora
+  de escopo. Decisão do Victor sobre o caminho (ver §3).
 - ⏳ `npm audit`: 14 vulnerabilidades pré-existentes na cadeia de
   build/teste (vite/esbuild/postcss/xlsx/playwright-related), nenhuma nova.
   Fora do escopo desta sessão — vale uma leva dedicada se Victor quiser.
