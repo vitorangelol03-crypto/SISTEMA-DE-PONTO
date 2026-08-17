@@ -182,12 +182,43 @@ Vercel conferida — site no ar, **mesmo hash de bundle de antes**
 (`index-DHsgL1LG.js`), esperado: esse commit só mexe em teste, não tem
 nada novo de app pra aparecer em produção.
 
-## 5. Pendências
+## 5. `dffe20a` — os 3 pendentes fechados ("corrige os 3")
 
-- ⏳ `npm audit`: 14 vulnerabilidades pré-existentes na cadeia de
-  build/teste (vite/esbuild/postcss/xlsx/playwright-related), nenhuma nova.
-  Fora do escopo desta sessão — vale uma leva dedicada se Victor quiser.
-- ℹ️ **Ponte Nova tem uso real hoje** (6 funcionários batendo ponto de
-  verdade) — o cabeçalho de `04-bonus.spec.ts` ainda diz "empresa sem uso
-  real"; comentário desatualizado, não bloqueia nada (o spec já se protege
-  com snapshot/restore), mas vale corrigir o texto num passe futuro.
+Victor pediu os 3 de uma vez. (a) `AttendanceTab.tsx`: removidas
+`_handleExitTimeChange`/`_updateExitTime` — dead code sem nenhuma
+referência (substituídas há tempo por `handleManualTimeChange`/
+`handleSaveManualTime`); **typecheck zera de vez** (era o último resto do
+baseline de julho). (b) Comentário desatualizado do `04-bonus.spec.ts`
+corrigido — documentado que o isolamento é via snapshot/restore, não via
+"empresa vazia". (c) `npm audit fix` (sem `--force`): **14→6**. As 8
+resolvidas eram patch/minor dentro do mesmo major (conferido no lockfile:
+nenhum pacote pulou major) — `@babel/core`, `brace-expansion`, `dompurify`,
+`js-yaml`, `nanoid`, `postcss`, `tar` (era CRÍTICA), `ws`.
+
+🔴 **As 6 que sobraram NÃO foram tocadas — avisando antes, não fazendo
+silencioso:**
+- **`vite` 5→8 + `esbuild`** — 3 majors de salto na base inteira de build.
+  Alto risco de quebrar config/plugins; precisa de leva dedicada com
+  validação completa.
+- **`face-api.js`** (chain `node-fetch`/`@tensorflow/tfjs-core`) — o "fix"
+  do npm audit é `face-api.js@0.20.0`, que é **mais VELHO** que o
+  `0.22.2` instalado hoje (o audit escolhe a versão mínima que resolve a
+  CVE, não a mais nova). Rebaixar a versão de um pacote usado no
+  **reconhecimento facial** dos funcionários é decisão de produto, não
+  correção — precisa de teste real no celular antes.
+- **`xlsx`**: **sem fix disponível no npm** — é limitação conhecida do
+  SheetJS (não publica patch de segurança no registry público). Nada a
+  fazer daqui sem trocar de biblioteca.
+
+Validado: **typecheck 0 erros** (primeira vez limpo na sessão) · eslint
+baseline (1 erro pré-existente do edge fn, fora de escopo) · build limpo
+· **1232 unit, 0 falha**.
+
+## 6. Pendências
+
+- ⏳ **Push do `dffe20a` não feito** — só commit local, aguardando OK do
+  Victor.
+- ⏳ As 6 vulnerabilidades restantes do `npm audit` (§5) — decisão do
+  Victor: vale a pena a leva de upgrade do vite (arriscado, mexe em toda
+  a base de build) ou do face-api.js (rebaixaria a versão atual)? `xlsx`
+  não tem o que fazer sem trocar de biblioteca.

@@ -38,7 +38,17 @@ continua sendo quem ele quer verificar. 🔴 Achado no caminho: insert esquecia
 errada. Corrigido + checagem de erro. **6/6** (era 0/6), banco conferido — **6
 funcionários REAIS de Ponte Nova** presentes hoje intactos (a empresa NÃO está "sem uso
 real" como o comentário do arquivo dizia). Push feito (`5619756..5a3c051`), site conferido
-no ar (bundle idêntico ao de antes — commit só de teste, nada de app mudou).
+no ar (bundle idêntico ao de antes — commit só de teste, nada de app mudou). **Por fim
+(`dffe20a`), Victor perguntou "oq mais falta" e pediu pra corrigir os 3 pendentes:**
+dead code do `AttendanceTab.tsx` removido (**typecheck zera de vez, 0 erros**),
+comentário desatualizado do `04-bonus.spec.ts` corrigido, e `npm audit fix` (sem
+`--force`) resolveu **14→6** vulnerabilidades (só patch/minor, nenhum pacote pulou
+major — conferido no lockfile). 🔴 **As 6 que sobraram, avisado e NÃO tocado:** `vite`
+5→8 (3 majors, mexe na base de build inteira), `face-api.js` (o "fix" do audit é
+**mais VELHO**, 0.20.0, que o 0.22.2 instalado — rebaixar reconhecimento facial é
+decisão de produto), `xlsx` sem fix disponível no npm (limitação conhecida do
+SheetJS). Validado: typecheck 0 · eslint baseline · build · 1232 unit 0 falha. ⏳ Push
+do `dffe20a` ainda não feito.
 Ver `CHECKPOINT_SESSAO_2026-08-17.md`.
 
 **Sessão 17/08 — push do pendente de 15/08 + os 61 erros de tipo pré-existentes zerados
