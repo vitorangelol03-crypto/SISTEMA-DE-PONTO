@@ -177,11 +177,13 @@ processo: a empresa NÃO está "sem uso real" como o comentário do arquivo
 dizia) continuam intactos, mesmos ids, sem bônus; zero PW Test sobrando em
 qualquer empresa. typecheck (só os 2 erros de sempre) · eslint 0.
 
+Push feito (*"pode fazer o push"*): `5619756..5a3c051` em `origin/main`.
+Vercel conferida — site no ar, **mesmo hash de bundle de antes**
+(`index-DHsgL1LG.js`), esperado: esse commit só mexe em teste, não tem
+nada novo de app pra aparecer em produção.
+
 ## 5. Pendências
 
-- ⏳ **Push do `fe0f96a` não feito** — só commit local, aguardando OK do
-  Victor (commit só de teste, não mexe em código de produção — quando
-  subir, não precisa conferir Vercel).
 - ⏳ `npm audit`: 14 vulnerabilidades pré-existentes na cadeia de
   build/teste (vite/esbuild/postcss/xlsx/playwright-related), nenhuma nova.
   Fora do escopo desta sessão — vale uma leva dedicada se Victor quiser.

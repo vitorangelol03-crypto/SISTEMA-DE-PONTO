@@ -7,7 +7,7 @@
 ## 🎯 Estado atual (1 parágrafo)
 
 **Sessão 17/08 (continuação) — trava de bonificação da outra janela, finalizada
-(`cafea2d`, só local):** Victor pediu pra conferir se a outra janela (sessão idle há 2h,
+(`cafea2d`, pushado):** Victor pediu pra conferir se a outra janela (sessão idle há 2h,
 sem outro terminal aberto — sobra, não trabalho em andamento) tinha terminado a trava da
 "Bonificação do Dia" — mesmo defeito do "Reset Geral" (29/07): botão aplicava em TODOS
 que bateram ponto, ignorando a busca (caso real: 20 funcionários da Caratinga com R$ 10
@@ -37,8 +37,8 @@ continua sendo quem ele quer verificar. 🔴 Achado no caminho: insert esquecia
 `company_id` (NOT NULL, default aponta pra Caratinga) — presença nascia na empresa
 errada. Corrigido + checagem de erro. **6/6** (era 0/6), banco conferido — **6
 funcionários REAIS de Ponte Nova** presentes hoje intactos (a empresa NÃO está "sem uso
-real" como o comentário do arquivo dizia). ⏳ Push do `fe0f96a` ainda NÃO feito (só
-commit local, aguardando OK do Victor).
+real" como o comentário do arquivo dizia). Push feito (`5619756..5a3c051`), site conferido
+no ar (bundle idêntico ao de antes — commit só de teste, nada de app mudou).
 Ver `CHECKPOINT_SESSAO_2026-08-17.md`.
 
 **Sessão 17/08 — push do pendente de 15/08 + os 61 erros de tipo pré-existentes zerados
@@ -67,9 +67,10 @@ propósito:** `AttendanceTab.tsx` tinha 2 desses 61 erros mas tem WIP não commi
 **outra sessão em paralelo** (trava de bonificação, `bonusScope.ts`) — pulado como sempre;
 commit só com `git add <arquivos>` explícitos (nunca `-A`, lição de 04/08). Validado:
 **typecheck 61→2** (só os do `AttendanceTab.tsx` intocado) · eslint 3→1 (sobrou o do edge
-fn, fora de escopo) · build limpo · **1232 unit passando (1215 antes), 0 falha**. ⏳ Push
-do `9c52028` não feito (toca `permissions.ts`, área sensível — vale revisão antes de
-subir). Segue intocada a trava de bonificação da outra janela (`bonusScope.ts`).
+fn, fora de escopo) · build limpo · **1232 unit passando (1215 antes), 0 falha**. Push
+feito (`ed81085..9f852e0`). A trava de bonificação da outra janela (`bonusScope.ts`),
+citada como intocada abaixo, foi finalizada e pushada na mesma sessão (ver parágrafo
+acima — não ficou pendente até o fim do dia).
 Ver `CHECKPOINT_SESSAO_2026-08-17.md`.
 
 **Sessão 15/08 — 5 commits de feature na aba Pagamentos Driver, todos locais (`96fadb0`,
