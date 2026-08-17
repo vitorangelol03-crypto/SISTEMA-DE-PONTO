@@ -19,6 +19,14 @@ import {
  * Molde novo: roda em PONTE NOVA (empresa sem uso real) com funcionário próprio
  * (PW Test) — o bônus aplicado/removido é sempre e somente o de teste. A regra
  * de junho é testada dos dois lados (9999 não vê Reset Geral; 2626 usa).
+ *
+ * 17/08/2026 — marcar presença virou exclusivo do 2626 desde 13/08; 9999 não
+ * clica mais "Presente" na UI (botão desabilitado). Os testes que precisam de
+ * alguém presente como PRÉ-CONDIÇÃO (não estão testando quem marca) passaram a
+ * inserir a presença direto no banco (`markPresentViaDb`/`openPontoPNPresente`)
+ * e login continua sendo de quem o teste realmente quer verificar — 9999 segue
+ * podendo aplicar bônus e continua sem ver Reset Geral, exatamente como a regra
+ * de junho sempre testou.
  */
 
 const EMP_NAME = 'PW Test Bonus PN';
@@ -91,6 +99,36 @@ async function markPresent(page: Page, row: Locator): Promise<void> {
   await expect(row.locator('span').filter({ hasText: /^Presente$/ }).first()).toBeVisible({ timeout: 10_000 });
 }
 
+/**
+ * 17/08/2026 — marcar presença virou exclusivo do mestre 2626 (13/08), e o botão
+ * "Presente" fica desabilitado pro 9999. Os testes deste arquivo que usam ADMIN
+ * (9999) não estão testando QUEM marca — precisam de UM presente como pré-condição
+ * pra testar bonificação. A marcação entra direto no banco (o que o 2626 faria),
+ * e o teste loga como quem realmente quer verificar (9999, na maioria dos casos —
+ * a regra de junho é justamente que aplicar bônus continua liberado pra ele).
+ */
+async function markPresentViaDb(): Promise<void> {
+  const s = getClient();
+  // company_id é NOT NULL com default apontando pra Caratinga — sem informar explicitamente,
+  // a linha nasce na empresa errada e nunca aparece na tela de Ponte Nova (achado 17/08).
+  const { error } = await s.from('attendance').upsert([{
+    employee_id: empId,
+    company_id: pnCompanyId,
+    date: todayIso(),
+    status: 'present',
+    marked_by: '2626',
+  }], { onConflict: 'employee_id,date' });
+  if (error) throw error;
+}
+
+/** openPontoPN + presença já garantida via banco + confere que a UI mostra "Presente". */
+async function openPontoPNPresente(page: Page, user: { id: string; password: string }): Promise<Locator> {
+  await markPresentViaDb();
+  const row = await openPontoPN(page, user);
+  await expect(row.locator('span').filter({ hasText: /^Presente$/ }).first()).toBeVisible({ timeout: 10_000 });
+  return row;
+}
+
 async function applyBonus(page: Page, type: 'B' | 'C1' | 'C2', amount: string): Promise<void> {
   await page.getByRole('button', { name: /^Bonificação$/ }).click();
   await expect(page.getByRole('heading', { name: /Bonificação do Dia/ })).toBeVisible();
@@ -147,8 +185,7 @@ test.describe('Bonificações (B / C1 / C2) — em Ponte Nova, isolado', () => {
   });
 
   test('modal de Bonificação abre com 3 campos (B, C1, C2)', async ({ page }) => {
-    const row = await openPontoPN(page, ADMIN);
-    await markPresent(page, row);
+    await openPontoPNPresente(page, ADMIN);
     await page.getByRole('button', { name: /^Bonificação$/ }).click();
 
     await expect(page.getByRole('heading', { name: /Bonificação do Dia/ })).toBeVisible();
@@ -158,8 +195,7 @@ test.describe('Bonificações (B / C1 / C2) — em Ponte Nova, isolado', () => {
   });
 
   test('aplicar B=10 faz aparecer card "Tipo B" com R$ 10,00 (como 9999 — bônus é permitido)', async ({ page }) => {
-    const row = await openPontoPN(page, ADMIN);
-    await markPresent(page, row);
+    await openPontoPNPresente(page, ADMIN);
     await applyBonus(page, 'B', '10');
 
     const painelBonus = page.locator('div').filter({ hasText: /^Bonificações Aplicadas$/ }).first().locator('..');
@@ -168,8 +204,7 @@ test.describe('Bonificações (B / C1 / C2) — em Ponte Nova, isolado', () => {
   });
 
   test('aplicar B=10, C1=15 e C2=5 → cards B/C1/C2 aparecem', async ({ page }) => {
-    const row = await openPontoPN(page, ADMIN);
-    await markPresent(page, row);
+    await openPontoPNPresente(page, ADMIN);
 
     await applyBonus(page, 'B', '10');
     await applyBonus(page, 'C1', '15');
@@ -185,8 +220,7 @@ test.describe('Bonificações (B / C1 / C2) — em Ponte Nova, isolado', () => {
   });
 
   test('"Remover Todas" faz os cards desaparecerem', async ({ page }) => {
-    const row = await openPontoPN(page, ADMIN);
-    await markPresent(page, row);
+    await openPontoPNPresente(page, ADMIN);
     await applyBonus(page, 'B', '10');
     await expect(page.getByText(/Bonificações Aplicadas/)).toBeVisible();
 
@@ -196,8 +230,7 @@ test.describe('Bonificações (B / C1 / C2) — em Ponte Nova, isolado', () => {
   });
 
   test('REGRA de junho: 9999 NÃO vê Reset Geral (mesmo com attendance no dia)', async ({ page }) => {
-    const row = await openPontoPN(page, ADMIN);
-    await markPresent(page, row);
+    await openPontoPNPresente(page, ADMIN);
     await expect(page.getByRole('button', { name: /^Reset Geral$/ })).toHaveCount(0);
   });
 
