@@ -26,8 +26,19 @@ com dev server real: **40-bonus-individual-ui 5/5 · 09-bonus-blocks 3/3 (Carati
 pra marcar presença via UI — exclusivo do 2626 desde 13/08, regressão anterior sem
 relação com hoje; decisão do Victor sobre o caminho. ⚠️ Rodar a suíte unit com o dev
 server ainda no ar gerou 12 erros de timeout de worker (mesma contenção do WSL já
-documentada, não regressão) — rerodada sozinha: **1232/1232, 0 falha**. ⏳ Push do
-`cafea2d` não feito (mexe em fluxo de dinheiro, pedir OK antes).
+documentada, não regressão) — rerodada sozinha: **1232/1232, 0 falha**. Push feito
+(`9f852e0..5619756`), conferido ao vivo na Vercel por conteúdo. **Em seguida
+(`fe0f96a`):** Victor pediu "corrige o 04-bonus.spec.ts pra usar o 2626" — mas trocar
+TUDO pra 2626 quebraria o teste que prova que **9999 NÃO** vê Reset Geral (par da regra
+de junho, cujo espelho — 2626 VÊ — já é o teste 6). Raiz real: 9999 não marca presença
+via UI desde 13/08, mas os 5 testes quebrados não testam QUEM marca, só precisam de
+alguém presente. Fix: presença direto no banco (`markPresentViaDb`), login de cada teste
+continua sendo quem ele quer verificar. 🔴 Achado no caminho: insert esquecia
+`company_id` (NOT NULL, default aponta pra Caratinga) — presença nascia na empresa
+errada. Corrigido + checagem de erro. **6/6** (era 0/6), banco conferido — **6
+funcionários REAIS de Ponte Nova** presentes hoje intactos (a empresa NÃO está "sem uso
+real" como o comentário do arquivo dizia). ⏳ Push do `fe0f96a` ainda NÃO feito (só
+commit local, aguardando OK do Victor).
 Ver `CHECKPOINT_SESSAO_2026-08-17.md`.
 
 **Sessão 17/08 — push do pendente de 15/08 + os 61 erros de tipo pré-existentes zerados

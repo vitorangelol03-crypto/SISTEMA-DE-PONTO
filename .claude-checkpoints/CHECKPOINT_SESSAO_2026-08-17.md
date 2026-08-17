@@ -139,14 +139,53 @@ Validado: typecheck (só os 2 erros de sempre, agora realmente do
 build limpo · 1232 unit · 5 specs E2E com clique real · banco conferido
 por query direta antes/depois.
 
-## 4. Pendências
+Victor pediu push (*"pode fazer o push"*) — subido `9f852e0..5619756` em
+`origin/main`, confirmado ao vivo na Vercel por conteúdo (chunk
+`AttendanceTab-By0etaSM.js` com os textos novos: "BUSCA ESTÁ ATIVA",
+"Ninguém na lista visível bateu ponto", "nada a bonificar").
 
-- ⏳ **Push do commit `cafea2d` não feito** — regra do projeto, só commit
-  local. Pedir OK do Victor antes (mexe na "Bonificação do Dia", fluxo de
-  dinheiro).
-- ⏳ **`04-bonus.spec.ts` quebrado** (login `9999` não consegue mais marcar
-  presença via UI desde 13/08) — achado nesta sessão, não corrigido, fora
-  de escopo. Decisão do Victor sobre o caminho (ver §3).
+## 4. `fe0f96a` — 04-bonus.spec.ts corrigido (o achado do §3)
+
+Victor pediu direto: *"corrige o 04-bonus.spec.ts pra usar o 2626"*. 🔑
+Mas **trocar tudo pra 2626 quebraria o próprio teste**: um dos 6 testes
+(`REGRA de junho: 9999 NÃO vê Reset Geral`) existe especificamente pra
+provar que 9999 NÃO tem acesso ao Reset Geral — e o teste 6 já prova que
+2626 TEM (é o par da mesma regra). Se os dois passassem a logar como 2626,
+o primeiro ficaria testando o oposto do que diz. A raiz do problema não é
+"logado como usuário errado" — é "o 9999 não consegue mais clicar
+'Presente' pela UI", e os 5 testes quebrados não estão testando QUEM
+marca, só precisam de alguém presente como pré-condição.
+
+Solução: presença entra direto no banco (`markPresentViaDb`, o que o 2626
+faria) e o login de cada teste continua sendo de quem ele realmente quer
+verificar — 9999 segue aplicando bônus e seguindo sem ver Reset Geral,
+exatamente a intenção original. Só o teste do 2626 (regressão do Reset
+Geral) continua marcando via UI de verdade, porque é literalmente o que
+ele testa.
+
+🔴 **Achado no caminho:** o primeiro insert direto esquecia `company_id` —
+a coluna é `NOT NULL` com **DEFAULT apontando pra Caratinga**, então a
+presença nascia na empresa errada e nunca aparecia na tela de Ponte Nova
+(a falha original nem tinha essa causa — só apareceu depois de trocar
+pro insert direto). Corrigido: `company_id` explícito + checagem de erro
+do upsert.
+
+Validado com clique real: **6/6** (era 0/6, incluindo o teste da regra de
+junho). Banco conferido por query direta antes/depois — os **6
+funcionários REAIS de Ponte Nova presentes hoje** (achado no meio do
+processo: a empresa NÃO está "sem uso real" como o comentário do arquivo
+dizia) continuam intactos, mesmos ids, sem bônus; zero PW Test sobrando em
+qualquer empresa. typecheck (só os 2 erros de sempre) · eslint 0.
+
+## 5. Pendências
+
+- ⏳ **Push do `fe0f96a` não feito** — só commit local, aguardando OK do
+  Victor (commit só de teste, não mexe em código de produção — quando
+  subir, não precisa conferir Vercel).
 - ⏳ `npm audit`: 14 vulnerabilidades pré-existentes na cadeia de
   build/teste (vite/esbuild/postcss/xlsx/playwright-related), nenhuma nova.
   Fora do escopo desta sessão — vale uma leva dedicada se Victor quiser.
+- ℹ️ **Ponte Nova tem uso real hoje** (6 funcionários batendo ponto de
+  verdade) — o cabeçalho de `04-bonus.spec.ts` ainda diz "empresa sem uso
+  real"; comentário desatualizado, não bloqueia nada (o spec já se protege
+  com snapshot/restore), mas vale corrigir o texto num passe futuro.
