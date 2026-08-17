@@ -16,9 +16,16 @@ import {
  * que desde junho é exclusivo do 2626. Em dia com bônus real da equipe, o spec
  * quebrava E ameaçava dados reais.
  *
- * Molde novo: roda em PONTE NOVA (empresa sem uso real) com funcionário próprio
- * (PW Test) — o bônus aplicado/removido é sempre e somente o de teste. A regra
- * de junho é testada dos dois lados (9999 não vê Reset Geral; 2626 usa).
+ * Molde novo: roda em PONTE NOVA com funcionário próprio (PW Test) — o bônus
+ * aplicado/removido é sempre e somente o de teste. A regra de junho é testada
+ * dos dois lados (9999 não vê Reset Geral; 2626 usa).
+ *
+ * ⚠️ 17/08/2026 — Ponte Nova TEM uso real (achado ao rodar: 6 funcionários
+ * batendo ponto de verdade no dia). O isolamento não vem de "empresa vazia" —
+ * vem de `capturarPnPayments`/`restaurarPnPayments`/`wipePnDayState`
+ * (fotografa os payments reais do dia antes, devolve exatamente como estava
+ * depois) e de `openPontoPN` buscar só pelo nome do PW Test, que combinado à
+ * trava de bonificação (17/08) exclui todo o resto da lista visível.
  *
  * 17/08/2026 — marcar presença virou exclusivo do 2626 desde 13/08; 9999 não
  * clica mais "Presente" na UI (botão desabilitado). Os testes que precisam de

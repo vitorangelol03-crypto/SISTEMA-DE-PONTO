@@ -343,10 +343,6 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     }
   };
 
-  const _handleExitTimeChange = (employeeId: string, time: string) => {
-    setExitTimes(prev => ({ ...prev, [employeeId]: time }));
-  };
-
   const handleManualTimeChange = (employeeId: string, field: 'entry' | 'exit', value: string) => {
     setManualTimes(prev => ({
       ...prev,
@@ -375,27 +371,6 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       toast.error(err instanceof Error ? err.message : 'Erro ao salvar horário');
     } finally {
       setSavingManualTime(prev => ({ ...prev, [employeeId]: false }));
-    }
-  };
-
-  const _updateExitTime = async (employeeId: string) => {
-    if (!isViewingToday && !hasPermission('attendance.editHistory')) {
-      toast.error('Você não tem permissão para editar registros de dias anteriores');
-      return;
-    }
-
-    if (!company?.id) return;
-
-    try {
-      const currentStatus = getAttendanceStatus(employeeId);
-      if (currentStatus) {
-        const exitTime = exitTimes[employeeId] || null;
-        await markAttendance(employeeId, selectedDate, currentStatus, exitTime, userId, company.id);
-        toast.success('Horário de saída atualizado');
-      }
-    } catch (error) {
-      console.error('Erro ao atualizar horário:', error);
-      toast.error('Erro ao atualizar horário');
     }
   };
 
