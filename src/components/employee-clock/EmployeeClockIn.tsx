@@ -16,7 +16,7 @@ import { useCompany } from '../../contexts/CompanyContext';
 import { FaceRegistration } from './FaceRegistration';
 import { FaceVerification } from './FaceVerification';
 import { clockFailureMessage } from './clockMessages';
-import { QUICK_EXIT_CONFIRM_MINUTES, AUTO_LOGOUT_SECONDS, quickExitMinutes } from './clockGuards';
+import { AUTO_LOGOUT_SECONDS, quickExitMinutes } from './clockGuards';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

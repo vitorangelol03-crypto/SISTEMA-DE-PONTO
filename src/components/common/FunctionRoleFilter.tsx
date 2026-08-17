@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Briefcase } from 'lucide-react';
 import { getFunctionRoles } from '../../services/database';
 

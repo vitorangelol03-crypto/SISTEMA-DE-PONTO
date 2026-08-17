@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { LoginForm } from './components/auth/LoginForm';
 import { CompanySelector } from './components/auth/CompanySelector';

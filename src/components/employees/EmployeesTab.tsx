@@ -388,7 +388,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       for (const emp of allEmployees) {
         if (!emp.cpf) continue; // funcionário sem CPF não entra na dedupe por CPF
         const cpfNorm = normalizeCPF(emp.cpf);
-        const empCompanyId = (emp as Employee & { company_id?: string }).company_id;
+        const empCompanyId = emp.company_id;
         if (empCompanyId && empCompanyId !== company.id && !existingCpfsInCompany.has(cpfNorm)) {
           existingCpfsOtherCompanies.set(
             cpfNorm,

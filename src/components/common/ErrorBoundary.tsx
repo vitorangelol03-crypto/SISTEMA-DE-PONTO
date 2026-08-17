@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { errorTracking } from '../../services/errorTracking';
 import { getCurrentCompanyId } from '../../contexts/companyHelpers';

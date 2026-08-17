@@ -1,6 +1,17 @@
 import { supabase } from '../lib/supabase';
 import { UserPermissions, UserPermissionRecord, PermissionLog, DEFAULT_ADMIN_PERMISSIONS, DEFAULT_SUPERVISOR_PERMISSIONS } from '../types/permissions';
 
+function mergeSection<K extends keyof UserPermissions>(
+  merged: UserPermissions,
+  overrides: UserPermissions,
+  key: K
+): void {
+  merged[key] = {
+    ...merged[key],
+    ...overrides[key]
+  };
+}
+
 function mergePermissionsWithDefaults(existingPermissions: UserPermissions | null): UserPermissions {
   if (!existingPermissions) {
     return DEFAULT_SUPERVISOR_PERMISSIONS;
@@ -10,10 +21,7 @@ function mergePermissionsWithDefaults(existingPermissions: UserPermissions | nul
 
   for (const module in merged) {
     if (module in existingPermissions) {
-      merged[module as keyof UserPermissions] = {
-        ...merged[module as keyof UserPermissions],
-        ...existingPermissions[module as keyof UserPermissions]
-      };
+      mergeSection(merged, existingPermissions, module as keyof UserPermissions);
     }
   }
 
@@ -183,10 +191,11 @@ function generateChangeSummary(before: UserPermissions | null, after: UserPermis
   const changes: string[] = [];
 
   Object.entries(after).forEach(([section, permissions]) => {
-    const beforeSection = before[section as keyof UserPermissions];
+    const beforeSection = before[section as keyof UserPermissions] as Record<string, boolean> | undefined;
+    const afterSection = permissions as Record<string, boolean>;
 
-    Object.entries(permissions).forEach(([key, value]) => {
-      const beforeValue = beforeSection?.[key as keyof typeof permissions];
+    Object.entries(afterSection).forEach(([key, value]) => {
+      const beforeValue = beforeSection?.[key];
 
       if (beforeValue !== value) {
         const status = value ? 'ativada' : 'desativada';

@@ -48,6 +48,7 @@ export interface User {
 
 export interface Employee {
   id: string;
+  company_id: string;
   name: string;
   cpf: string | null;
   pin: string | null;
@@ -404,7 +405,7 @@ async function validatePermission(
 // Sub-fase 11.3/11.1 — loginUser via edge fn auth-login (bcrypt + JWT custom).
 // JWT custom é injetado no supabase client via headers globais, atendendo
 // RLS policies que checam auth.jwt() ->> 'company_id'.
-export const loginUser = async (id: string, password: string): Promise<User | null> => {
+export const loginUser = async (id: string, password: string): Promise<User> => {
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
   const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
@@ -4158,8 +4159,7 @@ export const setFaceAutoResetThresholds = async (
 export const setFaceRecognitionForEmployee = async (
   employeeId: string,
   enabled: boolean,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  updatedBy: string
+  _updatedBy: string
 ): Promise<void> => {
   const { error } = await supabase
     .from('employees')
@@ -4170,8 +4170,7 @@ export const setFaceRecognitionForEmployee = async (
 
 export const resetFaceForEmployee = async (
   employeeId: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  updatedBy: string
+  _updatedBy: string
 ): Promise<void> => {
   const { error } = await supabase
     .from('employees')

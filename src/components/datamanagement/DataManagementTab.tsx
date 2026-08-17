@@ -179,12 +179,11 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
       const workbook = XLSX.utils.book_new();
 
       for (const dataType of selectedDataTypes) {
-        let rawData: unknown[] = [];
         let formattedData: unknown[] = [];
 
         if (dataType === 'attendance') {
-          rawData = await getAttendanceHistory(startDate, endDate, selectedEmployee, undefined, undefined, companyId);
-          formattedData = rawData.map(item => ({
+          const rows = await getAttendanceHistory(startDate, endDate, selectedEmployee, undefined, undefined, companyId);
+          formattedData = rows.map(item => ({
             'Nome do Funcionário': item.employees?.name || 'N/A',
             'CPF': item.employees?.cpf || 'N/A',
             'Data': format(new Date(item.date + 'T00:00:00'), 'dd/MM/yyyy'),
@@ -194,8 +193,8 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
             'Data de Criação': format(new Date(item.created_at), 'dd/MM/yyyy HH:mm:ss')
           }));
         } else if (dataType === 'payments') {
-          rawData = await getPayments(startDate, endDate, selectedEmployee, undefined, companyId);
-          formattedData = rawData.map(item => ({
+          const rows = await getPayments(startDate, endDate, selectedEmployee, undefined, companyId);
+          formattedData = rows.map(item => ({
             'Nome do Funcionário': item.employees?.name || 'N/A',
             'CPF': item.employees?.cpf || 'N/A',
             'Data': format(new Date(item.date + 'T00:00:00'), 'dd/MM/yyyy'),
@@ -207,8 +206,8 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
             'Última Atualização': format(new Date(item.updated_at), 'dd/MM/yyyy HH:mm:ss')
           }));
         } else if (dataType === 'error_records') {
-          rawData = await getErrorRecords(startDate, endDate, selectedEmployee, undefined, companyId);
-          formattedData = rawData.map(item => ({
+          const rows = await getErrorRecords(startDate, endDate, selectedEmployee, undefined, companyId);
+          formattedData = rows.map(item => ({
             'Nome do Funcionário': item.employees?.name || 'N/A',
             'CPF': item.employees?.cpf || 'N/A',
             'Data': format(new Date(item.date + 'T00:00:00'), 'dd/MM/yyyy'),
@@ -221,14 +220,14 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
             'Última Atualização': format(new Date(item.updated_at), 'dd/MM/yyyy HH:mm:ss')
           }));
         } else if (dataType === 'bonuses') {
-          rawData = await getBonuses(companyId);
+          let rows = await getBonuses(companyId);
           if (startDate) {
-            rawData = rawData.filter(b => b.date >= startDate);
+            rows = rows.filter(b => b.date >= startDate);
           }
           if (endDate) {
-            rawData = rawData.filter(b => b.date <= endDate);
+            rows = rows.filter(b => b.date <= endDate);
           }
-          formattedData = rawData.map(item => ({
+          formattedData = rows.map(item => ({
             'Data': format(new Date(item.date + 'T00:00:00'), 'dd/MM/yyyy'),
             'Valor (R$)': item.amount.toFixed(2).replace('.', ','),
             'Criado por': item.created_by,
@@ -240,7 +239,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
           const worksheet = XLSX.utils.json_to_sheet(formattedData);
 
           // Ajustar largura das colunas
-          const colWidths = Object.keys(formattedData[0]).map(key => {
+          const colWidths = Object.keys(formattedData[0] as Record<string, unknown>).map(key => {
             if (key.includes('Nome')) return { wch: 30 };
             if (key.includes('CPF')) return { wch: 15 };
             if (key.includes('Data')) return { wch: 12 };

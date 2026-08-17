@@ -239,7 +239,7 @@ export const generateEmployeeTemplate = (opts: {
 export const validateEmployeeData = (
   name: string,
   cpf: string,
-  pixKey: string,
+  _pixKey: string,
   row: number
 ): ValidationError[] => {
   const errors: ValidationError[] = [];

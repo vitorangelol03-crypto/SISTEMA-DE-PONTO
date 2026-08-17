@@ -27,7 +27,6 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
   const { company } = useCompany();
   const [activeSubTab, setActiveSubTab] = useState<'individual' | 'triage' | 'periods'>('individual');
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [errorRecords, setErrorRecords] = useState<ErrorRecord[]>([]);
   const [employeesWithErrors, setEmployeesWithErrors] = useState<EmployeeWithErrors[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -86,7 +85,6 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
       ]);
 
       setEmployees(employeesData);
-      setErrorRecords(errorRecordsData);
       setStatistics(statsData);
 
       processEmployeeErrorData(employeesData, attendancesData, errorRecordsData);
@@ -665,7 +663,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                     dataKey="taxa"
                     position="top"
                     style={{ fontSize: '11px', fill: '#dc2626', fontWeight: 600 }}
-                    formatter={(v: number) => v.toFixed(1)}
+                    formatter={(v) => typeof v === 'number' ? v.toFixed(1) : String(v ?? '')}
                   />
                 </Line>
               </ComposedChart>

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Users } from 'lucide-react';
 
 export type EmploymentType = 'all' | 'Diarista' | 'Carteira Assinada';
