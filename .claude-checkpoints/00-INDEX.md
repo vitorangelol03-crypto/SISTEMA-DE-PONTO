@@ -41,8 +41,18 @@ vínculo pra outro driver, desfaz vínculo ou ignorado. **E2E novo (`tests/74`) 
 o ciclo inteiro com clique real:** ignora → banco salva → reimporta a MESMA
 planilha → já vem "Ignorar" pré-selecionado → desfaz na tela nova → reimporta →
 volta a pedir decisão de verdade. 4 unit novos · typecheck 0 · eslint 0 · build ·
-**1261 unit, 0 falha**. ⏳ Push de `d31f417`, `2d0f796` e `1ded57d` não feito (mexe
-em dinheiro/dados de driver, pedir OK antes).
+**1261 unit, 0 falha**. Push feito (`9f21275..74e81dc`), Vercel conferida por
+conteúdo. **Por fim, operação em produção:** ele pediu pra vincular o que eu
+identificasse da planilha real. Análise (leitura pura, mesma `matchDriver` do
+sistema): 52 entregadores, 9.444 pacotes — 27 casam sozinhos, 1 ambíguo (`FABRÍCIO
+DOS SANTOS`, 184 pct, 2 candidatos) e 24 não reconhecidos (~6.100 pct). 🔑 **Conferido
+um por um: nenhum dos 24 dá pra vincular com segurança** (parecenças são só sobrenome
+comum — vincular errado = pagar pessoa errada); casos "quase" reportados sem gravar
+(ANDREA/KENIA/IAGO, sobrenome divergente). **24 vínculos gravados** (`source='loggi'`,
+dry-run mostrado antes, conferidos depois) — todos casos que o sistema JÁ reconhecia
+por token, gravar só trava o casamento; nenhum adivinhado. Rollback em
+`backups/2026-08-18-vinculos-loggi/`. ⏳ **A planilha real ainda NÃO foi importada** —
+cria dado de verdade, é o Victor quem sobe.
 Ver `CHECKPOINT_SESSAO_2026-08-18.md`.
 
 **Sessão 17/08 (continuação) — trava de bonificação da outra janela, finalizada

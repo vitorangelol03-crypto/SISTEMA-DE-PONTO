@@ -103,8 +103,44 @@ tela nova → reimporta de novo → volta a pedir decisão de verdade
 ("Criar como novo driver"). Banco conferido antes/depois, zero sobra.
 typecheck 0 · eslint 0 · build limpo · **1261 unit, 0 falha**.
 
-## 4. Pendências
+Push feito (`9f21275..74e81dc`), Vercel conferida por conteúdo (chunk
+`DriverPayTab-BDRLu-6x.js` com "LOGGI", "Vínculos de importação", "já
+ignorado antes", "Selecionar todos").
 
-- ⏳ **Push de `d31f417`, `2d0f796` e `1ded57d` não feito** — mexe em
-  fluxo de dinheiro/dados de driver, pedir OK do Victor antes de subir,
-  como sempre.
+## 4. Operação em produção: 24 vínculos da LOGGI gravados
+
+Victor pediu pra eu vincular o que conseguisse identificar da planilha
+real dele (`entregas-por-entregador (16 jul - 31 jul)`). **Análise antes
+de gravar** (script descartável, leitura pura, rodando a MESMA
+`matchDriver` do sistema contra os 109 drivers + 124 apelidos já salvos):
+52 entregadores com entrega, 9.444 pacotes —
+
+- **27 casam sozinhos** (3 já tinham apelido salvo, 24 por token);
+- **1 ambíguo**: `(IPT INT) FABRÍCIO DOS SANTOS (CARATINGA)`, **184
+  pacotes**, dois candidatos (`FABRICIO DOS SANTOS FERREIRA` /
+  `Fabricio dos Santos Maia Soares`) — decisão do Victor;
+- **24 não reconhecidos** (~6.100 pacotes). 🔑 **Conferido um por um: NENHUM
+  dá pra vincular com segurança** — as parecenças são só sobrenome comum
+  (Silva/Santos/Gomes/Souza/Martins) ou primeiro nome comum. Vincular
+  errado = pagar a pessoa errada. Casos "quase" (primeiro nome incomum,
+  sobrenome divergente) reportados a ele sem gravar: `ANDREA ALVES` vs
+  Andrea dos Santos Ramos, `KENIA KARINA` vs Kenia Caren da Costa Neves,
+  `IAGO LUCIANO` vs Iago Nascimento de Oliveira. A maioria do resto é do
+  hub "IPT LOC" (Ipatinga/Timóteo/Coronel Fabriciano — outra região).
+
+Decisão dele: *"os que vc conseguiu achar vc deve vincular"*, o resto ele
+olha na hora do import. **Gravados 24 vínculos** (`driverpay_driver_aliases`,
+`source='loggi'`) — dry-run mostrado antes, conferidos no banco depois.
+⚠️ Todos eram casos que o sistema **já reconhecia por token**; gravar o
+vínculo só trava o casamento pra não virar ambíguo se um nome parecido
+for cadastrado depois. **Nenhum foi adivinhado.** Rollback em
+`backups/2026-08-18-vinculos-loggi/` (ids + SQL), ou pela tela "Vínculos
+de importação". Total de apelidos por plataforma agora: shopee 96 ·
+loggi 24 · anjun 15 · imile 13.
+
+## 5. Pendências
+
+- ⏳ **A planilha real da LOGGI ainda NÃO foi importada** — isso cria
+  drivers/pacotes de verdade, é o Victor quem sobe pelo botão "Importar
+  planilha". Os 27 casam sozinhos; o Fabrício (ambíguo) e os 24
+  desconhecidos ele resolve na tela.
