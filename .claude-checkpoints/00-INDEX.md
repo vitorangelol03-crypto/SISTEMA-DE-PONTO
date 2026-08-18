@@ -51,8 +51,17 @@ comum — vincular errado = pagar pessoa errada); casos "quase" reportados sem g
 (ANDREA/KENIA/IAGO, sobrenome divergente). **24 vínculos gravados** (`source='loggi'`,
 dry-run mostrado antes, conferidos depois) — todos casos que o sistema JÁ reconhecia
 por token, gravar só trava o casamento; nenhum adivinhado. Rollback em
-`backups/2026-08-18-vinculos-loggi/`. ⏳ **A planilha real ainda NÃO foi importada** —
-cria dado de verdade, é o Victor quem sobe.
+`backups/2026-08-18-vinculos-loggi/`. **Fim da sessão — "Espelhos recebidos"
+(`f27d65e`):** ele pediu nome do grupo nos cartões + reclamou que espelho não marcava
+conferido sozinho. 🔑 **O "não marca" NÃO era bug — era chave desligada**
+(`proof_auto_confirm=false`); evidência: 22 prints validados com leitura BATENDO EXATO
+(812=812, 1884=1884…) e `espelho_conferido=false`. Decisões dele: ligar a chave +
+marcar os 22 retroativos (ligar sozinho não corrige o passado). Backup antes, escopo
+medido (22 pagamentos, só na quinzena ABERTA), aplicado e conferido. Os 33 restantes
+seguem sem marcar porque **não bateram** — correto. Nome do grupo: `groupName` já vinha
+nas props, só não era mostrado (zero query nova) + busca acha por grupo. Conferido na
+tela real: 31 cartões com grupo. ⏳ **A planilha real ainda NÃO foi importada** e **os
+R$ 7,79 do Cícero ainda não migrados** — as duas coisas são cliques do Victor.
 Ver `CHECKPOINT_SESSAO_2026-08-18.md`.
 
 **Sessão 17/08 (continuação) — trava de bonificação da outra janela, finalizada

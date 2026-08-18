@@ -138,9 +138,53 @@ for cadastrado depois. **Nenhum foi adivinhado.** Rollback em
 de importação". Total de apelidos por plataforma agora: shopee 96 ·
 loggi 24 · anjun 15 · imile 13.
 
-## 5. Pendências
+## 5. Espelhos recebidos: grupo na tela + a chave que estava desligada
+
+Victor mandou print da janela "Espelhos recebidos": *"adicione para
+aparecer o nomes dos grupos e os espelhos conferidos não está sendo
+marcado conferido mas deve marcar automático"*. Duas coisas bem
+diferentes:
+
+**(a) 🔑 O "não marca conferido" NÃO era bug de código — era chave
+desligada.** `driverpay_settings.proof_auto_confirm = false`. O sistema
+conferia e validava o print, mas não marcava o espelho, exatamente como
+programado. **Evidência:** 22 prints da 2ª quinzena de julho com
+`status='validado'`, `check_qtd=true` e leitura BATENDO EXATO
+(812=812, 1884=1884, 588=588, 1365=1365…), conferidos no mesmo dia
+17h13–17h35, todos com `espelho_conferido=false`. Antes de concluir li
+o código da RPC `driverpay_conclude_period_only` e os 3 caminhos que
+marcam o espelho (`setProofStatus`, a reconferência, a edge fn) — todos
+respeitam o liga/desliga.
+
+Decisões dele (`AskUserQuestion`): **ligar a chave** + **marcar os 22
+retroativos** (ligar sozinho não corrige o passado — o código só marca
+durante a conferência). Backup em `backup_espelho_conferido_20260818`
+(109 linhas) antes de mexer; escopo medido antes (22 pagamentos, todos
+na quinzena ABERTA — nenhuma fechada tocada). Aplicado e conferido:
+`proof_auto_confirm=true`, 22 espelhos marcados (`by='auto'`). Os 33
+que continuam sem marcar são os que **não bateram** a quantidade —
+comportamento correto, precisam da decisão dele.
+
+**(b) Nome do grupo nos cartões** (`f27d65e`): o `groupName` **já vinha**
+nas linhas da grade que a janela recebe por prop — só não era mostrado.
+Zero consulta nova. Junto, a busca passou a achar por grupo também.
+Conferido na tela real com clique: **31 cartões** com o grupo visível
+("Santa Rita - CAIO", "IPANEMA - DIEGO"…); todos os 55 entregadores com
+print têm grupo cadastrado. typecheck 0 · eslint 0 · build · **1261
+unit, 0 falha**. Push `1deb545..f27d65e`.
+
+## 6. Pendências
 
 - ⏳ **A planilha real da LOGGI ainda NÃO foi importada** — isso cria
   drivers/pacotes de verdade, é o Victor quem sobe pelo botão "Importar
   planilha". Os 27 casam sozinhos; o Fabrício (ambíguo) e os 24
   desconhecidos ele resolve na tela.
+- ⏳ **Os R$ 7,79 do Cícero** (2ª Quinzena Junho) ainda não migrados —
+  única dívida em aberto no sistema inteiro. Botão "Saldo de quinzenas
+  fechadas" → destino "2 quinzena de julho" → Migrar.
+- ℹ️ **Achado sem investigar** (não urgente, não afeta pagamento):
+  `bonuses` tem registro em março/abril mas nenhum `payments.bonus > 0`
+  depois de 06/01 — ou foram removidos depois (58 remoções, última em
+  18/05), ou ficaram registros órfãos.
+- ℹ️ Apagar `backup_espelho_conferido_20260818` e
+  `backups/2026-08-18-vinculos-loggi/` quando ele liberar.
