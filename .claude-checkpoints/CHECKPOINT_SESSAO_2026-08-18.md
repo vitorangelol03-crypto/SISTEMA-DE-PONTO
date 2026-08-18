@@ -45,7 +45,50 @@ Fixtures descartáveis (prefixo `PW Test`), limpos no `finally`, zero sobra
 conferida por query direta. typecheck 0 · eslint 0 · build limpo · **1250
 unit (era 1232), 0 falha** · E2E 73 1/1.
 
-## 2. Pendências
+## 2. `2d0f796` — reconhece a planilha da LOGGI ("entregas-por-entregador")
 
-- ⏳ **Push do `d31f417` não feito** — mexe em fluxo de dinheiro (migração
-  de saldo devedor), pedir OK do Victor antes de subir, como sempre.
+Victor mandou o arquivo real e pediu pra usar "as mesmas ferramentas" já
+usadas pra iMile/Shopee/Anjun (`PlatformImportModal.tsx`): detectar pelo
+cabeçalho, casar com driver cadastrado, o que não casar fica pendente
+pra vincular. Formato da LOGGI é diferente — 1 linha = 1 entregador com
+o TOTAL já agregado (coluna "Entregues"), sem código de pacote — ganhou
+caminho próprio no parser (`extractLoggi`), não forçado na abstração
+genérica dos outros 3.
+
+🔑 **Achado real na planilha:** traz vários hubs/regiões misturados —
+"IPT INT" (58 entregadores, reconheço nomes do time de Caratinga) e
+"IPT LOC" (77 entregadores, parecem Ipatinga/Timóteo/Coronel Fabriciano,
+nenhum nome reconhecido). Perguntado via `AskUserQuestion`: filtrar só
+"IPT INT" automaticamente, ou deixar tudo passar pela tela normal de
+identificação? **Escolheu a 2ª (recomendada)** — não quis o sistema
+adivinhando qual hub é seu; quem não é da equipe fica pendente e ele
+marca "ignorar" manualmente.
+
+O nome vem com o hub entre parênteses (`"(IPT INT) Fulano (CARATINGA)"`)
+— `driverNameMatch.ts` **já ignora qualquer parênteses** no casamento,
+zero mudança lá. Hub entra como "cidade/rota" do driver. Linha com 0
+entregas descartada em silêncio (não é regra de negócio, é literalmente
+nada pra contar). Validado: 20 unit novos (lógica pura + fixture .xlsx
+real) · typecheck 0 · eslint 0 · build · **1257 unit (era 1250), 0
+falha**.
+
+## 3. Pedido em aberto, plano ainda não aprovado: guardar rejeitados
+
+No meio da sessão, Victor pediu: *"faça uma configuração para guarda os
+rejeitados também, mas poder editar e editar os vinculados também mas
+manter salvo para não precisar ficar mexendo toda vez que for upar a
+planilha"*. Investigado: **vínculo já persiste** (tabela
+`driverpay_driver_aliases`, usada por todas as plataformas — uma vez
+vinculado, casa sozinho pra sempre). **O que falta é só "ignorar"**: essa
+decisão não é salva hoje, então todo import da LOGGI os ~77 nomes de
+"IPT LOC" (Ipatinga) voltariam a aparecer como pendente, e ele teria que
+marcar "ignorar" de novo toda vez. Não existe hoje nenhuma tela pra
+ver/editar vínculos ou ignorados. Plano ainda não apresentado/aprovado —
+próximo passo da sessão.
+
+## 4. Pendências
+
+- ⏳ **Push do `d31f417` e `2d0f796` não feito** — mexe em fluxo de
+  dinheiro/dados de driver, pedir OK do Victor antes de subir, como
+  sempre.
+- ⏳ Feature "guardar rejeitados + editar vínculos" — plano a apresentar.

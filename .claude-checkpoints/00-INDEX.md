@@ -20,7 +20,20 @@ clique real** (E2E novo `tests/73` — esse modal nunca tinha E2E, nem a sub-fas
 de 15/08 tinha): 2 quinzenas fechadas com saldo, filtra, seleciona em massa, migra
 — banco confirma quem foi selecionado migrou e quem ficou fora do filtro não foi
 tocado. typecheck 0 · eslint 0 · build · **1250 unit (era 1232), 0 falha** · E2E
-73 1/1. ⏳ Push não feito (mexe em fluxo de dinheiro, pedir OK antes).
+73 1/1. **Em seguida (`2d0f796`):** Victor mandou a planilha real da LOGGI
+("entregas-por-entregador") e pediu pra reconhecer com "as mesmas ferramentas" já
+usadas pra iMile/Shopee/Anjun. Achado real: a planilha traz **vários hubs
+misturados** — "IPT INT" (nomes conhecidos do time) e "IPT LOC" (~77 nomes de
+Ipatinga/região, nenhum reconhecido). Perguntado via `AskUserQuestion`: filtrar só
+"IPT INT" ou deixar tudo passar pela tela de identificação normal? **Escolheu
+deixar passar tudo** (recomendado) — sem o sistema adivinhar qual hub é dele.
+`driverNameMatch.ts` já ignora parênteses no nome, zero mudança lá; parser ganhou
+caminho próprio pro formato pré-agregado da LOGGI (sem código de pacote). 20 unit
+novos · typecheck 0 · eslint 0 · build · **1257 unit (era 1250), 0 falha**. **No
+meio da sessão, pedido em aberto ainda sem plano aprovado:** guardar decisão de
+"ignorar" entre importações (vínculo já persiste via `driverpay_driver_aliases`;
+ignorar não persiste hoje) + tela pra editar vínculos/ignorados. ⏳ Push de
+`d31f417` e `2d0f796` não feito (mexe em dinheiro/dados de driver, pedir OK antes).
 Ver `CHECKPOINT_SESSAO_2026-08-18.md`.
 
 **Sessão 17/08 (continuação) — trava de bonificação da outra janela, finalizada
