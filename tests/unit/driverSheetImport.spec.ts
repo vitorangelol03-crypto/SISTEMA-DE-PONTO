@@ -11,10 +11,11 @@ function readFixture(name: string): unknown[][] {
 }
 
 describe('driverSheetImport — deteccao de plataforma pelo cabecalho', () => {
-  it('reconhece iMile, Shopee e Anjun; rejeita desconhecido', () => {
+  it('reconhece iMile, Shopee, Anjun e LOGGI; rejeita desconhecido', () => {
     expect(detectPlatform(['DA', 'Waybill No.', 'Recipient City', 'Delivered time'])).toBe('imile');
     expect(detectPlatform(['Tipo do Serviço', 'Driver Name', 'Cidade Entrega', 'Rota'])).toBe('shopee');
     expect(detectPlatform(['número do negócio', 'operador de despacho', 'Cidade destinatária'])).toBe('anjun');
+    expect(detectPlatform(['Entregador', 'Entregues'])).toBe('loggi');
     expect(detectPlatform(['Nome', 'Valor', 'Cidade'])).toBeNull();
   });
 });
@@ -65,6 +66,59 @@ describe('driverSheetImport — agregacao por (entregador, cidade, plataforma)',
 
   it('lanca erro em planilha nao reconhecida', () => {
     expect(() => parseDriverSheetData([['Nome', 'Valor'], ['x', '1']])).toThrow(/reconhecida/i);
+  });
+
+  describe('LOGGI: ja vem agregada por entregador (sem codigo pra deduplicar)', () => {
+    const aoa = [
+      ['Entregador', 'Entregues'],
+      ['(IPT INT) Fulano da Silva (CARATINGA)', 12],
+      ['(CTA) Ninguem Entregou', 0], // 0 entregas -> descartado em silencio
+      ['(IPT LOC) Outro Hub Qualquer', 4], // hub diferente — nao filtramos, vai pra tela normal
+      ['', 5], // sem entregador -> descartado
+    ];
+
+    it('conta o total da coluna Entregues direto, sem deduplicar por codigo', () => {
+      const r = parseDriverSheetData(aoa);
+      expect(r.platform).toBe('loggi');
+      expect(r.rows).toHaveLength(2); // as duas com entregas > 0
+      expect(r.totalPackages).toBe(16); // 12 + 4
+      expect(r.totalDrivers).toBe(2);
+    });
+
+    it('extrai o hub entre parenteses como "cidade" e mantem o resto do nome pro casamento', () => {
+      const r = parseDriverSheetData(aoa);
+      const fulano = r.rows.find((x) => x.driverRaw.includes('Fulano'));
+      expect(fulano?.city).toBe('IPT INT');
+      expect(fulano?.platform).toBe('LOGGI');
+      expect(fulano?.packages).toBe(12);
+    });
+
+    it('0 entregas nao gera linha nem aviso (nao e "tipo nao pago", e so nao ter nada pra contar)', () => {
+      const r = parseDriverSheetData(aoa);
+      expect(r.rows.some((x) => x.driverRaw.includes('Ninguem'))).toBe(false);
+      expect(r.ignored).toEqual([]);
+    });
+
+    it('hub diferente da empresa NAO e filtrado aqui — decisao do Victor foi deixar ir pra tela de identificacao', () => {
+      const r = parseDriverSheetData(aoa);
+      expect(r.rows.some((x) => x.city === 'IPT LOC')).toBe(true);
+    });
+
+    it('nome sem parenteses (edge case real) vira cidade vazia, sem quebrar', () => {
+      const semHub = parseDriverSheetData([
+        ['Entregador', 'Entregues'],
+        ['Joao Sem Hub', 1],
+      ]);
+      expect(semHub.rows[0].city).toBe('');
+      expect(semHub.rows[0].driverRaw).toBe('Joao Sem Hub');
+    });
+
+    it('casa com driver cadastrado ignorando hub e sufixo entre parenteses', () => {
+      const drivers = [{ id: 'fulano', name: 'Fulano da Silva' }];
+      const m = matchDriver('(IPT INT) Fulano da Silva (CARATINGA)', drivers);
+      expect(m.status).toBe('matched');
+      expect(m.driverId).toBe('fulano');
+    });
   });
 });
 
@@ -130,5 +184,13 @@ describe('driverSheetImport — fixtures .xlsx das 3 plataformas (regressao do l
     expect(r.platform).toBe('anjun');
     expect(r.rows[0].platform).toBe('ANJUN');
     expect(r.rows[0].packages).toBe(2);
+  });
+
+  it('LOGGI: le "entregas-por-entregador" (2 entregadores com entrega, 1 zerado descartado)', () => {
+    const r = parseDriverSheetData(readFixture('loggi-teste.xlsx'));
+    expect(r.platform).toBe('loggi');
+    expect(r.totalDrivers).toBe(2);
+    expect(r.totalPackages).toBe(8); // 5 + 3
+    expect(r.rows.every((x) => x.platform === 'LOGGI')).toBe(true);
   });
 });

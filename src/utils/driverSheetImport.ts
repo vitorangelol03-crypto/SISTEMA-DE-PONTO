@@ -1,30 +1,39 @@
 /**
- * Leitor das planilhas CRUAS das plataformas (iMile / Shopee / Anjun) para a aba
- * Pagamentos Driver. Detecta a plataforma pelo CABECALHO (o usuario so sobe o
- * arquivo, o sistema reconhece sozinho) e agrega os pacotes por
+ * Leitor das planilhas CRUAS das plataformas (iMile / Shopee / Anjun / LOGGI) para
+ * a aba Pagamentos Driver. Detecta a plataforma pelo CABECALHO (o usuario so sobe
+ * o arquivo, o sistema reconhece sozinho) e agrega os pacotes por
  * (entregador, cidade, plataforma).
  *
- * Cada linha da planilha e 1 pacote. Contamos pacotes DISTINTOS por codigo
- * (waybill/tracking) para nao contar re-scans em dobro. Logica 100% pura
- * (`parseDriverSheetData` a partir de array-de-arrays) — sem React nem Supabase —
- * para ser testavel. O casamento entregador->driver cadastrado fica em
- * `driverNameMatch.ts`.
+ * iMile/Shopee/Anjun: cada linha da planilha e 1 pacote — contamos pacotes
+ * DISTINTOS por codigo (waybill/tracking) para nao contar re-scans em dobro.
+ * LOGGI e diferente: a planilha "entregas-por-entregador" ja vem 1 linha por
+ * entregador com o TOTAL entregue — sem codigo de pacote pra deduplicar (18/08/2026).
  *
- * Formatos (colunas-chave), confirmados nas planilhas reais 2026-07-17:
+ * Logica 100% pura (`parseDriverSheetData` a partir de array-de-arrays) — sem
+ * React nem Supabase — para ser testavel. O casamento entregador->driver
+ * cadastrado fica em `driverNameMatch.ts` (ja ignora qualquer coisa entre
+ * parenteses no nome, entao o prefixo de hub da LOGGI nao interfere).
+ *
+ * Formatos (colunas-chave), confirmados nas planilhas reais 2026-07-17 / 2026-08-18:
  *  - iMile "Delivered":  DA (entregador) · Recipient City (cidade) · Waybill No. (codigo). 1 plataforma: eMile.
  *  - Shopee "CLAYTON...": Driver Name (entregador) · Cidade Entrega · 3PL Tracking Number (codigo).
  *                         Tipo do Servico = ENTREGA->SHOPEE / COLETA->Coleta Shopee.
  *  - Anjun "Taxas a Pagar": operador de despacho (entregador/login) · Cidade destinataria · numero do negocio (codigo).
+ *  - LOGGI "entregas-por-entregador": Entregador ("(HUB) Nome (rota, as vezes)") · Entregues (total no periodo).
+ *    Traz VARIOS hubs/regioes misturados (18/08/2026, decisao do Victor): nao filtramos por
+ *    hub — passa tudo pra tela de identificacao normal, quem nao e da empresa fica pendente
+ *    e o operador marca "ignorar" (mesmo caminho que ja existe pras outras plataformas).
  */
 import * as XLSX from 'xlsx';
 
-export type DriverSheetPlatform = 'imile' | 'shopee' | 'anjun';
+export type DriverSheetPlatform = 'imile' | 'shopee' | 'anjun' | 'loggi';
 
 /** Nomes de plataforma no sistema (batem com driverpay_platforms.name). */
 export const PLATFORM_IMILE = 'eMile';
 export const PLATFORM_SHOPEE = 'SHOPEE';
 export const PLATFORM_SHOPEE_COLETA = 'Coleta Shopee';
 export const PLATFORM_ANJUN = 'ANJUN';
+export const PLATFORM_LOGGI = 'LOGGI';
 
 /** Um agrupamento: pacotes de um entregador numa cidade/plataforma. */
 export interface SheetAggregateRow {
@@ -72,6 +81,7 @@ export function detectPlatform(headers: unknown[]): DriverSheetPlatform | null {
   if (h.has('da') && h.has('waybill no.') && h.has('recipient city')) return 'imile';
   if (h.has('tipo do servico') && h.has('driver name') && h.has('cidade entrega')) return 'shopee';
   if (h.has('numero do negocio') && h.has('operador de despacho')) return 'anjun';
+  if (h.has('entregador') && h.has('entregues')) return 'loggi';
   return null;
 }
 
@@ -194,6 +204,47 @@ function extractAnjun(aoa: unknown[][], headers: unknown[]): ExtractResult {
   return { records: out, ignored: new Map() };
 }
 
+/** O(s) primeiro(s) parenteses do nome — a LOGGI usa como "hub/base", vira "cidade". */
+function extractLoggiHub(raw: string): string {
+  const m = raw.match(/^\s*\(\s*([^)]*?)\s*\)/);
+  return m ? cleanCell(m[1]) : '';
+}
+
+/**
+ * LOGGI ("entregas-por-entregador"): 1 linha = 1 entregador com o TOTAL entregue
+ * no periodo — sem codigo de pacote pra deduplicar, diferente das outras 3. Zero
+ * entregas = nada a lancar, descartado em silencio (mesmo tratamento que
+ * driverRaw vazio nas outras plataformas — nao e "tipo de servico nao pago",
+ * e literalmente nao ter nada pra contar).
+ *
+ * Traz varios hubs/regioes misturados na mesma planilha (18/08/2026) — decisao
+ * do Victor foi NAO filtrar por hub aqui: todo entregador com entrega > 0 vai
+ * pra tela de identificacao normal, e quem nao e da empresa fica pendente pra
+ * ele marcar "ignorar" (mesmo caminho que ja existe pras outras plataformas).
+ */
+function extractLoggi(
+  aoa: unknown[][],
+  headers: unknown[],
+): { rows: SheetAggregateRow[]; totalPackages: number; drivers: Set<string> } {
+  const cDriver = colExact(headers, 'entregador');
+  const cEntregues = colExact(headers, 'entregues');
+  const rows: SheetAggregateRow[] = [];
+  const drivers = new Set<string>();
+  let totalPackages = 0;
+  for (let i = 1; i < aoa.length; i++) {
+    const row = aoa[i];
+    if (!row) continue;
+    const driverRaw = cleanCell(row[cDriver]);
+    if (!driverRaw) continue;
+    const packages = Math.round(Number(row[cEntregues]) || 0);
+    if (packages <= 0) continue;
+    drivers.add(driverRaw);
+    rows.push({ driverRaw, city: extractLoggiHub(driverRaw), platform: PLATFORM_LOGGI, packages });
+    totalPackages += packages;
+  }
+  return { rows, totalPackages, drivers };
+}
+
 /**
  * Nucleo puro: detecta a plataforma pelo cabecalho e agrega os pacotes por
  * (entregador, cidade, plataforma). Lanca Error se o formato nao for reconhecido.
@@ -204,9 +255,20 @@ export function parseDriverSheetData(aoa: unknown[][]): DriverSheetResult {
   const platform = detectPlatform(headers);
   if (!platform) {
     throw new Error(
-      'Planilha nao reconhecida. Envie a planilha crua da iMile (Delivered), da Shopee (CLAYTONBDOSSANTOS) ou da Anjun (Taxas a Pagar).',
+      'Planilha nao reconhecida. Envie a planilha crua da iMile (Delivered), da Shopee (CLAYTONBDOSSANTOS), da Anjun (Taxas a Pagar) ou da LOGGI (entregas-por-entregador).',
     );
   }
+
+  // LOGGI ja vem agregada por entregador (sem codigo de pacote pra deduplicar) —
+  // caminho proprio, nao passa pelo RawRecord/aggregate() dos outros 3.
+  if (platform === 'loggi') {
+    const { rows, totalPackages, drivers } = extractLoggi(aoa, headers);
+    const warnings: string[] = [];
+    const noCity = rows.filter((r) => !r.city).length;
+    if (noCity > 0) warnings.push(`${noCity} agrupamento(s) sem cidade/rota informada.`);
+    return { platform, rows, totalPackages, totalDrivers: drivers.size, warnings, ignored: [] };
+  }
+
   const extracted =
     platform === 'imile'
       ? extractImile(aoa, headers)

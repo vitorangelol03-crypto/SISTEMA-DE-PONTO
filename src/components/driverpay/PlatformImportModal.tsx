@@ -27,7 +27,7 @@ import {
 } from '../../services/driverPay';
 import { formatInt } from './driverPayShared';
 
-const PLATFORM_LABEL: Record<string, string> = { imile: 'iMile', shopee: 'Shopee', anjun: 'Anjun' };
+const PLATFORM_LABEL: Record<string, string> = { imile: 'iMile', shopee: 'Shopee', anjun: 'Anjun', loggi: 'LOGGI' };
 
 /** Nome legivel para pre-preencher ao criar um driver novo (tira codigo/XPT/parenteses). */
 function suggestName(raw: string): string {
@@ -182,7 +182,7 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
     <ModalShell
       icon={<Upload className="w-5 h-5" />}
       title="Importar planilha da plataforma"
-      subtitle="iMile / Shopee / Anjun — o sistema reconhece a planilha sozinho"
+      subtitle="iMile / Shopee / Anjun / LOGGI — o sistema reconhece a planilha sozinho"
       onClose={onClose}
       maxWidth="sm:max-w-3xl"
       footer={
@@ -212,8 +212,8 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
       {!result ? (
         <div className="space-y-3">
           <p className="text-sm text-gray-600">
-            Suba a planilha <b>crua</b> como sai do sistema da plataforma. O sistema identifica se é iMile, Shopee ou
-            Anjun, conta os pacotes por entregador e cidade, e aplica a taxa já cadastrada.
+            Suba a planilha <b>crua</b> como sai do sistema da plataforma. O sistema identifica se é iMile, Shopee,
+            Anjun ou LOGGI, conta os pacotes por entregador e cidade, e aplica a taxa já cadastrada.
           </p>
           <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg py-10 cursor-pointer hover:bg-gray-50">
             {parsing ? (
