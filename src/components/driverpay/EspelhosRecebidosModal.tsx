@@ -11,7 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Image as ImageIcon, Eye, Loader2, Check, X, Trash2, AlertTriangle,
-  Clock, RefreshCw, Copy, Search,
+  Clock, RefreshCw, Copy, Search, Users,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { contemSemAcento } from '../../utils/buscaTexto';
@@ -266,6 +266,17 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
   const jaConferido = (p: DeliveryProofRow): boolean =>
     p.status === 'validado' && !precisaAtencao(p);
 
+  /**
+   * Grupo de cada entregador (18/08/2026, pedido do Victor: "adicione para aparecer
+   * os nomes dos grupos"). Vem das linhas da grade, que já trazem `groupName` — sem
+   * consulta nova ao banco.
+   */
+  const grupoPorDriver = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of rows) if (r.groupName) m.set(r.driverId, r.groupName);
+    return m;
+  }, [rows]);
+
   const naFila = proofs.filter((p) => p.nextCheckAt).length;
   const atencao = proofs.filter(precisaAtencao).length;
   const conferidos = proofs.filter(jaConferido).length;
@@ -277,7 +288,12 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
   // A busca vale DENTRO da aba escolhida — os contadores das abas seguem contando tudo,
   // senão procurar um nome faria parecer que as pendências sumiram.
   const q = busca.trim();
-  const visiveis = q ? daAba.filter((p) => contemSemAcento(p.driverName, q)) : daAba;
+  // Busca acha por nome OU por grupo (18/08/2026) — com o grupo na tela, procurar por
+  // ele e o gesto natural ("cadê o pessoal do Lucas Aredes?").
+  const visiveis = q
+    ? daAba.filter((p) =>
+        contemSemAcento(p.driverName, q) || contemSemAcento(grupoPorDriver.get(p.driverId) ?? '', q))
+    : daAba;
 
   const agir = async (fn: () => Promise<void>, id: string, ok: string) => {
     setOcupado(id);
@@ -397,7 +413,7 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 data-testid="print-busca"
-                placeholder="Procurar pelo nome do entregador…"
+                placeholder="Procurar pelo nome do entregador ou do grupo…"
                 className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
               />
               {busca && (
@@ -479,6 +495,12 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
                         <div className="flex items-start justify-between gap-2 flex-wrap">
                           <div className="min-w-0">
                             <p className="font-medium text-gray-900 break-words">{p.driverName}</p>
+                            {grupoPorDriver.get(p.driverId) && (
+                              <p className="text-xs text-indigo-700 flex items-center gap-1 mt-0.5" data-testid="proof-grupo">
+                                <Users className="w-3 h-3 flex-shrink-0" />
+                                {grupoPorDriver.get(p.driverId)}
+                              </p>
+                            )}
                             <p className="text-xs text-gray-500">
                               {p.platformName} · {p.uploadSource === 'painel' ? 'anexado por voce' : 'enviado pelo portal'}
                             </p>
