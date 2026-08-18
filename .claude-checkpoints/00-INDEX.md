@@ -2,9 +2,26 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-08-17**.
+> Última atualização: **2026-08-18**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 18/08 — filtro por quinzena + migração em massa do saldo herdado
+(`d31f417`, só local):** Victor, olhando o modal "Saldo de quinzenas fechadas"
+(sub-fase B de 15/08), pediu "coloque para poder filtrar entre as quinzenas e
+migrar em massa". Plano curto + 2 perguntas via `AskUserQuestion` (ambas aprovadas
+na recomendação): "selecionar todos" só marca quem está VISÍVEL no filtro (mesma
+regra do Reset Geral/Bonificação) e a massa manda todos pra UMA quinzena de destino
+só. Entregue: filtro por quinzena de origem, checkbox por linha + "selecionar
+todos", barra de migração em massa (falha parcial não trava o resto). Lógica
+extraída pra `closedPeriodsDebtScope.ts` (puro, mesmo padrão do `bonusScope.ts`) —
+18 unit novos. `recordCarryover` não mudou, nenhuma migration nova. **Validado com
+clique real** (E2E novo `tests/73` — esse modal nunca tinha E2E, nem a sub-fase B
+de 15/08 tinha): 2 quinzenas fechadas com saldo, filtra, seleciona em massa, migra
+— banco confirma quem foi selecionado migrou e quem ficou fora do filtro não foi
+tocado. typecheck 0 · eslint 0 · build · **1250 unit (era 1232), 0 falha** · E2E
+73 1/1. ⏳ Push não feito (mexe em fluxo de dinheiro, pedir OK antes).
+Ver `CHECKPOINT_SESSAO_2026-08-18.md`.
 
 **Sessão 17/08 (continuação) — trava de bonificação da outra janela, finalizada
 (`cafea2d`, pushado):** Victor pediu pra conferir se a outra janela (sessão idle há 2h,
