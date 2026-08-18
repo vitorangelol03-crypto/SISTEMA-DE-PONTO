@@ -2175,19 +2175,26 @@ export const bulkImportDrivers = async (
 
 // ─── Import de planilha de plataforma: contexto de matching + aplicacao ───────
 
-/** Drivers ativos + apelidos aprendidos, para casar os nomes vindos da planilha. */
+/** Drivers ativos + apelidos aprendidos + ignorados, para casar os nomes vindos da planilha. */
 export const getDriverMatchContext = async (
   companyId: string,
-): Promise<{ drivers: { id: string; name: string }[]; aliases: { alias_norm: string; driver_id: string }[] }> => {
-  const [dRes, aRes] = await Promise.all([
+): Promise<{
+  drivers: { id: string; name: string }[];
+  aliases: { alias_norm: string; driver_id: string }[];
+  ignored: { alias_norm: string }[];
+}> => {
+  const [dRes, aRes, iRes] = await Promise.all([
     supabase.from('driverpay_drivers').select('id, name').eq('company_id', companyId).eq('active', true),
     supabase.from('driverpay_driver_aliases').select('alias_norm, driver_id').eq('company_id', companyId),
+    supabase.from('driverpay_driver_ignored').select('alias_norm').eq('company_id', companyId),
   ]);
   if (dRes.error) throwDbError(dRes.error);
   if (aRes.error) throwDbError(aRes.error);
+  if (iRes.error) throwDbError(iRes.error);
   return {
     drivers: (dRes.data ?? []) as { id: string; name: string }[],
     aliases: (aRes.data ?? []) as { alias_norm: string; driver_id: string }[],
+    ignored: (iRes.data ?? []) as { alias_norm: string }[],
   };
 };
 
@@ -2205,6 +2212,107 @@ export const upsertDriverAlias = async (
     [{ company_id: companyId, driver_id: driverId, alias_raw: aliasRaw, alias_norm: aliasNorm, source, created_by: userId }],
     { onConflict: 'company_id,alias_norm' },
   );
+  if (error) throwDbError(error);
+};
+
+/**
+ * Grava (lembra) que este nome de planilha deve ser IGNORADO — pra nao pedir a
+ * mesma decisao de novo na proxima importacao (18/08/2026, pedido do Victor:
+ * "guarda os rejeitados tambem"). Idempotente por (company_id, alias_norm).
+ */
+export const upsertDriverIgnored = async (
+  companyId: string,
+  aliasRaw: string,
+  aliasNorm: string,
+  source: string | null,
+  userId: string,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.createDriver');
+  const { error } = await supabase.from('driverpay_driver_ignored').upsert(
+    [{ company_id: companyId, alias_raw: aliasRaw, alias_norm: aliasNorm, source, created_by: userId }],
+    { onConflict: 'company_id,alias_norm' },
+  );
+  if (error) throwDbError(error);
+};
+
+/** Um vinculo (apelido -> driver) ja aprendido, com o nome do driver pra mostrar na tela. */
+export interface DriverAliasRecord {
+  id: string;
+  aliasRaw: string;
+  aliasNorm: string;
+  driverId: string;
+  driverName: string;
+  source: string | null;
+  createdAt: string;
+}
+/** Um nome marcado "ignorar" (nunca vira driver, nunca vincula). */
+export interface DriverIgnoredRecord {
+  id: string;
+  aliasRaw: string;
+  aliasNorm: string;
+  source: string | null;
+  createdAt: string;
+}
+
+/**
+ * Tudo que ja foi aprendido (vinculos + ignorados) — pra tela de gerenciamento
+ * (18/08/2026): ver o que esta salvo, editar um vinculo errado, ou desfazer um
+ * "ignorar" (a linha volta a aparecer como pendente no proximo import).
+ */
+export const listDriverAliasesAndIgnored = async (
+  companyId: string,
+): Promise<{ aliases: DriverAliasRecord[]; ignored: DriverIgnoredRecord[] }> => {
+  const [aRes, iRes] = await Promise.all([
+    supabase
+      .from('driverpay_driver_aliases')
+      .select('id, alias_raw, alias_norm, source, created_at, driver:driverpay_drivers(id, name)')
+      .eq('company_id', companyId)
+      .order('alias_raw', { ascending: true }),
+    supabase
+      .from('driverpay_driver_ignored')
+      .select('id, alias_raw, alias_norm, source, created_at')
+      .eq('company_id', companyId)
+      .order('alias_raw', { ascending: true }),
+  ]);
+  if (aRes.error) throwDbError(aRes.error);
+  if (iRes.error) throwDbError(iRes.error);
+  type AliasRow = {
+    id: string; alias_raw: string; alias_norm: string; source: string | null; created_at: string;
+    driver: { id: string; name: string } | { id: string; name: string }[] | null;
+  };
+  const aliases = ((aRes.data ?? []) as AliasRow[]).map((r) => {
+    const driver = Array.isArray(r.driver) ? r.driver[0] : r.driver;
+    return {
+      id: r.id, aliasRaw: r.alias_raw, aliasNorm: r.alias_norm,
+      driverId: driver?.id ?? '', driverName: driver?.name ?? '(driver removido)',
+      source: r.source, createdAt: r.created_at,
+    };
+  });
+  type IgnoredRow = { id: string; alias_raw: string; alias_norm: string; source: string | null; created_at: string };
+  const ignored = ((iRes.data ?? []) as IgnoredRow[]).map((r) => ({
+    id: r.id, aliasRaw: r.alias_raw, aliasNorm: r.alias_norm, source: r.source, createdAt: r.created_at,
+  }));
+  return { aliases, ignored };
+};
+
+/** Desfaz um vinculo — o nome volta a pedir decisao no proximo import (nao apaga o driver). */
+export const deleteDriverAlias = async (id: string, userId: string): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.createDriver');
+  const { error } = await supabase.from('driverpay_driver_aliases').delete().eq('id', id);
+  if (error) throwDbError(error);
+};
+
+/** Edita um vinculo pra apontar pra OUTRO driver (mesmo nome de planilha, driver certo). */
+export const updateDriverAliasTarget = async (id: string, newDriverId: string, userId: string): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.createDriver');
+  const { error } = await supabase.from('driverpay_driver_aliases').update({ driver_id: newDriverId }).eq('id', id);
+  if (error) throwDbError(error);
+};
+
+/** Desfaz um "ignorar" — o nome volta a aparecer como pendente no proximo import. */
+export const deleteDriverIgnored = async (id: string, userId: string): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.createDriver');
+  const { error } = await supabase.from('driverpay_driver_ignored').delete().eq('id', id);
   if (error) throwDbError(error);
 };
 
@@ -2269,6 +2377,7 @@ export const applyDriverImport = async (
   }
   const ratesByDriver = new Map<string, Record<string, number>>();
   const createdByRaw = new Map<string, string>();
+  const ignoredNormsSaved = new Set<string>();
 
   let driversCreated = 0;
   let aliasesLearned = 0;
@@ -2279,6 +2388,11 @@ export const applyDriverImport = async (
   for (const it of items) {
     if (it.resolution.kind === 'ignore') {
       ignored += 1;
+      // Lembra a decisao pra nao pedir de novo na proxima importacao (18/08/2026).
+      if (!ignoredNormsSaved.has(it.aliasNorm)) {
+        ignoredNormsSaved.add(it.aliasNorm);
+        await upsertDriverIgnored(companyId, it.driverRaw, it.aliasNorm, source, userId);
+      }
       continue;
     }
 

@@ -9,6 +9,7 @@ import {
   normalizeDriverName,
   type DriverCandidate,
   type DriverAlias,
+  type DriverIgnored,
   type DriverMatch,
 } from '../../utils/driverNameMatch';
 import {
@@ -58,6 +59,7 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
   const [result, setResult] = useState<DriverSheetResult | null>(null);
   const [drivers, setDrivers] = useState<DriverCandidate[]>([]);
   const [aliases, setAliases] = useState<DriverAlias[]>([]);
+  const [ignoredNames, setIgnoredNames] = useState<DriverIgnored[]>([]);
   const [periods, setPeriods] = useState<DriverPaymentPeriod[]>([]);
   const [periodId, setPeriodId] = useState<string>('');
   // Plataformas cadastradas na empresa — a planilha pode trazer nome que nao existe.
@@ -88,6 +90,7 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
         setResult(parsed);
         setDrivers(ctx.drivers);
         setAliases(ctx.aliases);
+        setIgnoredNames(ctx.ignored);
         setPeriods(pers);
         setPlatforms(plats);
         const open = pers.filter((p) => p.status === 'aberto');
@@ -109,9 +112,11 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
     const packagesByRaw = new Map<string, number>();
     for (const r of result.rows) packagesByRaw.set(r.driverRaw, (packagesByRaw.get(r.driverRaw) ?? 0) + r.packages);
     return [...packagesByRaw.entries()]
-      .map(([driverRaw, packages]) => ({ driverRaw, packages, match: matchDriver(driverRaw, drivers, aliases) }))
+      .map(([driverRaw, packages]) => ({
+        driverRaw, packages, match: matchDriver(driverRaw, drivers, aliases, ignoredNames),
+      }))
       .sort((a, b) => b.packages - a.packages);
-  }, [result, drivers, aliases]);
+  }, [result, drivers, aliases, ignoredNames]);
 
   const needsReview = distinctDrivers.filter((d) => d.match.status !== 'matched');
   const autoCount = distinctDrivers.length - needsReview.length;
@@ -124,6 +129,9 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
         const d = drivers.find((x) => x.id === match.driverId);
         return { kind: 'existing', driverId: match.driverId, driverName: d?.name ?? driverRaw, learnAlias: false };
       }
+      // Ja foi marcado "ignorar" numa importacao anterior (18/08/2026) — nao pede
+      // a mesma decisao de novo, mas o operador pode trocar nesta rodada se quiser.
+      if (match.status === 'ignored') return { kind: 'ignore' };
       return { kind: 'create', name: suggestName(driverRaw) };
     },
     [resolutions, drivers],
@@ -137,9 +145,9 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
       city: r.city,
       platform: r.platform,
       packages: r.packages,
-      resolution: resolutionFor(r.driverRaw, matchDriver(r.driverRaw, drivers, aliases)),
+      resolution: resolutionFor(r.driverRaw, matchDriver(r.driverRaw, drivers, aliases, ignoredNames)),
     }));
-  }, [result, drivers, aliases, resolutionFor]);
+  }, [result, drivers, aliases, ignoredNames, resolutionFor]);
 
   const summary = useMemo(() => summarizeDriverImport(items), [items]);
 
@@ -317,11 +325,17 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
                 {needsReview.map((d) => {
                   const res = resolutionFor(d.driverRaw, d.match);
                   return (
-                    <div key={d.driverRaw} className="px-3 py-2 flex flex-col sm:flex-row sm:items-center gap-2">
+                    <div
+                      key={d.driverRaw}
+                      data-testid="import-review-row"
+                      className="px-3 py-2 flex flex-col sm:flex-row sm:items-center gap-2"
+                    >
                       <div className="min-w-0 sm:w-48 flex-shrink-0">
                         <div className="text-sm font-medium text-gray-900 break-words">{d.driverRaw}</div>
                         <div className="text-xs text-gray-500">
-                          {formatInt(d.packages)} pct{d.match.status === 'ambiguous' ? ' · homônimo' : ''}
+                          {formatInt(d.packages)} pct
+                          {d.match.status === 'ambiguous' ? ' · homônimo' : ''}
+                          {d.match.status === 'ignored' ? ' · já ignorado antes' : ''}
                         </div>
                       </div>
                       <DriverResolutionPicker

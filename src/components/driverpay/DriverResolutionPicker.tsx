@@ -85,6 +85,7 @@ export const DriverResolutionPicker: React.FC<DriverResolutionPickerProps> = ({
       <button
         ref={btnRef}
         type="button"
+        data-testid="import-resolution-picker"
         onClick={() => (open ? close() : openMenu())}
         className="w-full inline-flex items-center justify-between gap-2 px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[40px] bg-white hover:bg-gray-50"
       >

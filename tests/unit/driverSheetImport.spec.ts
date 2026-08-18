@@ -162,6 +162,31 @@ describe('driverNameMatch — normalizacao e casamento', () => {
     expect(m.driverId).toBe('luan');
     expect(m.fromAlias).toBe(true);
   });
+
+  describe('ignorados persistidos (18/08/2026) — "guarda os rejeitados também"', () => {
+    it('🎯 nome ja ignorado antes -> status ignored, sem pedir a mesma decisao de novo', () => {
+      const ignorado = { alias_norm: normalizeDriverName('(IPT LOC) Fulano de Fora') };
+      const m = matchDriver('(IPT LOC) Fulano de Fora', drivers, [], [ignorado]);
+      expect(m.status).toBe('ignored');
+    });
+
+    it('vinculo tem prioridade sobre ignorado (nao deveria coexistir, mas por seguranca)', () => {
+      const norm = normalizeDriverName('Romario Alves Dornelas');
+      const alias = { alias_norm: norm, driver_id: 'romario' };
+      const ignorado = { alias_norm: norm };
+      const m = matchDriver('Romario Alves Dornelas', drivers, [alias], [ignorado]);
+      expect(m.status).toBe('matched');
+      expect(m.driverId).toBe('romario');
+    });
+
+    it('sem alias nem ignorado -> continua "new", comportamento de sempre', () => {
+      expect(matchDriver('Nome Totalmente Novo', drivers, [], []).status).toBe('new');
+    });
+
+    it('lista de ignorados vazia (default) nao muda nada — retrocompat', () => {
+      expect(matchDriver('Fulano Xpto Desconhecido', drivers).status).toBe('new');
+    });
+  });
 });
 
 describe('driverSheetImport — fixtures .xlsx das 3 plataformas (regressao do leitor real)', () => {

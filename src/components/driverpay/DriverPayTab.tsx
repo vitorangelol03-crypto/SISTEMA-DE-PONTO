@@ -15,6 +15,7 @@ import {
   X,
   Trash2,
   AlertTriangle,
+  Link2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCompany } from '../../contexts/CompanyContext';
@@ -136,6 +137,7 @@ import { PeriodEditModal } from './PeriodEditModal';
 import { DriverPaymentHistory } from './DriverPaymentHistory';
 import { DriverImportModal } from './DriverImportModal';
 import { PlatformImportModal } from './PlatformImportModal';
+import { DriverImportLinksModal } from './DriverImportLinksModal';
 import { DriverMirrorPreviewDialog, type MirrorRequest } from './DriverMirrorPreviewDialog';
 
 interface DriverPayTabProps {
@@ -227,6 +229,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [showHistory, setShowHistory] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showPlatformImport, setShowPlatformImport] = useState(false);
+  const [showImportLinks, setShowImportLinks] = useState(false);
   const [showDiscountSearch, setShowDiscountSearch] = useState(false);
   /** Saldo devedor de quinzenas fechadas (14/08/2026, sub-fase A). */
   const [showClosedDebt, setShowClosedDebt] = useState(false);
@@ -2013,6 +2016,14 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               >
                 <Upload className="w-4 h-4" /> Importar planilha
               </button>
+              <button
+                type="button"
+                onClick={() => setShowImportLinks(true)}
+                title="Ver/editar quem já foi vinculado ou ignorado nas importações de planilha"
+                className="px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 inline-flex items-center gap-1.5 min-h-[40px]"
+              >
+                <Link2 className="w-4 h-4" /> Vínculos de importação
+              </button>
             </>
           )}
 
@@ -2356,6 +2367,15 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           userId={userId}
           onClose={() => setShowPlatformImport(false)}
           onImported={refreshComReconferencia}
+        />
+      )}
+
+      {showImportLinks && (
+        <DriverImportLinksModal
+          companyId={company.id}
+          userId={userId}
+          drivers={drivers}
+          onClose={() => setShowImportLinks(false)}
         />
       )}
 

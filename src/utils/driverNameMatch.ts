@@ -48,8 +48,12 @@ export interface DriverAlias {
   alias_norm: string;
   driver_id: string;
 }
+/** Nome que o operador ja marcou "ignorar" antes — nao pede a mesma decisao de novo (18/08/2026). */
+export interface DriverIgnored {
+  alias_norm: string;
+}
 
-export type MatchStatus = 'matched' | 'ambiguous' | 'new';
+export type MatchStatus = 'matched' | 'ambiguous' | 'new' | 'ignored';
 
 export interface DriverMatch {
   /** Nome como veio na planilha. */
@@ -68,18 +72,23 @@ export interface DriverMatch {
 /**
  * Casa um nome de entregador com um driver cadastrado.
  *  1) se ha alias aprendido para a chave normalizada -> matched (fromAlias);
- *  2) senao, casa por tokens (todos os tokens do raw contidos no cadastrado):
+ *  2) senao, se o nome ja foi marcado "ignorar" antes -> ignored (a tela default
+ *     pra "Ignorar", mas o operador pode trocar se mudar de ideia nesta rodada);
+ *  3) senao, casa por tokens (todos os tokens do raw contidos no cadastrado):
  *       exatamente 1 -> matched; varios -> ambiguous; nenhum -> new.
  */
 export function matchDriver(
   driverRaw: string,
   drivers: DriverCandidate[],
   aliases: DriverAlias[] = [],
+  ignored: DriverIgnored[] = [],
 ): DriverMatch {
   const norm = normalizeDriverName(driverRaw);
 
   const alias = aliases.find((a) => a.alias_norm === norm);
   if (alias) return { driverRaw, norm, status: 'matched', driverId: alias.driver_id, fromAlias: true };
+
+  if (ignored.some((i) => i.alias_norm === norm)) return { driverRaw, norm, status: 'ignored' };
 
   const qt = driverTokens(driverRaw);
   if (qt.length === 0) return { driverRaw, norm, status: 'new' };
