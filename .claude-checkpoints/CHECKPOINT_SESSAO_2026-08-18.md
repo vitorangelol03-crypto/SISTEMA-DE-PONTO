@@ -72,23 +72,39 @@ nada pra contar). Validado: 20 unit novos (lógica pura + fixture .xlsx
 real) · typecheck 0 · eslint 0 · build · **1257 unit (era 1250), 0
 falha**.
 
-## 3. Pedido em aberto, plano ainda não aprovado: guardar rejeitados
+## 3. `1ded57d` — guarda "ignorar" na importação + tela de vínculos
 
 No meio da sessão, Victor pediu: *"faça uma configuração para guarda os
 rejeitados também, mas poder editar e editar os vinculados também mas
 manter salvo para não precisar ficar mexendo toda vez que for upar a
 planilha"*. Investigado: **vínculo já persiste** (tabela
-`driverpay_driver_aliases`, usada por todas as plataformas — uma vez
-vinculado, casa sozinho pra sempre). **O que falta é só "ignorar"**: essa
-decisão não é salva hoje, então todo import da LOGGI os ~77 nomes de
-"IPT LOC" (Ipatinga) voltariam a aparecer como pendente, e ele teria que
-marcar "ignorar" de novo toda vez. Não existe hoje nenhuma tela pra
-ver/editar vínculos ou ignorados. Plano ainda não apresentado/aprovado —
-próximo passo da sessão.
+`driverpay_driver_aliases`) — só faltava "ignorar". Perguntado via
+`AskUserQuestion`: só LOGGI ou as 4 plataformas? **Escolheu as 4**
+(recomendado — mesmo mecanismo já compartilhado hoje).
+
+Migration `driverpay_driver_ignored` **mostrada e aprovada antes de
+aplicar** (AskUserQuestion) — mesmo formato da tabela de apelidos, sem
+`driver_id` (decisão "nunca vira driver" em vez de "vira este driver").
+`matchDriver` ganhou 4º status `'ignored'` (checado depois do vínculo,
+antes do casamento por token) — resolução default vira "Ignorar" mas o
+operador pode trocar naquela rodada. `applyDriverImport` grava o
+ignorado no mesmo momento em que já aprendia apelido.
+
+Tela nova **"Vínculos de importação"** (`DriverImportLinksModal.tsx`):
+lista vinculados + ignorados com busca, edita vínculo pra outro driver,
+desfaz vínculo ou ignorado (linha volta a pedir decisão no próximo
+import).
+
+Validado: 4 unit novos (status ignored, prioridade sobre vínculo,
+retrocompat) · **E2E novo (`tests/74`) com clique real provando o ciclo
+inteiro**: ignora e confirma → banco salva → reimporta a MESMA planilha
+→ já vem "Ignorar" pré-selecionado ("já ignorado antes") → desfaz na
+tela nova → reimporta de novo → volta a pedir decisão de verdade
+("Criar como novo driver"). Banco conferido antes/depois, zero sobra.
+typecheck 0 · eslint 0 · build limpo · **1261 unit, 0 falha**.
 
 ## 4. Pendências
 
-- ⏳ **Push do `d31f417` e `2d0f796` não feito** — mexe em fluxo de
-  dinheiro/dados de driver, pedir OK do Victor antes de subir, como
-  sempre.
-- ⏳ Feature "guardar rejeitados + editar vínculos" — plano a apresentar.
+- ⏳ **Push de `d31f417`, `2d0f796` e `1ded57d` não feito** — mexe em
+  fluxo de dinheiro/dados de driver, pedir OK do Victor antes de subir,
+  como sempre.

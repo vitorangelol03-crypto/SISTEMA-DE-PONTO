@@ -30,10 +30,19 @@ deixar passar tudo** (recomendado) — sem o sistema adivinhar qual hub é dele.
 `driverNameMatch.ts` já ignora parênteses no nome, zero mudança lá; parser ganhou
 caminho próprio pro formato pré-agregado da LOGGI (sem código de pacote). 20 unit
 novos · typecheck 0 · eslint 0 · build · **1257 unit (era 1250), 0 falha**. **No
-meio da sessão, pedido em aberto ainda sem plano aprovado:** guardar decisão de
-"ignorar" entre importações (vínculo já persiste via `driverpay_driver_aliases`;
-ignorar não persiste hoje) + tela pra editar vínculos/ignorados. ⏳ Push de
-`d31f417` e `2d0f796` não feito (mexe em dinheiro/dados de driver, pedir OK antes).
+meio da sessão, pedido:** *"guarda os rejeitados também... poder editar os
+vinculados também... pra não precisar ficar mexendo toda vez"*. Perguntado via
+`AskUserQuestion`: só LOGGI ou as 4 plataformas? **Escolheu as 4** (recomendado).
+**Em seguida (`1ded57d`):** migration `driverpay_driver_ignored` (mostrada e
+aprovada antes de aplicar) — mesmo formato da tabela de apelidos, sem driver_id.
+`matchDriver` ganhou status `'ignored'` (resolução default vira "Ignorar", operador
+pode trocar naquela rodada). Tela nova "Vínculos de importação" — lista, edita
+vínculo pra outro driver, desfaz vínculo ou ignorado. **E2E novo (`tests/74`) prova
+o ciclo inteiro com clique real:** ignora → banco salva → reimporta a MESMA
+planilha → já vem "Ignorar" pré-selecionado → desfaz na tela nova → reimporta →
+volta a pedir decisão de verdade. 4 unit novos · typecheck 0 · eslint 0 · build ·
+**1261 unit, 0 falha**. ⏳ Push de `d31f417`, `2d0f796` e `1ded57d` não feito (mexe
+em dinheiro/dados de driver, pedir OK antes).
 Ver `CHECKPOINT_SESSAO_2026-08-18.md`.
 
 **Sessão 17/08 (continuação) — trava de bonificação da outra janela, finalizada
