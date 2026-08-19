@@ -24,8 +24,17 @@ tudo mantém), `espelho_conferido_by` subiu até a grade. Validado: typecheck 0 
 eslint 0 erros · build · **1273 unit (+8), 0 falha** · **E2E novo `tests/76`**
 (pedido por grupo → marca sozinho SEM importar → ganha pacote → desmarca → zera →
 remarca, banco e tela conferidos) 1/1 · regressão 64 e 75 2/2. Respondido no meio:
-desmarcar espelho na mão NÃO gera nova solicitação (independentes; print novo se
-exige RECUSANDO o print no modal). ⏳ Push do `25288e7` aguardando OK.
+desmarcar espelho na mão NÃO gerava nova solicitação — e isso virou a **3ª leva
+(`78a01ea`)**: *"se o check for desmarcado e tiver pacotes da shopee o sistema volta a
+cobrar o print daquele líder"* — desmarcar alguém COBRADO agora **recusa os prints de
+pé** (com `window.confirm` antes; motivo no app: "O CD pediu um novo print deste
+período.") e o portal volta a cobrar sozinho pela regra que já existia
+(`sent===0 && rejected>0`); sem plataforma cobrada, desmarcar segue sendo só o check;
+varredura nunca remarca decisão humana. Validado: typecheck 0 · eslint 0 erros · build ·
+**1281 unit (+8), 0 falha** · **E2E novo `tests/77`** 1/1 · regressão 64/75/76 3/3.
+🔴 **Achado, não corrigido: `tests/57` quebrado DESDE 04/08** (`.last()` posicional ×
+plataforma "Coleta Shopee" criada em prod 04/08 — provado com stash+rerun sem as
+mudanças de hoje). ⏳ Push do `25288e7`+`78a01ea` aguardando OK.
 Ver `CHECKPOINT_SESSAO_2026-08-19.md`.
 
 **Sessão 19/08 — os 3 pendentes de ontem fechados + tag "não bate" clicável

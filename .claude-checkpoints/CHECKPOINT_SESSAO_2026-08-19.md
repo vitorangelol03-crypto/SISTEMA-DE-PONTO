@@ -109,7 +109,34 @@ conferidos em cada passo) 1/1 · regressão 64 e 75 2/2. ⚠️ tests/76 falhou 
 primeira rodada por ler o cabeçalho da grade antes de uma linha estar visível —
 corrigido no próprio spec (mesma ordem do 75), não era o app.
 
-## 6. Pendências
+## 6. Terceira leva — desmarcar espelho volta a cobrar o print (`78a01ea`, só local)
+
+Perguntas dele no meio (respondidas com o código na mão): o portal NÃO fica
+cobrando pra sempre — cartão vira "enviado" (apagado) depois do anexo e só volta
+a cobrar se o print for RECUSADO. Daí o pedido: *"se o check for desmarcado e
+tiver pacotes da shopee o sistema volta a cobrar o print daquele líder"*.
+
+Implementado: desmarcar alguém **cobrado** (plataforma pedida com pacote, régua
+`expectedProofPlatforms` — a mesma da grade) **recusa os prints ainda de pé**
+daquelas plataformas (via `setProofStatus`, o serviço do modal) e o portal volta
+a cobrar sozinho pela regra que já existia (`sent===0 && rejected>0`), mostrando
+ao entregador: *"O CD pediu um novo print deste período."*. Tem `window.confirm`
+antes (o entregador VÊ a recusa). Sem plataforma cobrada (dispensado etc.), o
+desmarcar segue sendo só o check. A varredura não remarca (by=humano).
+
+Validado: typecheck 0 · eslint 0 erros · build · **1281 unit (+8), 0 falha** ·
+**E2E novo `tests/77`** (print validado + conferido → desmarca → confirm →
+print 'rejeitado' com motivo no banco → tag "recusado" na grade → varredura não
+remarca) 1/1 · regressão 64/75/76 3/3.
+
+🔴 **Achado, NÃO corrigido (decisão do Victor): `tests/57` quebrado DESDE 04/08**
+— usa `.last()` posicional na edição de rota, e a plataforma real "Coleta
+Shopee" (criada em prod em 04/08, R$ 1,00) virou a última coluna: os 5 pacotes
+do teste caem nela (10×2+5×1=25 ≠ 30 esperado). **Provado sem as mudanças de
+hoje** (`git stash` de src/ + rerun = mesma falha). Não é regressão desta
+sessão; fix = mirar a plataforma pelo nome em vez de posição.
+
+## 7. Pendências
 
 - ✅ **Push do `95c764e` FEITO** (mais tarde no mesmo dia, com OK do Victor):
   revalidado antes (typecheck 0 · build limpo), subiu `bb7d29f..2c5208b` em
@@ -118,10 +145,13 @@ corrigido no próprio spec (mesma ordem do 75), não era o app.
   contém o texto novo "Clique para ver o motivo e validar o espelho";
   na 1ª checagem o site ainda servia o bundle velho (`YtdrweZ6`), na 2ª
   (~20s depois) já tinha virado.
-- ⏳ **Push do `25288e7`** (varredura da dispensa — só commit local; push = deploy
-  na Vercel, precisa de OK). Sem o deploy, os 20 já estão corrigidos no banco,
-  mas os gatilhos novos (desmarcar sozinho, varrer em toda recarga) só valem
-  depois do push.
+- ⏳ **Push do `25288e7` + `78a01ea`** (varredura da dispensa + desmarcar-cobra-
+  print — só commit local; push = deploy na Vercel, precisa de OK). Sem o
+  deploy, os 20 já estão corrigidos no banco, mas os gatilhos novos (varrer em
+  toda recarga, desmarcar sozinho, desmarcar-recusa-print) só valem depois do
+  push.
+- ⏳ **`tests/57` quebrado desde 04/08** (pré-existente, ver leva 3) — corrigir
+  quando o Victor autorizar.
 - ⏳ **Provar o fix da leitura no próximo caso real** (foto legível recusada
   1× → resgatada pelos modelos extras). Sem isso segue sendo teoria+unit.
 - ⏳ **João Gabriel Ferreira reenviar o print certo** (mandou papel de parede).
