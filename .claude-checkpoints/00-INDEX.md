@@ -2,9 +2,38 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-08-18**.
+> Última atualização: **2026-08-19**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 19/08 — os 3 pendentes de ontem fechados + tag "não bate" clicável
+(`95c764e`, só local):** Victor pediu "vamos resolver 123". **(1) Edge fn v32 NO AR** —
+o deploy saiu com ele rodando o comando via `!` (o CLI já estava logado; a hipótese
+"falta login" de ontem estava errada — o bloqueio real é o classificador barrar deploy
+vindo de mim, CLI E MCP; deploy de edge fn é SEMPRE ele com `!`). Conferido por
+conteúdo: `RECUSAS_ATE_DESISTIR = 3` no código deployado. **(2) Prova ao vivo do fix —
+resultado honesto:** 🔑 o print do Gustavo **se resolveu SOZINHO antes do deploy**
+(checked_at 02:15 UTC vs deploy 10:00; leu 1199=1199, o rodízio entre rodadas da fila
+já cobria o caso — o fix NÃO leva o crédito). Caso vivo testado com OK dele: print do
+JOÃO GABRIEL FERREIRA reposto na fila, reprocessado na v32 e **recusado de novo,
+corretamente** — baixada a foto, **não é a tela do app, é o papel de parede do celular
+(Pokémon)**; ele precisa reenviar o print certo. **Fica registrado: ainda não existe
+prova ao vivo do fix** (foto legível resgatada pelos modelos extras) — só unit + o fix
+no ar. **(3) Push do `3c29c0b` JÁ ESTAVA FEITO** (`origin/main = bb7d29f`; o checkpoint
+de ontem listava como pendente por engano) — revalidado: typecheck 0 · build ·
+**1265 unit, 0 falha**. **Em seguida (`95c764e`):** ele mandou print da grade — *"a tag
+de espelho não bate deixe ela para ser clicavel e quando clicar apare o espelho
+infromando o porque de não bate e com opção de validar ele ali"*. 🔑 Tudo que o clique
+precisa **já existia** no modal "Espelhos recebidos" — zero tela nova, zero backend: a
+tag âmbar da grade (`DriverRow`) e o aviso do card mobile (`DriverList`) viraram botão
+que abre o modal **já filtrado naquele driver** (prop `initialBusca` pré-preenche a
+busca que já existia); o botão geral segue abrindo sem filtro. Validado: typecheck 0 ·
+eslint 0 · build · 88 unit da área · **E2E novo `tests/75`** com cliques reais (print
+divergente → tag → clique → modal filtrado com "58 a mais no print" → validar ali →
+tag some, espelho conferido na tela E no banco) · regressão 64 1/1. ⚠️ O 75 deu flaky
+na 1ª rodada (clique de montagem na carga fria do Vite/WSL, flake já documentado no 64
+em 07/08) e passou 1/1 de primeira com Vite quente. ⏳ Push do `95c764e` não feito
+(sem OK). Ver `CHECKPOINT_SESSAO_2026-08-19.md`.
 
 **Sessão 18/08 — filtro por quinzena + migração em massa do saldo herdado
 (`d31f417`, só local):** Victor, olhando o modal "Saldo de quinzenas fechadas"
@@ -795,7 +824,11 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-08-13.md` | **Mais recente.** Presença sem batida: apurado que o dia 4 foi clique humano do 9999 (não bug) e os 3 lançamentos + R$ 450,00 apagados com OK dele · **registrar ponto pelo painel virou exclusivo do 2626** (`5ef68c0` + migration `20260813120000` **em prod**, provada com 6 casos sem gravar nada) · 🔴 **27 pontos reais de hoje apagados por mim** ao promover o login do `tests/40` pra 2626 e armar o "Reset Geral" que era código morto — **restaurados byte a byte** e a função removida do spec | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-19.md` | **Mais recente.** Edge fn **v32 no ar** (deploy sempre o Victor com `!` — classificador barra CLI e MCP vindos de mim) · prova ao vivo do fix da leitura: o caso do Gustavo se resolveu sozinho ANTES do deploy; o print do João Gabriel reprocessado na v32 e recusado **corretamente** (era papel de parede, não a tela do app) — **fix segue sem prova ao vivo** · push do `3c29c0b` já estava feito (pendência de ontem era engano) · **tag "não bate" clicável** (`95c764e`, local): grade e card mobile abrem "Espelhos recebidos" já filtrado no driver, E2E novo `tests/75` | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-18.md` | Filtro por quinzena + migração em massa do saldo herdado (`closedPeriodsDebtScope.ts`, E2E 73) · parser da planilha da LOGGI (`extractLoggi`, hubs misturados passam pela identificação normal) · "ignorar" persistido nas 4 plataformas (migration `driverpay_driver_ignored`, tela "Vínculos de importação", E2E 74) · 24 vínculos LOGGI gravados em prod (nenhum adivinhado) · chave `proof_auto_confirm` ligada + 22 espelhos retroativos · leitura não desiste na 1ª recusa (`3c29c0b`) | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-17.md` | Push do pendente de 15/08 + **61 erros de tipo pré-existentes zerados** (`9c52028`, por causa raiz, sem `as any`) · trava da "Bonificação do Dia" finalizada (`cafea2d`, mesma régua do Reset Geral) · `04-bonus.spec.ts` consertado com `markPresentViaDb` (9999 não marca presença via UI desde 13/08) · dead code do `AttendanceTab` removido, typecheck **zera de vez** · `npm audit fix` 14→6 | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-15.md` | Selo "desconto pendente" da grade alinhado com a régua do modal · ordenação de grupos por estado de pagamento · **marcar pago manual** sem relatório (`MarkPaidModal`) · saldo de quinzenas fechadas: sub-fase A (leitura) + sub-fase B (migration `driverpay_deduction_carryover` **em prod**, carryover entra em `deductionsOf()`) | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-13.md` | Presença sem batida: apurado que o dia 4 foi clique humano do 9999 (não bug) e os 3 lançamentos + R$ 450,00 apagados com OK dele · **registrar ponto pelo painel virou exclusivo do 2626** (`5ef68c0` + migration `20260813120000` **em prod**, provada com 6 casos sem gravar nada) · 🔴 **27 pontos reais de hoje apagados por mim** ao promover o login do `tests/40` pra 2626 e armar o "Reset Geral" que era código morto — **restaurados byte a byte** e a função removida do spec | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-07.md` | Desconto de vale/perda **por pessoa, com saldo** (`driverpay_deduction_ledger`, 3 opções na caixa, padrão "só de quem ainda não foi descontado") · Leva B: espelho segue o saldo e a **nota passa a ler o `printed_total`** em vez de recalcular · **release completo no ar** na ordem migrations → edge fn v31 → Vercel (conferida por conteúdo) · passe visual leva 7: **a Inter entra** (o app não carregava fonte nenhuma) · leva 8 (emojis→ícones) medida e não começada | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-06.md` | Notas atrasadas passam a se anunciar (`d7f2142`, local): o filtro de prazo já existia — o que faltava era o número e o atalho (`Só atrasadas (3)` + faixa "⏰ 3 nota(s) de 2 entregador(es) — Ver quem") · retrato de produção medido (75 · 72 · 3) e atraso conferido como justo · E2E `tests/71` novo com cliques reais · 🔴 espelho do CLAUDIOMAR com prazo em **novembro** (resíduo do `tests/60`, que grava o corte no banco de produção): prazo **corrigido** em prod com backup e o **laço fechado** no teste (`6853a98`), provado ao contrário | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-04.md` | (a sessão atravessou a virada do dia; as levas de 05/08 continuam neste arquivo, §§21-24). Espelho do app da Shopee conferido sozinho — backend do driver (`cb460b8`, **só local, nada no ar**) · conferência pura + fila de reconferência · leitora com provedor trocável (Gemini grátis; sem chave = modo manual) · migration **escrita e não aplicada** · medições reais com a foto do Victor (teste negativo 4/4; cota 20/dia **por modelo**) · datas das quinzenas corrigidas em prod · release completo no ar (migrations + edge fn + cron + push) · **tela do líder de grupo grande revista** (`4abdad7`) com E2E 6/6 em chromium e mobile · **05/08:** NF x desconto PNR, espelho de quem não entrega, busca nos modais, cadastro tudo-ou-nada, **nota escaneada lida pela IA** e **uma nota por vaga + print só da Shopee** (§24) | 🟢 ATIVO |
