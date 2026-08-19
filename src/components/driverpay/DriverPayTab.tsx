@@ -56,6 +56,7 @@ import {
   listDeliveryProofs,
   platformsWithProofHistory,
   requestProofForDrivers,
+  setProofStatus,
   type MirrorPublicationRow,
   type DeliveryProofRow,
 } from '../../services/driverPay';
@@ -105,6 +106,7 @@ import {
   type PaymentMark,
   proofForaPorSemGrupo,
   proofDispensadoSemPacote,
+  printsParaRecusarAoDesmarcar,
   platformPackages,
   expectedProofPlatforms,
   melhorEstado,
@@ -287,6 +289,12 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   useEffect(() => {
     proofRequestsRef.current = proofRequests;
   }, [proofRequests]);
+  // Prints crus numa ref: o desmarcar do espelho (que pode recusar print) roda em
+  // `useCallback` com o mesmo motivo acima.
+  const proofRowsRef = useRef<DeliveryProofRow[]>([]);
+  useEffect(() => {
+    proofRowsRef.current = proofRows;
+  }, [proofRows]);
   useEffect(() => {
     selectedPeriodIdRef.current = selectedPeriodId;
   }, [selectedPeriodId]);
@@ -841,10 +849,44 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const onToggleEspelho = useCallback(
     async (paymentId: string, current: boolean) => {
       if (!company?.id || !hasPermission('driverpay.editDriver')) return;
+      // ── Desmarcar quem está COBRADO derruba o print e volta a pedir (19/08/2026) ──
+      // Pedido do Victor: "se o check for desmarcado e tiver pacotes da shopee o
+      // sistema volta a cobrar o print daquele líder". O portal só volta a pedir
+      // quando não sobra print de pé, então os prints das plataformas cobradas viram
+      // 'rejeitado' — com confirmação antes, porque o entregador VÊ a recusa no app.
+      let paraRecusar: string[] = [];
+      if (current) {
+        const row = rowsRef.current.find((r) => r.paymentId === paymentId);
+        if (row) {
+          const semPlanilhaAgora = plataformasSemPlanilha(
+            rowsRef.current,
+            platformsRef.current.map((p) => p.name),
+          );
+          paraRecusar = printsParaRecusarAoDesmarcar(
+            row, proofRequestsRef.current, proofRowsRef.current, semPlanilhaAgora,
+          );
+        }
+        if (paraRecusar.length > 0) {
+          const ok = window.confirm(
+            'Desmarcar vai RECUSAR o print já enviado deste entregador, e o app vai pedir um novo. Continuar?',
+          );
+          if (!ok) return;
+        }
+      }
       // Atualiza otimista (linha fica verde na hora) e persiste; em erro, recarrega e reverte.
       setRows((prev) => prev.map((r) => (r.paymentId === paymentId ? { ...r, espelhoConferido: !current } : r)));
       try {
         await setEspelhoConferido(company.id, paymentId, !current, userId);
+        for (const proofId of paraRecusar) {
+          await setProofStatus(
+            company.id, proofId, 'rejeitado', userId,
+            'O CD pediu um novo print deste período.',
+          );
+        }
+        if (paraRecusar.length > 0) {
+          toast('Print recusado — o app vai pedir um novo do entregador.', { icon: '⚠️', duration: 8000 });
+          await reloadProofs(selectedPeriodIdRef.current);
+        }
         await reloadPayments();
       } catch (e) {
         console.error('Erro ao atualizar espelho conferido:', e);
@@ -852,7 +894,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         reloadPayments();
       }
     },
-    [company?.id, hasPermission, userId, reloadPayments],
+    [company?.id, hasPermission, userId, reloadPayments, reloadProofs],
   );
 
   const onToggleExpand = useCallback((paymentId: string) => {

@@ -879,6 +879,34 @@ export function proofDispensadoSemPacote(
 }
 
 /**
+ * Prints a RECUSAR quando o operador DESMARCA o "espelho conferido" (19/08/2026, pedido
+ * do Victor: *"se o check for desmarcado e tiver pacotes da shopee o sistema volta a
+ * cobrar o print daquele líder"*).
+ *
+ * Desmarcar sinaliza "quero conferência nova" — mas o portal só volta a pedir o print
+ * quando não sobra nenhum enviado de pé (`sent === 0 && rejected > 0`, no cartão do
+ * app). Então os prints ainda de pé (recebido/validado) das plataformas COBRADAS dele
+ * viram 'rejeitado', e o app volta a cobrar sozinho, mostrando o motivo ao entregador.
+ *
+ * Sem plataforma cobrada (ex.: dispensado sem pacote, ou ninguém pediu print), devolve
+ * vazio — desmarcar segue sendo só o check, sem tocar em print nenhum.
+ */
+export function printsParaRecusarAoDesmarcar(
+  row: DriverRowData,
+  requests: readonly ProofRequest[],
+  prints: readonly { id: string; driverId: string; platformName: string; status: string }[],
+  semPlanilha?: ReadonlySet<string>,
+): string[] {
+  const cobradas = new Set(expectedProofPlatforms(row, requests, semPlanilha));
+  if (cobradas.size === 0) return [];
+  return prints
+    .filter((p) => p.driverId === row.driverId)
+    .filter((p) => p.status !== 'rejeitado')
+    .filter((p) => cobradas.has(p.platformName))
+    .map((p) => p.id);
+}
+
+/**
  * Plataformas em que este driver TERIA pacote pra mandar, mas ficou de fora **por não estar
  * em grupo nenhum**. Não entra no contador de prints (senão ele nunca fecharia — decisão do
  * Victor: "marca separado, fora da conta"); serve pro selo cinza "sem grupo — não pedido"
