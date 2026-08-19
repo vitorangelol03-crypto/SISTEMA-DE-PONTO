@@ -173,8 +173,65 @@ Conferido na tela real com clique: **31 cartões** com o grupo visível
 print têm grupo cadastrado. typecheck 0 · eslint 0 · build · **1261
 unit, 0 falha**. Push `1deb545..f27d65e`.
 
-## 6. Pendências
+## 6. Perguntas dele, respondidas com evidência (nada mudou no código)
 
+**(a) "Driver novo entra sozinho no pedido de espelho? E quem eu ponho num
+grupo depois?"** — Lido o `proofSlots` da edge fn **deployada** (não o
+repo). **Sim pras duas: tudo é recalculado quando o driver abre o app**,
+nada fica congelado. O pedido "pra todos" é UMA linha com `driver_id=null`.
+Mas o driver só aparece se: (1) tiver **pagamento na quinzena**, (2) estiver
+**em grupo**, (3) tiver **pacote na plataforma** (ou a planilha ainda não ter
+chegado). 🔑 **Criar o cadastro sozinho NÃO basta** — sem pagamento na
+quinzena, não aparece nada. E o pedido "pra todos" **só cobra quem está em
+grupo** (quem não está fica de fora, calado). Caso real medido: 96 com
+pacote SHOPEE, 95 em grupo → **1 fora, o Rhuan Soares Vitor, com 444
+pacotes**, sem pedido chegando pra ninguém.
+
+**(b) "Os que estão na fila são cota da API estourada?"** — **Não.** 77
+leituras hoje contra ~180/dia de capacidade, e o padrão não é de cota (às
+22h: 9 prints, 7 leram, 2 falharam — cota estourada falharia tudo a partir
+de um ponto). Dos 5 na fila: **3 são print do período errado** (VITOR DA LUZ
+2×, Claudio Carlos — o app estava com data errada, já recusados com o motivo
+explicado ao entregador) e **2 são falha de leitura** (Gustavo Henrique,
+João Victor).
+
+## 7. `3c29c0b` — a leitura não desiste mais na primeira recusa
+
+Victor mandou a foto que falhou (a do Gustavo) e perguntou se dava pra
+melhorar em casos extremos. 🔑 **A causa não era "foto ruim", era uma
+linha:** `if (r.legivel === false) return true;` — o PRIMEIRO modelo que
+dissesse "não consegui ler" encerrava o rodízio, e os outros 8 nunca eram
+tentados. O comentário justificava com *"insistir daria o mesmo resultado"*,
+mas isso era **suposição, nunca medida**.
+
+**A foto refuta:** é foto da tela de OUTRO celular (sombra atravessando,
+torta, com reflexo) e o número está perfeitamente legível — **1199, batendo
+EXATO com a planilha**, período 16/07-31/07 correto. Estava certo e foi
+descartado.
+
+Mudanças: (1) recusa não encerra mais — tenta **mais 2 modelos**
+(`RECUSAS_ATE_DESISTIR=3`, decisão dele entre 1/2/todos); (2) o prompt
+mandava recusar imagem *"escura demais"* e o modelo obedecia — agora ele
+sabe que sombra/reflexo/torta/capa aparecendo são **normais** em foto-de-tela.
+⚠️ A trava *"NUNCA adivinhe um número"* **continua**, e as proteções de
+negócio não mudaram (número ≠ planilha segue não marcando; período errado
+segue recusando). Teste antigo **reescrito, não afrouxado** — ele gravava a
+suposição refutada; o motivo está escrito nele. 5 unit novos/reescritos ·
+typecheck 0 · eslint 0 · **1265 unit, 0 falha**.
+
+## 8. Pendências (para amanhã)
+
+- 🔴 **DEPLOY DA EDGE FN PENDENTE** — o `3c29c0b` **não está no ar**. Edge
+  function não sobe com push. Victor rodou o comando mas **não pegou**:
+  a fn segue **v31, de 07/08** (se tivesse subido viraria v32 com data de
+  hoje). Provável falta de `npx supabase login`. Comando:
+  `npx supabase functions deploy driver-public-api --no-verify-jwt --project-ref flcncdidxmmornkgkfbb`
+  ⚠️ **Não colar token no chat** (aconteceu em 07/08, teve que revogar) —
+  `supabase login` sozinho resolve pelo navegador.
+- ⏳ **Provar a melhoria depois do deploy**: o print do Gustavo está na fila;
+  forçar a reconferência e ver se passa a ler **1199**. Sem isso, a melhoria
+  é só teoria — os unit provam a lógica, não a leitura real.
+- ⏳ **Push do `3c29c0b`** (só commit local).
 - ⏳ **A planilha real da LOGGI ainda NÃO foi importada** — isso cria
   drivers/pacotes de verdade, é o Victor quem sobe pelo botão "Importar
   planilha". Os 27 casam sozinhos; o Fabrício (ambíguo) e os 24
@@ -182,6 +239,11 @@ unit, 0 falha**. Push `1deb545..f27d65e`.
 - ⏳ **Os R$ 7,79 do Cícero** (2ª Quinzena Junho) ainda não migrados —
   única dívida em aberto no sistema inteiro. Botão "Saldo de quinzenas
   fechadas" → destino "2 quinzena de julho" → Migrar.
+- ⏳ **O print do Gustavo pode ser aceito na mão** — já conferi o número
+  (1199 = 1199) e o período. É um clique no ✓; com a chave de auto-marcação
+  agora ligada, o espelho fica verde.
+- ⏳ **Rhuan Soares Vitor sem grupo** (444 pacotes SHOPEE) — não recebe
+  pedido de espelho enquanto não entrar num grupo.
 - ℹ️ **Achado sem investigar** (não urgente, não afeta pagamento):
   `bonuses` tem registro em março/abril mas nenhum `payments.bonus > 0`
   depois de 06/01 — ou foram removidos depois (58 remoções, última em

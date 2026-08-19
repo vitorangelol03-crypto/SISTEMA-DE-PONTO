@@ -60,8 +60,19 @@ marcar os 22 retroativos (ligar sozinho não corrige o passado). Backup antes, e
 medido (22 pagamentos, só na quinzena ABERTA), aplicado e conferido. Os 33 restantes
 seguem sem marcar porque **não bateram** — correto. Nome do grupo: `groupName` já vinha
 nas props, só não era mostrado (zero query nova) + busca acha por grupo. Conferido na
-tela real: 31 cartões com grupo. ⏳ **A planilha real ainda NÃO foi importada** e **os
-R$ 7,79 do Cícero ainda não migrados** — as duas coisas são cliques do Victor.
+tela real: 31 cartões com grupo. **Perguntas dele respondidas com evidência (sem mexer
+em código):** driver novo/pessoa que entra em grupo **entram sozinhos** no pedido de
+espelho (tudo recalculado quando o app abre) — mas só com pagamento na quinzena + em
+grupo + com pacote; achado: **Rhuan Soares Vitor, 444 pacotes, sem grupo → não recebe
+pedido**. E a fila **não é cota de API** (77 leituras de ~180/dia): 3 são print de
+período errado, 2 são falha de leitura. **Por fim (`3c29c0b`, só local e NÃO no ar):**
+🔑 a leitura desistia na PRIMEIRA recusa (`if (r.legivel === false) return true`) — os
+outros 8 modelos nunca eram tentados, com a justificativa "daria o mesmo resultado" que
+nunca foi medida. A foto do Gustavo refuta: número perfeitamente legível (**1199 = exato
+da planilha**) descartado por modelo conservador. Agora tenta mais 2 modelos + prompt
+sabe que sombra/reflexo/torta é normal em foto-de-tela; trava "nunca adivinhe" mantida.
+1265 unit. 🔴 **DEPLOY NÃO PEGOU** — fn segue v31 de 07/08 (provável falta de
+`supabase login`); sem deploy a melhoria é só teoria, e falta provar na foto do Gustavo.
 Ver `CHECKPOINT_SESSAO_2026-08-18.md`.
 
 **Sessão 17/08 (continuação) — trava de bonificação da outra janela, finalizada
