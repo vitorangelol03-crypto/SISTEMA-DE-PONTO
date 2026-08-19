@@ -145,13 +145,20 @@ sessão; fix = mirar a plataforma pelo nome em vez de posição.
   contém o texto novo "Clique para ver o motivo e validar o espelho";
   na 1ª checagem o site ainda servia o bundle velho (`YtdrweZ6`), na 2ª
   (~20s depois) já tinha virado.
-- ⏳ **Push do `25288e7` + `78a01ea`** (varredura da dispensa + desmarcar-cobra-
-  print — só commit local; push = deploy na Vercel, precisa de OK). Sem o
-  deploy, os 20 já estão corrigidos no banco, mas os gatilhos novos (varrer em
-  toda recarga, desmarcar sozinho, desmarcar-recusa-print) só valem depois do
-  push.
-- ⏳ **`tests/57` quebrado desde 04/08** (pré-existente, ver leva 3) — corrigir
-  quando o Victor autorizar.
+- ✅ **Push FEITO com OK do Victor** (`67c2594..1de8407`: varredura da dispensa
+  + desmarcar-cobra-print + checkpoints). **Vercel conferida POR CONTEÚDO**:
+  chunk `DriverPayTab-DAz14_WQ.js` do site (idêntico ao build local) com o
+  texto novo "o app volta a pedir o print" — as duas features de hoje estão em
+  produção.
+- ✅ **`tests/57` CONSERTADO com OK do Victor** (`413085c`, pushado): os dois
+  `.last()` posicionais viraram busca pelo NOME (coluna da plataforma pelo
+  cabeçalho; linha da rota pelo valor do input de cidade). A quebra escondia
+  uma SEGUNDA: removida a 1ª causa, o "Remover rota" posicional apagava a rota
+  errada (ordem das rotas muda quando a grade recarrega do banco). ⚠️ Lição
+  anotada no próprio spec: no FILL a âncora posicional é a certa (nada
+  recarregou ainda) — âncora por valor re-resolve no meio do re-render e
+  estoura (tentado e revertido na sessão). **2/2 passed, 2 rodadas seguidas**,
+  incluindo o teste "sessão expirada" que nunca chegava a rodar.
 - ⏳ **Provar o fix da leitura no próximo caso real** (foto legível recusada
   1× → resgatada pelos modelos extras). Sem isso segue sendo teoria+unit.
 - ⏳ **João Gabriel Ferreira reenviar o print certo** (mandou papel de parede).

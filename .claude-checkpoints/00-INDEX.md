@@ -32,9 +32,13 @@ período.") e o portal volta a cobrar sozinho pela regra que já existia
 (`sent===0 && rejected>0`); sem plataforma cobrada, desmarcar segue sendo só o check;
 varredura nunca remarca decisão humana. Validado: typecheck 0 · eslint 0 erros · build ·
 **1281 unit (+8), 0 falha** · **E2E novo `tests/77`** 1/1 · regressão 64/75/76 3/3.
-🔴 **Achado, não corrigido: `tests/57` quebrado DESDE 04/08** (`.last()` posicional ×
-plataforma "Coleta Shopee" criada em prod 04/08 — provado com stash+rerun sem as
-mudanças de hoje). ⏳ Push do `25288e7`+`78a01ea` aguardando OK.
+✅ **Push FEITO com OK dele** (`67c2594..413085c` no total) e **Vercel conferida por
+conteúdo** (chunk `DriverPayTab-DAz14_WQ.js` com os textos novos) — as duas features
+estão em produção. ✅ **`tests/57` consertado com OK dele** (`413085c`): quebrado
+DESDE 04/08 (`.last()` posicional × plataforma "Coleta Shopee" criada em prod —
+provado com stash+rerun), e o conserto expôs uma 2ª quebra igual no "Remover rota"
+(ordem das rotas muda ao recarregar do banco); os dois pontos agora acham
+plataforma/rota pelo NOME — **2/2 passed, 2 rodadas seguidas**.
 Ver `CHECKPOINT_SESSAO_2026-08-19.md`.
 
 **Sessão 19/08 — os 3 pendentes de ontem fechados + tag "não bate" clicável
