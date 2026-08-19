@@ -692,19 +692,33 @@ export const setNotaFiscalStatus = async (
 };
 
 /**
- * Exclui de vez uma nota anexada (ex.: nota errada). Apaga o registro; o arquivo fica
- * órfão no bucket privado (trava do storage não deixa apagar arquivo — inofensivo). O
- * CNPJ volta a aparecer como "faltando" no app pro driver reenviar.
+ * Exclui de vez uma nota anexada (ex.: nota errada) — registro E arquivo (19/08/2026;
+ * o comentário antigo dizia que a "trava do storage" impedia apagar o arquivo, mas a
+ * policy `driverpay_nf_master_all` é FOR ALL e cobre DELETE pro 2626/9999). O CNPJ
+ * volta a aparecer como "faltando" no app pro driver reenviar.
  */
 export const deleteNotaFiscalFile = async (fileId: string, userId: string): Promise<void> => {
   await ensurePerm(userId, 'driverpay.editDriver');
-  const { error } = await supabase.from('driverpay_nota_fiscal_files').delete().eq('id', fileId);
+  const { data: apagada, error } = await supabase
+    .from('driverpay_nota_fiscal_files')
+    .delete().eq('id', fileId)
+    .select('file_path')
+    .maybeSingle();
   if (error) throwDbError(error);
+  // Linha primeiro, arquivo em melhor esforço (mesma regra do deleteDeliveryProof).
+  const path = (apagada as { file_path?: string | null } | null)?.file_path;
+  if (path) {
+    const { error: rmErr } = await supabase.storage.from(NOTA_FISCAL_BUCKET).remove([path]);
+    if (rmErr) console.warn('Não foi possível remover a nota do Storage:', rmErr.message);
+  }
 };
+
+/** Bucket PRIVADO das notas fiscais anexadas pelo driver. */
+const NOTA_FISCAL_BUCKET = 'driverpay-nota-fiscais';
 
 /** Link assinado (bucket privado) pra ver/baixar uma nota. TTL curto. */
 export const notaFiscalFileUrl = async (path: string, expiresSec = 300): Promise<string> => {
-  const { data, error } = await supabase.storage.from('driverpay-nota-fiscais').createSignedUrl(path, expiresSec);
+  const { data, error } = await supabase.storage.from(NOTA_FISCAL_BUCKET).createSignedUrl(path, expiresSec);
   if (error || !data?.signedUrl) throw new Error(`Falha ao gerar link da nota${error ? ': ' + error.message : ''}`);
   return data.signedUrl;
 };
@@ -1220,6 +1234,19 @@ export const updatePeriod = async (
 /** Exclui uma quinzena inteira (pagamentos + pacotes/descontos/vales via cascade + o periodo). So 2626. */
 export const deletePeriod = async (periodId: string, companyId: string, userId: string): Promise<void> => {
   await ensurePerm(userId, 'driverpay.managePeriods');
+  // Caminhos dos ARQUIVOS antes do delete (19/08/2026): o CASCADE apaga as linhas de
+  // prints, notas e publicações do período, e sem isto os arquivos ficavam órfãos nos
+  // buckets pra sempre (achado da limpeza de 280 órfãos acumulados).
+  const [proofs, notas, pubs] = await Promise.all([
+    supabase.from('driverpay_delivery_proofs').select('file_path').eq('period_id', periodId),
+    supabase.from('driverpay_nota_fiscal_files').select('file_path').eq('period_id', periodId),
+    supabase.from('driverpay_mirror_publications').select('pdf_path').eq('period_id', periodId),
+  ]);
+  const paths = (rows: { data: unknown } | null, col: string): string[] =>
+    ((rows?.data ?? []) as Record<string, string | null>[])
+      .map((r) => r[col])
+      .filter((p): p is string => !!p);
+
   const { error: e1 } = await supabase
     .from('driverpay_payments')
     .delete()
@@ -1228,6 +1255,20 @@ export const deletePeriod = async (periodId: string, companyId: string, userId: 
   if (e1) throwDbError(e1);
   const { error: e2 } = await supabase.from('driverpay_periods').delete().eq('id', periodId).eq('company_id', companyId);
   if (e2) throwDbError(e2);
+
+  // Arquivos em melhor esforço, DEPOIS do período sair (falhar aqui = órfão como
+  // antes, nunca linha apontando pro nada). Lotes de 100 por folga do storage.
+  const porBucket: Array<[string, string[]]> = [
+    [PROOF_BUCKET, paths(proofs, 'file_path')],
+    [NOTA_FISCAL_BUCKET, paths(notas, 'file_path')],
+    [DRIVER_MIRRORS_BUCKET, paths(pubs, 'pdf_path')],
+  ];
+  for (const [bucket, lista] of porBucket) {
+    for (let i = 0; i < lista.length; i += 100) {
+      const { error: rmErr } = await supabase.storage.from(bucket).remove(lista.slice(i, i + 100));
+      if (rmErr) console.warn(`Não foi possível remover arquivos do período (${bucket}):`, rmErr.message);
+    }
+  }
 };
 
 // ─── Pagamentos do periodo (grade) ───────────────────────────────────────────
@@ -1833,10 +1874,11 @@ export const unpublishDriverMirror = async (
     .eq('driver_id', driverId);
   if (platformFilter !== undefined) q = q.eq('platform_key', mirrorPlatformKey(platformFilter));
 
-  // Quais espelhos vao sair — preciso saber ANTES do delete pra estornar o livro-caixa.
+  // Quais espelhos vao sair — preciso saber ANTES do delete pra estornar o livro-caixa
+  // e apagar os PDFs do bucket (19/08/2026: antes ficavam órfãos no storage).
   let sel = supabase
     .from('driverpay_mirror_publications')
-    .select('platform_key')
+    .select('platform_key, pdf_path')
     .eq('company_id', companyId).eq('period_id', periodId).eq('driver_id', driverId);
   if (platformFilter !== undefined) sel = sel.eq('platform_key', mirrorPlatformKey(platformFilter));
   const { data: saindo, error: selErr } = await sel;
@@ -1850,11 +1892,20 @@ export const unpublishDriverMirror = async (
     const key = String((p as { platform_key: string | null }).platform_key ?? '');
     await clearMirrorDeductions(companyId, periodId, mirrorLedgerRef(driverId, key));
   }
+  // PDFs em melhor esforço, depois das linhas (falhar aqui = órfão como antes, nunca
+  // publicação apontando pro nada). Republicar regenera o arquivo do zero.
+  const pdfPaths = (saindo ?? [])
+    .map((p) => (p as { pdf_path?: string | null }).pdf_path)
+    .filter((p): p is string => !!p);
+  if (pdfPaths.length > 0) {
+    const { error: rmErr } = await supabase.storage.from(DRIVER_MIRRORS_BUCKET).remove(pdfPaths);
+    if (rmErr) console.warn('Não foi possível remover o PDF do espelho do Storage:', rmErr.message);
+  }
 };
 
 /**
  * Despublica TODOS os espelhos do periodo (limpeza em massa — ex.: publicou errado pra
- * muita gente). Retorna quantos sairam. Os PDFs ficam orfaos no bucket privado (inofensivo).
+ * muita gente). Retorna quantos sairam. Os PDFs saem do bucket junto (19/08/2026).
  */
 export const unpublishAllMirrorsForPeriod = async (
   companyId: string,
@@ -1867,8 +1918,17 @@ export const unpublishAllMirrorsForPeriod = async (
     .delete()
     .eq('company_id', companyId)
     .eq('period_id', periodId)
-    .select('id');
+    .select('id, pdf_path');
   if (error) throwDbError(error);
+  // PDFs em melhor esforço, em lotes (o remove aceita lista; 100 por vez por folga).
+  const pdfPaths = (data ?? [])
+    .map((r) => (r as { pdf_path?: string | null }).pdf_path)
+    .filter((p): p is string => !!p);
+  for (let i = 0; i < pdfPaths.length; i += 100) {
+    const { error: rmErr } = await supabase.storage
+      .from(DRIVER_MIRRORS_BUCKET).remove(pdfPaths.slice(i, i + 100));
+    if (rmErr) console.warn('Não foi possível remover PDFs de espelho do Storage:', rmErr.message);
+  }
   // Nenhum espelho do periodo continua no app: nenhum abate vindo de espelho continua
   // valendo. Os abates de RELATORIO (o dinheiro que ja saiu de fato) ficam intactos.
   const { error: ledErr } = await supabase
@@ -3119,9 +3179,22 @@ export const deleteDeliveryProof = async (
   companyId: string, proofId: string, userId: string,
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.editDriver');
-  const { error } = await supabase
-    .from('driverpay_delivery_proofs').delete().eq('id', proofId).eq('company_id', companyId);
+  const { data: apagado, error } = await supabase
+    .from('driverpay_delivery_proofs')
+    .delete().eq('id', proofId).eq('company_id', companyId)
+    .select('file_path')
+    .maybeSingle();
   if (error) throwDbError(error);
+  // O ARQUIVO sai junto (19/08/2026): antes só a linha era apagada e a foto ficava
+  // órfã no bucket pra sempre. A policy `driverpay_proofs_master_all` é FOR ALL
+  // (cobre DELETE pro 2626/9999) — a "trava do storage" do comentário antigo não
+  // existia. Linha primeiro (a ação que importa), arquivo em melhor esforço: se o
+  // remove falhar fica um órfão como antes, nunca uma linha apontando pro nada.
+  const path = (apagado as { file_path?: string | null } | null)?.file_path;
+  if (path) {
+    const { error: rmErr } = await supabase.storage.from(PROOF_BUCKET).remove([path]);
+    if (rmErr) console.warn('Não foi possível remover o print do Storage:', rmErr.message);
+  }
 };
 
 export const PROOF_BUCKET = 'driverpay-delivery-proofs';
