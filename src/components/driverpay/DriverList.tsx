@@ -700,34 +700,40 @@ export const DriverList: React.FC<DriverListProps> = ({
             : 'Sem nota esperada'}
         </button>
 
-        {/* Espelho do app (print da Shopee) — so informativo no card: quem resolve
-            divergencia e o modal "Espelhos recebidos". */}
-        {proof && proof.expected > 0 && (
+        {/* Espelho do app (print da Shopee). Quando precisa de atencao, o card vira
+            botao (19/08/2026, pedido do Victor): clique abre "Espelhos recebidos" ja
+            filtrado neste driver, com o motivo e a opcao de validar ali. */}
+        {proof && proof.expected > 0 && (proof.needsAttention || proof.rejected > 0) ? (
+          <button
+            type="button"
+            onClick={() => handlers.onVerEspelhoAtencao(row)}
+            data-testid="espelho-atencao"
+            title="Clique para ver o motivo e validar o espelho"
+            className="w-full mb-2 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium min-h-[40px] border bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 hover:border-amber-300"
+          >
+            <AlertTriangle className="w-5 h-5" />
+            {proof.needsAttention
+              ? 'Espelho do app: quantidade diferente'
+              : 'Espelho do app recusado — vai reenviar'}
+          </button>
+        ) : proof && proof.expected > 0 ? (
           <div
             className={`w-full mb-2 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium min-h-[40px] border ${
               proof.complete
                 ? 'bg-green-50 border-green-200 text-green-700'
-                : proof.needsAttention || proof.rejected > 0
-                ? 'bg-amber-50 border-amber-200 text-amber-700'
                 : 'bg-gray-50 border-gray-200 text-gray-500'
             }`}
           >
             {proof.complete
               ? <CheckCircle2 className="w-5 h-5 fill-green-100" />
-              : proof.needsAttention || proof.rejected > 0
-              ? <AlertTriangle className="w-5 h-5" />
               : <Circle className="w-5 h-5" />}
             {proof.complete
               ? 'Espelho do app confere'
-              : proof.needsAttention
-              ? 'Espelho do app: quantidade diferente'
-              : proof.rejected > 0
-              ? 'Espelho do app recusado — vai reenviar'
               : proof.pending > 0
               ? 'Espelho do app: conferindo'
               : `Espelho do app: falta ${proof.missing}`}
           </div>
-        )}
+        ) : null}
 
         {/* Espelho conferido — deixa o card inteiro verde */}
         <button

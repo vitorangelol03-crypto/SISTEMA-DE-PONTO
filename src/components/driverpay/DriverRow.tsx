@@ -468,18 +468,20 @@ export const DriverRow: React.FC<DriverRowProps> = ({
               )}
             </button>
             {!row.espelhoConferido && proofProgress && (proofProgress.needsAttention || proofProgress.rejected > 0) && (
-              <span
+              <button
+                type="button"
+                onClick={() => handlers.onVerEspelhoAtencao(row)}
                 title={
                   proofProgress.rejected > 0
-                    ? 'Print recusado (data errada ou ilegivel) — o entregador precisa reenviar'
-                    : 'O print chegou mas a quantidade NAO bate com a planilha — veja em "Espelhos recebidos"'
+                    ? 'Print recusado (data errada ou ilegivel) — clique para ver o motivo e validar'
+                    : 'O print chegou mas a quantidade NAO bate com a planilha — clique para ver e validar'
                 }
                 data-testid="espelho-atencao"
-                className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold border bg-amber-100 text-amber-700 border-amber-300 whitespace-nowrap"
+                className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold border bg-amber-100 text-amber-700 border-amber-300 whitespace-nowrap hover:bg-amber-200 hover:border-amber-400 cursor-pointer"
               >
                 <AlertTriangle className="w-3 h-3" />
                 {proofProgress.rejected > 0 ? 'recusado' : 'não bate'}
-              </span>
+              </button>
             )}
             {!row.espelhoConferido && semGrupoFora.length > 0 && (
               /* Regra de logistica (04/08/2026): o pedido "pra todos" nao cobra quem esta

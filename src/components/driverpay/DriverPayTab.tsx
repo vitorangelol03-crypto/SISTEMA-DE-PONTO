@@ -217,6 +217,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // Espelho do app da Shopee (print da tela) — 04/08/2026
   const [showSolicitarEspelho, setShowSolicitarEspelho] = useState(false);
   const [showEspelhosRecebidos, setShowEspelhosRecebidos] = useState(false);
+  /** Nome do driver pra abrir "Espelhos recebidos" já filtrado (19/08/2026) — vazio =
+   *  abriu pelo botão geral, sem filtro. */
+  const [espelhosBuscaInicial, setEspelhosBuscaInicial] = useState('');
   /** Plataformas com print solicitado nesta quinzena. Vazio = ninguém pediu ainda. */
   const [proofRequests, setProofRequests] = useState<ProofRequest[]>([]);
   /** Estado do print por `driverId|plataforma`, pra pintar a coluna da grade. */
@@ -917,6 +920,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     [],
   );
 
+  /** Clique na tag "não bate"/"recusado" da grade (19/08/2026): abre o mesmo modal do
+   *  botão "Espelhos recebidos", só que já filtrado neste driver. */
+  const onVerEspelhoAtencao = useCallback((row: DriverRowData) => {
+    setEspelhosBuscaInicial(row.name);
+    setShowEspelhosRecebidos(true);
+  }, []);
+
   const handlers: RowHandlers = useMemo(
     () => ({
       onPackageChange,
@@ -937,6 +947,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onMirror,
       onToggleExpand,
       onMarkPaid,
+      onVerEspelhoAtencao,
     }),
     [
       onPackageChange,
@@ -957,6 +968,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       onMirror,
       onToggleExpand,
       onMarkPaid,
+      onVerEspelhoAtencao,
     ],
   );
 
@@ -1965,7 +1977,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           {selectedPeriod && canMirror && proofRequests.length > 0 && (
             <button
               type="button"
-              onClick={() => setShowEspelhosRecebidos(true)}
+              onClick={() => { setEspelhosBuscaInicial(''); setShowEspelhosRecebidos(true); }}
               title={
                 seloPrints.estado === 'pendente'
                   ? `${seloPrints.numero} print(s) precisando da sua atenção`
@@ -2289,7 +2301,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           periodLabel={selectedPeriod.label}
           rows={rows}
           userId={userId}
-          onClose={() => setShowEspelhosRecebidos(false)}
+          initialBusca={espelhosBuscaInicial}
+          onClose={() => { setShowEspelhosRecebidos(false); setEspelhosBuscaInicial(''); }}
           onChanged={() => { reloadProofs(selectedPeriod.id); reloadPayments(); }}
         />
       )}

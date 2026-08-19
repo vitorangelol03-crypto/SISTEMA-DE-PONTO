@@ -163,6 +163,9 @@ export interface RowHandlers {
   onToggleExpand: (paymentId: string) => void;
   /** Marca este driver como pago SEM gerar relatório (14/08/2026). */
   onMarkPaid: (row: DriverRowData) => void;
+  /** Abre "Espelhos recebidos" já filtrado neste driver (19/08/2026, pedido do Victor:
+   *  a tag "não bate"/"recusado" da grade vira atalho pro espelho, em vez de só avisar. */
+  onVerEspelhoAtencao: (row: DriverRowData) => void;
 }
 
 /** Total de pacotes de uma plataforma somando todas as rotas do driver. */

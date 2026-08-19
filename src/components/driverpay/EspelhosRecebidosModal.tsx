@@ -38,6 +38,8 @@ interface EspelhosRecebidosModalProps {
   /** Linhas da grade — pra saber o que a planilha diz HOJE. */
   rows: DriverRowData[];
   userId: string;
+  /** Nome do driver pra abrir já filtrado (19/08/2026) — clique na tag "não bate" da grade. */
+  initialBusca?: string;
   onClose: () => void;
   onChanged: () => void;
 }
@@ -200,7 +202,7 @@ const SeloConferencia: React.FC<{ p: DeliveryProofRow }> = ({ p }) => {
 };
 
 export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
-  companyId, periodId, periodLabel, rows, userId, onClose, onChanged,
+  companyId, periodId, periodLabel, rows, userId, initialBusca, onClose, onChanged,
 }) => {
   const [carregando, setCarregando] = useState(true);
   const [proofs, setProofs] = useState<DeliveryProofRow[]>([]);
@@ -212,7 +214,9 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
   const [aba, setAba] = useState<'atencao' | 'conferidos' | 'fila' | 'todos'>('atencao');
   // Busca por nome (05/08/2026, pedido do Victor): com 84 prints, achar um entregador
   // rolando a lista não é possível. Filtra enquanto digita e IGNORA ACENTO.
-  const [busca, setBusca] = useState('');
+  // `initialBusca` (19/08/2026) pré-preenche quando o modal abre a partir do clique
+  // na tag "não bate"/"recusado" de um driver específico da grade.
+  const [busca, setBusca] = useState(initialBusca ?? '');
   const [autoConfirm, setAutoConfirm] = useState(true);
   const [urls, setUrls] = useState<Record<string, string>>({});
 
