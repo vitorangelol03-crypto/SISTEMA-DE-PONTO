@@ -41,7 +41,19 @@ recobrança pelo app provada em produção (regra prática: F5 no painel após d
 **E o fix de largura da grade (`08c8c10`, NO AR):** "2.209"/"1322" tampados nas
 caixinhas de pacote — `w-12`+`px-2` → `w-14`+`px-1.5` nas 3 caixas do desktop (mobile
 já era `w-16`); provado com print real da grade e Vercel conferida por conteúdo
-(chunk `B0kdffnH`). ✅ **`tests/57` consertado com OK dele** (`413085c`): quebrado
+(chunk `B0kdffnH`). **Tarde de operação assistida (5ª leva):** recobrança da Celita
+provada ao vivo (líder reenviou em ~6 min) · prints pretos = foto preta REAL e idêntica
+nos 2 (mesmo arquivo, sistema agiu certo) · nota do Willkerson = ele anexou a nº 10
+antiga (robô leu certo), resolvido sozinho · **troca dos espelhos da Andrea feita pela
+UI real** (todas → sem-LOGGI R$ 10.356,81 + só-LOGGI R$ 316,80; notas validadas
+intocadas e ainda batendo — a LOGGI só entrou na planilha depois da publicação da
+manhã). **Fix 2 (`3a711d6`, NO AR): espelho com abate ZERO** imprimia "− R$ 154,79" sem
+subtrair (parecia desconto em dobro; áudio da Andreia) — `deductionsApplied` agora
+respeita o `deductionOverride`; espelho LOGGI dela REPUBLICADO com o papel limpo (PDF
+conferido). **1287 unit (+6), 0 falha**; Vercel conferida (`DriverPayTab-BQ5V-Xmt.js`).
+🔍 Achados anotados sem mexer: abate PARCIAL ainda imprime bruto no resumo (caso raro) ·
+apagar print/nota deixa arquivo órfão no storage · Vite zumbi (nohup) derrubou a máquina
+(load 15) e truncou 2 rodadas da suíte — matar por PID. ✅ **`tests/57` consertado com OK dele** (`413085c`): quebrado
 DESDE 04/08 (`.last()` posicional × plataforma "Coleta Shopee" criada em prod —
 provado com stash+rerun), e o conserto expôs uma 2ª quebra igual no "Remover rota"
 (ordem das rotas muda ao recarregar do banco); os dois pontos agora acham

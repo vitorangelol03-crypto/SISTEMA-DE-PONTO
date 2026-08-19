@@ -156,7 +156,49 @@ build · **print real da grade** (produção, só leitura) com 2.209/747/339
 inteiros · nenhum teste referencia a classe. **Push + Vercel conferida por
 conteúdo** (chunk `DriverPayTab-B0kdffnH.js` com a classe nova).
 
-## 8. Pendências
+## 8. Quinta leva — tarde de operação assistida + 2 fixes no ar
+
+**Operações em produção (pedidos do Victor, um a um):**
+- **Recobrança do print da Celita** (*"solicita o dele de novo para lider"*): print
+  validado dela recusado via SQL (formato do `setProofStatus`, motivo visível no app;
+  estado anterior anotado). **Funcionou ao vivo:** o líder João Gabriel reenviou print
+  novo em ~6 min.
+- **Prints pretos (Bruno Eduardo/Rogério):** *"o sistema bugou ou anexaram foto preta?"*
+  → baixados do storage: **foto 100% preta real** (720×1600, 7,3 KB) e **byte a byte
+  idêntica nos dois** (mesmo arquivo pros 2 cadastros, grupos diferentes). Sistema agiu
+  certo (recusou + acusou duplicidade). 🔍 Achado não corrigido: apagar print/nota pelo
+  painel deixa o ARQUIVO órfão no storage (só a linha sai do banco).
+- **Nota do Willkerson:** robô leu R$ 1.486 e a nota certa era R$ 2.470 → **o robô leu
+  certo**: ele anexou a nota nº 10 (antiga, R$ 1.486) em vez da nº 12 (R$ 2.470, emitida
+  2 min antes). Caso se resolveu sozinho: recusada excluída no painel e a nº 12
+  reenviada e validada.
+- **Troca dos espelhos da Andrea** (*"pode fazer a troca"*): despublicado o "de todas"
+  e publicados **2**: ANJUN+SHOPEE+eMile (R$ 10.356,81 — idêntico ao antigo, a LOGGI
+  dela só entrou na planilha DEPOIS da publicação da manhã; as 2 notas validadas
+  continuam batendo) + LOGGI (R$ 316,80). Feito pela UI real via Playwright; 3 erros de
+  roteiro no caminho (seletor ambíguo ×2, diálogo fecha após despublicar), nenhum tocou
+  dado indevido (banco conferido a cada tentativa). Espelho João Pedro conferido a
+  pedido: era o do GRUPO (3 págs), os R$ 134 do Clemilson estavam na pág. 1-2.
+- **Áudios transcritos** (faster-whisper): João Pedro (2×, "faltam os 134") e Andreia
+  (confirmando desconto na Shopee e LOGGI cheia).
+
+**Fix 1 — largura da grade (`08c8c10`, NO AR):** ver leva 4 (números tampados).
+
+**Fix 2 — espelho com abate ZERO (`3a711d6`, NO AR):** o espelho só-LOGGI da Andrea
+imprimia "Descontos − R$ 154,79" SEM subtrair (316,80 − 154,79 = 316,80 no papel —
+parecia desconto em dobro; ela mandou áudio). Raiz: `deductionsApplied` fixado em
+`includeDeductions`, ignorando o `deductionOverride` da regra de saldo (07/08). Agora
+abate 0 + dívida listada → flag `false` → apresentação de 27/07 ("não abatido", sem
+sinal de menos, faixa amarela). Grupo desce a flag quando NENHUM membro teve abate
+real. **Espelho da Andrea republicado em produção com o papel limpo** (PDF baixado e
+conferido; printed_total inalterado). Validado: typecheck 0 · eslint 0 erros · build ·
+**1287 unit (+6), 0 falha** · Vercel conferida (chunk `DriverPayTab-BQ5V-Xmt.js`).
+⚠️ Limitação anotada: abate PARCIAL (sobra) ainda imprime o bruto no resumo — mesma
+classe, caso raro, não tocado. ⚠️ Lição operacional: 3 Vite zumbis (nohup sobrevive ao
+kill do shell) deixaram o load em 15 e truncaram 2 rodadas da suíte — matar por PID
+(`pgrep -f` se auto-casa quando o padrão aparece na própria linha de comando).
+
+## 9. Pendências
 
 - ✅ **Push do `95c764e` FEITO** (mais tarde no mesmo dia, com OK do Victor):
   revalidado antes (typecheck 0 · build limpo), subiu `bb7d29f..2c5208b` em
