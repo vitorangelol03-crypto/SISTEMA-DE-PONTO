@@ -6,8 +6,30 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
+**Sessão 19/08 (2ª leva) — a dispensa do espelho que nunca disparou (`25288e7`, só
+local; dados JÁ corrigidos em produção):** Victor mandou prints ("esse luis agusto
+ja não era para sistema ter validado…?", "daniel tambem"). 🔑 A feature de dispensa
+de 05/08 **já existia** e pegaria os dois — mas só rodava no `onImported`, e TODAS
+as importações reais (18/08 18:42–19:33) rodaram com `proof_auto_confirm` ainda
+**desligado** (ligado só à noite; ligar não reexecuta nada; o "13:05 de 19/08" era 1
+linha de edição de célula, que não dispara). **20 entregadores em grupo sem pacote
+SHOPEE presos sem marca.** Decisões dele: marcar os 20 (✅ **feito em produção**,
+dry-run antes, backup em `backups/2026-08-19-espelho-dispensa/`; quinzena ficou 100
+'auto' + 2 manuais + 16 corretos sem marca), só quem tem grupo (Cícero/Wender fora),
+e **desmarcar sozinho** quem ganhar pacote depois (o portal volta a pedir o print
+sozinho — pedido de pé + pacote > 0). Código: varredura virou `useEffect` da grade
+(roda em toda recarga; sem candidato não escreve), sentido novo de desmarcar só
+desfaz marca `'auto'` (humano intocado nos dois sentidos; print validado cobrindo
+tudo mantém), `espelho_conferido_by` subiu até a grade. Validado: typecheck 0 ·
+eslint 0 erros · build · **1273 unit (+8), 0 falha** · **E2E novo `tests/76`**
+(pedido por grupo → marca sozinho SEM importar → ganha pacote → desmarca → zera →
+remarca, banco e tela conferidos) 1/1 · regressão 64 e 75 2/2. Respondido no meio:
+desmarcar espelho na mão NÃO gera nova solicitação (independentes; print novo se
+exige RECUSANDO o print no modal). ⏳ Push do `25288e7` aguardando OK.
+Ver `CHECKPOINT_SESSAO_2026-08-19.md`.
+
 **Sessão 19/08 — os 3 pendentes de ontem fechados + tag "não bate" clicável
-(`95c764e`, só local):** Victor pediu "vamos resolver 123". **(1) Edge fn v32 NO AR** —
+(`95c764e`, pushado + Vercel conferida):** Victor pediu "vamos resolver 123". **(1) Edge fn v32 NO AR** —
 o deploy saiu com ele rodando o comando via `!` (o CLI já estava logado; a hipótese
 "falta login" de ontem estava errada — o bloqueio real é o classificador barrar deploy
 vindo de mim, CLI E MCP; deploy de edge fn é SEMPRE ele com `!`). Conferido por

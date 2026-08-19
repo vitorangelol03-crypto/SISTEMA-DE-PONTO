@@ -64,7 +64,52 @@ conferido na tela E no banco) · regressão 64 1/1. ⚠️ O 75 deu flaky na 1ª
 rodada (clique de montagem na carga fria do Vite/WSL — mesmo flake
 documentado do 64 em 07/08); rerodado com Vite quente: 1/1 de primeira.
 
-## 5. Pendências
+## 5. Segunda leva do dia — dispensa do espelho que nunca disparou (`25288e7`, só local)
+
+Victor mandou prints da grade: *"esse luis agusto ja não era para sistema ter
+validado e marcado espelho dele sozinho?"* (e depois "daniel tambem").
+
+🔑 **A feature JÁ EXISTIA** (`marcarEspelhoPorDispensa`, decisão dele de 05/08:
+0 pacote na plataforma cobrada = validado). **Raiz de não ter disparado, provada
+pela linha do tempo do banco:** a varredura só rodava no `onImported` das duas
+janelas de importação; TODAS as importações reais da quinzena foram 18/08
+18:42–19:33, quando o `proof_auto_confirm` ainda estava **desligado** (ligado só
+à noite); ligar a chave não reexecuta nada, e o que parecia reimportação em
+19/08 13:05 UTC era **1 linha** (edição de célula, que não dispara). Resultado:
+**20 entregadores em grupo sem pacote SHOPEE presos sem marca** — Daniel e Luiz
+Augusto entre eles — enquanto os 80 com Shopee foram marcados pelo caminho do
+print.
+
+**Decisões dele:** (1) marcar os 20 retroativos → **feito em produção** com a
+mesma régua do app (dry-run antes, ids idênticos, backup + rollback em
+`backups/2026-08-19-espelho-dispensa/`); quinzena ficou 100 'auto' + 2 manuais +
+16 sem marca (14 devendo print de verdade + Cícero/Wender). (2) Só quem tem
+grupo — Cícero e Wender ficam fora (regra de 04/08 mantida). (3) Quem foi
+dispensado e depois **ganha pacote** é **desmarcado sozinho** e o portal volta a
+pedir o print (pedido de pé + pacote > 0 = slot reaparece sozinho; nenhum pedido
+novo é criado).
+
+**Código (`25288e7`):** varredura virou `useEffect` da grade — roda em qualquer
+recarga (importação, chave ligada, pedido criado, célula editada); sem candidato
+não escreve nada. Sentido novo de DESMARCAR (`pagamentosParaDesmarcarPorDispensa`
++ `desmarcarEspelhoPorDispensa`): só desfaz marca `'auto'`, nunca de humano (nos
+dois sentidos), e quem tem print validado cobrindo tudo mantém a marca.
+`DriverRowData`/`DriverPayment` ganharam `espelho_conferido_by` (o select `*` já
+trazia; campo opcional pra não quebrar fixtures).
+
+**Pergunta dele no meio, respondida:** desmarcar espelho na mão NÃO dispara nova
+solicitação (são independentes; pra exigir print novo o caminho é RECUSAR o
+print no modal), e a varredura respeita desmarcação humana.
+
+Validado: typecheck 0 · eslint 0 erros (6 warnings pré-existentes) · build ·
+**1273 unit (+8), 0 falha** · **E2E novo `tests/76`** com cliques reais (pedido
+por grupo → Y sem pacote marcado SOZINHO sem importar nada → X com pacote segue
+pendente → Y ganha pacote e é desmarcado → zera e remarca; banco e tela
+conferidos em cada passo) 1/1 · regressão 64 e 75 2/2. ⚠️ tests/76 falhou 1× na
+primeira rodada por ler o cabeçalho da grade antes de uma linha estar visível —
+corrigido no próprio spec (mesma ordem do 75), não era o app.
+
+## 6. Pendências
 
 - ✅ **Push do `95c764e` FEITO** (mais tarde no mesmo dia, com OK do Victor):
   revalidado antes (typecheck 0 · build limpo), subiu `bb7d29f..2c5208b` em
@@ -73,6 +118,10 @@ documentado do 64 em 07/08); rerodado com Vite quente: 1/1 de primeira.
   contém o texto novo "Clique para ver o motivo e validar o espelho";
   na 1ª checagem o site ainda servia o bundle velho (`YtdrweZ6`), na 2ª
   (~20s depois) já tinha virado.
+- ⏳ **Push do `25288e7`** (varredura da dispensa — só commit local; push = deploy
+  na Vercel, precisa de OK). Sem o deploy, os 20 já estão corrigidos no banco,
+  mas os gatilhos novos (desmarcar sozinho, varrer em toda recarga) só valem
+  depois do push.
 - ⏳ **Provar o fix da leitura no próximo caso real** (foto legível recusada
   1× → resgatada pelos modelos extras). Sem isso segue sendo teoria+unit.
 - ⏳ **João Gabriel Ferreira reenviar o print certo** (mandou papel de parede).
