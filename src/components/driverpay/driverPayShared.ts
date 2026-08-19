@@ -1367,6 +1367,9 @@ export function buildDriverMirrorData(
       discountsValue: totals.discounts,
       valesValue: totals.vales,
       toReceive: totals.net,
+      // O que a regra de saldo REALMENTE abateu (19/08/2026) — o PDF usa pra detectar
+      // abate parcial e imprimir a conta que fecha (ver partialDeduction).
+      deductedValue: totals.deducted,
     },
     // false = descontos/vales aparecem listados mas NAO foram abatidos (pagamento parcial).
     //

@@ -37,6 +37,7 @@ import {
   separatedPlatformTotals,
   separatedAmount,
   areDeductionsApplied,
+  partialDeduction,
 } from './driverMirrorGenerator';
 
 // Reexporta os tipos para que consumidores possam importar tudo deste módulo.
@@ -451,6 +452,53 @@ function drawDeferredDeductionsBand(doc: jsPDF, amount: number, y: number): numb
   return y + h + 8;
 }
 
+/**
+ * Faixa do abate PARCIAL (19/08/2026): a regra de saldo abateu só um pedaço da dívida
+ * (o resto não coube no que a pessoa recebe nesta conta). Mesma cara da faixa de abate
+ * adiado, com os três números do caso — pra conta impressa se explicar sozinha.
+ */
+function drawPartialDeductionsBand(
+  doc: jsPDF,
+  parcial: { applied: number; listed: number; remaining: number },
+  y: number,
+): number {
+  const h = 40;
+  const usable = CONTENT_W - 24;
+  doc.setFillColor(...COLOR_NOTICE_BG);
+  doc.rect(X_LEFT, y, CONTENT_W, h, 'F');
+  doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1);
+  doc.rect(X_LEFT, y, CONTENT_W, h, 'S');
+
+  drawSegmentsCentered(
+    doc,
+    fitSegments(
+      doc,
+      [
+        { text: `Dos ${fmtBRL(parcial.listed)} de vales e perdas,`, bold: true, size: 9.5 },
+        { text: fmtBRL(parcial.applied), bold: true, color: COLOR_DANGER, size: 11, padLeft: 4 },
+        { text: 'foi abatido NESTE pagamento', bold: true, size: 9.5, padLeft: 4 },
+      ],
+      usable,
+    ),
+    y + 16,
+  );
+  drawSegmentsCentered(
+    doc,
+    fitSegments(
+      doc,
+      [
+        {
+          text: `Os ${fmtBRL(parcial.remaining)} restantes não couberam nesta conta e serão descontados nos próximos pagamentos.`,
+          size: 9,
+        },
+      ],
+      usable,
+    ),
+    y + 31,
+  );
+  return y + h + 8;
+}
+
 function drawGreenBanner(doc: jsPDF, label: string, value: string, y: number): number {
   const h = 34;
   doc.setFillColor(...COLOR_SUCCESS);
@@ -471,6 +519,10 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   // Pagamento parcial (2026-07-27): false = descontos/vales LISTADOS, mas fora do total.
   const deductionsApplied = areDeductionsApplied(data);
   const deferredTotal = totals.discountsValue + totals.valesValue;
+  // Abate PARCIAL (19/08/2026): a regra de saldo abateu só um pedaço — as linhas ficam
+  // informativas (sem sinal de menos) e o resumo mostra a dívida E o que saiu de verdade.
+  const parcial = partialDeduction(totals, deductionsApplied);
+  const itemComSinal = deductionsApplied && !parcial;
 
   drawCompanyHeader(doc, company);
   drawBand(doc, 'ESPELHO DE PAGAMENTO — DRIVER', period);
@@ -654,17 +706,21 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
     const body: RowInput[] = discounts.map((d) => [
       d.packageId || '—',
       d.description || '—',
-      deductionsApplied ? `- ${fmtBRL(d.value)}` : fmtBRL(d.value),
+      itemComSinal ? `- ${fmtBRL(d.value)}` : fmtBRL(d.value),
     ]);
     const foot: RowInput[] = [
       [
         {
-          content: deductionsApplied ? 'Subtotal de descontos' : 'Subtotal de descontos (NÃO abatido neste pagamento)',
+          content: parcial
+            ? 'Subtotal de descontos (abatido EM PARTE neste pagamento — ver resumo)'
+            : deductionsApplied
+            ? 'Subtotal de descontos'
+            : 'Subtotal de descontos (NÃO abatido neste pagamento)',
           colSpan: 2,
           styles: { halign: 'left' },
         },
         {
-          content: deductionsApplied ? `- ${fmtBRL(totals.discountsValue)}` : fmtBRL(totals.discountsValue),
+          content: itemComSinal ? `- ${fmtBRL(totals.discountsValue)}` : fmtBRL(totals.discountsValue),
           styles: { halign: 'right' },
         },
       ],
@@ -703,17 +759,21 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
     const body: RowInput[] = vales.map((v) => [
       v.date ? formatDateBR(v.date) : '—',
       v.note || '—',
-      deductionsApplied ? `- ${fmtBRL(v.value)}` : fmtBRL(v.value),
+      itemComSinal ? `- ${fmtBRL(v.value)}` : fmtBRL(v.value),
     ]);
     const foot: RowInput[] = [
       [
         {
-          content: deductionsApplied ? 'Subtotal de vales' : 'Subtotal de vales (NÃO abatido neste pagamento)',
+          content: parcial
+            ? 'Subtotal de vales (abatido EM PARTE neste pagamento — ver resumo)'
+            : deductionsApplied
+            ? 'Subtotal de vales'
+            : 'Subtotal de vales (NÃO abatido neste pagamento)',
           colSpan: 2,
           styles: { halign: 'left' },
         },
         {
-          content: deductionsApplied ? `- ${fmtBRL(totals.valesValue)}` : fmtBRL(totals.valesValue),
+          content: itemComSinal ? `- ${fmtBRL(totals.valesValue)}` : fmtBRL(totals.valesValue),
           styles: { halign: 'right' },
         },
       ],
@@ -745,18 +805,38 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
 
   // ── Resumo (theme plain) — idioma holeritePdf ──
   y = ensureSpace(doc, y, 120);
-  const resumoBody: RowInput[] = [
-    [
-      sep.length > 0 ? `Total de pacotes (sem ${sepNames})` : 'Total de pacotes',
-      `+ ${fmtBRL(totals.packagesValue - sepTotal)}`,
-    ],
-    deductionsApplied
-      ? ['Descontos', `- ${fmtBRL(totals.discountsValue)}`]
-      : ['Descontos (não abatidos neste pagamento)', fmtBRL(totals.discountsValue)],
-    deductionsApplied
-      ? ['Vales / adiantamentos', `- ${fmtBRL(totals.valesValue)}`]
-      : ['Vales / adiantamentos (não abatidos neste pagamento)', fmtBRL(totals.valesValue)],
+  // Cada linha declara se o valor dela sai do total (vira vermelho com sinal de menos).
+  // No abate PARCIAL (19/08/2026) a dívida aparece neutra e só a linha "Abatido neste
+  // pagamento" subtrai — é a única conta que fecha com o TOTAL A RECEBER.
+  const resumoLinhas: { rotulo: string; valor: string; abate: boolean }[] = [
+    {
+      rotulo: sep.length > 0 ? `Total de pacotes (sem ${sepNames})` : 'Total de pacotes',
+      valor: `+ ${fmtBRL(totals.packagesValue - sepTotal)}`,
+      abate: false,
+    },
+    ...(parcial
+      ? [
+          {
+            rotulo: 'Vales e perdas da quinzena',
+            valor: fmtBRL(parcial.listed),
+            abate: false,
+          },
+          {
+            rotulo: 'Abatido neste pagamento',
+            valor: `- ${fmtBRL(parcial.applied)}`,
+            abate: true,
+          },
+        ]
+      : [
+          deductionsApplied
+            ? { rotulo: 'Descontos', valor: `- ${fmtBRL(totals.discountsValue)}`, abate: totals.discountsValue > 0 }
+            : { rotulo: 'Descontos (não abatidos neste pagamento)', valor: fmtBRL(totals.discountsValue), abate: false },
+          deductionsApplied
+            ? { rotulo: 'Vales / adiantamentos', valor: `- ${fmtBRL(totals.valesValue)}`, abate: totals.valesValue > 0 }
+            : { rotulo: 'Vales / adiantamentos (não abatidos neste pagamento)', valor: fmtBRL(totals.valesValue), abate: false },
+        ]),
   ];
+  const resumoBody: RowInput[] = resumoLinhas.map((l) => [l.rotulo, l.valor]);
 
   autoTable(doc, {
     startY: y,
@@ -769,15 +849,10 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
       1: { cellWidth: 170, halign: 'right' },
     },
     didParseCell: (cell) => {
-      // Vermelho só quando o valor REALMENTE sai do total; no pagamento parcial ele é
-      // informativo (fica neutro pra não parecer que foi abatido).
-      if (deductionsApplied && cell.section === 'body' && cell.column.index === 1) {
-        if (
-          (cell.row.index === 1 && totals.discountsValue > 0) ||
-          (cell.row.index === 2 && totals.valesValue > 0)
-        ) {
-          cell.cell.styles.textColor = COLOR_DANGER;
-        }
+      // Vermelho só quando o valor REALMENTE sai do total; dívida listada sem abate é
+      // informativa (fica neutra pra não parecer que foi abatida).
+      if (cell.section === 'body' && cell.column.index === 1 && resumoLinhas[cell.row.index]?.abate) {
+        cell.cell.styles.textColor = COLOR_DANGER;
       }
     },
     margin: AUTOTABLE_MARGIN,
@@ -799,6 +874,11 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   if (!deductionsApplied && deferredTotal > 0) {
     y = ensureSpace(doc, y, 60);
     y = drawDeferredDeductionsBand(doc, deferredTotal, y);
+  }
+  // Abate parcial (19/08/2026): explica os três números antes do total verde.
+  if (parcial) {
+    y = ensureSpace(doc, y, 60);
+    y = drawPartialDeductionsBand(doc, parcial, y);
   }
 
   y = ensureSpace(doc, y, 60);
@@ -925,8 +1005,19 @@ function drawGroupSummaryPage(
 
   // Pagamento parcial: o número continua na tabela (o líder precisa ver), com o rótulo
   // dizendo que NÃO saiu deste pagamento e sem o sinal de menos.
-  const signed = (value: number): string =>
-    value > 0 ? (deductionsApplied ? `- ${fmtBRL(value)}` : fmtBRL(value)) : '—';
+  // Por MEMBRO (19/08/2026): quem teve abate zero ou PARCIAL não pode aparecer com o
+  // sinal de menos no valor cheio — o "A Receber" da linha não subtraiu esse número.
+  // O recibo individual (páginas seguintes) explica o caso de cada um.
+  const memberDeductedFully = (d: DriverMirrorData): boolean =>
+    deductionsApplied && areDeductionsApplied(d) && !partialDeduction(d.totals, true);
+  const signedFor = (d: DriverMirrorData, value: number): string =>
+    value > 0 ? (memberDeductedFully(d) ? `- ${fmtBRL(value)}` : fmtBRL(value)) : '—';
+  // Totais agregados (SUBTOTAL e rodapé dos descontos): com NENHUM membro abatendo
+  // cheio, o total também sai sem o sinal de menos — senão a linha do membro fica
+  // neutra e o total abaixo dela "subtrai" um número que não saiu de conta nenhuma.
+  const algumMembroCheio = drivers.some(memberDeductedFully);
+  const signedAgg = (value: number): string =>
+    value > 0 ? (algumMembroCheio ? `- ${fmtBRL(value)}` : fmtBRL(value)) : '—';
   const head: RowInput[] = [
     [
       'Driver',
@@ -946,8 +1037,8 @@ function drawGroupSummaryPage(
       joinRouteCities(d.driver.routes) || '—',
       ...platCols,
       ...zapexCol,
-      signed(d.totals.discountsValue),
-      signed(d.totals.valesValue),
+      signedFor(d, d.totals.discountsValue),
+      signedFor(d, d.totals.valesValue),
       // Valor separado fica FORA do "A Receber" exibido (sai na faixa amarela).
       fmtBRL(d.totals.toReceive - separatedAmount(d.platforms)),
     ];
@@ -960,8 +1051,8 @@ function drawGroupSummaryPage(
       { content: `SUBTOTAL — ${fmtQty(groupTotals.driverCount)} driver(s)`, colSpan: 2 },
       ...footPlatSums.map((v) => ({ content: v })),
       ...(hasZapex ? [{ content: `+ ${fmtBRL(zapexTotal)}` }] : []),
-      { content: signed(groupTotals.discountsValue) },
-      { content: signed(groupTotals.valesValue) },
+      { content: signedAgg(groupTotals.discountsValue) },
+      { content: signedAgg(groupTotals.valesValue) },
       { content: fmtBRL(groupTotals.toReceive - groupSepTotal) },
     ],
   ];
@@ -1047,12 +1138,15 @@ function drawGroupSummaryPage(
     drawSectionTitle(doc, 'DESCONTOS DO GRUPO', y);
 
     const dHead: RowInput[] = [['Driver', 'Código do pacote', 'Marca', 'Observação', 'Valor (R$)']];
+    // Sinal por DONO do item (19/08/2026): item de membro com abate zero/parcial sai
+    // sem o menos — o valor cheio dele não foi subtraído nesta conta.
+    const semSinal = new Set(drivers.filter((d) => !memberDeductedFully(d)).map((d) => d.driver.name));
     const dBody: RowInput[] = shown.map((s) => [
       s.driver,
       s.packageId || '—',
       s.status ?? '—',
       s.description || '—',
-      deductionsApplied ? `- ${fmtBRL(s.value)}` : fmtBRL(s.value),
+      deductionsApplied && !semSinal.has(s.driver) ? `- ${fmtBRL(s.value)}` : fmtBRL(s.value),
     ]);
     const dFoot: RowInput[] = [
       [
@@ -1067,7 +1161,7 @@ function drawGroupSummaryPage(
           styles: { halign: 'left' },
         },
         {
-          content: deductionsApplied ? `- ${fmtBRL(groupTotals.discountsValue)}` : fmtBRL(groupTotals.discountsValue),
+          content: signedAgg(groupTotals.discountsValue),
           styles: { halign: 'right' },
         },
       ],

@@ -105,6 +105,14 @@ export interface DriverMirrorTotals {
    * NÃO entram nesta conta — `toReceive` fica igual a `packagesValue`.
    */
   toReceive: number;
+  /**
+   * Quanto este espelho REALMENTE abateu (19/08/2026) — o número da regra de saldo
+   * (`deductionOverride`), que pode ser MENOR que `discountsValue + valesValue` quando a
+   * dívida não coube no que a pessoa recebe nesta conta ("guardar o que sobrou", 07/08).
+   * Ausente = espelho antigo/caminho sem regra de saldo: abate cheio quando
+   * `deductionsApplied`.
+   */
+  deductedValue?: number;
 }
 
 export interface DriverMirrorCompany {
@@ -188,6 +196,32 @@ export function areDeductionsApplied(
   data: { deductionsApplied?: boolean } | null | undefined,
 ): boolean {
   return data?.deductionsApplied !== false;
+}
+
+/**
+ * Abate PARCIAL (19/08/2026, pedido do Victor): a regra de saldo abateu só um PEDAÇO da
+ * dívida — o resto não coube no que a pessoa recebe nesta conta. Sem este tratamento o
+ * papel imprimia a dívida CHEIA com sinal de menos e o total subtraindo só o pedaço:
+ * a conta impressa não fechava (mesma família do caso "abate zero" da Andrea).
+ *
+ * Devolve os três números do caso (abatido / listado / restante) ou `null` quando NÃO é
+ * parcial: sem `deductedValue` (espelho antigo, abate cheio), abate zero (a flag
+ * `deductionsApplied` já desce e trata), ou abate maior/igual ao listado (cheio).
+ */
+export function partialDeduction(
+  totals: { discountsValue: number; valesValue: number; deductedValue?: number },
+  applied: boolean,
+): { applied: number; listed: number; remaining: number } | null {
+  if (!applied) return null;
+  const a = totals.deductedValue;
+  if (typeof a !== 'number' || !Number.isFinite(a)) return null;
+  const listed = totals.discountsValue + totals.valesValue;
+  if (a <= 0 || a >= listed - 0.005) return null;
+  return {
+    applied: a,
+    listed,
+    remaining: Math.round((listed - a) * 100) / 100,
+  };
 }
 
 // ─── Builders (DriverPayment do serviço → dados de apresentação) ──────────────

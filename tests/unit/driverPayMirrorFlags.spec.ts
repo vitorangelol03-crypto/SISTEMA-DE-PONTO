@@ -13,6 +13,7 @@ import {
   buildGroupMirrorData,
   type DriverRowData,
 } from '../../src/components/driverpay/driverPayShared';
+import { partialDeduction } from '../../src/utils/driverMirrorGenerator';
 import type { Company } from '../../src/services/database';
 import type { DriverPlatform, DriverPaymentPeriod, DriverDiscount } from '../../src/services/driverPay';
 
@@ -175,5 +176,54 @@ describe('deductionsApplied com a regra de saldo (19/08/2026)', () => {
     expect(g.deductionsApplied).toBe(true);
     const paginas = g.drivers.map((d) => d.deductionsApplied);
     expect(paginas).toEqual([true, false]);
+  });
+});
+
+/**
+ * Abate PARCIAL (19/08/2026, pedido do Victor: "conserta o abate parcial também"):
+ * quando a dívida não cabe no que a pessoa recebe, a regra de saldo abate só um pedaço
+ * ("guardar o que sobrou", 07/08). O papel imprimia a dívida CHEIA com sinal de menos e
+ * o total subtraindo só o pedaço — a conta não fechava. Agora o builder expõe o abate
+ * real (`deductedValue`) e `partialDeduction` decide a apresentação.
+ */
+describe('abate parcial no espelho (19/08/2026)', () => {
+  const dividas = [discount({ amount: 48.99 }), discount({ id: 'd2', amount: 105.8 })];
+  const comTaxa = (r: DriverRowData, rates: Record<string, number>): DriverRowData =>
+    ({ ...r, ratesByPlatform: rates } as DriverRowData);
+
+  it('🎯 builder expõe o abate real: dívida 154,79 mas só 20,00 coube (10 pacotes × R$2)', () => {
+    const data = buildDriverMirrorData(
+      comTaxa(row({ SHOPEE: 10 }, dividas), { SHOPEE: 2 }),
+      [platform('SHOPEE')], company, period, undefined, true, 20,
+    );
+    expect(data.deductionsApplied).toBe(true); // abateu de verdade, só que em parte
+    expect(data.totals.deductedValue).toBe(20);
+    expect(data.totals.toReceive).toBe(0); // 20 − 20: nunca fica negativo (regra de 07/08)
+    expect(partialDeduction(data.totals, true)).toEqual({
+      applied: 20, listed: 154.79, remaining: 134.79,
+    });
+  });
+
+  it('abate CHEIO não é parcial (papel segue como sempre)', () => {
+    const data = buildDriverMirrorData(
+      comTaxa(row({ SHOPEE: 100 }, dividas), { SHOPEE: 2 }),
+      [platform('SHOPEE')], company, period, undefined, true, 154.79,
+    );
+    expect(partialDeduction(data.totals, true)).toBeNull();
+  });
+
+  it('abate ZERO não é parcial (a flag deductionsApplied já desce e trata)', () => {
+    expect(partialDeduction({ discountsValue: 100, valesValue: 54.79, deductedValue: 0 }, true)).toBeNull();
+    expect(partialDeduction({ discountsValue: 100, valesValue: 54.79, deductedValue: 20 }, false)).toBeNull();
+  });
+
+  it('espelho antigo (sem deductedValue) segue o comportamento de sempre', () => {
+    expect(partialDeduction({ discountsValue: 100, valesValue: 0 }, true)).toBeNull();
+  });
+
+  it('centavos de arredondamento não viram "parcial" fantasma', () => {
+    expect(
+      partialDeduction({ discountsValue: 100, valesValue: 54.79, deductedValue: 154.789 }, true),
+    ).toBeNull();
   });
 });
