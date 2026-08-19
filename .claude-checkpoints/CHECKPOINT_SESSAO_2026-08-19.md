@@ -136,7 +136,27 @@ do teste caem nela (10×2+5×1=25 ≠ 30 esperado). **Provado sem as mudanças d
 hoje** (`git stash` de src/ + rerun = mesma falha). Não é regressão desta
 sessão; fix = mirar a plataforma pelo nome em vez de posição.
 
-## 7. Pendências
+## 7. Quarta leva — teste ao vivo da Celita + fix de largura da grade
+
+**Celita (teste do Victor em produção):** ele desmarcou o espelho dela ANTES de
+recarregar a página — aba ainda com o bundle velho, então o check apagou mas o
+print seguiu 'validado' (sem recobrança). Pedido dele: *"solicita o dele de novo
+para lider"* → **recusei o print via SQL** (mesmo formato do `setProofStatus`;
+motivo: "O CD pediu um novo print deste período."; estado anterior anotado:
+validado 62=62 às 12:13 UTC). **Funcionou ao vivo:** o líder (João Gabriel)
+**reenviou print novo às 15:51** (na fila) e o Victor validou/marcou às 15:52 —
+a recobrança pelo app está provada em produção. ⚠️ Regra prática: depois de
+deploy, **F5 no painel** antes de testar feature nova.
+
+**Fix de largura (`08c8c10`, NO AR):** print dele mostrava "2.209"/"1322"
+tampados na grade. As 3 caixas de pacote do desktop usavam `w-12`+`px-2` (com
+borda 2px sobravam ~28px). Agora `w-14`+`px-1.5` (~40px úteis, cabe até 9.999);
+mobile já era `w-16`; tabela tem `overflow-x-auto`. Validado: typecheck 0 ·
+build · **print real da grade** (produção, só leitura) com 2.209/747/339
+inteiros · nenhum teste referencia a classe. **Push + Vercel conferida por
+conteúdo** (chunk `DriverPayTab-B0kdffnH.js` com a classe nova).
+
+## 8. Pendências
 
 - ✅ **Push do `95c764e` FEITO** (mais tarde no mesmo dia, com OK do Victor):
   revalidado antes (typecheck 0 · build limpo), subiu `bb7d29f..2c5208b` em

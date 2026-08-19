@@ -34,7 +34,14 @@ varredura nunca remarca decisão humana. Validado: typecheck 0 · eslint 0 erros
 **1281 unit (+8), 0 falha** · **E2E novo `tests/77`** 1/1 · regressão 64/75/76 3/3.
 ✅ **Push FEITO com OK dele** (`67c2594..413085c` no total) e **Vercel conferida por
 conteúdo** (chunk `DriverPayTab-DAz14_WQ.js` com os textos novos) — as duas features
-estão em produção. ✅ **`tests/57` consertado com OK dele** (`413085c`): quebrado
+estão em produção. **Prova ao vivo da recobrança (4ª leva):** Victor testou na Celita
+com a aba ainda no bundle velho (check apagou, print ficou de pé); a pedido dele o
+print foi recusado via SQL e **o líder João Gabriel reenviou print novo em ~6 min** —
+recobrança pelo app provada em produção (regra prática: F5 no painel após deploy).
+**E o fix de largura da grade (`08c8c10`, NO AR):** "2.209"/"1322" tampados nas
+caixinhas de pacote — `w-12`+`px-2` → `w-14`+`px-1.5` nas 3 caixas do desktop (mobile
+já era `w-16`); provado com print real da grade e Vercel conferida por conteúdo
+(chunk `B0kdffnH`). ✅ **`tests/57` consertado com OK dele** (`413085c`): quebrado
 DESDE 04/08 (`.last()` posicional × plataforma "Coleta Shopee" criada em prod —
 provado com stash+rerun), e o conserto expôs uma 2ª quebra igual no "Remover rota"
 (ordem das rotas muda ao recarregar do banco); os dois pontos agora acham
