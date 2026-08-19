@@ -13,7 +13,9 @@ import {
   DEFAULT_GEMINI_MODELS,
   parseGeminiResponse,
   PROOF_PROMPT,
+  readingIsComplete,
   readingIsUsable,
+  RECUSAS_ATE_DESISTIR,
   visionConfigFromEnv,
 } from '../../supabase/functions/_shared/visionRead';
 
@@ -103,6 +105,22 @@ describe('buildGeminiBody', () => {
     expect(PROOF_PROMPT).toContain('Em Rota');
     expect(PROOF_PROMPT).toContain('NUNCA adivinhe');
   });
+
+  /**
+   * 18/08/2026 — o print do Gustavo (foto da tela de OUTRO celular, com sombra
+   * atravessando) voltou "ilegivel" com o numero perfeitamente visivel. O pedido
+   * antigo mandava recusar imagem "escura demais", e ele estava obedecendo.
+   */
+  it('🎯 o pedido diz que sombra/reflexo/torta em FOTO DA TELA nao e motivo pra recusar', () => {
+    expect(PROOF_PROMPT).toContain('FOTO DA TELA');
+    expect(PROOF_PROMPT.toLowerCase()).toContain('sombra');
+    expect(PROOF_PROMPT.toLowerCase()).toContain('reflexo');
+    expect(PROOF_PROMPT).toContain('NADA DISSO, sozinho, e motivo pra dizer que e ilegivel');
+  });
+
+  it('mesmo mais permissivo, a trava contra chutar numero CONTINUA', () => {
+    expect(PROOF_PROMPT).toContain('NUNCA adivinhe ou estime um numero');
+  });
 });
 
 describe('parseGeminiResponse', () => {
@@ -131,20 +149,38 @@ describe('parseGeminiResponse', () => {
   });
 });
 
-describe('readingIsUsable — quando vale gastar outra cota', () => {
-  it('leitura completa serve', () => {
-    expect(readingIsUsable({ legivel: true, entregues: 1808, periodoInicio: '2026-07-01', periodoFim: '2026-07-15' })).toBe(true);
+describe('readingIsComplete — o que ENCERRA o rodizio', () => {
+  it('leitura completa (numero + as duas datas) encerra', () => {
+    expect(readingIsComplete({ legivel: true, entregues: 1808, periodoInicio: '2026-07-01', periodoFim: '2026-07-15' })).toBe(true);
   });
 
-  it('"nao consegui ler" e resposta LEGITIMA — nao gasta outra tentativa', () => {
-    // A foto e ruim mesmo (etiqueta de pacote, foto tremida). Insistir em outro
-    // modelo daria o mesmo resultado e queimaria cota do dia a toa.
-    expect(readingIsUsable({ legivel: false, entregues: null, periodoInicio: null, periodoFim: null })).toBe(true);
+  /**
+   * 🔑 MUDOU EM 18/08/2026 — antes isto era `true` ("a foto e ruim mesmo, insistir
+   * daria o mesmo resultado e queimaria cota"). Essa frase era SUPOSICAO, nunca foi
+   * medida, e um caso real provou o contrario: o print do Gustavo Henrique (foto da
+   * tela de outro celular, sombra atravessando, torta, com reflexo) tem o numero
+   * perfeitamente legivel — 1199, batendo EXATO com a planilha — e mesmo assim
+   * voltou "ilegivel" na primeira tentativa.
+   *
+   * Modelo conservador nao e o mesmo que foto ruim. Agora recusa NAO encerra: o
+   * rodizio tenta outros modelos (ver RECUSAS_ATE_DESISTIR).
+   */
+  it('🎯 "nao consegui ler" NAO encerra mais — outro modelo pode conseguir', () => {
+    expect(readingIsComplete({ legivel: false, entregues: null, periodoInicio: null, periodoFim: null })).toBe(false);
   });
 
-  it('leitura pela metade NAO serve — tenta o proximo modelo', () => {
-    expect(readingIsUsable({ legivel: true, entregues: 1808, periodoInicio: '2026-07-01' })).toBe(false);
-    expect(readingIsUsable({ legivel: true, entregues: null, periodoInicio: '2026-07-01', periodoFim: '2026-07-15' })).toBe(false);
-    expect(readingIsUsable(null)).toBe(false);
+  it('leitura pela metade NAO encerra — tenta o proximo modelo', () => {
+    expect(readingIsComplete({ legivel: true, entregues: 1808, periodoInicio: '2026-07-01' })).toBe(false);
+    expect(readingIsComplete({ legivel: true, entregues: null, periodoInicio: '2026-07-01', periodoFim: '2026-07-15' })).toBe(false);
+    expect(readingIsComplete(null)).toBe(false);
+  });
+
+  it('readingIsUsable (nome antigo) segue existindo e responde igual', () => {
+    expect(readingIsUsable({ legivel: true, entregues: 9, periodoInicio: '2026-07-01', periodoFim: '2026-07-15' })).toBe(true);
+    expect(readingIsUsable({ legivel: false, entregues: null, periodoInicio: null, periodoFim: null })).toBe(false);
+  });
+
+  it('a politica e desistir na 3a recusa (decisao do Victor: "mais 2 modelos")', () => {
+    expect(RECUSAS_ATE_DESISTIR).toBe(3);
   });
 });

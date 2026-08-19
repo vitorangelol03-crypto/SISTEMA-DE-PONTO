@@ -130,10 +130,17 @@ Extraia EXATAMENTE tres informacoes:
    ATENCAO ao formato: "01/07/2026" e dia/mes/ano (1 de julho), nao mes/dia/ano.
 
 3. "legivel": true se voce conseguiu ler com confianca os tres valores acima; false se a imagem
-   esta borrada, cortada, escura demais, ou nao e nenhuma das duas telas descritas acima.
+   nao e nenhuma das duas telas descritas acima, ou se os valores estao mesmo impossiveis de ler.
+
+IMPORTANTE — A IMAGEM COSTUMA SER UMA FOTO DA TELA, NAO UMA CAPTURA:
+muitas vezes o entregador fotografa a tela do celular com OUTRO aparelho. E NORMAL a foto ter
+sombra atravessando, reflexo/brilho, estar torta ou girada, ter a capa e a borda do celular
+aparecendo, ou o fundo esbranquicado. NADA DISSO, sozinho, e motivo pra dizer que e ilegivel.
+Olhe com atencao apesar desses defeitos: se der pra ler os numeros e as datas, LEIA e responda
+legivel = true. So responda legivel = false quando o valor em si estiver realmente ilegivel.
 
 Se voce nao conseguir ler algum valor com certeza, deixe o campo nulo e ponha legivel = false.
-NUNCA adivinhe ou estime um numero.`;
+NUNCA adivinhe ou estime um numero: e melhor dizer que nao deu do que chutar.`;
 
 /** Formato fixo da resposta — evita ter que interpretar texto solto. */
 export const PROOF_SCHEMA = {
@@ -186,17 +193,36 @@ export function parseGeminiResponse(payload: unknown): ProofReadingRaw | null {
   }
 }
 
-/**
- * A leitura é aproveitável? Serve pra decidir se vale gastar outra tentativa em
- * outro modelo. `legivel: false` é resposta LEGÍTIMA (a foto é ruim mesmo) e não
- * merece retry — insistir só queimaria cota e daria o mesmo resultado.
- */
-export function readingIsUsable(r: ProofReadingRaw | null): boolean {
+/** A leitura veio COMPLETA (número + as duas datas)? É o que encerra o rodízio. */
+export function readingIsComplete(r: ProofReadingRaw | null): boolean {
   if (r === null) return false;
-  if (r.legivel === false) return true; // resposta válida: a foto é que não presta
+  if (r.legivel === false) return false;
   return r.entregues !== null && r.entregues !== undefined
     && r.periodoInicio !== null && r.periodoInicio !== undefined
     && r.periodoFim !== null && r.periodoFim !== undefined;
+}
+
+/**
+ * Quantas RECUSAS ("legivel: false") aceitar antes de desistir de vez.
+ *
+ * 🔑 ERA 1 — a primeira recusa encerrava o assunto (18/08/2026). O comentário
+ * antigo dizia que insistir "daria o mesmo resultado", mas isso nunca foi medido,
+ * e um caso real provou o contrário: o print do Gustavo (foto da tela de outro
+ * celular, com sombra atravessando, torta, com reflexo) tem o número perfeitamente
+ * legível — 1199, batendo exato com a planilha — e mesmo assim voltou "ilegível"
+ * na primeira tentativa. Modelo conservador ≠ foto ruim.
+ *
+ * Decisão do Victor (18/08): tentar mais 2 modelos antes de aceitar a recusa.
+ * Só print DIFÍCIL gasta isso; o normal continua custando 1 leitura.
+ */
+export const RECUSAS_ATE_DESISTIR = 3;
+
+/**
+ * A leitura é aproveitável? Mantido pelo nome antigo pra não quebrar chamador
+ * externo — hoje é só `readingIsComplete`.
+ */
+export function readingIsUsable(r: ProofReadingRaw | null): boolean {
+  return readingIsComplete(r);
 }
 
 // ─── A chamada de verdade (com rodízio) ──────────────────────────────────────
@@ -236,6 +262,10 @@ export async function readProofImage(
   const body = JSON.stringify(buildGeminiBody(imageBase64, mimeType));
   const tentativas = attemptOrder(cfg).slice(0, Math.max(1, cfg.maxAttempts));
 
+  /** Última recusa vista. Se ninguém ler, é ela que volta (e não `null`). */
+  let recusa: ProofReadingRaw | null = null;
+  let recusas = 0;
+
   for (const { apiKey, model } of tentativas) {
     try {
       const resp = await fetch(GEMINI_URL(model), {
@@ -251,16 +281,35 @@ export async function readProofImage(
       }
 
       const leitura = parseGeminiResponse(await resp.json());
-      if (readingIsUsable(leitura)) {
-        log(`[vision] ${model}: leitura ok`);
+      if (readingIsComplete(leitura)) {
+        log(`[vision] ${model}: leitura ok${recusas > 0 ? ` (na ${recusas + 1}ª tentativa — ${recusas} recusa(s) antes)` : ''}`);
         return leitura;
       }
+
+      // 🔑 RECUSA NÃO ENCERRA MAIS O ASSUNTO (18/08/2026). Ver `RECUSAS_ATE_DESISTIR`.
+      if (leitura?.legivel === false) {
+        recusa = leitura;
+        recusas += 1;
+        if (recusas >= RECUSAS_ATE_DESISTIR) {
+          log(`[vision] ${model}: ${recusas} modelos seguidos disseram ilegível — aceito, vai pra conferência manual`);
+          return recusa;
+        }
+        log(`[vision] ${model}: disse ilegível (${recusas}/${RECUSAS_ATE_DESISTIR}), tentando outro modelo`);
+        continue;
+      }
+
       log(`[vision] ${model}: resposta incompleta, tentando o próximo`);
     } catch (err) {
       log(`[vision] ${model}: falhou (${String(err)}), tentando o próximo`);
     }
   }
 
+  // Acabaram as tentativas. Se alguém chegou a dizer "ilegível", essa é a resposta
+  // mais informativa que temos — melhor que `null` (que significa "nem consegui perguntar").
+  if (recusa) {
+    log('[vision] acabaram as tentativas; a última resposta foi "ilegível"');
+    return recusa;
+  }
   log('[vision] nenhuma tentativa deu certo — print vai pra conferência manual');
   return null;
 }
