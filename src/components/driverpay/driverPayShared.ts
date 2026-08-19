@@ -1369,7 +1369,16 @@ export function buildDriverMirrorData(
       toReceive: totals.net,
     },
     // false = descontos/vales aparecem listados mas NAO foram abatidos (pagamento parcial).
-    deductionsApplied: includeDeductions,
+    //
+    // 19/08/2026 (caso real da Andrea): com a regra de saldo decidindo abate ZERO
+    // (`deductionOverride = 0`, dívida já abatida noutro espelho da quinzena), a flag
+    // ficava `true` e o papel imprimia "Descontos − R$ 154,79" SEM subtrair — a conta
+    // impressa se contradizia e parecia desconto em dobro. Quando nada foi abatido de
+    // verdade E existe dívida listada, a flag desce pra `false` e aciona a apresentação
+    // que já existe ("não abatidos neste pagamento", valores sem o sinal de menos).
+    deductionsApplied:
+      includeDeductions &&
+      (totals.deducted > 0 || totals.discounts + totals.vales + (totals.carryover ?? 0) <= 0),
   };
 }
 
@@ -1401,13 +1410,22 @@ export function buildGroupMirrorData(
     }),
     { driverCount: 0, packagesValue: 0, discountsValue: 0, valesValue: 0, toReceive: 0 },
   );
+  // 19/08/2026 (mesma correção do espelho individual): se NENHUM membro teve abate de
+  // verdade, o resumo do grupo não pode imprimir os descontos com sinal de menos — a
+  // flag desce e o PDF usa a apresentação "não abatido". Com abates mistos (um membro
+  // abatido, outro não) o resumo segue como sempre; a página individual de cada um já
+  // diz a verdade do seu caso.
+  const temDivida = drivers.some((d) => d.totals.discountsValue + d.totals.valesValue > 0);
+  const algumAbatido = drivers.some(
+    (d) => d.deductionsApplied !== false && d.totals.discountsValue + d.totals.valesValue > 0,
+  );
   return {
     company: companyInfo(company),
     period: periodInfo(period),
     groupName,
     drivers,
     groupTotals,
-    deductionsApplied: includeDeductions,
+    deductionsApplied: includeDeductions && (algumAbatido || !temDivida),
   };
 }
 
