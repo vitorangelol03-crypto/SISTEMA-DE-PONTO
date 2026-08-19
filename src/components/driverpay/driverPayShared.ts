@@ -100,6 +100,12 @@ export interface DriverRowData {
   /** true quando o operador conferiu o espelho do driver e a quantidade bate com a planilha. */
   espelhoConferido: boolean;
   /**
+   * Quem marcou/desmarcou por último ('auto', id de usuário ou null). Opcional porque
+   * dezenas de fixtures de teste montam linhas sem ele — ausente vale como "não sei
+   * quem marcou", e a varredura automática NUNCA desfaz o que não sabe ser dela.
+   */
+  espelhoConferidoBy?: string | null;
+  /**
    * Itens Zapex lancados neste pagamento (1 item = 1 entrega). Cada item so tem
    * codigo + data; o VALOR vem do zapexRate individual do driver. Total Zapex do
    * driver = zapex.length * zapexRate.
@@ -1196,6 +1202,7 @@ export function buildRows(
       active: driver?.active ?? true,
       notaFiscal: Boolean(p.nota_fiscal_recebida),
       espelhoConferido: Boolean(p.espelho_conferido),
+      espelhoConferidoBy: p.espelho_conferido_by ?? null,
       zapex: p.zapex ?? [],
       zapexRate: Number(p.zapex_rate ?? 0),
       carryover: carryoverByDriver.get(p.driver_id) ?? 0,

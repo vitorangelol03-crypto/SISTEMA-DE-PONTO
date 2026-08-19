@@ -9,7 +9,11 @@
  * O risco aqui é marcar espelho de quem NÃO deveria — por isso a regra é pura e testada.
  */
 import { describe, it, expect } from 'vitest';
-import { espelhoDispensado, pagamentosParaMarcarPorDispensa } from '../../src/utils/espelhoDispensa';
+import {
+  espelhoDispensado,
+  pagamentosParaMarcarPorDispensa,
+  pagamentosParaDesmarcarPorDispensa,
+} from '../../src/utils/espelhoDispensa';
 
 describe('espelhoDispensado', () => {
   it('🎯 cobrado e sem pacote na plataforma: dispensado, conta como validado', () => {
@@ -70,5 +74,66 @@ describe('pagamentosParaMarcarPorDispensa', () => {
     );
     expect(ids).toHaveLength(8);
     expect(ids).not.toContain('com1');
+  });
+});
+
+/**
+ * Desmarcar por dispensa caducada (19/08/2026, decisão do Victor: "desmarca sozinho
+ * e solicita o espelho"). O caso que motivou: reimportação dá pacote SHOPEE a alguém
+ * que tinha sido marcado por dispensa — ele volta a dever print e a marca antiga
+ * viraria "conferido" sem conferência.
+ */
+describe('pagamentosParaDesmarcarPorDispensa', () => {
+  const esperadaShopee = () => ['SHOPEE'];
+  const nadaEsperado = () => [] as string[];
+  const nadaConferido = () => false;
+  const tudoConferido = () => true;
+
+  it('🎯 caso Daniel: marcado por dispensa, reimportação deu pacote, sem print — desmarca', () => {
+    const linhas = [{ paymentId: 'p1', espelhoConferido: true, espelhoConferidoBy: 'auto' }];
+    expect(pagamentosParaDesmarcarPorDispensa(linhas, esperadaShopee, nadaConferido)).toEqual(['p1']);
+  });
+
+  it('🔴 marcação HUMANA nunca é desfeita, mesmo devendo print', () => {
+    const linhas = [{ paymentId: 'p1', espelhoConferido: true, espelhoConferidoBy: '2626' }];
+    expect(pagamentosParaDesmarcarPorDispensa(linhas, esperadaShopee, nadaConferido)).toEqual([]);
+  });
+
+  it('🔴 sem saber quem marcou (fixture antiga / dado sem by) não mexe', () => {
+    const linhas = [
+      { paymentId: 'p1', espelhoConferido: true },
+      { paymentId: 'p2', espelhoConferido: true, espelhoConferidoBy: null },
+    ];
+    expect(pagamentosParaDesmarcarPorDispensa(linhas, esperadaShopee, nadaConferido)).toEqual([]);
+  });
+
+  it('print validado cobrindo tudo: a marca é legítima, fica', () => {
+    // Ex.: Alcione — marcada por 'auto' via print que bateu (298 = 298).
+    const linhas = [{ paymentId: 'p1', espelhoConferido: true, espelhoConferidoBy: 'auto' }];
+    expect(pagamentosParaDesmarcarPorDispensa(linhas, esperadaShopee, tudoConferido)).toEqual([]);
+  });
+
+  it('dispensa ainda vale (nada cobrado): fica marcado', () => {
+    const linhas = [{ paymentId: 'p1', espelhoConferido: true, espelhoConferidoBy: 'auto' }];
+    expect(pagamentosParaDesmarcarPorDispensa(linhas, nadaEsperado, nadaConferido)).toEqual([]);
+  });
+
+  it('quem não está marcado não entra (é assunto do MARCAR, não do desmarcar)', () => {
+    const linhas = [{ paymentId: 'p1', espelhoConferido: false, espelhoConferidoBy: 'auto' }];
+    expect(pagamentosParaDesmarcarPorDispensa(linhas, esperadaShopee, nadaConferido)).toEqual([]);
+  });
+
+  it('é idempotente e não oscila com o marcar: os dois conjuntos nunca se cruzam', () => {
+    // Depois de desmarcado, ele tem plataforma esperada (tem pacote) — logo NÃO é
+    // dispensado e o marcar não devolve ele pra lista. Sem ping-pong.
+    const desmarcado = [{ paymentId: 'p1', espelhoConferido: false, espelhoConferidoBy: 'auto' }];
+    expect(
+      pagamentosParaMarcarPorDispensa(desmarcado, esperadaShopee, () => [] as string[]),
+    ).toEqual([]);
+    expect(pagamentosParaDesmarcarPorDispensa(desmarcado, esperadaShopee, nadaConferido)).toEqual([]);
+  });
+
+  it('lista vazia não quebra', () => {
+    expect(pagamentosParaDesmarcarPorDispensa([], esperadaShopee, nadaConferido)).toEqual([]);
   });
 });

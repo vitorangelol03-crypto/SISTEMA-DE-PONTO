@@ -38,6 +38,7 @@ import {
   setNotaFiscal,
   setEspelhoConferido,
   marcarEspelhoPorDispensa,
+  desmarcarEspelhoPorDispensa,
   publishDriverMirror,
   listMirrorPublications,
   unpublishDriverMirror,
@@ -59,7 +60,7 @@ import {
   type DeliveryProofRow,
 } from '../../services/driverPay';
 import { contemSemAcento } from '../../utils/buscaTexto';
-import { pagamentosParaMarcarPorDispensa } from '../../utils/espelhoDispensa';
+import { pagamentosParaMarcarPorDispensa, pagamentosParaDesmarcarPorDispensa } from '../../utils/espelhoDispensa';
 import { driversParaPedirPrint, plataformasQuePedemPrint } from '../../utils/proofAuto';
 import { linhasForaDaConfig, diferencaEmReais } from '../../utils/rateSync';
 import { abaterAgora, type ModoDesconto, type PessoaDesconto } from '../../utils/descontoSaldo';
@@ -466,26 +467,17 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     const periodId = selectedPeriodIdRef.current;
     if (!company?.id || !periodId) return;
     try {
-      // ── Quem NÃO ENTREGA na plataforma já entra como conferido (05/08/2026) ──
-      // Com a planilha importada, quem ficou com ZERO pacote não manda print — e o
-      // Victor decidiu que isso CONTA como validado, senão a equipe fica marcando um
-      // por um. Usa a MESMA regra do selo "não entrega": se divergissem, o painel
-      // diria "não entrega" e ainda assim cobraria o espelho.
-      // `semPlanilha` sai das MESMAS fontes do memo da tela (linhas + plataformas),
-      // recalculado aqui porque este callback lê tudo por ref.
+      // ⚠️ A marcação/desmarcação por dispensa NÃO mora mais aqui (19/08/2026): ela
+      // virou a varredura automática (useEffect mais abaixo), que roda em QUALQUER
+      // recarga da grade — importação, chave ligada, pedido criado, célula editada.
+      // Rodava só aqui e por isso os 20 dispensados de 18/08 ficaram sem marca: as
+      // importações aconteceram com o proof_auto_confirm ainda desligado, e nada
+      // reexecutava a varredura depois. `semPlanilhaAgora` fica porque o bloco de
+      // pedido automático abaixo usa.
       const semPlanilhaAgora = plataformasSemPlanilha(
         rowsRef.current,
         platformsRef.current.map((p) => p.name),
       );
-      const paraMarcar = pagamentosParaMarcarPorDispensa(
-        rowsRef.current,
-        (row) => expectedProofPlatforms(row, proofRequestsRef.current, semPlanilhaAgora),
-        (row) => proofDispensadoSemPacote(row, proofRequestsRef.current, semPlanilhaAgora),
-      );
-      const marcados = await marcarEspelhoPorDispensa(company.id, paraMarcar, userId);
-      if (marcados > 0) {
-        toast.success(`${marcados} entregador(es) sem entrega na plataforma — espelho marcado sozinho.`, { duration: 7000 });
-      }
 
       // ── Quem TEM pacote e não mandou print já é cobrado sozinho (05/08/2026) ──
       // Pedido do Victor: "quando subir a planilha da shopee, todo usuário que tiver
@@ -1465,6 +1457,64 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     () => computeProofProgressByPayment(rows, proofRequests, proofStates, semPlanilha),
     [rows, proofRequests, proofStates, semPlanilha],
   );
+
+  /**
+   * Varredura automática do "Espelho conferido" por dispensa (19/08/2026).
+   *
+   * Antes ela rodava SÓ depois de importar planilha — e foi assim que 20 entregadores
+   * em grupo sem pacote SHOPEE ficaram sem marca na 2ª quinzena de julho: as
+   * importações de 18/08 rodaram com `proof_auto_confirm` ainda desligado, a chave foi
+   * ligada à noite, e nada reexecutava a varredura. Agora ela roda sempre que a grade
+   * recarrega, cobrindo todos os gatilhos: importação, chave ligada, pedido de espelho
+   * criado, célula de pacotes editada.
+   *
+   * Nos dois sentidos (decisão do Victor, 19/08: "desmarca sozinho e solicita o espelho"):
+   * marca quem foi cobrado e ficou sem pacote (dispensa), e DESFAZ a marca 'auto' de quem
+   * ganhou pacote depois — o portal volta a pedir o print sozinho (pedido + pacote > 0).
+   * Marcação humana nunca é tocada, em nenhum dos sentidos.
+   *
+   * Sem candidato ela não escreve nada (conta pura) — abrir a grade não gera escrita.
+   * `busyRef` impede corrida; após mudar algo, recarrega a grade e a nova rodada zera.
+   */
+  const varreduraEspelhoBusyRef = useRef(false);
+  useEffect(() => {
+    if (!company?.id || !selectedPeriod || isReadOnly) return;
+    if (!hasPermission('driverpay.editDriver')) return;
+    // Humano marcou/desmarcou: a varredura não passa por cima (nem pra marcar de volta).
+    const linhasDaVarredura = rows.filter(
+      (r) => !r.espelhoConferidoBy || r.espelhoConferidoBy === 'auto',
+    );
+    const paraMarcar = pagamentosParaMarcarPorDispensa(
+      linhasDaVarredura,
+      (row) => expectedProofPlatforms(row, proofRequests, semPlanilha),
+      (row) => proofDispensadoSemPacote(row, proofRequests, semPlanilha),
+    );
+    const paraDesmarcar = pagamentosParaDesmarcarPorDispensa(
+      linhasDaVarredura,
+      (row) => expectedProofPlatforms(row, proofRequests, semPlanilha),
+      (row) => proofProgressByPayment.get(row.paymentId)?.complete === true,
+    );
+    if (paraMarcar.length === 0 && paraDesmarcar.length === 0) return;
+    if (varreduraEspelhoBusyRef.current) return;
+    varreduraEspelhoBusyRef.current = true;
+    void (async () => {
+      try {
+        const marcados = await marcarEspelhoPorDispensa(company.id, paraMarcar, userId);
+        const desmarcados = await desmarcarEspelhoPorDispensa(company.id, paraDesmarcar, userId);
+        if (marcados > 0) {
+          toast.success(`${marcados} entregador(es) sem entrega na plataforma — espelho marcado sozinho.`, { duration: 7000 });
+        }
+        if (desmarcados > 0) {
+          toast(`${desmarcados} entregador(es) ganharam pacote na plataforma cobrada — espelho desmarcado, o app volta a pedir o print.`, { icon: '⚠️', duration: 9000 });
+        }
+        if (marcados > 0 || desmarcados > 0) await reloadPayments();
+      } catch (e) {
+        console.error('[varredura espelho] falhou:', e);
+      } finally {
+        varreduraEspelhoBusyRef.current = false;
+      }
+    })();
+  }, [rows, proofRequests, semPlanilha, proofProgressByPayment, company?.id, selectedPeriod, isReadOnly, hasPermission, userId, reloadPayments]);
 
   /**
    * Quem tem pacote numa plataforma pedida "pra todos" mas ficou de fora **por não estar em

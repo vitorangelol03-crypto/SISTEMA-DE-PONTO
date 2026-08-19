@@ -172,6 +172,8 @@ export interface DriverPayment {
   total_zapex: number;
   nota_fiscal_recebida: boolean;
   espelho_conferido: boolean;
+  /** Quem marcou/desmarcou por último: id de usuário, 'auto', ou null (nunca tocado). */
+  espelho_conferido_by: string | null;
   created_at: string;
   updated_at: string;
   // joins opcionais (embutidos via select aninhado)
@@ -262,6 +264,7 @@ function mapPayment(r: Record<string, unknown>): DriverPayment {
     total_zapex: num(p.total_zapex),
     nota_fiscal_recebida: Boolean(p.nota_fiscal_recebida),
     espelho_conferido: Boolean(p.espelho_conferido),
+    espelho_conferido_by: (p.espelho_conferido_by as string | null) ?? null,
     packages: Array.isArray(p.packages) ? (p.packages as Record<string, unknown>[]).map(mapPackage) : undefined,
     discounts: Array.isArray(p.discounts) ? (p.discounts as Record<string, unknown>[]).map(mapDiscount) : undefined,
     vales: Array.isArray(p.vales) ? (p.vales as Record<string, unknown>[]).map(mapVale) : undefined,
@@ -1397,6 +1400,59 @@ export const marcarEspelhoPorDispensa = async (
     .update({
       espelho_conferido: true,
       espelho_conferido_at: new Date().toISOString(),
+      espelho_conferido_by: 'auto',
+    })
+    .eq('company_id', companyId)
+    .in('id', alvos);
+  if (error) throwDbError(error);
+  return alvos.length;
+};
+
+/**
+ * DESMARCA o "espelho conferido" de quem foi dispensado mas voltou a dever print
+ * (19/08/2026, decisão do Victor: "desmarca sozinho e solicita o espelho").
+ *
+ * O caso real: reimportação (ou edição de célula) dá pacote na plataforma cobrada a
+ * alguém que tinha sido marcado por dispensa — sem isto ele ficaria "conferido" sem
+ * conferência nenhuma. O pedido de print não precisa ser recriado: com pacote > 0 e o
+ * pedido da quinzena de pé, o portal do entregador volta a cobrar sozinho.
+ *
+ * Só desfaz marcação `'auto'` — quem um humano marcou nunca é desmarcado por aqui
+ * (mesma trava, no sentido inverso, da `marcarEspelhoPorDispensa`). Grava `'auto'`
+ * também ao desmarcar, para a varredura poder remarcar se a planilha zerar de novo.
+ */
+export const desmarcarEspelhoPorDispensa = async (
+  companyId: string,
+  paymentIds: readonly string[],
+  userId: string,
+): Promise<number> => {
+  if (paymentIds.length === 0) return 0;
+  await ensurePerm(userId, 'driverpay.editDriver');
+
+  // Mesma chave liga/desliga da confirmação automática: desligada, nada automático roda.
+  const { data: settings } = await supabase
+    .from('driverpay_settings')
+    .select('proof_auto_confirm')
+    .eq('company_id', companyId)
+    .maybeSingle();
+  if (settings?.proof_auto_confirm === false) return 0; // sem linha = ligado (padrão)
+
+  const { data: atuais } = await supabase
+    .from('driverpay_payments')
+    .select('id, espelho_conferido, espelho_conferido_by')
+    .eq('company_id', companyId)
+    .in('id', [...paymentIds]);
+  const alvos = (atuais ?? [])
+    .filter((p) => p.espelho_conferido)
+    .filter((p) => p.espelho_conferido_by === 'auto')
+    .map((p) => p.id as string);
+  if (alvos.length === 0) return 0;
+
+  const { error } = await supabase
+    .from('driverpay_payments')
+    .update({
+      espelho_conferido: false,
+      espelho_conferido_at: null,
       espelho_conferido_by: 'auto',
     })
     .eq('company_id', companyId)
