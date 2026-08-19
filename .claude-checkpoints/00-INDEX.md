@@ -56,10 +56,15 @@ conferido). **1287 unit (+6), 0 falha**; Vercel conferida (`DriverPayTab-BQ5V-Xm
 "Abatido neste pagamento − X" + faixa com os 3 números; grupo com sinal por membro e
 agregados coerentes. Provado ponta-a-ponta com caso descartável (R$ 20 × R$ 154,79),
 **1292 unit (+5), 0 falha**, Vercel conferida.
-🔍 Achados anotados sem mexer: apagar print/nota deixa arquivo órfão no storage ·
-Vite zumbi (nohup) derrubou a máquina (load 15) e truncou 2 rodadas da suíte — matar
-por PID · total negativo com plataforma separada única (só eMile + vale) é
-comportamento pré-existente do "pago separado". ✅ **`tests/57` consertado com OK dele** (`413085c`): quebrado
+**7ª leva (`fa92618`, NO AR): arquivos órfãos do storage consertados** — o comentário
+"trava do storage" mentia (policies FOR ALL cobrem DELETE); 4 caminhos fechados
+(excluir print, nota, despublicar espelho ×2 e **excluir quinzena**, que orfanava via
+CASCADE) + **limpeza de 286 órfãos (~21,7 MB)** nos 3 buckets com dupla contagem,
+manifesto em `backups/2026-08-19-orfaos-storage/` e conferência final **0 órfãos**.
+Provado com clique real no JWT do 2626 (linha E arquivo somem). 1292 unit, 0 falha.
+🔍 Achados anotados sem mexer: Vite zumbi (nohup) derrubou a máquina (load 15) e
+truncou 2 rodadas da suíte — matar por PID · total negativo com plataforma separada
+única (só eMile + vale) é comportamento pré-existente do "pago separado". ✅ **`tests/57` consertado com OK dele** (`413085c`): quebrado
 DESDE 04/08 (`.last()` posicional × plataforma "Coleta Shopee" criada em prod —
 provado com stash+rerun), e o conserto expôs uma 2ª quebra igual no "Remover rota"
 (ordem das rotas muda ao recarregar do banco); os dois pontos agora acham

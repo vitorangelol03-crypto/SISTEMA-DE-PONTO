@@ -220,7 +220,30 @@ atenção: a faixa mora no chunk DriverPayTab, não no mirrorGenerator). ℹ️ 
 negativo com plataforma separada única (só eMile + vale) é comportamento
 pré-existente do "pago separado", não desta mudança.
 
-## 10. Pendências
+## 10. Sétima leva — arquivos órfãos do storage (`fa92618`, NO AR) + limpeza de 286
+
+🔑 **O comentário antigo mentia:** dizia que a "trava do storage" impedia apagar
+arquivo pelo painel — mas as policies `*_master_all` dos 3 buckets são **FOR ALL**
+(DELETE incluso pro 2626/9999); o `removeDiscount` já apagava arquivo há semanas.
+
+**Quatro caminhos fechados** (linha primeiro, arquivo em melhor esforço):
+`deleteDeliveryProof` · `deleteNotaFiscalFile` · `unpublishDriverMirror`/
+`unpublishAllMirrorsForPeriod` (PDFs, lotes de 100) · `deletePeriod` (coleta os
+caminhos dos 3 buckets ANTES do CASCADE — 4º caminho, descoberto pelos restos dos
+próprios testes da sessão). **Provado com clique real e o JWT do 2626**: print e nota
+descartáveis excluídos pelos modais, linha E arquivo conferidos fora.
+
+**Limpeza do acumulado em produção:** 280 órfãos do manifesto + 6 restos de teste =
+**286 arquivos (~21,7 MB)** removidos dos 3 buckets. Dupla contagem antes de apagar
+(SQL vs varredura da API, bateram), margem de 1h contra upload em andamento,
+manifesto + scripts em `backups/2026-08-19-orfaos-storage/`. **Conferência final:
+0 órfãos nos 3 buckets.** ⚠️ O classificador barrou o script inline de deleção em
+massa — refeito como arquivo em `backups/` com dry-run separado do `--apagar`.
+
+Validado: typecheck 0 · eslint 0 erros · build · **1292 unit, 0 falha** · Vercel
+conferida (chunk `DriverPayTab-uokWwphj.js` com o código novo).
+
+## 11. Pendências
 
 - ✅ **Push do `95c764e` FEITO** (mais tarde no mesmo dia, com OK do Victor):
   revalidado antes (typecheck 0 · build limpo), subiu `bb7d29f..2c5208b` em
