@@ -307,7 +307,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                   <span
                     title="soma das rotas — para editar, abra as rotas"
                     style={plColor ? { borderColor: plColor } : undefined}
-                    className={`w-12 inline-block text-right rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums bg-gray-50 text-gray-600 ${
+                    className={`w-14 inline-block text-right rounded-md px-1.5 py-1.5 text-sm font-semibold tabular-nums bg-gray-50 text-gray-600 ${
                       plColor ? 'border-2 border-dashed' : 'border border-dashed border-gray-300'
                     }`}
                   >
@@ -324,7 +324,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                     }
                     onBlur={() => handlers.onPackageBlur(row.paymentId, 0, pl.name)}
                     style={plColor ? ({ borderColor: plColor, ['--tw-ring-color']: plColor } as React.CSSProperties) : undefined}
-                    className={`w-12 text-right rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 disabled:bg-gray-50 disabled:text-gray-500 ${
+                    className={`w-14 text-right rounded-md px-1.5 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 disabled:bg-gray-50 disabled:text-gray-500 ${
                       plColor ? 'border-2' : 'border border-gray-300 focus:ring-blue-500/30 focus:border-blue-500'
                     }`}
                   />
@@ -629,7 +629,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                         handlers.onPackageChange(row.paymentId, ri, pl.name, parsePackages(e.target.value))
                       }
                       onBlur={() => handlers.onPackageBlur(row.paymentId, ri, pl.name)}
-                      className="w-12 text-right border border-gray-300 rounded-md px-2 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                      className="w-14 text-right border border-gray-300 rounded-md px-1.5 py-1.5 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                     />
                     {/* Taxa (R$/pacote) DESTA rota — editavel por rota */}
                     <div className="relative">
