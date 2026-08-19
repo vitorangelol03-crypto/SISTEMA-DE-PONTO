@@ -273,11 +273,40 @@ test.describe('Pagamentos Driver — jornada completa de edições', () => {
     await expect(cityInputs.last()).toBeVisible({ timeout: 10_000 });
     await cityInputs.last().fill('PW Rota 2');
     await cityInputs.last().blur();
-    const routePkg = page.getByTitle('Pacotes desta rota').last();
+    // Os 5 pacotes vão na plataforma DO TESTE (R$ 2,00), mirada pelo NOME — o
+    // `.last()` posicional quebrou em 04/08/2026, quando a plataforma real
+    // "Coleta Shopee" (R$ 1,00) virou a última coluna de produção e os 5 caíam
+    // nela (10×2 + 5×1 = 25 ≠ 30). Na linha de rota os inputs de pacote seguem
+    // a ordem das colunas de plataforma, que são contíguas depois de "Grupo".
+    let grupoIdx = -1;
+    for (let i = 0; i < nHeaders; i++) {
+      if ((await headers.nth(i).innerText()).trim().startsWith('Grupo')) {
+        grupoIdx = i;
+        break;
+      }
+    }
+    expect(grupoIdx, 'coluna "Grupo" no cabeçalho').toBeGreaterThan(-1);
+    // A linha da rota também é achada pelo NOME (valor do input de cidade), não
+    // por posição: quando o blur salva e a grade recarrega, a ORDEM das rotas
+    // pode mudar (vem do banco, sem ordem de criação garantida) — foi o que
+    // fazia o "Remover rota" `.last()` apagar a rota ERRADA (a dos 10 pacotes).
+    const routeRows = page.locator('tr').filter({ has: page.getByPlaceholder('cidade') });
+    const rotaNova = async () => {
+      const n = await routeRows.count();
+      for (let i = 0; i < n; i++) {
+        const linha = routeRows.nth(i);
+        if ((await linha.getByPlaceholder('cidade').inputValue()) === 'PW Rota 2') return linha;
+      }
+      throw new Error('linha da rota "PW Rota 2" não encontrada');
+    };
+    // No FILL a rota nova ainda é a última (acabou de ser criada; nada recarregou
+    // desde então) — ancorar por posição aqui é seguro E necessário: âncoras mais
+    // "espertas" (por valor do input) re-resolvem no meio do re-render e estouram.
+    const routePkg = routeRows.last().getByTitle('Pacotes desta rota').nth(platIdx - grupoIdx - 1);
     await routePkg.fill('5');
     await routePkg.blur();
     await expect(driverRow(page)).toContainText('R$ 30,00', { timeout: 10_000 }); // 10×2 + 5×2
-    await page.getByTitle('Remover rota').last().click();
+    await (await rotaNova()).getByTitle('Remover rota').click();
     await expect(driverRow(page)).toContainText('R$ 20,00', { timeout: 10_000 });
 
     // ── 12. Quinzena: concluir → renomear (só concluída tem Editar) → reabrir
