@@ -66,8 +66,13 @@ documentado do 64 em 07/08); rerodado com Vite quente: 1/1 de primeira.
 
 ## 5. Pendências
 
-- ⏳ **Push do `95c764e`** (só commit local; push precisa de OK — o de hoje
-  cobria só o item 3, que já estava no ar).
+- ✅ **Push do `95c764e` FEITO** (mais tarde no mesmo dia, com OK do Victor):
+  revalidado antes (typecheck 0 · build limpo), subiu `bb7d29f..2c5208b` em
+  `origin/main` (feature + checkpoint). **Vercel conferida POR CONTEÚDO**:
+  o chunk `DriverPayTab-DqAlpQOm.js` do site (mesmo nome do build local)
+  contém o texto novo "Clique para ver o motivo e validar o espelho";
+  na 1ª checagem o site ainda servia o bundle velho (`YtdrweZ6`), na 2ª
+  (~20s depois) já tinha virado.
 - ⏳ **Provar o fix da leitura no próximo caso real** (foto legível recusada
   1× → resgatada pelos modelos extras). Sem isso segue sendo teoria+unit.
 - ⏳ **João Gabriel Ferreira reenviar o print certo** (mandou papel de parede).

@@ -32,8 +32,10 @@ eslint 0 · build · 88 unit da área · **E2E novo `tests/75`** com cliques rea
 divergente → tag → clique → modal filtrado com "58 a mais no print" → validar ali →
 tag some, espelho conferido na tela E no banco) · regressão 64 1/1. ⚠️ O 75 deu flaky
 na 1ª rodada (clique de montagem na carga fria do Vite/WSL, flake já documentado no 64
-em 07/08) e passou 1/1 de primeira com Vite quente. ⏳ Push do `95c764e` não feito
-(sem OK). Ver `CHECKPOINT_SESSAO_2026-08-19.md`.
+em 07/08) e passou 1/1 de primeira com Vite quente. ✅ **Push do `95c764e` FEITO** mais
+tarde no mesmo dia com OK dele (revalidado: typecheck 0 · build; `bb7d29f..2c5208b` em
+`origin/main`) e **Vercel conferida por conteúdo** (chunk `DriverPayTab-DqAlpQOm.js` do
+site com o texto novo da tag clicável). Ver `CHECKPOINT_SESSAO_2026-08-19.md`.
 
 **Sessão 18/08 — filtro por quinzena + migração em massa do saldo herdado
 (`d31f417`, só local):** Victor, olhando o modal "Saldo de quinzenas fechadas"
