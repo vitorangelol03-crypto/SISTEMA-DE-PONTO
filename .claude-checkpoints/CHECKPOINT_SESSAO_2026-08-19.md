@@ -198,7 +198,29 @@ classe, caso raro, não tocado. ⚠️ Lição operacional: 3 Vite zumbis (nohup
 kill do shell) deixaram o load em 15 e truncaram 2 rodadas da suíte — matar por PID
 (`pgrep -f` se auto-casa quando o padrão aparece na própria linha de comando).
 
-## 9. Pendências
+## 9. Sexta leva — abate PARCIAL no espelho (`d01f8db`, NO AR)
+
+Continuação do fix do abate zero, a pedido dele ("conserta o abate parcial também"):
+dívida que não cabe no recebível → regra de saldo abate um pedaço, mas o papel
+imprimia a dívida CHEIA com menos e o total subtraindo só o pedaço.
+
+- `DriverMirrorTotals.deductedValue` (abate real; ausente = espelho antigo) +
+  `partialDeduction` pura no gerador (0 < abatido < listado, tolerância de centavos).
+- Recibo individual: itens sem sinal, subtotal "(abatido EM PARTE — ver resumo)",
+  resumo com "Vales e perdas da quinzena" (neutro) + "Abatido neste pagamento − X"
+  (única linha que subtrai) + faixa amarela com os 3 números.
+- Resumo do grupo: sinal de menos por MEMBRO (zero/parcial ficam neutros) e nos
+  agregados só quando algum membro abateu cheio.
+
+**Provado ponta-a-ponta** com caso descartável real (R$ 20 recebível × dívida
+R$ 154,79): publicado pela UI, livro com abate 20, PDF baixado e conferido página a
+página. Validado: typecheck 0 · eslint 0 erros · build · **1292 unit (+5), 0 falha** ·
+push + Vercel conferida (chunk `DriverPayTab-CFhLL0dZ.js` com o texto da faixa —
+atenção: a faixa mora no chunk DriverPayTab, não no mirrorGenerator). ℹ️ Total
+negativo com plataforma separada única (só eMile + vale) é comportamento
+pré-existente do "pago separado", não desta mudança.
+
+## 10. Pendências
 
 - ✅ **Push do `95c764e` FEITO** (mais tarde no mesmo dia, com OK do Victor):
   revalidado antes (typecheck 0 · build limpo), subiu `bb7d29f..2c5208b` em

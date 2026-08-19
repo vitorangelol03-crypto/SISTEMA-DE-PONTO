@@ -51,9 +51,15 @@ manhã). **Fix 2 (`3a711d6`, NO AR): espelho com abate ZERO** imprimia "− R$ 1
 subtrair (parecia desconto em dobro; áudio da Andreia) — `deductionsApplied` agora
 respeita o `deductionOverride`; espelho LOGGI dela REPUBLICADO com o papel limpo (PDF
 conferido). **1287 unit (+6), 0 falha**; Vercel conferida (`DriverPayTab-BQ5V-Xmt.js`).
-🔍 Achados anotados sem mexer: abate PARCIAL ainda imprime bruto no resumo (caso raro) ·
-apagar print/nota deixa arquivo órfão no storage · Vite zumbi (nohup) derrubou a máquina
-(load 15) e truncou 2 rodadas da suíte — matar por PID. ✅ **`tests/57` consertado com OK dele** (`413085c`): quebrado
+**E a 6ª leva fechou o ciclo (`d01f8db`, NO AR): abate PARCIAL consertado também** —
+`deductedValue` no espelho + `partialDeduction` pura; recibo mostra dívida neutra +
+"Abatido neste pagamento − X" + faixa com os 3 números; grupo com sinal por membro e
+agregados coerentes. Provado ponta-a-ponta com caso descartável (R$ 20 × R$ 154,79),
+**1292 unit (+5), 0 falha**, Vercel conferida.
+🔍 Achados anotados sem mexer: apagar print/nota deixa arquivo órfão no storage ·
+Vite zumbi (nohup) derrubou a máquina (load 15) e truncou 2 rodadas da suíte — matar
+por PID · total negativo com plataforma separada única (só eMile + vale) é
+comportamento pré-existente do "pago separado". ✅ **`tests/57` consertado com OK dele** (`413085c`): quebrado
 DESDE 04/08 (`.last()` posicional × plataforma "Coleta Shopee" criada em prod —
 provado com stash+rerun), e o conserto expôs uma 2ª quebra igual no "Remover rota"
 (ordem das rotas muda ao recarregar do banco); os dois pontos agora acham
