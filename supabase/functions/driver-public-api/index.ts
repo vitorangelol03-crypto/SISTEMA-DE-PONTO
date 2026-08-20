@@ -450,6 +450,11 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
   const periodId = String(body.periodId ?? '').trim();
   if (!periodId) return json({ error: 'periodId ausente' }, 400);
 
+  // Nota dividida: expira duplas vencidas ANTES de montar os slots — senão a
+  // rodada que expira ainda conta a parte 1 velha como 'enviada' e a vaga só
+  // aparece livre na recarga seguinte (pego pelo teste ponta-a-ponta de 20/08).
+  await expirarDuplasDoDriver(claims.driver_id, periodId);
+
   const porPeriodo = await vagasDeNotaPorPeriodo(claims, [periodId]);
   const slots = porPeriodo.get(periodId) ?? [];
 
@@ -720,6 +725,25 @@ async function parte1AbertaDoSlot(
 function ehSplitExpirada(f: { status: string; check_details?: unknown }): boolean {
   return f.status === 'rejeitada'
     && Boolean((f.check_details as { splitExpired?: boolean } | null)?.splitExpired);
+}
+
+/** Expira TODAS as partes 1 vencidas deste driver no período (todos os CNPJs). */
+async function expirarDuplasDoDriver(driverId: string, periodId: string): Promise<void> {
+  const corte = new Date(Date.now() - NF_SPLIT_WINDOW_MS).toISOString();
+  const { data: velhas } = await supabase.from('driverpay_nota_fiscal_files')
+    .select('id, split_group, check_details')
+    .eq('driver_id', driverId).eq('period_id', periodId)
+    .eq('split_part', 1).eq('status', 'recebida').lt('uploaded_at', corte);
+  for (const f of velhas ?? []) {
+    const { data: par } = await supabase.from('driverpay_nota_fiscal_files')
+      .select('id').eq('split_group', f.split_group).eq('split_part', 2).limit(1);
+    if ((par ?? []).length > 0) continue;
+    await supabase.from('driverpay_nota_fiscal_files').update({
+      status: 'rejeitada',
+      reject_reason: '[automático] A segunda nota da dupla não chegou em 10 minutos. Envie as DUAS de novo.',
+      check_details: { ...((f.check_details as Record<string, unknown> | null) ?? {}), splitExpired: true },
+    }).eq('id', f.id).eq('status', 'recebida');
+  }
 }
 
 // Recebe a nota (base64), CONFERE contra o espelho publicado (valor/CNPJ/nome) e
