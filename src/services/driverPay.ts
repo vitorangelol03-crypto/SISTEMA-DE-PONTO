@@ -1517,6 +1517,17 @@ export const marcarEspelhoPorDispensa = async (
  * Só desfaz marcação `'auto'` — quem um humano marcou nunca é desmarcado por aqui
  * (mesma trava, no sentido inverso, da `marcarEspelhoPorDispensa`). Grava `'auto'`
  * também ao desmarcar, para a varredura poder remarcar se a planilha zerar de novo.
+ *
+ * 🔴 20/08/2026, achado real (81 pagamentos afetados, ver
+ * backups/2026-08-20-espelho-conferido-fantasma): o `paymentIds` que chega aqui vem
+ * do `tudoConferidoDe` calculado NA TELA (`proofProgressByPayment`), que pode estar
+ * um passo atrás do banco — a grade recarrega pagamentos e prints em chamadas
+ * separadas, então existe uma janela em que o print já validou (e o payment já foi
+ * marcado `true`) mas a tela ainda enxerga o print como pendente e manda desmarcar.
+ * Por isso, antes de desmarcar de verdade, RECONFERE contra `driverpay_delivery_proofs`
+ * (fonte da verdade, sem depender do que a tela calculou): quem já tem print
+ * validado+batendo (qtd e período) pro seu período fica de fora — a tela pode estar
+ * desatualizada, o banco não.
  */
 export const desmarcarEspelhoPorDispensa = async (
   companyId: string,
@@ -1536,12 +1547,34 @@ export const desmarcarEspelhoPorDispensa = async (
 
   const { data: atuais } = await supabase
     .from('driverpay_payments')
-    .select('id, espelho_conferido, espelho_conferido_by')
+    .select('id, driver_id, period_id, espelho_conferido, espelho_conferido_by')
     .eq('company_id', companyId)
     .in('id', [...paymentIds]);
-  const alvos = (atuais ?? [])
+  const candidatos = (atuais ?? [])
     .filter((p) => p.espelho_conferido)
-    .filter((p) => p.espelho_conferido_by === 'auto')
+    .filter((p) => p.espelho_conferido_by === 'auto');
+  if (candidatos.length === 0) return 0;
+
+  // Reconferência contra o banco: quem já tem print validado E batendo (qtd e
+  // período) pro driver/período deste pagamento não é desmarcado — a tela que mandou
+  // este candidato pode estar um passo atrás do que já foi confirmado.
+  const driverIds = [...new Set(candidatos.map((p) => p.driver_id as string))];
+  const periodIds = [...new Set(candidatos.map((p) => p.period_id as string))];
+  const { data: provasBatendo } = await supabase
+    .from('driverpay_delivery_proofs')
+    .select('driver_id, period_id')
+    .eq('company_id', companyId)
+    .in('driver_id', driverIds)
+    .in('period_id', periodIds)
+    .eq('status', 'validado')
+    .eq('check_qtd', true)
+    .eq('check_periodo', true);
+  const temProvaBatendo = new Set(
+    (provasBatendo ?? []).map((p) => `${p.driver_id}|${p.period_id}`),
+  );
+
+  const alvos = candidatos
+    .filter((p) => !temProvaBatendo.has(`${p.driver_id}|${p.period_id}`))
     .map((p) => p.id as string);
   if (alvos.length === 0) return 0;
 
