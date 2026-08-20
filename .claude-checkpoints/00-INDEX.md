@@ -6,6 +6,25 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
+**Sessão 20/08 (tarde) — "espelho conferido" fantasma achado e corrigido
+(`5cc0a14`, só local):** Victor reportou grupo em produção com print SHOPEE
+validado e batendo mas painel sem marcar — mandou corrigir e marcar todos.
+🔑 Não era a chave `proof_auto_confirm` (ligada) — era a varredura de
+dispensa de 19/08 (`desmarcarEspelhoPorDispensa`) desmarcando gente que JÁ
+tinha print confirmado: os reloads de pagamentos e de prints na tela não
+terminam juntos, e nessa janela a varredura desmarcava o que estava certo
+(e nada remarca sozinho depois). **81 pagamentos** da 2ª quinzena de julho
+(Caratinga) nesse estado — todos conferidos um por um (só print exato, sem
+outra pendência) — backup em `backups/2026-08-20-espelho-conferido-fantasma/`
+e os 81 marcados de volta. **Fix de raiz:** a função agora reconfere direto
+contra `driverpay_delivery_proofs` antes de desmarcar, não confia só no que
+a tela calculou. Validado: typecheck 0 · build limpo · **834 unit, 0 falha**
+· E2E 76+77 no Chromium (76 flaky em setup não relacionado, limpo na
+repetição; 77 de primeira). 🔴 **2 relatos do Victor sem confirmação ainda**
+(filtro "NF ok" e filtro "pago" supostamente deixando passar quem não devia)
+— investigado, sem reprodução nova; aguardando print ou nome pra fechar. Ver
+`CHECKPOINT_SESSAO_2026-08-20.md` §3-4.
+
 **Sessão 20/08 (madrugada) — release da NOTA DIVIDIDA fechado, tudo NO AR:** fn
 **v34** deployada (saga: CLI vive no **npx**; 2 deploys do Victor falharam em silêncio
 — conferir SEMPRE por versão + sonda na rota nova; 🔑 **fato novo: com pedido explícito
