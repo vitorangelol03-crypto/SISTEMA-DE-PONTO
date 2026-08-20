@@ -2,9 +2,19 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-08-19**.
+> Última atualização: **2026-08-20**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 20/08 (madrugada) — release da NOTA DIVIDIDA fechado, tudo NO AR:** fn
+**v34** deployada (saga: CLI vive no **npx**; 2 deploys do Victor falharam em silêncio
+— conferir SEMPRE por versão + sonda na rota nova; 🔑 **fato novo: com pedido explícito
+dele o classificador deixou EU deployar** — a regra "deploy é sempre o Victor" caiu,
+memória atualizada) · **teste ponta-a-ponta contra a fn real: 22/22** (dupla feliz com
+fatias exatas e nomes diferentes; recusas de valor/nome; expiração liberando a vaga) ·
+fix pego pelo teste (`2ea92b1`): `nf-slots` agora expira a dupla ANTES de montar os
+contadores · push + Vercel conferida (`DriverApp-v5VBhaUB.js`). Uso na prática aguarda
+o aval do contador. Ver `CHECKPOINT_SESSAO_2026-08-20.md`.
 
 **Sessão 19/08 (2ª leva) — a dispensa do espelho que nunca disparou (`25288e7`, só
 local; dados JÁ corrigidos em produção):** Victor mandou prints ("esse luis agusto
