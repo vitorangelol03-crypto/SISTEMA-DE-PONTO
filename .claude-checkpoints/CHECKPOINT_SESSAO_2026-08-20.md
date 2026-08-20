@@ -118,3 +118,10 @@ que não deveria passar:
   exatamente o que corrigi no item 3 — pode ser confusão dos dois, ou pode
   ser o "Pagamento" de verdade. **Preciso de print ou nome pra confirmar —
   não mexi em nada aqui.**
+- **TOTAL GERAL em branco no relatório exportado (print da planilha, coluna
+  do valor da linha "TOTAL GERAL" vazia em vez de somar)**: reportado, NÃO
+  investigado a pedido dele ("coloca como pendência, vamos olhar depois").
+  Candidatos a olhar quando voltar: `src/utils/driverReport.ts` e
+  `DriverList.tsx` (os 2 arquivos que têm "TOTAL GERAL" no código) — ele
+  disse que acontece "às vezes", então é condicional a algo (tipo de
+  relatório? filtro aplicado? quantidade de linhas?).
