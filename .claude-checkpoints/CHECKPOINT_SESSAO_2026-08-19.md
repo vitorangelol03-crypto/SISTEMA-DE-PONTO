@@ -243,7 +243,37 @@ massa — refeito como arquivo em `backups/` com dry-run separado do `--apagar`.
 Validado: typecheck 0 · eslint 0 erros · build · **1292 unit, 0 falha** · Vercel
 conferida (chunk `DriverPayTab-uokWwphj.js` com o código novo).
 
-## 11. Pendências
+## 11. Oitava leva — NOTA DIVIDIDA em 2 nomes (`55ea753`, local; migration NO AR)
+
+Origem: áudios da equipe/drivers — MEI dos melhores estourando, divisão "no braço"
+(quinzena alternada, CNPJ da esposa, "10 mil no meu nome e o resto no de outro").
+Avisado o risco fiscal (interposição); Victor confirmou que valida com o contador.
+
+**Decisões dele:** validação continua por NOME (lista de autorizados no perfil,
+máx 2) · formas fixas **única · 50/50 · 70/30** (nada livre) · **10 minutos** pra
+2ª nota com aviso antes da 1ª · app mostra **o valor exato de cada nota** após a
+escolha da forma.
+
+**Entregue:** migration `20260819200000` APLICADA com OK (tabela
+`driverpay_driver_nota_names` + trigger máx-2 + 6 colunas em `nota_fiscal_files`,
+tudo aditivo) · robô: fatias como candidatos (`nfSplitSlices`, centavo na 1ª),
+parte 1 'recebida' esperando o par, parte 2 = restante exato em nome DIFERENTE,
+dupla valida junta; janela vencida expira lazy (upload/slots) + cron, e recusa
+por expiração NÃO segura a vaga (exceção documentada à regra de 05/08) · rotas
+novas `nf-split-preview` e campos no `nf-slots`/`nf-upload` (aditivos — cliente
+antigo intocado) · app: escolha da forma com valores exatos + aviso 10 min +
+estado "falta a 2ª de R$ X até HH:MM" · painel: cadastro dos nomes no perfil
+(DriverFormModal) + badge da dupla no Notas recebidas.
+
+Validado: typecheck 0 · eslint limpo · build · **1308 unit (+16), 0 falha**
+(fatias app×robô lado a lado, janela, nomes no runNfCheck) · **E2E real do
+cadastro de nomes 1/1** (2 pela tela, teto na UI, trigger barra 3º por SQL).
+
+🔴 **RELEASE PELA ORDEM: falta (1) deploy da edge fn pelo Victor (`!`) e
+(2) push.** O fluxo completo do app só existe com a fn v33; o E2E ponta-a-ponta
+do envio dividido (2 PDFs de teste) roda DEPOIS do deploy, contra a fn real.
+
+## 12. Pendências
 
 - ✅ **Push do `95c764e` FEITO** (mais tarde no mesmo dia, com OK do Victor):
   revalidado antes (typecheck 0 · build limpo), subiu `bb7d29f..2c5208b` em

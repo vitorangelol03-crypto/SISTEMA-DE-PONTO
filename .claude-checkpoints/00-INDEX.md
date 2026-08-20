@@ -56,6 +56,14 @@ conferido). **1287 unit (+6), 0 falha**; Vercel conferida (`DriverPayTab-BQ5V-Xm
 "Abatido neste pagamento − X" + faixa com os 3 números; grupo com sinal por membro e
 agregados coerentes. Provado ponta-a-ponta com caso descartável (R$ 20 × R$ 154,79),
 **1292 unit (+5), 0 falha**, Vercel conferida.
+**8ª leva (`55ea753`, LOCAL; migration NO AR): NOTA DIVIDIDA em 2 nomes autorizados** —
+resposta aos áudios do MEI estourando: lista de nomes autorizados por driver (máx 2,
+trigger), formas fixas única·50/50·70/30 com o app mostrando o valor EXATO de cada nota
+(conta única app×robô, travada por teste lado a lado), 2ª nota em 10 min em nome
+DIFERENTE, dupla valida junta, expiração lazy+cron. Migration `20260819200000` aplicada
+com OK. **1308 unit (+16), 0 falha** · E2E do cadastro 1/1. 🔴 Falta: **deploy da fn
+(Victor, `!`) → push → E2E ponta-a-ponta contra a fn real**. Aviso fiscal dado; ele
+valida com o contador.
 **7ª leva (`fa92618`, NO AR): arquivos órfãos do storage consertados** — o comentário
 "trava do storage" mentia (policies FOR ALL cobrem DELETE); 4 caminhos fechados
 (excluir print, nota, despublicar espelho ×2 e **excluir quinzena**, que orfanava via
