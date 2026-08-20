@@ -25,7 +25,8 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
 import { extractText, getDocumentProxy } from 'npm:unpdf@1.8.0';
 import {
-  runNfCheck, mirrorExpectedValue, nfTextoIlegivel, notasQueOcupamVaga, type NfCheckResult,
+  runNfCheck, mirrorExpectedValue, nfTextoIlegivel, notasQueOcupamVaga, nfSplitSlices,
+  type NfCheckResult, type NfSplitForm,
 } from './nfCheck.ts';
 import {
   proofContarDataErrada,
@@ -373,10 +374,15 @@ async function vagasDeNotaPorPeriodo(
     .eq('driver_id', claims.driver_id).in('period_id', periodIds)
     .order('delivered_at', { ascending: true });
 
-  const { data: files } = await supabase.from('driverpay_nota_fiscal_files')
-    .select('period_id, nota_emitter_id, status, reject_reason, uploaded_at, mirror_platform_key')
+  const { data: filesRaw } = await supabase.from('driverpay_nota_fiscal_files')
+    .select('period_id, nota_emitter_id, status, reject_reason, uploaded_at, mirror_platform_key, check_details')
     .eq('driver_id', claims.driver_id).in('period_id', periodIds)
     .order('uploaded_at', { ascending: true });
+  // Dupla EXPIRADA não conta em nada: nem segura vaga, nem aparece como recusada
+  // (a nota estava certa, só o relógio dos 10 minutos venceu — o slot volta livre).
+  const files = (filesRaw ?? []).filter(
+    (f) => !ehSplitExpirada({ status: f.status as string, check_details: f.check_details }),
+  );
 
   // Contagem por SLOT (periodo + espelho + CNPJ). Nota antiga (mirror_platform_key NULL)
   // conta no slot daquele CNPJ de qualquer espelho — senao quem ja mandou antes desta
@@ -445,7 +451,58 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
   if (!periodId) return json({ error: 'periodId ausente' }, 400);
 
   const porPeriodo = await vagasDeNotaPorPeriodo(claims, [periodId]);
-  return json({ slots: porPeriodo.get(periodId) ?? [] });
+  const slots = porPeriodo.get(periodId) ?? [];
+
+  // Nota dividida (19/08/2026): a dupla ABERTA aparece no slot — o app mostra
+  // "falta a segunda de R$ X" com o relógio. (Também expira as vencidas, lazy.)
+  for (const s of slots as Array<Record<string, unknown>>) {
+    const aberta = await parte1AbertaDoSlot(claims.driver_id, periodId, String(s.emitterId));
+    if (aberta) {
+      const total = Number((aberta.check_details as { splitTotal?: number } | null)?.splitTotal ?? NaN);
+      const veio = Number(aberta.read_value ?? NaN);
+      s.splitOpen = {
+        form: aberta.split_form,
+        part1Value: Number.isFinite(veio) ? veio : null,
+        remaining: Number.isFinite(total) && Number.isFinite(veio)
+          ? Math.round((total - veio) * 100) / 100 : null,
+        expiresAt: new Date(new Date(aberta.uploaded_at).getTime() + NF_SPLIT_WINDOW_MS).toISOString(),
+      };
+    }
+  }
+  return json({ slots });
+}
+
+/**
+ * Nota dividida (19/08/2026): as FATIAS exatas de cada forma, pro app mostrar na
+ * escolha ("cada nota deve ter R$ X e R$ Y" — exigência do Victor). A conta é a
+ * MESMA da conferência (nfSplitSlices sobre os candidatos do espelho publicado).
+ */
+async function nfSplitPreview(req: Request, body: Body): Promise<Response> {
+  const claims = await claimsFromRequest(req, body);
+  if (!claims) return json({ error: 'Sessao invalida' }, 401);
+  const periodId = String(body.periodId ?? '').trim();
+  const emitterId = String(body.emitterId ?? '').trim();
+  if (!periodId || !emitterId) return json({ error: 'Dados incompletos' }, 400);
+
+  const candidates = await buildValueCandidates(claims.driver_id, claims.company_id, periodId, emitterId);
+  // O total mostrado é o do ESPELHO publicado (o papel que o driver tem na mão);
+  // sem espelho, cai no maior candidato; sem candidato nenhum, não tem como dividir.
+  const espelhos = Object.entries(candidates).filter(([k, v]) => k.startsWith('espelho_') && v > 0);
+  const todos = Object.values(candidates).filter((v) => v > 0);
+  const total = espelhos.length > 0
+    ? Math.max(...espelhos.map(([, v]) => v))
+    : (todos.length > 0 ? Math.max(...todos) : 0);
+  if (total <= 0) {
+    return json({ error: 'Ainda não há espelho publicado pra calcular a divisão — aguarde ou envie a nota única.' }, 409);
+  }
+  return json({
+    total,
+    forms: {
+      '50': nfSplitSlices(total, '50'),
+      '70-30': nfSplitSlices(total, '70-30'),
+    },
+    windowMinutes: NF_SPLIT_WINDOW_MS / 60_000,
+  });
 }
 
 // ─── Conferência automática (v8; abate parcial em v11) ───────────────────────
@@ -604,6 +661,67 @@ async function buildValueCandidates(
   return cands;
 }
 
+// ─── Nota dividida em 2 nomes (19/08/2026, decisão do Victor) ────────────────
+
+/** Janela pra segunda nota da dupla chegar depois da primeira. */
+const NF_SPLIT_WINDOW_MS = 10 * 60_000;
+
+/** Nomes AUTORIZADOS a emitir nota por este driver (tabela nova, máx 2). */
+async function nomesAutorizadosDe(driverId: string): Promise<string[]> {
+  const { data } = await supabase.from('driverpay_driver_nota_names')
+    .select('name').eq('driver_id', driverId);
+  return (data ?? []).map((r) => String(r.name)).filter((n) => n.trim().length > 0);
+}
+
+type Parte1Aberta = {
+  id: string; split_group: string; split_form: string; read_value: number | null;
+  split_expected: number | null; matched_name: string | null; uploaded_at: string;
+  check_details: Record<string, unknown> | null;
+};
+
+/**
+ * A parte 1 ABERTA da dupla deste slot (se houver) — e, de quebra, EXPIRA as
+ * vencidas (lazy: roda no upload e no nf-slots; o cron também varre). Aberta =
+ * split_part=1, status 'recebida', sem par, dentro dos 10 minutos.
+ *
+ * ⚠️ A expiração marca 'rejeitada' com `check_details.splitExpired` — e essa recusa
+ * NÃO segura a vaga (exceção à regra de 05/08 "recusada segura o lugar": aquilo
+ * mira nota ERRADA reenviada em loop; aqui a nota estava CERTA, só o relógio venceu
+ * — travar até a CD excluir puniria queda de internet no meio da dupla).
+ */
+async function parte1AbertaDoSlot(
+  driverId: string, periodId: string, emitterId: string,
+): Promise<Parte1Aberta | null> {
+  const { data: partes } = await supabase.from('driverpay_nota_fiscal_files')
+    .select('id, split_group, split_form, split_part, read_value, split_expected, matched_name, uploaded_at, status, check_details')
+    .eq('driver_id', driverId).eq('period_id', periodId).eq('nota_emitter_id', emitterId)
+    .not('split_group', 'is', null)
+    .order('uploaded_at', { ascending: true });
+  const lista = partes ?? [];
+  const temPar = new Set(lista.filter((f) => f.split_part === 2).map((f) => f.split_group as string));
+  let aberta: Parte1Aberta | null = null;
+  for (const f of lista) {
+    if (f.split_part !== 1 || f.status !== 'recebida' || temPar.has(f.split_group as string)) continue;
+    const idade = Date.now() - new Date(f.uploaded_at as string).getTime();
+    if (idade > NF_SPLIT_WINDOW_MS) {
+      await supabase.from('driverpay_nota_fiscal_files').update({
+        status: 'rejeitada',
+        reject_reason: '[automático] A segunda nota da dupla não chegou em 10 minutos. Envie as DUAS de novo.',
+        check_details: { ...((f.check_details as Record<string, unknown> | null) ?? {}), splitExpired: true },
+      }).eq('id', f.id);
+      continue;
+    }
+    aberta = f as unknown as Parte1Aberta;
+  }
+  return aberta;
+}
+
+/** A nota rejeitada é uma dupla que EXPIROU? (não segura a vaga — ver acima.) */
+function ehSplitExpirada(f: { status: string; check_details?: unknown }): boolean {
+  return f.status === 'rejeitada'
+    && Boolean((f.check_details as { splitExpired?: boolean } | null)?.splitExpired);
+}
+
 // Recebe a nota (base64), CONFERE contra o espelho publicado (valor/CNPJ/nome) e
 // registra. Decisão do Victor (26/07): não bateu ou ilegível → RECUSA automática
 // com motivo (status 'rejeitada' reabre o slot; app mostra o porquê). Erro
@@ -622,6 +740,16 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     ? null : String(mirrorKeyRaw);
   const b64raw = String(body.fileBase64 ?? '');
   if (!periodId || !emitterId || !b64raw) return json({ error: 'Dados incompletos' }, 400);
+
+  // ── Nota dividida (19/08/2026): forma escolhida no app + qual das duas é esta ──
+  // Ausente = nota única (comportamento de sempre, cliente antigo incluso).
+  const splitFormRaw = body.splitForm === undefined || body.splitForm === null ? null : String(body.splitForm);
+  const splitForm: NfSplitForm | null = splitFormRaw === '50' || splitFormRaw === '70-30' ? splitFormRaw : null;
+  const splitPartNum = body.splitPart === undefined || body.splitPart === null ? null : Number(body.splitPart);
+  const splitPart: 1 | 2 | null = splitPartNum === 1 || splitPartNum === 2 ? splitPartNum : null;
+  if ((splitForm === null) !== (splitPart === null)) {
+    return json({ error: 'Parcelamento inválido — escolha a forma de novo no app.' }, 400);
+  }
 
   const { data: em } = await supabase.from('driverpay_nota_emitters')
     .select('id, cnpj, label').eq('id', emitterId).eq('company_id', claims.company_id).maybeSingle();
@@ -652,13 +780,32 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   //
   // Vem ANTES do upload pra não deixar PDF órfão no bucket.
   // ══════════════════════════════════════════════════════════════════════════
+  // Expira duplas vencidas ANTES de olhar a vaga (lazy — o cron também varre) e
+  // descobre se há uma parte 1 aberta esperando o par.
+  const parte1 = await parte1AbertaDoSlot(claims.driver_id, periodId, emitterId);
+  if (splitPart === 2) {
+    if (!parte1) {
+      return json({
+        error: 'Não há primeira nota aberta desta dupla (ou os 10 minutos acabaram). Escolha a forma e envie as DUAS de novo.',
+        splitExpired: true,
+      }, 409);
+    }
+    if (parte1.split_form !== splitForm) {
+      return json({ error: 'A forma escolhida mudou no meio — envie as DUAS de novo com a mesma forma.' }, 409);
+    }
+  }
   {
     const { data: jaEnviadas } = await supabase.from('driverpay_nota_fiscal_files')
-      .select('id, status, mirror_platform_key')
+      .select('id, status, mirror_platform_key, check_details')
       .eq('driver_id', claims.driver_id).eq('period_id', periodId)
       .eq('nota_emitter_id', emitterId);
+    const consideradas = (jaEnviadas ?? [])
+      // Dupla expirada não segura a vaga (ver parte1AbertaDoSlot) …
+      .filter((f) => !ehSplitExpirada({ status: f.status as string, check_details: f.check_details }))
+      // … e, no envio da PARTE 2, a própria parte 1 aberta é esperada na vaga.
+      .filter((f) => !(splitPart === 2 && parte1 && f.id === parte1.id));
     const ocupando = notasQueOcupamVaga(
-      (jaEnviadas ?? []).map((f) => ({
+      consideradas.map((f) => ({
         status: f.status as string,
         mirror_platform_key: (f.mirror_platform_key as string | null) ?? null,
       })),
@@ -673,6 +820,13 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
         alreadySent: true,
       }, 409);
     }
+    // Dupla aberta bloqueia nota única/nova parte 1: ou completa, ou espera expirar.
+    if (splitPart !== 2 && parte1) {
+      return json({
+        error: 'Você tem uma dupla de notas em andamento — envie a SEGUNDA nota dela (ou aguarde os 10 minutos expirarem pra recomeçar).',
+        splitOpen: true,
+      }, 409);
+    }
   }
 
   // Somente PDF (decisao do Victor, 2026-07-24): foto confundia os drivers. Valida o TIPO
@@ -685,6 +839,8 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   // 'pendente' (conferir manualmente) — jamais bloqueia o envio por falha nossa.
   let check: NfCheckResult | null = null;
   let candidates: Record<string, number> = {};
+  /** O mapa que a conferência DE FATO comparou (nota dividida troca por fatias). */
+  let candidatosComparados: Record<string, number> = {};
   /** A transcricao veio da IA? Vai pro check_details, pra dar pra auditar depois. */
   let lidoPorIa = false;
   try {
@@ -721,15 +877,54 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
 
     const { data: driver } = await supabase.from('driverpay_drivers')
       .select('name, recebedor_nome').eq('id', claims.driver_id).maybeSingle();
+    const nomesAutorizados = await nomesAutorizadosDe(claims.driver_id);
     candidates = await buildValueCandidates(claims.driver_id, claims.company_id, periodId, emitterId);
+
+    // ── Nota dividida: o valor esperado vira a FATIA (19/08/2026) ──
+    // Parte 1: a fatia 1 de QUALQUER candidato (mesma conta que o app mostrou).
+    // Parte 2: exatamente o que FALTA da dupla (total casado na parte 1 − o que a
+    // parte 1 trouxe) — assim a soma fecha sempre no espelho.
+    candidatosComparados = candidates;
+    if (splitPart === 1 && splitForm) {
+      candidatosComparados = Object.fromEntries(
+        Object.entries(candidates)
+          .filter(([, v]) => v > 0)
+          .map(([label, v]) => [`${label}~parte1`, nfSplitSlices(v, splitForm)[0]]),
+      );
+    } else if (splitPart === 2 && parte1) {
+      const totalDupla = Number((parte1.check_details as { splitTotal?: number } | null)?.splitTotal ?? NaN);
+      const jaVeio = Number(parte1.read_value ?? NaN);
+      if (Number.isFinite(totalDupla) && Number.isFinite(jaVeio)) {
+        candidatosComparados = { dupla_restante: Math.round((totalDupla - jaVeio) * 100) / 100 };
+      }
+    }
+
     check = runNfCheck({
       text: textoFinal,
       expectedCnpj: String(em.cnpj ?? '').replace(/\D/g, ''),
       expectedCnpjLabel: em.label ?? '',
       driverName: driver?.name ?? '',
       recebedorNome: driver?.recebedor_nome ?? null,
-      valueCandidates: candidates,
+      authorizedNames: nomesAutorizados,
+      valueCandidates: candidatosComparados,
     });
+
+    // A dupla exige nomes DIFERENTES (decisão do Victor: "duas notas no nome de
+    // duas pessoas diferentes"). Vira recusa normal, com o motivo pro driver.
+    if (splitPart === 2 && parte1 && check.status === 'ok') {
+      const nomeDaParte1 = parte1.matched_name ?? '';
+      const temNomeDiferente = check.matchedNames.some((n) => n !== nomeDaParte1);
+      if (!temNomeDiferente) {
+        check = {
+          ...check,
+          status: 'divergente',
+          nomeOk: false,
+          reasons: [
+            `A segunda nota deve estar em um nome DIFERENTE da primeira (a primeira está no nome de ${nomeDaParte1}).`,
+          ],
+        };
+      }
+    }
   } catch (checkErr) {
     console.error('[nf-check] falha interna (upload segue como pendente):', checkErr);
     check = null;
@@ -750,7 +945,33 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   const autoValidateEnabled = settings?.nf_auto_validate !== false;
   const checksAllGreen = check !== null && check.status === 'ok'
     && check.valorOk === true && check.cnpjOk === true && check.nomeOk === true;
-  const autoValidate = checksAllGreen && autoValidateEnabled;
+  // Parte 1 da dupla NUNCA valida sozinha — fica 'recebida' esperando o par (a
+  // validação das duas acontece junta, quando a parte 2 fecha a soma).
+  const autoValidate = checksAllGreen && autoValidateEnabled && splitPart !== 1;
+
+  // ── Nota dividida: números pra gravar (fatia, total da dupla, nome que casou) ──
+  let readValue: number | null = null;
+  let splitTotal: number | null = null;
+  if (check && check.valorOk === true && check.matchedCandidates.length > 0) {
+    const labelComparado = check.matchedCandidates[0];
+    const v = candidatosComparados[labelComparado];
+    readValue = typeof v === 'number' && Number.isFinite(v) ? v : null;
+    if (splitPart === 1) {
+      const original = labelComparado.replace(/~parte1$/, '');
+      const total = candidates[original];
+      splitTotal = typeof total === 'number' && Number.isFinite(total) ? total : null;
+    } else if (splitPart === 2 && parte1) {
+      const t = Number((parte1.check_details as { splitTotal?: number } | null)?.splitTotal ?? NaN);
+      splitTotal = Number.isFinite(t) ? t : null;
+    }
+  }
+  // Na parte 2, o nome gravado é o DIFERENTE do da parte 1 (a regra da dupla).
+  const matchedName = check && check.matchedNames.length > 0
+    ? (splitPart === 2 && parte1
+        ? (check.matchedNames.find((n) => n !== (parte1.matched_name ?? '')) ?? check.matchedNames[0])
+        : check.matchedNames[0])
+    : null;
+  const splitGroup = splitPart === 1 ? crypto.randomUUID() : (splitPart === 2 ? parte1!.split_group : null);
 
   const path = `${claims.company_id}/${periodId}/${claims.driver_id}/${emitterId}/${crypto.randomUUID()}.${extFromType(contentType)}`;
   const { error: upErr } = await supabase.storage.from(NF_BUCKET).upload(path, bytes, { contentType, upsert: false });
@@ -774,13 +995,23 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     check_valor: check?.valorOk ?? null,
     check_cnpj: check?.cnpjOk ?? null,
     check_nome: check?.nomeOk ?? null,
+    // Nota dividida (19/08/2026): NULL em tudo na nota única — nada muda pra ela.
+    read_value: readValue,
+    split_group: autoReject ? null : splitGroup,
+    split_form: autoReject ? null : splitForm,
+    split_part: autoReject ? null : splitPart,
+    split_expected: autoReject ? null : readValue,
+    matched_name: matchedName,
     check_details: check ? {
       autoValidated: autoValidate,
       // Auto-validação estava desligada e a nota passou nos 3 checks: o painel
       // mostra "conferida ✓ — validar" (é só apertar o botão, sem reconferir).
       autoValidateSkipped: checksAllGreen && !autoValidateEnabled,
       foundValues: check.foundValues, foundCnpjs: check.foundCnpjs,
-      matchedCandidates: check.matchedCandidates, candidates, reasons: check.reasons,
+      matchedCandidates: check.matchedCandidates, candidates: candidatosComparados,
+      reasons: check.reasons,
+      matchedNames: check.matchedNames,
+      ...(splitTotal !== null ? { splitTotal } : {}),
       // O PDF veio sem texto e quem leu foi a IA. Fica gravado pra dar pra
       // auditar depois: se um dia um valor lido errado passar, dá pra achar
       // exatamente quais notas dependeram da leitura automática.
@@ -798,7 +1029,31 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     // A nota fica registrada como 'rejeitada' e o slot reabre pro reenvio.
     return json({ ok: false, rejected: true, error: rejectReason, reason: rejectReason, checks: check }, 422);
   }
-  return json({ ok: true, validated: autoValidate, checks: check });
+
+  // ── Nota dividida: a parte 2 fechou a soma → a PARTE 1 acompanha o veredito ──
+  // (validada junto, ou 'recebida' aguardando o clique quando a auto-validação
+  // está desligada — o par nunca fica meio validado.)
+  if (splitPart === 2 && parte1 && checksAllGreen && autoValidate) {
+    await supabase.from('driverpay_nota_fiscal_files').update({
+      status: 'validada',
+      validated_at: new Date().toISOString(),
+    }).eq('id', parte1.id).eq('status', 'recebida');
+  }
+
+  if (splitPart === 1) {
+    const restante = splitTotal !== null && readValue !== null
+      ? Math.round((splitTotal - readValue) * 100) / 100
+      : null;
+    return json({
+      ok: true,
+      validated: false,
+      splitOpen: true,
+      splitRemaining: restante,
+      splitDeadlineMs: NF_SPLIT_WINDOW_MS,
+      checks: check,
+    });
+  }
+  return json({ ok: true, validated: autoValidate, splitClosed: splitPart === 2, checks: check });
 }
 
 // Lista as notas que o proprio driver ja enviou no periodo.
@@ -1572,8 +1827,34 @@ async function proofProcessQueue(req: Request, body: Body): Promise<Response> {
   const limite = Math.min(Math.max(Number(body.limit ?? 10) || 10, 1), 50);
   const placar = await processarFila(null, limite);
   const total = Object.values(placar).reduce((s, n) => s + n, 0);
+  // Nota dividida (19/08/2026): duplas com a parte 1 esperando há mais de 10 min
+  // expiram aqui também — o app e o upload já expiram lazy, o cron garante que
+  // nenhuma fica pendurada mesmo sem ninguém abrir nada.
+  const expiradas = await expirarDuplasVencidas();
+  if (expiradas > 0) console.log(`[fila] ${expiradas} dupla(s) de nota expiradas (10 min sem a segunda)`);
   console.log(`[fila] rodada do agendador: ${total} print(s) — ${JSON.stringify(placar)}`);
-  return json({ ok: true, processados: total, placar });
+  return json({ ok: true, processados: total, placar, duplasExpiradas: expiradas });
+}
+
+/** Expira TODAS as partes 1 sem par além dos 10 minutos (qualquer empresa). */
+async function expirarDuplasVencidas(): Promise<number> {
+  const corte = new Date(Date.now() - NF_SPLIT_WINDOW_MS).toISOString();
+  const { data: abertas } = await supabase.from('driverpay_nota_fiscal_files')
+    .select('id, split_group, check_details')
+    .eq('split_part', 1).eq('status', 'recebida').lt('uploaded_at', corte);
+  let n = 0;
+  for (const f of abertas ?? []) {
+    const { data: par } = await supabase.from('driverpay_nota_fiscal_files')
+      .select('id').eq('split_group', f.split_group).eq('split_part', 2).limit(1);
+    if ((par ?? []).length > 0) continue;
+    const { error } = await supabase.from('driverpay_nota_fiscal_files').update({
+      status: 'rejeitada',
+      reject_reason: '[automático] A segunda nota da dupla não chegou em 10 minutos. Envie as DUAS de novo.',
+      check_details: { ...((f.check_details as Record<string, unknown> | null) ?? {}), splitExpired: true },
+    }).eq('id', f.id).eq('status', 'recebida');
+    if (!error) n++;
+  }
+  return n;
 }
 
 /** Comparacao que nao vaza o tamanho do acerto pelo tempo gasto. */
@@ -1602,6 +1883,7 @@ Deno.serve(async (req) => {
       case 'my-mirrors': return await myMirrors(req, body);
       case 'my-mirror-url': return await myMirrorUrl(req, body);
       case 'nf-slots': return await nfSlots(req, body);
+      case 'nf-split-preview': return await nfSplitPreview(req, body);
       case 'nf-upload': return await nfUpload(req, body);
       case 'nf-list': return await nfListFn(req, body);
       // Espelho do app (print da tela da Shopee) — 04/08/2026

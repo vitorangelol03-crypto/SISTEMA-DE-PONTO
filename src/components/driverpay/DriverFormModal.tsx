@@ -9,6 +9,10 @@ import {
   upsertDriverRate,
   getDriverRates,
   resetDriverPassword,
+  listDriverNotaNames,
+  addDriverNotaName,
+  removeDriverNotaName,
+  type DriverNotaName,
 } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
 
@@ -60,6 +64,45 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
   // Recebedor separado (ex.: esposa emite a nota e recebe o PIX) — relatórios saem no nome/PIX dele.
   const [recebedorNome, setRecebedorNome] = useState(driver?.recebedor_nome ?? '');
   const [recebedorPix, setRecebedorPix] = useState(driver?.recebedor_pix ?? '');
+  // Nomes autorizados a emitir nota (nota dividida, 19/08/2026) — máx 2, teto no banco.
+  const [notaNames, setNotaNames] = useState<DriverNotaName[]>([]);
+  const [novoNotaNome, setNovoNotaNome] = useState('');
+  const [novoNotaCnpj, setNovoNotaCnpj] = useState('');
+  const [salvandoNotaNome, setSalvandoNotaNome] = useState(false);
+
+  useEffect(() => {
+    if (mode !== 'edit' || !driver?.id) return;
+    listDriverNotaNames(companyId, driver.id)
+      .then(setNotaNames)
+      .catch((e) => console.error('Erro ao carregar nomes autorizados:', e));
+  }, [mode, driver?.id, companyId]);
+
+  const adicionarNotaNome = async () => {
+    if (!driver?.id || !novoNotaNome.trim()) return;
+    setSalvandoNotaNome(true);
+    try {
+      await addDriverNotaName(companyId, driver.id, novoNotaNome, novoNotaCnpj || null, userId);
+      setNotaNames(await listDriverNotaNames(companyId, driver.id));
+      setNovoNotaNome('');
+      setNovoNotaCnpj('');
+      toast.success('Nome autorizado cadastrado.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao cadastrar o nome');
+    } finally {
+      setSalvandoNotaNome(false);
+    }
+  };
+
+  const removerNotaNome = async (id: string) => {
+    if (!driver?.id) return;
+    try {
+      await removeDriverNotaName(companyId, id, userId);
+      setNotaNames((prev) => prev.filter((n) => n.id !== id));
+      toast.success('Nome removido.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover o nome');
+    }
+  };
   const [rates, setRates] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const pl of platforms) initial[pl.id] = String(pl.default_rate);
@@ -321,6 +364,65 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
             </div>
           </div>
         </div>
+
+        {/* ── Nomes autorizados a emitir nota (nota dividida, 19/08/2026) ──
+            Só na edição: o driver precisa existir pra pendurar os nomes. */}
+        {mode === 'edit' && driver?.id && (
+          <div className="border border-blue-200 bg-blue-50 rounded-md p-3 space-y-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Nomes autorizados a emitir nota (máx. 2)</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Pra nota dividida em 2 nomes: o robô só aceita nota destes nomes (além do driver e do recebedor).
+                No app, o driver escolhe dividir em 2 notas — metade/metade ou 70%/30% — em nomes diferentes.
+              </p>
+            </div>
+            {notaNames.length > 0 && (
+              <div className="space-y-1.5">
+                {notaNames.map((n) => (
+                  <div key={n.id} className="flex items-center justify-between gap-2 bg-white border border-gray-200 rounded-md px-3 py-2">
+                    <div className="min-w-0 text-sm text-gray-800">
+                      <span className="font-medium">{n.name}</span>
+                      {n.cnpj && <span className="text-xs text-gray-500"> · CNPJ {n.cnpj}</span>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removerNotaNome(n.id)}
+                      className="shrink-0 text-xs text-red-600 hover:text-red-800 underline"
+                    >
+                      remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {notaNames.length < 2 && (
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-2">
+                <input
+                  type="text"
+                  value={novoNotaNome}
+                  onChange={(e) => setNovoNotaNome(e.target.value)}
+                  placeholder="Nome EXATO como sai na nota"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
+                />
+                <input
+                  type="text"
+                  value={novoNotaCnpj}
+                  onChange={(e) => setNovoNotaCnpj(e.target.value)}
+                  placeholder="CNPJ (opcional)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
+                />
+                <button
+                  type="button"
+                  onClick={adicionarNotaNome}
+                  disabled={salvandoNotaNome || !novoNotaNome.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 min-h-[40px]"
+                >
+                  {salvandoNotaNome ? 'Salvando…' : 'Adicionar'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {platforms.length > 0 && (
           <div className="space-y-2">

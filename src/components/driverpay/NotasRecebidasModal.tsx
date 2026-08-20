@@ -550,6 +550,17 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
                           <span className="text-[13px] font-medium text-gray-700 truncate">{row.emitterLabel} · {row.emitterCnpj}</span>
                           <StatusBadge status={row.status} reason={row.rejectReason} auto={row.checkDetails?.autoValidated === true} />
                           <CheckBadges row={row} />
+                          {/* Nota DIVIDIDA (19/08/2026): qual das duas é esta, a forma e o
+                              nome que casou — a dupla valida junta quando a soma fecha. */}
+                          {row.splitGroup && (
+                            <span
+                              className="inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700"
+                              title={`Nota dividida (${row.splitForm === '50' ? 'metade/metade' : '70% e 30%'})${row.matchedName ? ` — esta no nome de ${row.matchedName}` : ''}. A dupla só valida quando as duas fatias batem, em nomes diferentes, com a 2ª chegando em até 10 min.`}
+                            >
+                              dupla {row.splitForm === '50' ? '50/50' : '70/30'} · nota {row.splitPart ?? '?'} de 2
+                              {row.readValue !== null ? ` · R$ ${row.readValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}
+                            </span>
+                          )}
                           {/* Quanto a nota TEM que ter (05/08/2026). Antes esse número só
                               aparecia dentro da mensagem de recusa — ou seja, só depois de
                               dar errado. Agora dá pra conferir antes. */}

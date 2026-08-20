@@ -112,6 +112,16 @@ export interface NfSlot {
   rejected: number;
   /** motivo da última recusa (mostra "recusada: <motivo>, envie outra"). */
   rejectReason: string | null;
+  /**
+   * Nota dividida (19/08/2026): a PRIMEIRA nota da dupla já chegou e a segunda
+   * tem até `expiresAt` pra vir. Ausente/null = nenhuma dupla em andamento.
+   */
+  splitOpen?: {
+    form: string;
+    part1Value: number | null;
+    remaining: number | null;
+    expiresAt: string;
+  } | null;
 }
 export interface NfFile {
   id: string;
@@ -149,12 +159,28 @@ export function driverNfUpload(
     filename?: string;
     /** De qual espelho é esta nota (28/07). Omitido = sem espelho publicado. */
     mirrorKey?: string | null;
+    /** Nota dividida (19/08/2026): forma escolhida + qual das duas é esta. Omitido = única. */
+    splitForm?: '50' | '70-30';
+    splitPart?: 1 | 2;
   },
   token: string,
-): Promise<{ ok: boolean; validated?: boolean }> {
+): Promise<{
+  ok: boolean; validated?: boolean;
+  splitOpen?: boolean; splitRemaining?: number | null; splitDeadlineMs?: number; splitClosed?: boolean;
+}> {
   // Nota recusada pela conferência automática volta como HTTP 422 → callDriverApi
   // lança DriverApiError com o motivo (o slot reabre e mostra "recusada: <motivo>").
-  return callDriverApi<{ ok: boolean; validated?: boolean }>('nf-upload', input, token);
+  return callDriverApi('nf-upload', input, token);
+}
+
+/**
+ * Nota dividida (19/08/2026): as fatias exatas de cada forma — o app mostra
+ * "cada nota deve ter R$ X e R$ Y" ANTES do driver escolher (exigência do Victor).
+ */
+export function driverNfSplitPreview(
+  periodId: string, emitterId: string, token: string,
+): Promise<{ total: number; forms: Record<'50' | '70-30', [number, number]>; windowMinutes: number }> {
+  return callDriverApi('nf-split-preview', { periodId, emitterId }, token);
 }
 
 // ─── Espelho do app da Shopee (print da tela) — 04/08/2026 ───────────────────

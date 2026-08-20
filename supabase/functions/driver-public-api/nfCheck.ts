@@ -70,6 +70,13 @@ export interface NfCheckInput {
   expectedCnpjLabel: string;
   driverName: string;
   recebedorNome: string | null;
+  /**
+   * Nota dividida (19/08/2026): nomes AUTORIZADOS a emitir nota por este driver
+   * (tabela driverpay_driver_nota_names, máx 2). Contam junto com driver/recebedor
+   * na validação por nome — decisão do Victor: "continuamos usando a validação
+   * por nome".
+   */
+  authorizedNames?: readonly string[];
   /** label -> valor esperado (ex.: espelho_group_LOGGI: 238). Vazio = sem base p/ conferir valor. */
   valueCandidates: Record<string, number>;
   /** Tolerância em centavos (padrão 2 = ±R$ 0,02, só arredondamento). */
@@ -84,6 +91,11 @@ export interface NfCheckResult {
   nomeOk: boolean | null;
   /** Quais candidatos de valor bateram (labels). */
   matchedCandidates: string[];
+  /**
+   * Quais NOMES (driver / recebedor / autorizados) aparecem na nota (19/08/2026).
+   * A dupla da nota dividida exige que as 2 notas casem nomes DIFERENTES.
+   */
+  matchedNames: string[];
   /** Maiores valores achados na nota (p/ mensagem e auditoria). */
   foundValues: number[];
   /** CNPJs achados na nota (só dígitos, p/ auditoria). */
@@ -201,7 +213,7 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
   const tolerance = (input.toleranceCents ?? 2) / 100;
   const base: Omit<NfCheckResult, 'status' | 'reasons'> = {
     cnpjOk: null, valorOk: null, nomeOk: null,
-    matchedCandidates: [], foundValues: [], foundCnpjs: [],
+    matchedCandidates: [], matchedNames: [], foundValues: [], foundCnpjs: [],
   };
 
   const text = input.text ?? '';
@@ -267,17 +279,26 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
     }
   }
 
-  // Nome: driver OU recebedor cadastrado
-  const driverMatch = nameMatches(input.driverName, ntext);
-  const recebedorMatch = nameMatches(input.recebedorNome, ntext);
-  const nomeOk = driverMatch === null && recebedorMatch === null ? null : Boolean(driverMatch || recebedorMatch);
+  // Nome: driver, recebedor cadastrado OU nome autorizado (nota dividida, 19/08/2026).
+  // Registra QUAIS casaram — a dupla da nota dividida exige nomes diferentes.
+  const nomesConferidos: Array<{ nome: string; hit: boolean | null }> = [
+    { nome: input.driverName, hit: nameMatches(input.driverName, ntext) },
+    { nome: input.recebedorNome ?? '', hit: nameMatches(input.recebedorNome, ntext) },
+    ...(input.authorizedNames ?? []).map((n) => ({ nome: n, hit: nameMatches(n, ntext) })),
+  ];
+  const matchedNames = nomesConferidos.filter((c) => c.hit === true).map((c) => c.nome);
+  const algumConferivel = nomesConferidos.some((c) => c.hit !== null);
+  const nomeOk = !algumConferivel ? null : matchedNames.length > 0;
   if (nomeOk === false) {
-    const quem = input.recebedorNome
-      ? `${input.driverName} ou ${input.recebedorNome} (recebedor cadastrado)`
-      : input.driverName;
+    const autorizados = (input.authorizedNames ?? []).filter((n) => n && n.trim());
+    const lista = [
+      input.driverName,
+      ...(input.recebedorNome ? [`${input.recebedorNome} (recebedor cadastrado)`] : []),
+      ...autorizados.map((n) => `${n} (nome autorizado)`),
+    ].filter(Boolean).join(' ou ');
     reasons.push(
-      `A nota deve estar no nome de ${quem}. ` +
-      'Se quem emite a nota mudou, avise a CD pra atualizar o cadastro do recebedor.'
+      `A nota deve estar no nome de ${lista}. ` +
+      'Se quem emite a nota mudou, avise a CD pra atualizar o cadastro.'
     );
   }
 
@@ -289,8 +310,32 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
     valorOk,
     nomeOk,
     matchedCandidates,
+    matchedNames: [...new Set(matchedNames)],
     foundValues: foundValues.sort((a, b) => b - a).slice(0, 8),
     foundCnpjs,
     reasons,
   };
+}
+
+// ─── Nota dividida em 2 nomes (19/08/2026, decisão do Victor) ────────────────
+
+/** Formas de parcelamento da nota (decisão do Victor: só estas três; 'unica' = sem divisão). */
+export type NfSplitForm = '50' | '70-30';
+
+/**
+ * As DUAS fatias de um total para a forma escolhida — o valor EXATO que cada
+ * nota deve ter, mostrado no app na hora da escolha e conferido pelo robô.
+ *
+ * Regra do centavo: a fatia 1 arredonda pro centavo mais próximo e a fatia 2
+ * leva o resto — a soma fecha SEMPRE no total, sem centavo perdido.
+ * Ex.: 10.356,81 em 50/50 → 5.178,41 + 5.178,40 · em 70/30 → 7.249,77 + 3.107,04.
+ *
+ * ⚠️ Existe uma cópia desta conta no painel/app (src/utils/nfSplit.ts) e um teste
+ * roda as duas LADO A LADO — se divergirem, o app mostraria um valor e o robô
+ * cobraria outro. Mudou aqui, mudou lá.
+ */
+export function nfSplitSlices(total: number, form: NfSplitForm): [number, number] {
+  const cents = Math.round(total * 100);
+  const first = form === '50' ? Math.round(cents / 2) : Math.round(cents * 0.7);
+  return [first / 100, (cents - first) / 100];
 }

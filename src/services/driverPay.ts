@@ -599,12 +599,23 @@ export interface NotaFiscalFileRow {
   validatedBy: string | null;
   /** Espelho que pediu esta nota (28/07). null = nota antiga / sem espelho publicado. */
   mirrorPlatformKey: string | null;
+  // ── Nota dividida (19/08/2026) — null em tudo na nota única ──
+  /** As 2 notas da dupla compartilham este id. */
+  splitGroup: string | null;
+  /** '50' (metade/metade) ou '70-30'. */
+  splitForm: string | null;
+  /** 1 ou 2 — qual das duas é esta. */
+  splitPart: number | null;
+  /** Valor lido/casado nesta nota. */
+  readValue: number | null;
+  /** Nome (driver/recebedor/autorizado) que casou nesta nota. */
+  matchedName: string | null;
 }
 
 export const listNotaFiscalFiles = async (companyId: string, periodId: string): Promise<NotaFiscalFileRow[]> => {
   const { data, error } = await supabase
     .from('driverpay_nota_fiscal_files')
-    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, reject_reason, uploaded_at, check_status, check_valor, check_cnpj, check_nome, check_details, validated_by, mirror_platform_key, driverpay_drivers(name, recebedor_nome), driverpay_nota_emitters(label, cnpj)')
+    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, reject_reason, uploaded_at, check_status, check_valor, check_cnpj, check_nome, check_details, validated_by, mirror_platform_key, split_group, split_form, split_part, read_value, matched_name, driverpay_drivers(name, recebedor_nome), driverpay_nota_emitters(label, cnpj)')
     .eq('company_id', companyId)
     .eq('period_id', periodId)
     .order('uploaded_at', { ascending: true });
@@ -636,6 +647,11 @@ export const listNotaFiscalFiles = async (companyId: string, periodId: string): 
       checkNome: (r.check_nome as boolean | null) ?? null,
       checkDetails: (r.check_details as Record<string, unknown> | null) ?? null,
       validatedBy: (r.validated_by as string | null) ?? null,
+      splitGroup: (r.split_group as string | null) ?? null,
+      splitForm: (r.split_form as string | null) ?? null,
+      splitPart: (r.split_part as number | null) ?? null,
+      readValue: r.read_value === null || r.read_value === undefined ? null : Number(r.read_value),
+      matchedName: (r.matched_name as string | null) ?? null,
     };
   });
 };
@@ -711,6 +727,46 @@ export const deleteNotaFiscalFile = async (fileId: string, userId: string): Prom
     const { error: rmErr } = await supabase.storage.from(NOTA_FISCAL_BUCKET).remove([path]);
     if (rmErr) console.warn('Não foi possível remover a nota do Storage:', rmErr.message);
   }
+};
+
+// ─── Nomes autorizados a emitir nota (nota dividida, 19/08/2026) ─────────────
+// Decisão do Victor: cada driver pode ter até 2 nomes cadastrados (o teto é
+// trigger no banco); o robô valida a nota contra driver + recebedor + esta lista,
+// e a dupla da nota dividida exige nomes diferentes entre as duas.
+
+export interface DriverNotaName {
+  id: string;
+  driver_id: string;
+  name: string;
+  cnpj: string | null;
+}
+
+export const listDriverNotaNames = async (companyId: string, driverId: string): Promise<DriverNotaName[]> => {
+  const { data, error } = await supabase
+    .from('driverpay_driver_nota_names')
+    .select('id, driver_id, name, cnpj')
+    .eq('company_id', companyId).eq('driver_id', driverId)
+    .order('created_at', { ascending: true });
+  if (error) throwDbError(error);
+  return (data ?? []) as DriverNotaName[];
+};
+
+export const addDriverNotaName = async (
+  companyId: string, driverId: string, name: string, cnpj: string | null, userId: string,
+): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase.from('driverpay_driver_nota_names').insert({
+    company_id: companyId, driver_id: driverId,
+    name: name.trim(), cnpj: cnpj?.trim() || null, created_by: userId,
+  });
+  if (error) throwDbError(error);
+};
+
+export const removeDriverNotaName = async (companyId: string, id: string, userId: string): Promise<void> => {
+  await ensurePerm(userId, 'driverpay.editDriver');
+  const { error } = await supabase.from('driverpay_driver_nota_names')
+    .delete().eq('id', id).eq('company_id', companyId);
+  if (error) throwDbError(error);
 };
 
 /** Bucket PRIVADO das notas fiscais anexadas pelo driver. */

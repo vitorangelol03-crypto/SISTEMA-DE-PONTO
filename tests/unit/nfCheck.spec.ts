@@ -337,3 +337,61 @@ describe('ehNossoEspelho — recusar o próprio espelho como nota', () => {
     expect(r.matchedCandidates).toEqual([]);
   });
 });
+
+/**
+ * Nota dividida (19/08/2026): a validação por NOME passa a aceitar também os
+ * NOMES AUTORIZADOS cadastrados no perfil do driver (máx 2) — decisão do Victor:
+ * "continuamos usando a validação por nome". E o resultado agora CONTA quais
+ * nomes casaram (a dupla exige nomes diferentes entre as duas notas).
+ */
+describe('runNfCheck — nomes autorizados (nota dividida, 19/08/2026)', () => {
+  const base = {
+    expectedCnpj: CNPJ_CD,
+    expectedCnpjLabel: 'Shopee/Anjun/Loggi',
+    driverName: 'WILLKERSON MOISES DORNELAS BATISTA',
+    recebedorNome: null as string | null,
+    valueCandidates: { espelho_individual_cheio: 2470 },
+  };
+
+  it('🎯 nota no nome AUTORIZADO (ex.: esposa) → nomeOk, e o nome casado fica registrado', () => {
+    const r = runNfCheck({
+      ...base,
+      authorizedNames: ['NEILIZANA DA SILVA DORNELAS'],
+      text: danfse({ valor: '2.470,00', emitente: 'NEILIZANA DA SILVA DORNELAS' }),
+    });
+    expect(r.status).toBe('ok');
+    expect(r.nomeOk).toBe(true);
+    expect(r.matchedNames).toEqual(['NEILIZANA DA SILVA DORNELAS']);
+  });
+
+  it('🔴 nome de ESTRANHO (fora do driver/recebedor/autorizados) → recusa citando quem pode', () => {
+    const r = runNfCheck({
+      ...base,
+      authorizedNames: ['NEILIZANA DA SILVA DORNELAS'],
+      text: danfse({ valor: '2.470,00', emitente: 'FULANO QUALQUER DE TAL' }),
+    });
+    expect(r.status).toBe('divergente');
+    expect(r.nomeOk).toBe(false);
+    expect(r.matchedNames).toEqual([]);
+    expect(r.reasons.join(' ')).toContain('NEILIZANA DA SILVA DORNELAS (nome autorizado)');
+  });
+
+  it('sem lista, o comportamento de sempre não muda (driver/recebedor)', () => {
+    const r = runNfCheck({
+      ...base,
+      text: danfse({ valor: '2.470,00', emitente: 'WILLKERSON MOISES DORNELAS BATISTA' }),
+    });
+    expect(r.status).toBe('ok');
+    expect(r.matchedNames).toEqual(['WILLKERSON MOISES DORNELAS BATISTA']);
+  });
+
+  it('nota com o nome do DRIVER continua valendo mesmo com lista cadastrada', () => {
+    const r = runNfCheck({
+      ...base,
+      authorizedNames: ['NEILIZANA DA SILVA DORNELAS', 'OUTRO NOME AUTORIZADO'],
+      text: danfse({ valor: '2.470,00', emitente: 'WILLKERSON MOISES DORNELAS BATISTA' }),
+    });
+    expect(r.status).toBe('ok');
+    expect(r.matchedNames).toEqual(['WILLKERSON MOISES DORNELAS BATISTA']);
+  });
+});

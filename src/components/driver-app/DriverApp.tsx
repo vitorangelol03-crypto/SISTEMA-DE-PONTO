@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import { CircleDollarSign, LogOut, Eye, FileText, KeyRound, Upload, ChevronLeft, CheckCircle2, Download } from 'lucide-react';
 import {
   driverLogin, driverChangePassword, driverMyMirrors, driverMirrorUrl,
-  driverNfSlots, driverNfList, driverNfUpload,
+  driverNfSlots, driverNfList, driverNfUpload, driverNfSplitPreview,
   driverProofSlots, driverProofUpload,
   getDriverToken, getDriverName, setDriverSession, clearDriverSession,
   DriverApiError, type DriverMirror, type NfSlot, type NfFile,
@@ -27,6 +27,14 @@ function fmtDate(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
+}
+/** R$ da NOTA dividida (o valor da nota o driver PRECISA ver — é o que ele emite). */
+function fmtBRL(v: number): string {
+  return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+function fmtHora(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 function errStatus(e: unknown): number {
   return e instanceof DriverApiError ? e.status : -1;
@@ -136,6 +144,10 @@ export function DriverApp() {
   const [nfSlots, setNfSlots] = useState<NfSlot[] | null>(null);
   const [nfFiles, setNfFiles] = useState<NfFile[]>([]);
   const [nfUploading, setNfUploading] = useState<string | null>(null);
+  // Nota dividida (19/08/2026): menu de formas por slot (valores exatos vindos do
+  // robô — a MESMA conta que vai conferir) e a forma escolhida antes do 1º envio.
+  const [splitMenu, setSplitMenu] = useState<Record<string, { total: number; forms: Record<'50' | '70-30', [number, number]> } | null>>({});
+  const [splitChoice, setSplitChoice] = useState<Record<string, { form: '50' | '70-30'; slices: [number, number] } | null>>({});
 
   // Espelho do app da Shopee (print da tela) — 04/08/2026.
   // ⚠️ Nada aqui guarda quantidade: o driver so anexa a foto.
@@ -369,7 +381,23 @@ export function DriverApp() {
     }
   }
 
-  async function handleNfFile(slot: NfSlot, file: File | null | undefined) {
+  /** Abre o menu "dividir em 2 notas" com os valores EXATOS de cada forma (do robô). */
+  async function abrirMenuSplit(slot: NfSlot) {
+    const k = `${slot.mirrorKey ?? '*'}|${slot.emitterId}`;
+    if (!token || !nfCtx || splitMenu[k]) return;
+    try {
+      const prev = await driverNfSplitPreview(nfCtx.periodId, slot.emitterId, token);
+      setSplitMenu((m) => ({ ...m, [k]: { total: prev.total, forms: prev.forms } }));
+    } catch (e) {
+      toast.error(errMsg(e, 'Não consegui calcular a divisão — envie a nota única.'), { duration: 8000 });
+    }
+  }
+
+  async function handleNfFile(
+    slot: NfSlot,
+    file: File | null | undefined,
+    split?: { form: '50' | '70-30'; part: 1 | 2 },
+  ) {
     const emitterId = slot.emitterId;
     if (!file || !token || !nfCtx) return;
     // Somente PDF (decisão do Victor, 2026-07-24): foto confundia os drivers.
@@ -383,11 +411,23 @@ export function DriverApp() {
     try {
       const { base64, contentType, filename } = await fileToUpload(file);
       const res = await driverNfUpload(
-        { periodId: nfCtx.periodId, emitterId, contentType, fileBase64: base64, filename, mirrorKey: slot.mirrorKey },
+        {
+          periodId: nfCtx.periodId, emitterId, contentType, fileBase64: base64, filename,
+          mirrorKey: slot.mirrorKey,
+          ...(split ? { splitForm: split.form, splitPart: split.part } : {}),
+        },
         token,
       );
+      // Nota dividida: a 1ª entrou — o relógio dos 10 minutos está correndo.
+      if (res.splitOpen) {
+        toast.success(
+          `1ª nota recebida!${typeof res.splitRemaining === 'number' ? ` Agora envie a 2ª, de ${fmtBRL(res.splitRemaining)},` : ' Agora envie a 2ª'} em até 10 minutos.`,
+          { duration: 10000 },
+        );
+        setSplitChoice((m) => ({ ...m, [`${slot.mirrorKey ?? '*'}|${emitterId}`]: null }));
+      }
       // Conferência automática: 3 checks verdes = já validada; senão fica pra conferência manual.
-      if (res.validated) toast.success('Nota enviada e validada! ✓ Valor, CNPJ e nome conferidos.', { duration: 6000 });
+      else if (res.validated) toast.success(res.splitClosed ? 'Dupla completa! ✓ As duas notas foram validadas.' : 'Nota enviada e validada! ✓ Valor, CNPJ e nome conferidos.', { duration: 6000 });
       else toast.success('Nota enviada! Ela será conferida.');
       await loadNf(nfCtx.periodId);
       // O card lá da lista mostra "Nota enviada" — mas só se a lista for relida.
@@ -751,26 +791,88 @@ export function DriverApp() {
               )}
               {/* UMA NOTA POR VAGA (05/08). Com nota no lugar — boa ou recusada — o
                   botão some: a edge fn recusa o envio com 409, e um botão que só dá
-                  erro é pior do que botão nenhum. O caminho passa a ser a CD. */}
-              {s.sent > 0 || s.rejected > 0 ? (
+                  erro é pior do que botão nenhum. O caminho passa a ser a CD.
+                  NOTA DIVIDIDA (19/08): dupla em andamento vem ANTES de tudo — a 1ª
+                  conta como enviada, mas o que falta é a 2ª. */}
+              {s.splitOpen ? (
+                <>
+                  <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <b>1ª nota recebida{s.splitOpen.part1Value !== null ? ` (${fmtBRL(s.splitOpen.part1Value)})` : ''}.</b>
+                    {' '}Envie a 2ª{s.splitOpen.remaining !== null ? <>, de <b>{fmtBRL(s.splitOpen.remaining)}</b>,</> : ''} até{' '}
+                    <b>{fmtHora(s.splitOpen.expiresAt)}</b> — em nome DIFERENTE da primeira. Passou da hora, as duas caem e você reenvia a dupla.
+                  </div>
+                  <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer'}`}>
+                    {nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? <Spinner /> : <><Upload size={16} /> Enviar 2ª nota{s.splitOpen.remaining !== null ? ` (${fmtBRL(s.splitOpen.remaining)})` : ''}</>}
+                    <input
+                      type="file" accept="application/pdf" className="hidden"
+                      disabled={nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}`}
+                      onChange={(e) => { handleNfFile(s, e.target.files?.[0], { form: s.splitOpen!.form as '50' | '70-30', part: 2 }); e.currentTarget.value = ''; }}
+                    />
+                  </label>
+                </>
+              ) : s.sent > 0 || s.rejected > 0 ? (
                 <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs text-gray-600 text-center">
                   {s.sent > 0
                     ? <><b className="text-green-700">Nota enviada.</b> Precisa trocar? Peça à CD para excluir a atual.</>
                     : <>Só dá pra enviar outra depois que a CD excluir a recusada.</>}
                 </div>
-              ) : (
-                <>
-                  <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
-                    {nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? <Spinner /> : <><Upload size={16} /> Enviar PDF da nota</>}
-                    <input
-                      type="file" accept="application/pdf" className="hidden"
-                      disabled={nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}`}
-                      onChange={(e) => { handleNfFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
-                    />
-                  </label>
-                  <p className="mt-1.5 text-[11px] text-gray-400 text-center">Somente arquivo PDF — foto não é aceita.</p>
-                </>
-              )}
+              ) : (() => {
+                const k = `${s.mirrorKey ?? '*'}|${s.emitterId}`;
+                const escolha = splitChoice[k];
+                const menu = splitMenu[k];
+                if (escolha) {
+                  // Forma escolhida: valores exatos + o aviso dos 10 minutos ANTES da 1ª.
+                  return (
+                    <>
+                      <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        <b>Dupla {escolha.form === '50' ? 'metade/metade' : '70% e 30%'}:</b>{' '}
+                        nota 1 de <b>{fmtBRL(escolha.slices[0])}</b> + nota 2 de <b>{fmtBRL(escolha.slices[1])}</b>, em nomes diferentes.
+                        <br /><b>⏰ Você terá 10 minutos</b> para enviar a segunda depois da primeira.
+                      </div>
+                      <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === k ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
+                        {nfUploading === k ? <Spinner /> : <><Upload size={16} /> Enviar 1ª nota ({fmtBRL(escolha.slices[0])})</>}
+                        <input
+                          type="file" accept="application/pdf" className="hidden" disabled={nfUploading === k}
+                          onChange={(e) => { handleNfFile(s, e.target.files?.[0], { form: escolha.form, part: 1 }); e.currentTarget.value = ''; }}
+                        />
+                      </label>
+                      <button type="button" className="mt-1.5 w-full text-[11px] text-gray-500 underline"
+                        onClick={() => setSplitChoice((m) => ({ ...m, [k]: null }))}>
+                        Voltar (enviar nota única)
+                      </button>
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === k ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
+                      {nfUploading === k ? <Spinner /> : <><Upload size={16} /> Enviar PDF da nota</>}
+                      <input
+                        type="file" accept="application/pdf" className="hidden" disabled={nfUploading === k}
+                        onChange={(e) => { handleNfFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
+                      />
+                    </label>
+                    <p className="mt-1.5 text-[11px] text-gray-400 text-center">Somente arquivo PDF — foto não é aceita.</p>
+                    {menu ? (
+                      <div className="mt-2 space-y-1.5">
+                        {(['50', '70-30'] as const).map((f) => (
+                          <button key={f} type="button"
+                            className="w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 hover:bg-blue-100 text-left"
+                            onClick={() => setSplitChoice((m) => ({ ...m, [k]: { form: f, slices: menu.forms[f] } }))}>
+                            <b>{f === '50' ? '2 notas: metade / metade' : '2 notas: 70% e 30%'}</b>
+                            <span className="block">{fmtBRL(menu.forms[f][0])} + {fmtBRL(menu.forms[f][1])} (nomes diferentes)</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <button type="button" className="mt-1.5 w-full text-[11px] text-blue-600 underline"
+                        onClick={() => abrirMenuSplit(s)}>
+                        Dividir em 2 notas (2 nomes)
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           ))}
 
