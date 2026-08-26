@@ -52,3 +52,4 @@ prints-espelhos/
 supabase/.temp/
 prints-espelho-app/
 prints-grade/
+.env*
