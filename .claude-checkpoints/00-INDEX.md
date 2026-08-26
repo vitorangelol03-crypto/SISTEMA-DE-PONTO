@@ -2,9 +2,32 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-08-20**.
+> Última atualização: **2026-08-26**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 26/08 — cadastro público de funcionário + aba "Aprovação de
+Cadastro" (`0c84746`, SÓ LOCAL — push pendente do OK dele):** feature nova
+pedida do zero. Link público (sem login) pra cadastrar funcionário —
+nome/CPF/telefone/PIX obrigatórios, sem acento/ponto/traço em NENHUM campo
+(confirmado por ele mesmo depois de eu avisar que isso deixa e-mail/chave
+PIX aleatória com formato estranho). Todo funcionário — os 97 que já
+existiam E os novos — entra `pending`; pending/approved batem ponto normal,
+só `rejected` bloqueia no `/clock` (e fica registrado, não apaga).
+Migration aplicada em prod (MCP `execute_sql` — `apply_migration` do MCP tá
+bloqueado pelo classificador pra mim) · edge fn `employee-public-api` ganhou
+ação `register-employee`, **deploy feito pelo Victor** via `!`, conferido
+por sonda HTTP · página pública `/cadastro?empresa=...` (link por empresa,
+sem trava extra — decisão dele) · aba nova com link+copiar, filtro por
+status, observações, aprovar/recusar, e **botão de copiar por campo**
+(pedido dele ao ver o print: copia sempre a versão limpa, mesmo pra
+funcionário antigo com acento no nome) · **exclusiva do 2626** (nem o 9999
+— pedido dele, mesmo critério do Pagamentos Driver), reforçado nos dois
+lados (front `usePermissions` + backend `validatePermission`). Validado:
+typecheck 0 · build limpo · **1317 unit, 0 falha real** (2 rodadas bateram
+timeout de worker do WSL em arquivos aleatórios, infra não código — cada um
+isolado passou limpo) · **E2E novo `tests/78`** 2/2 no Chromium provando o
+fluxo real ponta a ponta. Ver `CHECKPOINT_SESSAO_2026-08-26.md`.
 
 **Sessão 20/08 (tarde) — "espelho conferido" fantasma achado e corrigido
 (`5cc0a14`, só local):** Victor reportou grupo em produção com print SHOPEE
@@ -928,6 +951,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
+| `CHECKPOINT_SESSAO_2026-08-26.md` | **Mais recente.** Cadastro público de funcionário (`/cadastro?empresa=...`, sem login) + aba nova "Aprovação de Cadastro" (exclusiva do 2626) — migration, edge fn `register-employee`, bloqueio no `/clock` pra recusado, botão de copiar por campo (sempre versão limpa). E2E novo `tests/78`. **Só local — push pendente do OK dele.** | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-19.md` | **Mais recente.** Edge fn **v32 no ar** (deploy sempre o Victor com `!` — classificador barra CLI e MCP vindos de mim) · prova ao vivo do fix da leitura: o caso do Gustavo se resolveu sozinho ANTES do deploy; o print do João Gabriel reprocessado na v32 e recusado **corretamente** (era papel de parede, não a tela do app) — **fix segue sem prova ao vivo** · push do `3c29c0b` já estava feito (pendência de ontem era engano) · **tag "não bate" clicável** (`95c764e`, local): grade e card mobile abrem "Espelhos recebidos" já filtrado no driver, E2E novo `tests/75` | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-18.md` | Filtro por quinzena + migração em massa do saldo herdado (`closedPeriodsDebtScope.ts`, E2E 73) · parser da planilha da LOGGI (`extractLoggi`, hubs misturados passam pela identificação normal) · "ignorar" persistido nas 4 plataformas (migration `driverpay_driver_ignored`, tela "Vínculos de importação", E2E 74) · 24 vínculos LOGGI gravados em prod (nenhum adivinhado) · chave `proof_auto_confirm` ligada + 22 espelhos retroativos · leitura não desiste na 1ª recusa (`3c29c0b`) | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-17.md` | Push do pendente de 15/08 + **61 erros de tipo pré-existentes zerados** (`9c52028`, por causa raiz, sem `as any`) · trava da "Bonificação do Dia" finalizada (`cafea2d`, mesma régua do Reset Geral) · `04-bonus.spec.ts` consertado com `markPresentViaDb` (9999 não marca presença via UI desde 13/08) · dead code do `AttendanceTab` removido, typecheck **zera de vez** · `npm audit fix` 14→6 | 🟢 ATIVO |
