@@ -6,8 +6,30 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
+**Sessão 26/08 (3º bloco) — cadastro público grava Diarista + função
+escolhida (`dac3c6d`, só local):** Victor pediu que todo cadastro pelo
+link público entre automaticamente como Diarista e no "setor de
+triagem". 🔑 **Achado antes de programar:** o setor de triagem NÃO é o
+mesmo em toda empresa — Caratinga é majoritariamente "Triagem - Shopee"
+(85 pessoas), Ponte Nova é 100% "Triagem - Transportadoras" (6/6) — um
+valor fixo por código erraria numa das duas. Perguntado com essa
+evidência, ele preferiu **deixar a pessoa escolher** a função numa lista
+das que a empresa já usa (mais flexível que fixar por empresa). Entregue:
+edge fn ganhou ação pública `list-function-roles`; `register-employee`
+exige `functionRole` e valida contra a lista real da empresa (aceita
+qualquer texto só se a empresa não tem nenhuma função ainda); página
+pública ganhou `<select>` de função (cai pra texto livre se a lista vier
+vazia); aba de aprovação mostra "Diarista — função" em cada cartão
+(pedido dele). `employment_type` sempre 'Diarista' fixo, sem exceção.
+Validado: typecheck 0 · eslint 0 · build limpo · 1322 unit 0 falha ·
+**E2E `tests/78` atualizado** (escolhe função real da Caratinga no
+select, confere banco + aparição no cartão) 2/2 contra a função
+deployada (v10) · regressão `tests/79` 2/2. Timeout do `tests/78` subiu
+pra 90s (2 chamadas a mais por cadastro estouravam o padrão de 30s). Ver
+`CHECKPOINT_SESSAO_2026-08-26.md` §6.
+
 **Sessão 26/08 (2º bloco) — incidente "ninguém bate ponto" resolvido,
-NO AR (`1069964`, só local):** Victor reportou logo depois do cadastro
+NO AR (`1069964`, pushado):** Victor reportou logo depois do cadastro
 público (bloco 1 abaixo) que os funcionários pararam de conseguir bater
 ponto. 🔑 **Causa raiz:** migração antiga de 14/05 converteu o PIN de 70
 funcionários pra bcrypt (`pin_hash`, zerando o `pin` texto puro), mas a

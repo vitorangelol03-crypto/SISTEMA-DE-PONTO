@@ -129,4 +129,50 @@ reconhecimento ligado) — Chromium headless não tem câmera; mesma
 limitação já documentada no `tests/48`. Não é bug, só ajuste do teste.
 
 **No ar desde os dois deploys de hoje** (edge fn `employee-public-api`
-v8 → v9). Commit `1069964` só local — falta push com OK dele.
+v8 → v9). Commit `1069964` — **pushado com OK dele** (`fc6f6c7..13f967c`
+em `origin/main`, junto com o checkpoint deste bloco).
+
+## 6. Feature nova: cadastro público grava Diarista + função escolhida (`dac3c6d`, só local)
+
+Ainda 26/08, depois do conserto acima, Victor pediu: *"Todo funcionário
+que passa por aquele link de cadastro, automaticamente ele vai ser
+diarista... e ele vai automaticamente também pelo setor de triagem"*.
+
+**Investigado antes de programar:** `employment_type`/`function_role` já
+existem (sem migration). 🔑 **O "setor de triagem" NÃO é igual em toda
+empresa** — Caratinga tem 85 pessoas em "Triagem - Shopee" (majoritário) e
+só 1 em "Triagem - Transportadoras"; Ponte Nova é o oposto, **100%**
+"Triagem - Transportadoras". Perguntado via `AskUserQuestion` com essa
+evidência: fixar um texto por empresa (minha recomendação) ou deixar a
+pessoa escolher? **Ele escolheu deixar a pessoa escolher** numa lista das
+funções que a empresa já usa — mais flexível que eu tinha sugerido, e
+resolve o problema das duas empresas serem diferentes sem precisar
+configurar nada por fora. Confirmado também: mostrar "Diarista — função"
+na aba de aprovação (recomendado, aceito).
+
+**Entregue:**
+- Edge fn ganhou ação `list-function-roles` (pública, mesma lógica do
+  `getFunctionRoles` do painel — RLS de `employees` bloqueia anon lendo
+  direto).
+- `register-employee` agora exige `functionRole`, valida contra a lista
+  real da empresa (função de fora da lista = 400) — **exceto se a empresa
+  ainda não tem nenhuma função cadastrada**, aí aceita qualquer texto (pra
+  não travar cadastro de uma empresa nova sem nenhum dado ainda; decisão
+  técnica minha, não pedida). Grava `employment_type: 'Diarista'` fixo.
+- Página pública: campo "Função" novo — `<select>` com as opções da
+  empresa (busca ao carregar a página); sem nenhuma opção, vira campo de
+  texto livre (mesmo fallback acima).
+- Aba "Aprovação de Cadastro": cada cartão mostra `Diarista — <função>`.
+
+**Validado:** typecheck 0 · eslint 0 · build limpo · **1322 unit, 0
+falha** · **E2E `tests/78` atualizado** (escolhe "Triagem - Shopee", real
+da Caratinga, no `<select>`; confere no banco `employment_type='Diarista'`
++ `function_role` certos; confere que aparece no cartão da aprovação antes
+de decidir) — 2/2 contra a função já deployada (`v10`) · regressão
+`tests/79` (PIN) 2/2 junto. 🔑 **Achado no caminho:** o teste 78 passou a
+levar mais tempo (2 cadastros × 1 chamada a mais cada + validação extra no
+insert) e estourou o timeout padrão de 30s — subido pra 90s nesse teste
+específico, sem mudar o padrão global.
+
+**Pendente:** 🔴 push do `dac3c6d` — esperar OK dele (mesma regra de
+sempre).
