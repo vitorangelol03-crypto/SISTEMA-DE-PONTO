@@ -6,8 +6,32 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Sessão 26/08 — cadastro público de funcionário + aba "Aprovação de
-Cadastro" (`0c84746`, SÓ LOCAL — push pendente do OK dele):** feature nova
+**Sessão 26/08 (2º bloco) — incidente "ninguém bate ponto" resolvido,
+NO AR (`1069964`, só local):** Victor reportou logo depois do cadastro
+público (bloco 1 abaixo) que os funcionários pararam de conseguir bater
+ponto. 🔑 **Causa raiz:** migração antiga de 14/05 converteu o PIN de 70
+funcionários pra bcrypt (`pin_hash`, zerando o `pin` texto puro), mas a
+ação `verify-pin` da `employee-public-api` nunca foi atualizada — só
+comparava com o `pin` plain, que estava vazio. Resultado: "PIN incorreto"
+pra todo mundo com PIN já configurado (zero registros de presença no dia
+inteiro). Um teste unitário antigo já esperava esse comportamento bcrypt
+e nunca tinha rodado de verdade (faltava `SUPABASE_SERVICE_ROLE_KEY` no
+`.env` local) — confirmou o achado assim que rodou. **2 deploys do
+Victor via `!`:** (1) `verify-pin` agora compara por bcrypt quando existe
+`pin_hash` — sozinho já liberou os 70, confirmado ~0.5s com funcionário
+real; (2) achado no meio da validação — `set-pin` (PIN novo, os 27 que
+faltam) usava `bcryptjs.hash()` async que **trava até estourar timeout
+(504)** nesse runtime Deno específico (medido 2/2) — trocado pra
+`hashSync`, confirmado ~1.4s. `resetEmployeePin` do painel também zera
+`pin_hash` (senão reset não resetava de verdade). Validado: typecheck 0 ·
+build limpo · unit 1322/1323 · **E2E novo `tests/79`** 1/1 provando o
+ciclo (cria PIN → sessão nova → mesmo PIN aceito → PIN errado recusado) ·
+regressão `tests/78` 1/1. Edge fn `employee-public-api` v7→v9. Ver
+`CHECKPOINT_SESSAO_2026-08-26.md` §5.
+
+**Sessão 26/08 (1º bloco) — cadastro público de funcionário + aba "Aprovação de
+Cadastro" (`0c84746`, pushado fora desta sessão — `origin/main` já batia no
+início do 2º bloco):** feature nova
 pedida do zero. Link público (sem login) pra cadastrar funcionário —
 nome/CPF/telefone/PIX obrigatórios, sem acento/ponto/traço em NENHUM campo
 (confirmado por ele mesmo depois de eu avisar que isso deixa e-mail/chave

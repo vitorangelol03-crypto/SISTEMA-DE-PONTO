@@ -71,11 +71,62 @@ No meio da sessão, ao ver o print da aba, ele pediu 2 ajustes:
 - `masters.test.ts` ganhou bloco de teste pra
   `isEmployeeApprovalPermission`/`canAccessEmployeeApproval` (SOMENTE 2626).
 
-## 4. Pendente
+## 4. Pendente (do bloco 1, cadastro público)
 
-- 🔴 **Push** — commit só local (regra do CLAUDE.md do projeto: nunca
-  push sem pedido). Avisar Victor e esperar OK explícito antes de subir
-  (e antes da Vercel pegar a mudança).
+- ✅ **Push do `0c84746`/`fc6f6c7` — já aconteceu** (fora desta sessão;
+  `origin/main` confere com `HEAD` no início do bloco 2 abaixo). A nota
+  anterior aqui ("push pendente do OK dele") estava desatualizada.
 - Pendências herdadas de 20/08 (filtro "NF ok"/"pago" sem reprodução nova,
   TOTAL GERAL em branco no relatório) **não foram tocadas** nesta sessão —
   seguem em aberto, ver `CHECKPOINT_SESSAO_2026-08-20.md` §5.
+
+## 5. Incidente do mesmo dia: ninguém conseguia bater ponto (`1069964`, só local)
+
+Victor reportou (ainda 26/08, depois do bloco 1): *"os funcionarios não
+estão conseguindo fazer login para bater ponto"*.
+
+**Investigação (sem mexer em nada até entender):** zero registros de
+presença no dia inteiro e zero chamadas à função que grava o ponto
+(`clock-in-validated`) desde as 19h14 do dia anterior — ou seja, todo
+mundo travava ANTES de bater o ponto, no PIN. No banco: dos 97
+funcionários, **70 com PIN configurado estavam com o campo `pin` (texto
+puro) vazio** e um `pin_hash` (bcrypt) preenchido — sobra de uma migração
+de 14/05 (`20260514121730_add_pin_hash_employees.sql`) que converteu os
+PINs pra bcrypt e zerou o texto puro. 🔑 **A causa raiz:** a ação
+`verify-pin` da `employee-public-api` só comparava com o `pin` (texto
+puro) — nunca foi atualizada pra olhar o `pin_hash`. Achei até um teste
+unitário antigo (`tests/unit/edgeFnEmployeePublicApi.spec.ts`, de sessões
+de meses atrás) que **já esperava** esse comportamento bcrypt e nunca
+tinha rodado de verdade porque `SUPABASE_SERVICE_ROLE_KEY` só entrou no
+`.env` local nesta sessão — ele confirmou o achado assim que rodou.
+
+**Conserto (2 deploys, ambos feitos pelo Victor via `!`):**
+- **1º deploy:** `verify-pin` passa a comparar por bcrypt (`pin_hash`)
+  quando existe, com fallback pro `pin` plain só pra quem ainda não tem
+  hash. **Isso sozinho já liberou os 70 funcionários** — confirmado com
+  um funcionário real (só leitura, sem mexer no PIN dele): `verify-pin`
+  respondeu em ~0.5s, certo e errado.
+- **2º deploy:** no meio da validação, achei que `set-pin` (grava PIN
+  novo, usado pelos 27 sem PIN ainda) **também estava quebrado** —
+  `bcryptjs.hash()` (a versão async, que gera salt novo) trava até
+  estourar timeout (504) nesse runtime Deno específico — medido 2/2 vezes
+  na função real. `bcryptjs.compare()` (usada no verify-pin, não gera
+  salt) nunca teve esse problema. Troquei `set-pin` pra `bcryptjs.hashSync`
+  — mesma lib, só sem a parte async que trava; confirmado ~1.4s gravando
+  hash certo.
+- `resetEmployeePin` (painel) ganhou `pin_hash: null` também — sem isso o
+  "reset" não resetava de verdade (sobrava o hash antigo validando).
+
+**Validado:** typecheck 0 · build limpo · unit **1322/1323** (o único que
+faltava — o teste antigo de bcrypt citado acima — passou depois do 1º
+deploy) · **E2E novo `tests/79-employee-pin-bcrypt.spec.ts`**: cria PIN
+(setup) → sessão nova (reload real) → mesmo PIN aceito → PIN errado
+recusado, 1/1 · regressão `tests/78` 1/1 (deu flaky numa rodada em paralelo
+com o 79, limpo isolado — carga do WSL, já documentado como padrão).
+🔑 **Achado no caminho, sem consequência:** funcionário de teste sem
+`face_recognition_enabled:false` cai no gate facial (Caratinga tem
+reconhecimento ligado) — Chromium headless não tem câmera; mesma
+limitação já documentada no `tests/48`. Não é bug, só ajuste do teste.
+
+**No ar desde os dois deploys de hoje** (edge fn `employee-public-api`
+v8 → v9). Commit `1069964` só local — falta push com OK dele.
