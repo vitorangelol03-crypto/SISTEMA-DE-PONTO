@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserPlus, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
-import { getCompanyById, registerEmployeePublic, Company } from '../../services/database';
+import { getCompanyById, getFunctionRolesPublic, registerEmployeePublic, Company } from '../../services/database';
 import {
   validateCPF,
   sanitizePublicRegistrationName,
@@ -15,6 +15,11 @@ import {
 // gerada pela aba "Aprovação de Cadastro" do painel — o candidato nunca
 // escolhe empresa. Grava com registration_status='pending' (já bate ponto
 // normal; a análise de antecedentes acontece depois, no painel).
+//
+// 2ª leva (26/08): todo cadastro por este link entra como Diarista — a
+// função (function_role) é escolhida pelo próprio candidato numa lista das
+// funções já usadas na empresa (não texto livre: cada empresa tem seu
+// "setor" majoritário — pedido do Victor).
 
 function formatCPFMask(value: string): string {
   const d = value.replace(/\D/g, '').slice(0, 11);
@@ -37,6 +42,8 @@ export const EmployeePublicRegister: React.FC = () => {
   const [phoneInput, setPhoneInput] = useState('');
   const [pixKey, setPixKey] = useState('');
   const [pixType, setPixType] = useState<typeof PIX_TYPES[number] | ''>('');
+  const [functionRole, setFunctionRole] = useState('');
+  const [functionRoles, setFunctionRoles] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
@@ -49,13 +56,21 @@ export const EmployeePublicRegister: React.FC = () => {
       return;
     }
     getCompanyById(companyId)
-      .then(c => {
+      .then(async c => {
         if (!active) return;
         if (!c) {
           setStep('link-invalid');
           return;
         }
         setCompany(c);
+        try {
+          const roles = await getFunctionRolesPublic(companyId);
+          if (active) setFunctionRoles(roles);
+        } catch (err) {
+          // Best-effort: sem lista de funções, o campo vira texto livre
+          // (ver fallback no <select>/<input> abaixo) em vez de travar o cadastro.
+          console.error('Erro ao carregar funções da empresa:', err);
+        }
         setStep('form');
       })
       .catch(() => {
@@ -70,7 +85,8 @@ export const EmployeePublicRegister: React.FC = () => {
   const cpfValid = validateCPF(cpfDigits);
   const phoneValid = validatePhoneDigits(phoneDigits);
   const pixKeyValid = sanitizePublicRegistrationPixKey(pixKey).length > 0;
-  const formValid = nameValid && cpfValid && phoneValid && pixKeyValid && !!pixType;
+  const functionRoleValid = functionRole.trim().length > 0;
+  const formValid = nameValid && cpfValid && phoneValid && pixKeyValid && !!pixType && functionRoleValid;
 
   const handleSubmit = async () => {
     if (!formValid || !company) return;
@@ -84,6 +100,7 @@ export const EmployeePublicRegister: React.FC = () => {
         phone: phoneDigits,
         pixKey: sanitizePublicRegistrationPixKey(pixKey),
         pixType,
+        functionRole: functionRole.trim(),
       });
       setStep('success');
     } catch (err) {
@@ -188,6 +205,28 @@ export const EmployeePublicRegister: React.FC = () => {
                   placeholder="Sua chave PIX"
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-green-500 focus:outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Função</label>
+                {functionRoles.length > 0 ? (
+                  <select
+                    value={functionRole}
+                    onChange={e => setFunctionRole(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-green-500 focus:outline-none bg-white"
+                  >
+                    <option value="">Selecione...</option>
+                    {functionRoles.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={functionRole}
+                    onChange={e => setFunctionRole(e.target.value)}
+                    placeholder="Sua função"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-green-500 focus:outline-none"
+                  />
+                )}
               </div>
 
               {submitError && (

@@ -3284,6 +3284,7 @@ export const registerEmployeePublic = async (params: {
   phone: string;
   pixKey: string;
   pixType: string;
+  functionRole: string;
 }): Promise<{ id: string }> => {
   const data = await callEmployeePublicApi<{ employee: { id: string } }>('register-employee', {
     companyId: params.companyId,
@@ -3292,8 +3293,19 @@ export const registerEmployeePublic = async (params: {
     phone: params.phone.replace(/\D/g, ''),
     pixKey: params.pixKey,
     pixType: params.pixType,
+    functionRole: params.functionRole,
   });
   return data.employee;
+};
+
+/**
+ * Funções (function_role) já usadas na empresa — pro <select> da página
+ * pública de cadastro (2ª leva 26/08). Via edge fn (RLS de employees
+ * bloqueia anon); mesma lógica de `getFunctionRoles`, só que pública.
+ */
+export const getFunctionRolesPublic = async (companyId: string): Promise<string[]> => {
+  const data = await callEmployeePublicApi<{ roles: string[] }>('list-function-roles', { companyId });
+  return data.roles;
 };
 
 /** Busca o registro de attendance de hoje para um funcionário específico.

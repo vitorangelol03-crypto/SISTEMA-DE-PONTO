@@ -18,6 +18,10 @@ import { validateCPF } from '../src/utils/validation';
  *   2) o funcionário cadastrado aparece "Pendente" na aba Aprovação de Cadastro;
  *   3) aprovar não muda o comportamento de bater ponto (chega no setup de PIN);
  *   4) recusar bloqueia no /clock com mensagem clara — mesmo sem PIN configurado.
+ *
+ * 2ª leva (26/08): todo cadastro por este link entra como Diarista, na
+ * função que o candidato escolhe numa lista das funções já usadas na
+ * empresa (não texto livre) — prova que grava certo e aparece na aba.
  */
 
 const RUN = Date.now().toString(36);
@@ -43,6 +47,10 @@ function validCpf(seed: number): string {
 const CPF_APROVADO = validCpf(Date.now());
 const CPF_RECUSADO = validCpf(Date.now() + 7);
 
+// Função real já usada por dezenas de funcionários da Caratinga — não é
+// dado de teste, só reaproveita o que já existe pro <select> oferecer.
+const FUNCAO_TRIAGEM = 'Triagem - Shopee';
+
 test.describe('Cadastro público + Aprovação de Cadastro', () => {
   test.beforeAll(() => {
     expect(validateCPF(CPF_APROVADO)).toBe(true);
@@ -50,6 +58,11 @@ test.describe('Cadastro público + Aprovação de Cadastro', () => {
   });
 
   test('cadastro público → pendente → aprovado continua batendo ponto, recusado é bloqueado', async ({ page }) => {
+    // 2ª leva (26/08): cada cadastro agora faz 1 chamada a mais (busca as
+    // funções da empresa) + a própria validação de função no insert faz
+    // outra consulta — o teste já fazia 2 cadastros + login + 2 decisões +
+    // 2 checagens no /clock, e passou a estourar os 30s padrão.
+    test.setTimeout(90_000);
     const supabase = getClient();
     const { data: caratinga, error } = await supabase
       .from('companies')
@@ -68,20 +81,28 @@ test.describe('Cadastro público + Aprovação de Cadastro', () => {
         await page.getByPlaceholder('Seu nome completo').fill(nome);
         await page.getByPlaceholder('000.000.000-00').fill(cpf);
         await page.getByPlaceholder('(00) 00000-0000').fill('33999998888');
-        await page.locator('select').selectOption('Aleatória');
+        await page.locator('select').nth(0).selectOption('Aleatória');
         await page.getByPlaceholder('Sua chave PIX').fill('a1b2c3d4-e5f6-0000-0000-000000000000');
+        // Função: <select> com as funções já usadas na empresa (Caratinga já
+        // tem "Triagem - Shopee" real, não é dado de teste).
+        await expect(page.locator('select').nth(1)).toBeVisible({ timeout: 10_000 });
+        await page.locator('select').nth(1).selectOption(FUNCAO_TRIAGEM);
         await page.getByRole('button', { name: 'Enviar cadastro' }).click();
         await expect(page.getByText('Cadastro enviado!')).toBeVisible({ timeout: 10_000 });
       }
 
-      // Confere no banco: os dois entraram como pending, sem PIN configurado.
+      // Confere no banco: os dois entraram como pending, sem PIN configurado,
+      // Diarista, na função escolhida (2ª leva 26/08).
       const { data: created } = await supabase
         .from('employees')
-        .select('id, name, registration_status, pin_configured, phone, pix_type')
+        .select('id, name, registration_status, pin_configured, phone, pix_type, employment_type, function_role')
         .in('name', [NOME_APROVADO, NOME_RECUSADO]);
       expect(created).toHaveLength(2);
       for (const emp of created ?? []) {
-        expect((emp as { registration_status: string }).registration_status).toBe('pending');
+        const e = emp as { registration_status: string; employment_type: string; function_role: string };
+        expect(e.registration_status).toBe('pending');
+        expect(e.employment_type).toBe('Diarista');
+        expect(e.function_role).toBe(FUNCAO_TRIAGEM);
       }
 
       // ── 2) Painel: aba Aprovação de Cadastro — EXCLUSIVA do 2626 (nem 9999 vê) ──
@@ -93,6 +114,11 @@ test.describe('Cadastro público + Aprovação de Cadastro', () => {
       const rowRecusado = page.getByTestId('employee-approval-row').filter({ hasText: NOME_RECUSADO });
       await expect(page.getByText(NOME_APROVADO)).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText(NOME_RECUSADO)).toBeVisible({ timeout: 10_000 });
+
+      // Quem aprova já vê Diarista + função escolhida no cartão (pedido do
+      // Victor: "sim, mostrar na lista").
+      await expect(rowAprovado.getByText(`Diarista — ${FUNCAO_TRIAGEM}`)).toBeVisible();
+      await expect(rowRecusado.getByText(`Diarista — ${FUNCAO_TRIAGEM}`)).toBeVisible();
 
       // Aprova o primeiro.
       await rowAprovado.getByRole('button', { name: 'Aprovar' }).click();

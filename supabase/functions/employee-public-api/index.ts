@@ -28,9 +28,13 @@
 //   log-face-attempt         { employeeId, success, confidence, clockType, companyId } → { ok: true }
 //   employee-errors-by-period { employeeId, periodId, companyId } → { period, individual_errors, triage_errors, total_individual, total_triage }
 //   employee-error-periods    { employeeId, companyId } → { periods: Array<{ period, has_errors, total_errors }> }
-//   register-employee        { companyId, name, cpf, phone, pixKey, pixType } → { employee: { id } }
+//   register-employee        { companyId, name, cpf, phone, pixKey, pixType, functionRole } → { employee: { id } }
 //     Sub-fase 26/08 — cadastro público de funcionário novo (link sem login,
-//     página /cadastro). Grava registration_status='pending'.
+//     página /cadastro). Grava registration_status='pending', employment_type
+//     fixo 'Diarista' e function_role = a função escolhida (2ª leva 26/08).
+//   list-function-roles      { companyId } → { roles: string[] }
+//     2ª leva 26/08 — funções (function_role) já usadas na empresa, pro
+//     <select> da página pública de cadastro.
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -91,10 +95,37 @@ async function lookupCompaniesByCpf(body: Body): Promise<Response> {
   return json({ companies: out });
 }
 
+// Sub-fase 26/08 (2ª leva) — lista as funções (function_role) já usadas na
+// empresa, pra página pública oferecer como <select> (não texto livre).
+// Mesma lógica de getFunctionRoles (database.ts), só que pública porque RLS
+// de employees bloqueia anon.
+async function listFunctionRoles(body: Body): Promise<Response> {
+  const companyId = String(body.companyId ?? '').trim();
+  if (!companyId) return json({ error: 'Invalid companyId' }, 400);
+
+  const { data, error } = await supabase
+    .from('employees')
+    .select('function_role')
+    .eq('company_id', companyId)
+    .not('function_role', 'is', null);
+  if (error) return json({ error: 'Database error', details: error.message }, 500);
+
+  const unique = new Set<string>();
+  for (const row of (data ?? []) as Array<{ function_role: string | null }>) {
+    const v = row.function_role?.trim();
+    if (v) unique.add(v);
+  }
+  const roles = Array.from(unique).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  return json({ roles });
+}
+
 // Sub-fase 26/08 — cadastro público de funcionário novo (link sem login).
 // Sempre grava pending: a análise de antecedentes acontece depois, na aba
 // "Aprovação de Cadastro" do painel. Enquanto pending, o funcionário já bate
 // ponto normal (bloqueio só entra se alguém recusar o cadastro).
+// 2ª leva (26/08): todo cadastro por este link entra como Diarista, na função
+// que a própria pessoa escolhe (lista das funções já existentes na empresa —
+// pedido do Victor, cada empresa tem seu próprio "setor" majoritário).
 async function registerEmployee(body: Body): Promise<Response> {
   const companyId = String(body.companyId ?? '').trim();
   const name = String(body.name ?? '').trim();
@@ -102,6 +133,7 @@ async function registerEmployee(body: Body): Promise<Response> {
   const phone = String(body.phone ?? '').replace(/\D/g, '');
   const pixKey = String(body.pixKey ?? '').trim();
   const pixType = String(body.pixType ?? '').trim();
+  const functionRole = String(body.functionRole ?? '').trim();
 
   if (!companyId) return json({ error: 'Empresa inválida' }, 400);
   if (!name) return json({ error: 'Nome é obrigatório' }, 400);
@@ -111,6 +143,7 @@ async function registerEmployee(body: Body): Promise<Response> {
   if (!['CPF', 'Email', 'Telefone', 'Aleatória'].includes(pixType)) {
     return json({ error: 'Tipo de chave PIX inválido' }, 400);
   }
+  if (!functionRole) return json({ error: 'Função é obrigatória' }, 400);
 
   const { data: company, error: companyError } = await supabase
     .from('companies')
@@ -119,6 +152,25 @@ async function registerEmployee(body: Body): Promise<Response> {
     .maybeSingle();
   if (companyError) return json({ error: 'Database error', details: companyError.message }, 500);
   if (!company) return json({ error: 'Empresa não encontrada — link inválido' }, 404);
+
+  // Trava a função na lista que a própria empresa já usa (mesma que o
+  // <select> da página pública oferece) — evita valor arbitrário por fora
+  // da UI. Empresa sem NENHUMA função cadastrada ainda: aceita qualquer
+  // texto (senão ninguém consegue se cadastrar até alguém configurar uma).
+  const { data: existingRoles, error: rolesError } = await supabase
+    .from('employees')
+    .select('function_role')
+    .eq('company_id', companyId)
+    .not('function_role', 'is', null);
+  if (rolesError) return json({ error: 'Database error', details: rolesError.message }, 500);
+  const roleSet = new Set(
+    (existingRoles ?? [])
+      .map((r) => (r as { function_role: string | null }).function_role?.trim())
+      .filter((v): v is string => Boolean(v)),
+  );
+  if (roleSet.size > 0 && !roleSet.has(functionRole)) {
+    return json({ error: 'Função inválida' }, 400);
+  }
 
   const { data, error } = await supabase
     .from('employees')
@@ -129,6 +181,8 @@ async function registerEmployee(body: Body): Promise<Response> {
       phone,
       pix_key: pixKey,
       pix_type: pixType,
+      employment_type: 'Diarista',
+      function_role: functionRole,
       registration_status: 'pending',
     }])
     .select('id')
@@ -479,6 +533,7 @@ Deno.serve(async (req) => {
       case 'lookup-companies-by-cpf': return await lookupCompaniesByCpf(body);
       case 'lookup-employee': return await lookupEmployee(body);
       case 'register-employee': return await registerEmployee(body);
+      case 'list-function-roles': return await listFunctionRoles(body);
       case 'verify-pin': return await verifyPin(body);
       case 'set-pin': return await setPin(body);
       case 'today-attendance': return await todayAttendance(body);

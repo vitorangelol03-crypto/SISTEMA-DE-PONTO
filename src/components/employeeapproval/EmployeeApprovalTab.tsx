@@ -248,6 +248,11 @@ export const EmployeeApprovalTab: React.FC<EmployeeApprovalTabProps> = ({ userId
                       <CopyField label="Chave PIX" value={emp.pix_key ? sanitizePublicRegistrationPixKey(emp.pix_key) : ''} />
                     </span>
                   </p>
+                  {(emp.employment_type || emp.function_role) && (
+                    <p className="text-xs text-gray-500">
+                      {[emp.employment_type, emp.function_role].filter(Boolean).join(' — ')}
+                    </p>
+                  )}
                 </div>
                 <span className={`px-2 py-1 rounded-full text-xs font-semibold ${STATUS_META[(emp.registration_status ?? 'pending') as StatusFilter].badgeCls}`}>
                   {STATUS_META[(emp.registration_status ?? 'pending') as StatusFilter].label}
