@@ -12,7 +12,14 @@
 //   lookup-companies-by-cpf  { cpf } → { companies: Company[] }
 //   lookup-employee          { cpf, companyId } → { employee: Employee | null }
 //   verify-pin               { employeeId, pin } → { valid: boolean }
+//     26/08 (fix): compara por bcrypt contra pin_hash quando existir (migração
+//     de 14/05 já converteu 70 funcionários pra hash e zerou o pin plain —
+//     esta ação só comparava com o pin plain, travando o login de todo mundo
+//     que já tinha PIN configurado). Fallback pro pin plain só sobra pra quem
+//     ainda não tem pin_hash.
 //   set-pin                  { employeeId, newPin } → { ok: true }
+//     26/08 (fix): passa a gravar em pin_hash (bcrypt), não mais em pin plain
+//     — fecha o mesmo buraco pra quem configura o PIN a partir de agora.
 //   today-attendance         { employeeId, companyId } → { attendance: Attendance | null }
 //   attendance-history       { employeeId, companyId, days } → { history: Attendance[] }
 //   face-config              { companyId } → { enabled: boolean }
@@ -27,6 +34,7 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -157,12 +165,22 @@ async function verifyPin(body: Body): Promise<Response> {
 
   const { data, error } = await supabase
     .from('employees')
-    .select('pin')
+    .select('pin, pin_hash')
     .eq('id', employeeId)
     .maybeSingle();
   if (error) return json({ error: 'Database error', details: error.message }, 500);
 
-  const valid = Boolean(data?.pin && data.pin === pin);
+  let valid = false;
+  if (data?.pin_hash) {
+    try {
+      valid = await bcryptjs.compare(pin, data.pin_hash);
+    } catch (err) {
+      console.error('[employee-public-api] bcrypt compare error:', err);
+      valid = false;
+    }
+  } else {
+    valid = Boolean(data?.pin && data.pin === pin);
+  }
   return json({ valid });
 }
 
@@ -174,9 +192,15 @@ async function setPin(body: Body): Promise<Response> {
     return json({ error: 'PIN deve ser numérico com 4 a 6 dígitos' }, 400);
   }
 
+  // hashSync, não hash() async: no runtime Deno desta função, bcryptjs.hash()
+  // (que gera salt novo por dentro) trava indefinidamente até estourar o
+  // timeout da edge fn (504) — medido: 2/2 chamadas reais. bcryptjs.compare()
+  // (sem gerar salt, só reconfere) responde normal em <1s — por isso verify-pin
+  // continua async. hashSync roda tudo síncrono, sem essa trava.
+  const pinHash = bcryptjs.hashSync(newPin, 10);
   const { error } = await supabase
     .from('employees')
-    .update({ pin: newPin, pin_configured: true })
+    .update({ pin: null, pin_hash: pinHash, pin_configured: true })
     .eq('id', employeeId);
   if (error) return json({ error: 'Database error', details: error.message }, 500);
 

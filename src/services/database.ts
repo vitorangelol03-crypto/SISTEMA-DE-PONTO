@@ -3554,11 +3554,13 @@ export const setEmployeePin = async (employeeId: string, pin: string): Promise<v
   await callEmployeePublicApi('set-pin', { employeeId, newPin: pin });
 };
 
-/** Reseta o PIN do funcionário — exige nova criação no próximo acesso. */
+/** Reseta o PIN do funcionário — exige nova criação no próximo acesso.
+ *  Zera pin E pin_hash (26/08: só pin não bastava — sobrava o hash antigo
+ *  validando o PIN "resetado"). */
 export const resetEmployeePin = async (employeeId: string): Promise<void> => {
   const { error } = await supabase
     .from('employees')
-    .update({ pin: null, pin_configured: false })
+    .update({ pin: null, pin_hash: null, pin_configured: false })
     .eq('id', employeeId);
 
   if (error) throw error;
