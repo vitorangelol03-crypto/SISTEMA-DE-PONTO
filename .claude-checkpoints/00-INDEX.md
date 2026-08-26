@@ -6,8 +6,26 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
+**Sessão 26/08 (4º bloco) — Vercel parou de auto-deployar, resolvido com
+deploy manual via CLI:** Victor reportou que a Vercel não estava
+mostrando a última implementação (campo "Função"). 🔑 **Causa**: os
+deploys pararam de disparar sozinhos depois do commit `13f967c` — os 2
+commits seguintes (bloco 3 abaixo) nem aparecem na lista de Deployments
+da Vercel (não é erro de build, o build nunca começou — provável
+integração GitHub↔Vercel desconectada, **não investigado a fundo**).
+Resolvido linkando o projeto local (`vercel link --yes --project
+sistema-ponto` — `vercel --prod` direto tentava criar projeto novo com
+nome inválido, maiúsculo) e rodando `vercel --prod` manual. **Conferido
+por conteúdo** (baixei os 2 chunks publicados e achei os textos novos de
+verdade, não só o hash do arquivo — correção de um erro meu anterior,
+que tinha testado só por HTTP status e caiu no rewrite catch-all do SPA
+devolvendo 200 pra qualquer coisa). 🔴 **Enquanto a causa raiz do
+auto-deploy não for achada, todo push novo pode precisar de `vercel
+--prod` manual** (`.vercel/` já ficou linkado local). Ver
+`CHECKPOINT_SESSAO_2026-08-26.md` §7.
+
 **Sessão 26/08 (3º bloco) — cadastro público grava Diarista + função
-escolhida (`dac3c6d`, só local):** Victor pediu que todo cadastro pelo
+escolhida (`dac3c6d`, pushado):** Victor pediu que todo cadastro pelo
 link público entre automaticamente como Diarista e no "setor de
 triagem". 🔑 **Achado antes de programar:** o setor de triagem NÃO é o
 mesmo em toda empresa — Caratinga é majoritariamente "Triagem - Shopee"

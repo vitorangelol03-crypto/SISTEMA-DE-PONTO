@@ -174,5 +174,45 @@ levar mais tempo (2 cadastros × 1 chamada a mais cada + validação extra no
 insert) e estourou o timeout padrão de 30s — subido pra 90s nesse teste
 específico, sem mudar o padrão global.
 
-**Pendente:** 🔴 push do `dac3c6d` — esperar OK dele (mesma regra de
-sempre).
+**Pendente:** ✅ push feito com OK dele (`13f967c..4add67b`). Ver §7 abaixo
+— a Vercel não estava auto-deployando esses commits.
+
+## 7. Vercel parou de auto-deployar — resolvido com deploy manual via CLI
+
+Depois do push do bloco 6, Victor mandou print: a página de cadastro
+público no site **não tinha o campo "Função" novo** — "sistema não está
+atualizado". Investigado (painel de Deployments da Vercel, que ele
+mandou print): os deploys **pararam de acontecer depois do commit
+`13f967c`** (1h antes) — os commits `dac3c6d` e `4add67b` **nem
+aparecem na lista**, ou seja, o gatilho do GitHub→Vercel não disparou
+pra esses dois pushes (não é erro de build, é o build que nunca
+começou). 🔴 **Correção minha registrada:** eu tinha testado antes se o
+arquivo novo "existia" no servidor e concluí errado que sim — na
+verdade era o rewrite catch-all do SPA (`vercel.json`) devolvendo
+`index.html` com status 200 pra qualquer caminho, inclusive um
+`/assets/*` que não existe. Reportei o engano pro Victor assim que vi.
+
+**Resolvido com deploy manual via CLI** (Victor logou, eu rodei com a
+permissão dele): `.vercel/` não existia local, então `vercel --prod`
+direto tentava CRIAR um projeto novo com o nome da pasta
+(`SISTEMA-DE-PONTO`, maiúsculo — inválido). Certo foi `vercel link --yes
+--project sistema-ponto` (achado usando `vercel link --help` em vez de
+chutar flag — `--team`/`--scope` não aceitam conta pessoal como valor,
+por isso tirei) e depois `vercel --prod`. Deploy `dpl_AaZWULcYHQSqn...`
+ficou **READY** e **aliasado** em `sistema-ponto-zeta.vercel.app`.
+**Conferido por conteúdo** (não só hash de arquivo, pra não repetir o
+erro de antes): baixei os 2 chunks (`EmployeePublicRegister-DSr4D7PW.js`
+e `EmployeeApprovalTab-CiKLHT8j.js`) publicados e confirmei os textos
+("Sua função", "functionRole", "employment_type"/"function_role")
+presentes de verdade no JS servido.
+
+🔴 **Não resolvido — fica pra próxima vez que Victor mexer na Vercel:**
+por que o GitHub→Vercel parou de disparar sozinho depois do `13f967c`.
+Prováveis causas: integração Git desconectada/permissão expirada nas
+Settings → Git do projeto, ou "Ignored Build Step" mal configurado.
+`vercel link` criou `.vercel/project.json` + `.env.local` locais (ambos
+gitignored, `.env*` foi adicionado ao `.gitignore` automaticamente pelo
+próprio `vercel link` — commitado). **Enquanto a causa não for achada,
+todo push a partir de agora pode precisar do mesmo `vercel --prod`
+manual** (agora já teria `.vercel/` linkado, então só o passo
+`--prod`).
