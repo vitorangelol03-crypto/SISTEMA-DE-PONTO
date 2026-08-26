@@ -125,6 +125,11 @@ describe('permissions.ts - Sistema de Permissões', () => {
           manualCleanup: false,
           autoCleanup: false,
         },
+        employeeapproval: {
+          view: false,
+          approve: false,
+          reject: false,
+        },
       };
 
       expect(hasPermission(permissions, 'attendance.mark')).toBe(false);

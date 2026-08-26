@@ -42,3 +42,38 @@ export const isValidPassword = (password: string): boolean => {
 export const isNumericString = (str: string): boolean => {
   return /^\d+$/.test(str);
 };
+
+// Sub-fase: cadastro público de funcionário (26/08) — pedido explícito do
+// Victor: nome, CPF, telefone e chave PIX sem acento, traço ou ponto (mesmo
+// sabendo que isso pode deixar e-mail/chave aleatória com formato estranho;
+// ele confirmou que quer assim mesmo — ajuste manual na aprovação se precisar).
+export const stripAccentsDashesDots = (value: string): string => {
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // acentos (á, ç, ã, õ, ü...)
+    .replace(/[.-]/g, ''); // ponto e traço
+};
+
+export const sanitizePublicRegistrationName = (value: string): string => {
+  return stripAccentsDashesDots(value).replace(/\s+/g, ' ').trim();
+};
+
+export const sanitizePublicRegistrationPixKey = (value: string): string => {
+  return stripAccentsDashesDots(value).trim();
+};
+
+export const sanitizePhoneDigits = (value: string): string => {
+  return value.replace(/\D/g, '').slice(0, 11);
+};
+
+export const validatePhoneDigits = (digits: string): boolean => {
+  return digits.length === 10 || digits.length === 11;
+};
+
+export const formatPhoneDisplay = (digits: string | null | undefined): string => {
+  if (!digits) return '';
+  const d = digits.replace(/\D/g, '');
+  if (d.length === 11) return d.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+  if (d.length === 10) return d.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+  return d;
+};

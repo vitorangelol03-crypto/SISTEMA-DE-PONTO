@@ -21,6 +21,9 @@
 //   log-face-attempt         { employeeId, success, confidence, clockType, companyId } → { ok: true }
 //   employee-errors-by-period { employeeId, periodId, companyId } → { period, individual_errors, triage_errors, total_individual, total_triage }
 //   employee-error-periods    { employeeId, companyId } → { periods: Array<{ period, has_errors, total_errors }> }
+//   register-employee        { companyId, name, cpf, phone, pixKey, pixType } → { employee: { id } }
+//     Sub-fase 26/08 — cadastro público de funcionário novo (link sem login,
+//     página /cadastro). Grava registration_status='pending'.
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -78,6 +81,57 @@ async function lookupCompaniesByCpf(body: Body): Promise<Response> {
     }
   }
   return json({ companies: out });
+}
+
+// Sub-fase 26/08 — cadastro público de funcionário novo (link sem login).
+// Sempre grava pending: a análise de antecedentes acontece depois, na aba
+// "Aprovação de Cadastro" do painel. Enquanto pending, o funcionário já bate
+// ponto normal (bloqueio só entra se alguém recusar o cadastro).
+async function registerEmployee(body: Body): Promise<Response> {
+  const companyId = String(body.companyId ?? '').trim();
+  const name = String(body.name ?? '').trim();
+  const cpf = String(body.cpf ?? '').replace(/\D/g, '');
+  const phone = String(body.phone ?? '').replace(/\D/g, '');
+  const pixKey = String(body.pixKey ?? '').trim();
+  const pixType = String(body.pixType ?? '').trim();
+
+  if (!companyId) return json({ error: 'Empresa inválida' }, 400);
+  if (!name) return json({ error: 'Nome é obrigatório' }, 400);
+  if (cpf.length !== 11) return json({ error: 'CPF inválido' }, 400);
+  if (phone.length !== 10 && phone.length !== 11) return json({ error: 'Telefone inválido' }, 400);
+  if (!pixKey) return json({ error: 'Chave PIX é obrigatória' }, 400);
+  if (!['CPF', 'Email', 'Telefone', 'Aleatória'].includes(pixType)) {
+    return json({ error: 'Tipo de chave PIX inválido' }, 400);
+  }
+
+  const { data: company, error: companyError } = await supabase
+    .from('companies')
+    .select('id')
+    .eq('id', companyId)
+    .maybeSingle();
+  if (companyError) return json({ error: 'Database error', details: companyError.message }, 500);
+  if (!company) return json({ error: 'Empresa não encontrada — link inválido' }, 404);
+
+  const { data, error } = await supabase
+    .from('employees')
+    .insert([{
+      company_id: companyId,
+      name,
+      cpf,
+      phone,
+      pix_key: pixKey,
+      pix_type: pixType,
+      registration_status: 'pending',
+    }])
+    .select('id')
+    .single();
+
+  if (error) {
+    if (error.code === '23505') return json({ error: 'CPF já cadastrado' }, 409);
+    return json({ error: 'Database error', details: error.message }, 500);
+  }
+
+  return json({ employee: data });
 }
 
 async function lookupEmployee(body: Body): Promise<Response> {
@@ -400,6 +454,7 @@ Deno.serve(async (req) => {
     switch (body.action) {
       case 'lookup-companies-by-cpf': return await lookupCompaniesByCpf(body);
       case 'lookup-employee': return await lookupEmployee(body);
+      case 'register-employee': return await registerEmployee(body);
       case 'verify-pin': return await verifyPin(body);
       case 'set-pin': return await setPin(body);
       case 'today-attendance': return await todayAttendance(body);

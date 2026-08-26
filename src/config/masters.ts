@@ -63,3 +63,17 @@ export function isDriverpayPermission(permission: string): boolean {
 export function canAccessDriverpay(userId: string | null | undefined): boolean {
   return userId === PONTO_EDITOR_ID;
 }
+
+/**
+ * Aprovação de Cadastro (2026-08-26): TODO o módulo (aba + ações) é EXCLUSIVO
+ * do 2626 — nem o 9999 nem admins/supervisores acessam. Decisão do Victor,
+ * mesmo critério do Pagamentos Driver acima.
+ */
+export function isEmployeeApprovalPermission(permission: string): boolean {
+  return permission.startsWith('employeeapproval.');
+}
+
+/** True se o usuário pode acessar Aprovação de Cadastro (somente 2626). */
+export function canAccessEmployeeApproval(userId: string | null | undefined): boolean {
+  return userId === PONTO_EDITOR_ID;
+}

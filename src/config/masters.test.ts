@@ -6,6 +6,8 @@ import {
   MASTER_IDS,
   PONTO_EDITOR_ID,
   PONTO_EDIT_PERMISSIONS,
+  isEmployeeApprovalPermission,
+  canAccessEmployeeApproval,
 } from './masters';
 
 describe('masters config', () => {
@@ -92,6 +94,36 @@ describe('masters config', () => {
         'attendance.mark',
         'attendance.reset',
       ]);
+    });
+  });
+
+  // Sub-fase 26/08 — Aprovação de Cadastro é EXCLUSIVA do 2626, mesmo critério
+  // do Pagamentos Driver (decisão do Victor: nem o 9999 acessa).
+  describe('isEmployeeApprovalPermission / canAccessEmployeeApproval', () => {
+    it('reconhece qualquer permissão do módulo employeeapproval', () => {
+      expect(isEmployeeApprovalPermission('employeeapproval.view')).toBe(true);
+      expect(isEmployeeApprovalPermission('employeeapproval.approve')).toBe(true);
+      expect(isEmployeeApprovalPermission('employeeapproval.reject')).toBe(true);
+    });
+
+    it('não confunde com permissões de outros módulos', () => {
+      expect(isEmployeeApprovalPermission('employees.view')).toBe(false);
+      expect(isEmployeeApprovalPermission('driverpay.view')).toBe(false);
+    });
+
+    it('SOMENTE o 2626 acessa — nem o 9999 (mestre)', () => {
+      expect(canAccessEmployeeApproval('2626')).toBe(true);
+      expect(canAccessEmployeeApproval('9999')).toBe(false);
+    });
+
+    it('supervisores comuns não acessam', () => {
+      expect(canAccessEmployeeApproval('01')).toBe(false);
+      expect(canAccessEmployeeApproval('8888')).toBe(false);
+    });
+
+    it('é seguro com null/undefined', () => {
+      expect(canAccessEmployeeApproval(null)).toBe(false);
+      expect(canAccessEmployeeApproval(undefined)).toBe(false);
     });
   });
 });

@@ -1,6 +1,6 @@
 import { supabase, setAuthToken, getAuthToken } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
-import { isMaster, isPontoEditPermission, canEditPonto, canAccessDriverpay } from '../config/masters';
+import { isMaster, isPontoEditPermission, canEditPonto, canAccessDriverpay, isEmployeeApprovalPermission, canAccessEmployeeApproval } from '../config/masters';
 import {
   computeWorkedMinutes,
   computeIntervalMinutes,
@@ -78,6 +78,12 @@ export interface Employee {
   marking_count?: 2 | 4 | null;
   hire_date?: string | null;
   contract_type?: string | null;
+  // Sub-fase: cadastro público de funcionário (26/08).
+  phone?: string | null;
+  registration_status?: 'pending' | 'approved' | 'rejected';
+  registration_notes?: string | null;
+  registration_reviewed_by?: string | null;
+  registration_reviewed_at?: string | null;
 }
 
 export interface EmployeeExtras {
@@ -375,6 +381,13 @@ async function validatePermission(
       : { allowed: false, error: 'Apenas o usuário mestre (2626) pode acessar Pagamentos Driver' };
   }
 
+  // Aprovação de Cadastro: módulo EXCLUSIVO do 2626 (nem 9999), acima do bypass de mestre.
+  if (isEmployeeApprovalPermission(permission)) {
+    return canAccessEmployeeApproval(userId)
+      ? { allowed: true }
+      : { allowed: false, error: 'Apenas o usuário mestre (2626) pode acessar Aprovação de Cadastro' };
+  }
+
   // Mestres (9999 / 2626) têm todas as demais permissões.
   if (isMaster(userId)) {
     return { allowed: true };
@@ -654,6 +667,36 @@ export const updateEmployee = async (
     }
     throw error;
   }
+};
+
+/**
+ * Aprova ou recusa o cadastro de um funcionário (análise de antecedentes,
+ * sub-fase 26/08). 'approved' e 'pending' batem ponto normal — só 'rejected'
+ * bloqueia no /clock (checado em EmployeeClockIn ao ler o CPF).
+ */
+export const updateEmployeeRegistrationStatus = async (
+  employeeId: string,
+  status: 'approved' | 'rejected',
+  notes: string | null,
+  reviewerUserId: string
+): Promise<void> => {
+  const permission = status === 'approved' ? 'employeeapproval.approve' : 'employeeapproval.reject';
+  const permissionCheck = await validatePermission(reviewerUserId, permission);
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  const { error } = await supabase
+    .from('employees')
+    .update({
+      registration_status: status,
+      registration_notes: notes,
+      registration_reviewed_by: reviewerUserId,
+      registration_reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', employeeId);
+
+  if (error) throw error;
 };
 
 export const deleteEmployee = async (id: string, userId: string): Promise<void> => {
@@ -3226,6 +3269,31 @@ export const getEmployeeByCpf = async (cpf: string, companyId: string): Promise<
     companyId,
   });
   return data.employee ?? null;
+};
+
+/**
+ * Cadastro público de funcionário novo (link sem login, sub-fase 26/08).
+ * Grava com registration_status='pending' — o candidato já pode bater ponto
+ * assim que o cadastro é aceito; só 'rejected' bloqueia.
+ * Sub-fase 11.8-family — via edge fn employee-public-api (anon-friendly pós-RLS).
+ */
+export const registerEmployeePublic = async (params: {
+  companyId: string;
+  name: string;
+  cpf: string;
+  phone: string;
+  pixKey: string;
+  pixType: string;
+}): Promise<{ id: string }> => {
+  const data = await callEmployeePublicApi<{ employee: { id: string } }>('register-employee', {
+    companyId: params.companyId,
+    name: params.name,
+    cpf: params.cpf.replace(/\D/g, ''),
+    phone: params.phone.replace(/\D/g, ''),
+    pixKey: params.pixKey,
+    pixType: params.pixType,
+  });
+  return data.employee;
 };
 
 /** Busca o registro de attendance de hoje para um funcionário específico.

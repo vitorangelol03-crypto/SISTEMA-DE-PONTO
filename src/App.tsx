@@ -22,6 +22,11 @@ const DriverApp = lazy(() =>
   import('./components/driver-app/DriverApp').then(m => ({ default: m.DriverApp })),
 );
 
+// Cadastro público de funcionário novo (rota publica /cadastro?empresa=...) — sem login.
+const EmployeePublicRegister = lazy(() =>
+  import('./components/employee-clock/EmployeePublicRegister').then(m => ({ default: m.EmployeePublicRegister })),
+);
+
 const AttendanceTab = lazy(() => import('./components/attendance/AttendanceTab').then(m => ({ default: m.AttendanceTab })));
 const EmployeesTab = lazy(() => import('./components/employees/EmployeesTab').then(m => ({ default: m.EmployeesTab })));
 const ReportsTab = lazy(() => import('./components/reports/ReportsTab').then(m => ({ default: m.ReportsTab })));
@@ -34,6 +39,7 @@ const DriverPayTab = lazy(() => import('./components/driverpay/DriverPayTab').th
 const DataManagementTab = lazy(() => import('./components/datamanagement/DataManagementTab').then(m => ({ default: m.DataManagementTab })));
 const TutorialTab = lazy(() => import('./components/tutorial/TutorialTab').then(m => ({ default: m.TutorialTab })));
 const AdminTab = lazy(() => import('./components/admin/AdminTab').then(m => ({ default: m.AdminTab })));
+const EmployeeApprovalTab = lazy(() => import('./components/employeeapproval/EmployeeApprovalTab').then(m => ({ default: m.EmployeeApprovalTab })));
 
 function App() {
   const { user, loading, login, logout } = useAuth();
@@ -74,6 +80,11 @@ function App() {
   const isDriverMode =
     window.location.pathname === '/driver' ||
     new URLSearchParams(window.location.search).get('mode') === 'driver';
+
+  // Cadastro público de funcionário novo — não exige login (link ?empresa=...)
+  const isRegisterMode =
+    window.location.pathname === '/cadastro' ||
+    new URLSearchParams(window.location.search).get('mode') === 'cadastro';
 
   useEffect(() => {
     if (!company?.id) return;
@@ -116,6 +127,22 @@ function App() {
           </div>
         }>
           <DriverApp />
+        </Suspense>
+        <Toaster position="top-right" />
+      </>
+    );
+  }
+
+  // Cadastro público de funcionário novo — tela pública própria, sem login
+  if (isRegisterMode) {
+    return (
+      <>
+        <Suspense fallback={
+          <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+          </div>
+        }>
+          <EmployeePublicRegister />
         </Suspense>
         <Toaster position="top-right" />
       </>
@@ -172,6 +199,8 @@ function App() {
           return hasPermission('attendance.view') ? <AttendanceTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'employees':
           return hasPermission('employees.view') ? <EmployeesTab userId={user.id} hasPermission={hasPermission} /> : null;
+        case 'employeeapproval':
+          return hasPermission('employeeapproval.view') ? <EmployeeApprovalTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'reports':
           return hasPermission('reports.view') ? <ReportsTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'financial':

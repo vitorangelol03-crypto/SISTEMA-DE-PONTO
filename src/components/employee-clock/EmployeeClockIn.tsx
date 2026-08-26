@@ -224,7 +224,14 @@ export const EmployeeClockIn: React.FC = () => {
   // ─── CPF ────────────────────────────────────────────────────────────────────
 
   // Pós-validação de funcionário: decide próximo step (setup-pin ou pin).
+  // Sub-fase 26/08 — cadastro recusado na análise de antecedentes: bloqueia
+  // no próximo ponto (pending/approved seguem batendo ponto normal).
   const proceedAfterEmployee = (emp: Employee) => {
+    if (emp.registration_status === 'rejected') {
+      setErrorMsg('Seu cadastro foi recusado. Procure seu supervisor ou o RH para mais informações.');
+      setStep('error');
+      return;
+    }
     setEmployee(emp);
     if (!emp.pin_configured) {
       setSetupField('new');

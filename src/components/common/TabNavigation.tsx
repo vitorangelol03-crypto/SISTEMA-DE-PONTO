@@ -14,6 +14,7 @@ import {
   BookOpen,
   Shield,
   MoreHorizontal,
+  UserCheck,
 } from 'lucide-react';
 
 export type TabType =
@@ -28,7 +29,8 @@ export type TabType =
   | 'driverpay'
   | 'datamanagement'
   | 'tutorial'
-  | 'admin';
+  | 'admin'
+  | 'employeeapproval';
 
 interface TabNavigationProps {
   activeTab: TabType;
@@ -55,6 +57,7 @@ const TAB_COLOR: Record<TabType, string> = {
   datamanagement: '#0d9488',  // dados — teal
   tutorial: '#ea580c',        // ajuda — laranja
   admin: '#b91c1c',           // admin — vermelho escuro
+  employeeapproval: '#16a34a', // aprovação de cadastro — verde
 };
 
 const LARGURA_BOTAO_MAIS = 104; // px reservados pro botão "Mais" quando ele existe
@@ -70,6 +73,7 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
   const allTabs = [
     { id: 'attendance' as TabType, name: t('tab.attendance'), icon: Clock, permission: 'attendance.view' },
     { id: 'employees' as TabType, name: t('tab.employees'), icon: Users, permission: 'employees.view' },
+    { id: 'employeeapproval' as TabType, name: t('tab.employeeapproval'), icon: UserCheck, permission: 'employeeapproval.view' },
     { id: 'reports' as TabType, name: t('tab.reports'), icon: BarChart3, permission: 'reports.view' },
     { id: 'financial' as TabType, name: t('tab.financial'), icon: DollarSign, permission: 'financial.view' },
     { id: 'c6payment' as TabType, name: t('tab.c6payment'), icon: FileSpreadsheet, permission: 'c6payment.view' },

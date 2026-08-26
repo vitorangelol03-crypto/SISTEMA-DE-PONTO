@@ -56,6 +56,7 @@ const ptBR = {
   'tab.datamanagement': 'Gerenciamento',
   'tab.tutorial': 'Ajuda',
   'tab.admin': 'Admin',
+  'tab.employeeapproval': 'Aprovação de Cadastro',
 
   // Common UI
   'common.save': 'Salvar',
@@ -113,6 +114,7 @@ const en: typeof ptBR = {
   'tab.datamanagement': 'Data Mgmt',
   'tab.tutorial': 'Help',
   'tab.admin': 'Admin',
+  'tab.employeeapproval': 'Registration Approval',
 
   'common.save': 'Save',
   'common.cancel': 'Cancel',

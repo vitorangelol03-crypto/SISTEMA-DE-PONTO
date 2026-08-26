@@ -102,6 +102,11 @@ export interface DataManagementPermissions extends TabPermissions {
   autoCleanup: boolean;
 }
 
+export interface EmployeeApprovalPermissions extends TabPermissions {
+  approve: boolean;
+  reject: boolean;
+}
+
 export interface UserPermissions {
   attendance: AttendancePermissions;
   employees: EmployeesPermissions;
@@ -113,6 +118,7 @@ export interface UserPermissions {
   settings: SettingsPermissions;
   users: UsersPermissions;
   datamanagement: DataManagementPermissions;
+  employeeapproval: EmployeeApprovalPermissions;
 }
 
 export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
@@ -125,7 +131,8 @@ export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
   errors: { view: true, create: true, createByValue: true, edit: true, delete: true, viewStats: true, viewTriage: true, createTriage: true, distributeTriage: true },
   settings: { view: true, editDailyRate: true, editOther: true },
   users: { view: true, create: true, delete: true, managePermissions: true },
-  datamanagement: { view: true, viewStats: true, configRetention: true, manualCleanup: true, autoCleanup: true }
+  datamanagement: { view: true, viewStats: true, configRetention: true, manualCleanup: true, autoCleanup: true },
+  employeeapproval: { view: true, approve: true, reject: true }
 };
 
 export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
@@ -144,7 +151,10 @@ export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
   errors: { view: true, create: true, createByValue: false, edit: true, delete: false, viewStats: true, viewTriage: true, createTriage: true, distributeTriage: true },
   settings: { view: false, editDailyRate: false, editOther: false },
   users: { view: false, create: false, delete: false, managePermissions: false },
-  datamanagement: { view: false, viewStats: false, configRetention: false, manualCleanup: false, autoCleanup: false }
+  datamanagement: { view: false, viewStats: false, configRetention: false, manualCleanup: false, autoCleanup: false },
+  // Análise de antecedentes: admin/mestre por padrão (mesmo critério do driverpay
+  // acima). Liberável por usuário via PermissionsModal.
+  employeeapproval: { view: false, approve: false, reject: false }
 };
 
 export const DEFAULT_READONLY_PERMISSIONS: UserPermissions = {
@@ -157,7 +167,8 @@ export const DEFAULT_READONLY_PERMISSIONS: UserPermissions = {
   errors: { view: true, create: false, createByValue: false, edit: false, delete: false, viewStats: true, viewTriage: false, createTriage: false, distributeTriage: false },
   settings: { view: false, editDailyRate: false, editOther: false },
   users: { view: false, create: false, delete: false, managePermissions: false },
-  datamanagement: { view: false, viewStats: false, configRetention: false, manualCleanup: false, autoCleanup: false }
+  datamanagement: { view: false, viewStats: false, configRetention: false, manualCleanup: false, autoCleanup: false },
+  employeeapproval: { view: false, approve: false, reject: false }
 };
 
 export interface PermissionLog {
@@ -287,5 +298,11 @@ export const PERMISSION_LABELS = {
     configRetention: 'Configurar retenção',
     manualCleanup: 'Limpar dados manualmente',
     autoCleanup: 'Configurar limpeza automática'
+  },
+  employeeapproval: {
+    title: 'Aprovação de Cadastro',
+    view: 'Ver aba',
+    approve: 'Aprovar cadastro',
+    reject: 'Recusar cadastro (bloqueia o funcionário)'
   }
 };
