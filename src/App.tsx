@@ -8,7 +8,7 @@ import { TabNavigation, TabType } from './components/common/TabNavigation';
 import { HelpButton } from './components/tutorial/HelpButton';
 import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
-import { useCompany } from './contexts/CompanyContext';
+import { useCompany } from './contexts/useCompany';
 import { autoCreateWeeklyPeriod, type User } from './services/database';
 import { EmployeeClockIn } from './components/employee-clock/EmployeeClockIn';
 

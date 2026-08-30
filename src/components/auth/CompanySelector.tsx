@@ -1,6 +1,6 @@
 import React from 'react';
 import { Building2, MapPin, LogOut } from 'lucide-react';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import type { User } from '../../services/database';
 
 interface CompanySelectorProps {

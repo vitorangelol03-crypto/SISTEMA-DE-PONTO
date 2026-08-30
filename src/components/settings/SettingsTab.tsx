@@ -6,7 +6,7 @@ import {
   updateBonusDefault,
   BonusType,
 } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { isMaster } from '../../config/masters';
 
 interface SettingsTabProps {

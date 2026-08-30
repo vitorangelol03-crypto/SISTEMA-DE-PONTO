@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart3, Download, Filter, FileText, RefreshCw, Search, Printer } from 'lucide-react';
 import { getAllEmployees, getAttendanceHistory, getPayments, getBonusTypes, Employee, Attendance, Payment, BonusTypeRecord } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { getBonusValueForType } from '../../utils/bonusHelpers';
 import { formatDateBR } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx-js-style';
@@ -145,14 +145,14 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   }, [payments]);
 
   // Retorna mapa code → valor para cada bonusType conhecido (zero se ausente).
-  const getBonusForAttendance = (att: Attendance): Record<string, number> => {
+  const getBonusForAttendance = React.useCallback((att: Attendance): Record<string, number> => {
     const payment = paymentIndex.get(`${att.employee_id}|${att.date}`);
     const out: Record<string, number> = {};
     for (const bt of bonusTypes) {
       out[bt.code] = payment ? getBonusValueForType(payment, bt) : 0;
     }
     return out;
-  };
+  }, [paymentIndex, bonusTypes]);
 
   // Resumo do período agregado por funcionário (considera os attendances filtrados não-rejeitados)
   interface EmployeeSummary {
@@ -199,7 +199,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
     });
 
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [displayedAttendances, paymentIndex, bonusTypes]);
+  }, [displayedAttendances, bonusTypes, getBonusForAttendance]);
 
   const exportToPDF = () => {
     // Sub-fase 14.13: chave correta é reports.exportPDF (matriz tem essa,

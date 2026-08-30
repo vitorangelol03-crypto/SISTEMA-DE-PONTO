@@ -3,7 +3,7 @@ import { Zap, Trash2, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { addZapex, updateZapex, removeZapex, setZapexRate } from '../../services/driverPay';
 import type { DriverZapex } from '../../services/driverPay';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { getBrazilDate } from '../../utils/dateUtils';
 import { ModalShell } from './ModalShell';
 import { DriverRowData, formatBRL } from './driverPayShared';

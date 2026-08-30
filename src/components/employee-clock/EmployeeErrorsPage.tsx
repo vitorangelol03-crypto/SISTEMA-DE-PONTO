@@ -8,7 +8,7 @@ import {
   Employee,
   Company,
 } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { EmployeeErrorsView } from './EmployeeErrorsView';
 
 function formatCPFMask(value: string): string {

@@ -18,7 +18,7 @@ import {
   Link2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import {
   Driver,
   DriverGroup,

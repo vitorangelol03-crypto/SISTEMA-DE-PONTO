@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserCog, Plus, Trash2, Eye, EyeOff, RefreshCw, Shield } from 'lucide-react';
 import { getAllUsers, createUser, deleteUser, User } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { isValidPassword, isNumericString } from '../../utils/validation';
 import { getUserPermissions } from '../../services/permissions';
 import { UserPermissions } from '../../types/permissions';

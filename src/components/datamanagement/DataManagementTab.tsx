@@ -23,7 +23,7 @@ import {
   CleanupLog,
   Employee
 } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { format } from 'date-fns';
 
 interface DataManagementTabProps {

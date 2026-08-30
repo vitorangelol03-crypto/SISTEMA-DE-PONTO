@@ -1,23 +1,9 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 import { getCompanyById, getCompanies, DEFAULT_COMPANY_ID, type Company } from '../services/database';
 import { COMPANY_STORAGE_KEY } from './companyHelpers';
+import { CompanyContext } from './useCompany';
 
 const STORAGE_KEY = COMPANY_STORAGE_KEY;
-
-interface CompanyContextValue {
-  // Empresa atual (null durante carregamento inicial)
-  company: Company | null;
-  // Lista de empresas disponíveis (apenas usado por admin)
-  availableCompanies: Company[];
-  // Trocar empresa (apenas admin pode chamar)
-  setCompany: (companyId: string) => Promise<void>;
-  // Loading state
-  loading: boolean;
-  // Indica se está pronto para uso
-  ready: boolean;
-}
-
-const CompanyContext = createContext<CompanyContextValue | null>(null);
 
 // Sub-fase 14.4.3: valida UUID antes de query. localStorage poluído com
 // string não-UUID fazia getCompanyById lançar PostgREST 22P02 (invalid_text_
@@ -102,13 +88,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useCompany() {
-  const ctx = useContext(CompanyContext);
-  if (!ctx) {
-    throw new Error('useCompany must be used inside <CompanyProvider>');
-  }
-  return ctx;
-}
+// 30/08/2026: useCompany + CompanyContext movidos pra ./useCompany.ts —
+// este arquivo exporta APENAS o componente CompanyProvider (Fast Refresh).
 
 // Sub-fase 14.4.9: getCurrentCompanyId movido pra ./companyHelpers.ts
 // (export incompatível com React Fast Refresh estava invalidando HMR

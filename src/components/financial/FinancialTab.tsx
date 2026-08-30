@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -9,7 +9,7 @@ import {
   applyBankHoursToPayment, previewBankHoursForPeriod, createBankHoursOverride,
   type BankHoursPreviewItem,
 } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import {
   shouldShowAllAppliedBanner,
   selectAllPendingState,
@@ -571,7 +571,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     }
   };
 
-  const loadBonusRemovalHistory = async () => {
+  const loadBonusRemovalHistory = useCallback(async () => {
     if (!hasPermission('financial.viewHistory')) {
       toast.error('Você não tem permissão para visualizar o histórico');
       return;
@@ -593,7 +593,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     } finally {
       setLoadingHistory(false);
     }
-  };
+  }, [hasPermission, company?.id, historyFilters]);
 
   const exportHistoryToExcel = () => {
     if (displayedBonusRemovals.length === 0) {
@@ -624,7 +624,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     if (activeView === 'history') {
       loadBonusRemovalHistory();
     }
-  }, [activeView, historyFilters]);
+  }, [activeView, loadBonusRemovalHistory]);
 
   if (loading) {
     return (

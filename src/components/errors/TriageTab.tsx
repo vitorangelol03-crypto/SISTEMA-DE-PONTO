@@ -11,7 +11,7 @@ import {
   TriageDistributionPreview,
   TriageType,
 } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 

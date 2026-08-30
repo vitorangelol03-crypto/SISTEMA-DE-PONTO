@@ -3,7 +3,7 @@ import { X, Save, RotateCcw, Search, Shield, Eye, CheckSquare, Square } from 'lu
 import { UserPermissions, PERMISSION_LABELS, DEFAULT_ADMIN_PERMISSIONS, DEFAULT_SUPERVISOR_PERMISSIONS, DEFAULT_READONLY_PERMISSIONS } from '../../types/permissions';
 import { saveUserPermissions } from '../../services/permissions';
 import { getBonusTypes, BonusTypeRecord } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { isMaster } from '../../config/masters';
 import toast from 'react-hot-toast';
 

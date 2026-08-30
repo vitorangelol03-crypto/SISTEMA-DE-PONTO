@@ -12,7 +12,7 @@ import {
   Attendance,
   Company,
 } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { FaceRegistration } from './FaceRegistration';
 import { FaceVerification } from './FaceVerification';
 import { clockFailureMessage } from './clockMessages';

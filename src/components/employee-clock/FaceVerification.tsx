@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScanFace, X, Loader2 } from 'lucide-react';
 import { getFaceDescriptor, logFaceAttempt, Employee } from '../../services/database';
 import { useFaceApi } from '../../hooks/useFaceApi';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { FaceScanFrame, FaceScanVisual } from './FaceScanFrame';
 
 interface FaceVerificationProps {

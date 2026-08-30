@@ -22,7 +22,7 @@ import {
   getBonusTypes,
   BonusTypeRecord,
 } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { attendancesToReset, resetIsFiltered } from '../../utils/attendanceReset';
 import {
   bonusTargets,

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Building2, Save, MapPin, Clock, AlertCircle, Wallet, Calculator, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { useAuth } from '../../hooks/useAuth';
 import { updateCompany } from '../../services/database';
 import {

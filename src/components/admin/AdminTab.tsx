@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { BonusTypesManager } from './BonusTypesManager';
 import { CompanySettings } from './CompanySettings';
 import { AuditLogsTab } from '../monitoring/AuditLogsTab';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import {
   verifyAdminSecret,
   updateAdminSecret,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { FileText, Calendar, User, Filter, Download, Search } from 'lucide-react';
 import { auditService, ActionType } from '../../services/auditService';
 import { supabase } from '../../lib/supabase';
@@ -74,11 +74,11 @@ export function AuditLogsTab() {
   useEffect(() => {
     loadUsers();
     loadData();
-  }, [filters]);
+  }, [loadUsers, loadData]);
 
   // audit_logs é global (sem company_id). Query direto em users via RLS —
   // admin master vê todos os ids; supervisor (que não acessa AdminTab) veria só os seus.
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('users')
@@ -89,9 +89,9 @@ export function AuditLogsTab() {
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
     }
-  };
+  }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [logsData, statsData] = await Promise.all([
@@ -113,7 +113,7 @@ export function AuditLogsTab() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   const filteredLogs = logs.filter((log) => {
     if (!searchTerm) return true;

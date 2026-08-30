@@ -30,7 +30,7 @@ function scheduleSum(schedule: number[]): number {
 import { validateCPF, formatCPF } from '../../utils/validation';
 import { generateEmployeeTemplate, parseEmployeeSpreadsheet, generateErrorReport, generateImportReport, parsedToImportData, ImportValidationResult, EmployeeImportData } from '../../utils/employeeImport';
 import { validateImportRow, normalizeCPF, type ValidationContext, type ImportRow } from '../../utils/employeeImportValidation';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import { FunctionRoleInput } from '../common/FunctionRoleInput';
 import toast from 'react-hot-toast';
 

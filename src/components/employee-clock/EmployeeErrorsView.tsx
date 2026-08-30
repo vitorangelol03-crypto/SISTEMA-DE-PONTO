@@ -6,7 +6,7 @@ import {
   PaymentPeriod,
   ErrorType,
 } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 
 interface EmployeeErrorsViewProps {
   employeeId: string;

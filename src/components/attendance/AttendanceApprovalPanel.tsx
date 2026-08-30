@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, CheckCheck } from 'lucide-react';
 import {
   getPendingApprovals,
@@ -7,7 +7,7 @@ import {
   bulkApproveAttendance,
   Attendance,
 } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import toast from 'react-hot-toast';
 
 interface AttendanceApprovalPanelProps {
@@ -70,7 +70,7 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
   const [rejectReason, setRejectReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!company?.id) return;
     setLoading(true);
     try {
@@ -82,9 +82,9 @@ export const AttendanceApprovalPanel: React.FC<AttendanceApprovalPanelProps> = (
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateFilter, company?.id]);
 
-  useEffect(() => { load(); }, [dateFilter, company?.id]);
+  useEffect(() => { load(); }, [load]);
 
   const handleApprove = async (id: string) => {
     setActionLoading(true);

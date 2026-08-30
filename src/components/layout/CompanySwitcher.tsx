@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Building2, ChevronDown, Check } from 'lucide-react';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 
 interface CompanySwitcherProps {
   onCompanyChange?: () => void;

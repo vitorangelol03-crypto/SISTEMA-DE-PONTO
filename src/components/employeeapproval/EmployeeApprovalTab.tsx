@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { UserCheck, Copy, CheckCircle2, XCircle, Clock3, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getAllEmployees, updateEmployeeRegistrationStatus, Employee } from '../../services/database';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompany } from '../../contexts/useCompany';
 import {
   formatCPF,
   formatPhoneDisplay,
