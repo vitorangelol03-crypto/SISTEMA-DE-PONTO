@@ -100,14 +100,40 @@ ambiente/segredo — são **duas quebras reais e independentes**, e
   Gerenciamento dentro. Antes de 07/08 as falhas do playwright eram
   esporádicas (04–05/08, flake), não esta.
 
-### 6.3 O que consertar (NÃO feito — aguardando OK do Victor)
+### 6.3 Conserto feito (`8672604`, pushado) — "faz os dois" do Victor
 
-1. Lint: trocar `Record<string, any>` por `Record<string, unknown>` (ou
-   `// eslint-disable-next-line @typescript-eslint/no-explicit-any` com
-   justificativa) em `driver-public-api/index.ts:130` — checar se o
-   `unknown` compila na fn (usos de `body.x` já passam por `String()`).
-   Edge fn precisaria redeploy só se o código mudar de verdade; troca de
-   tipo não muda comportamento. Opcional: limpar os 6 warnings.
-2. E2E: nos specs 38 e 101, trocar o clique direto por `goToTab(page,
-   tab)` (helper já existente). Sem mudar produto.
-3. Depois: rodar `npm run lint` + specs 38/101 local + ver CI verde.
+1. **Lint:** `type Body = Record<string, any>` → `Record<string, unknown>`
+   em `driver-public-api/index.ts:130` (todos os 29 usos de `body.x` já
+   passavam por `String()`/`Number()`/comparação). 🔑 Conferido com
+   `deno check` (Deno 2.9 via `npx -y deno@2`, numa cópia no scratchpad
+   com `--node-modules-dir=auto` pra não sujar o repo): **3 erros, os
+   MESMOS 3 no HEAD original** (`bcryptjs` sem default export,
+   `Uint8Array`→`BufferSource`, cast `SlotOut[]`) — pré-existentes, TS
+   local mais novo que o runtime da Supabase onde a v34 roda. Zero erro
+   novo. Só tipo/comentário, JS igual → **sem redeploy**.
+2. **E2E:** specs 38 (teste B) e 101 (teste G1) trocam o clique direto por
+   `goToTab(page, tab)` (helper que já abre o `abas-mais`).
+3. `tests/54`: `// eslint-disable-next-line no-console` sem uso removida.
+4. **Warnings deixados de propósito (5):** 4× `react-hooks/exhaustive-deps`
+   (AttendanceApprovalPanel, FinancialTab, AuditLogsTab, ReportsTab) e
+   1× `react-refresh/only-export-components` (CompanyContext exporta
+   `useCompany`). Consertar de verdade = `useCallback` com deps certas em
+   4 arquivos sem relação com o CI (errar = loop de recarga) ou mover
+   `useCompany` pra arquivo próprio (mexe em imports do app todo). Não
+   derrubam o CI; ficam como pendência opcional.
+
+**Validado:** tsc 0 · `npm run lint` **0 erros** (5 warnings acima) ·
+build limpo (1m03) · **specs 38 + 101 inteiros: 33/33** no Chromium,
+`--workers=1` igual ao CI (Vite aquecido antes — frio no WSL estoura o
+`goto` de 15s, ruído de ambiente). CI do commit `8672604`: ver §6.4.
+
+🔑 Reparo no caminho (não mexido): `tests/101` H1 (linha 611) afirma que o
+admin 8888 de PN "não vê Gerenciamento" com `toHaveCount(0)` — com o menu
+"Mais" isso passa mesmo se a aba existir escondida no menu. Passa hoje;
+teste ficou fraco, não errado.
+
+### 6.4 CI da rodada `8672604` — ✅ VERDE (run 33325963821)
+
+`tsc + eslint` = success · `vitest (unit)` = success · `playwright (e2e)`
+= success. **Primeira rodada verde do `main` desde 20/07** (`218e130`).
+Vercel auto-deployou o commit sozinha (código do site idêntico).

@@ -26,9 +26,15 @@ também**, os "eslint 0 erros" de checkpoints de agosto não eram do lint
 completo. (b) Playwright: specs 38 e 101 clicam direto em "Gerenciamento",
 que desde o menu "Mais (N)" da barra de abas (`c346b62`, 06/08) fica
 escondida no desktop — helper `goToTab` já trata, os 2 specs não usam.
-Teste desatualizado, não bug de produto; reproduzido local. **Nada
-consertado ainda** — plano no §6.3 do checkpoint, aguardando OK. Ver
-`CHECKPOINT_SESSAO_2026-08-30.md`.
+Teste desatualizado, não bug de produto; reproduzido local. **Consertado
+com OK dele (`8672604`, pushado):** `any`→`unknown` na edge fn (deno check
+não acusa erro novo — os 3 que acusa já existiam; sem redeploy, só tipo),
+specs 38/101 passam a usar `goToTab`, diretiva eslint sem uso removida no
+54. Validado: tsc 0 · lint 0 erros (5 warnings de hooks/react-refresh
+deixados de propósito — refatorar 4 arquivos sem relação, risco de loop) ·
+build · specs 38+101 33/33 local · **CI verde nos 3 jobs (run
+33325963821) — primeira vez desde 20/07**. Ver
+`CHECKPOINT_SESSAO_2026-08-30.md` §6.
 
 **Sessão 26/08 (4º bloco) — Vercel parou de auto-deployar, resolvido com
 deploy manual via CLI:** Victor reportou que a Vercel não estava
@@ -1039,7 +1045,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-08-30.md` | **Mais recente.** Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado: `any` na edge fn driver-public-api (lint) + specs 38/101 não abrem o menu "Mais" (e2e); fix proposto, não aplicado. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-30.md` | **Mais recente.** Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado E consertado (`8672604`): `any`→`unknown` na edge fn driver-public-api (lint) + specs 38/101 via `goToTab` (menu "Mais"); CI verde nos 3 jobs, 1ª vez desde 20/07. 5 warnings de lint deixados como pendência opcional. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-26.md` | Cadastro público de funcionário (`/cadastro?empresa=...`, sem login) + aba nova "Aprovação de Cadastro" (exclusiva do 2626) — migration, edge fn `register-employee`, bloqueio no `/clock` pra recusado, botão de copiar por campo (sempre versão limpa). E2E novo `tests/78`. **Só local — push pendente do OK dele.** | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-19.md` | **Mais recente.** Edge fn **v32 no ar** (deploy sempre o Victor com `!` — classificador barra CLI e MCP vindos de mim) · prova ao vivo do fix da leitura: o caso do Gustavo se resolveu sozinho ANTES do deploy; o print do João Gabriel reprocessado na v32 e recusado **corretamente** (era papel de parede, não a tela do app) — **fix segue sem prova ao vivo** · push do `3c29c0b` já estava feito (pendência de ontem era engano) · **tag "não bate" clicável** (`95c764e`, local): grade e card mobile abrem "Espelhos recebidos" já filtrado no driver, E2E novo `tests/75` | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-18.md` | Filtro por quinzena + migração em massa do saldo herdado (`closedPeriodsDebtScope.ts`, E2E 73) · parser da planilha da LOGGI (`extractLoggi`, hubs misturados passam pela identificação normal) · "ignorar" persistido nas 4 plataformas (migration `driverpay_driver_ignored`, tela "Vínculos de importação", E2E 74) · 24 vínculos LOGGI gravados em prod (nenhum adivinhado) · chave `proof_auto_confirm` ligada + 22 espelhos retroativos · leitura não desiste na 1ª recusa (`3c29c0b`) | 🟢 ATIVO |
