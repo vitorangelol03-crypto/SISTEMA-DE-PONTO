@@ -65,7 +65,6 @@ test.describe('Pagamentos Driver — espelho PDF sem lixo (fix U+2212)', () => {
     const corrupted = texts.filter(hasNullByte);
     expect(corrupted, `textos corrompidos: ${corrupted.length}`).toHaveLength(0);
 
-    // eslint-disable-next-line no-console
     console.log(`ESPELHO OK — ${texts.length} blocos de texto, 0 corrompidos; contém "R$" e "0,00".`);
   });
 });

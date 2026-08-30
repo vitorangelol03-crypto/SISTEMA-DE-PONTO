@@ -126,8 +126,7 @@ function json(body: unknown, status = 200): Response {
 }
 const onlyDigits = (s: unknown) => String(s ?? '').replace(/\D/g, '');
 
-// deno-lint-ignore no-explicit-any
-type Body = Record<string, any>;
+type Body = Record<string, unknown>;
 
 async function claimsFromRequest(req: Request, body: Body): Promise<DriverClaims | null> {
   const auth = req.headers.get('authorization') ?? '';

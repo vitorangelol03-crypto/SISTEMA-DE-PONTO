@@ -566,7 +566,8 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
 
       const tabs = ['Ponto', 'Funcionários', 'Relatórios', 'Financeiro', 'Pagamento C6', 'Erros', 'Configurações', 'Usuários', 'Gerenciamento', 'Ajuda'];
       for (const tab of tabs) {
-        await page.getByRole('button', { name: new RegExp(`^${tab}$`) }).first().click();
+        // goToTab abre o menu "Mais" quando a aba está escondida nele (barra que cabe, 06/08/2026)
+        await goToTab(page, tab);
         await page.waitForTimeout(800);
       }
 

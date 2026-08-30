@@ -165,7 +165,8 @@ test.describe('System walkthrough exaustivo (sub-fase 14.4.10)', () => {
     const tabs = ['Ponto', 'Funcionários', 'Financeiro', 'Relatórios', 'Erros', 'Pagamento C6', 'Usuários', 'Gerenciamento', 'Ajuda'];
 
     for (const tab of tabs) {
-      await page.getByRole('button', { name: new RegExp(`^${tab}$`) }).first().click();
+      // goToTab abre o menu "Mais" quando a aba está escondida nele (barra que cabe, 06/08/2026)
+      await goToTab(page, tab);
       // Aguarda content renderizar (qualquer h1/h2/heading principal)
       await page.waitForTimeout(800);
     }
