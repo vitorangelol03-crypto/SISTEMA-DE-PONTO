@@ -6,6 +6,19 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
+**Sessão 30/08 (3º bloco) — 5 warnings do ESLint zerados (`1e5656a`, NO AR):**
+4× `exhaustive-deps` viraram `useCallback` com deps reais (efeitos disparam
+igual antes; bônus: histórico do Financeiro não fica mais stale após carga
+de permissões/troca de empresa) e `useCompany`+`CompanyContext` foram pra
+`src/contexts/useCompany.ts` (CompanyContext.tsx exporta só o Provider —
+mesma família/motivo do split 14.4.9), 26 consumidores atualizados juntos.
+Validado: eslint 0+0 · tsc 0 · 1322 unit · build · E2E 15+38+46+51 26
+passed. 🔑 Falso alarme documentado: "aprovação em lote" do 15 falhou
+isolado por latência (>10s no toast; screenshot prova que aprovou —
+466→464), 2/2 verde re-rodado; e o teste "reset de ponto — flaky" é
+`test.skip` vazio permanente (o "flaky" é o NOME). Vercel auto-deployou
+(`READY PROMOTED 1e5656a`). Ver `CHECKPOINT_SESSAO_2026-08-30.md` §7.
+
 **Sessão 30/08 — "Vercel parou de auto-deployar" investigado: NÃO estava
 quebrado.** Vínculo Git do projeto intacto (API: link github + credencial +
 `main`, sem Ignored Build Step, não pausado). Só **um** push (10:07 de
@@ -1045,7 +1058,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-08-30.md` | **Mais recente.** Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado E consertado (`8672604`): `any`→`unknown` na edge fn driver-public-api (lint) + specs 38/101 via `goToTab` (menu "Mais"); CI verde nos 3 jobs, 1ª vez desde 20/07. 5 warnings de lint deixados como pendência opcional. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-30.md` | **Mais recente.** Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado E consertado (`8672604`); depois 5 warnings zerados (`1e5656a`): useCallback nos 4 hooks + useCompany em arquivo próprio (26 imports). eslint 0+0, CI verde. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-26.md` | Cadastro público de funcionário (`/cadastro?empresa=...`, sem login) + aba nova "Aprovação de Cadastro" (exclusiva do 2626) — migration, edge fn `register-employee`, bloqueio no `/clock` pra recusado, botão de copiar por campo (sempre versão limpa). E2E novo `tests/78`. **Só local — push pendente do OK dele.** | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-19.md` | **Mais recente.** Edge fn **v32 no ar** (deploy sempre o Victor com `!` — classificador barra CLI e MCP vindos de mim) · prova ao vivo do fix da leitura: o caso do Gustavo se resolveu sozinho ANTES do deploy; o print do João Gabriel reprocessado na v32 e recusado **corretamente** (era papel de parede, não a tela do app) — **fix segue sem prova ao vivo** · push do `3c29c0b` já estava feito (pendência de ontem era engano) · **tag "não bate" clicável** (`95c764e`, local): grade e card mobile abrem "Espelhos recebidos" já filtrado no driver, E2E novo `tests/75` | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-18.md` | Filtro por quinzena + migração em massa do saldo herdado (`closedPeriodsDebtScope.ts`, E2E 73) · parser da planilha da LOGGI (`extractLoggi`, hubs misturados passam pela identificação normal) · "ignorar" persistido nas 4 plataformas (migration `driverpay_driver_ignored`, tela "Vínculos de importação", E2E 74) · 24 vínculos LOGGI gravados em prod (nenhum adivinhado) · chave `proof_auto_confirm` ligada + 22 espelhos retroativos · leitura não desiste na 1ª recusa (`3c29c0b`) | 🟢 ATIVO |

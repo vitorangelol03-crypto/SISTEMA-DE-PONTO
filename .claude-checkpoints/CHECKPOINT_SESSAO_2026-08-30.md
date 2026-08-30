@@ -137,3 +137,56 @@ teste ficou fraco, não errado.
 `tsc + eslint` = success · `vitest (unit)` = success · `playwright (e2e)`
 = success. **Primeira rodada verde do `main` desde 20/07** (`218e130`).
 Vercel auto-deployou o commit sozinha (código do site idêntico).
+
+## 7. 3º pedido: "limpa os 5 warnings também" (`1e5656a`, pushado, NO AR)
+
+Modo cirúrgico: cada função lida antes de mexer (dep errada em hook =
+loop de recarga). Zero mudança de comportamento pretendida.
+
+- **4× `exhaustive-deps`** → `useCallback` com as deps reais e o efeito
+  dependendo da função: `load` (AttendanceApprovalPanel,
+  `[dateFilter, company?.id]` — iguais às antigas do efeito),
+  `loadUsers`/`loadData` (AuditLogsTab, `[]`/`[filters]`),
+  `getBonusForAttendance` (ReportsTab, `[paymentIndex, bonusTypes]` ⊆
+  deps do memo — o memo trocou `paymentIndex` pela função, que já o
+  carrega), `loadBonusRemovalHistory` (FinancialTab,
+  `[hasPermission, company?.id, historyFilters]`). 🔑 `hasPermission` é
+  `useCallback([permissions, userId])` no `usePermissions` — estável,
+  muda 1× quando as permissões carregam. Delta de comportamento
+  (proposital, pequeno): o histórico do Financeiro refaz a busca quando
+  as permissões terminam de carregar ou a empresa troca — antes ficava
+  stale/negado pra sempre.
+- **`react-refresh/only-export-components`** → `useCompany` +
+  `CompanyContext` + interface movidos pra `src/contexts/useCompany.ts`
+  novo; `CompanyContext.tsx` exporta SÓ `CompanyProvider`. Mesma família
+  do split de 14.4.9 (`companyHelpers`) e mesmo motivo real: export
+  não-componente invalida Fast Refresh → full reload → duplicação de
+  módulo. **26 consumidores** atualizados no mesmo passo (regra das 5
+  abas); nada mais referencia o arquivo antigo além do `main.tsx`
+  (CompanyProvider).
+
+**Validado:** eslint **0 erros e 0 warnings** · tsc 0 · **1322 unit** ·
+build limpo · **E2E specs 15+38+46+51: 26 passed / 3 skipped** (15 cobre
+o painel de aprovação; 38 todas as abas + troca de empresa =
+`useCompany` novo em tudo; 46 Gerenciamento/logs; 51 Financeiro).
+
+🔑 **Falso alarme no caminho, documentado com prova:** rodando o spec 15
+isolado, "aprovação em lote" falhou 2× ("toast aprovad não visível") — o
+screenshot do retry mostra o toast VISÍVEL e o contador 466→464, ou
+seja, a aprovação funcionou e só passou dos 10s do assert
+(`bulkApproveAttendance` faz `validatePermission` + UPDATE +
+`recalcAttendance` por id contra o Supabase REAL; o painel tem ~466
+pendências reais de produção). Re-rodado isolado: **2/2 verde (~44s
+cada)**. Diff não toca `services/` nem `hooks/` — flake de latência
+pré-existente, mesma família dos flakes WSL documentados em 20 e 26/08.
+Obs.: o teste "reset de ponto via UI ... — flaky" do spec 15 é um
+`test.skip` VAZIO permanente — o "flaky" é parte do NOME; não confundir
+com flake real (me confundiu hoje).
+
+**Vercel:** auto-deploy disparou sozinho e produção está
+`READY PROMOTED` no sha `1e5656a` (conferido pela API). **CI:** rodada
+em andamento no push; resultado registrado abaixo quando terminar.
+
+### 7.1 CI da rodada `1e5656a`
+
+(preenchido quando terminar)
