@@ -51,11 +51,63 @@ sha `0b97684`, BUILDING) e em <1 min estava `READY` + `PROMOTED` no alias
 
 ## 5. Achados no caminho (não tocados)
 
-- **CI do GitHub Actions está vermelho** em todos os commits recentes:
-  `tsc + eslint` = failure e `playwright (e2e)` = failure em `bc31813`,
-  `fc6f6c7`, `13f967c`, `4add67b` (`vitest (unit)` passa). Localmente
-  tsc/eslint estavam 0 erros nessas sessões — provável diferença de
-  ambiente/segredos no CI, **não investigado** (fora do pedido).
+- CI do GitHub Actions vermelho — **investigado no §6 abaixo**.
 - `CHECKPOINT_PROXIMOS_PASSOS.md` segue parado em 19/05 — desatualizado.
 - Pendências de 20/08 §5 (filtro "NF ok"/"pago", TOTAL GERAL em branco)
   continuam em aberto.
+
+## 6. Investigação: por que o CI do GitHub está vermelho (2º pedido do dia)
+
+Histórico (`gh run list`, 200 rodadas no `main`): última verde em
+**20/07** (`218e130`); desde 21/07 são 120 falhas seguidas. NÃO é
+ambiente/segredo — são **duas quebras reais e independentes**, e
+`vitest (unit)` passa em todas.
+
+### 6.1 `tsc + eslint` — vermelho desde 21/07 (tsc passa; é o ESLint)
+
+- **21/07 → ~23/07:** `'QUICK_EXIT_CONFIRM_MINUTES' is defined but never
+  used` (`no-unused-vars`) — a rodada de 21/07 mostra esse erro; sumiu
+  depois (a variável foi removida/usada em algum commit seguinte).
+- **23/07 → hoje:** `supabase/functions/driver-public-api/index.ts:130`
+  `type Body = Record<string, any>` → `@typescript-eslint/no-explicit-any`.
+  Entrou em `433932c8` (23/07) com `// deno-lint-ignore no-explicit-any`
+  (só cala o Deno) — o ESLint do repo (`eslint .`, `eslint.config.js`
+  ignora só dist/coverage/android/reports) **também lê `supabase/`** e
+  reclama. Mais 6 warnings (não derrubam).
+- 🔴 **`npm run lint` falha LOCALMENTE com o mesmo erro** (rodado hoje:
+  "✖ 7 problems (1 error, 6 warnings)"). Os "eslint 0 erros" registrados
+  em checkpoints de agosto não correspondem ao `npm run lint` completo —
+  ou foi rodado só em `src/`, ou só nos arquivos tocados. Regra 4 do
+  CLAUDE.md pede lint limpo antes de commit; a partir de agora conferir
+  com `npm run lint` inteiro.
+
+### 6.2 `playwright (e2e)` — vermelho de vez desde 07/08 (`6172f0e`)
+
+- Falham **2 testes** (113 passam em ~12 min): `tests/38` "B. Navegar
+  TODAS as tabs admin" e `tests/101` "G1. Todas as abas admin renderizam
+  em PN" — os dois com `getByRole('button', {name: /^Gerenciamento$/})`
+  → timeout.
+- 🔑 **Causa:** o commit `c346b62` (06/08, "barra de abas que cabe")
+  criou o menu **"Mais (N)"** na `TabNavigation` no desktop (≥1024px):
+  as últimas abas ("Gerenciamento", "Ajuda"…) deixam de ser botões na
+  barra e viram itens dentro do "Mais". O helper `goToTab` de
+  `tests/helpers.ts` **já foi adaptado** (abre `getByTestId('abas-mais')`
+  se a aba não está visível) — mas esses 2 testes clicam direto no botão
+  sem passar pelo helper. É **teste desatualizado, não bug de produto**
+  (a mudança de UI foi pedida pelo Victor em 06/08).
+- **Reproduzido local** (Vite aquecido antes — frio no WSL estoura o
+  `goto` em 15s, ruído): mesma falha, screenshot mostra "Mais (3)" com
+  Gerenciamento dentro. Antes de 07/08 as falhas do playwright eram
+  esporádicas (04–05/08, flake), não esta.
+
+### 6.3 O que consertar (NÃO feito — aguardando OK do Victor)
+
+1. Lint: trocar `Record<string, any>` por `Record<string, unknown>` (ou
+   `// eslint-disable-next-line @typescript-eslint/no-explicit-any` com
+   justificativa) em `driver-public-api/index.ts:130` — checar se o
+   `unknown` compila na fn (usos de `body.x` já passam por `String()`).
+   Edge fn precisaria redeploy só se o código mudar de verdade; troca de
+   tipo não muda comportamento. Opcional: limpar os 6 warnings.
+2. E2E: nos specs 38 e 101, trocar o clique direto por `goToTab(page,
+   tab)` (helper já existente). Sem mudar produto.
+3. Depois: rodar `npm run lint` + specs 38/101 local + ver CI verde.
