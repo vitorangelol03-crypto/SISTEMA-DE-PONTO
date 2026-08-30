@@ -187,6 +187,28 @@ com flake real (me confundiu hoje).
 `READY PROMOTED` no sha `1e5656a` (conferido pela API). **CI:** rodada
 em andamento no push; resultado registrado abaixo quando terminar.
 
-### 7.1 CI da rodada `1e5656a`
+### 7.1 CI pós-`1e5656a` — 🔴 pegou REGRESSÃO minha; consertada (`7.2`)
+
+O run do `1e5656a` foi cancelado pelo push do checkpoint seguinte
+(`cancel-in-progress` por branch — lição: **agrupar commits num push só**).
+O run do `a5d1053` (mesma árvore) falhou: spec 100 **J1/J3**,
+`facial-global-toggle` invisível no AdminTab. Reproduzido local.
+
+### 7.2 Causa raiz e fix (commit `fix(audit-logs)`)
+
+🔴 **Minha afirmação "zero mudança de comportamento" no `1e5656a` estava
+errada.** No `AuditLogsTab`, o `useEffect` ficava ANTES das declarações e
+o array de deps novo `[loadUsers, loadData]` é avaliado na renderização →
+`const` ainda em TDZ → `ReferenceError` ao montar → o componente quebra e
+derruba o **AdminTab inteiro** (que renderiza `<AuditLogsTab />` na linha
+1546) — por isso o toggle sumiu. Meus 4 specs locais (15/38/46/51) não
+cobrem o AdminTab (fica atrás da senha Clayton2024) — só o spec 100 J
+entra lá; o CI pegou. **Fix de raiz:** efeito movido pra DEPOIS das
+declarações, com comentário explicando o porquê.
+
+**Validado:** eslint 0+0 · tsc 0 · **spec 100 seção J 3/3** · spec 46
+7/7 · build limpo. CI do push final: registrado abaixo.
+
+### 7.3 CI final
 
 (preenchido quando terminar)
