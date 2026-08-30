@@ -71,11 +71,6 @@ export function AuditLogsTab() {
 
   const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    loadUsers();
-    loadData();
-  }, [loadUsers, loadData]);
-
   // audit_logs é global (sem company_id). Query direto em users via RLS —
   // admin master vê todos os ids; supervisor (que não acessa AdminTab) veria só os seus.
   const loadUsers = useCallback(async () => {
@@ -114,6 +109,14 @@ export function AuditLogsTab() {
       setLoading(false);
     }
   }, [filters]);
+
+  // Depois das declarações acima — deps de useEffect são avaliadas na
+  // renderização; referenciar const declarada abaixo é TDZ/ReferenceError
+  // (quebrou o AdminTab inteiro em 30/08, pego pelo spec 100 J1/J3 no CI).
+  useEffect(() => {
+    loadUsers();
+    loadData();
+  }, [loadUsers, loadData]);
 
   const filteredLogs = logs.filter((log) => {
     if (!searchTerm) return true;
