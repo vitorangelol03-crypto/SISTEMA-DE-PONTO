@@ -22,7 +22,7 @@ isolado por latência (>10s no toast; screenshot prova que aprovou —
 useCallback e o deps novo causava TDZ/ReferenceError → AdminTab inteiro
 quebrava ao montar (specs locais 15/38/46/51 não entram no AdminTab).
 Consertado movendo o efeito pra depois das declarações; spec 100-J 3/3 +
-46 7/7 + build. Lição dupla: "zero mudança de comportamento" só depois de
+46 7/7 + build; **CI final verde nos 3 jobs (`739710d`) e fix NO AR**. Lição dupla: "zero mudança de comportamento" só depois de
 cobrir TODAS as telas que montam o componente; e agrupar commits num push
 só (push de doc cancelou o run do push de código —
 `cancel-in-progress`). Ver `CHECKPOINT_SESSAO_2026-08-30.md` §7.1-7.3.

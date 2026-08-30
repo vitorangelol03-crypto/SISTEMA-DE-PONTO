@@ -209,6 +209,8 @@ declarações, com comentário explicando o porquê.
 **Validado:** eslint 0+0 · tsc 0 · **spec 100 seção J 3/3** · spec 46
 7/7 · build limpo. CI do push final: registrado abaixo.
 
-### 7.3 CI final
+### 7.3 CI final — ✅ VERDE nos 3 jobs (`739710d`)
 
-(preenchido quando terminar)
+`tsc + eslint` · `vitest (unit)` · `playwright (e2e)` = success. Vercel
+promoveu o fix a produção (`READY PROMOTED 739710d`, conferido pela API).
+Estado final do dia: main verde, lint 0 erros + 0 warnings, tudo no ar.
