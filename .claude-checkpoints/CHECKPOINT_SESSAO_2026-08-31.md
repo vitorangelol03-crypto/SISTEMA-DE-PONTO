@@ -107,6 +107,95 @@ aberto na próxima sessão.
 - **Aguardando o Victor:** decisões de `CHECKPOINT_PROXIMOS_PASSOS.md` §2 (segurança
   primeiro). Depois: roadmap §4, item 1 (auditoria dos caminhos de batida facial+geo).
 
+### 5.1 CI / Vercel do push final — ✅ tudo verde
+
+- Push único `80660d8..c88f6df` (4 commits: `fdeb834` TOTAL GERAL+101+tsbuildinfo+CLAUDE.md ·
+  `66b8235` CI · `879ac37` selo do grupo · `c88f6df` docs).
+- **CI run 33406628242: success nos 3 jobs** (`tsc + eslint` — primeira rodada com o
+  typecheck de verdade e as actions v7 · `vitest (unit)` · `playwright (e2e)`), concluído
+  15:17:54Z (~10 min).
+- **Vercel:** deploy de produção `Ready` (41s) disparado pelo push; conferido **por conteúdo**
+  — o `index.html` do site aponta pro mesmo bundle do build local (`assets/index-CoN1an_J.js`).
+- Dependabot: PRs #13/#16/#3 (actions) ainda abertos logo após o push — o bot fecha sozinho
+  quando revisitar o `main`; se não fechar até a próxima sessão, fechar à mão com nota.
+- Ambiente: Vite local parado; scratchpad com as provas (`prova-formula.cjs`, logs de
+  unit/E2E, digest do workflow em `wf-digest.md`).
+
+## 6. 🔒 Segurança aplicada — OK do Victor ("pode aplicar"), mesmo dia
+
+Migration `20260831160000_security_lock_backups_view_invoker_rpc_revoke.sql` (no repo) =
+mesmo SQL aplicado em prod via MCP `apply_migration` (`success: true`). Antes de aplicar,
+conferi os consumidores: a view só é lida por `recomputePaymentTotals` (como 2626) e por
+`tests/70` (service_role); **nada** em `src/`, `supabase/functions/` ou `tests/` lê `backup_*`;
+a RPC é chamada pela UI como `authenticated` (grant mantido).
+
+**Prova pós-aplicação (3 níveis):**
+1. Catálogo (`has_table_privilege`/`has_function_privilege`): 12 `backup_*` → `rls=true`,
+   0 policies, `anon_select=false anon_delete=false auth_select=false`; view →
+   `security_invoker=true`, `anon_select=false auth_select=true`; `driverpay_conclude_period_only`
+   → `anon_exec=false auth_exec=true service_exec=true` (igual às outras 2 RPCs agora).
+2. Simulação no banco: `set local role authenticated` + claims `sub=2626` → view devolve
+   **325** pagamentos (o caminho do app continua igual); `set local role anon` → `42501
+   permission denied for view`.
+3. Sonda REAL na API (PostgREST) com a chave anon do bundle: view **401**,
+   `backup_employees_20260813` **401**, `backup_attendance_20260813` **401**,
+   `backup_driver_pix_20260724` **401**, `rpc/driverpay_conclude_period_only` **401** — antes
+   eram 206 com dados. Controle: `driverpay_payments` segue **200 `[]`** (RLS normal).
+
+Fica pra decisão dele: apagar/mover as `backup_*` depois de confirmar cópia; e a leva §2.2 do
+PROXIMOS_PASSOS (policy "só 2626", checagem do chamador dentro das 3 RPCs, trava de período).
+
+**CI do push `9a4beb1` (run 33408386035): ✅ success nos 3 jobs** (tsc+eslint · vitest ·
+playwright), concluído 15:37:27Z — rodado de propósito SEM `[skip ci]`: o E2E inteiro passou
+contra o banco já com as permissões novas, ou seja, o app segue funcionando.
+
+## 7. 🔎 Auditoria do roadmap item 1 (facial+geo sem brecha) — só leitura, 31/08
+
+Lido: `clock-in-validated/index.ts` (repo == deployado **v11**, `verify_jwt:true`),
+`EmployeeClockIn.tsx` (fluxo `performClock`→`proceedClock`→`executeClock`), `FaceVerification.tsx`,
+`clockGuards.ts`, config do toggle facial. Achados (brechas contra "ninguém bate sem facial E geo"):
+
+- 🔴 **Facial NÃO é exigida no servidor.** O edge fn `clock-in-validated` recebe só
+  `employee_id + cpf + clock_type + coords` — **nenhum parâmetro de facial**. A conferência
+  facial é 100% no navegador (`FaceVerification` compara o descriptor com `compareFaces` <
+  `MATCH_THRESHOLD` e chama `onSuccess()`; o resultado NÃO vai pro servidor). Logo: se
+  `face_recognition_enabled=false` (ou sem descriptor cadastrado, ou config global off) a
+  batida grava sem rosto; e qualquer chamada direta ao edge fn (anon key + employee_id + CPF)
+  bate ponto sem facial. Identidade no servidor = só o CPF (que não é secreto).
+- 🔴 **Geo só é bloqueada na 1ª entrada.** Nas posições 2/3/4 (saída intervalo, volta, saída),
+  o edge fn registra `geo_fraud_attempts` mas **deixa passar** (`geoValid=false`, comentário
+  literal "deixa passar"). Com as 4 batidas ligadas pra todo mundo, 3 das 4 ficam sem trava de geo.
+- 🟠 **Geo da 1ª entrada depende de `block_outside`.** Default true, mas o override
+  `geolocation_config.block_outside=false` desliga a trava até da entrada (vira só bloqueio de
+  bônus). Conferir/forçar true em PN e Caratinga.
+- 🟠 **Facial 1:1 é confiança-no-cliente.** Mesmo com facial ligada, o match roda no navegador
+  e só o `onSuccess` dispara a gravação — replay/burla do cliente não é detectável no servidor.
+
+Consequência de projeto: o item 1 ("sem brecha" de facial) exige **facial conferida no
+servidor**, que é a base do item 4 (facial sem CPF, 1:N, no tablet). Por isso item 1/3/4 estão
+entrelaçados — levei as decisões pro Victor (rumo/sequência + rigor anti-fraude) antes de programar.
+
+**Decisões do Victor (31/08, via AskUserQuestion):** (1) **blindar o fluxo de hoje primeiro**
+(servidor exige facial 1:1 + geo nas 4 batidas, CPF fica; tablet/1:N depois em cima dessa base);
+(2) rigor = **"garantir que é a pessoa certa"** (servidor reconfere o rosto; SEM anti-foto-de-foto/
+prova de vida por ora — pode entrar depois).
+
+**Como o rosto é guardado (viável e barato no servidor):** `employees.face_descriptor` (jsonb, o
+vetor de 128 números do face-api), gravado/lido pela edge fn `employee-public-api`
+(`save-face`/`face-descriptor`). Match = `faceapi.euclideanDistance` < **0.5** (mesmo limite de
+hoje). O servidor só precisa refazer essa distância — conta pura, sem lib pesada no Deno.
+
+**Realidade dos dados (SELECT em prod, 31/08) — muda o rollout:**
+| Empresa | batidas config | block_outside | raio | func | com rosto | SEM rosto | facial desligada |
+|---|---|---|---|---|---|---|---|
+| Caratinga | **2** | true | 150m | 91 | 59 | **32** | 4 |
+| Ponte Nova | 4 | true | 150m | 6 | 5 | 1 | 1 |
+- `block_outside=true` nas duas (bom). **Caratinga está em 2 batidas, não 4** → item 2 do roadmap
+  é mudar `default_marking_count` 2→4 (afeta 91 pessoas). **32 de 91 em Caratinga NÃO têm rosto** →
+  ligar a trava dura de uma vez trancaria essas 32; o rollout PRECISA de caminho de cadastro.
+- Decisões de rollout levadas ao Victor: quem não tem rosto quando ligar (cadastra na hora ×
+  bloqueia até responsável); ligar empresa-por-empresa × de uma vez.
+
 ## 8. 🔴 Correção urgente de última hora: "filtro certinho no topo, misturado ao rolar"
 
 Pedido do Victor no meio da auditoria de segurança: "verifica os filtros, alguns que
@@ -149,45 +238,3 @@ no cold-start do Vite, recuperado no retry).
 **Push `f26c492`: CI verde nos 3 jobs** (run 33424676706) · **Vercel conferida por
 conteúdo** — produção (`sistema-ponto-zeta.vercel.app`) serve o mesmo bundle
 (`index-BP0qeZwx.js`) do build local deste commit. No ar.
-
-### 5.1 CI / Vercel do push final — ✅ tudo verde
-
-- Push único `80660d8..c88f6df` (4 commits: `fdeb834` TOTAL GERAL+101+tsbuildinfo+CLAUDE.md ·
-  `66b8235` CI · `879ac37` selo do grupo · `c88f6df` docs).
-- **CI run 33406628242: success nos 3 jobs** (`tsc + eslint` — primeira rodada com o
-  typecheck de verdade e as actions v7 · `vitest (unit)` · `playwright (e2e)`), concluído
-  15:17:54Z (~10 min).
-- **Vercel:** deploy de produção `Ready` (41s) disparado pelo push; conferido **por conteúdo**
-  — o `index.html` do site aponta pro mesmo bundle do build local (`assets/index-CoN1an_J.js`).
-- Dependabot: PRs #13/#16/#3 (actions) ainda abertos logo após o push — o bot fecha sozinho
-  quando revisitar o `main`; se não fechar até a próxima sessão, fechar à mão com nota.
-- Ambiente: Vite local parado; scratchpad com as provas (`prova-formula.cjs`, logs de
-  unit/E2E, digest do workflow em `wf-digest.md`).
-
-## 6. 🔒 Segurança aplicada — OK do Victor ("pode aplicar"), mesmo dia
-
-Migration `20260831160000_security_lock_backups_view_invoker_rpc_revoke.sql` (no repo) =
-mesmo SQL aplicado em prod via MCP `apply_migration` (`success: true`). Antes de aplicar,
-conferi os consumidores: a view só é lida por `recomputePaymentTotals` (como 2626) e por
-`tests/70` (service_role); **nada** em `src/`, `supabase/functions/` ou `tests/` lê `backup_*`;
-a RPC é chamada pela UI como `authenticated` (grant mantido).
-
-**Prova pós-aplicação (3 níveis):**
-1. Catálogo (`has_table_privilege`/`has_function_privilege`): 12 `backup_*` → `rls=true`,
-   0 policies, `anon_select=false anon_delete=false auth_select=false`; view →
-   `security_invoker=true`, `anon_select=false auth_select=true`; `driverpay_conclude_period_only`
-   → `anon_exec=false auth_exec=true service_exec=true` (igual às outras 2 RPCs agora).
-2. Simulação no banco: `set local role authenticated` + claims `sub=2626` → view devolve
-   **325** pagamentos (o caminho do app continua igual); `set local role anon` → `42501
-   permission denied for view`.
-3. Sonda REAL na API (PostgREST) com a chave anon do bundle: view **401**,
-   `backup_employees_20260813` **401**, `backup_attendance_20260813` **401**,
-   `backup_driver_pix_20260724` **401**, `rpc/driverpay_conclude_period_only` **401** — antes
-   eram 206 com dados. Controle: `driverpay_payments` segue **200 `[]`** (RLS normal).
-
-Fica pra decisão dele: apagar/mover as `backup_*` depois de confirmar cópia; e a leva §2.2 do
-PROXIMOS_PASSOS (policy "só 2626", checagem do chamador dentro das 3 RPCs, trava de período).
-
-**CI do push `9a4beb1` (run 33408386035): ✅ success nos 3 jobs** (tsc+eslint · vitest ·
-playwright), concluído 15:37:27Z — rodado de propósito SEM `[skip ci]`: o E2E inteiro passou
-contra o banco já com as permissões novas, ou seja, o app segue funcionando.
