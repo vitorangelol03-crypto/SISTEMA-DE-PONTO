@@ -164,6 +164,23 @@ function fmtQty(n: number): string {
   return new Intl.NumberFormat('pt-BR').format(n);
 }
 
+/**
+ * Célula de fórmula COM o valor já calculado (`v`) — 31/08/2026.
+ *
+ * 🔑 Só `{ f }` grava `<f>` SEM `<v>` no .xlsx. Visualizador que não recalcula ao abrir
+ * (prévia do WhatsApp/Gmail/Drive, QuickLook do iPhone, apps de planilha do Android) mostra
+ * a célula EM BRANCO — era o "TOTAL GERAL às vezes vazio" relatado em 20/08/2026; Excel de
+ * PC e Google Sheets recalculam e escondiam o problema. A fórmula continua viva pra quem
+ * editar a planilha; o valor garante a leitura em qualquer lugar.
+ */
+function formulaCell(f: string, v: number): { t: 'n'; f: string; v: number } {
+  // Arredonda em centavos: a soma crua em JS vaza ruído de ponto flutuante pro arquivo
+  // (ex.: <v>300.59999999999997</v>), que aparece em CSV/visualizador sem formato. Pra
+  // coluna inteira (pacotes, nº de drivers) não muda nada; pra dinheiro a diferença pra
+  // SUM do Excel fica abaixo de meio centavo — invisível nas 2 casas.
+  return { t: 'n', f, v: Math.round(v * 100) / 100 };
+}
+
 function sanitizeForFile(s: string): string {
   return s.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'periodo';
 }
@@ -232,7 +249,7 @@ function computeTotals(rows: DriverReportRow[], platforms: string[]): ReportTota
  * Cabeçalho em 2 linhas: linha de grupo (nome da plataforma mesclado sobre suas 2
  * sub-colunas; colunas fixas mescladas verticalmente) + linha de sub-rótulos.
  */
-function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLSX.WorkSheet {
+export function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLSX.WorkSheet {
   const platforms = meta.platforms;
   const generatedAt = meta.generatedAt || nowBR();
 
@@ -332,7 +349,20 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
     data[R_DATA + j] = line;
   });
 
-  // Linha TOTAL GERAL (SUM por coluna; se não há dados, cai pra 0).
+  // Linha TOTAL GERAL: fórmula SUM por coluna + o valor já somado na mesma célula (ver
+  // formulaCell — só a fórmula saía em branco fora do Excel). Se não há dados, cai pra 0.
+  // As somas vêm do mesmo computeTotals do PDF — uma fonte só pros dois formatos.
+  const totals = computeTotals(rows, platforms);
+  const totalByCol = new Map<number, number>();
+  platforms.forEach((p, i) => {
+    totalByCol.set(platPkgCol(i), totals.perPlatform[p].packages);
+    totalByCol.set(platValCol(i), totals.perPlatform[p].value);
+  });
+  totalByCol.set(colTotalPackages, totals.totalPackages);
+  totalByCol.set(colDiscount, totals.discount);
+  totalByCol.set(colVale, totals.vale);
+  totalByCol.set(colToReceive, totals.totalToReceive);
+
   const totalRow = blankRow();
   totalRow[0] = `TOTAL GERAL — ${entityText}`;
   const firstDataExcel = R_DATA + 1; // 1-based
@@ -341,7 +371,10 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
     if (!moneyCols.has(c) && !intCols.has(c)) continue;
     if (n > 0) {
       const colL = XLSX.utils.encode_col(c);
-      totalRow[c] = { f: `SUM(${colL}${firstDataExcel}:${colL}${lastDataExcel})` };
+      totalRow[c] = formulaCell(
+        `SUM(${colL}${firstDataExcel}:${colL}${lastDataExcel})`,
+        totalByCol.get(c) ?? 0,
+      );
     } else {
       totalRow[c] = 0;
     }
@@ -490,7 +523,7 @@ function buildGeneralSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLS
 }
 
 /** Aba opcional "Por Grupo": agregado por grupo + TOTAL. Gerada só se houver grupo nomeado. */
-function buildGroupSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLSX.WorkSheet {
+export function buildGroupSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLSX.WorkSheet {
   interface Agg {
     drivers: number;
     totalPackages: number;
@@ -557,10 +590,22 @@ function buildGroupSheet(rows: DriverReportRow[], meta: DriverReportMeta): XLSX.
   totalRow[0] = 'TOTAL GERAL';
   const firstDataExcel = R_DATA + 1;
   const lastDataExcel = R_DATA + g;
+  // Soma de cada coluna já calculada, gravada junto da fórmula (ver formulaCell).
+  const aggs = order.map((name) => byGroup.get(name)!);
+  const totalByCol: Record<number, number> = {
+    1: aggs.reduce((s, a) => s + a.drivers, 0),
+    2: aggs.reduce((s, a) => s + a.totalPackages, 0),
+    3: aggs.reduce((s, a) => s + a.discount, 0),
+    4: aggs.reduce((s, a) => s + a.vale, 0),
+    5: aggs.reduce((s, a) => s + a.totalToReceive, 0),
+  };
   for (let c = 1; c <= lastCol; c++) {
     if (g > 0) {
       const colL = XLSX.utils.encode_col(c);
-      totalRow[c] = { f: `SUM(${colL}${firstDataExcel}:${colL}${lastDataExcel})` };
+      totalRow[c] = formulaCell(
+        `SUM(${colL}${firstDataExcel}:${colL}${lastDataExcel})`,
+        totalByCol[c] ?? 0,
+      );
     } else {
       totalRow[c] = 0;
     }
@@ -791,7 +836,9 @@ export function buildSimpleSheet(rows: SimpleExportRow[], meta: DriverReportMeta
 
   const totalRow = blank();
   totalRow[C_NOME] = 'TOTAL GERAL';
-  totalRow[C_VALOR] = n > 0 ? { f: `SUM(C${R_DATA + 1}:C${R_DATA + n})` } : 0;
+  // Fórmula + valor já somado (ver formulaCell): é esta planilha que vai pro banco/WhatsApp.
+  const somaValores = rows.reduce((s, r) => s + r.total, 0);
+  totalRow[C_VALOR] = n > 0 ? formulaCell(`SUM(C${R_DATA + 1}:C${R_DATA + n})`, somaValores) : 0;
   data[R_TOTAL] = totalRow;
 
   const ws = XLSX.utils.aoa_to_sheet(data);

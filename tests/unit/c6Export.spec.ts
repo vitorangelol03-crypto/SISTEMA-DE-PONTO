@@ -256,6 +256,11 @@ describe('createPaymentSheet — dados reais', () => {
     // 3 rows ocupam linhas 7,8,9. TOTAL é linha 10.
     expect(cellVal(sheet, 'B10')).toBe('TOTAL');
     expect(sheet['D10'].f).toBe('SUM(D7:D9)');
+    // 31/08/2026: o valor já somado vai JUNTO da fórmula. Só `{ f }` grava <f> sem <v>, e
+    // visualizador que não recalcula (prévia do WhatsApp/Gmail, iPhone) mostra o TOTAL em
+    // branco — mesma causa do "TOTAL GERAL vazio" do relatório driver.
+    expect(sheet['D10'].t).toBe('n');
+    expect(sheet['D10'].v).toBe(300);
   });
 
   it('25. amount=0 → VERIFICAR', async () => {

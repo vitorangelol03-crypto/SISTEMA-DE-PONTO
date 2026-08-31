@@ -15,7 +15,7 @@ NÃO sugerir mudanças arquiteturais não solicitadas.
 2. Uma sub-fase por vez, na ordem, sem antecipar
 3. Mudanças aditivas: NUNCA quebrar o que já funciona
 4. Sempre validar antes de commit: tsc, build, playwright
-5. NUNCA fazer push — só commit local
+5. Push LIBERADO (decisão do Victor, 10/08/2026, regra global) — só do que passou na validação da regra 4, e agrupando os commits num push só (o CI cancela o run anterior do mesmo branch). Push em `main` = deploy na Vercel: se puder quebrar, parar e avisar antes
 6. Se algum teste falhar, mostrar para o Victor antes de "consertar"
 7. Se houver dúvida, PERGUNTAR antes de assumir
 

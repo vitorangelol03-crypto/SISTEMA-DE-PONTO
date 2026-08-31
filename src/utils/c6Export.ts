@@ -121,11 +121,16 @@ const createPaymentSheet = (
   });
 
   const lastRow = worksheetData.length;
+  // 31/08/2026: fórmula + valor já somado (`v`) na mesma célula. Só `{ f }` grava <f> sem
+  // <v>, e visualizador que não recalcula ao abrir (prévia do WhatsApp/Gmail, iPhone, apps
+  // Android) mostra o TOTAL em branco — mesma causa do "TOTAL GERAL vazio" do relatório
+  // driver (src/utils/driverReport.ts, formulaCell). `metadata.totalAmount` é a soma dos
+  // mesmos `amount` que a SUM cobre (D7:D{lastRow}).
   worksheetData.push([
     '',
     'TOTAL',
     '',
-    { f: `SUM(D7:D${lastRow})` },
+    { t: 'n', f: `SUM(D7:D${lastRow})`, v: Math.round(metadata.totalAmount * 100) / 100 },
     '',
     '',
     ''

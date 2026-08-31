@@ -607,7 +607,16 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
       await expect(page.getByRole('button', { name: /^Erros$/ }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /^Admin$/ }).first()).toBeVisible();
 
-      // Abas QUE NÃO vê (permission restrita vs admin master)
+      // Abas QUE NÃO vê (permission restrita vs admin master).
+      // 🔑 Desde o menu "Mais (N)" da barra (06/08/2026), as últimas abas saem da barra e
+      // só entram no DOM quando o menu abre — então `toHaveCount(0)` com o menu fechado
+      // passava MESMO se a aba existisse escondida lá dentro (teste fraco, visto em
+      // 30/08). Abre o menu (quando houver) antes de afirmar que a aba não existe.
+      const mais = page.getByTestId('abas-mais');
+      if (await mais.count()) {
+        await mais.click();
+        await expect(mais).toHaveAttribute('aria-expanded', 'true');
+      }
       await expect(page.getByRole('button', { name: /^Usuários$/ })).toHaveCount(0);
       await expect(page.getByRole('button', { name: /^Gerenciamento$/ })).toHaveCount(0);
     });

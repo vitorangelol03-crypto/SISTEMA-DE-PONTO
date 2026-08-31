@@ -53,3 +53,6 @@ supabase/.temp/
 prints-espelho-app/
 prints-grade/
 .env*
+
+# Cache incremental do tsc (artefato de build, nao fonte)
+*.tsbuildinfo
