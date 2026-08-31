@@ -120,3 +120,27 @@ aberto na próxima sessão.
   quando revisitar o `main`; se não fechar até a próxima sessão, fechar à mão com nota.
 - Ambiente: Vite local parado; scratchpad com as provas (`prova-formula.cjs`, logs de
   unit/E2E, digest do workflow em `wf-digest.md`).
+
+## 6. 🔒 Segurança aplicada — OK do Victor ("pode aplicar"), mesmo dia
+
+Migration `20260831160000_security_lock_backups_view_invoker_rpc_revoke.sql` (no repo) =
+mesmo SQL aplicado em prod via MCP `apply_migration` (`success: true`). Antes de aplicar,
+conferi os consumidores: a view só é lida por `recomputePaymentTotals` (como 2626) e por
+`tests/70` (service_role); **nada** em `src/`, `supabase/functions/` ou `tests/` lê `backup_*`;
+a RPC é chamada pela UI como `authenticated` (grant mantido).
+
+**Prova pós-aplicação (3 níveis):**
+1. Catálogo (`has_table_privilege`/`has_function_privilege`): 12 `backup_*` → `rls=true`,
+   0 policies, `anon_select=false anon_delete=false auth_select=false`; view →
+   `security_invoker=true`, `anon_select=false auth_select=true`; `driverpay_conclude_period_only`
+   → `anon_exec=false auth_exec=true service_exec=true` (igual às outras 2 RPCs agora).
+2. Simulação no banco: `set local role authenticated` + claims `sub=2626` → view devolve
+   **325** pagamentos (o caminho do app continua igual); `set local role anon` → `42501
+   permission denied for view`.
+3. Sonda REAL na API (PostgREST) com a chave anon do bundle: view **401**,
+   `backup_employees_20260813` **401**, `backup_attendance_20260813` **401**,
+   `backup_driver_pix_20260724` **401**, `rpc/driverpay_conclude_period_only` **401** — antes
+   eram 206 com dados. Controle: `driverpay_payments` segue **200 `[]`** (RLS normal).
+
+Fica pra decisão dele: apagar/mover as `backup_*` depois de confirmar cópia; e a leva §2.2 do
+PROXIMOS_PASSOS (policy "só 2626", checagem do chamador dentro das 3 RPCs, trava de período).

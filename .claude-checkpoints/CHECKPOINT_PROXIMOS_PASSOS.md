@@ -32,11 +32,16 @@ Sessão 31/08 fechou 6 pendências (§1) e levantou o que precisa de decisão de
 
 ## 2. ⚖️ Preciso que o Victor decida (cada item com recomendação)
 
-### 2.1 🔴 SEGURANÇA — 3 buracos abertos pra QUALQUER pessoa com a chave pública do site (provado ao vivo em 31/08)
+### 2.1 ✅ SEGURANÇA — 3 buracos abertos pra QUALQUER pessoa com a chave pública — **FECHADOS em 31/08** (OK do Victor: "pode aplicar")
 
-Nada disso é "de tela": foi conferido com SELECT no banco de produção. Todos os fixes são
-**migrations só restritivas** (tiram acesso de quem não devia ter; a UI atual continua igual).
-**Não apliquei nada — migration precisa do teu OK.** Recomendo aplicar os 3 **hoje**, nesta ordem.
+Migration `supabase/migrations/20260831160000_security_lock_backups_view_invoker_rpc_revoke.sql`,
+aplicada em prod via MCP e **provada depois**: catálogo (12 `backup_*` com `rls=true`, 0
+policies, anon/authenticated sem SELECT/DELETE; view `security_invoker=true`, anon sem SELECT;
+RPC sem EXECUTE pro anon/PUBLIC), simulação no banco (como 2626 a view devolve os 325
+pagamentos — app segue igual; como anon: `permission denied`) e sonda real na API com a chave
+anon (**401** na view, nas backups e na RPC; tabela normal de controle segue 200 `[]`).
+O texto abaixo fica como registro do que era e do SQL aplicado. **Pendente só a decisão
+extra do item (a): apagar ou mover as tabelas backup_* depois de confirmar cópia.**
 
 **(a) 12 tabelas `backup_*` sem RLS, com SELECT *e DELETE* liberados pro anônimo.** Criadas
 à mão em produção (não estão no repo): `backup_attendance_20260813` (~5.042 pontos),
