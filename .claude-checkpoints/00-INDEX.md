@@ -27,7 +27,9 @@ face, `backup_attendance`, `backup_payments`), view `driverpay_payment_computed`
 por anon. SQL pronto em `CHECKPOINT_PROXIMOS_PASSOS.md` §2.1. Mais decisões dele em §2.2–2.5
 (policy "só 2626", filtro NF na mão + bug do espelho republicado, travas do import, Dependabot
 npm). Investigação feita com 6 agentes só-leitura + céticos (16 céticos caíram por limite de
-sessão; os achados que agi em cima eu mesmo re-verifiquei). Ver `CHECKPOINT_SESSAO_2026-08-31.md`.
+sessão; os achados que agi em cima eu mesmo re-verifiquei). **Push único `c88f6df`: CI verde nos
+3 jobs (run 33406628242) e Vercel `READY` conferida por conteúdo (bundle `index-CoN1an_J.js`).**
+Ver `CHECKPOINT_SESSAO_2026-08-31.md`.
 
 **Sessão 30/08 (3º bloco) — 5 warnings do ESLint zerados (`1e5656a`, NO AR):**
 4× `exhaustive-deps` viraram `useCallback` com deps reais (efeitos disparam

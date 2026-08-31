@@ -107,6 +107,16 @@ aberto na próxima sessão.
 - **Aguardando o Victor:** decisões de `CHECKPOINT_PROXIMOS_PASSOS.md` §2 (segurança
   primeiro). Depois: roadmap §4, item 1 (auditoria dos caminhos de batida facial+geo).
 
-### 5.1 CI / Vercel do push final
+### 5.1 CI / Vercel do push final — ✅ tudo verde
 
-(preenchido após o push)
+- Push único `80660d8..c88f6df` (4 commits: `fdeb834` TOTAL GERAL+101+tsbuildinfo+CLAUDE.md ·
+  `66b8235` CI · `879ac37` selo do grupo · `c88f6df` docs).
+- **CI run 33406628242: success nos 3 jobs** (`tsc + eslint` — primeira rodada com o
+  typecheck de verdade e as actions v7 · `vitest (unit)` · `playwright (e2e)`), concluído
+  15:17:54Z (~10 min).
+- **Vercel:** deploy de produção `Ready` (41s) disparado pelo push; conferido **por conteúdo**
+  — o `index.html` do site aponta pro mesmo bundle do build local (`assets/index-CoN1an_J.js`).
+- Dependabot: PRs #13/#16/#3 (actions) ainda abertos logo após o push — o bot fecha sozinho
+  quando revisitar o `main`; se não fechar até a próxima sessão, fechar à mão com nota.
+- Ambiente: Vite local parado; scratchpad com as provas (`prova-formula.cjs`, logs de
+  unit/E2E, digest do workflow em `wf-digest.md`).
