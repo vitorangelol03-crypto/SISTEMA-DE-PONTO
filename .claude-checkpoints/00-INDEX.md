@@ -30,6 +30,12 @@ por anon. SQL pronto em `CHECKPOINT_PROXIMOS_PASSOS.md` §2.1. Mais decisões de
 npm). Investigação feita com 6 agentes só-leitura + céticos (16 céticos caíram por limite de
 sessão; os achados que agi em cima eu mesmo re-verifiquei). **Push único `c88f6df`: CI verde nos
 3 jobs (run 33406628242) e Vercel `READY` conferida por conteúdo (bundle `index-CoN1an_J.js`).**
+🔴 **No meio da sessão, correção urgente (`f26c492`):** filtro "Espelho no app · Publicado"
+era ciente de grupo, mas o SELO "no app" de cada linha não era — 61 de 113 linhas passavam
+no filtro sem o selo (todo membro que não era o líder). Função única
+`rowPublicadoNoApp()` agora usada pelo filtro, pelo selo da linha e pelo cabeçalho do
+grupo. A hipótese óbvia (filtro Pagamento) foi testada e DESCARTADA com prova (3 períodos
+reais, zero divergência). Ver `CHECKPOINT_SESSAO_2026-08-31.md` §8.
 Ver `CHECKPOINT_SESSAO_2026-08-31.md`.
 
 **Sessão 30/08 (3º bloco) — 5 warnings do ESLint zerados (`1e5656a`, NO AR):**
@@ -1092,7 +1098,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-08-31.md` | **Mais recente.** Roadmap ditado (tablet + facial sem CPF + 4 batidas) e pendências zeradas antes dele: TOTAL GERAL em branco (fórmula sem valor cacheado → `formulaCell`), selo "todos pagos" do grupo contando só linhas filtradas, "NF ok" não era bug, 101-H1, CI typecheck era no-op, actions v7, tsbuildinfo, CLAUDE.md. 🔴 3 buracos de segurança provados em prod (backup_* sem RLS, view sem security_invoker, RPC pro anon) — SQL pronto, **aguardando OK**. PROXIMOS_PASSOS reescrito. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-31.md` | **Mais recente.** Roadmap ditado (tablet + facial sem CPF + 4 batidas) e pendências zeradas antes dele: TOTAL GERAL em branco, selo "todos pagos" do grupo, "NF ok" não era bug, 101-H1, CI typecheck era no-op, actions v7, tsbuildinfo, CLAUDE.md. **3 buracos de segurança provados E FECHADOS** (backup_* sem RLS, view sem security_invoker, RPC pro anon — sonda anon→401 nos 3). Roadmap item 1 (facial+geo no servidor) começado na branch `feature/ponto-facial-geo-servidor`. 🔴 **Correção urgente no meio da sessão:** selo "no app" da linha não era ciente de grupo (61/113 linhas sem selo no filtro "Publicado") — `rowPublicadoNoApp()` unifica filtro+selo+header. PROXIMOS_PASSOS reescrito. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-30.md` | Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado E consertado (`8672604`); depois 5 warnings zerados (`1e5656a`): useCallback nos 4 hooks + useCompany em arquivo próprio (26 imports). eslint 0+0, CI verde. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-26.md` | Cadastro público de funcionário (`/cadastro?empresa=...`, sem login) + aba nova "Aprovação de Cadastro" (exclusiva do 2626) — migration, edge fn `register-employee`, bloqueio no `/clock` pra recusado, botão de copiar por campo (sempre versão limpa). E2E novo `tests/78`. **Só local — push pendente do OK dele.** | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-19.md` | **Mais recente.** Edge fn **v32 no ar** (deploy sempre o Victor com `!` — classificador barra CLI e MCP vindos de mim) · prova ao vivo do fix da leitura: o caso do Gustavo se resolveu sozinho ANTES do deploy; o print do João Gabriel reprocessado na v32 e recusado **corretamente** (era papel de parede, não a tela do app) — **fix segue sem prova ao vivo** · push do `3c29c0b` já estava feito (pendência de ontem era engano) · **tag "não bate" clicável** (`95c764e`, local): grade e card mobile abrem "Espelhos recebidos" já filtrado no driver, E2E novo `tests/75` | 🟢 ATIVO |

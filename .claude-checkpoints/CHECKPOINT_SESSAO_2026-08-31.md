@@ -107,6 +107,49 @@ aberto na próxima sessão.
 - **Aguardando o Victor:** decisões de `CHECKPOINT_PROXIMOS_PASSOS.md` §2 (segurança
   primeiro). Depois: roadmap §4, item 1 (auditoria dos caminhos de batida facial+geo).
 
+## 8. 🔴 Correção urgente de última hora: "filtro certinho no topo, misturado ao rolar"
+
+Pedido do Victor no meio da auditoria de segurança: "verifica os filtros, alguns que
+não deviam passar aparecem misturados enquanto rola a lista". Pausei o trabalho do
+roadmap (guardado intacto na branch `feature/ponto-facial-geo-servidor`) pra investigar.
+
+**Método:** login real como 2626 via Playwright ad-hoc (scratchpad, não fica no repo),
+Caratinga, aba Pagamentos Driver, comparando o DOM renderizado contra SELECT direto no
+banco de produção (verdade absoluta) pra cada filtro.
+
+**Hipótese óbvia (Pagamento pago/não pago) — DESCARTADA com prova:** testei os 3
+períodos reais (118+109+98 pagamentos) nos dois filtros ('pago'/'nao_pago'), Lista E
+Grupos: **zero divergência** — nome por nome bate 100% com a query SQL, inclusive no
+caso "Raul Soares, MG" (1 pago de 6) onde o cabeçalho do grupo mostra honestamente
+"pago 1/6" (fix da sessão anterior, `situacaoPagamentoDoGrupo`, funcionando certinho).
+
+**Causa real achada: filtro "Espelho no app · Publicado".** Esse filtro JÁ era ciente de
+grupo (só o líder publica, conta pro grupo inteiro) — mas o SELO "no app" de cada linha
+olhava só o `driver_id` de quem publicou, sem checar o grupo. Medido ao vivo: **das 113
+linhas que passavam no filtro "Publicado", 61 apareciam SEM o selo** — todo membro que
+não era o líder. Isso é literalmente "filtro certinho, mas misturado ao rolar" (rolando
+a lista de 113, a maioria não tem o selo que deveria ter).
+
+**Fix (commit `f26c492`):** função pura nova `rowPublicadoNoApp()` em `driverPayShared.ts`
+— filtro, selo da linha (desktop + mobile) E cabeçalho do grupo agora chamam a MESMA
+função, não tem mais como divergir. O cabeçalho do grupo tinha o mesmo bug irmão (calculava
+sobre `groupRows` filtradas, não todos os membros — mesma família do `situacaoPagamentoDoGrupo`).
+
+**Prova pós-fix:** 61→0 linhas sem selo; "Não publicado" seguiu correto (5, nenhuma com
+selo indevido); Grupos view "Raul Soares, MG" com filtro "Falta pagar" continua
+excluindo corretamente quem já foi pago. Teste novo
+`tests/unit/driverPayEspelhoNoAppSelo.spec.ts` (5 casos).
+
+**Validado:** tsc 0 · eslint 0/0 · build limpo · vitest completo **1358 passed** (12
+arquivos bateram timeout de worker do vitest — infra do WSL, não código: até um teste
+trivial sem import nenhum falhou na 1ª rodada; recuperou sozinho na 2ª — mesma família do
+flake "Timeout waiting for worker to respond" já documentado) · E2E 64+68 2/2 (1 flaky
+no cold-start do Vite, recuperado no retry).
+
+**Push `f26c492`: CI verde nos 3 jobs** (run 33424676706) · **Vercel conferida por
+conteúdo** — produção (`sistema-ponto-zeta.vercel.app`) serve o mesmo bundle
+(`index-BP0qeZwx.js`) do build local deste commit. No ar.
+
 ### 5.1 CI / Vercel do push final — ✅ tudo verde
 
 - Push único `80660d8..c88f6df` (4 commits: `fdeb834` TOTAL GERAL+101+tsbuildinfo+CLAUDE.md ·
