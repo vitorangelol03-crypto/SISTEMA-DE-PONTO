@@ -200,7 +200,10 @@ export const EmployeeClockIn: React.FC = () => {
     try {
       const cfg = await getFaceRecognitionConfig(company.id);
       const empEnabled = emp.face_recognition_enabled !== false; // null/undefined = habilitado por padrão
-      const activeGlobally = cfg.enabled && empEnabled;
+      // Trava dura por empresa (31/08): quando ligada, a facial é OBRIGATÓRIA — ignora o
+      // toggle por funcionário e o config global; quem não tem rosto cai no cadastro (abaixo).
+      const strict = company.require_facial_clock === true;
+      const activeGlobally = strict || (cfg.enabled && empEnabled);
 
       if (activeGlobally && (!emp.face_registered || emp.face_reset_requested)) {
         setFaceGateActive(true); // após cadastrar, próximos pontos vão exigir verificação
@@ -219,7 +222,7 @@ export const EmployeeClockIn: React.FC = () => {
       setClockMsg(null);
       setStep('dashboard');
     }
-  }, [loadDashboard, company?.id]);
+  }, [loadDashboard, company?.id, company?.require_facial_clock]);
 
   // ─── CPF ────────────────────────────────────────────────────────────────────
 
@@ -348,7 +351,8 @@ export const EmployeeClockIn: React.FC = () => {
     clockType: 'entry' | 'exit',
     signal?: AbortSignal,
     markingPosition?: MarkingPosition,
-  ): Promise<{ success: boolean; fraud: boolean; geo_warning?: boolean; distance_meters: number | null; attendance?: Attendance; error?: string; message?: string }> => {
+    faceDescriptor?: number[] | null,
+  ): Promise<{ success: boolean; fraud: boolean; geo_warning?: boolean; distance_meters: number | null; attendance?: Attendance; error?: string; message?: string; face_error?: boolean }> => {
     if (!employee) throw new Error('Funcionário não carregado');
 
     let latitude: number | null = null;
@@ -384,6 +388,9 @@ export const EmployeeClockIn: React.FC = () => {
         longitude,
         accuracy,
         ...(markingPosition ? { marking_position: markingPosition } : {}),
+        // Rosto do momento (128 nºs) — o servidor reconfere na trava dura por empresa.
+        // Só vai quando a facial rodou antes da batida; no modo legado fica de fora.
+        ...(faceDescriptor && faceDescriptor.length ? { face_descriptor_now: faceDescriptor } : {}),
       }),
       signal,
     });
@@ -396,7 +403,7 @@ export const EmployeeClockIn: React.FC = () => {
   // Executa a batida de ponto de fato (chamada à Edge Function + feedback).
   // Em caso de timeout (30s), consulta o banco para ver se o servidor
   // registrou mesmo assim antes de mostrar erro ao usuário.
-  const executeClock = async (type: 'entry' | 'exit', markingPosition?: MarkingPosition) => {
+  const executeClock = async (type: 'entry' | 'exit', markingPosition?: MarkingPosition, faceDescriptor?: number[] | null) => {
     if (!employee) return;
     // Guard síncrono: bloqueia qualquer segundo clique enquanto um registro
     // estiver em voo (ou no debounce de 3s pós-clique). React schedula o
@@ -466,7 +473,7 @@ export const EmployeeClockIn: React.FC = () => {
     };
 
     try {
-      const result = await callClockValidated(type, controller.signal, markingPosition);
+      const result = await callClockValidated(type, controller.signal, markingPosition, faceDescriptor);
       if (!result.success) {
         // Mesmo com success=false, o servidor pode ter gravado. Confirma.
         if (await verifyRegisteredInDb()) {
@@ -578,12 +585,13 @@ export const EmployeeClockIn: React.FC = () => {
     setStep('dashboard');
   };
 
-  const handleFaceClockVerifySuccess = () => {
+  const handleFaceClockVerifySuccess = (descriptor: number[]) => {
     const type = pendingClockType;
     const pos = pendingMarkingPositionRef.current ?? undefined;
     setPendingClockType(null);
     pendingMarkingPositionRef.current = null;
-    if (type) executeClock(type, pos);
+    // O rosto reconhecido segue junto pra o servidor reconferir (trava dura por empresa).
+    if (type) executeClock(type, pos, descriptor);
   };
 
   const handleFaceClockVerifyFail = () => {

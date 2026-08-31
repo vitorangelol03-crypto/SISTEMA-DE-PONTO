@@ -253,6 +253,12 @@ export interface Company {
   default_geo_lat: number;
   default_geo_lng: number;
   default_geo_radius: number;
+  /**
+   * Trava dura do ponto (31/08/2026): quando true, o servidor exige facial (1:1) +
+   * geo válida em TODAS as batidas e cadastra o rosto na 1ª vez. Padrão/ausente =
+   * false (comportamento legado). Ligado empresa por empresa após todos terem rosto.
+   */
+  require_facial_clock?: boolean | null;
   bank_hours_enabled: boolean;
   bank_hours_apply_in_payment?: boolean | null;
   // Configuração do banco de horas no pagamento (combo G — sub-fase 2.16).

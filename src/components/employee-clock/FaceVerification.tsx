@@ -7,7 +7,8 @@ import { FaceScanFrame, FaceScanVisual } from './FaceScanFrame';
 
 interface FaceVerificationProps {
   employee: Employee;
-  onSuccess: () => void;
+  /** Recebe o descriptor do rosto reconhecido (128 nºs) — vai pro servidor reconferir. */
+  onSuccess: (descriptor: number[]) => void;
   onFail: () => void;
   maxAttempts?: number;
   clockType?: 'entry' | 'exit' | null;
@@ -158,7 +159,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
     return () => clearInterval(iv);
   }, []);
 
-  const handleSuccess = useCallback(async (distance: number) => {
+  const handleSuccess = useCallback(async (distance: number, descriptor: number[]) => {
     if (resultHandledRef.current) return;
     if (!company?.id) return;
     resultHandledRef.current = true;
@@ -166,7 +167,8 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
     setPhase('success');
     stopStream();
     await logFaceAttempt(employee.id, true, Math.max(0, 1 - distance), clockType, company.id);
-    setTimeout(() => onSuccess(), 1000);
+    // O rosto reconhecido segue pro servidor reconferir (trava dura por empresa).
+    setTimeout(() => onSuccess(descriptor), 1000);
   }, [employee.id, clockType, onSuccess, company?.id]);
 
   const handleFail = useCallback(async (distance: number) => {
@@ -220,7 +222,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
         if (distance < bestDistanceRef.current) bestDistanceRef.current = distance;
 
         if (distance < MATCH_THRESHOLD) {
-          handleSuccess(distance);
+          handleSuccess(distance, Array.from(descriptor));
           return;
         }
 
