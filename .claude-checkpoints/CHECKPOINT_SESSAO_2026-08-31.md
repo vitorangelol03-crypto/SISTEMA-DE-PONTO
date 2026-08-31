@@ -238,3 +238,40 @@ no cold-start do Vite, recuperado no retry).
 **Push `f26c492`: CI verde nos 3 jobs** (run 33424676706) · **Vercel conferida por
 conteúdo** — produção (`sistema-ponto-zeta.vercel.app`) serve o mesmo bundle
 (`index-BP0qeZwx.js`) do build local deste commit. No ar.
+## 9. 🚧 Roadmap item 1 (facial+geo sem brecha) — código pronto na branch, aguardando 2 OKs pra ir ao ar
+
+Branch `feature/ponto-facial-geo-servidor` (rebasada em cima do `main` de hoje, 6 commits):
+
+- **`5f08752` backend:** edge fn `clock-in-validated` ganha bloco `strictFacial` — quando
+  `companies.require_facial_clock=true` (migration `20260831170000`, coluna nova, **default
+  false**): exige `face_descriptor_now` no corpo e reconfere contra `employees.face_descriptor`
+  (euclideanDistance < 0.5, mesmo limite do navegador); quem não tem rosto cadastrado tem o
+  rosto do momento salvo na hora (self-enroll, decisão do Victor); geo inválida recusa em
+  **QUALQUER** das 4 posições (antes só a 1ª bloqueava — 2/3/4 "deixavam passar").
+- **`fb3710e` frontend:** `/clock` manda o rosto reconhecido junto da batida
+  (`face_descriptor_now`); com a chave ligada, a facial vira obrigatória (ignora toggle por
+  funcionário/config global).
+- **`2e237a6` doc:** auditoria completa do que estava furado hoje + decisões do Victor via
+  AskUserQuestion (blindar fluxo primeiro; rigor = identidade correta, sem prova-de-vida por
+  ora; self-enroll; ligar empresa por empresa).
+- **`59ee72c` teste:** suíte E2E-de-verdade (bate na edge fn real, empresa fixture própria,
+  sem tocar Caratinga/PN) provando as 4 marcações do dia com rosto certo/errado/ausente e
+  geo certo/longe em CADA posição. Rodei agora: **falhou DE PROPÓSITO** — "companies.
+  require_facial_clock não existe" — porque a migration ainda não foi aplicada. Confirma que
+  o teste está certo; falta só o pré-requisito.
+
+**Validado (com a chave OFF, que é o estado de produção hoje):** tsc 0 · eslint 0/0 · build
+limpo · funções puras 12/12 (node) · `deno check` exit 0 · E2E specs 02+08+23+62 **24/24**
+(fluxo de hoje intacto, zero regressão).
+
+**🔴 Bloqueado em 2 decisões do Victor pra ir além (nenhuma aplicada — ambas seguras/reversíveis):**
+1. Aplicar a migration `20260831170000` (só ADICIONA a coluna `require_facial_clock boolean
+   default false` — nenhuma linha muda de comportamento).
+2. Publicar a versão nova do edge fn `clock-in-validated` (com a chave off em todas as
+   empresas, o comportamento fica IDÊNTICO ao de hoje — já provado pelos 24 E2E acima).
+Com os dois feitos, a suíte `edgeFnClockFacialGeoEstrito` passa a rodar de verdade e prova
+ao vivo que a trava bloqueia — só DEPOIS disso faz sentido ligar `require_facial_clock=true`
+pra uma empresa (e só quando todo mundo dela tiver rosto, decisão já tomada).
+
+Ambos ficam PENDENTES até o Victor responder — não empurrei pra `main`, a branch segue local
++ (a decidir) no remoto.
