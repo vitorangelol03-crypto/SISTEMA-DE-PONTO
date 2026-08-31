@@ -36,7 +36,18 @@ no filtro sem o selo (todo membro que não era o líder). Função única
 `rowPublicadoNoApp()` agora usada pelo filtro, pelo selo da linha e pelo cabeçalho do
 grupo. A hipótese óbvia (filtro Pagamento) foi testada e DESCARTADA com prova (3 períodos
 reais, zero divergência). Ver `CHECKPOINT_SESSAO_2026-08-31.md` §8.
-Ver `CHECKPOINT_SESSAO_2026-08-31.md`.
+**✅ Roadmap item 1 (facial+geo sem brecha) foi AO AR ainda hoje:** Victor perguntou
+"aplicando o sistema atual para de funcionar?" — respondi com risco real (migration quase
+zero risco; deploy da edge fn risco baixo mas não comprovado até rodar) e um plano (publicar
++ testar na hora + rollback pronto); ele autorizou ("pode seguir"). Migration aplicada
+(coluna `require_facial_clock`, default false) + backup do código antigo salvo e conferido
+byte a byte + edge fn `clock-in-validated` publicada (v11→v12) + **provado AO VIVO contra a
+função recém-publicada**: `edgeFnClockFacialGeoEstrito` passou (bloqueia rosto/geo errados de
+verdade, em qualquer das 4 posições) e specs 02+08+23+62 **24/24** contra Caratinga real
+(fluxo de hoje intacto). Branch mergeada (fast-forward) em `main`. Chave segue **desligada**
+em Caratinga e Ponte Nova — falta decidir quando ligar, empresa por empresa. No meio disso,
+pedido rápido do Victor: grupo sem nada a receber não conta mais como "falta pagar" (fica
+sempre por último — reverte decisão de 14/08). Ver `CHECKPOINT_SESSAO_2026-08-31.md` §9-§11.
 
 **Sessão 30/08 (3º bloco) — 5 warnings do ESLint zerados (`1e5656a`, NO AR):**
 4× `exhaustive-deps` viraram `useCallback` com deps reais (efeitos disparam
@@ -1098,14 +1109,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-08-31.md` | **Mais recente.** Roadmap ditado (tablet + facial sem CPF + 4 batidas) e pendências zeradas antes dele: TOTAL GERAL em branco, selo "todos pagos" do grupo, "NF ok" não era bug, 101-H1, CI typecheck era no-op, actions v7, tsbuildinfo, CLAUDE.md. **3 buracos de segurança provados E FECHADOS** (backup_* sem RLS, view sem security_invoker, RPC pro anon — sonda anon→401 nos 3). **Roadmap item 1 (facial+geo no servidor) — código+testes prontos na branch
-`feature/ponto-facial-geo-servidor` (6 commits, rebasada em main), aguardando 2 OKs pra ir ao
-ar:** aplicar a migration `20260831170000` (coluna `require_facial_clock`, default false,
-zero mudança de comportamento) e publicar a edge fn `clock-in-validated` nova (chave off em
-toda empresa = idêntico a hoje, provado por 24 E2E). Suíte `edgeFnClockFacialGeoEstrito`
-falhou DE PROPÓSITO agora (migration não aplicada) — confirma que está pronta pra provar o
-bloqueio de verdade assim que os 2 OKs vierem. Ver `CHECKPOINT_SESSAO_2026-08-31.md` §9.
-🔴 **Correção urgente no meio da sessão:** selo "no app" da linha não era ciente de grupo (61/113 linhas sem selo no filtro "Publicado") — `rowPublicadoNoApp()` unifica filtro+selo+header. PROXIMOS_PASSOS reescrito. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-31.md` | **Mais recente.** Roadmap ditado (tablet + facial sem CPF + 4 batidas) e pendências zeradas antes dele: TOTAL GERAL em branco, selo "todos pagos" do grupo, "NF ok" não era bug, 101-H1, CI typecheck era no-op, actions v7, tsbuildinfo, CLAUDE.md. **3 buracos de segurança provados E FECHADOS** (backup_* sem RLS, view sem security_invoker, RPC pro anon — sonda anon→401 nos 3). 🔴 **Correção urgente no meio da sessão:** selo "no app" da linha não era ciente de grupo (61/113 linhas sem selo no filtro "Publicado") — `rowPublicadoNoApp()` unifica filtro+selo+header. **✅ Roadmap item 1 (facial+geo no servidor) NO AR:** migration aplicada + edge fn `clock-in-validated` publicada (v11→v12) com OK do Victor ("pode seguir" depois de eu explicar o risco real) — provado AO VIVO contra a função recém-publicada: `edgeFnClockFacialGeoEstrito` passou (trava bloqueia rosto/geo errados de verdade) e specs 02+08+23+62 24/24 (fluxo de hoje intacto). Chave `require_facial_clock` **desligada em Caratinga e Ponte Nova** — falta decidir quando ligar por empresa. Branch mergeada (fast-forward) em `main`. Fix rápido no meio: grupo sem nada a receber não conta mais como "falta pagar" (fica sempre por último, revertendo decisão de 14/08). PROXIMOS_PASSOS reescrito. Ver §9-§11. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-30.md` | Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado E consertado (`8672604`); depois 5 warnings zerados (`1e5656a`): useCallback nos 4 hooks + useCompany em arquivo próprio (26 imports). eslint 0+0, CI verde. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-26.md` | Cadastro público de funcionário (`/cadastro?empresa=...`, sem login) + aba nova "Aprovação de Cadastro" (exclusiva do 2626) — migration, edge fn `register-employee`, bloqueio no `/clock` pra recusado, botão de copiar por campo (sempre versão limpa). E2E novo `tests/78`. **Só local — push pendente do OK dele.** | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-19.md` | **Mais recente.** Edge fn **v32 no ar** (deploy sempre o Victor com `!` — classificador barra CLI e MCP vindos de mim) · prova ao vivo do fix da leitura: o caso do Gustavo se resolveu sozinho ANTES do deploy; o print do João Gabriel reprocessado na v32 e recusado **corretamente** (era papel de parede, não a tela do app) — **fix segue sem prova ao vivo** · push do `3c29c0b` já estava feito (pendência de ontem era engano) · **tag "não bate" clicável** (`95c764e`, local): grade e card mobile abrem "Espelhos recebidos" já filtrado no driver, E2E novo `tests/75` | 🟢 ATIVO |

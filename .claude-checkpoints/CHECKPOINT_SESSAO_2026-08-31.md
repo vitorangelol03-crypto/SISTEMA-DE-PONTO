@@ -264,14 +264,51 @@ Branch `feature/ponto-facial-geo-servidor` (rebasada em cima do `main` de hoje, 
 limpo · funções puras 12/12 (node) · `deno check` exit 0 · E2E specs 02+08+23+62 **24/24**
 (fluxo de hoje intacto, zero regressão).
 
-**🔴 Bloqueado em 2 decisões do Victor pra ir além (nenhuma aplicada — ambas seguras/reversíveis):**
-1. Aplicar a migration `20260831170000` (só ADICIONA a coluna `require_facial_clock boolean
-   default false` — nenhuma linha muda de comportamento).
-2. Publicar a versão nova do edge fn `clock-in-validated` (com a chave off em todas as
-   empresas, o comportamento fica IDÊNTICO ao de hoje — já provado pelos 24 E2E acima).
-Com os dois feitos, a suíte `edgeFnClockFacialGeoEstrito` passa a rodar de verdade e prova
-ao vivo que a trava bloqueia — só DEPOIS disso faz sentido ligar `require_facial_clock=true`
-pra uma empresa (e só quando todo mundo dela tiver rosto, decisão já tomada).
+## 10. ✅ Roadmap item 1 — migration aplicada, edge fn publicada e PROVADA (OK do Victor "pode seguir")
 
-Ambos ficam PENDENTES até o Victor responder — não empurrei pra `main`, a branch segue local
-+ (a decidir) no remoto.
+Pergunta dele antes de autorizar: *"aplicando o sistema atual para de funcionar?"* — resposta
+honesta dada (migration quase zero risco, provado hoje; deploy da edge fn com risco baixo mas
+NÃO comprovado até rodar contra a infra real) + plano: publicar e IMEDIATAMENTE testar contra
+a função ao vivo, com rollback pronto. Ele autorizou ("pode seguir").
+
+1. **Migration `companies_require_facial_clock_flag` aplicada via MCP** — conferida depois:
+   coluna existe, `boolean not null default false`; Caratinga e Ponte Nova com `false` (nada mudou).
+2. **Backup do código antigo (v11) salvo em arquivo local** ANTES de publicar — conferido
+   byte a byte contra o commit `fda9a80` (main antes das mudanças) — rollback garantido caso
+   algo desse errado.
+3. **Edge fn `clock-in-validated` publicada (v11→v12)** via MCP `deploy_edge_function`.
+4. **Prova ao vivo, na hora, contra a função REAL recém-publicada** (não só código lido):
+   - `tests/unit/edgeFnClockFacialGeoEstrito.spec.ts` — **PASSOU** (empresa fixture com
+     `require_facial_clock=true`): sem rosto cadastrado E sem mandar rosto → recusa; manda o
+     rosto pela 1ª vez → cadastra sozinho e deixa bater; rosto de outra pessoa → recusa; geo
+     longe nas posições 2 E 3 (não só a 1ª!) → recusa; tudo certo → passa; attendance do dia
+     fecha com as 4 marcações. **A trava bloqueia de verdade, provado contra produção.**
+   - E2E specs **02+08+23+62 rodadas de novo, ao vivo, contra Caratinga real** (chave `false`
+     lá) — **24/24 passed** contra a função JÁ PUBLICADA. Fluxo de hoje continua idêntico.
+5. **Merge fast-forward** de `feature/ponto-facial-geo-servidor` pra `main` (6 commits) — o
+   repositório agora bate com o que está de fato publicado (antes só o local da branch sabia).
+
+**Estado final do item 1:** código + migration + deploy no ar, comportamento de hoje intacto
+(provado ao vivo), trava nova provada funcionando (provado ao vivo) — mas **desligada em toda
+empresa** (`require_facial_clock=false` em Caratinga e Ponte Nova). Falta só: decidir com o
+Victor QUANDO ligar pra cada empresa (ele já decidiu o COMO: cadastra na hora, empresa por
+empresa, só depois de todos terem rosto — Ponte Nova quase pronta, Caratinga com 32 sem rosto).
+
+## 11. Pedido rápido no meio do deploy: grupo sem nada a receber não é "falta pagar"
+
+Enquanto verificava o deploy, Victor pediu (print da visão Grupos, botão "Ordenar por
+Pagamento"): grupos com R$ 0,00 a receber (zero pacotes na quinzena) não podem contar como
+"falta pagar" nem aparecer misturados — têm que ficar sempre por último. Isso REVERTE uma
+decisão dele mesmo de 14/08 (que colocava esses grupos junto com "nada pago" de propósito).
+
+Fix (commit `0f6193d`): `groupMetric`/`contagemDoCriterio` (chave 'pagamento') agora tratam
+grupo com zero pacote como `null`/"não se aplica" (mesma regra do NF), que
+`compararPorCriterios` manda sempre pro fim — igual ao NF e Espelho no app já faziam. Teste de
+14/08 atualizado pra refletir a decisão nova. Prova ao vivo: os 3 grupos sem pacote
+(CARATINGA-ESCRITORIO, Ipanema-MAIULY, Sem grupo) ficam nas 3 últimas posições de 55, nos dois
+sentidos do clique. 🔑 Achado no caminho: todo o resto (103 pagamentos) já estava "concluído"
+no período aberto — o Victor deve ter pago/gerado relatório enquanto eu trabalhava em paralelo;
+não sobrou ninguém "pendente" de verdade nessa quinzena pra aparecer primeiro no "falta pagar".
+
+**Validado:** tsc 0 · eslint 0/0 · build limpo · vitest completo **1344 passed** (1 skipped) —
+primeira rodada, sem nenhum flake de infra dessa vez.
