@@ -1,256 +1,178 @@
-# CHECKPOINT_PROXIMOS_PASSOS.md — Pendências + Ações Victor + Gaps
+# CHECKPOINT_PROXIMOS_PASSOS.md — Pendências, decisões do Victor e roadmap
 
-> O que falta pra go-live e além. Última atualização: **2026-05-19**.
-
----
-
-## 0. ⏳ Pendências ATIVAS (pós-sessão 2026-05-18/19)
-
-| # | Item | Status | Bloqueador |
-|---|---|---|---|
-| 1 | Testar fluidez facial no celular (pós-deploy do commit `e9d7f63`) | ⏳ aguardando | redeploy do build novo |
-| 2 | Spec 101 PN hardcodes — fix preventivo | ✅ NÃO PRECISA (já filtra por `name LIKE 'Demo PN%'`) | — |
-| 3 | Auditar specs que poluem prod com bônus em massa | ✅ RESOLVIDO em `823f45f` (helper `_bonusIsolation` + 4 specs blindados) | — |
-| 4 | Redeploy de produção pegar build atualizado | ⏳ aguardando | Victor dispara via hosting (Vercel/Netlify/etc.) |
-
-**O que validar quando Victor testar no celular (pendência #1):**
-- [ ] Não tem mais "travadinha" de ~5s antes da barra começar a mexer
-- [ ] Frame oval (220×290) está visualmente OK em vez do quadrado
-- [ ] Barra de confiança começa a mexer no 1º frame após câmera abrir
-- [ ] Animações fluem sem jank durante detecção
-- [ ] Cadastro de funcionário: ao digitar Função, datalist mostra sugestões
-- [ ] No Financeiro, filtro por função funciona
+> Reescrito em **2026-08-31**. A versão anterior (19/05/2026, go-live/onboarding PN/release
+> v2.0.0) ficou toda concluída e está no histórico do git. Fonte de verdade do estado:
+> `00-INDEX.md` + último `CHECKPOINT_SESSAO_*.md`. Este arquivo é o **mapa do que falta**.
 
 ---
 
-## 1. 🚀 GO-LIVE — Ações manuais do Victor (sistema 100% pronto técnico)
+## 0. Onde estamos (31/08/2026)
 
-### 1.1 Onboarding Ponte Nova com dados reais (em andamento — sub-fase 14.12)
-
-**✅ Concluído em 2026-05-14:**
-- [x] Login admin local 8888 (password_hash setado)
-- [x] `geolocation_config` PN: lat `-20.3908557`, lng `-42.8616382`, raio **150m**, block_outside=true
-- [x] `bonus_types` PN: B=R$15, C1=R$20, C2=R$15
-- [x] `payment_period_config` PN: mensal (`auto_weekly=false`)
-
-**⏳ Pendente:**
-- [ ] Importar ~30 employees via UI Admin → Funcionários → Importar Excel (Victor mandar planilha)
-- [ ] Smoke test pós-import: 1 funcionário marca ponto via `/clock` + verifica geo bloqueio
-
-### 1.2 Release v2.0.0
-- [ ] Tag `v2.0.0-multi-tenant` no commit final da Fase 14
-- [ ] CHANGELOG/GitHub Release notes referenciando:
-  - Multi-empresa via RLS
-  - bcrypt password hash
-  - 4 edge fns ACTIVE
-  - 0 ERRORs Sistema de Ponto
-  - 250+ specs E2E passing 3× sem flake
-  - 11 bugs UI cazados+fixados na Fase 14.4
-- [ ] Push da tag (`git push origin v2.0.0-multi-tenant`)
-
-### 1.3 Deploy frontend pra produção
-- [ ] Escolher hosting (Vercel/Netlify/Cloudflare Pages)
-- [ ] Configurar env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
-- [ ] **NUNCA** commitar/upload `SUPABASE_SERVICE_ROLE_KEY` no frontend
-- [ ] Smoke test pós-deploy:
-  - Login admin `9999` + selecionar empresa
-  - Login supervisor Caratinga
-  - Login supervisor Ponte Nova (após onboarding)
-  - Clock-in real via `/clock`
+Sistema multi-empresa em produção (Vercel, auto-deploy funcionando), CI verde desde 30/08,
+lint 0/0. Aba Pagamentos Driver em uso real (3 quinzenas importadas com arquivos reais).
+Em 31/08 o Victor ditou o **roadmap** (§4) e pediu pra **zerar as pendências antes**.
+Sessão 31/08 fechou 6 pendências (§1) e levantou o que precisa de decisão dele (§2).
 
 ---
 
-## 2. 🧪 Cobertura de testes — lacunas postponed (sub-fase 14.9+ futura, pós-go-live)
+## 1. ✅ Fechadas em 31/08 (detalhe em `CHECKPOINT_SESSAO_2026-08-31.md`)
 
-| Item | Motivo | Sub-fase futura |
+| Pendência | O que era | Como fechou |
 |---|---|---|
-| Spec FaceRegistration (sub-fase 10.7) | face-api.js + getUserMedia mock pesado ~6-8h | 14.9 (se feedback usuários demandar) |
-| Bank hours **revert UI** | Não existe no produto — apenas apply | N/A (feature) |
-| Mobile responsivo E2E | Só Chromium desktop em CI | 14.10 (Playwright mobile project) |
-| Browser compat (Firefox/Safari) | Só Chromium em CI | 14.10 |
-| Supervisor com `permissions.users.create` | Cenário criado mas não exercitado em E2E | 14.11 |
-| Performance benchmarks | Sem baseline de queries lentas | 14.12 (após dados reais PN) |
-| Backup/restore drill | Sem rotina automatizada | 14.13 (operacional) |
-| Offline support | App não funciona offline (online-only) | Feature futura |
+| TOTAL GERAL em branco (20/08 §5) | célula do total só com fórmula, sem valor → prévia de celular mostra vazio | `formulaCell()` grava fórmula + valor nos 3 layouts + export C6; 9 testes de regressão (`driverReportTotalGeral.spec.ts`) |
+| Filtro "quem já está pago" (20/08 §5) | cabeçalho do grupo na visão Grupos contava só as linhas filtradas → "todos pagos" com membros não pagos escondidos | `situacaoPagamentoDoGrupo()` sobre TODOS os membros (`allRows`); 7 testes (`driverPaySeloPagoGrupo.spec.ts`). O relato em si também coincide com a janela 17:46–18:34 de 20/08 (85 marcas erradas, já limpas) |
+| Filtro "NF ok" (20/08 §5) | grupo do Mauricio com "NF 0/1" passando no filtro | **não era bug**: a nota do líder foi validada 18:39 de 20/08; antes disso não passava, depois passou por desenho. Achados colaterais → §2.2 |
+| `tests/101` H1 fraco | `toHaveCount(0)` passava com a aba escondida no menu "Mais" | abre o menu antes de afirmar |
+| CI: typecheck não checava nada | `npx tsc --noEmit` na raiz = 0 arquivos | `npm run typecheck` (142 arquivos) |
+| Dependabot: 3 PRs de Actions (#13/#16/#3) | checkout/setup-node/upload-artifact v4 | v7 direto no `ci.yml` (Dependabot fecha os PRs) |
+| `*.tsbuildinfo` no git · `CLAUDE.md` "nunca push" | artefato versionado · regra desatualizada | `.gitignore` + untrack · regra 5 alinhada a 10/08 |
+| "Import grande nunca até o fim" (índice) | linha de 17/07 | **desatualizada**: banco prova imports reais completos em 17-18/07, 04/08 e 18/08. O que falta é §2.4 |
 
 ---
 
-## 3. 🧹 Tech debt residual aceito (não bloqueia go-live)
+## 2. ⚖️ Preciso que o Victor decida (cada item com recomendação)
 
-### 3.1 PIN funcionário plain text
-- **Status:** plain em `employees.pin`, validado server-side via edge fn.
-- **Risco:** baixo — anon não lê (RLS bloqueia); só funcionário com CPF correto via edge fn.
-- **Migração futura (sub-fase 11.9):** trocar pra bcrypt similar à 11.3+11.7. Postponed sem urgência.
+### 2.1 🔴 SEGURANÇA — 3 buracos abertos pra QUALQUER pessoa com a chave pública do site (provado ao vivo em 31/08)
 
-### 3.2 6 WARNs persistentes em advisors (intencionais)
-- 3 SECURITY DEFINER nossas (`verify_admin_secret`, `update_admin_secret`, `apply_bank_hours_to_payment`).
-- 16 WARNs no sistema legado (decidido: não mexer — outro produto).
+Nada disso é "de tela": foi conferido com SELECT no banco de produção. Todos os fixes são
+**migrations só restritivas** (tiram acesso de quem não devia ter; a UI atual continua igual).
+**Não apliquei nada — migration precisa do teu OK.** Recomendo aplicar os 3 **hoje**, nesta ordem.
 
-### 3.3 `nightDebitMinutes = 0` (decisão técnica conservadora)
-- Todo débito tratado como diurno, sem multiplier noturno aplicado.
-- **Documentado.** Mudar exige confirmação Victor + recalcular histórico.
+**(a) 12 tabelas `backup_*` sem RLS, com SELECT *e DELETE* liberados pro anônimo.** Criadas
+à mão em produção (não estão no repo): `backup_attendance_20260813` (~5.042 pontos),
+`backup_payments_20260813` (~3.036), `backup_employees_20260813` (96 funcionários — CPF, PIN,
+descritor facial), `backup_driver_pix_20260724` (99), `backup_espelho_conferido_20260818`,
+`backup_mirror_pub_2026072{4,7,8}`, `backup_nf_files_2026072{6,8}`, `backup_nf_imagens_20260724`,
+`backup_driver_auth_20260725`. Nada no app lê essas tabelas.
+```sql
+-- trava tudo que começa com backup_ (RLS sem policy = ninguém além do service_role)
+do $$ declare t text; begin
+  for t in select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+           where n.nspname = 'public' and c.relkind = 'r' and c.relname like 'backup\_%' escape '\'
+  loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
+  end loop;
+end $$;
+```
+Decisão extra: depois de travadas, **apagar** (já existe cópia em `backups/` local?) ou mover
+pra um schema `backups` fora da API. Recomendo: travar agora, apagar depois de confirmar cópia.
 
-### 3.4 Cold start `create-user` ~150s primeira chamada
-- Característica conhecida — esm.sh bcryptjs download. Warm 0.57s.
-- UI tem spinner com mensagem "pode levar até 2 minutos no primeiro uso".
+**(b) View `driverpay_payment_computed` roda como dono (perdeu `security_invoker` na migration
+de 17/07) e o anônimo lê os 325 pagamentos com valores.**
+```sql
+alter view public.driverpay_payment_computed set (security_invoker = true);
+revoke all on public.driverpay_payment_computed from anon;
+```
+Único consumidor é `recomputePaymentTotals` rodando como 2626 (passa na RLS das tabelas base).
 
-### 3.5 ~~`User` interface tem `password: string`~~ — ✅ Resolvido em 11.6 (cleanup confirmado em 14.21)
-- Interface `User` em `src/services/database.ts:41-46` já está limpa: `{ id, role, created_by, created_at }`.
-- Doc atualizada em 14.21 (entry estava obsoleta).
+**(c) Função `driverpay_conclude_period_only` é SECURITY DEFINER, não checa quem chama e o
+anônimo pode executá-la** (as outras duas RPCs tiveram REVOKE; esta, de 17/07, não). Com o
+`period_id` que a view (b) entrega, dá pra concluir a quinzena aberta sem login.
+```sql
+revoke execute on function public.driverpay_conclude_period_only(uuid, uuid, text) from public, anon;
+```
+Segundo passo (migration à parte, precisa reescrever as 3 RPCs): checar dentro delas que o
+chamador é `2626` (ou `service_role`).
 
-### 3.6 ~~Vite warnings (esbuild deprecated)~~ — ✅ Mitigado em 14.21
-- `chunkSizeWarningLimit` bumpado de 600→1000kB em `vite.config.ts:48`.
-- Warnings de `vite:react-babel` (esbuild→oxc, optimizeDeps.esbuildOptions→rolldownOptions) são internos do plugin `@vitejs/plugin-react` — só resolvem com upgrade Vite 6 + plugin novo. Fora do escopo quick win.
+### 2.2 🟠 SEGURANÇA — exclusividade do 2626 no driverpay é só de tela (decisão de produto)
 
----
+No banco, as 24 tabelas `driverpay_*` têm UMA policy: "mesma empresa OU sub em (9999, 2626)".
+Ou seja: os 5 supervisores e o 9999 cadastrados em Caratinga conseguem, **sem usar a aba**
+(direto na API), ler CPF/PIX/telefone dos 119 drivers, trocar chave PIX (dinheiro iria pra
+outra conta), alterar pacotes/descontos/vales, marcar/desmarcar pago e reabrir quinzena.
+**Decisão:** a regra é "só 2626" (como a tela diz) ou "2626 + 9999"? Com a resposta, migration
+que troca a policy das 24 tabelas + 4 policies de storage + RPC de reset de senha.
+Recomendo **só 2626** (é o que o produto promete desde julho). Junto: trigger em
+`driverpay_periods` impedindo reabrir/editar quinzena concluída por quem não é 2626, e
+estender a trava de período concluído pras tabelas novas (payment_marks, deduction_ledger,
+nota_fiscal_files, mirror_publications).
 
-## 4. 📌 Items específicos pra próxima sessão
+Menores (baixa): bucket `driverpay-discount-proofs` público (68 fotos; URL não adivinhável —
+fechar exige trocar pra URL assinada no frontend); `driverpay_mirror_notice` com GRANT explícito
+a anon (hoje não vaza, mas convida); `nf-upload` aceita `periodId` de outra empresa (nota órfã,
+sem vazamento); respostas públicas ecoam `details` do Postgres; `driverpay_nfnames_cap2` sem
+`search_path` fixo. Recomendo: incluir os 3 últimos na mesma leva; bucket fica.
 
-### Quando reabrir Claude Code:
-1. **Ler `CHECKPOINT.md`** + os 6 arquivos auxiliares
-2. **Confirmar 8 regras** (no `CHECKPOINT.md`)
-3. **Verificar estado:**
-   ```bash
-   git log --oneline -5      # último commit = fechamento Fase 14
-   git status --short        # working tree limpo
-   ```
-4. **Validar baseline:**
-   ```bash
-   npx tsc --noEmit          # exit 0
-   npx vitest run | tail -5  # 422+ passing
-   ```
-5. **Avaliar com Victor:**
-   - Onboarding Ponte Nova (1.1)
-   - Release + deploy (1.2 + 1.3)
-   - Tech debt residual (item específico)
-   - Cobertura postponed (face, mobile, etc.)
+### 2.3 🟡 Filtro "NF ok (validada)" — 2 escolhas de produto (achados de 31/08, código lido inteiro)
 
----
+1. **Marca "na mão" faz o grupo INTEIRO passar em "NF ok (validada)"** sem nenhuma nota
+   validada (aconteceu em 20/08: 2 grupos marcados assim pelo 2626). O selo verde não diz
+   que foi manual. Opções: (a) filtro "NF ok" passa a exigir nota validada de verdade e
+   ganha uma opção nova "marcada na mão"; (b) só o selo do grupo passa a dizer "NF ok (na
+   mão)". **Recomendo (a)+(b).**
+2. **Bug real no sentido inverso:** despublicar o espelho "de todas" e republicar por
+   plataforma faz notas já validadas **deixarem de contar** (caso vivo: ANDREA com 3 notas
+   validadas mostrando "NF 1/3"; o operador contornou marcando na mão). Fix em
+   `slotCoberto`: nota cuja chave de espelho não corresponde a nenhuma publicação viva volta
+   a valer pelo CNPJ. **Recomendo fazer** (é técnico, mas muda contagem de NF → aviso antes).
 
-## 5. 🐛 Bugs latentes a monitorar pós-go-live
+### 2.4 🟡 Import de planilha — 3 travas de segurança (achados de 31/08)
 
-Após deploy em prod e uso real, monitorar:
+1. **Re-clicar "Importar" depois de falha no meio duplica os drivers novos** (o modal mantém
+   o estado). Paliativo: no erro, recarregar o contexto de nomes e zerar as resoluções.
+   Raiz: RPC transacional (tudo ou nada). **Recomendo paliativo agora, RPC depois.**
+2. O modal deixa escolher **quinzena concluída** como destino e o 2626 passa pela trava →
+   um clique errado reescreve totais já pagos. **Recomendo listar só quinzenas abertas.**
+3. Teste "até o fim" com arquivo real grande + falha no meio + reimport: **usar Ponte Nova
+   como área de teste** (driverpay zerado lá; limpeza por `company_id` via service role).
+   **Preciso do OK** pra usar PN e os arquivos reais de Downloads.
 
-| Sintoma | Tabela/Arquivo a olhar | Provável causa |
-|---|---|---|
-| Funcionário some da lista | `localStorage timecard_user` vs `sessionStorage sb-custom-token` | Sessão expirada inconsistente (14.4.7 cobre, mas se reproduzir, investigar) |
-| Tela branca após troca empresa | CompanySwitcher logs | setCompany throw — 14.4.2 cobre, monitor |
-| 409 payment_periods | `users.id` FK violation | created_by inválido — 14.4.8 cobre |
-| HTTP 406 silencioso | `.single()` em código novo | Trocar pra `.maybeSingle()` |
-| Tela "Ops algo deu errado" | `error_logs` table | ErrorBoundary capturou — investigar componentStack |
-| Multiple GoTrueClient (volta) | imports de `createClient` duplicados | Verificar `src/lib/supabase.ts` continua único |
-| Cold-start edge fn timeouts | Logs edge function | Aumentar timeout no frontend toast/UI |
+### 2.5 🟢 Dependabot — PRs de npm (5 abertos)
 
----
-
-## 6. 📊 Métricas a coletar pós-go-live (ainda não instrumentado)
-
-- Latência média p50/p95/p99 das principais queries (employees, payments, attendances)
-- Taxa de cold-start nas edge fns (auth-login, create-user, employee-public-api)
-- Erros capturados via ErrorBoundary (count por dia/categoria)
-- Geo-fraud attempts (sucesso vs falha)
-- Face auth attempts (taxa de sucesso)
-
-**Sem dashboard ainda.** Pode-se construir via Supabase Dashboard → SQL Editor com queries adhoc nos primeiros dias.
-
----
-
-## 7. 🔮 Roadmap pós-go-live (não bloqueante)
-
-| Feature | Trigger | Prioridade |
-|---|---|---|
-| Reset facial automático após N tentativas falhas | Feedback usuários | Média |
-| Notificações push (clock-in atrasado) | Demanda admin | Baixa |
-| Export PDF holerite | Demanda funcionário | Média |
-| **APK Android via Capacitor** (sub-fase 15) | Demanda mobile | Média (ver §7.1) |
-| Multi-idioma | Expansão geográfica | Baixa |
-| API pública pra integrações ERP | Demanda enterprise | Baixa |
-
-### 7.1 — APK Android via Capacitor (sub-fase 15 futura)
-
-**Objetivo:** transformar o webapp Vite+React em APK Android instalável com acesso a APIs nativas (câmera, geolocalização, notificações).
-
-**Stack escolhida:** Capacitor (Ionic) — wrapper nativo que embrulha o app web num WebView e expõe APIs nativas via plugins. Reaproveita 100% do React+TypeScript já existente.
-
-**Plugins envolvidos:**
-- `@capacitor/camera` — face-api.js continua funcionando, mas plugin nativo é alternativa pra captura
-- `@capacitor/geolocation` — substitui/complementa `navigator.geolocation` (mais robusto em background)
-- `@capacitor/local-notifications` — lembretes locais (e.g. "Você esqueceu de bater ponto?")
-- `@capacitor/push-notifications` — push server→device (requer Firebase Cloud Messaging)
-- `@capacitor/preferences` — fallback de localStorage se WebView resetar
-
-**Caminho escolhido pelo Victor (sem Play Store):** sideload via link direto/Slack/email.
-
-**Esforço estimado:** ~4 dias úteis
-- Dia 1: Setup Capacitor + AndroidManifest + permissões runtime
-- Dia 2: Adaptar serviços de geo + camera pra plugins nativos
-- Dia 3: Local notifications + UX de permissões
-- Dia 4: Keystore auto-assinado (Claude gera) + build release APK + smoke test device real
-
-**Pré-requisitos do Victor:**
-- [ ] **Android Studio instalado** (download ~3GB; única dependência chata)
-- [ ] **Decisão de senha do keystore** (Claude gera o arquivo `.jks`, Victor define senha + guarda backup)
-- [ ] **Projeto Firebase** (OPCIONAL — só se quiser push notifications server→device. Local notifications não precisam)
-
-**APK release auto-assinado (escolhido):**
-- ✅ Instala em qualquer Android via sideload ("Fontes desconhecidas" ativado uma vez)
-- ✅ Sem flag "debuggable" — performance otimizada
-- ✅ Zero custo recorrente, sem Google
-- ⚠️ **Sem auto-update** — cada nova versão precisa ser distribuída manualmente (link/Slack/email)
-- ⚠️ Funcionário precisa abrir o link e reinstalar a cada release
-
-**Play Store (descartado por Victor):**
-- Economizaria distribuição manual e auto-update
-- Custo: US$25 conta dev one-time + revisão Google 1-7 dias + políticas restritivas
-- Pode ser adicionado depois sem reescrita — mesmo APK, só upload
-
-**Tradeoffs:**
-- ✅ Reaproveita 100% do código React atual
-- ✅ Build APK direto, sem reescrita
-- ⚠️ APK fica ~15-20MB (overhead Capacitor + WebView)
-- ⚠️ `face-api.js` carrega modelos ~10MB pesados — primeira abertura lenta no celular
-- ⚠️ iOS exigiria Mac + Apple Developer ($99/ano) — adiar pra outra sub-fase
-
-**Alternativa zero-esforço:** PWA "Add to Home Screen" (Chrome → menu → "Instalar app"). Câmera + geo funcionam, mas notifications limitadas (iOS especialmente) e sem ícone próprio no app drawer.
-
-**Status:** Roadmap. Sem trigger imediato — esperar feedback de uso real pós-go-live.
+Nenhum pode ser mergeado pelo botão: o lock que o bot gera vem quebrado (`npm ci` falha em
+10s — já aconteceu em 18/07) e o CI dos PRs do bot roda sem os secrets (vitest/playwright
+sempre vermelhos por isso). Caminho: aplicar **localmente** com lock regenerado + validação.
+- **#25** (20 minor/patch) + **#19** (globals 17): seguros em conteúdo → **recomendo aplicar**
+  numa leva própria (typecheck+lint+unit+build+E2E essencial; `npx playwright install`).
+- **#18 typescript 7.0.2**: compilador nativo (Go) sem API; quebra o typescript-eslint →
+  **recomendo `@dependabot ignore this major version`** e planejar 5.6→5.9 depois.
+- **#8 react 19 sem react-dom 19**: preview da Vercel já quebrou; em conflito →
+  **recomendo ignorar o major**; React 19 é projeto próprio (código já compatível).
+- **#5 rollup-plugin-visualizer 7**: só relatório de bundle; em conflito → ignorar ou junto do #25.
 
 ---
 
-## 8. 🔄 Estado atual do trabalho (2026-05-13)
+## 3. 📌 Pendências técnicas abertas (sem decisão de negócio)
 
-### Sub-fases concluídas nesta sessão
+- Marcas de pagamento podem "vazar" pra quinzena nova se a leitura das notas falhar ao
+  trocar de período (`paymentMarks` não é zerado em `changePeriod`; índice sem período).
+  Não confirmado em dados. Fix pequeno + guarda contra resposta fora de ordem.
+- Marca "pago" é por plataforma, sem valor: alterar pacotes depois de pago mantém "✓ pago".
+  Ideia: snapshot do total na marca + aviso "pago com R$ X — hoje R$ Y".
+- Automações pós-import rodam no período **da aba**, não no escolhido no modal.
+- Casamento de nomes do import só olha drivers ativos (arquivado vira "Criar novo").
+- E2E pro selo do grupo com filtro "Já pagos" (hoje só unit).
+- `tests/101` positivo ("abas que vê") ainda usa `.first().toBeVisible()` — ok hoje.
+- CI dos PRs do Dependabot sem secrets (decisão: cadastrar em Dependabot secrets ou aceitar).
+- `SSF.format` não entende o `BRL_FMT` (sem efeito no Excel; só CSV cru) — não mexer.
 
-- ✅ 14.5 + 14.6 + 14.7 + 14.8 — 5 specs novos (39, 40, 41, 42, edgeFn) + 2 race fixes (26, 37)
-- ✅ Fixes pós-criação (40 test 4, 41 test 5, 42 test 2) — strict mode + reload
-- ✅ Validação isolada de cada spec: 39 (5/5), 40 (5/5), 41 (5/5), 42 (3/3+1skip), edgeFn (4/4+1skip), 26 (9/9), 37 (5/5)
-- ✅ Checkpoint dividido em arquivos (este e os outros 5)
-- ✅ **14.9 — Batch 100% determinístico:**
-  - Spec 40 race AttendanceTab (loadData mount-only) → `searchEmployee` clica "Atualizar" antes do fill
-  - Spec 37 cold-start residual create-user → warmup completo no beforeAll
-  - Suite completa: 259 passed / 18 skipped / 0 failed em 19.3min
-- ✅ **14.10 — Validação ampla pré-go-live:**
-  - Build prod, Vitest coverage 45.96% Stmts, Supabase advisors 0 ERRORs core
-  - Edge fns warm <1s (curl direto)
-  - Dist serve + smoke chromium ✅
-  - Lighthouse: Perf 86 / A11y 75 → **100** (sub-fase 14.11.2) / Best 100 / SEO 100
-  - Mobile E2E (project Pixel 5): 14/31 → **30/31** após refactor TabNavigation 14.11.2
-- ✅ **14.11.x — Caratinga deploy Vercel + onboarding parcial PN + tech debts:**
-  - Sistema online: https://sistema-ponto-zeta.vercel.app
-  - PN 90% configurada (geo, bonus_types, payment_period_config mensal)
-  - 26 PINs Caratinga migrados plain → bcrypt
-- ✅ **14.13 — 6 bugs UX permissões + 15 tutoriais novos + Spec Supremo 2.0:**
-  - Bug #1 CRÍTICO: resetToDefault transformava supervisor em admin
-  - Bugs #2-#6: FinancialTab/C6PaymentTab/AttendanceApprovalPanel/ReportsTab/defaults
-  - Ajuda: 13 → 28 tutoriais (todas features fases 8-14)
-  - Spec 100 (46 tests, 12 seções A-L): localhost 46/46 + prod 46/46
-- ✅ **14.14 — Auditoria final + correções + checkpoints:**
-  - Lint 2 errors fixados (tests/99-supremo path/fs unused)
-  - TECH_DEBT 6.10 movido pra histórico (já fixado em 9/5)
-  - TECH_DEBT 6.26/6.27/11.9.X marcados resolvidos
-  - Métricas atualizadas: 64 migrations, 50 RLS tables, 431 unit tests, 4 edge fns (auth v9, clock v8, create v1, public **v3 bcrypt**)
-  - testTimeout 15s pro set-pin flaky
+---
 
-### Próximo passo Victor
-- ⏳ Onboarding Ponte Nova (1.1) **OU** release/deploy (1.2 + 1.3)
-- ⏳ Tech debt residual postponed (PIN bcrypt 11.9, `User.password` cleanup, Vite warnings)
+## 4. 🔮 ROADMAP ditado pelo Victor em 31/08/2026 (ordem combinada) — ver memória `project_roadmap_ponto_tablet_facial`
+
+1. **Facial + geolocalização 100% obrigatórias, sem brecha.** Auditar TODOS os caminhos
+   que registram batida e fechar cada um (toggle global, empresa sem geo, fallbacks).
+2. **4 batidas/dia** (entrada, saída intervalo, volta, saída) em **PN e Caratinga**:
+   cadastro, cálculo, aprovação, Financeiro e todos os relatórios.
+3. **Modo tablet (quiosque):** 2 tablets da empresa; ponto só neles, dentro da localização.
+   Celular pessoal e supervisor não batem/registram ponto fora dali.
+4. **Facial sem CPF, ordem automática:** câmera aberta escaneando; reconhece → identifica →
+   registra a próxima batida do dia sem clicar nada.
+5. **Fora da empresa:** funcionário só vê os próprios erros.
+
+**Ambiguidades a confirmar ANTES de programar** (não assumir): escopo do "tirar acesso de
+supervisores"; como o tablet se identifica como "da empresa"; quem não tem facial no dia da
+virada / falha de reconhecimento 1:N; regra do "próximo ponto" quando alguém pula uma batida.
+Cada item entra com plano curto (critério de sucesso + backend/frontend/banco/fluxo/testes +
+"Preciso que você decida").
+
+---
+
+## 5. Como retomar
+
+1. Ler `00-INDEX.md` → `CHECKPOINT_SESSAO_2026-08-31.md` → este arquivo.
+2. `git status --short` limpo · `npm run typecheck` 0 · `npm run lint` 0.
+3. Se o Victor respondeu §2: aplicar as migrations aprovadas (arquivo em
+   `supabase/migrations/`, via CLI/MCP, conferir com SELECT depois), depois §2.3–2.5.
+4. Só então começar o roadmap (§4), item 1.

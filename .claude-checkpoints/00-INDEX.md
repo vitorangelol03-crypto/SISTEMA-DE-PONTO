@@ -2,9 +2,32 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-08-30**.
+> Última atualização: **2026-08-31**.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 31/08 — "zerar as pendências pra começar o roadmap novo".** O Victor ditou o
+**roadmap** (facial+geo sem brecha → 4 batidas PN/Caratinga → ponto só em tablet da empresa →
+facial sem CPF com ordem automática → fora da empresa só "meus erros"; memória
+`project_roadmap_ponto_tablet_facial`) e pediu pra fechar as pendências ANTES. Fechadas:
+**TOTAL GERAL em branco** (causa provada: célula de total só com fórmula, sem `<v>` — prévia
+de celular mostra vazio; `formulaCell()` grava fórmula+valor nos 3 layouts + C6; 9 testes
+com roundtrip do .xlsx), **filtro "já pagos"** (cabeçalho do grupo na visão Grupos contava só
+as linhas filtradas → "todos pagos" com membros não pagos escondidos; `situacaoPagamentoDoGrupo`
+sobre TODOS os membros via `allRows`; 7 testes), **filtro "NF ok"** (NÃO era bug: nota do
+líder validada 18:39 de 20/08 — timeline bate com o print), `tests/101` H1 fortalecido (abre
+o menu "Mais"), **CI checava ZERO arquivos de tipo** (`npx tsc --noEmit` na raiz com
+`files: []`) → `npm run typecheck`, actions checkout/setup-node/upload-artifact **v7**,
+`*.tsbuildinfo` fora do git, `CLAUDE.md` do projeto com a regra de push de 10/08,
+`CHECKPOINT_PROXIMOS_PASSOS.md` **reescrito** (estava em 19/05). 🔴 **Segurança, provado por
+mim com SELECT em prod (não aplicado — migration precisa do OK dele):** 12 tabelas
+`backup_*` sem RLS com SELECT+DELETE pro anon (incl. `backup_employees_20260813` com CPF/PIN/
+face, `backup_attendance`, `backup_payments`), view `driverpay_payment_computed` sem
+`security_invoker` (anon lê 325 pagamentos), RPC `driverpay_conclude_period_only` executável
+por anon. SQL pronto em `CHECKPOINT_PROXIMOS_PASSOS.md` §2.1. Mais decisões dele em §2.2–2.5
+(policy "só 2626", filtro NF na mão + bug do espelho republicado, travas do import, Dependabot
+npm). Investigação feita com 6 agentes só-leitura + céticos (16 céticos caíram por limite de
+sessão; os achados que agi em cima eu mesmo re-verifiquei). Ver `CHECKPOINT_SESSAO_2026-08-31.md`.
 
 **Sessão 30/08 (3º bloco) — 5 warnings do ESLint zerados (`1e5656a`, NO AR):**
 4× `exhaustive-deps` viraram `useCallback` com deps reais (efeitos disparam
@@ -1066,7 +1089,8 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-08-30.md` | **Mais recente.** Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado E consertado (`8672604`); depois 5 warnings zerados (`1e5656a`): useCallback nos 4 hooks + useCompany em arquivo próprio (26 imports). eslint 0+0, CI verde. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-31.md` | **Mais recente.** Roadmap ditado (tablet + facial sem CPF + 4 batidas) e pendências zeradas antes dele: TOTAL GERAL em branco (fórmula sem valor cacheado → `formulaCell`), selo "todos pagos" do grupo contando só linhas filtradas, "NF ok" não era bug, 101-H1, CI typecheck era no-op, actions v7, tsbuildinfo, CLAUDE.md. 🔴 3 buracos de segurança provados em prod (backup_* sem RLS, view sem security_invoker, RPC pro anon) — SQL pronto, **aguardando OK**. PROXIMOS_PASSOS reescrito. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-08-30.md` | Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado E consertado (`8672604`); depois 5 warnings zerados (`1e5656a`): useCallback nos 4 hooks + useCompany em arquivo próprio (26 imports). eslint 0+0, CI verde. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-26.md` | Cadastro público de funcionário (`/cadastro?empresa=...`, sem login) + aba nova "Aprovação de Cadastro" (exclusiva do 2626) — migration, edge fn `register-employee`, bloqueio no `/clock` pra recusado, botão de copiar por campo (sempre versão limpa). E2E novo `tests/78`. **Só local — push pendente do OK dele.** | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-19.md` | **Mais recente.** Edge fn **v32 no ar** (deploy sempre o Victor com `!` — classificador barra CLI e MCP vindos de mim) · prova ao vivo do fix da leitura: o caso do Gustavo se resolveu sozinho ANTES do deploy; o print do João Gabriel reprocessado na v32 e recusado **corretamente** (era papel de parede, não a tela do app) — **fix segue sem prova ao vivo** · push do `3c29c0b` já estava feito (pendência de ontem era engano) · **tag "não bate" clicável** (`95c764e`, local): grade e card mobile abrem "Espelhos recebidos" já filtrado no driver, E2E novo `tests/75` | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-18.md` | Filtro por quinzena + migração em massa do saldo herdado (`closedPeriodsDebtScope.ts`, E2E 73) · parser da planilha da LOGGI (`extractLoggi`, hubs misturados passam pela identificação normal) · "ignorar" persistido nas 4 plataformas (migration `driverpay_driver_ignored`, tela "Vínculos de importação", E2E 74) · 24 vínculos LOGGI gravados em prod (nenhum adivinhado) · chave `proof_auto_confirm` ligada + 22 espelhos retroativos · leitura não desiste na 1ª recusa (`3c29c0b`) | 🟢 ATIVO |
@@ -1101,10 +1125,13 @@ janela). **Nada foi pro ar** — espera o OK dele.
 | `CHECKPOINT_TESTES.md` | Specs, coverage, comandos de teste | 🔵 referência (05/2026 — specs 52-56 não listados) |
 | `CHECKPOINT_OPERACAO.md` | Deploy, env vars, troubleshoot | 🔵 referência (05/2026) |
 | `CHECKPOINT_FASES.md` | Histórico granular fases 5→14 | ⚪ arquivo morto (consulta rara) |
-| `CHECKPOINT_PROXIMOS_PASSOS.md` | Pendências go-live + roadmap (APK Capacitor etc.) | ⚪ superseded em 05/2026 — go-live JÁ aconteceu; só o roadmap §7 ainda interessa |
+| `CHECKPOINT_PROXIMOS_PASSOS.md` | **Reescrito em 31/08/2026:** pendências fechadas, **decisões que o Victor precisa tomar** (segurança com SQL pronto, policy só-2626, filtro NF, travas do import, Dependabot npm), pendências técnicas abertas e o **roadmap** (facial+geo sem brecha, 4 batidas, tablet, facial sem CPF). A versão de 05/2026 (go-live/APK) está no git. | 🟢 ATIVO — ler ao retomar |
 
 ## ⚖️ Decisões ativas (não re-perguntar)
 
+- **Ordem de trabalho (Victor, 31/08/2026):** primeiro **zerar as pendências abertas**, depois o roadmap na ordem: (1) facial + geolocalização 100% obrigatórias sem brecha → (2) 4 batidas/dia funcionando em PN e Caratinga (cadastro, cálculo, relatórios) → (3) ponto SÓ em tablet da empresa, dentro da localização (celular pessoal e supervisor não batem fora) → (4) facial sem CPF com a próxima batida decidida sozinha → (5) fora da empresa o funcionário só vê os próprios erros. Ambiguidades listadas em `CHECKPOINT_PROXIMOS_PASSOS.md` §4 — **perguntar antes de programar cada item**.
+- **Push (Victor, 10/08/2026, regra global; `CLAUDE.md` do projeto alinhado em 31/08):** push liberado após validação (tsc + lint + unit + build + E2E do que mudou), **agrupando commits num push só** (o CI cancela o run anterior do branch). Push em `main` = deploy na Vercel: se puder quebrar, parar e avisar antes.
+- **Migration de banco: SEMPRE pedir OK antes** — vale até pra migration só restritiva de segurança (31/08: 3 buracos provados ficaram esperando o OK; ver PROXIMOS_PASSOS §2.1).
 - **Ponto:** editar/excluir ponto é SÓ do mestre **2626** (nem 9999); travado em frontend + RLS + trigger.
 - **Ponto (13/08, decisão do Victor "bloqueia em todos os usuários"):** **marcar Presente/Falta pelo painel também é SÓ do 2626** — supervisores e o 9999 perdem. Na tela os botões ficam **desabilitados com o motivo no `title`** (não somem, pra equipe saber por quê) e a **caixa de seleção some** (marcação em massa impossível). No banco, o gatilho `enforce_ponto_master_only` recusa **INSERT** de ponto e **UPDATE que mude status**. Seguem liberados: **aprovar/recusar** (só mexe em `approval_status`), o recálculo, e a **batida do próprio funcionário no /clock** (entra pela edge fn com `service_role`). Motivo: marcar pelo painel cria ponto sem batida nenhuma e o Financeiro paga como dia trabalhado.
 - **Driverpay:** namespace `driverpay_*`; 100% aditivo ao sistema de ponto; vários períodos abertos permitidos; import auto-detecta plataforma pelo cabeçalho; valor/pacote vem da taxa cadastrada (nunca da planilha); apelidos de entregador aprendidos em `driverpay_driver_aliases`; Shopee COLETA = plataforma "Coleta Shopee"; plataforma arquivada sai da soma; driver só pode estar em 1 grupo (vínculo exclusivo, 18/07).
@@ -1190,8 +1217,12 @@ janela). **Nada foi pro ar** — espera o OK dele.
   Sentinelas (`ZZSentinela …` em cada empresa, com ponto do dia) são a forma rápida de
   detectar estrago novo.
 
-- 🟠 **Segurança driverpay:** exclusividade "2626" é client-side; RLS = `company_id OR sub IN (9999,2626)`; RPCs sem authz do chamador.
-- 🟡 Bucket `driverpay-discount-proofs` público; sem trava server-side de `driverpay_periods`; `driverPayCalc.ts` sem termo Zapex.
-- 🟡 Import com arquivos REAIS grandes nunca clicado até o fim (Shopee 132k só até a prévia; iMile 13k/Anjun 8k só fixtures).
-- 🟡 tsc com 63 erros de baseline (fora do driverpay); `*.tsbuildinfo` fora do `.gitignore`.
-- 🔵 Ponte Nova: aba driverpay existe mas dados zerados (só Caratinga populada).
+- 🔴 **Segurança — PROVADO em prod em 31/08, aguardando OK do Victor pra migration** (SQL em `CHECKPOINT_PROXIMOS_PASSOS.md` §2.1): (a) **12 tabelas `public.backup_*`** criadas à mão, sem RLS, com SELECT **e DELETE** pro `anon` — `backup_employees_20260813` (96 func. com CPF/PIN/face), `backup_attendance_20260813` (~5k), `backup_payments_20260813` (~3k), `backup_driver_pix_20260724` (99) e mais 8; (b) view `driverpay_payment_computed` **sem `security_invoker`** (migration `20260717182000` recriou com `CREATE OR REPLACE VIEW` sem `WITH` — isso zera as opções) → anon lê 325 pagamentos; (c) `driverpay_conclude_period_only` SECURITY DEFINER com EXECUTE pro anon (as outras 2 RPCs tiveram REVOKE). **Regra pro futuro:** backup de dado sensível NUNCA em `public` (schema privado ou arquivo); toda recriação de view repete o `WITH (security_invoker = true)`; toda RPC nova nasce com `REVOKE EXECUTE FROM PUBLIC, anon`.
+- 🟠 **Segurança driverpay (decisão de produto, §2.2):** exclusividade "2626" é só client-side; RLS = `company_id OR sub IN (9999,2626)` nas 24 tabelas → supervisores e 9999 de Caratinga leem/alteram tudo via PostgREST (PIX, pacotes, marcas de pago, reabrir quinzena); RPCs create/conclude sem checagem do chamador; trava de período concluído não cobre `driverpay_periods` nem payment_marks/deduction_ledger/nota_fiscal_files/mirror_publications.
+- 🟡 Bucket `driverpay-discount-proofs` público (68 fotos, caminho não adivinhável, listagem bloqueada — fechar exige URL assinada no frontend); `driverPayCalc.ts` sem termo Zapex.
+- 🟡 **Import de planilha** (31/08): arquivos reais grandes JÁ foram importados até o fim em prod (17-18/07, 04/08, 18/08) — a pendência antiga caiu. O que falta: **re-clicar "Importar" após falha no meio duplica drivers novos** (modal mantém o estado), import não é atômico (~700 requests sequenciais, sem lote/desfazer), modal aceita quinzena concluída como destino. Plano de teste seguro = Ponte Nova como área de teste (precisa OK). Ver PROXIMOS_PASSOS §2.4.
+- 🟡 **Filtro "NF ok (validada)"** (31/08): marca "na mão" de UM membro faz o grupo inteiro passar sem nota validada (aconteceu 20/08); e notas gravadas com a chave do espelho "de todas" **deixam de contar** quando ele é despublicado e republicado por plataforma (caso ANDREA "1/3" com 3 validadas). Ver PROXIMOS_PASSOS §2.3.
+- 🟡 Marcas de pagamento podem vazar pra quinzena nova se a leitura das notas falhar ao trocar período (`paymentMarks` não zera em `changePeriod`) — não confirmado em dados.
+- 🟢 ~~tsc com 63 erros de baseline~~ zerado em 17/08; `*.tsbuildinfo` fora do git desde 31/08. ⚠️ Até 31/08 o **CI não checava tipo nenhum** (`npx tsc --noEmit` na raiz = 0 arquivos) — agora roda `npm run typecheck`.
+- 🟡 **Ambiente WSL:** `page.goto` estoura os 15s quando o Vite está frio ou a máquina ocupada (vitest/build em paralelo) — re-rodar isolado antes de chamar de falha; `vitest` também pode cair com "Timeout waiting for worker to respond" (pool), idem.
+- 🔵 Ponte Nova: aba driverpay existe mas dados zerados (só Caratinga populada) — candidata a área de teste do import.
