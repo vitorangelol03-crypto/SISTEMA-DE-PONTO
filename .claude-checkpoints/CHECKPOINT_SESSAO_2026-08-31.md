@@ -144,3 +144,7 @@ a RPC é chamada pela UI como `authenticated` (grant mantido).
 
 Fica pra decisão dele: apagar/mover as `backup_*` depois de confirmar cópia; e a leva §2.2 do
 PROXIMOS_PASSOS (policy "só 2626", checagem do chamador dentro das 3 RPCs, trava de período).
+
+**CI do push `9a4beb1` (run 33408386035): ✅ success nos 3 jobs** (tsc+eslint · vitest ·
+playwright), concluído 15:37:27Z — rodado de propósito SEM `[skip ci]`: o E2E inteiro passou
+contra o banco já com as permissões novas, ou seja, o app segue funcionando.
