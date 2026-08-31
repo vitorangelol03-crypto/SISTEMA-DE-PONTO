@@ -127,6 +127,8 @@ describe.skipIf(!HAS_SERVICE_ROLE)(
     let cpf = '';
     const today = new Date().toISOString().slice(0, 10);
 
+    // Timeout explícito: cria empresa + funcionário fixture via REST (2 chamadas de rede) —
+    // o hookTimeout padrão do vitest (10s) já flakou aqui uma vez.
     beforeAll(async () => {
       expect(SUPABASE_URL).toMatch(/^https:\/\//);
       expect(ANON_KEY.length).toBeGreaterThan(20);
@@ -163,7 +165,7 @@ describe.skipIf(!HAS_SERVICE_ROLE)(
         face_registered: false,
       });
       employeeId = String(employee.id);
-    });
+    }, 30_000);
 
     afterAll(async () => {
       if (employeeId) {

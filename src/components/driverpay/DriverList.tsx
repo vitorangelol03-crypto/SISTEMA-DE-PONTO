@@ -370,17 +370,17 @@ export const DriverList: React.FC<DriverListProps> = ({
       return list.some((r) => publishedDriverIds?.has(r.driverId)) ? 1 : 0;
     }
     if (key === 'pagamento') {
-      // Status de pagamento do GRUPO, mesma escala 0/1/2 do NF e do Espelho (14/08/2026,
-      // pedido do Victor: ordenar por valor/pacotes escondia quem falta pagar no meio da
-      // lista — ele viu um grupo sem NENHUM pagamento cair entre dois grupos já pagos).
-      // asc = nada pago → parte pago → tudo pago (decisão dele nessa sessão).
-      // ⚠️ Diferente do NF/Espelho: quem não tem pacote na quinzena entra JUNTO com "nada
-      // pago" (decisão dele) em vez de ir pro fim como `null` — aqui não é progresso de
-      // conferência, é "queda no bolso de alguém", e ele quer ver esses grupos também.
+      // Status de pagamento do GRUPO, mesma escala 0/1/2 do NF e do Espelho.
+      // asc = nada pago → parte pago → tudo pago.
+      // ⚠️ 31/08/2026 — pedido do Victor: quem NÃO TEM NADA A RECEBER (nenhum membro com
+      // pacote na quinzena) não conta como "falta pagar" — não é "queda no bolso de
+      // ninguém", é R$ 0,00, então `null` (mesma regra do NF/Espelho): SEMPRE pro fim,
+      // nos dois sentidos, nunca misturado com quem falta pagar de verdade. Substitui a
+      // decisão de 14/08 (que colocava esses grupos junto com "nada pago").
       const sits = list
         .map((r) => pagamentoByPayment?.get(r.paymentId))
         .filter((x): x is PagamentoDoDriver => !!x && x.estado !== 'sem_pacote');
-      if (sits.length === 0) return 0;
+      if (sits.length === 0) return null;
       const pagos = sits.filter((x) => x.estado === 'concluido').length;
       return pagos === sits.length ? 2 : pagos > 0 ? 1 : 0;
     }

@@ -1640,12 +1640,14 @@ export function contagemDoCriterio(
       if (g.rows.some((r) => publicados?.has(r.driverId))) feitos += 1;
       else faltam += 1;
     } else if (key === 'pagamento') {
-      // Mesma regra do selo/ordenação do grupo: sem pacote nenhum entra junto com
-      // "nada pago" (decisão do Victor, 14/08/2026) — por isso soma em `faltam`.
+      // Mesma regra do selo/ordenação do grupo (31/08/2026): sem pacote nenhum na
+      // quinzena não é "falta pagar" — é R$ 0,00 — então nem entra na conta (mesma
+      // regra do NF acima). Substitui a decisão de 14/08.
       const sits = g.rows
         .map((r) => pagamentoByPayment?.get(r.paymentId))
         .filter((x): x is PagamentoDoDriver => !!x && x.estado !== 'sem_pacote');
-      if (sits.length > 0 && sits.every((x) => x.estado === 'concluido')) feitos += 1;
+      if (sits.length === 0) continue;
+      if (sits.every((x) => x.estado === 'concluido')) feitos += 1;
       else faltam += 1;
     } else {
       if (g.rows.every((r) => r.espelhoConferido)) feitos += 1;

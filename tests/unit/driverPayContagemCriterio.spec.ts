@@ -101,11 +101,13 @@ describe('contagemDoCriterio — pagamento (14/08/2026)', () => {
       .toEqual({ feitos: 1, faltam: 1 });
   });
 
-  it('⚠️ grupo sem pacote nenhum entra em FALTAM — decisão do Victor (14/08/2026)', () => {
+  it('🎯 grupo sem pacote nenhum NÃO entra na conta (nem feitos, nem faltam) — decisão do Victor (31/08/2026, substitui a de 14/08)', () => {
+    // Sem pacote = R$ 0,00 a receber: não é "falta pagar" (não é dinheiro devido a
+    // ninguém), então nem soma — mesma regra do NF (expected===0 também não entra).
     const semPacote = grupo(row('a'));
     const pb = new Map([['pay-a', pagto('sem_pacote')]]);
     expect(contagemDoCriterio([semPacote], 'pagamento', undefined, undefined, pb))
-      .toEqual({ feitos: 0, faltam: 1 });
+      .toEqual({ feitos: 0, faltam: 0 });
   });
 
   it('parcial conta como FALTA, não como feito', () => {
