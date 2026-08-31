@@ -312,3 +312,6 @@ não sobrou ninguém "pendente" de verdade nessa quinzena pra aparecer primeiro 
 
 **Validado:** tsc 0 · eslint 0/0 · build limpo · vitest completo **1344 passed** (1 skipped) —
 primeira rodada, sem nenhum flake de infra dessa vez.
+
+**Push `bdb35e7`: CI verde nos 3 jobs** (run 33441166404) · **Vercel conferida por
+conteúdo** — produção serve o mesmo bundle (`index-B9UUtLhq.js`) do build local. No ar.
