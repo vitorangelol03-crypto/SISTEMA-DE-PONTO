@@ -1541,6 +1541,26 @@ export interface SituacaoPagamentoDoGrupo {
 }
 
 /**
+ * O espelho deste driver/grupo já foi publicado no app? (31/08/2026 — extraída pra função
+ * única depois de achar a divergência real em produção.)
+ *
+ * 🔑 CIENTE DE GRUPO: só o líder publica, e isso vale pro grupo inteiro — mas o FILTRO
+ * "Espelho no app" (`DriverPayTab.isRowPublished`) já sabia disso (`publishedGroups`) e o
+ * SELO da linha (`DriverList`, o badge "no app") olhava só `publishedDriverIds.has(driverId)`,
+ * sem checar o grupo. Resultado medido em produção (Caratinga, período aberto): das 113
+ * linhas que passavam no filtro "Publicado", 61 apareciam SEM o selo — todo membro que não
+ * era o líder. Daqui pra frente o filtro E o selo chamam esta MESMA função, então não tem
+ * como divergir de novo.
+ */
+export function rowPublicadoNoApp(
+  row: Pick<DriverRowData, 'groupName' | 'driverId'>,
+  publishedDriverIds: ReadonlySet<string>,
+  publishedGroups: ReadonlySet<string>,
+): boolean {
+  return row.groupName ? publishedGroups.has(row.groupName) : publishedDriverIds.has(row.driverId);
+}
+
+/**
  * Situação de pagamento de um GRUPO a partir dos seus membros (31/08/2026).
  *
  * 🔑 Recebe TODOS os membros do grupo — não só os que passaram no filtro da tela. Com o

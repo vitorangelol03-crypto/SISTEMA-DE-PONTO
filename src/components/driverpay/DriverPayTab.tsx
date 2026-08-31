@@ -80,6 +80,7 @@ import {
   printsRepetidos,
   passaNoFiltroDePagamento,
   type FiltroDePagamento,
+  rowPublicadoNoApp,
   proofPrecisaAtencao,
   toggleValorDeFiltro,
   temTodasAsRotas,
@@ -1612,7 +1613,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     return s;
   }, [rows, publishedDriverIds]);
   const isRowPublished = useCallback(
-    (r: DriverRowData) => (r.groupName ? publishedGroups.has(r.groupName) : publishedDriverIds.has(r.driverId)),
+    (r: DriverRowData) => rowPublicadoNoApp(r, publishedDriverIds, publishedGroups),
     [publishedGroups, publishedDriverIds],
   );
 
@@ -2238,6 +2239,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             onGroupMirror={onGroupMirror}
             onGroupMarkPaid={onGroupMarkPaid}
             publishedDriverIds={publishedDriverIds}
+            publishedGroups={publishedGroups}
             nfProgressByPayment={nfProgressByPayment}
             proofProgressByPayment={proofProgressByPayment}
             semGrupoForaByPayment={semGrupoForaByPayment}

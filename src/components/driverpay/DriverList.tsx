@@ -32,6 +32,7 @@ import {
   toggleSortCriteria,
   plataformasPagasDoGrupo,
   situacaoPagamentoDoGrupo,
+  rowPublicadoNoApp,
   resumirPlataformas,
   contagemDoCriterio,
   type SortCriterion,
@@ -71,6 +72,16 @@ interface DriverListProps {
   onGroupMarkPaid: (groupName: string, rows: DriverRowData[]) => void;
   /** driver_ids com espelho já publicado no app (alimenta o selo "no app"). */
   publishedDriverIds?: ReadonlySet<string>;
+  /**
+   * Nomes de GRUPO cujo espelho já foi publicado (31/08/2026) — o líder publica e conta
+   * pro grupo inteiro. Sem isto, o selo "no app" da linha só olhava `publishedDriverIds`
+   * (o driver_id de quem publicou de verdade, normalmente só o líder): o filtro "Espelho
+   * no app · Publicado" é CIENTE DE GRUPO e inclui os membros certinho, mas o selo da
+   * linha deles ficava faltando — 61 de 113 linhas no filtro "Publicado" apareciam SEM
+   * o selo, misturadas com as poucas (líderes) que tinham. Mesma família do bug do selo
+   * de pagamento do grupo (`situacaoPagamentoDoGrupo`), agora no espelho do app.
+   */
+  publishedGroups?: ReadonlySet<string>;
   /** Progresso da NF (validadas/esperadas) por paymentId — ciente de grupo. */
   nfProgressByPayment?: ReadonlyMap<string, NfProgress>;
   /** Espelho do app (print da Shopee) — 04/08. Vazio = ninguem solicitou nesta quinzena. */
@@ -87,6 +98,8 @@ interface DriverListProps {
 }
 
 const NO_GROUP = 'Sem grupo';
+/** Set fixo (nunca recriado) pra sobrar de default quando os Sets de "publicado" não vêm. */
+const EMPTY_SET: ReadonlySet<string> = new Set();
 
 interface Totals {
   drivers: number;
@@ -131,6 +144,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   onGroupMirror,
   onGroupMarkPaid,
   publishedDriverIds,
+  publishedGroups,
   nfProgressByPayment,
   proofProgressByPayment,
   semGrupoForaByPayment,
@@ -143,6 +157,13 @@ export const DriverList: React.FC<DriverListProps> = ({
   /** O grupo do driver está selecionado? (checkbox dele fica marcado e travado) */
   const rowGroupSelected = (row: DriverRowData): boolean =>
     !!selGroups?.has(row.groupName ?? NO_GROUP);
+
+  /**
+   * Selo "no app" da linha: MESMA função (`rowPublicadoNoApp`) que o filtro "Espelho no
+   * app" da DriverPayTab usa — não tem mais como divergir.
+   */
+  const rowPublishedInApp = (row: DriverRowData): boolean =>
+    rowPublicadoNoApp(row, publishedDriverIds ?? EMPTY_SET, publishedGroups ?? EMPTY_SET);
 
   /** Membros COMPLETOS de cada grupo (antes do filtro) — pro selo de pagamento do cabeçalho. */
   const membrosPorGrupo = useMemo(() => {
@@ -543,7 +564,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                 canMirror={canMirror}
                 canMarkPaid={canMarkPaid}
                 handlers={handlers}
-                publishedInApp={publishedDriverIds?.has(row.driverId)}
+                publishedInApp={rowPublishedInApp(row)}
                 nfProgress={nfProgressByPayment?.get(row.paymentId)}
                 proofProgress={proofProgressByPayment?.get(row.paymentId)}
                 pagamento={pagamentoByPayment?.get(row.paymentId)}
@@ -626,7 +647,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                 {row.groupName}
               </span>
             ) : null}
-            {publishedDriverIds?.has(row.driverId) && (
+            {rowPublishedInApp(row) && (
               <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap inline-flex items-center gap-1">
                 <Smartphone className="w-3 h-3" /> no app
               </span>
@@ -915,7 +936,13 @@ export const DriverList: React.FC<DriverListProps> = ({
           // (validadas/esperadas — todos os membros compartilham o mesmo progresso, então
           // basta o de qualquer membro) e se o espelho do grupo já foi publicado no app.
           const groupNf = nfProgressByPayment?.get(groupRows[0]?.paymentId);
-          const groupPublished = groupRows.some((r) => publishedDriverIds?.has(r.driverId));
+          // 31/08/2026: usa a MESMA `rowPublicadoNoApp` do filtro/selo da linha, sobre TODOS
+          // os membros do grupo (`membrosPorGrupo`, não `groupRows` — que são só os que
+          // sobraram do filtro ativo; se filtrar de um jeito que esconda justo quem publicou,
+          // o cabeçalho dizia "não publicado" pro grupo inteiro mesmo com o espelho no ar).
+          const groupPublished = (membrosPorGrupo.get(name) ?? groupRows).some((r) =>
+            rowPublicadoNoApp(r, publishedDriverIds ?? EMPTY_SET, publishedGroups ?? EMPTY_SET),
+          );
           const platCounts = platforms
             .map((pl) => ({ pl, n: groupRows.reduce((s, r) => s + platformPackages(r, pl.name), 0) }))
             .filter((x) => x.n > 0);
