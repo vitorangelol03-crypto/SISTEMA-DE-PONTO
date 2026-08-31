@@ -51,6 +51,36 @@ function calcDistance(
   return Math.round(R * c);
 }
 
+// ── Facial 1:1 no servidor (31/08/2026) ───────────────────────────────────────
+// Mesma conta e mesmo limite do navegador (faceapi.euclideanDistance < 0.5): o
+// descriptor do face-api são 128 números; o servidor reconfere a distância entre
+// o rosto do momento e o cadastrado. Conta pura, sem lib pesada no Deno.
+const FACE_THRESHOLD = 0.5;
+
+function euclideanDistance(a: number[], b: number[]): number {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    const d = a[i] - b[i];
+    sum += d * d;
+  }
+  return Math.sqrt(sum);
+}
+
+// Aceita array (jsonb) ou string JSON de 128 números finitos; qualquer outra coisa → null.
+function parseDescriptor(raw: unknown): number[] | null {
+  let arr: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(arr) || arr.length !== 128) return null;
+  const nums = arr.map(Number);
+  return nums.every((n) => Number.isFinite(n)) ? nums : null;
+}
+
 function calcHours(
   entry: Date,
   exit: Date,
@@ -131,6 +161,7 @@ Deno.serve(async (req: Request) => {
       accuracy,
       company_id: bodyCompanyId,
       marking_position: markingPositionRaw,
+      face_descriptor_now: faceDescriptorNow,
     } = await req.json();
 
     if (!employee_id || !cpf || !clock_type) {
@@ -180,7 +211,7 @@ Deno.serve(async (req: Request) => {
     // Verify employee exists, CPF matches, capture canonical company_id
     const { data: emp, error: empErr } = await supabase
       .from("employees")
-      .select("id, cpf, company_id")
+      .select("id, cpf, company_id, face_descriptor, face_registered")
       .eq("id", employee_id)
       .single();
 
@@ -213,7 +244,7 @@ Deno.serve(async (req: Request) => {
     // Resolve geo config: companies.default_geo_* (base) + geolocation_config (override por empresa)
     const { data: company } = await supabase
       .from("companies")
-      .select("default_geo_lat, default_geo_lng, default_geo_radius")
+      .select("default_geo_lat, default_geo_lng, default_geo_radius, require_facial_clock")
       .eq("id", effectiveCompanyId)
       .maybeSingle();
 
@@ -253,6 +284,61 @@ Deno.serve(async (req: Request) => {
 
     const today = getBrazilDateString();
     const now = new Date().toISOString();
+
+    // ── Trava dura da facial (por empresa; decisões do Victor 31/08) ───────────
+    // require_facial_clock=false (padrão) → nada muda. true → o servidor confere o
+    // rosto do momento contra o cadastrado (1:1, distância < FACE_THRESHOLD) em TODA
+    // batida; quem ainda não tem rosto tem o rosto do momento cadastrado UMA vez.
+    const strictFacial = company.require_facial_clock === true;
+    if (strictFacial) {
+      const enrolled = parseDescriptor(emp.face_descriptor);
+      const fresh = parseDescriptor(faceDescriptorNow);
+      if (!enrolled) {
+        // 1ª vez de quem não tem rosto: cadastra o rosto enviado (uma vez) e segue.
+        if (!fresh) {
+          return new Response(
+            JSON.stringify({ success: false, face_error: true, message: "Cadastre o rosto para bater ponto" }),
+            { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+          );
+        }
+        const { error: enrErr } = await supabase
+          .from("employees")
+          .update({
+            face_descriptor: fresh,
+            face_registered: true,
+            face_registered_at: now,
+            face_reset_requested: false,
+          })
+          .eq("id", employee_id);
+        if (enrErr) {
+          return new Response(
+            JSON.stringify({ error: enrErr.message }),
+            { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+          );
+        }
+        // Rosto cadastrado agora — segue a batida (nesta 1ª vez não há com o que comparar).
+      } else {
+        if (!fresh) {
+          return new Response(
+            JSON.stringify({ success: false, face_error: true, message: "Rosto não enviado" }),
+            { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+          );
+        }
+        const faceDistance = euclideanDistance(fresh, enrolled);
+        if (!(faceDistance < FACE_THRESHOLD)) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              face_error: true,
+              face_distance: faceDistance,
+              message: "Rosto não confere",
+            }),
+            { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+          );
+        }
+      }
+    }
+
     const hasCoords =
       latitude != null && longitude != null && isFinite(latitude) && isFinite(longitude);
 
@@ -428,6 +514,21 @@ Deno.serve(async (req: Request) => {
         }
         // Marcações 2/3/4 fora da área: deixa passar com geoValid=false.
       }
+    }
+
+    // Trava dura: sob require_facial_clock, geo inválida recusa em QUALQUER batida.
+    // A 1ª entrada já foi recusada acima (bloqueio + bonus_block); aqui pega as
+    // posições 2/3/4 e a saída legacy, que no modo legado "deixavam passar".
+    if (strictFacial && !geoValid) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          fraud: true,
+          distance_meters: hasCoords ? distance : null,
+          message: hasCoords ? `Fora da área permitida (${distance}m)` : "Localização não fornecida",
+        }),
+        { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
     }
 
     // Geo válida (ou marcação ≠ primeira entrada com geo aceito) — grava o ponto.
