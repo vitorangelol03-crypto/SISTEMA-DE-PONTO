@@ -1528,6 +1528,42 @@ export function plataformasPagasDoGrupo(
   return { iguais, plataformas: iguais ? [...situacoes[0].pagas] : uniao };
 }
 
+/** Resumo do selo de pagamento do cabeçalho de um GRUPO (ver situacaoPagamentoDoGrupo). */
+export interface SituacaoPagamentoDoGrupo {
+  /** Membros com pagamento concluído. */
+  pagos: number;
+  /** Membros que têm o que receber (ignora quem não tem pacote). */
+  total: number;
+  /** Todos os membros com pacote já foram pagos. */
+  todos: boolean;
+  /** Situações consideradas (pra nomear as plataformas via plataformasPagasDoGrupo). */
+  situacoes: PagamentoDoDriver[];
+}
+
+/**
+ * Situação de pagamento de um GRUPO a partir dos seus membros (31/08/2026).
+ *
+ * 🔑 Recebe TODOS os membros do grupo — não só os que passaram no filtro da tela. Com o
+ * filtro "Já pagos" ligado só sobram os pagos, e contar só eles fazia o cabeçalho dizer
+ * "todos os membros já foram pagos" com membros não pagos escondidos (caso real: grupo com
+ * 1 pago e 5 não pagos somando R$ 20 mil aparecia como "✓ pago"). Relato do Victor em
+ * 20/08 ("filtro de pago mostrando quem não deveria").
+ *
+ * `null` = sem selo: ninguém do grupo tem pacote, ou ninguém foi pago ainda.
+ */
+export function situacaoPagamentoDoGrupo(
+  membros: readonly { paymentId: string }[],
+  pagamentoByPayment: ReadonlyMap<string, PagamentoDoDriver>,
+): SituacaoPagamentoDoGrupo | null {
+  const situacoes = membros
+    .map((r) => pagamentoByPayment.get(r.paymentId))
+    .filter((x): x is PagamentoDoDriver => !!x && x.estado !== 'sem_pacote');
+  if (situacoes.length === 0) return null;
+  if (situacoes.every((x) => x.estado === 'pendente')) return null;
+  const pagos = situacoes.filter((x) => x.estado === 'concluido').length;
+  return { pagos, total: situacoes.length, todos: pagos === situacoes.length, situacoes };
+}
+
 // ── FILTRO "PAGOS × NÃO PAGOS" (05/08/2026, pedido do Victor) ───────────────
 // A tag "pagamento concluído" já existia na grade; faltava poder filtrar por ela.
 //

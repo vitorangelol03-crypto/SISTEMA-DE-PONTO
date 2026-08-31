@@ -2223,6 +2223,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         ) : (
           <DriverList
             rows={filteredRows}
+            allRows={rows}
             platforms={platforms}
             expanded={expanded}
             view={view}

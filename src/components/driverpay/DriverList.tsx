@@ -31,6 +31,7 @@ import {
   compararPorCriterios,
   toggleSortCriteria,
   plataformasPagasDoGrupo,
+  situacaoPagamentoDoGrupo,
   resumirPlataformas,
   contagemDoCriterio,
   type SortCriterion,
@@ -47,6 +48,12 @@ import {
 
 interface DriverListProps {
   rows: DriverRowData[];
+  /**
+   * TODAS as linhas do período, ANTES do filtro da tela (31/08/2026). O cabeçalho do
+   * grupo usa isto pra contar os membros escondidos pelo filtro — com "Já pagos" ligado,
+   * contar só `rows` dizia "todos pagos" num grupo com 5 membros não pagos. Ausente = `rows`.
+   */
+  allRows?: DriverRowData[];
   platforms: DriverPlatform[];
   expanded: Set<string>;
   view: 'list' | 'groups';
@@ -109,6 +116,7 @@ function sumTotals(rows: DriverRowData[]): Totals {
 
 export const DriverList: React.FC<DriverListProps> = ({
   rows,
+  allRows,
   platforms,
   expanded,
   view,
@@ -135,6 +143,18 @@ export const DriverList: React.FC<DriverListProps> = ({
   /** O grupo do driver está selecionado? (checkbox dele fica marcado e travado) */
   const rowGroupSelected = (row: DriverRowData): boolean =>
     !!selGroups?.has(row.groupName ?? NO_GROUP);
+
+  /** Membros COMPLETOS de cada grupo (antes do filtro) — pro selo de pagamento do cabeçalho. */
+  const membrosPorGrupo = useMemo(() => {
+    const m = new Map<string, DriverRowData[]>();
+    for (const row of allRows ?? rows) {
+      const key = row.groupName ?? NO_GROUP;
+      const bucket = m.get(key);
+      if (bucket) bucket.push(row);
+      else m.set(key, [row]);
+    }
+    return m;
+  }, [allRows, rows]);
   // Ordenacao pelo cabecalho: 1 clique = maior→menor (desc), 2 cliques = menor→maior
   // (asc), 3 cliques = desativa. So reordena (mostra todos), nao esconde ninguem.
   //
@@ -953,14 +973,12 @@ export const DriverList: React.FC<DriverListProps> = ({
                         porque o dinheiro da linha do líder cobre todos eles. */}
                     {(() => {
                       if (!pagamentoByPayment) return null;
-                      const sits = groupRows
-                        .map((r) => pagamentoByPayment.get(r.paymentId))
-                        .filter((x): x is PagamentoDoDriver => !!x && x.estado !== 'sem_pacote');
-                      if (sits.length === 0) return null;
-                      const pagos = sits.filter((x) => x.estado === 'concluido').length;
-                      const nenhum = sits.every((x) => x.estado === 'pendente');
-                      if (nenhum) return null;
-                      const todos = pagos === sits.length;
+                      // 31/08/2026: conta TODOS os membros do grupo (membrosPorGrupo), não só
+                      // os que sobraram do filtro — com "Já pagos" ligado só restavam os pagos
+                      // e o cabeçalho dizia "todos pagos" com membros não pagos escondidos.
+                      const sit = situacaoPagamentoDoGrupo(membrosPorGrupo.get(name) ?? groupRows, pagamentoByPayment);
+                      if (!sit) return null;
+                      const { pagos, todos, situacoes: sits } = sit;
                       return (
                         <span
                           data-testid="selo-pago-grupo"
