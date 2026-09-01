@@ -789,5 +789,22 @@ certo, o teste que estava desatualizado.
 **Validado:** `npm run typecheck` 0 · `npm run lint` 0 · **suíte inteira
 `tests/101-supremo-pn.spec.ts` rodada local com dev server quente: 24 passed + 1 flaky
 (A1, login/CompanySelector — flake de cold-start já conhecido, não relacionado; passou
-no retry) — F1 agora verde.** Commit de fix + push novo; CI re-conferido no final desta
-leva.
+no retry) — F1 agora verde.**
+
+### 24.3 ✅ Fechado — CI verde nos 3 jobs, Vercel conferida por conteúdo
+
+Push `1e38f9b` (fix do `tests/101-supremo-pn`): **CI run 33539665356 — `tsc + eslint`,
+`vitest (unit)` e `playwright (e2e)` verdes os 3** (o `playwright`, que tinha falhado no
+push anterior, agora passou limpo — prova que o fix resolveu de verdade, não só local).
+**Vercel conferida por conteúdo** (sem precisar de token/CLI — só `curl` no bundle, mesmo
+método já usado em levas anteriores): `index-DNqz6Xue.js` servido em produção
+(`sistema-ponto-zeta.vercel.app`) é **byte-a-byte o mesmo hash** do `dist/index.html` do
+build local pós-fix — produção está com o código de verdade, incluindo a aba Funcionários
+nova.
+
+**Resumo da leva toda (§24-§24.3):** 3 pushes (`3999433` feature, `4431102` fix de tipo
+pego pelo CI, `1e38f9b` fix de teste desatualizado). Os dois problemas que o CI pegou
+NÃO eram bug de produto — um foi eu usando o comando de typecheck errado (memória nova
+gravada pra não repetir) e o outro foi um teste de uma leva anterior que não tinha sido
+atualizado depois de uma mudança de dado real em produção. A feature em si (aprovação
+embutida na aba Funcionários) não teve nenhum bug encontrado em nenhuma das 3 rodadas.

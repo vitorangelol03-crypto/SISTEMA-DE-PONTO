@@ -17,17 +17,17 @@
 > longe de onde um funcionário (Euder) tentava bater ponto — corrigida via SQL (igualada a
 > Caratinga, vale pros 6 funcionários de PN) **+ nova tela pra editar latitude/longitude de
 > qualquer empresa** (não existia, só dava pra mudar via SQL) **+ aba "Aprovação de Cadastro"
-> embutida na aba Funcionários** (`3999433`+`<próximo>`, pushado): form de edição rola até a
-> tela sozinho ao abrir; aprovar/recusar/reverter (só 2626) e o link público de cadastro agora
-> vivem dentro de Funcionários (badge Pendente/Recusado + toggle Ativos/Bloqueados); aba antiga
-> removida do menu de vez. 🔑 **`npx tsc --noEmit` (raiz) não pega erro nenhum neste projeto —
-> sempre usar `npm run typecheck`** (lição já documentada em §2.2 e esquecida de novo nesta
-> leva; CI pegou 1 erro de tipo real que passou local; corrigido e re-pushado — ver §24.1).
-> E2E 78+80 fechados 1/1 limpos rodando com o dev server mantido no ar entre execuções (cold
-> start de Vite era a causa da instabilidade, não o código). Detalhe completo em
-> `CHECKPOINT_SESSAO_2026-08-31.md` §14-§24.1. Pendências: §13 (2 e 3), §17.1, §18.3, §20.1,
-> §23 (`CHECKPOINT_PROXIMOS_PASSOS.md` §3), e decidir quando habilitar 4 batidas de verdade
-> pra todo mundo.
+> embutida na aba Funcionários** (`3999433`+`4431102`+`1e38f9b`, pushado, **CI verde nos 3 jobs,
+> Vercel conferida por conteúdo**): form de edição rola até a tela sozinho ao abrir;
+> aprovar/recusar/reverter (só 2626) e o link público de cadastro agora vivem dentro de
+> Funcionários (badge Pendente/Recusado + toggle Ativos/Bloqueados); aba antiga removida do
+> menu de vez. CI pegou 2 problemas no caminho (nenhum bug de produto): 🔑 **`npx tsc --noEmit`
+> (raiz) não pega erro nenhum neste projeto — sempre usar `npm run typecheck`** (lição já
+> documentada em §2.2 e esquecida de novo nesta leva; memória nova gravada) + `tests/101-supremo-pn`
+> F1 desatualizado desde a correção de geo de Ponte Nova de uma leva anterior (§23), corrigido.
+> Detalhe completo em `CHECKPOINT_SESSAO_2026-08-31.md` §14-§24.3. Pendências: §13 (2 e 3),
+> §17.1, §18.3, §20.1, §23 (`CHECKPOINT_PROXIMOS_PASSOS.md` §3), e decidir quando habilitar
+> 4 batidas de verdade pra todo mundo.
 
 ## 🎯 Estado atual (1 parágrafo)
 
