@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Truck, KeyRound, Loader2 } from 'lucide-react';
+import { Truck, KeyRound, Loader2, Archive, ArchiveRestore } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   Driver,
@@ -9,6 +9,7 @@ import {
   upsertDriverRate,
   getDriverRates,
   resetDriverPassword,
+  setDriverActive,
   listDriverNotaNames,
   addDriverNotaName,
   removeDriverNotaName,
@@ -38,6 +39,13 @@ interface DriverFormModalProps {
    * atropelar os overrides por rota.
    */
   onSaved: (driverId: string, rateChanges: DriverRateChange[]) => void | Promise<void>;
+  /**
+   * Chamado depois de arquivar/reativar (01/09/2026). Separado de `onSaved` de
+   * propósito: `onSaved`/`handleDriverSaved` reaplica taxa e pode abrir um
+   * confirm de "valor divergente da config" — ruído completamente fora de
+   * contexto pra uma ação de arquivar. Aqui só precisa recarregar a lista.
+   */
+  onArchived: () => void | Promise<void>;
 }
 
 const parseRate = (raw: string): number => {
@@ -55,6 +63,7 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
   hasPermission,
   onClose,
   onSaved,
+  onArchived,
 }) => {
   const [name, setName] = useState(driver?.name ?? '');
   const [route, setRoute] = useState(driver?.route ?? '');
@@ -115,8 +124,37 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
   );
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   const canConfigRate = hasPermission('driverpay.configRate');
+
+  // Arquivar (01/09/2026, pedido do Victor): soft-delete — driverpay_drivers.active=false.
+  // NÃO apaga nada: histórico de pagamento de quinzenas passadas fica intacto (o grid
+  // monta as linhas a partir de driverpay_payments, não da lista de drivers — arquivar
+  // só tira o driver de quinzenas NOVAS a partir de agora, via driverpay_create_period
+  // que já filtra active=true no preload). Reversível a qualquer momento.
+  const handleArchiveToggle = async () => {
+    if (!driver) return;
+    const willArchive = driver.active;
+    const msg = willArchive
+      ? `Arquivar ${driver.name}?\n\n` +
+        'Ele some das quinzenas novas a partir de agora (não entra mais automaticamente) ' +
+        'e some da lista de nomes reconhecidos ao importar planilha. O histórico de ' +
+        'pagamentos já feitos continua intacto — nada é apagado. Dá pra reverter depois.'
+      : `Reativar ${driver.name}?\n\nEle volta a entrar automaticamente nas quinzenas novas.`;
+    if (!window.confirm(msg)) return;
+    setArchiving(true);
+    try {
+      await setDriverActive(driver.id, !willArchive, userId);
+      toast.success(willArchive ? 'Driver arquivado' : 'Driver reativado');
+      await onArchived();
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao arquivar/reativar');
+    } finally {
+      setArchiving(false);
+    }
+  };
 
   // Reset de senha do app: apaga a auth -> volta pro 1234 (troca no próximo acesso) e destrava.
   const handleResetPassword = async () => {
@@ -241,21 +279,45 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
     <ModalShell
       icon={<Truck className="w-5 h-5" />}
       title={mode === 'create' ? 'Novo driver' : 'Editar driver'}
-      subtitle={mode === 'create' ? 'Cadastrar entregador' : name}
+      subtitle={
+        mode === 'create'
+          ? 'Cadastrar entregador'
+          : driver && !driver.active
+            ? `${name} · 🗄️ Arquivado`
+            : name
+      }
       onClose={onClose}
       footer={
         <>
           {mode === 'edit' && driver && (
-            <button
-              type="button"
-              onClick={handleResetPassword}
-              disabled={resetting || saving}
-              title="Volta a senha do app pro 1234 (o driver cria uma nova no próximo acesso)"
-              className="mr-auto px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 text-sm font-medium min-h-[40px] inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
-              Resetar senha
-            </button>
+            <div className="mr-auto flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleResetPassword}
+                disabled={resetting || saving || archiving}
+                title="Volta a senha do app pro 1234 (o driver cria uma nova no próximo acesso)"
+                className="px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 text-sm font-medium min-h-[40px] inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                Resetar senha
+              </button>
+              <button
+                type="button"
+                onClick={handleArchiveToggle}
+                disabled={resetting || saving || archiving}
+                title={driver.active ? 'Some das quinzenas novas — histórico fica intacto, reversível' : 'Volta a entrar nas quinzenas novas'}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium min-h-[40px] inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {archiving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : driver.active ? (
+                  <Archive className="w-4 h-4" />
+                ) : (
+                  <ArchiveRestore className="w-4 h-4" />
+                )}
+                {driver.active ? 'Arquivar' : 'Reativar'}
+              </button>
+            </div>
           )}
           <button
             type="button"

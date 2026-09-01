@@ -2269,6 +2269,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           hasPermission={hasPermission}
           onClose={() => setFormModal(null)}
           onSaved={handleDriverSaved}
+          onArchived={refresh}
         />
       )}
 
