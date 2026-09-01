@@ -766,3 +766,28 @@ de antes — não só a carga da máquina): `tests/80` **1/1 limpo**, `tests/78`
 (sem retry) — a suspeita de flake genuíno caiu; era cold-start de Vite competindo com a
 máquina ocupada, não o código. Commit de fix + push novo, checkpoint atualizado de novo
 com o resultado real.
+
+### 24.2 🔴 CI (job `playwright`) achou um 2º problema — teste desatualizado de uma leva ANTERIOR desta sessão
+
+Com o job `tsc + eslint` verde, o job `playwright (e2e)` (VM limpa do GitHub, roda a
+suíte "essencial") falhou em **`tests/101-supremo-pn.spec.ts` F1** (`geolocation_config
+PN tem lat/lng/raio corretos`): esperava a latitude ANTIGA de Ponte Nova
+(`-20.3908557`) e recebeu `-19.8024282`. 🔑 **Não é regressão desta leva** — é
+consequência de uma mudança de dado real da leva anterior (§23, commit `b1cd717`,
+mesma sessão): Ponte Nova estava 100km longe de onde os funcionários de verdade
+trabalham (achado do Euder), corrigida via SQL igualando a localização de Caratinga.
+Aquela leva validou com `tests/41` + `tests/34`, mas **não rodou `tests/101-supremo-pn`**
+— o teste ficou com a coordenada velha hardcoded e só quebrou agora, na primeira vez que
+o job `playwright` do CI rodou depois daquele push. Conferido direto em produção (SQL)
+antes de mexer: `geolocation_config` e `companies.default_geo_lat/lng` de Ponte Nova
+**são**, hoje, idênticos aos de Caratinga (`-19.8024282, -42.1361237`) — é o estado
+certo, o teste que estava desatualizado.
+
+**Fix:** `tests/101-supremo-pn.spec.ts` F1 atualizado pra esperar a coordenada nova
+(comentário no teste explica o porquê, com data e link pro achado do Euder).
+
+**Validado:** `npm run typecheck` 0 · `npm run lint` 0 · **suíte inteira
+`tests/101-supremo-pn.spec.ts` rodada local com dev server quente: 24 passed + 1 flaky
+(A1, login/CompanySelector — flake de cold-start já conhecido, não relacionado; passou
+no retry) — F1 agora verde.** Commit de fix + push novo; CI re-conferido no final desta
+leva.

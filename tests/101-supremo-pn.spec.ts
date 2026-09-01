@@ -527,8 +527,12 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
         .eq('company_id', PN_ID)
         .single();
 
-      expect(Number(data?.latitude)).toBeCloseTo(-20.3908557, 5);
-      expect(Number(data?.longitude)).toBeCloseTo(-42.8616382, 5);
+      // 01/09/2026: Ponte Nova estava 100km longe de onde os funcionários reais
+      // trabalham — corrigido igualando à localização de Caratinga (achado real
+      // de produção, funcionário Euder não conseguia bater ponto). Coordenadas
+      // antigas da PN (-20.3908557, -42.8616382) não são mais as certas.
+      expect(Number(data?.latitude)).toBeCloseTo(-19.8024282, 5);
+      expect(Number(data?.longitude)).toBeCloseTo(-42.1361237, 5);
       expect(data?.allowed_radius_meters).toBe(150);
       expect(data?.block_outside).toBe(true);
     });
