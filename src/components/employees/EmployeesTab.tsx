@@ -1379,12 +1379,20 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Tipo de Vínculo
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Chave PIX
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  PIN
-                </th>
+                {registrationView === 'bloqueados' ? (
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Motivo
+                  </th>
+                ) : (
+                  <>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Chave PIX
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      PIN
+                    </th>
+                  </>
+                )}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Cadastrado em
                 </th>
@@ -1424,11 +1432,6 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                         </span>
                       )}
                     </div>
-                    {canViewApproval && employee.registration_status === 'rejected' && employee.registration_notes && (
-                      <p className="text-xs text-red-600 italic mt-0.5 max-w-xs">
-                        Motivo: {employee.registration_notes}
-                      </p>
-                    )}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500 flex items-center gap-1">
@@ -1449,40 +1452,50 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                       <span className="text-sm text-gray-400">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">
-                      {employee.pix_key || '-'}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      {employee.pin_configured ? (
-                        <span className="text-sm font-medium text-green-700">Configurado ✓</span>
-                      ) : (
-                        <span className="text-sm text-gray-400 italic">Não configurado</span>
-                      )}
-                      {hasPermission('employees.edit') && (
-                        <>
-                          <button
-                            onClick={() => { setPinModal({ employee }); setPinInput(''); }}
-                            className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                            title="Definir PIN"
-                          >
-                            <KeyRound className="w-3.5 h-3.5" />
-                          </button>
-                          {employee.pin_configured && (
-                            <button
-                              onClick={() => setResetModal({ employee })}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
-                              title="Resetar PIN"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
+                  {registrationView === 'bloqueados' ? (
+                    <td className="px-4 py-4 max-w-xs">
+                      <p className="text-sm text-red-600 italic break-words">
+                        {employee.registration_notes || '-'}
+                      </p>
+                    </td>
+                  ) : (
+                    <>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {employee.pix_key || '-'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {employee.pin_configured ? (
+                            <span className="text-sm font-medium text-green-700">Configurado ✓</span>
+                          ) : (
+                            <span className="text-sm text-gray-400 italic">Não configurado</span>
                           )}
-                        </>
-                      )}
-                    </div>
-                  </td>
+                          {hasPermission('employees.edit') && (
+                            <>
+                              <button
+                                onClick={() => { setPinModal({ employee }); setPinInput(''); }}
+                                className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                                title="Definir PIN"
+                              >
+                                <KeyRound className="w-3.5 h-3.5" />
+                              </button>
+                              {employee.pin_configured && (
+                                <button
+                                  onClick={() => setResetModal({ employee })}
+                                  className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                                  title="Resetar PIN"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </>
+                  )}
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">
                       {new Date(employee.created_at).toLocaleDateString('pt-BR')}
