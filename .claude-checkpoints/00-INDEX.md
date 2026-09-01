@@ -2,14 +2,19 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-08-31**.
+> Última atualização: **2026-09-01** (sessão iniciada 31/08, atravessou a virada).
 
-> ✅ **Retomado 31/08 (nova sessão, mesma data): roadmap item 1 FECHADO — facial obrigatória
-> LIGADA nas DUAS empresas** a pedido do Victor. Ponte Nova (1 sem rosto) e depois Caratinga
-> (achado: dos "32 sem rosto" só 4 são `approved` de verdade — os outros 28 já são `rejected`
-> e nem chegam na facial, bloqueados antes). Sem código novo, só UPDATE em prod (conferido
-> antes e depois nas duas) — edge fn e frontend já validados na leva anterior. Detalhe em
-> `CHECKPOINT_SESSAO_2026-08-31.md` §14-§15. Restam as pendências 2 e 3 do §13 (mesmo arquivo).
+> ✅ **Sessão 31/08→01/09: roadmap item 1 FECHADO** (facial obrigatória ligada nas duas
+> empresas) **+ aba Aprovação de Cadastro ganhou reverter decisão em qualquer sentido**
+> (`25cd77b`, pushado, CI verde, Vercel conferida). Achado no meio: `Arthur` estava `approved`
+> com a mesma nota dos 27 `rejected` de Caratinga — a aba só deixava decidir a partir do
+> filtro "Pendente", sem volta. Botões agora existem nos 3 filtros (aprovado↔recusado nos
+> dois sentidos, com confirm). E2E novo `tests/80`. 🔑 No meio da validação, achado (mostrado
+> ao Victor antes de mexer) um teste flaky intermitente pré-existente
+> (`edgeFnClockFacialGeoEstrito.spec.ts`, não é regressão de hoje — já tinha falhado num CI
+> de commit anterior à sessão) — registrado como pendência técnica, não corrigido (fora de
+> escopo). Detalhe em `CHECKPOINT_SESSAO_2026-08-31.md` §14-§17. Restam as pendências 2 e 3
+> do §13 (mesmo arquivo) + o item novo de §17.1 (`CHECKPOINT_PROXIMOS_PASSOS.md` §3).
 
 ## 🎯 Estado atual (1 parágrafo)
 

@@ -414,3 +414,60 @@ atendido. Os 28 recusados continuam barrados como antes.
 `approved` mas com nota "não esta indo trabalhar" — mesma frase dos 27 rejeitados, mas
 ficou como aprovado. Pode ser inconsistência de quem revisou; avisar o Victor, não corrigir
 sem ele confirmar (ele decide status de cadastro, não eu).
+
+## 17. ✅ Aba Aprovação de Cadastro — reverter decisão em qualquer sentido (`25cd77b`, pushado, CI verde, Vercel confirmada)
+
+Puxando o fio do achado do Arthur (§16), Victor pediu pra corrigir: "não só quem tá marcado
+como recusado que fica bloqueado... coloca também uma forma de reverter esse bloqueio".
+
+**Causa raiz lida no código** (`EmployeeApprovalTab.tsx`): os botões Aprovar/Recusar só
+apareciam com `filter === 'pending'` — uma vez decidido (aprovado OU recusado), a linha
+não tinha mais botão nenhum. Não existia caminho de UI pra reverter nada.
+
+**Fix:** botões agora aparecem nos 3 filtros — no filtro "Aprovado" só mostra "Recusar"
+(cobre o caso do Arthur e qualquer futuro parecido); no filtro "Recusado" só mostra
+"Reverter e aprovar". `handleDecision` ganhou confirm dialog também no sentido
+recusado→aprovado (antes só existia pra aprovado/pendente→recusado) — reverter um bloqueio
+merece a mesma pausa que aplicar um, ainda mais tendo achado 1 caso de fraude entre os
+recusados de Caratinga (§15). Reusa a mesma `updateEmployeeRegistrationStatus` de sempre
+(permissão + UPDATE), nenhum caminho novo no backend.
+
+**E2E novo `tests/80-aprovacao-reverter-bloqueio.spec.ts`:** cria funcionário fixture
+`approved`, recusa pelo botão novo no filtro Aprovado (confere DB), reverte pelo botão novo
+no filtro Recusado (confere DB) e finaliza confirmando no `/clock` real que o funcionário
+revertido **realmente desbloqueou** (cai no setup de PIN, não na mensagem de recusado).
+1/1. Regressão `tests/78` (fluxo pending→aprovar/recusar original) revalidada 1/1.
+
+**Validado:** typecheck 0 · eslint 0 · build limpo · E2E 78+80 · CI do push (`33466024676`)
+verde nos 3 jobs · Vercel conferida por conteúdo (`index-C6XMa3TU.js` idêntico local×prod).
+
+### 17.1 🔍 Episódio no meio da validação: teste flaky achado, mostrado ANTES de mexer
+
+Rodando a suíte unit completa apareceu 1 falha real em `edgeFnClockFacialGeoEstrito.spec.ts`
+("percorre o dia inteiro..."): `TypeError: Cannot read properties of undefined (reading
+'entry_1_time')` — a query de conferência não achou a linha de `attendance` esperada.
+Parei e mostrei o erro completo ao Victor (regra do projeto) antes de tocar em qualquer
+coisa — ele pediu pra investigar em vez de só seguir.
+
+**Investigação (sem mexer no teste nem no código dele):**
+1. Rodei o arquivo isolado → passou 1/1 limpo.
+2. Achei a causa mais provável: eu tinha deixado o **Vite dev server rodando em segundo
+   plano** (subido antes pro E2E) brigando por CPU com os workers do vitest no WSL — mesma
+   família dos flakes de "Timeout waiting for worker to respond" já documentados nos
+   checkpoints anteriores. Matei o processo e rodei a suíte inteira de novo: **87 arquivos,
+   1344 passed, 1 skipped, 0 falhas, 0 erros de worker.**
+3. Achado extra, mais importante: esse MESMO teste já tinha falhado com o MESMO erro **no
+   CI do GitHub**, num run de um commit de ANTES desta sessão (`1af2193`, run
+   `33456819989`, 21:57 de 31/08 — commit de doc puro, sem nenhuma mudança minha de hoje).
+   Runner do GitHub é uma VM limpa, sem meu dev server e sem qualquer contenção do WSL —
+   ou seja, a causa não é só o dev server local. **Conclusão: é uma flakiness intermitente
+   pré-existente desse teste específico**, provável corrida entre a escrita da edge fn
+   (`clock-in-validated`) e a leitura via REST logo em seguida (read-after-write), não uma
+   regressão de hoje nem bug de produto. Passou limpo de novo tanto local (isolado e na
+   suíte completa) quanto no CI do push atual (`33466024676`).
+
+**Não mexido** (fora do escopo desta leva, que era só a aba de Aprovação): registrar como
+pendência técnica pra próxima sessão que tocar em `edgeFnClockFacialGeoEstrito.spec.ts` ou
+na edge fn `clock-in-validated` — considerar um retry/wait curto antes do SELECT final de
+conferência, ou investigar se há lag real de consistência entre a escrita da fn e a leitura
+via PostgREST.

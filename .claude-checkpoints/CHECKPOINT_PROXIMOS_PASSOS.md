@@ -151,6 +151,11 @@ sempre vermelhos por isso). Caminho: aplicar **localmente** com lock regenerado 
 - `tests/101` positivo ("abas que vê") ainda usa `.first().toBeVisible()` — ok hoje.
 - CI dos PRs do Dependabot sem secrets (decisão: cadastrar em Dependabot secrets ou aceitar).
 - `SSF.format` não entende o `BRL_FMT` (sem efeito no Excel; só CSV cru) — não mexer.
+- `tests/unit/edgeFnClockFacialGeoEstrito.spec.ts` é flaky intermitente (falhou igual local e
+  no CI em duas ocasiões distintas, inclusive num commit sem nenhuma mudança relacionada —
+  ver `CHECKPOINT_SESSAO_2026-08-31.md` §17.1): `att` vem `undefined` na conferência final de
+  `attendance`. Suspeita: corrida entre a escrita da edge fn `clock-in-validated` e a leitura
+  via REST logo em seguida (read-after-write). Considerar retry/wait curto no SELECT final.
 
 ---
 
