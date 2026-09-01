@@ -173,6 +173,10 @@ sempre vermelhos por isso). Caminho: aplicar **localmente** com lock regenerado 
   hoje porque toda função que chama o recalc já calcula `hours_worked` ela mesma antes (achado
   ao implementar `setManualTimeFourMarkings`, que corrigiu isso calculando direto). Vale
   entender se os dois sistemas paralelos (horas legadas vs. minutos novos) deveriam convergir.
+- `tests/34-company-settings.spec.ts` teste "Switch empresa (CT → PN) atualiza title" falha
+  de forma reproduzível (2/2, inclusive isolado). **Confirmado via `git stash`** que já
+  falhava ANTES da leva de 01/09 (feature de editar lat/lng) — não relacionado, pré-existente.
+  Não investigado a fundo. Ver `CHECKPOINT_SESSAO_2026-08-31.md` §23.
 
 ---
 

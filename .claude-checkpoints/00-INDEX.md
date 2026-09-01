@@ -12,10 +12,14 @@
 > (não existia nenhum jeito de corrigir um erro — fechado, `setManualTimeFourMarkings`) **+
 > arquivar/reativar driver** (soft-delete, backend já existia pronto, só faltava o botão).
 > `/clock` confirmado funcionando pro pessoal real o tempo todo (Vercel conferida, CI limpo).
-> Supabase CLI vinculado localmente (`supabase link`), próximos deploys sem flag. Detalhe
-> completo em `CHECKPOINT_SESSAO_2026-08-31.md` §14-§21. Pendências: §13 (2 e 3), §17.1,
-> §18.3, §20.1 (`CHECKPOINT_PROXIMOS_PASSOS.md` §3), e decidir quando habilitar 4 batidas de
-> verdade pra todo mundo.
+> Supabase CLI vinculado localmente (`supabase link`), próximos deploys sem flag. **+ achado e
+> fechado achado real de produção**: Ponte Nova estava com a localização configurada 100km
+> longe de onde um funcionário (Euder) tentava bater ponto — corrigida via SQL (igualada a
+> Caratinga, vale pros 6 funcionários de PN) **+ nova tela pra editar latitude/longitude de
+> qualquer empresa** (não existia, só dava pra mudar via SQL). Detalhe completo em
+> `CHECKPOINT_SESSAO_2026-08-31.md` §14-§23. Pendências: §13 (2 e 3), §17.1, §18.3, §20.1, §23
+> (`CHECKPOINT_PROXIMOS_PASSOS.md` §3), e decidir quando habilitar 4 batidas de verdade pra
+> todo mundo.
 
 ## 🎯 Estado atual (1 parágrafo)
 

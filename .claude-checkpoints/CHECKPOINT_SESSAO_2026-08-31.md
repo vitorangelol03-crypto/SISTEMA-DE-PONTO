@@ -647,3 +647,51 @@ sentidos pelo navegador real (arquiva → banco confirma `active=false` → reab
 2/2 · suíte unit completa **1345 passed**.
 
 **Push único (`16caeea..c4a96f1`) das duas features.**
+
+## 22. ✅ Cadastro do Victor Angelo conferido + presença de teste inserida
+
+Vitor pediu pra checar o cadastro de "Victor Angelo" (um dos 3 pilotos de 4 marcações).
+Achado: o CPF cadastrado (`12232625613`) é **exatamente o `TEST_EMPLOYEE_CPF`** usado por
+`tests/02`, `tests/10` e `tests/48` (comentário no próprio código: "Victor Angelo é o
+funcionário garantido") — explica os cliques em sequência de segundos vistos antes (era a
+suíte de teste rodando, não trabalho real). `marking_count=4` foi setado manualmente (não
+por nenhum teste), presumivelmente pra experimentar a feature.
+
+A pedido dele, inseri uma presença de teste (sexta 28/08 22:00 → sábado 29/08 06:00, 8h,
+7h noturnas, sem almoço) — confirmei ANTES que o padrão real do time (Caratinga, dia
+28-29/08) é madrugada (~02:30-10:00, dentro do mesmo dia, sem atravessar meia-noite) e
+perguntei via `AskUserQuestion` como ele queria a semântica de "sexta pra sábado" dado esse
+achado — ele escolheu 1 registro atravessando a meia-noite de verdade (exemplo que sugeri).
+
+## 23. 🔴 Achado urgente + fechado: Ponte Nova 100km longe de onde o funcionário real estava
+
+Vitor mandou print de WhatsApp: o funcionário Euder (Ponte Nova) tentando bater ponto,
+recebendo "Fora da área permitida (100108m)". Medi a distância real entre as coordenadas
+cadastradas de Caratinga e Ponte Nova: **100.104m — bate exato** com o erro (4m de folga,
+ruído de GPS). Confirmado: Euder estava fisicamente em Caratinga, mas o sistema comparava
+contra a localização de Ponte Nova.
+
+**Fechado em duas partes:**
+1. **Urgente, via SQL** (antes de qualquer código): `default_geo_lat/lng` de Ponte Nova
+   passou a ser igual ao de Caratinga, nos dois lugares que o edge fn consulta
+   (`companies` + `geolocation_config`). **Vale pra TODOS os 6 funcionários de Ponte Nova**,
+   não só o Euder — avisei o Victor disso antes de aplicar.
+2. **A pedido dele** ("e a possibilidade de alterar qualquer um dos dois de um jeito rápido
+   fácil e prático"): construída a tela que faltava. Achado: `CompanySettings.tsx` já tinha
+   os campos de lat/lng, mas `disabled` com a nota "editada em outra tela" — tela que **não
+   existia em lugar nenhum do app** (só dava pra mudar via SQL direto, como acabei de fazer).
+   `updateGeoLocation` (database.ts) grava lat/lng/raio nos dois lugares (companies +
+   geolocation_config) com validação (-90..90 / -180..180). Campos liberados na tela.
+
+`tests/41-company-settings-save.spec.ts` reescrito: o teste 5 antigo **validava
+explicitamente que lat/lng não podiam ser editados** — reescrito pra provar a edição de
+verdade (2 empresas conferidas: grava em `companies` E `geolocation_config`) + um teste
+novo de validação (latitude inválida bloqueia o save, não grava nada).
+
+**Achado no caminho, pendência técnica registrada (não é regressão de hoje):**
+`tests/34-company-settings.spec.ts` teste "Switch empresa (CT → PN) atualiza title" falha
+de forma reproduzível (2/2). **Confirmado via `git stash`** que já falhava com o código de
+ANTES desta mudança — não relacionado à feature. Não investigado a fundo (fora de escopo).
+
+Validado: typecheck 0 · eslint 0 · build limpo · E2E `tests/41` (7 testes) + `tests/34`
+(isolado, exceto o pré-existente) · suíte unit completa **1345 passed**. Push `b1cd717`.
