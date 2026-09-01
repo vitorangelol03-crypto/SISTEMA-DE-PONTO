@@ -126,9 +126,15 @@ export const EmployeeApprovalTab: React.FC<EmployeeApprovalTabProps> = ({ userId
   };
 
   const handleDecision = async (employee: Employee, status: 'approved' | 'rejected') => {
+    const currentStatus = employee.registration_status ?? 'pending';
     if (status === 'rejected') {
       const confirmed = window.confirm(
         `Recusar o cadastro de ${employee.name}? Isso bloqueia o funcionário no próximo ponto.`
+      );
+      if (!confirmed) return;
+    } else if (currentStatus === 'rejected') {
+      const confirmed = window.confirm(
+        `Reverter o bloqueio de ${employee.name} e aprovar de novo? Ele volta a poder bater ponto.`
       );
       if (!confirmed) return;
     }
@@ -271,15 +277,21 @@ export const EmployeeApprovalTab: React.FC<EmployeeApprovalTabProps> = ({ userId
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-green-500 focus:outline-none resize-none"
               />
 
-              {filter === 'pending' && (
-                <div className="flex gap-2">
+              {/* Botões nos 3 filtros (31/08): decisão de aprovar/recusar não é
+                  definitiva — dá pra reverter depois em qualquer direção
+                  (ex.: aprovado que some do trabalho vira recusado; recusado
+                  por engano volta a aprovado, desbloqueando o ponto). */}
+              <div className="flex gap-2">
+                {filter !== 'approved' && (
                   <button
                     onClick={() => handleDecision(emp, 'approved')}
                     disabled={!canApprove || savingId === emp.id}
                     className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    Aprovar
+                    {filter === 'rejected' ? 'Reverter e aprovar' : 'Aprovar'}
                   </button>
+                )}
+                {filter !== 'rejected' && (
                   <button
                     onClick={() => handleDecision(emp, 'rejected')}
                     disabled={!canReject || savingId === emp.id}
@@ -287,8 +299,8 @@ export const EmployeeApprovalTab: React.FC<EmployeeApprovalTabProps> = ({ userId
                   >
                     Recusar
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           ))}
         </div>
