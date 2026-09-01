@@ -802,6 +802,78 @@ método já usado em levas anteriores): `index-DNqz6Xue.js` servido em produçã
 build local pós-fix — produção está com o código de verdade, incluindo a aba Funcionários
 nova.
 
+## 25. ✅ Roadmap item 2 — 4 marcações preparadas pra TODO MUNDO (sem ligar), `c191648`
+
+Vitor pediu: "pode seguir pra quatro batidas ponto para todo mundo, só não ative ainda...
+já deixe tudo pronto pra eles poder, na hora que eu quiser eu ativo e funciona tudo
+perfeitamente." Auditoria de ponta a ponta (cadastro, edge fn, cálculo, aprovação,
+Financeiro, Relatórios, banco de horas) — a leva anterior (§18-20) só tinha provado com
+os 3 pilotos, todos com `marking_count` FIXO em 4, o que escondia dois problemas que só
+apareceriam ao ligar de verdade pra todo mundo:
+
+1. 🔴 **Achado mais sério**: a aba Ponto (`AttendanceTab.tsx`) decidia mostrar os 4 campos
+   de hora editáveis checando só `employee.marking_count === 4` — sem herdar o default da
+   empresa (`EmployeeClockIn.tsx` e `recalcAttendance` já faziam essa herança certo). No
+   dia em que a empresa ligasse, a maioria (que herda, `marking_count=null`) continuaria
+   vendo o campo antigo de Entrada/Saída na tela do supervisor, mesmo com as 4 marcações
+   sendo gravadas certinho pela batida real. Fix: `resolveMarkingCount()` extraído pra
+   `attendanceTabHelpers.ts` (módulo leve, sem puxar supabase — testável isolado) e usado
+   nos dois lugares (desktop + mobile).
+2. Import de planilha gravava o default ATUAL da empresa como valor FIXO no funcionário
+   quando a coluna vinha vazia (parecia inofensivo, mas travava a pessoa nesse número pra
+   sempre). **26 funcionários reais** (24 Caratinga + 2 Ponte Nova) de importações antigas
+   ficaram presos em "2 fixo" — normalizados pra NULL (herda) via SQL, backup em
+   `backups/2026-09-01-marking-count-normalizacao/antes.json` (local). Import corrigido
+   pra deixar sem valor quando a planilha não informa.
+
+Resto da auditoria (edge fn `clock-in-validated`, `recalcAttendance`,
+`approveAttendance`/`bulkApproveAttendance`, `setManualTimeFourMarkings`,
+Financeiro/Relatórios/C6Payment) já estava correto — leem os campos legados
+(`entry_time`/`exit_time_full`/`hours_worked`) que a batida real e a correção manual já
+espelham certo. Achado à parte, não é lacuna de escopo (pré-existente, afeta 2 e 4
+marcações igual): `night_additional` calculado na edge fn sempre dá 0 porque
+`attendance.daily_rate` não existe como coluna — o cálculo de payroll de verdade usa
+`payments.daily_rate` em outro lugar, não investigado a fundo (fora do pedido de hoje).
+
+**Estado final:** `companies.default_marking_count` continua **2** nas duas empresas —
+nada mudou pra ninguém hoje. O que muda: quando o Victor decidir ligar (`UPDATE companies
+SET default_marking_count=4`), literalmente TODO MUNDO passa a bater 4 marcações e a tela
+do supervisor mostra os campos certos pra qualquer um — não só quem tem valor fixo.
+
+Validado: typecheck 0 · eslint 0 · build limpo · suíte unit completa 1351 passed/1 skipped
+(+7 testes novos/atualizados) · E2E `tests/81` re-validado (refactor não quebrou o caminho
+de valor fixo, que já era usado pelos 3 pilotos).
+
+## 26. ✅ Dois achados ao vivo na aba Funcionários (mesma sessão), `416ec6a`
+
+Enquanto validava o item 25, Vitor reportou (com prints) dois problemas usando a aba
+Funcionários de verdade:
+
+1. **"quando clico para editar ele ainda não abre [rola] pra editar o funcionário"** —
+   causa raiz: o scroll automático pro formulário (leva de hoje mais cedo, §24) só
+   disparava no `useEffect([showForm])` na transição false→true. Clicar "Editar" num
+   OUTRO funcionário com o formulário JÁ aberto troca só os dados — `showForm` continua
+   `true`, o efeito não dispara de novo, e quem tinha rolado a página pra procurar o
+   próximo funcionário ficava preso lá embaixo. Fix: gatilho virou `formOpenSeq`, um
+   contador que incrementa em TODO clique de abrir (editar OU novo), não mais `showForm`.
+2. **"coloque os pendentes sempre em primeiro em amarelo"** — a lista misturava pendente
+   com aprovado em ordem alfabética simples. Sort estável agora bota pendente sempre antes
+   de quem não é (só pro 2626, único que vê o badge — pra outros a ordem não muda),
+   preservando a ordem alfabética dentro de cada grupo; a linha inteira (desktop + mobile)
+   ganha fundo amarelo, não só o badge pequeno de antes.
+
+**E2E novo `tests/83`** (2 casos, 2/2 real no Chromium): (1) edita funcionário A, confirma
+que rola pro formulário; rola a página até o fim de propósito; edita funcionário B SEM
+fechar o form; confirma que rola de novo — prova o cenário exato do relato; (2) cria
+funcionário pendente fixture, confere que TODA linha antes dele na lista também é
+pendente/amarela (prova robusta a quantos pendentes reais existem em produção, não
+depende de contagem fixa) + confirma o fundo amarelo da própria linha.
+
+Validado: typecheck 0 · eslint 0 · build limpo · E2E `tests/83` 2/2.
+
+**Falta:** push (agrupar os 2 commits desta leva, `c191648` + `416ec6a`, num push só) +
+conferir CI/Vercel.
+
 **Resumo da leva toda (§24-§24.3):** 3 pushes (`3999433` feature, `4431102` fix de tipo
 pego pelo CI, `1e38f9b` fix de teste desatualizado). Os dois problemas que o CI pegou
 NÃO eram bug de produto — um foi eu usando o comando de typecheck errado (memória nova

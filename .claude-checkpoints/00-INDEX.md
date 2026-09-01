@@ -4,6 +4,16 @@
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 > Última atualização: **2026-09-01** (sessão iniciada 31/08, atravessou a virada).
 
+> ✅ **Roadmap item 2 (4 batidas) PREPARADO pra todo mundo, sem ligar ainda** (`c191648`):
+> pedido "deixe tudo pronto, na hora que eu ativar funciona perfeitamente". Auditoria achou
+> 2 lacunas reais que só apareceriam ao ligar de verdade — aba Ponto não herdava o default
+> da empresa pra decidir mostrar os 4 campos (só via pelos 3 pilotos com valor fixo) e 26
+> funcionários de imports antigos travados em "2 fixo" — ambas fechadas.
+> `default_marking_count` continua 2 nas duas empresas. **+ 2 achados ao vivo na aba
+> Funcionários** (`416ec6a`): scroll até o formulário não disparava ao trocar de
+> funcionário com ele já aberto (corrigido) + pendente agora sempre ordena primeiro, linha
+> em amarelo (só 2626). Detalhe em `CHECKPOINT_SESSAO_2026-08-31.md` §25-§26.
+
 > ✅ **Sessão 31/08→01/09: roadmap item 1 FECHADO** (facial obrigatória nas duas empresas) **+
 > aba Aprovação de Cadastro ganhou reverter decisão** (`25cd77b`) **+ roadmap item 2 (4
 > batidas) sem bloqueios técnicos restantes** — 2 bugs de cálculo achados/corrigidos/deployados
