@@ -16,7 +16,11 @@
 > confirmando Ponto/Relatórios/Financeiro funcionando pra quem herda as 4 marcações **+ 2
 > pedidos em cima da prova** (§28, `ed54e29`+`b64ede7`): coluna Intervalo (almoço) no
 > relatório (tela+PDF+Excel) e "Motivo: ..." do bloqueio agora aparece na aba Funcionários.
-> Detalhe em `CHECKPOINT_SESSAO_2026-08-31.md` §25-§28.
+> **+ prova em PRODUÇÃO com gente real** (§29, artifact) — sem fixture dessa vez. **+ Editar/
+> Novo Funcionário viraram popup FLUTUANTE de verdade** (§30, `75b87f4`): o conserto de
+> scroll-até-lá resolvia o sintoma errado; agora é modal real (mesmo padrão do modal de
+> PIN/Importar), e o bug original (trocar de funcionário sem fechar) fica impossível por
+> desenho. Detalhe em `CHECKPOINT_SESSAO_2026-08-31.md` §25-§30.
 
 > ✅ **Sessão 31/08→01/09: roadmap item 1 FECHADO** (facial obrigatória nas duas empresas) **+
 > aba Aprovação de Cadastro ganhou reverter decisão** (`25cd77b`) **+ roadmap item 2 (4

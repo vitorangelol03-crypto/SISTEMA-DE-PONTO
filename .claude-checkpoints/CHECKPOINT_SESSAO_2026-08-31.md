@@ -919,6 +919,46 @@ ao vivo (mesma técnica: empresa/funcionário fictícios, apagados depois):
 
 Validado: typecheck 0 · eslint 0 · build limpo nos dois · regressão `tests/06-reports`
 (5 testes, 1 flaky não relacionado) · verificação ao vivo de cada um com dado fictício
-real, apagado depois.
+real, apagado depois. Push `ed54e29`+`b64ede7`+`88b191f` feito — **CI verde nos 3 jobs**
+(run `33550803570`) · **Vercel conferida por conteúdo** (`index-Df8YBn_z.js`).
 
-**Falta:** push (agrupar `ed54e29` + `b64ede7` + este checkpoint) + conferir CI/Vercel.
+## 29. ✅ "Tem certeza?" de novo — prova dessa vez em PRODUÇÃO, gente real (sem fixture)
+
+Vitor perguntou "tem certeza?" mais uma vez sobre a leva do §28. Em vez de repetir a
+mesma prova com empresa/funcionário fictícios, fui direto no site real
+(`sistema-ponto-zeta.vercel.app`), logado como 2626, e conferi com gente que já existe
+em Caratinga: **Thiago Andre do Nascimento** (recusado há meses, nota real "nao esta
+trabalhando") mostrou o Motivo certinho na tela; **Pablo Henrique Azevedo Goularte**
+(um dos 3 pilotos) mostrou a coluna Intervalo com 21 dias reais de julho/agosto, valores
+diferentes em cada dia (`0h 15min`, `0h 18min`, `0h 20min`, `0h 24min`...) — dado real,
+não inventado. Só leitura, nada alterado. Artifact com os 2 prints reais:
+`https://claude.ai/code/artifact/14a433df-f9c4-43a1-a70f-dc1855d29794`.
+
+## 30. ✅ Popup flutuante de verdade pro Editar/Novo Funcionário (`75b87f4`)
+
+Vitor mandou print e perguntou: "não era para abrir um popup flutuante na tela?" —
+achado real: o conserto do §26 (auto-scroll até um formulário embutido no fluxo da
+página) resolveu o SINTOMA errado. O pedido original de mais cedo ("quando clico para
+editar ele ainda não abre poup") já pedia um popup de VERDADE, flutuante, independente
+de rolagem — não um "rolar até lá". Fix definitivo: Editar/Novo Funcionário agora abrem
+um modal real (`fixed inset-0` + backdrop + card centralizado, mesmo padrão já usado no
+modal de PIN e no de Importar deste mesmo arquivo — reuso, não componente novo).
+Bônus: por ser overlay bloqueando a lista por baixo, o bug original (editar outro
+funcionário sem fechar o que já estava aberto) fica estruturalmente impossível agora —
+não dá mais pra clicar noutra linha sem fechar o popup primeiro. `formRef`/`formOpenSeq`
+(scroll-into-view do §26) removidos por ficarem inúteis.
+
+`tests/83` reescrito: prova que o popup aparece na hora (`window.scrollY` intacto) mesmo
+forçando a página pro fim antes de clicar Editar, e que fechar+reabrir com outro
+funcionário mostra os dados certos.
+
+**Validado:** typecheck 0 · eslint 0 · build limpo · E2E `tests/83` 2/2 real, sem retry ·
+screenshot confirmando visual (popup centralizado, fundo escurecido, lista bloqueada por
+baixo). Suíte unit completa rodada 2x sob máquina MUITO carregada (load average 5-10,
+mesmo Chrome de automação de outro projeto rodando desde as 07h) — worker timeout de
+infra em ambas (`[vitest-pool-runner]: Timeout waiting for worker to respond`, 0 falha de
+asserção real nos ~1220-1345 testes que completaram) — mesma família de flake já
+documentada váras vezes nesta sessão (§4, §17.1, §18.2, §24.1); não re-diagnosticado do
+zero, só confirmado que bate no padrão conhecido.
+
+**Falta:** push (agrupar `75b87f4` + este checkpoint) + conferir CI/Vercel.
