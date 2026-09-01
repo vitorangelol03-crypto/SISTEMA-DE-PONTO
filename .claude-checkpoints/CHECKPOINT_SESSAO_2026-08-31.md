@@ -586,3 +586,64 @@ mais tolerar o valor antigo — commit `9ae17fa`). typecheck 0 · eslint 0 · te
 Pablo) já calculam a hora certa a partir de agora. Falta só a decisão de quando habilitar 4
 marcações pra todo mundo (cadastro, cálculo, aprovação, Financeiro, relatórios) — não pedida
 ainda.
+
+## 20. ✅ Auditoria dos 5 pontos do roadmap item 2 — lacuna real achada e fechada (correção manual)
+
+Vitor pediu "pode analisar e fazer" depois que eu terminei de checar os 5 pontos que o
+roadmap item 2 lista (cadastro/cálculo/aprovação/Financeiro/relatórios). Achado: **cadastro,
+cálculo, aprovar/recusar, Financeiro e relatórios** já estavam OK — só faltava **corrigir
+ponto manualmente**: quem tem `marking_count=4` via a aba Ponto só em modo leitura
+(`AttendanceTab.tsx`), sem NENHUM jeito de um supervisor corrigir um erro (esqueceu de bater,
+engano de horário) — diferente de quem tem 2 marcações, que já tinha os campinhos de hora.
+
+Fechado (commit `16caeea`): `setManualTimeFourMarkings` (database.ts) grava as 4 posições
+(edição parcial permitida) + espelha os campos legados (Aprovação/Financeiro/Relatórios leem
+`entry_time`/`exit_time_full`) + computa `hours_worked`/`night_hours` com desconto do almoço.
+**Achado no caminho, não regressão de hoje:** `recalcAttendance` NUNCA escreve `hours_worked`
+— só um conjunto paralelo de campos em minutos que nada na tela lê. As funções existentes
+(`setManualTime`, aprovar) já calculavam `hours_worked` ELAS MESMAS antes de chamar o recalc;
+eu presumi errado que o recalc faria isso — o E2E pegou na hora (`hours_worked` virou 0).
+Corrigido calculando direto na função nova. UI ganhou 4 campos de hora editáveis (desktop +
+mobile) + `data-testid="attendance-row"` novo (a linha não tinha seletor estável pra E2E).
+
+Validado: typecheck 0 · eslint 0 · build limpo · **E2E novo `tests/81`** prova ponta a ponta
+(08:00→12:00→13:00→18:00 = 9h, não as 10h do cálculo ingênuo) · regressão `tests/15` sem
+falha nova (achado à parte no caminho — ver §20.1) · suíte unit completa **1345 passed**.
+
+### 20.1 🐢 Achado à parte, registrado como pendência técnica (não investigado a fundo)
+
+Rodando `tests/15-attendance-complete.spec.ts`, o teste "aprovação em lote" falhou 2/2 vezes
+(inclusive isolado, sem contenção de outros testes) por timeout esperando o toast de sucesso.
+Investigado: **não é regressão de hoje** — mesmo padrão já documentado em 30/08 ("latência
+>10s no toast, ação realmente aconteceu"). Mas hoje tem **492 Aprovações Pendentes reais**
+em produção (era 466 em 30/08) — o painel provavelmente fica mais lento pra carregar/re-render
+conforme a fila cresce. Vale investigar com calma numa sessão futura (talvez paginação, ou o
+`load()` completo após aprovar sendo mais pesado que precisa).
+
+## 21. ✅ "Excluir" driver — soft-delete achado pronto no backend, só faltava o botão
+
+Vitor pediu "faça uma atualização rápida permitindo excluir drivers" (print do modal "Editar
+driver"). No meio da investigação, ele confirmou a dúvida que eu ia perguntar: *"mas se em
+alguma quinzena pra trás de pagamento dele fica registrado ainda"* — soft-delete (arquivar),
+não apagar de verdade.
+
+**Achado antes de programar:** o backend já tinha TUDO pronto — `setDriverActive(id, active,
+userId)` já existia (`driverPay.ts`), com a permissão certa (`driverpay.deleteDriver` pra
+desativar) — mas **nunca era chamada de lugar nenhum na tela**. E a RPC
+`driverpay_create_period` já filtra `active=true` no preload de quinzena nova desde a
+criação do módulo (03/07) — ou seja, arquivar um driver JÁ o tiraria das quinzenas futuras
+automaticamente, só faltava o gatilho. Confirmado antes de mexer: `buildRows` (o grid) monta
+as linhas a partir de `driverpay_payments` (histórico), não da lista de drivers — arquivar
+não esconde nem apaga nada de quinzenas que já existem (nem a atual, já em andamento).
+
+Fechado (commit `c4a96f1`): botão "Arquivar"/"Reativar" no `DriverFormModal.tsx` (rodapé, ao
+lado de "Resetar senha"), confirm antes, selo "🗄️ Arquivado" no cabeçalho. Callback
+`onArchived` separado de `onSaved` de propósito — `onSaved`/`handleDriverSaved` reaplica taxa
+e pode abrir um confirm de "valor divergente da config", ruído fora de contexto aqui.
+
+Validado: typecheck 0 · eslint 0 · build limpo · **E2E novo `tests/82`** prova os dois
+sentidos pelo navegador real (arquiva → banco confirma `active=false` → reabre mostra
+"Arquivado" → reativa → `active=true`) · regressão `tests/57` (todas as edições do módulo)
+2/2 · suíte unit completa **1345 passed**.
+
+**Push único (`16caeea..c4a96f1`) das duas features.**

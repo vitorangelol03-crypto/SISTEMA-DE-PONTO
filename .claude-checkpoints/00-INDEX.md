@@ -6,16 +6,16 @@
 
 > ✅ **Sessão 31/08→01/09: roadmap item 1 FECHADO** (facial obrigatória nas duas empresas) **+
 > aba Aprovação de Cadastro ganhou reverter decisão** (`25cd77b`) **+ roadmap item 2 (4
-> batidas) com 2 bugs reais achados, corrigidos E DEPLOYADOS, provados ao vivo.** Ponte Nova
-> nunca rodou de fato com 4 marcações apesar de configurada (bug de herança, corrigido); a 4ª
-> marcação não descontava o almoço (afetava 3 pilotos reais em Caratinga — Victor rodou o
-> deploy manual pela manhã, `clock-in-validated` v13, teste contra a fn real confirma
-> `hours_worked=8h` exato). `/clock` confirmado funcionando pro pessoal real o tempo todo
-> (Vercel conferida, CI limpo, E2E de isolamento provando que 9 testes que falharam antes são
-> desatualizados — trava facial, não bug de hoje). Ambiente do Supabase CLI agora vinculado
-> localmente (`supabase link`), próximos deploys sem flag. Detalhe completo em
-> `CHECKPOINT_SESSAO_2026-08-31.md` §14-§19. Pendências: §13 (2 e 3), §17.1, §18.3
-> (`CHECKPOINT_PROXIMOS_PASSOS.md` §3), e decidir quando habilitar 4 batidas de verdade.
+> batidas) sem bloqueios técnicos restantes** — 2 bugs de cálculo achados/corrigidos/deployados
+> (Ponte Nova nunca rodou de fato com 4 marcações; 4ª marcação não descontava o almoço, já
+> deployado e provado `hours_worked=8h` exato) **+ correção manual de ponto pra 4 marcações**
+> (não existia nenhum jeito de corrigir um erro — fechado, `setManualTimeFourMarkings`) **+
+> arquivar/reativar driver** (soft-delete, backend já existia pronto, só faltava o botão).
+> `/clock` confirmado funcionando pro pessoal real o tempo todo (Vercel conferida, CI limpo).
+> Supabase CLI vinculado localmente (`supabase link`), próximos deploys sem flag. Detalhe
+> completo em `CHECKPOINT_SESSAO_2026-08-31.md` §14-§21. Pendências: §13 (2 e 3), §17.1,
+> §18.3, §20.1 (`CHECKPOINT_PROXIMOS_PASSOS.md` §3), e decidir quando habilitar 4 batidas de
+> verdade pra todo mundo.
 
 ## 🎯 Estado atual (1 parágrafo)
 

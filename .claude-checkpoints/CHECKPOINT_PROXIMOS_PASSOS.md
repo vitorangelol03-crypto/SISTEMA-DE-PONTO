@@ -163,6 +163,16 @@ sempre vermelhos por isso). Caminho: aplicar **localmente** com lock regenerado 
   produto — confirmado via `git stash` que já falhava antes de qualquer mudança de hoje.
   Precisam registrar rosto no fixture (ou usar empresa sem `require_facial_clock`) antes de
   testar o dashboard. Ver `CHECKPOINT_SESSAO_2026-08-31.md` §18.3.
+- Painel "Aprovações Pendentes" (Ponto) lento com fila grande: `tests/15` (aprovação em lote)
+  deu timeout 2/2 esperando o toast, mesmo isolado — já documentado como flake em 30/08 (466
+  pendências), reproduziu de novo em 01/09 com **492 pendências reais** acumuladas. Não
+  investigado a fundo — suspeita: `load()` completo após aprovar fica mais pesado conforme a
+  fila cresce. Ver `CHECKPOINT_SESSAO_2026-08-31.md` §20.1.
+- `recalcAttendance` (database.ts) nunca escreve `hours_worked`/`night_hours` — só um conjunto
+  paralelo de campos em minutos (`worked_minutes` etc.) que nada na tela lê. Não quebra nada
+  hoje porque toda função que chama o recalc já calcula `hours_worked` ela mesma antes (achado
+  ao implementar `setManualTimeFourMarkings`, que corrigiu isso calculando direto). Vale
+  entender se os dois sistemas paralelos (horas legadas vs. minutos novos) deveriam convergir.
 
 ---
 
@@ -180,9 +190,12 @@ sempre vermelhos por isso). Caminho: aplicar **localmente** com lock regenerado 
    marcação calculava a hora sem descontar o almoço (bug real, já afetando os 3 pilotos de
    Caratinga — corrigido e **deployado pelo Victor, provado ao vivo: hours_worked=8h exato**).
    Normalizei `default_marking_count` de PN de volta pra 2 pra não habilitar sem querer.
-   Detalhe completo em `CHECKPOINT_SESSAO_2026-08-31.md` §18-§19. **Sem bloqueios técnicos —
-   falta só decidir quando habilitar de verdade** (cadastro, cálculo, aprovação, Financeiro e
-   relatórios pra todo mundo).
+   Auditados os 5 pontos do roadmap (cadastro/cálculo/aprovação/Financeiro/relatórios) — só
+   faltava **corrigir ponto manualmente** pra quem tem 4 marcações (não existia NENHUM jeito de
+   um supervisor corrigir um erro) — **fechado (01/09)**, `setManualTimeFourMarkings` +
+   4 campos editáveis na aba Ponto, E2E provando. Detalhe completo em
+   `CHECKPOINT_SESSAO_2026-08-31.md` §18-§20. **Sem bloqueios técnicos restantes — falta só
+   decidir quando habilitar de verdade** (pra todo mundo, nas duas empresas).
 3. **Modo tablet (quiosque):** 2 tablets da empresa; ponto só neles, dentro da localização.
    Celular pessoal e supervisor não batem/registram ponto fora dali.
 4. **Facial sem CPF, ordem automática:** câmera aberta escaneando; reconhece → identifica →
