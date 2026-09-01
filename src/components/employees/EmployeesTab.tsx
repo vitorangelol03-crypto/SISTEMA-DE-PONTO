@@ -30,10 +30,7 @@ function scheduleSum(schedule: number[]): number {
 import {
   validateCPF,
   formatCPF,
-  formatPhoneDisplay,
   sanitizePublicRegistrationName,
-  sanitizePublicRegistrationPixKey,
-  sanitizePhoneDigits,
 } from '../../utils/validation';
 import { generateEmployeeTemplate, parseEmployeeSpreadsheet, generateErrorReport, generateImportReport, parsedToImportData, ImportValidationResult, EmployeeImportData } from '../../utils/employeeImport';
 import { validateImportRow, normalizeCPF, type ValidationContext, type ImportRow } from '../../utils/employeeImportValidation';
@@ -1556,7 +1553,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   </div>
                   <p className="text-xs text-gray-500 mt-1 break-words flex items-center gap-1">
                     CPF: {formatCPF(employee.cpf)}
-                    <CopyField label="CPF" value={employee.cpf} />
+                    <CopyField label="CPF" value={employee.cpf ? employee.cpf.replace(/\D/g, '') : ''} />
                   </p>
                   {employee.pix_key && (
                     <p className="text-xs text-gray-500 mt-1 break-words">PIX: {employee.pix_key}</p>

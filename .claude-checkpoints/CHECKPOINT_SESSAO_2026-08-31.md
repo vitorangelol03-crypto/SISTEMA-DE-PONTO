@@ -732,24 +732,37 @@ também tem que ir junto pra dentro da aba Funcionários.
    que agora são ícones sem texto visível, igual ao padrão já usado nos botões de
    Editar/Excluir da própria tabela).
 
-**Validado:** typecheck 0 · build limpo · suíte unit completa **1345 passed / 1 skipped**
-(zero regressão) · **E2E `tests/80` (reverter decisão) 1/1 real no Chromium** — prova a
-mesma coisa de ponta a ponta dentro da aba nova: recusa quem tava aprovado, reverte quem
-tava recusado, confirma no `/clock` real que desbloqueou.
+**Validado antes do push:** `npx tsc --noEmit` 0 · build limpo · suíte unit completa
+**1345 passed / 1 skipped** (zero regressão) · **E2E `tests/80` (reverter decisão) 1/1 real
+no Chromium**.
 
-**🔴 `tests/78` não fechou — investigado a fundo, não é regressão desta leva:** falhou 5/5
-vezes, sempre no **primeiro** `page.goto('/cadastro?empresa=...')` do teste (rota pública
-de cadastro, `EmployeePublicRegister.tsx` — arquivo que esta leva **não tocou**). Prova:
-(1) `git diff` mostra essa linha byte-a-byte idêntica à versão anterior à mudança; (2) um
-probe isolado de 2 linhas (só o goto, sem nada do resto do teste) falhou igual, no MESMO
-`page.goto`, timeout de 15s; (3) `curl` na mesma URL nesse momento voltou código `000`
-(conexão recusada) e `uptime` mostrou **load average 9-10** — a máquina tem, desde as
-07:24 de hoje, um Chrome de automação de OUTRO projeto (`shopee-bot-chrome`, sessão
-separada) consumindo ~12% de CPU sem parar, mais uma 2ª sessão do Claude Code num 3º
-projeto. Conclusão: cold-start do Vite sob contenção externa sustentada, mesma família de
-flake já documentada várias vezes neste projeto (§4, §17.1, §18.2) — não fica escondido,
-fica registrado aqui como pendência de re-execução (rodar `tests/78` de novo quando a
-máquina estiver livre do outro projeto, ou em CI, que é VM limpa).
+**`tests/78` não fechou naquele momento:** falhou 5/5 vezes, sempre no **primeiro**
+`page.goto(...)` do teste (código que esta leva não tocou) — máquina com **load average
+9-10** por causa de um Chrome de automação de OUTRO projeto (`shopee-bot-chrome`, sessão
+separada) rodando sem parar desde as 07:24, mais uma 2ª sessão do Claude Code num 3º
+projeto. Investigado a fundo (diff mostrando código intacto + probe isolado + `curl`
+confirmando `000`/conexão recusada) antes de decidir seguir — commitado e empurrado sem
+esperar esse teste fechar.
 
-**Falta:** push (agrupado com o commit deste checkpoint, pedido explícito de sempre
-juntar tudo num push só) + conferir CI/Vercel depois.
+### 24.1 🔴 CI pegou erro real que `npx tsc --noEmit` NÃO acusou — corrigido, re-validado, re-pushado
+
+Push `dee086c` foi embora achando tudo limpo — mas **CI falhou o job `tsc + eslint`** com
+1 erro de tipo real (`EmployeesTab.tsx:1559`, `CopyField value={employee.cpf}` — `cpf` é
+`string | null`, `value` exige `string`) + 3 imports não usados. 🔑 **Causa: eu rodei
+`npx tsc --noEmit` (raiz) o tempo todo nesta leva** — e esse comando específico **checa
+ZERO arquivos** neste projeto (`tsconfig.json` da raiz tem `files: []`; já documentado no
+§2.2 deste MESMO checkpoint, de uma leva anterior — eu simplesmente não apliquei a lição
+de novo). `npm run typecheck` (o comando certo, `tsc -p tsconfig.app.json`) achava os 4
+erros o tempo todo. Memória nova gravada (`reference_typecheck_command`) pra não repetir.
+
+**Fix:** `CopyField` do CPF mobile ganhou o mesmo fallback do desktop
+(`employee.cpf ? employee.cpf.replace(/\D/g, '') : ''`); os 3 imports mortos
+(`formatPhoneDisplay`, `sanitizePublicRegistrationPixKey`, `sanitizePhoneDigits`) removidos.
+
+**Re-validado com o comando certo:** `npm run typecheck` 0 · `npm run lint` 0 · build limpo.
+**E2E re-rodado com o dev server mantido no ar entre execuções** (em vez de cada
+`playwright test` isolado subir um Vite frio do zero, que era a causa real da instabilidade
+de antes — não só a carga da máquina): `tests/80` **1/1 limpo**, `tests/78` **1/1 limpo**
+(sem retry) — a suspeita de flake genuíno caiu; era cold-start de Vite competindo com a
+máquina ocupada, não o código. Commit de fix + push novo, checkpoint atualizado de novo
+com o resultado real.
