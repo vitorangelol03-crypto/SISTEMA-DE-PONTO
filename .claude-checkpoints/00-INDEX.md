@@ -4,11 +4,12 @@
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 > Última atualização: **2026-08-31**.
 
-> ✅ **Retomado 31/08 (nova sessão, mesma data): Ponte Nova com facial obrigatória LIGADA**
-> a pedido do Victor (`require_facial_clock=true`, só 1 pessoa sem rosto lá — self-enroll
-> cobre). Caratinga segue desligada (32/91 sem rosto). Sem código novo, só UPDATE em prod
-> (conferido antes e depois) — edge fn e frontend já validados na leva anterior. Detalhe em
-> `CHECKPOINT_SESSAO_2026-08-31.md` §14. Restam as pendências 2 e 3 do §13 (mesmo arquivo).
+> ✅ **Retomado 31/08 (nova sessão, mesma data): roadmap item 1 FECHADO — facial obrigatória
+> LIGADA nas DUAS empresas** a pedido do Victor. Ponte Nova (1 sem rosto) e depois Caratinga
+> (achado: dos "32 sem rosto" só 4 são `approved` de verdade — os outros 28 já são `rejected`
+> e nem chegam na facial, bloqueados antes). Sem código novo, só UPDATE em prod (conferido
+> antes e depois nas duas) — edge fn e frontend já validados na leva anterior. Detalhe em
+> `CHECKPOINT_SESSAO_2026-08-31.md` §14-§15. Restam as pendências 2 e 3 do §13 (mesmo arquivo).
 
 ## 🎯 Estado atual (1 parágrafo)
 

@@ -156,12 +156,12 @@ sempre vermelhos por isso). Caminho: aplicar **localmente** com lock regenerado 
 
 ## 4. 🔮 ROADMAP ditado pelo Victor em 31/08/2026 (ordem combinada) — ver memória `project_roadmap_ponto_tablet_facial`
 
-1. **Facial + geolocalização 100% obrigatórias, sem brecha.** ✅ **NO AR (31/08):** migration
-   `companies.require_facial_clock` aplicada + edge fn `clock-in-validated` publicada (v12) +
-   provado ao vivo (trava bloqueia rosto/geo errados; fluxo de hoje intacto, 24 E2E). **Chave
-   LIGADA em Ponte Nova** (31/08, pedido do Victor — só 1 pessoa sem rosto, self-enroll cobre).
-   Segue **desligada** em Caratinga (32 de 91 sem rosto — falta decidir quando ligar lá: esperar
-   todo mundo cadastrar ou confiar no self-enroll).
+1. ✅✅ **FECHADO (31/08) — Facial + geolocalização 100% obrigatórias, sem brecha, LIGADA nas
+   DUAS empresas.** migration `companies.require_facial_clock` aplicada + edge fn
+   `clock-in-validated` publicada (v12) + provado ao vivo (trava bloqueia rosto/geo errados;
+   fluxo de hoje intacto, 24 E2E). Ponte Nova ligada (1 pessoa sem rosto, self-enroll cobre) e
+   depois **Caratinga também** — dos 32 "sem rosto", 28 já eram `rejected` (bloqueados antes da
+   facial, não afeta) e só 4 `approved` de fato caem no auto-cadastro na próxima batida.
 2. **4 batidas/dia** (entrada, saída intervalo, volta, saída) em **PN e Caratinga**:
    cadastro, cálculo, aprovação, Financeiro e todos os relatórios.
 3. **Modo tablet (quiosque):** 2 tablets da empresa; ponto só neles, dentro da localização.

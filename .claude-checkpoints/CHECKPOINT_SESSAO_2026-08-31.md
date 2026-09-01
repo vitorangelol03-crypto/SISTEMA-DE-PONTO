@@ -373,3 +373,25 @@ bloqueado).
 **Pendência 1 do §13 fechada.** Faltam as pendências 2 (PROXIMOS_PASSOS §2) e 3 (roadmap
 item 2, 4 batidas — Caratinga com 32/91 sem rosto ainda, decisão de quando ligar lá segue
 em aberto, ele não pediu isso agora).
+
+## 15. ✅ Rollout item 1 — Caratinga LIGADA também (mesma sessão, na sequência)
+
+Victor perguntou "mesmo com os 32 sem rosto, quando logar vai pedir pra cadastrar certo?"
+antes de autorizar. Conferido em produção (contagem por `registration_status`, não só o
+total): dos 32 sem `face_descriptor`, **28 já são `rejected`** — bloqueados no CPF, ANTES
+do PIN/facial (`EmployeeClockIn.tsx:233`), então ligar a chave não muda nada pra eles. Só
+**4 têm cadastro `approved` e sem rosto** — esses caem no auto-cadastro facial na próxima
+batida (mesmo caminho provado com o Euder/PN e com o fixture da leva anterior; a chave
+força a facial mesmo nos 4 que tinham o toggle antigo `face_recognition_enabled=false`
+individual, comportamento já testado ao vivo, não é hipótese).
+
+Achado corrige o número do roadmap/PROXIMOS_PASSOS ("32 sem rosto" → só 4 de fato afetados
+na prática; os outros 28 já não batem ponto de jeito nenhum).
+
+Aplicado: `companies.require_facial_clock = true` em Caratinga
+(`6583bb2a-e334-41a7-b69c-7d98f3b46dfc`). Conferido depois: **as duas empresas com a chave
+ligada** (Caratinga `true`, Ponte Nova `true`). Sem deploy — mesmo código já provado ao vivo.
+
+**Roadmap item 1 (facial+geo sem brecha) fechado por completo — nas duas empresas, no ar.**
+Restam as pendências 2 (PROXIMOS_PASSOS §2: policy "só 2626", filtro NF, travas do import,
+Dependabot) e o próximo item do roadmap (item 2 — 4 batidas/dia).
