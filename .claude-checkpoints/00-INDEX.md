@@ -4,17 +4,17 @@
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 > Última atualização: **2026-09-01** (sessão iniciada 31/08, atravessou a virada).
 
-> ⏸️ **Sessão 31/08→01/09 pausada (madrugada, Victor foi dormir), estado seguro pra
-> retomar.** Fechado: roadmap item 1 (facial obrigatória nas duas empresas) + aba Aprovação
-> de Cadastro ganhou reverter decisão em qualquer sentido (`25cd77b`). **Última leva: roadmap
-> item 2 (4 batidas) investigado a fundo — 2 bugs reais achados e consertados** (Ponte Nova
-> nunca rodou de fato com 4 marcações apesar de configurada; cálculo da 4ª marcação não
-> descontava o almoço, já afetando 3 pilotos reais em Caratinga). Fix no ar (commit `9ae3ea8`,
-> no-op pra usuários reais hoje) — **falta só o Victor rodar o deploy da edge fn com `!`**
-> (bloqueado pelo classificador, baixa urgência). `/clock` confirmado funcionando pro pessoal
-> real (Vercel conferida, CI limpo, E2E de isolamento provando que 9 testes que falharam são
-> desatualizados — trava facial, não bug de hoje). Detalhe completo em
-> `CHECKPOINT_SESSAO_2026-08-31.md` §14-§18. Pendências: §13 (2 e 3), §17.1, §18.3
+> ✅ **Sessão 31/08→01/09: roadmap item 1 FECHADO** (facial obrigatória nas duas empresas) **+
+> aba Aprovação de Cadastro ganhou reverter decisão** (`25cd77b`) **+ roadmap item 2 (4
+> batidas) com 2 bugs reais achados, corrigidos E DEPLOYADOS, provados ao vivo.** Ponte Nova
+> nunca rodou de fato com 4 marcações apesar de configurada (bug de herança, corrigido); a 4ª
+> marcação não descontava o almoço (afetava 3 pilotos reais em Caratinga — Victor rodou o
+> deploy manual pela manhã, `clock-in-validated` v13, teste contra a fn real confirma
+> `hours_worked=8h` exato). `/clock` confirmado funcionando pro pessoal real o tempo todo
+> (Vercel conferida, CI limpo, E2E de isolamento provando que 9 testes que falharam antes são
+> desatualizados — trava facial, não bug de hoje). Ambiente do Supabase CLI agora vinculado
+> localmente (`supabase link`), próximos deploys sem flag. Detalhe completo em
+> `CHECKPOINT_SESSAO_2026-08-31.md` §14-§19. Pendências: §13 (2 e 3), §17.1, §18.3
 > (`CHECKPOINT_PROXIMOS_PASSOS.md` §3), e decidir quando habilitar 4 batidas de verdade.
 
 ## 🎯 Estado atual (1 parágrafo)

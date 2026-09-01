@@ -560,3 +560,29 @@ pilotos de Caratinga, e só quando o deploy acontecer). Único pendente real: **
 o deploy da edge fn quando quiser** (baixa urgência — só os 3 pilotos são afetados, e o bug
 já estava lá antes de hoje). Roadmap item 2 segue precisando de decisão de quando habilitar
 de verdade (4 batidas pra todo mundo) — não é hoje, ele não pediu isso.
+
+## 19. ✅ Deploy da edge fn FEITO pelo Victor — bug do almoço fechado de vez, provado ao vivo
+
+Vitor rodou o deploy manual pela manhã (`npx supabase functions deploy clock-in-validated`).
+Dois obstáculos de ambiente no caminho, resolvidos:
+1. **Cache do npx corrompido** (`ENOTEMPTY` no rename do binário `@supabase/cli-linux-x64`,
+   resto de uma instalação anterior interrompida) — limpei a pasta específica em
+   `~/.npm/_npx/<hash>/`, não mexi no resto do cache.
+2. **`LegacyProjectNotLinkedError`** — primeira tentativa sem `--project-ref` falhou; funcionou
+   passando `--project-ref flcncdidxmmornkgkfbb` direto. Depois rodei `supabase link
+   --project-ref flcncdidxmmornkgkfbb` (a pedido dele, "deixa isso salvo pra não ter esse
+   problema de novo") — grava `supabase/.temp/project-ref` (já no `.gitignore`, mesmo padrão
+   do `.vercel/`), então daqui pra frente `npx supabase functions deploy <nome>` funciona sem
+   flag nenhuma.
+
+**Edge fn `clock-in-validated` agora em v13** (era v12). Rodei
+`tests/unit/edgeFnClockFourMarkingsLunch.spec.ts` contra a função real (2 tentativas — a 1ª
+bateu no flake de worker do WSL já documentado, infra, não código): **`hours_worked = 8h`
+exato**, sem o valor antigo (9h) aparecer — **prova ao vivo que o bug do almoço está
+corrigido em produção**. Apertei a asserção do teste de volta pro valor estrito (não precisa
+mais tolerar o valor antigo — commit `9ae17fa`). typecheck 0 · eslint 0 · teste 1/1.
+
+**Roadmap item 2 sem bloqueios técnicos.** Os 3 pilotos de Caratinga (Lara, Victor Angelo,
+Pablo) já calculam a hora certa a partir de agora. Falta só a decisão de quando habilitar 4
+marcações pra todo mundo (cadastro, cálculo, aprovação, Financeiro, relatórios) — não pedida
+ainda.
