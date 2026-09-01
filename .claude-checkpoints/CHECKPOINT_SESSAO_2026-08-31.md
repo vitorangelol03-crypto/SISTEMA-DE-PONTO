@@ -695,3 +695,61 @@ ANTES desta mudança — não relacionado à feature. Não investigado a fundo (
 
 Validado: typecheck 0 · eslint 0 · build limpo · E2E `tests/41` (7 testes) + `tests/34`
 (isolado, exceto o pré-existente) · suíte unit completa **1345 passed**. Push `b1cd717`.
+
+## 24. ✅ Aba "Aprovação de Cadastro" embutida na aba Funcionários (`3999433`, local — falta push)
+
+Vitor pediu (áudio transcrito, com typos): editar funcionário abre o form lá em cima da
+tela, obrigando rolar pra achar quem se procura lá embaixo — e a aprovação de cadastro
+vivia numa aba separada, cortada da lista principal ("vamos excluir essa aba... marcando
+que eles estão bloqueado, pra gente não perder esses dados também"). Confirmado antes de
+programar via `AskUserQuestion`: (1) só o 2626 continua vendo aprovar/recusar (igual antes,
+nem o 9999); (2) a aba antiga **some de vez** do menu, não fica como caminho duplicado.
+No meio da implementação ele acrescentou: o link público de cadastro (com botão copiar)
+também tem que ir junto pra dentro da aba Funcionários.
+
+**Fechado:**
+1. **Form de edição com scroll-into-view** — `formRef` + `useEffect` rola até o form
+   sozinho quando abre (o problema original: form aparecia no topo, fora da tela, exigindo
+   rolar manualmente).
+2. **Aprovação embutida em `EmployeesTab.tsx`** — badge de status (`Pendente`/`Recusado`,
+   `Aprovado` fica mudo) no nome de cada funcionário (desktop + mobile); toggle
+   "Ativos"/"Bloqueados" no lugar da aba separada (Ativos = pendente+aprovado, Bloqueados =
+   recusado, com contador); botões Aprovar/Recusar/Reverter na coluna de Ações (desktop) e
+   no grid de botões (mobile), reusando a mesma `updateEmployeeRegistrationStatus` +
+   `handleRegistrationDecision` (confirm nativo nos dois sentidos, igual à leva do §17) —
+   zero caminho novo no backend, só UI.
+3. **Link público de cadastro migrado** — caixa verde com o link + botão copiar, antes só na
+   aba antiga, agora no topo da aba Funcionários (gated por `canViewApproval`).
+4. **Aba antiga removida de vez**: `TabNavigation.tsx` (`TabType` union + entrada do menu +
+   cor), `App.tsx` (lazy import + `case 'employeeapproval'`), `src/i18n/index.ts`
+   (`tab.employeeapproval` pt-BR/en) e o arquivo `EmployeeApprovalTab.tsx` **deletado**
+   (lógica já coberta pela nova UI). A permissão `employeeapproval.*` em si (mecanismo
+   2626-exclusivo, `masters.ts`) **não mudou** — só mudou onde ela é consumida.
+5. **`data-testid="employee-row"` novo** na `<tr>` desktop da lista (mesmo padrão do
+   `attendance-row` do §20) — a lista não tinha seletor estável pra E2E.
+6. **`tests/78` e `tests/80` reescritos** pra operar dentro de "Funcionários" (busca pelo
+   nome isola a linha em vez de depender de aba separada; botões viraram `getByTitle`, já
+   que agora são ícones sem texto visível, igual ao padrão já usado nos botões de
+   Editar/Excluir da própria tabela).
+
+**Validado:** typecheck 0 · build limpo · suíte unit completa **1345 passed / 1 skipped**
+(zero regressão) · **E2E `tests/80` (reverter decisão) 1/1 real no Chromium** — prova a
+mesma coisa de ponta a ponta dentro da aba nova: recusa quem tava aprovado, reverte quem
+tava recusado, confirma no `/clock` real que desbloqueou.
+
+**🔴 `tests/78` não fechou — investigado a fundo, não é regressão desta leva:** falhou 5/5
+vezes, sempre no **primeiro** `page.goto('/cadastro?empresa=...')` do teste (rota pública
+de cadastro, `EmployeePublicRegister.tsx` — arquivo que esta leva **não tocou**). Prova:
+(1) `git diff` mostra essa linha byte-a-byte idêntica à versão anterior à mudança; (2) um
+probe isolado de 2 linhas (só o goto, sem nada do resto do teste) falhou igual, no MESMO
+`page.goto`, timeout de 15s; (3) `curl` na mesma URL nesse momento voltou código `000`
+(conexão recusada) e `uptime` mostrou **load average 9-10** — a máquina tem, desde as
+07:24 de hoje, um Chrome de automação de OUTRO projeto (`shopee-bot-chrome`, sessão
+separada) consumindo ~12% de CPU sem parar, mais uma 2ª sessão do Claude Code num 3º
+projeto. Conclusão: cold-start do Vite sob contenção externa sustentada, mesma família de
+flake já documentada várias vezes neste projeto (§4, §17.1, §18.2) — não fica escondido,
+fica registrado aqui como pendência de re-execução (rodar `tests/78` de novo quando a
+máquina estiver livre do outro projeto, ou em CI, que é VM limpa).
+
+**Falta:** push (agrupado com o commit deste checkpoint, pedido explícito de sempre
+juntar tudo num push só) + conferir CI/Vercel depois.

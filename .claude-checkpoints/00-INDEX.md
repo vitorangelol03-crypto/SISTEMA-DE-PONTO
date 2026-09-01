@@ -16,9 +16,15 @@
 > fechado achado real de produção**: Ponte Nova estava com a localização configurada 100km
 > longe de onde um funcionário (Euder) tentava bater ponto — corrigida via SQL (igualada a
 > Caratinga, vale pros 6 funcionários de PN) **+ nova tela pra editar latitude/longitude de
-> qualquer empresa** (não existia, só dava pra mudar via SQL). Detalhe completo em
-> `CHECKPOINT_SESSAO_2026-08-31.md` §14-§23. Pendências: §13 (2 e 3), §17.1, §18.3, §20.1, §23
-> (`CHECKPOINT_PROXIMOS_PASSOS.md` §3), e decidir quando habilitar 4 batidas de verdade pra
+> qualquer empresa** (não existia, só dava pra mudar via SQL) **+ aba "Aprovação de Cadastro"
+> embutida na aba Funcionários** (`3999433`, local): form de edição rola até a tela sozinho ao
+> abrir; aprovar/recusar/reverter (só 2626) e o link público de cadastro agora vivem dentro de
+> Funcionários (badge Pendente/Recusado + toggle Ativos/Bloqueados); aba antiga removida do
+> menu de vez. `tests/78` com falha investigada a fundo e não fechada — cold-start do Vite sob
+> máquina ocupada por outro projeto (load 9-10), código da falha 100% intacto, não é regressão.
+> Detalhe completo em `CHECKPOINT_SESSAO_2026-08-31.md` §14-§24. Pendências: §13 (2 e 3), §17.1,
+> §18.3, §20.1, §23, §24 (`tests/78` re-rodar com máquina livre;
+> `CHECKPOINT_PROXIMOS_PASSOS.md` §3), e decidir quando habilitar 4 batidas de verdade pra
 > todo mundo.
 
 ## 🎯 Estado atual (1 parágrafo)
