@@ -979,4 +979,19 @@ mostra Motivo sem Chave PIX/PIN; Ativos continua com as duas colunas normais) ·
 regressão `tests/05`+`21`+`39`+`83` (19 testes, 1 flaky de cold-start não relacionado,
 17 passed).
 
-**Falta:** push (agrupar `cbba51a` + este checkpoint) + conferir CI/Vercel.
+Push `cbba51a`+`714aa9f` feito — **CI verde nos 3 jobs** (run `33561470423`) · **Vercel
+conferida por conteúdo** (`index-CTZZ9_Lg.js`).
+
+## 32. ✅ Suavização de fonte global (`915f3d7`)
+
+Vitor reportou texto "serrilhado" num print. Investigado antes de mexer: Inter Variable
+carrega certinho (`document.fonts` confirma "loaded"), `devicePixelRatio` normal, e um
+screenshot direto da tela (não do print dele) sai nítido — `-webkit-font-smoothing`
+já estava ligado, mas só pro motor WebKit/Chrome. Adicionado `-moz-osx-font-smoothing:
+grayscale` (Firefox/macOS) + `text-rendering: optimizeLegibility` no `body` — mudança
+pequena, segura, sem risco. Causa provável do que ele viu: zoom do navegador ou escala
+de tela do Windows, fora do controle do código do site.
+
+**Validado:** typecheck 0 · eslint 0 · build limpo.
+
+**Falta:** push (agrupar `915f3d7` + este checkpoint) + conferir CI/Vercel.

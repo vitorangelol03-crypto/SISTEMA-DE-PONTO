@@ -21,8 +21,10 @@
 > scroll-até-lá resolvia o sintoma errado; agora é modal real (mesmo padrão do modal de
 > PIN/Importar), e o bug original (trocar de funcionário sem fechar) fica impossível por
 > desenho. **+ view Bloqueados troca Chave PIX/PIN por Motivo** (§31, `cbba51a`) — mais
-> largo, mais fácil de ler; Ativos sem mudança. Detalhe em
-> `CHECKPOINT_SESSAO_2026-08-31.md` §25-§31.
+> largo, mais fácil de ler; Ativos sem mudança. **+ suavização de fonte global**
+> (§32, `915f3d7`, `-moz-osx-font-smoothing`+`text-rendering`) — fonte confirmada
+> carregando certinho, causa provável do "serrilhado" reportado é zoom/escala fora do
+> código. Detalhe em `CHECKPOINT_SESSAO_2026-08-31.md` §25-§32.
 
 > ✅ **Sessão 31/08→01/09: roadmap item 1 FECHADO** (facial obrigatória nas duas empresas) **+
 > aba Aprovação de Cadastro ganhou reverter decisão** (`25cd77b`) **+ roadmap item 2 (4
