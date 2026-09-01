@@ -11,10 +11,12 @@ import { getClient } from './cleanup';
  *
  *  - Cidade (input texto, free-form)
  *  - Endereço completo (textarea, free-form)
- *  - Raio (m) — único campo de geofence editável neste form
- *    (latitude/longitude têm input `disabled` aqui — UX é "editar em outra
- *    tela"). Mesmo assim validamos que o submit NÃO destrói os valores
- *    pré-existentes de lat/lng (eles não estão no payload de `handleSubmit`).
+ *  - Latitude/longitude/raio (m) — ponto de referência do geofence do /clock
+ *    (01/09/2026: antes só o raio era editável aqui, lat/lng ficavam travados
+ *    com uma nota "editada em outra tela" que não existia de verdade —
+ *    achado investigando um caso real de funcionário "fora da área"). Agora
+ *    os 3 gravam junto em `companies.default_geo_*` E em `geolocation_config`
+ *    (o override que o edge fn lê primeiro).
  *  - Jornada padrão semanal (default_schedule — array de 7 minutos)
  *
  * Estratégia anti-pollution:
@@ -38,6 +40,9 @@ type SettingsSnapshot = {
   default_geo_lng: number;
   default_geo_radius: number;
   default_schedule: number[] | null;
+  override_lat: number;
+  override_lng: number;
+  override_radius: number;
 };
 
 const SNAPSHOT_COLUMNS =
@@ -51,7 +56,18 @@ async function captureSnapshot(): Promise<SettingsSnapshot> {
     .eq('id', CARATINGA_ID)
     .single();
   if (error) throw error;
-  return data as unknown as SettingsSnapshot;
+  const { data: geo, error: geoErr } = await s
+    .from('geolocation_config')
+    .select('latitude, longitude, allowed_radius_meters')
+    .eq('company_id', CARATINGA_ID)
+    .single();
+  if (geoErr) throw geoErr;
+  return {
+    ...(data as unknown as Omit<SettingsSnapshot, 'override_lat' | 'override_lng' | 'override_radius'>),
+    override_lat: geo.latitude,
+    override_lng: geo.longitude,
+    override_radius: geo.allowed_radius_meters,
+  };
 }
 
 async function restoreSnapshot(snap: SettingsSnapshot): Promise<void> {
@@ -68,15 +84,15 @@ async function restoreSnapshot(snap: SettingsSnapshot): Promise<void> {
     })
     .eq('id', CARATINGA_ID);
   if (error) throw error;
-}
-
-async function setLatLngDirect(lat: number, lng: number): Promise<void> {
-  const s = getClient();
-  const { error } = await s
-    .from('companies')
-    .update({ default_geo_lat: lat, default_geo_lng: lng })
-    .eq('id', CARATINGA_ID);
-  if (error) throw error;
+  const { error: geoErr } = await s
+    .from('geolocation_config')
+    .update({
+      latitude: snap.override_lat,
+      longitude: snap.override_lng,
+      allowed_radius_meters: snap.override_radius,
+    })
+    .eq('company_id', CARATINGA_ID);
+  if (geoErr) throw geoErr;
 }
 
 async function unlockAdmin(page: Page) {
@@ -219,60 +235,93 @@ test.describe('CompanySettings SAVE (spec 41)', () => {
     expect((data as { default_geo_radius: number }).default_geo_radius).toBe(testRadius);
   });
 
-  test('5. Save NÃO destrói lat/lng (read-only) e persiste schedule editado', async ({ page }) => {
-    // Setup: define lat/lng via SQL (UI não permite editar aqui).
+  test('5. Editar Latitude/Longitude + Salvar persiste em companies E geolocation_config', async ({ page }) => {
+    // 01/09/2026: lat/lng eram `disabled` até hoje (achado investigando um caso
+    // real de funcionário "fora da área" em Ponte Nova). Agora editam e gravam
+    // nos DOIS lugares que o edge fn clock-in-validated consulta.
     const testLat = -19.7901;
     const testLng = -42.1389;
-    await setLatLngDirect(testLat, testLng);
-
-    // CompanyContext só carrega no mount inicial — sem reload, a UI mostra
-    // valores cacheados (anteriores ao SQL update acima). Recarrega a página
-    // pra forçar re-fetch do context com o novo lat/lng.
-    await page.reload();
 
     await unlockAdmin(page);
     const section = locSettingsSection(page);
 
-    // Verifica que UI carregou os valores injetados (binding DB → state).
     const latInput = section.locator('label:has-text("Latitude") + input').first();
     const lngInput = section.locator('label:has-text("Longitude") + input').first();
     await expect(latInput).toBeVisible({ timeout: 15_000 });
     await expect(lngInput).toBeVisible();
-    await expect(latInput).toBeDisabled();
-    await expect(lngInput).toBeDisabled();
+    await expect(latInput).toBeEnabled();
+    await expect(lngInput).toBeEnabled();
+
+    await latInput.fill(String(testLat));
+    await lngInput.fill(String(testLng));
     await expect(latInput).toHaveValue(String(testLat));
     await expect(lngInput).toHaveValue(String(testLng));
 
-    // Edita um campo editável (segunda-feira da jornada padrão) só pra disparar
-    // submit com alteração. Segunda = índice 1 do array default_schedule.
-    // Inputs `type=time` aceitam "HH:MM" via fill.
+    await clickSave(page);
+
+    const s = getClient();
+    const { data, error } = await s
+      .from('companies')
+      .select('default_geo_lat, default_geo_lng')
+      .eq('id', CARATINGA_ID)
+      .single();
+    expect(error).toBeNull();
+    const row = data as { default_geo_lat: number; default_geo_lng: number };
+    expect(row.default_geo_lat).toBe(testLat);
+    expect(row.default_geo_lng).toBe(testLng);
+
+    // O override em geolocation_config (lido primeiro pelo edge fn) também
+    // tem que refletir — senão o /clock continuaria usando o valor antigo.
+    const { data: geo, error: geoErr } = await s
+      .from('geolocation_config')
+      .select('latitude, longitude')
+      .eq('company_id', CARATINGA_ID)
+      .single();
+    expect(geoErr).toBeNull();
+    expect((geo as { latitude: number }).latitude).toBe(testLat);
+    expect((geo as { longitude: number }).longitude).toBe(testLng);
+  });
+
+  test('6. Latitude inválida (fora de -90..90) bloqueia o save com erro, sem gravar', async ({ page }) => {
+    await unlockAdmin(page);
+    const section = locSettingsSection(page);
+
+    const latInput = section.locator('label:has-text("Latitude") + input').first();
+    await expect(latInput).toBeVisible({ timeout: 15_000 });
+    await latInput.fill('999');
+
+    const before = await captureSnapshot();
+
+    await section.getByRole('button', { name: /^Salvar/ }).first().click();
+    await expect(page.getByText(/latitude deve estar entre/i).first()).toBeVisible({ timeout: 10_000 });
+
+    // Nada foi gravado — nem companies, nem geolocation_config.
+    const after = await captureSnapshot();
+    expect(after.default_geo_lat).toBe(before.default_geo_lat);
+    expect(after.override_lat).toBe(before.override_lat);
+  });
+
+  test('7. Editar jornada padrão semanal + Salvar persiste no DB', async ({ page }) => {
+    await unlockAdmin(page);
+    const section = locSettingsSection(page);
+
+    // Edita segunda-feira (índice 1 do array default_schedule).
     const mondayInput = section.locator('input[type="time"]').nth(1);
-    await expect(mondayInput).toBeVisible();
+    await expect(mondayInput).toBeVisible({ timeout: 15_000 });
     await mondayInput.fill('07:30');
     await expect(mondayInput).toHaveValue('07:30');
 
     await clickSave(page);
 
-    // Valida no DB: schedule[1] = 450 min (7h30); lat/lng intactos.
     const s = getClient();
     const { data, error } = await s
       .from('companies')
-      .select('default_geo_lat, default_geo_lng, default_schedule')
+      .select('default_schedule')
       .eq('id', CARATINGA_ID)
       .single();
     expect(error).toBeNull();
-
-    const row = data as {
-      default_geo_lat: number;
-      default_geo_lng: number;
-      default_schedule: number[] | null;
-    };
-    // lat/lng não estão no payload de handleSubmit — então o UPDATE não toca
-    // neles e os valores injetados via SQL permanecem.
-    expect(row.default_geo_lat).toBe(testLat);
-    expect(row.default_geo_lng).toBe(testLng);
-
-    // Schedule: 7h30 = 7*60 + 30 = 450
+    const row = data as { default_schedule: number[] | null };
+    // 7h30 = 7*60 + 30 = 450
     expect(Array.isArray(row.default_schedule)).toBe(true);
     expect((row.default_schedule ?? [])[1]).toBe(450);
   });

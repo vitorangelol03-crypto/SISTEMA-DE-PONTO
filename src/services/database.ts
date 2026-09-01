@@ -3702,6 +3702,37 @@ export const getGeoConfig = async (companyId: string): Promise<{
   return data;
 };
 
+/**
+ * Atualiza o ponto de referência (lat/lng/raio) que o /clock usa pra decidir
+ * "dentro ou fora da área" (01/09/2026). Grava nos DOIS lugares que o edge fn
+ * `clock-in-validated` consulta: `companies.default_geo_*` (base) e
+ * `geolocation_config` (override — lido primeiro; se existir, vence). Upsert
+ * pra funcionar mesmo se a empresa ainda não tiver linha de override.
+ */
+export const updateGeoLocation = async (
+  companyId: string,
+  updates: { latitude: number; longitude: number; allowed_radius_meters: number }
+): Promise<void> => {
+  const { error: companyErr } = await supabase
+    .from('companies')
+    .update({
+      default_geo_lat: updates.latitude,
+      default_geo_lng: updates.longitude,
+      default_geo_radius: updates.allowed_radius_meters,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', companyId);
+  if (companyErr) throw companyErr;
+
+  const { error: overrideErr } = await supabase
+    .from('geolocation_config')
+    .upsert(
+      [{ company_id: companyId, latitude: updates.latitude, longitude: updates.longitude, allowed_radius_meters: updates.allowed_radius_meters }],
+      { onConflict: 'company_id' },
+    );
+  if (overrideErr) throw overrideErr;
+};
+
 export function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
   const toRad = (deg: number) => (deg * Math.PI) / 180;

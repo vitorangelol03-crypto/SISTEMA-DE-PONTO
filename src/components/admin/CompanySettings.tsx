@@ -3,7 +3,7 @@ import { Building2, Save, MapPin, Clock, AlertCircle, Wallet, Calculator, Shield
 import toast from 'react-hot-toast';
 import { useCompany } from '../../contexts/useCompany';
 import { useAuth } from '../../hooks/useAuth';
-import { updateCompany } from '../../services/database';
+import { updateCompany, updateGeoLocation } from '../../services/database';
 import {
   applyBankHours,
   type BankHoursAfterApply,
@@ -69,6 +69,9 @@ export const CompanySettings: React.FC = () => {
   const [defaultFunctionRole, setDefaultFunctionRole] = useState('');
   const [defaultMarkingCount, setDefaultMarkingCount] = useState<2 | 4>(2);
   const [defaultGeoRadius, setDefaultGeoRadius] = useState(50);
+  // Raw (string) pra aceitar digitação livre de negativo/decimal sem travar o campo.
+  const [geoLatRaw, setGeoLatRaw] = useState('0');
+  const [geoLngRaw, setGeoLngRaw] = useState('0');
   const [bankHoursEnabled, setBankHoursEnabled] = useState(false);
   const [bankHoursApplyInPayment, setBankHoursApplyInPayment] = useState(false);
   const [bankHoursFormula, setBankHoursFormula] = useState<BankHoursFormula>(BANK_HOURS_DEFAULTS.formula);
@@ -89,6 +92,10 @@ export const CompanySettings: React.FC = () => {
   const bankHoursExtraMultiplier = parseNumericInput(extraMultRaw) ?? 0;
   const bankHoursCustomValue = parseNumericInput(customValueRaw) ?? 0;
   const bankHoursNightMultiplier = parseNumericInput(nightMultRaw) ?? 0;
+  const geoLat = parseNumericInput(geoLatRaw);
+  const geoLng = parseNumericInput(geoLngRaw);
+  const geoLatValid = geoLat != null && isInRange(geoLat, -90, 90);
+  const geoLngValid = geoLng != null && isInRange(geoLng, -180, 180);
 
   useEffect(() => {
     if (!company) return;
@@ -97,6 +104,8 @@ export const CompanySettings: React.FC = () => {
     setDefaultFunctionRole(company.default_function_role ?? '');
     setDefaultMarkingCount(company.default_marking_count);
     setDefaultGeoRadius(company.default_geo_radius);
+    setGeoLatRaw(String(company.default_geo_lat));
+    setGeoLngRaw(String(company.default_geo_lng));
     setBankHoursEnabled(!!company.bank_hours_enabled);
     setBankHoursApplyInPayment(!!company.bank_hours_apply_in_payment);
     setBankHoursFormula(company.bank_hours_formula ?? BANK_HOURS_DEFAULTS.formula);
@@ -124,6 +133,11 @@ export const CompanySettings: React.FC = () => {
     e.preventDefault();
     if (!company) return;
 
+    if (!geoLatValid || !geoLngValid) {
+      toast.error('Latitude deve estar entre -90 e 90, longitude entre -180 e 180');
+      return;
+    }
+
     // Validação dos campos do banco de horas (centavos importam — falhar cedo).
     if (bankHoursApplyInPayment) {
       if (bankHoursExtraMultiplier < 1 || bankHoursExtraMultiplier > 3) {
@@ -142,12 +156,18 @@ export const CompanySettings: React.FC = () => {
 
     setSaving(true);
     try {
+      // Ponto de referência do /clock (lat/lng/raio) — próprio update, grava
+      // também em geolocation_config (ver updateGeoLocation).
+      await updateGeoLocation(company.id, {
+        latitude: geoLat as number,
+        longitude: geoLng as number,
+        allowed_radius_meters: defaultGeoRadius,
+      });
       await updateCompany(company.id, {
         city,
         address_full: addressFull || null,
         default_function_role: defaultFunctionRole.trim() || null,
         default_marking_count: defaultMarkingCount,
-        default_geo_radius: defaultGeoRadius,
         default_schedule: scheduleMin,
         bank_hours_enabled: bankHoursEnabled,
         bank_hours_apply_in_payment: bankHoursApplyInPayment,
@@ -259,11 +279,25 @@ export const CompanySettings: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className={labelCls}>Latitude</label>
-            <input value={company.default_geo_lat} disabled className={`${inputCls} bg-gray-50 text-gray-600`} />
+            <input
+              type="text"
+              inputMode="decimal"
+              value={geoLatRaw}
+              onChange={e => setGeoLatRaw(e.target.value)}
+              className={`${inputCls} ${!geoLatValid ? 'border-red-500 ring-1 ring-red-200' : ''}`}
+              disabled={saving}
+            />
           </div>
           <div>
             <label className={labelCls}>Longitude</label>
-            <input value={company.default_geo_lng} disabled className={`${inputCls} bg-gray-50 text-gray-600`} />
+            <input
+              type="text"
+              inputMode="decimal"
+              value={geoLngRaw}
+              onChange={e => setGeoLngRaw(e.target.value)}
+              className={`${inputCls} ${!geoLngValid ? 'border-red-500 ring-1 ring-red-200' : ''}`}
+              disabled={saving}
+            />
           </div>
           <div>
             <label className={labelCls}>Raio (m)</label>
@@ -278,7 +312,9 @@ export const CompanySettings: React.FC = () => {
           </div>
         </div>
         <p className="text-xs text-gray-500 -mt-3 flex items-center gap-1">
-          <MapPin className="w-3 h-3" /> Latitude/longitude são editadas em outra tela.
+          <MapPin className="w-3 h-3" /> É esse ponto (± o raio) que o app usa pra bloquear "fora da área
+          permitida" no /clock. Pra copiar de outra empresa, abra a localização dela num mapa (ex.:
+          Google Maps → botão direito → copiar coordenadas) e cole aqui.
         </p>
 
         <div>
