@@ -871,12 +871,54 @@ depende de contagem fixa) + confirma o fundo amarelo da própria linha.
 
 Validado: typecheck 0 · eslint 0 · build limpo · E2E `tests/83` 2/2.
 
-**Falta:** push (agrupar os 2 commits desta leva, `c191648` + `416ec6a`, num push só) +
-conferir CI/Vercel.
-
-**Resumo da leva toda (§24-§24.3):** 3 pushes (`3999433` feature, `4431102` fix de tipo
+**Resumo da leva §24-§24.3:** 3 pushes (`3999433` feature, `4431102` fix de tipo
 pego pelo CI, `1e38f9b` fix de teste desatualizado). Os dois problemas que o CI pegou
 NÃO eram bug de produto — um foi eu usando o comando de typecheck errado (memória nova
 gravada pra não repetir) e o outro foi um teste de uma leva anterior que não tinha sido
 atualizado depois de uma mudança de dado real em produção. A feature em si (aprovação
 embutida na aba Funcionários) não teve nenhum bug encontrado em nenhuma das 3 rodadas.
+Push de `c191648`+`416ec6a`+`0eaf631` já feito e confirmado (CI verde, Vercel conferida)
+— ver início da §27 abaixo.
+
+## 27. ✅ Prova ao vivo pro Victor — "tem certeza que está 100% funcional?"
+
+Depois de eu reportar a leva §25-§26, Victor perguntou (com razão): "tem certeza que
+está 100% funcional? e os relatórios como vão sair e a aba de ponto vai aparecer?" —
+não aceitei só reafirmar, montei uma verificação ao vivo de verdade: empresa fixture
+com `default_marking_count=4` + funcionário SEM valor fixo (marking_count=null,
+herdando — exatamente a situação de ~97 pessoas reais no dia da ativação), bati as 4
+marcações pela tela real e conferi Ponto, Relatórios e Financeiro.
+
+**Resultado:** os 4 campos de hora apareceram sozinhos na aba Ponto (confirma o fix do
+§25 funcionando pra herança, não só valor fixo); Relatórios mostrou `08:00 → 18:00 →
+9h 00min` certinho (almoço descontado); Financeiro contou o dia trabalhado normal.
+Conferido também direto no banco no momento do save (antes do cleanup automático dos
+testes apagar os dados fictícios): `entry_1/exit_1/entry_2/exit_2` corretos,
+`hours_worked=9`, `worked_minutes=540`, `bank_credit_minutes=60`. Empresa e funcionário
+apagados depois — nada ficou em produção.
+
+**Publiquei um Artifact** com os 3 prints reais (não descrição, prints de verdade) pra
+ele conferir com os próprios olhos: `https://claude.ai/code/artifact/e6a26bce-06a3-45e5-8978-ff8b9c3d50d6`.
+
+## 28. ✅ Dois pedidos em cima da prova ao vivo — Intervalo no relatório + Motivo do bloqueio
+
+Vendo a prova do §27, Victor pediu dois ajustes pequenos, ambos entregues e provados
+ao vivo (mesma técnica: empresa/funcionário fictícios, apagados depois):
+
+1. **"gostei que já calcula automático, vamos colocar também pra aparecer o
+   intervalo"** — commit `ed54e29`. Coluna Intervalo nova entre Saída e Horas,
+   reusando `computeIntervalMinutes` (já testado em `attendanceCalc.spec.ts`, sem
+   duplicar cálculo) nos 3 lugares que precisavam ficar em sincronia: tela, PDF e
+   Excel. Provado baixando o Excel de VERDADE (não só a tela) e lendo o arquivo com a
+   lib `xlsx` — cabeçalho e valor da coluna batem (`"1h 00min"`).
+2. **"e onde eu vejo a observação do porque o funcionário foi bloqueado, precisamos
+   dessa informação também"** — commit `b64ede7`. Achado real: `registration_notes` já
+   era gravado ao recusar (prompt da leva de sessão anterior) mas nunca aparecia em
+   lugar nenhum da aba Funcionários. Agora mostra "Motivo: ..." abaixo do nome (desktop
+   + mobile), só na view Bloqueados, só quando existe motivo.
+
+Validado: typecheck 0 · eslint 0 · build limpo nos dois · regressão `tests/06-reports`
+(5 testes, 1 flaky não relacionado) · verificação ao vivo de cada um com dado fictício
+real, apagado depois.
+
+**Falta:** push (agrupar `ed54e29` + `b64ede7` + este checkpoint) + conferir CI/Vercel.

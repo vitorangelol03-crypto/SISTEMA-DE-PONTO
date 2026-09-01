@@ -12,7 +12,11 @@
 > `default_marking_count` continua 2 nas duas empresas. **+ 2 achados ao vivo na aba
 > Funcionários** (`416ec6a`): scroll até o formulário não disparava ao trocar de
 > funcionário com ele já aberto (corrigido) + pendente agora sempre ordena primeiro, linha
-> em amarelo (só 2626). Detalhe em `CHECKPOINT_SESSAO_2026-08-31.md` §25-§26.
+> em amarelo (só 2626). **+ prova ao vivo pro Victor** (§27, artifact com prints reais)
+> confirmando Ponto/Relatórios/Financeiro funcionando pra quem herda as 4 marcações **+ 2
+> pedidos em cima da prova** (§28, `ed54e29`+`b64ede7`): coluna Intervalo (almoço) no
+> relatório (tela+PDF+Excel) e "Motivo: ..." do bloqueio agora aparece na aba Funcionários.
+> Detalhe em `CHECKPOINT_SESSAO_2026-08-31.md` §25-§28.
 
 > ✅ **Sessão 31/08→01/09: roadmap item 1 FECHADO** (facial obrigatória nas duas empresas) **+
 > aba Aprovação de Cadastro ganhou reverter decisão** (`25cd77b`) **+ roadmap item 2 (4
