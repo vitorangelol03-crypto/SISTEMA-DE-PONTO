@@ -354,3 +354,22 @@ apagada quando quiser, não tem mais uso.
 
 **Ao reabrir:** ler este arquivo + `00-INDEX.md` primeiro (regra do projeto). Nenhuma ação
 pendente de finalizar — é ponto de parada limpo, não meio de tarefa.
+
+## 14. ✅ Rollout item 1 — Ponte Nova LIGADA (pedido do Victor, mesmo dia, nova sessão)
+
+Victor pediu "pode ligar a facial em Ponte Nova, falta só 1 pessoa". Conferido em produção
+ANTES de mexer (não confiei só no número do checkpoint): 6 funcionários em Ponte Nova, só
+**Euder da Silva Machado** sem `face_descriptor` (cadastro `pending`, o que não bloqueia o
+ponto — só o rosto travaria); `geolocation_config` da empresa com `block_outside=true` e
+raio 150m intactos.
+
+Aplicado via MCP `execute_sql` (UPDATE simples, não é DDL — não precisa de migration):
+`companies.require_facial_clock = true` só na Ponte Nova (`2b2abc4b-084c-4cf0-b5f1-02792513241d`).
+Conferido depois: Ponte Nova `true`, **Caratinga segue `false`** (intacta). Sem deploy —
+edge fn e frontend já estavam publicados e provados ao vivo na leva anterior (§9-10 e §12),
+incluindo o caminho exato do Euder (sem rosto → cai no cadastro facial, self-enroll, não é
+bloqueado).
+
+**Pendência 1 do §13 fechada.** Faltam as pendências 2 (PROXIMOS_PASSOS §2) e 3 (roadmap
+item 2, 4 batidas — Caratinga com 32/91 sem rosto ainda, decisão de quando ligar lá segue
+em aberto, ele não pediu isso agora).

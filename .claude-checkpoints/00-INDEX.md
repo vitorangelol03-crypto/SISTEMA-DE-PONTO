@@ -4,10 +4,11 @@
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 > Última atualização: **2026-08-31**.
 
-> ⏸️ **Sessão pausada a pedido do Victor (reinício do PC), estado limpo:** `git status` vazio,
-> `main` local = `origin/main` = `ed14294`, zero processo em segundo plano. Não é meio de
-> tarefa — nenhuma ação ficou pra terminar. As 3 pendências reais (todas decisão/operação
-> dele, não código) estão em `CHECKPOINT_SESSAO_2026-08-31.md` §13.
+> ✅ **Retomado 31/08 (nova sessão, mesma data): Ponte Nova com facial obrigatória LIGADA**
+> a pedido do Victor (`require_facial_clock=true`, só 1 pessoa sem rosto lá — self-enroll
+> cobre). Caratinga segue desligada (32/91 sem rosto). Sem código novo, só UPDATE em prod
+> (conferido antes e depois) — edge fn e frontend já validados na leva anterior. Detalhe em
+> `CHECKPOINT_SESSAO_2026-08-31.md` §14. Restam as pendências 2 e 3 do §13 (mesmo arquivo).
 
 ## 🎯 Estado atual (1 parágrafo)
 

@@ -158,10 +158,10 @@ sempre vermelhos por isso). Caminho: aplicar **localmente** com lock regenerado 
 
 1. **Facial + geolocalização 100% obrigatórias, sem brecha.** ✅ **NO AR (31/08):** migration
    `companies.require_facial_clock` aplicada + edge fn `clock-in-validated` publicada (v12) +
-   provado ao vivo (trava bloqueia rosto/geo errados; fluxo de hoje intacto, 24 E2E). Chave
-   **desligada** em Caratinga e Ponte Nova. **Falta:** decidir COM o Victor quando ligar por
-   empresa (ele já decidiu o COMO: self-enroll na 1ª vez, empresa por empresa, só depois de
-   todos terem rosto — Ponte Nova quase pronta, 1 sem rosto; Caratinga com 32 sem rosto).
+   provado ao vivo (trava bloqueia rosto/geo errados; fluxo de hoje intacto, 24 E2E). **Chave
+   LIGADA em Ponte Nova** (31/08, pedido do Victor — só 1 pessoa sem rosto, self-enroll cobre).
+   Segue **desligada** em Caratinga (32 de 91 sem rosto — falta decidir quando ligar lá: esperar
+   todo mundo cadastrar ou confiar no self-enroll).
 2. **4 batidas/dia** (entrada, saída intervalo, volta, saída) em **PN e Caratinga**:
    cadastro, cálculo, aprovação, Financeiro e todos os relatórios.
 3. **Modo tablet (quiosque):** 2 tablets da empresa; ponto só neles, dentro da localização.
