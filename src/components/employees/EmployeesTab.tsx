@@ -90,7 +90,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   // 01/09/2026: clicar "Editar" num funcionário lá embaixo da lista abria o
   // formulário (que fica no topo da página) sem levar a tela até ele — tinha
   // que rolar na mão. Agora rola sozinho sempre que o formulário abre.
+  // `formOpenSeq` (não `showForm`) é o gatilho: clicar "Editar" num outro
+  // funcionário COM o formulário já aberto troca o conteúdo mas não muda
+  // `showForm` (que já era true) — o efeito não disparava de novo, achado
+  // real do Victor ("clico editar e não rola até o formulário").
   const formRef = useRef<HTMLDivElement>(null);
+  const [formOpenSeq, setFormOpenSeq] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [cityFilter, setCityFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('');
@@ -195,13 +200,17 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     setTempSchedule([0, 0, 0, 0, 0, 0, 0]);
   }, [company?.id]);
 
-  // Rola até o formulário sempre que ele abre — "Editar" num funcionário lá
-  // embaixo da lista não deixa mais a pessoa perdida lá em cima.
+  // Rola até o formulário toda vez que ele é aberto — "Editar" num funcionário
+  // lá embaixo da lista não deixa mais a pessoa perdida lá em cima. Dispara em
+  // `formOpenSeq`, não em `showForm`: trocar de funcionário com o formulário
+  // já aberto não muda `showForm` (que já era true), então precisa de um
+  // gatilho que muda em TODO clique de abrir, não só na 1ª vez.
   useEffect(() => {
     if (showForm) {
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  }, [showForm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- formOpenSeq é o gatilho de propósito (ver comentário acima)
+  }, [formOpenSeq]);
 
   useEffect(() => {
     const filtered = employees.filter(employee => {
@@ -227,7 +236,19 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
       return matchesSearch && matchesCity && matchesState && matchesEmploymentType && matchesRegistrationView;
     });
-    setFilteredEmployees(filtered);
+    // Pedido do Victor (01/09/2026): pendente sempre em primeiro na lista, pra
+    // não passar batido no meio dos aprovados. Só pro 2626 (só ele vê o badge
+    // "Pendente" pra essa ordem fazer sentido) — sort estável preserva a ordem
+    // alfabética dentro de cada grupo (pendentes entre si, aprovados entre si).
+    const ordered = canViewApproval
+      ? [...filtered].sort((a, b) => {
+          const aPending = (a.registration_status ?? 'pending') === 'pending';
+          const bPending = (b.registration_status ?? 'pending') === 'pending';
+          if (aPending === bPending) return 0;
+          return aPending ? -1 : 1;
+        })
+      : filtered;
+    setFilteredEmployees(ordered);
   }, [searchTerm, cityFilter, stateFilter, employmentTypeFilter, employees, canViewApproval, registrationView]);
 
   const registrationCounts = useMemo(() => {
@@ -422,6 +443,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       expectedSchedule: employee.expected_schedule ?? null,
     });
     setShowForm(true);
+    setFormOpenSeq(seq => seq + 1);
   };
 
   const handleDelete = async (employee: Employee) => {
@@ -987,7 +1009,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
             {hasPermission('employees.create') && (
               <button
-                onClick={() => setShowForm(true)}
+                onClick={() => { setShowForm(true); setFormOpenSeq(seq => seq + 1); }}
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors min-h-[48px] font-medium"
               >
                 <Plus className="w-4 h-4" />
@@ -1391,8 +1413,16 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredEmployees.map((employee) => (
-                <tr key={employee.id} data-testid="employee-row" className={selectedIds.has(employee.id) ? 'bg-blue-50/50' : 'hover:bg-gray-50'}>
+              {filteredEmployees.map((employee) => {
+                const isPending = canViewApproval && (employee.registration_status ?? 'pending') === 'pending';
+                return (
+                <tr key={employee.id} data-testid="employee-row" className={
+                  selectedIds.has(employee.id)
+                    ? 'bg-blue-50/50'
+                    : isPending
+                      ? 'bg-yellow-50 hover:bg-yellow-100'
+                      : 'hover:bg-gray-50'
+                }>
                   {hasPermission('employees.edit') && (
                     <td className="px-3 py-4 w-12">
                       <input
@@ -1523,15 +1553,18 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
 
         {/* Mobile View - Cards */}
         <div className="md:hidden divide-y divide-gray-200">
-          {filteredEmployees.map((employee) => (
-            <div key={employee.id} className="p-4 hover:bg-gray-50 overflow-hidden">
+          {filteredEmployees.map((employee) => {
+            const isPending = canViewApproval && (employee.registration_status ?? 'pending') === 'pending';
+            return (
+            <div key={employee.id} className={`p-4 overflow-hidden ${isPending ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -1639,7 +1672,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {filteredEmployees.length === 0 && (
