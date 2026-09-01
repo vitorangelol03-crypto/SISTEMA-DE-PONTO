@@ -39,7 +39,6 @@ const DriverPayTab = lazy(() => import('./components/driverpay/DriverPayTab').th
 const DataManagementTab = lazy(() => import('./components/datamanagement/DataManagementTab').then(m => ({ default: m.DataManagementTab })));
 const TutorialTab = lazy(() => import('./components/tutorial/TutorialTab').then(m => ({ default: m.TutorialTab })));
 const AdminTab = lazy(() => import('./components/admin/AdminTab').then(m => ({ default: m.AdminTab })));
-const EmployeeApprovalTab = lazy(() => import('./components/employeeapproval/EmployeeApprovalTab').then(m => ({ default: m.EmployeeApprovalTab })));
 
 function App() {
   const { user, loading, login, logout } = useAuth();
@@ -199,8 +198,6 @@ function App() {
           return hasPermission('attendance.view') ? <AttendanceTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'employees':
           return hasPermission('employees.view') ? <EmployeesTab userId={user.id} hasPermission={hasPermission} /> : null;
-        case 'employeeapproval':
-          return hasPermission('employeeapproval.view') ? <EmployeeApprovalTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'reports':
           return hasPermission('reports.view') ? <ReportsTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'financial':

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound, Clock, Briefcase, Calendar, Hash, Save } from 'lucide-react';
-import { getAllEmployees, getAllEmployeesAcrossAllCompanies, createEmployee, updateEmployee, deleteEmployee, Employee, bulkCreateEmployees, setEmployeePin, resetEmployeePin, getCompanies } from '../../services/database';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound, Clock, Briefcase, Calendar, Hash, Save, Copy, CheckCircle2, XCircle, Clock3, ArchiveRestore, UserCheck } from 'lucide-react';
+import { getAllEmployees, getAllEmployeesAcrossAllCompanies, createEmployee, updateEmployee, deleteEmployee, updateEmployeeRegistrationStatus, Employee, bulkCreateEmployees, setEmployeePin, resetEmployeePin, getCompanies } from '../../services/database';
 import { supabase } from '../../lib/supabase';
 
 const SCHEDULE_DAY_LABELS: ReadonlyArray<{ index: number; short: string; long: string }> = [
@@ -27,7 +27,14 @@ function hhmmToMinutes(s: string): number {
 function scheduleSum(schedule: number[]): number {
   return schedule.reduce((a, b) => a + (Number(b) || 0), 0);
 }
-import { validateCPF, formatCPF } from '../../utils/validation';
+import {
+  validateCPF,
+  formatCPF,
+  formatPhoneDisplay,
+  sanitizePublicRegistrationName,
+  sanitizePublicRegistrationPixKey,
+  sanitizePhoneDigits,
+} from '../../utils/validation';
 import { generateEmployeeTemplate, parseEmployeeSpreadsheet, generateErrorReport, generateImportReport, parsedToImportData, ImportValidationResult, EmployeeImportData } from '../../utils/employeeImport';
 import { validateImportRow, normalizeCPF, type ValidationContext, type ImportRow } from '../../utils/employeeImportValidation';
 import { useCompany } from '../../contexts/useCompany';
@@ -39,6 +46,43 @@ interface EmployeesTabProps {
   hasPermission: (permission: string) => boolean;
 }
 
+// 01/09/2026: Aprovação de Cadastro deixou de ser aba separada — embutida
+// aqui em Funcionários (pedido do Victor: "dá muito trabalho ficar trocando
+// de aba"). Pendente ganha um selo na lista normal; recusado (bloqueado) vai
+// pra uma seção separada, só com hasPermission('employeeapproval.view')
+// (exclusivo do 2626, mesma regra de antes) — pra ninguém mais ver nem mexer.
+type RegistrationStatus = 'pending' | 'approved' | 'rejected';
+
+const REGISTRATION_META: Record<RegistrationStatus, { label: string; icon: React.ElementType; badgeCls: string }> = {
+  pending: { label: 'Pendente', icon: Clock3, badgeCls: 'bg-yellow-100 text-yellow-800' },
+  approved: { label: 'Aprovado', icon: CheckCircle2, badgeCls: 'bg-green-100 text-green-800' },
+  rejected: { label: 'Recusado', icon: XCircle, badgeCls: 'bg-red-100 text-red-800' },
+};
+
+/** Botão de copiar a versão LIMPA de um dado (nome/CPF/telefone/PIX) — pedido do Victor 26/08. */
+const CopyField: React.FC<{ label: string; value: string }> = ({ label, value }) => {
+  const handleCopy = async () => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copiado`);
+    } catch {
+      toast.error('Não foi possível copiar');
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      disabled={!value}
+      title={`Copiar ${label.toLowerCase()}`}
+      className="inline-flex items-center justify-center p-0.5 rounded text-gray-400 hover:text-green-700 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+    >
+      <Copy className="w-3 h-3" />
+    </button>
+  );
+};
+
 export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermission }) => {
   const { company } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -46,10 +90,22 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  // 01/09/2026: clicar "Editar" num funcionário lá embaixo da lista abria o
+  // formulário (que fica no topo da página) sem levar a tela até ele — tinha
+  // que rolar na mão. Agora rola sozinho sempre que o formulário abre.
+  const formRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [cityFilter, setCityFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [employmentTypeFilter, setEmploymentTypeFilter] = useState('');
+  // Aprovação de Cadastro embutida (01/09/2026) — só existe de verdade pra
+  // quem tem employeeapproval.view (2626).
+  const [registrationView, setRegistrationView] = useState<'ativos' | 'bloqueados'>('ativos');
+  const [savingApprovalId, setSavingApprovalId] = useState<string | null>(null);
+  const [registerLinkCopied, setRegisterLinkCopied] = useState(false);
+  const canViewApproval = hasPermission('employeeapproval.view');
+  const canApproveRegistration = hasPermission('employeeapproval.approve');
+  const canRejectRegistration = hasPermission('employeeapproval.reject');
   const [formData, setFormData] = useState({
     name: '',
     cpf: '',
@@ -142,6 +198,14 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     setTempSchedule([0, 0, 0, 0, 0, 0, 0]);
   }, [company?.id]);
 
+  // Rola até o formulário sempre que ele abre — "Editar" num funcionário lá
+  // embaixo da lista não deixa mais a pessoa perdida lá em cima.
+  useEffect(() => {
+    if (showForm) {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [showForm]);
+
   useEffect(() => {
     const filtered = employees.filter(employee => {
       const searchNumbers = searchTerm.replace(/\D/g, '');
@@ -155,10 +219,71 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       const matchesState = !stateFilter || employee.state === stateFilter;
       const matchesEmploymentType = !employmentTypeFilter || employee.employment_type === employmentTypeFilter;
 
-      return matchesSearch && matchesCity && matchesState && matchesEmploymentType;
+      // Quem não tem employeeapproval.view continua vendo todo mundo, igual
+      // sempre foi — a separação ativos/bloqueados é exclusiva do 2626.
+      const registrationStatus = employee.registration_status ?? 'pending';
+      const matchesRegistrationView = !canViewApproval
+        ? true
+        : registrationView === 'bloqueados'
+          ? registrationStatus === 'rejected'
+          : registrationStatus !== 'rejected';
+
+      return matchesSearch && matchesCity && matchesState && matchesEmploymentType && matchesRegistrationView;
     });
     setFilteredEmployees(filtered);
-  }, [searchTerm, cityFilter, stateFilter, employmentTypeFilter, employees]);
+  }, [searchTerm, cityFilter, stateFilter, employmentTypeFilter, employees, canViewApproval, registrationView]);
+
+  const registrationCounts = useMemo(() => {
+    const c = { pending: 0, rejected: 0 };
+    for (const e of employees) {
+      const status = e.registration_status ?? 'pending';
+      if (status === 'pending') c.pending += 1;
+      else if (status === 'rejected') c.rejected += 1;
+    }
+    return c;
+  }, [employees]);
+
+  const registerLink = company ? `${window.location.origin}/cadastro?empresa=${company.id}` : '';
+
+  const handleCopyRegisterLink = async () => {
+    if (!registerLink) return;
+    try {
+      await navigator.clipboard.writeText(registerLink);
+      setRegisterLinkCopied(true);
+      toast.success('Link copiado');
+      setTimeout(() => setRegisterLinkCopied(false), 2000);
+    } catch {
+      toast.error('Não foi possível copiar o link. Copie manualmente.');
+    }
+  };
+
+  const handleRegistrationDecision = async (employee: Employee, status: 'approved' | 'rejected') => {
+    const currentStatus = employee.registration_status ?? 'pending';
+    let notes: string | null = employee.registration_notes ?? null;
+    if (status === 'rejected') {
+      const reason = window.prompt(
+        `Recusar o cadastro de ${employee.name}? Isso bloqueia o funcionário no próximo ponto.\n\nMotivo (opcional):`,
+        employee.registration_notes ?? '',
+      );
+      if (reason === null) return; // cancelou
+      notes = reason.trim() || null;
+    } else if (currentStatus === 'rejected') {
+      const confirmed = window.confirm(
+        `Reverter o bloqueio de ${employee.name} e aprovar de novo? Ele volta a poder bater ponto.`
+      );
+      if (!confirmed) return;
+    }
+    setSavingApprovalId(employee.id);
+    try {
+      await updateEmployeeRegistrationStatus(employee.id, status, notes, userId);
+      toast.success(status === 'approved' ? 'Cadastro aprovado' : 'Cadastro recusado');
+      await loadEmployees();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao salvar');
+    } finally {
+      setSavingApprovalId(null);
+    }
+  };
 
   const resetForm = () => {
     setFormData({
@@ -669,6 +794,68 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
             </h2>
           </div>
 
+          {/* Aprovação de Cadastro embutida (01/09/2026) — exclusivo do 2626,
+              mesma regra de antes (nem o 9999 vê). */}
+          {canViewApproval && (
+            <>
+              <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 space-y-2">
+                <p className="text-sm font-semibold text-green-900 flex items-center gap-1.5">
+                  <UserCheck className="w-4 h-4" /> Link de cadastro para novos funcionários
+                </p>
+                <p className="text-xs text-green-700">
+                  Compartilhe esse link com o candidato — ele cadastra sozinho, sem entrar no sistema, e já pode bater ponto.
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={registerLink}
+                    className="flex-1 min-w-0 px-3 py-2 bg-white border border-green-300 rounded-lg text-sm font-mono text-gray-700"
+                    onFocus={e => e.target.select()}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyRegisterLink}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors"
+                  >
+                    <Copy className="w-4 h-4" />
+                    {registerLinkCopied ? 'Copiado!' : 'Copiar'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRegistrationView('ativos')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-colors ${
+                    registrationView === 'ativos' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300'
+                  }`}
+                >
+                  Ativos
+                  {registrationCounts.pending > 0 && (
+                    <span className={`px-1.5 py-0.5 rounded-full text-xs ${registrationView === 'ativos' ? 'bg-white/20' : 'bg-yellow-100 text-yellow-800'}`}>
+                      {registrationCounts.pending} pendente{registrationCounts.pending > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRegistrationView('bloqueados')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-colors ${
+                    registrationView === 'bloqueados' ? 'bg-red-600 border-red-600 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-red-300'
+                  }`}
+                >
+                  <XCircle className="w-4 h-4" />
+                  Bloqueados
+                  <span className={`px-1.5 py-0.5 rounded-full text-xs ${registrationView === 'bloqueados' ? 'bg-white/20' : 'bg-gray-100'}`}>
+                    {registrationCounts.rejected}
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
+
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -815,7 +1002,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       </div>
 
       {showForm && (
-        <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+        <div ref={formRef} className="bg-white p-4 sm:p-6 rounded-lg shadow scroll-mt-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base sm:text-lg font-medium">
               {editingEmployee ? 'Editar Funcionário' : 'Novo Funcionário'}
@@ -1208,7 +1395,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredEmployees.map((employee) => (
-                <tr key={employee.id} className={selectedIds.has(employee.id) ? 'bg-blue-50/50' : 'hover:bg-gray-50'}>
+                <tr key={employee.id} data-testid="employee-row" className={selectedIds.has(employee.id) ? 'bg-blue-50/50' : 'hover:bg-gray-50'}>
                   {hasPermission('employees.edit') && (
                     <td className="px-3 py-4 w-12">
                       <input
@@ -1220,10 +1407,21 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                     </td>
                   )}
                   <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                    <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5 flex-wrap">
+                      {employee.name}
+                      <CopyField label="Nome" value={sanitizePublicRegistrationName(employee.name)} />
+                      {canViewApproval && (employee.registration_status ?? 'pending') !== 'approved' && (
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${REGISTRATION_META[(employee.registration_status ?? 'pending') as RegistrationStatus].badgeCls}`}>
+                          {REGISTRATION_META[(employee.registration_status ?? 'pending') as RegistrationStatus].label}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{formatCPF(employee.cpf)}</div>
+                    <div className="text-sm text-gray-500 flex items-center gap-1">
+                      {formatCPF(employee.cpf)}
+                      <CopyField label="CPF" value={employee.cpf ? employee.cpf.replace(/\D/g, '') : ''} />
+                    </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     {employee.employment_type ? (
@@ -1279,6 +1477,34 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
+                      {canViewApproval && (() => {
+                        const status = employee.registration_status ?? 'pending';
+                        const busy = savingApprovalId === employee.id;
+                        return (
+                          <>
+                            {status !== 'approved' && canApproveRegistration && (
+                              <button
+                                onClick={() => handleRegistrationDecision(employee, 'approved')}
+                                disabled={busy}
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-md transition-colors min-h-[44px] min-w-[44px] disabled:opacity-50"
+                                title={status === 'rejected' ? 'Reverter e aprovar' : 'Aprovar cadastro'}
+                              >
+                                {status === 'rejected' ? <ArchiveRestore className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                              </button>
+                            )}
+                            {status !== 'rejected' && canRejectRegistration && (
+                              <button
+                                onClick={() => handleRegistrationDecision(employee, 'rejected')}
+                                disabled={busy}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors min-h-[44px] min-w-[44px] disabled:opacity-50"
+                                title="Recusar cadastro (bloqueia)"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                       {hasPermission('employees.edit') && (
                         <button
                           onClick={() => handleEdit(employee)}
@@ -1322,8 +1548,16 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                         {employee.employment_type}
                       </span>
                     )}
+                    {canViewApproval && (employee.registration_status ?? 'pending') !== 'approved' && (
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${REGISTRATION_META[(employee.registration_status ?? 'pending') as RegistrationStatus].badgeCls}`}>
+                        {REGISTRATION_META[(employee.registration_status ?? 'pending') as RegistrationStatus].label}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-1 break-words">CPF: {formatCPF(employee.cpf)}</p>
+                  <p className="text-xs text-gray-500 mt-1 break-words flex items-center gap-1">
+                    CPF: {formatCPF(employee.cpf)}
+                    <CopyField label="CPF" value={employee.cpf} />
+                  </p>
                   {employee.pix_key && (
                     <p className="text-xs text-gray-500 mt-1 break-words">PIX: {employee.pix_key}</p>
                   )}
@@ -1340,6 +1574,36 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
               </div>
 
               <div className="grid grid-cols-2 gap-2 mt-3">
+                {canViewApproval && (() => {
+                  const status = employee.registration_status ?? 'pending';
+                  const busy = savingApprovalId === employee.id;
+                  return (
+                    <>
+                      {status !== 'approved' && canApproveRegistration && (
+                        <button
+                          onClick={() => handleRegistrationDecision(employee, 'approved')}
+                          disabled={busy}
+                          className="w-full inline-flex items-center justify-center gap-1 px-2 py-3 text-sm font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-colors min-h-[48px] disabled:opacity-50"
+                        >
+                          {status === 'rejected'
+                            ? <ArchiveRestore className="w-4 h-4 flex-shrink-0" />
+                            : <CheckCircle2 className="w-4 h-4 flex-shrink-0" />}
+                          <span>{status === 'rejected' ? 'Reverter' : 'Aprovar'}</span>
+                        </button>
+                      )}
+                      {status !== 'rejected' && canRejectRegistration && (
+                        <button
+                          onClick={() => handleRegistrationDecision(employee, 'rejected')}
+                          disabled={busy}
+                          className="w-full inline-flex items-center justify-center gap-1 px-2 py-3 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors min-h-[48px] disabled:opacity-50"
+                        >
+                          <XCircle className="w-4 h-4 flex-shrink-0" />
+                          <span>Recusar</span>
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
                 {hasPermission('employees.edit') && (
                   <button
                     onClick={() => handleEdit(employee)}

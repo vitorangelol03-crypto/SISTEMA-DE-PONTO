@@ -3,7 +3,7 @@ import { MASTER_2626, loginAs, goToTab } from './helpers';
 import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
 
 /**
- * E2E — reverter decisão na aba Aprovação de Cadastro (31/08/2026, pedido do Victor):
+ * E2E — reverter decisão de cadastro (31/08/2026, pedido do Victor):
  *
  *   achado no meio da sessão: Arthur Teixeira estava "aprovado" mas com a nota
  *   "não está indo trabalhar" — a MESMA frase usada pra recusar outros 27
@@ -15,6 +15,10 @@ import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
  * Prova, no navegador real, os botões novos nos dois sentidos (aprovado →
  * recusado e recusado → aprovado, sem sair do painel) e confirma no fim que
  * o estado revertido desbloqueia de verdade no /clock.
+ *
+ * 01/09/2026: a aba "Aprovação de Cadastro" separada foi removida — os
+ * botões agora vivem na aba "Funcionários" (view "Ativos"/"Bloqueados" no
+ * lugar dos filtros Pendente/Aprovado/Recusado de antes).
  */
 
 const RUN = Date.now().toString(36);
@@ -67,15 +71,16 @@ test.describe('Aprovação de Cadastro — reverter decisão', () => {
 
     try {
       await loginAs(page, MASTER_2626);
-      await goToTab(page, 'Aprovação de Cadastro');
-      await expect(page.getByRole('heading', { name: 'Aprovação de Cadastro' })).toBeVisible({ timeout: 10_000 });
+      await goToTab(page, 'Funcionários');
+      await expect(page.getByRole('heading', { name: /Funcionários/ })).toBeVisible({ timeout: 10_000 });
+      const search = page.getByPlaceholder('Buscar por nome ou CPF...');
+      await search.fill(NOME);
 
-      // ── 1) Filtro "Aprovado": recusa (bloqueia) ──
-      await page.getByRole('button', { name: /Aprovado/ }).click();
-      const rowApproved = page.getByTestId('employee-approval-row').filter({ hasText: NOME });
+      // ── 1) View "Ativos" (aprovado entra aqui): recusa (bloqueia) ──
+      const rowApproved = page.getByTestId('employee-row').filter({ hasText: NOME });
       await expect(rowApproved).toBeVisible({ timeout: 10_000 });
       page.once('dialog', d => d.accept());
-      await rowApproved.getByRole('button', { name: 'Recusar' }).click();
+      await rowApproved.getByTitle('Recusar cadastro (bloqueia)').click();
       await expect(rowApproved).toHaveCount(0, { timeout: 10_000 });
 
       const { data: afterReject } = await supabase
@@ -87,12 +92,12 @@ test.describe('Aprovação de Cadastro — reverter decisão', () => {
       // (bloqueio real no /clock pra quem é 'rejected' já é provado no tests/78;
       // aqui o foco é a reversão em si, sem sair do painel entre as duas ações)
 
-      // ── 2) Filtro "Recusado": reverte (aprova de novo) ──
-      await page.getByRole('button', { name: /Recusado/ }).click();
-      const rowRejected = page.getByTestId('employee-approval-row').filter({ hasText: NOME });
+      // ── 2) View "Bloqueados": reverte (aprova de novo) ──
+      await page.getByRole('button', { name: /Bloqueados/ }).click();
+      const rowRejected = page.getByTestId('employee-row').filter({ hasText: NOME });
       await expect(rowRejected).toBeVisible({ timeout: 10_000 });
       page.once('dialog', d => d.accept());
-      await rowRejected.getByRole('button', { name: 'Reverter e aprovar' }).click();
+      await rowRejected.getByTitle('Reverter e aprovar').click();
       await expect(rowRejected).toHaveCount(0, { timeout: 10_000 });
 
       const { data: afterRevert } = await supabase

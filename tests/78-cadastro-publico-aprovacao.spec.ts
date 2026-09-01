@@ -15,13 +15,18 @@ import { validateCPF } from '../src/utils/validation';
  *
  * O que este teste prova, ponta a ponta, no navegador real:
  *   1) a página pública /cadastro?empresa=... aceita o cadastro sem login;
- *   2) o funcionário cadastrado aparece "Pendente" na aba Aprovação de Cadastro;
+ *   2) o funcionário cadastrado aparece "Pendente" na aba Funcionários;
  *   3) aprovar não muda o comportamento de bater ponto (chega no setup de PIN);
  *   4) recusar bloqueia no /clock com mensagem clara — mesmo sem PIN configurado.
  *
  * 2ª leva (26/08): todo cadastro por este link entra como Diarista, na
  * função que o candidato escolhe numa lista das funções já usadas na
  * empresa (não texto livre) — prova que grava certo e aparece na aba.
+ *
+ * 3ª leva (01/09/2026, pedido do Victor): a aba "Aprovação de Cadastro"
+ * separada foi removida — tudo isso agora vive embutido na aba
+ * "Funcionários" (badge de status + botões Aprovar/Recusar na própria
+ * lista), exclusivo do 2626, igual antes.
  */
 
 const RUN = Date.now().toString(36);
@@ -105,29 +110,31 @@ test.describe('Cadastro público + Aprovação de Cadastro', () => {
         expect(e.function_role).toBe(FUNCAO_TRIAGEM);
       }
 
-      // ── 2) Painel: aba Aprovação de Cadastro — EXCLUSIVA do 2626 (nem 9999 vê) ──
+      // ── 2) Painel: aprovação embutida na aba Funcionários — EXCLUSIVA do 2626 (nem 9999 vê) ──
       await loginAs(page, MASTER_2626);
-      await goToTab(page, 'Aprovação de Cadastro');
-      await expect(page.getByRole('heading', { name: 'Aprovação de Cadastro' })).toBeVisible({ timeout: 10_000 });
+      await goToTab(page, 'Funcionários');
+      await expect(page.getByRole('heading', { name: /Funcionários/ })).toBeVisible({ timeout: 10_000 });
 
-      const rowAprovado = page.getByTestId('employee-approval-row').filter({ hasText: NOME_APROVADO });
-      const rowRecusado = page.getByTestId('employee-approval-row').filter({ hasText: NOME_RECUSADO });
-      await expect(page.getByText(NOME_APROVADO)).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText(NOME_RECUSADO)).toBeVisible({ timeout: 10_000 });
+      // Busca isola cada linha (lista tem centenas de funcionários reais).
+      const search = page.getByPlaceholder('Buscar por nome ou CPF...');
 
-      // Quem aprova já vê Diarista + função escolhida no cartão (pedido do
-      // Victor: "sim, mostrar na lista").
-      await expect(rowAprovado.getByText(`Diarista — ${FUNCAO_TRIAGEM}`)).toBeVisible();
-      await expect(rowRecusado.getByText(`Diarista — ${FUNCAO_TRIAGEM}`)).toBeVisible();
+      await search.fill(NOME_APROVADO);
+      const rowAprovado = page.getByTestId('employee-row').filter({ hasText: NOME_APROVADO });
+      await expect(rowAprovado).toBeVisible({ timeout: 10_000 });
+      await expect(rowAprovado.getByText('Pendente')).toBeVisible();
+      await expect(rowAprovado.getByText('Diarista')).toBeVisible();
+      await rowAprovado.getByTitle('Aprovar cadastro').click();
+      await expect(rowAprovado.getByText('Pendente')).toHaveCount(0, { timeout: 10_000 });
 
-      // Aprova o primeiro.
-      await rowAprovado.getByRole('button', { name: 'Aprovar' }).click();
-      await expect(page.getByText(NOME_APROVADO)).toHaveCount(0, { timeout: 10_000 });
-
-      // Recusa o segundo — confirma no dialog nativo.
+      await search.fill(NOME_RECUSADO);
+      const rowRecusado = page.getByTestId('employee-row').filter({ hasText: NOME_RECUSADO });
+      await expect(rowRecusado).toBeVisible({ timeout: 10_000 });
+      await expect(rowRecusado.getByText('Pendente')).toBeVisible();
+      await expect(rowRecusado.getByText('Diarista')).toBeVisible();
+      // Recusa — confirma no dialog nativo (some da view "Ativos" ao virar rejected).
       page.once('dialog', d => d.accept());
-      await rowRecusado.getByRole('button', { name: 'Recusar' }).click();
-      await expect(page.getByText(NOME_RECUSADO)).toHaveCount(0, { timeout: 10_000 });
+      await rowRecusado.getByTitle('Recusar cadastro (bloqueia)').click();
+      await expect(rowRecusado).toHaveCount(0, { timeout: 10_000 });
 
       const { data: afterDecision } = await supabase
         .from('employees')
