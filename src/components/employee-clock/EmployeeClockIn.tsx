@@ -635,8 +635,14 @@ export const EmployeeClockIn: React.FC = () => {
   const hasExit = todayRecord?.exit_time_full != null;
   const summary = step === 'dashboard' ? monthSummary() : null;
 
-  // Sub-fase 2.10: 4 marcações
-  const markingCount: 2 | 4 = (employee?.marking_count === 4 ? 4 : 2);
+  // Sub-fase 2.10: 4 marcações. `marking_count` do funcionário manda; sem
+  // valor próprio, herda o padrão da empresa (mesma semântica prometida pela
+  // opção "Padrão" no cadastro e já usada em recalcAttendance) — antes disso
+  // caía direto em 2, ignorando o default da empresa (achado 01/09, roadmap
+  // item 2: Ponte Nova está com default_marking_count=4 mas nenhum
+  // funcionário via a tela de 4 marcações por causa desse gap).
+  const resolvedMarkingCount = employee?.marking_count ?? company?.default_marking_count ?? 2;
+  const markingCount: 2 | 4 = resolvedMarkingCount === 4 ? 4 : 2;
   const nextMarkingPos = getNextMarkingPosition(todayRecord);
 
   // ─── UI ───────────────────────────────────────────────────────────────────

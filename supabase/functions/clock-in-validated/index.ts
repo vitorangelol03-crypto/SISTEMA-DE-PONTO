@@ -101,6 +101,30 @@ function calcHours(
   };
 }
 
+// Dia com 4 marcações (item 2 do roadmap, ainda não habilitado em nenhuma
+// empresa): entry_1→exit_2 direto conta o intervalo do almoço como
+// trabalhado. Quando o intervalo (exit_1/entry_2) existe, soma os dois
+// turnos separados — mesma semântica de getWorkSegments/computeWorkedMinutes
+// em src/utils/attendanceCalc.ts (não importável aqui, Deno isolado; mantido
+// em paridade manual). Sem intervalo registrado (pulou posição 2/3), cai no
+// cálculo direto de sempre — sem regressão pro caso hoje em produção.
+function calcHoursFourMarkings(
+  entry1: Date,
+  exit1: Date | null,
+  entry2: Date | null,
+  exit2: Date,
+): { hoursWorked: number; nightHours: number } {
+  if (!exit1 || !entry2 || exit1.getTime() <= entry1.getTime() || exit2.getTime() <= entry2.getTime()) {
+    return calcHours(entry1, exit2);
+  }
+  const morning = calcHours(entry1, exit1);
+  const afternoon = calcHours(entry2, exit2);
+  return {
+    hoursWorked: Math.round((morning.hoursWorked + afternoon.hoursWorked) * 100) / 100,
+    nightHours: Math.round((morning.nightHours + afternoon.nightHours) * 100) / 100,
+  };
+}
+
 // v6 (sub-fase 8.4 / TECH_DEBT 6.12): logger best-effort para writes silenciosos.
 // Cada um dos 4 writes auxiliares (geo_fraud_attempts + bonus_blocks) capturava
 // erros silenciosamente. Agora persistimos em error_logs (que ganhou company_id
@@ -560,7 +584,12 @@ Deno.serve(async (req: Request) => {
       if (markingPosition === 4) {
         const entry = new Date(existing.entry_1_time);
         const exitTime = new Date();
-        const { hoursWorked, nightHours } = calcHours(entry, exitTime);
+        const { hoursWorked, nightHours } = calcHoursFourMarkings(
+          entry,
+          existing.exit_1_time ? new Date(existing.exit_1_time) : null,
+          existing.entry_2_time ? new Date(existing.entry_2_time) : null,
+          exitTime,
+        );
         const dailyRate = Number(existing.daily_rate) || 0;
         let nightAdditional = 0;
         if (nightHours > 0 && hoursWorked > 0 && dailyRate > 0) {
