@@ -3462,6 +3462,98 @@ export const setManualTime = async (
   return data;
 };
 
+/**
+ * Supervisor insere / edita as 4 marcações (entrada, saída almoço, volta,
+ * saída final) de um funcionário com marking_count=4 — equivalente ao
+ * setManualTime acima, mas pro caso de 4 marcações (que setManualTime não
+ * cobre: ele só grava entry_time/exit_time_full, e recalcAttendance ignora
+ * esses campos legados quando o funcionário é de 4 marcações — usaria
+ * entry_1_time/exit_1_time/entry_2_time/exit_2_time sem tocar, tornando o
+ * setManualTime um no-op silencioso nesse caso).
+ *
+ * Cada horário chega como "HH:MM:SS" (Brasília) e é opcional — permite
+ * corrigir só uma marcação sem exigir as 4. Mesma regra de virada de
+ * meia-noite do setManualTime, aplicada por turno (entry_1→exit_1 e
+ * entry_2→exit_2 independentes).
+ */
+export const setManualTimeFourMarkings = async (
+  employeeId: string,
+  date: string,
+  times: { entry1?: string; exit1?: string; entry2?: string; exit2?: string },
+  userId: string,
+  companyId: string
+): Promise<Attendance> => {
+  const permissionCheck = await validatePermission(userId, 'attendance.manualTime');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  const parseTime = (t: string | undefined): Date | null =>
+    t ? new Date(`${date}T${t}-03:00`) : null;
+  const withRollover = (start: Date | null, end: Date | null): Date | null => {
+    if (!start || !end) return end;
+    return end.getTime() <= start.getTime()
+      ? new Date(end.getTime() + 24 * 60 * 60 * 1000)
+      : end;
+  };
+
+  const entry1 = parseTime(times.entry1);
+  const exit1 = withRollover(entry1, parseTime(times.exit1));
+  const entry2 = parseTime(times.entry2);
+  const exit2 = withRollover(entry2, parseTime(times.exit2));
+
+  const updateRecord: Record<string, unknown> = {
+    employee_id: employeeId,
+    date,
+    status: 'present',
+    clock_source: 'manual',
+    approval_status: 'manual',
+    company_id: companyId,
+  };
+  // Campos legados (entry_time/exit_time_full) espelham posição 1/4 — é o
+  // que Aprovação, Financeiro e Relatórios leem hoje.
+  if (entry1) { updateRecord.entry_1_time = entry1.toISOString(); updateRecord.entry_time = entry1.toISOString(); }
+  if (exit1) updateRecord.exit_1_time = exit1.toISOString();
+  if (entry2) updateRecord.entry_2_time = entry2.toISOString();
+  if (exit2) { updateRecord.exit_2_time = exit2.toISOString(); updateRecord.exit_time_full = exit2.toISOString(); }
+
+  const { data, error } = await supabase
+    .from('attendance')
+    .upsert([updateRecord], { onConflict: 'employee_id,date' })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  // `data` já vem com o estado MESCLADO (edição parcial preserva os campos
+  // não tocados) — computa hours_worked/night_hours a partir dele, com
+  // desconto do almoço (mesma semântica de calcHoursFourMarkings na edge fn
+  // e de getWorkSegments/computeWorkedMinutes). recalcAttendance NÃO faz
+  // isso — só escreve worked_minutes/bank_*, campos que Aprovação/
+  // Financeiro/Relatórios não leem; sem este passo, hours_worked ficaria
+  // travado no valor anterior (achado ao testar: virava 0/null).
+  const markings: AttendanceMarkings = {
+    entry_1: data.entry_1_time,
+    exit_1: data.exit_1_time,
+    entry_2: data.entry_2_time,
+    exit_2: data.exit_2_time,
+    marking_count: 4,
+  };
+  const hoursWorked = Math.round((computeWorkedMinutes(markings) / 60) * 100) / 100;
+  const nightHours = Math.round((computeNighttimeMinutes(markings) / 60) * 100) / 100;
+
+  const { data: finalData, error: hoursErr } = await supabase
+    .from('attendance')
+    .update({ hours_worked: hoursWorked, night_hours: nightHours })
+    .eq('id', data.id)
+    .select()
+    .single();
+  if (hoursErr) throw hoursErr;
+
+  await recalcAttendance(data.id);
+  return finalData;
+};
+
 /** Busca registros pendentes de aprovação, opcionalmente filtrados por data. */
 export const getPendingApprovals = async (date: string | undefined, companyId: string): Promise<Attendance[]> => {
   let query = supabase

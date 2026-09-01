@@ -7,6 +7,7 @@ import {
   getAttendanceHistory,
   markAttendance,
   setManualTime,
+  setManualTimeFourMarkings,
   Employee,
   Attendance,
   applyBonusToAllPresent,
@@ -59,6 +60,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [selectedDate, setSelectedDate] = useState(getBrazilDate());
   const [exitTimes, setExitTimes] = useState<Record<string, string>>({});
   const [manualTimes, setManualTimes] = useState<Record<string, { entry: string; exit: string }>>({});
+  const [manualTimesFour, setManualTimesFour] = useState<Record<string, { entry1: string; exit1: string; entry2: string; exit2: string }>>({});
   const [savingManualTime, setSavingManualTime] = useState<Record<string, boolean>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [employmentTypeFilter, setEmploymentTypeFilter] = useState<EmploymentType>('all');
@@ -118,6 +120,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
 
       const exitTimesMap: Record<string, string> = {};
       const manualTimesMap: Record<string, { entry: string; exit: string }> = {};
+      const manualTimesFourMap: Record<string, { entry1: string; exit1: string; entry2: string; exit2: string }> = {};
 
       const isoToBrazilHMS = (iso: string): string => {
         const d = new Date(iso);
@@ -134,10 +137,17 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
           entry: att.entry_time    ? isoToBrazilHMS(att.entry_time)    : '',
           exit:  att.exit_time_full ? isoToBrazilHMS(att.exit_time_full) : '',
         };
+        manualTimesFourMap[att.employee_id] = {
+          entry1: att.entry_1_time ? isoToBrazilHMS(att.entry_1_time) : '',
+          exit1:  att.exit_1_time  ? isoToBrazilHMS(att.exit_1_time)  : '',
+          entry2: att.entry_2_time ? isoToBrazilHMS(att.entry_2_time) : '',
+          exit2:  att.exit_2_time  ? isoToBrazilHMS(att.exit_2_time)  : '',
+        };
       });
 
       setExitTimes(prev => JSON.stringify(prev) === JSON.stringify(exitTimesMap) ? prev : exitTimesMap);
       setManualTimes(prev => JSON.stringify(prev) === JSON.stringify(manualTimesMap) ? prev : manualTimesMap);
+      setManualTimesFour(prev => JSON.stringify(prev) === JSON.stringify(manualTimesFourMap) ? prev : manualTimesFourMap);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       if (!silent) toast.error('Erro ao carregar dados');
@@ -368,6 +378,47 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       await loadData(selectedDate);
     } catch (err) {
       console.error('Erro ao salvar horário manual:', err);
+      toast.error(err instanceof Error ? err.message : 'Erro ao salvar horário');
+    } finally {
+      setSavingManualTime(prev => ({ ...prev, [employeeId]: false }));
+    }
+  };
+
+  const handleManualTimeFourChange = (
+    employeeId: string,
+    field: 'entry1' | 'exit1' | 'entry2' | 'exit2',
+    value: string,
+  ) => {
+    setManualTimesFour(prev => ({
+      ...prev,
+      [employeeId]: { ...(prev[employeeId] ?? { entry1: '', exit1: '', entry2: '', exit2: '' }), [field]: value },
+    }));
+  };
+
+  const handleSaveManualTimeFour = async (employeeId: string) => {
+    if (!hasPermission('attendance.manualTime')) {
+      toast.error('Você não tem permissão para inserir horário manual');
+      return;
+    }
+    const times = manualTimesFour[employeeId];
+    if (!times?.entry1 && !times?.exit1 && !times?.entry2 && !times?.exit2) {
+      toast.error('Preencha ao menos uma marcação antes de salvar');
+      return;
+    }
+    if (!company?.id) return;
+    setSavingManualTime(prev => ({ ...prev, [employeeId]: true }));
+    try {
+      await setManualTimeFourMarkings(
+        employeeId,
+        selectedDate,
+        { entry1: times.entry1 || undefined, exit1: times.exit1 || undefined, entry2: times.entry2 || undefined, exit2: times.exit2 || undefined },
+        userId,
+        company.id,
+      );
+      toast.success('Horário salvo');
+      await loadData(selectedDate);
+    } catch (err) {
+      console.error('Erro ao salvar horário manual (4 marcações):', err);
       toast.error(err instanceof Error ? err.message : 'Erro ao salvar horário');
     } finally {
       setSavingManualTime(prev => ({ ...prev, [employeeId]: false }));
@@ -1035,7 +1086,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                 const status = getAttendanceStatus(employee.id);
 
                 return (
-                  <tr key={employee.id} className="hover:bg-gray-50">
+                  <tr key={employee.id} data-testid="attendance-row" className="hover:bg-gray-50">
                     {hasPermission('attendance.mark') && (
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input
@@ -1154,27 +1205,58 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {employee.marking_count === 4 ? (
-                        (() => {
-                          const att = attendances.find(a => a.employee_id === employee.id);
-                          const fmt = (iso: string | null | undefined) =>
-                            iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
-                          const cells = [
-                            { label: 'Ent.1', value: att?.entry_1_time ?? att?.entry_time ?? null, color: 'text-green-700' },
-                            { label: 'Saí.1', value: att?.exit_1_time ?? null, color: 'text-orange-600' },
-                            { label: 'Ent.2', value: att?.entry_2_time ?? null, color: 'text-green-700' },
-                            { label: 'Saí.2', value: att?.exit_2_time ?? att?.exit_time_full ?? null, color: 'text-orange-600' },
-                          ];
-                          return (
-                            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs font-mono">
-                              {cells.map(c => (
-                                <div key={c.label} className="flex items-center gap-1">
-                                  <span className="text-gray-400 text-[10px] uppercase">{c.label}</span>
-                                  <span className={c.value ? c.color : 'text-gray-400'}>{fmt(c.value)}</span>
-                                </div>
+                        hasPermission('attendance.edit') ? (
+                          <div className="space-y-1">
+                            <div className="grid grid-cols-2 gap-1">
+                              {([
+                                { key: 'entry1' as const, label: 'Ent.1' },
+                                { key: 'exit1' as const, label: 'Saí.1' },
+                                { key: 'entry2' as const, label: 'Ent.2' },
+                                { key: 'exit2' as const, label: 'Saí.2' },
+                              ]).map(f => (
+                                <input
+                                  key={f.key}
+                                  type="time"
+                                  step="1"
+                                  value={manualTimesFour[employee.id]?.[f.key] ?? ''}
+                                  onChange={(e) => handleManualTimeFourChange(employee.id, f.key, e.target.value)}
+                                  className="w-[92px] border border-gray-300 rounded px-1 py-1 text-[11px] focus:ring-blue-500 focus:border-blue-500"
+                                  title={f.label}
+                                />
                               ))}
                             </div>
-                          );
-                        })()
+                            <button
+                              onClick={() => handleSaveManualTimeFour(employee.id)}
+                              disabled={savingManualTime[employee.id]}
+                              className="w-full px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs"
+                              title="Salvar marcações"
+                            >
+                              {savingManualTime[employee.id] ? '…' : '💾 Salvar'}
+                            </button>
+                          </div>
+                        ) : (
+                          (() => {
+                            const att = attendances.find(a => a.employee_id === employee.id);
+                            const fmt = (iso: string | null | undefined) =>
+                              iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+                            const cells = [
+                              { label: 'Ent.1', value: att?.entry_1_time ?? att?.entry_time ?? null, color: 'text-green-700' },
+                              { label: 'Saí.1', value: att?.exit_1_time ?? null, color: 'text-orange-600' },
+                              { label: 'Ent.2', value: att?.entry_2_time ?? null, color: 'text-green-700' },
+                              { label: 'Saí.2', value: att?.exit_2_time ?? att?.exit_time_full ?? null, color: 'text-orange-600' },
+                            ];
+                            return (
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs font-mono">
+                                {cells.map(c => (
+                                  <div key={c.label} className="flex items-center gap-1">
+                                    <span className="text-gray-400 text-[10px] uppercase">{c.label}</span>
+                                    <span className={c.value ? c.color : 'text-gray-400'}>{fmt(c.value)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()
+                        )
                       ) : hasPermission('attendance.edit') ? (
                         <div className="flex items-center gap-1">
                           <input
@@ -1340,29 +1422,63 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                   )}
 
                   {employee.marking_count === 4 ? (
-                    (() => {
-                      const att = attendances.find(a => a.employee_id === employee.id);
-                      const fmt = (iso: string | null | undefined) =>
-                        iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
-                      const cells = [
-                        { label: 'Ent.1', value: att?.entry_1_time ?? att?.entry_time ?? null, color: 'text-green-700' },
-                        { label: 'Saí.1', value: att?.exit_1_time ?? null, color: 'text-orange-600' },
-                        { label: 'Ent.2', value: att?.entry_2_time ?? null, color: 'text-green-700' },
-                        { label: 'Saí.2', value: att?.exit_2_time ?? att?.exit_time_full ?? null, color: 'text-orange-600' },
-                      ];
-                      return (
-                        <div className="bg-gray-50 rounded-lg px-3 py-2">
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm font-mono">
-                            {cells.map(c => (
-                              <div key={c.label} className="flex items-center gap-2">
-                                <span className="text-gray-400 text-xs uppercase">{c.label}</span>
-                                <span className={c.value ? c.color : 'text-gray-400'}>{fmt(c.value)}</span>
-                              </div>
-                            ))}
-                          </div>
+                    hasPermission('attendance.edit') ? (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">4 marcações (entrada/almoço/volta/saída)</label>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          {([
+                            { key: 'entry1' as const, label: 'Entrada' },
+                            { key: 'exit1' as const, label: 'Saída almoço' },
+                            { key: 'entry2' as const, label: 'Volta almoço' },
+                            { key: 'exit2' as const, label: 'Saída final' },
+                          ]).map(f => (
+                            <div key={f.key}>
+                              <span className="block text-[10px] text-gray-400 uppercase mb-0.5">{f.label}</span>
+                              <input
+                                type="time"
+                                step="1"
+                                value={manualTimesFour[employee.id]?.[f.key] ?? ''}
+                                onChange={(e) => handleManualTimeFourChange(employee.id, f.key, e.target.value)}
+                                className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 min-h-[44px]"
+                                title={f.label}
+                              />
+                            </div>
+                          ))}
                         </div>
-                      );
-                    })()
+                        <button
+                          onClick={() => handleSaveManualTimeFour(employee.id)}
+                          disabled={savingManualTime[employee.id]}
+                          className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm min-h-[44px]"
+                          title="Salvar marcações"
+                        >
+                          {savingManualTime[employee.id] ? '…' : '💾 Salvar marcações'}
+                        </button>
+                      </div>
+                    ) : (
+                      (() => {
+                        const att = attendances.find(a => a.employee_id === employee.id);
+                        const fmt = (iso: string | null | undefined) =>
+                          iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+                        const cells = [
+                          { label: 'Ent.1', value: att?.entry_1_time ?? att?.entry_time ?? null, color: 'text-green-700' },
+                          { label: 'Saí.1', value: att?.exit_1_time ?? null, color: 'text-orange-600' },
+                          { label: 'Ent.2', value: att?.entry_2_time ?? null, color: 'text-green-700' },
+                          { label: 'Saí.2', value: att?.exit_2_time ?? att?.exit_time_full ?? null, color: 'text-orange-600' },
+                        ];
+                        return (
+                          <div className="bg-gray-50 rounded-lg px-3 py-2">
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm font-mono">
+                              {cells.map(c => (
+                                <div key={c.label} className="flex items-center gap-2">
+                                  <span className="text-gray-400 text-xs uppercase">{c.label}</span>
+                                  <span className={c.value ? c.color : 'text-gray-400'}>{fmt(c.value)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()
+                    )
                   ) : hasPermission('attendance.edit') ? (
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Entrada / Saída</label>
