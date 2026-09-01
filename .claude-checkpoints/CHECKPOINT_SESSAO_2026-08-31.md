@@ -315,3 +315,42 @@ primeira rodada, sem nenhum flake de infra dessa vez.
 
 **Push `bdb35e7`: CI verde nos 3 jobs** (run 33441166404) · **Vercel conferida por
 conteúdo** — produção serve o mesmo bundle (`index-B9UUtLhq.js`) do build local. No ar.
+
+## 12. Duas perguntas do Victor pós-deploy, respondidas com prova (sem código novo)
+
+- **"Aplicando isso, o sistema atual para de funcionar?"** — Não: expliquei o porquê com
+  evidência (migration só soma coluna default false; edge fn só muda comportamento dentro de
+  `if (strictFacial)`, que nunca é true pra Caratinga/PN hoje) e citei as provas já feitas
+  (24 E2E reais + CI completo rodados DEPOIS do deploy).
+- **"O pessoal sem facial, quando for bater ponto, vai pedir pra cadastrar?"** — Testado AO
+  VIVO agora (não só lido no código): criei empresa+funcionário fictício com
+  `require_facial_clock=true` e `face_registered=false`, simulei o login (CPF+PIN) via
+  Playwright. Resultado: cai direto na tela **"Cadastro Facial"** (mesma tela que já existe
+  no app), NÃO no painel — confirmado por screenshot mostrando "Preparando câmera... /
+  Carregando reconhecimento facial". `continueAfterPin` força isso porque `strict=true` vira
+  `activeGlobally=true` independente do toggle antigo por funcionário. Quem tenta pular
+  (`onSkip`) só é deslogado — não existe caminho pra chegar ao botão de bater ponto sem
+  cadastrar. Empresa e funcionário fictícios apagados depois do teste (nada ficou no banco).
+
+## 13. Pausa a pedido do Victor (reinício do PC) — estado pra retomar
+
+Nada ficou pra trás: `git status` limpo, `main` local = `origin/main` = `ed14294`, nenhum
+processo em segundo plano (Vite/Playwright todos encerrados). Branch
+`feature/ponto-facial-geo-servidor` já foi mergeada (fast-forward) em `main` — pode ser
+apagada quando quiser, não tem mais uso.
+
+**Pendências reais pra próxima sessão (nenhuma é código — todas são decisão/operação do Victor):**
+1. **Rollout do item 1:** ligar `require_facial_clock=true` — precisa esperar cadastro de
+   rosto de quem falta (Ponte Nova: 1 pessoa; Caratinga: 32 de 91) OU decidir ligar mesmo
+   assim (o autocadastro cobre tecnicamente, mas ele preferiu esperar por segurança — decisão
+   dele, não peço de novo).
+2. **PROXIMOS_PASSOS.md §2** ainda tem itens em aberto sem decisão: policy "só 2626" no banco
+   do driverpay, filtro NF (marca na mão / bug do espelho republicado), travas do import,
+   Dependabot npm (#25/#19 seguros, #18/#8 recomendo ignorar).
+3. **Próximo item do roadmap (se ele quiser seguir sem esperar o rollout):** item 2 — 4
+   batidas em Ponte Nova e Caratinga. Já sei que Caratinga está configurada pra 2 batidas
+   hoje (`default_marking_count`), precisa virar 4 — mas NADA foi investigado/auditado ainda,
+   é só esse fato solto.
+
+**Ao reabrir:** ler este arquivo + `00-INDEX.md` primeiro (regra do projeto). Nenhuma ação
+pendente de finalizar — é ponto de parada limpo, não meio de tarefa.

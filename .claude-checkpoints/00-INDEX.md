@@ -4,6 +4,11 @@
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 > Última atualização: **2026-08-31**.
 
+> ⏸️ **Sessão pausada a pedido do Victor (reinício do PC), estado limpo:** `git status` vazio,
+> `main` local = `origin/main` = `ed14294`, zero processo em segundo plano. Não é meio de
+> tarefa — nenhuma ação ficou pra terminar. As 3 pendências reais (todas decisão/operação
+> dele, não código) estão em `CHECKPOINT_SESSAO_2026-08-31.md` §13.
+
 ## 🎯 Estado atual (1 parágrafo)
 
 **Sessão 31/08 — "zerar as pendências pra começar o roadmap novo".** O Victor ditou o
