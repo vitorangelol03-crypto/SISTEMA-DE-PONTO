@@ -87,15 +87,6 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  // 01/09/2026: clicar "Editar" num funcionário lá embaixo da lista abria o
-  // formulário (que fica no topo da página) sem levar a tela até ele — tinha
-  // que rolar na mão. Agora rola sozinho sempre que o formulário abre.
-  // `formOpenSeq` (não `showForm`) é o gatilho: clicar "Editar" num outro
-  // funcionário COM o formulário já aberto troca o conteúdo mas não muda
-  // `showForm` (que já era true) — o efeito não disparava de novo, achado
-  // real do Victor ("clico editar e não rola até o formulário").
-  const formRef = useRef<HTMLDivElement>(null);
-  const [formOpenSeq, setFormOpenSeq] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [cityFilter, setCityFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('');
@@ -199,18 +190,6 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     setShowScheduleModal(false);
     setTempSchedule([0, 0, 0, 0, 0, 0, 0]);
   }, [company?.id]);
-
-  // Rola até o formulário toda vez que ele é aberto — "Editar" num funcionário
-  // lá embaixo da lista não deixa mais a pessoa perdida lá em cima. Dispara em
-  // `formOpenSeq`, não em `showForm`: trocar de funcionário com o formulário
-  // já aberto não muda `showForm` (que já era true), então precisa de um
-  // gatilho que muda em TODO clique de abrir, não só na 1ª vez.
-  useEffect(() => {
-    if (showForm) {
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- formOpenSeq é o gatilho de propósito (ver comentário acima)
-  }, [formOpenSeq]);
 
   useEffect(() => {
     const filtered = employees.filter(employee => {
@@ -443,7 +422,6 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       expectedSchedule: employee.expected_schedule ?? null,
     });
     setShowForm(true);
-    setFormOpenSeq(seq => seq + 1);
   };
 
   const handleDelete = async (employee: Employee) => {
@@ -1009,7 +987,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
 
             {hasPermission('employees.create') && (
               <button
-                onClick={() => { setShowForm(true); setFormOpenSeq(seq => seq + 1); }}
+                onClick={() => setShowForm(true)}
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors min-h-[48px] font-medium"
               >
                 <Plus className="w-4 h-4" />
@@ -1021,19 +999,20 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       </div>
 
       {showForm && (
-        <div ref={formRef} className="bg-white p-4 sm:p-6 rounded-lg shadow scroll-mt-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base sm:text-lg font-medium">
-              {editingEmployee ? 'Editar Funcionário' : 'Novo Funcionário'}
-            </h3>
-            <button
-              onClick={resetForm}
-              className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
-            >
-              ✕
-            </button>
-          </div>
-
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-[95vw] sm:max-w-3xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b">
+              <h3 className="text-base sm:text-lg font-medium">
+                {editingEmployee ? 'Editar Funcionário' : 'Novo Funcionário'}
+              </h3>
+              <button
+                onClick={resetForm}
+                className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -1362,6 +1341,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
               </button>
             </div>
           </form>
+            </div>
+          </div>
         </div>
       )}
 

@@ -6,14 +6,17 @@ import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from '
 /**
  * E2E — dois achados do Victor usando a aba Funcionários ao vivo (01/09/2026):
  *
- * 1) "quando clico para editar ele ainda não abre [rola até] pra te pedir para
- *    editar o funcionário" — o `useEffect` que rola até o formulário disparava
- *    só na transição `showForm` false→true. Clicar "Editar" num OUTRO
- *    funcionário com o formulário JÁ aberto (troca só os dados, `showForm`
- *    continua true) não disparava o efeito de novo — a pessoa ficava presa
- *    onde estava rolada, sem ver o formulário trocar de conteúdo lá em cima.
- *    Fix: gatilho passou a ser `formOpenSeq` (incrementa em TODO clique de
- *    abrir), não mais `showForm`.
+ * 1) "quando clico para editar ele ainda não abre popup flutuante" — a 1ª
+ *    tentativa de conserto tinha sido rolar a página até um formulário
+ *    embutido no fluxo normal (achado errado do pedido original). Victor
+ *    confirmou que queria um popup FLUTUANTE de verdade, independente de
+ *    onde a página está rolada — não um scroll-até-lá. Fix definitivo:
+ *    "Editar"/"Novo Funcionário" agora abrem um modal de verdade (mesmo
+ *    padrão `fixed inset-0` já usado no modal de PIN e no de Importar), que
+ *    aparece por cima da tela na hora, sem depender de rolagem nenhuma — e,
+ *    por ser um overlay bloqueando a lista por baixo, o bug original (trocar
+ *    de funcionário com o form "já aberto" sem fechar) fica estruturalmente
+ *    impossível: dá pra editar outro funcionário sem fechar o modal primeiro.
  *
  * 2) "coloque os pendentes sempre em primeiro em amarelo" — a lista misturava
  *    pendentes com aprovados em ordem alfabética; agora pendente (2626) sempre
@@ -23,12 +26,12 @@ import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from '
 
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}Emp83 `;
 
-test.describe('EmployeesTab — rolagem ao editar + ordenação de pendentes', () => {
+test.describe('EmployeesTab — popup flutuante ao editar + ordenação de pendentes', () => {
   test.afterAll(async () => {
     await cleanupByPrefix(PREFIX);
   });
 
-  test('clicar Editar em funcionário diferente com o formulário já aberto rola até ele de novo', async ({ page }) => {
+  test('Editar abre popup flutuante na hora, sem depender de rolagem da página', async ({ page }) => {
     test.setTimeout(60_000);
     const nomeA = `${PREFIX}A ${Date.now()}`;
     const nomeB = `${PREFIX}B ${Date.now() + 1}`;
@@ -43,31 +46,41 @@ test.describe('EmployeesTab — rolagem ao editar + ordenação de pendentes', (
 
       const search = page.getByPlaceholder('Buscar por nome ou CPF...');
       const nameInput = page.getByPlaceholder('Digite o nome completo');
+      const heading = page.getByRole('heading', { name: 'Editar Funcionário' });
+      const closeBtn = page.getByRole('button', { name: '✕' });
 
-      // ── 1ª abertura: edita A, confirma que rola até o formulário ──
+      // ── Busca primeiro (isola a linha) e só DEPOIS rola pro fim de propósito
+      //    — se rolasse antes, o filtro encolheria a lista e o navegador
+      //    ajustaria o scroll sozinho, misturando esse ajuste com o que o
+      //    popup realmente faz (mesma pegadinha já vista no tests/78/83
+      //    anteriores desta sessão). Só o clique em Editar acontece depois
+      //    do scroll estabilizado — prova que o popup aparece flutuando por
+      //    cima, sem precisar rolar até ele. ──
       await search.fill(nomeA);
       const rowA = page.getByTestId('employee-row').filter({ hasText: nomeA });
       await expect(rowA).toBeVisible({ timeout: 10_000 });
-      await rowA.getByTitle('Editar').click();
-      await expect(nameInput).toHaveValue(nomeA);
-      await expect(page.getByRole('heading', { name: 'Editar Funcionário' })).toBeInViewport({ timeout: 5_000 });
-
-      // ── Limpa a busca (lista cheia, ~90 funcionários reais) e força rolar
-      //    pro fim — simula ter ido procurar B lá embaixo, longe do formulário.
-      await search.fill('');
-      await expect(page.getByTestId('employee-row').first()).toBeVisible({ timeout: 10_000 });
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      const yFundoDaLista = await page.evaluate(() => window.scrollY);
-      expect(yFundoDaLista).toBeGreaterThan(500);
+      const yAntes = await page.evaluate(() => window.scrollY);
+      expect(yAntes).toBeGreaterThan(50);
 
-      // ── Edita B SEM fechar o formulário — era aqui que o bug acontecia.
-      //    O .click() do Playwright rola até a LINHA de B primeiro (onde quer
-      //    que ela esteja na lista); o que este teste prova é que, depois do
-      //    clique, o app rola de novo — desta vez até o FORMULÁRIO. ──
+      await rowA.getByTitle('Editar').click();
+
+      // Popup aparece na hora, SEM a página ter rolado (window.scrollY intacto).
+      await expect(heading).toBeInViewport({ timeout: 5_000 });
+      await expect(nameInput).toHaveValue(nomeA);
+      const yDepois = await page.evaluate(() => window.scrollY);
+      expect(yDepois).toBe(yAntes);
+
+      // ── Fecha e edita B — confirma o ciclo fechar→abrir troca de conteúdo certo ──
+      await closeBtn.click();
+      await expect(heading).toHaveCount(0);
+
+      await search.fill(nomeB);
       const rowB = page.getByTestId('employee-row').filter({ hasText: nomeB });
+      await expect(rowB).toBeVisible({ timeout: 10_000 });
       await rowB.getByTitle('Editar').click();
+      await expect(heading).toBeInViewport({ timeout: 5_000 });
       await expect(nameInput).toHaveValue(nomeB);
-      await expect(page.getByRole('heading', { name: 'Editar Funcionário' })).toBeInViewport({ timeout: 5_000 });
     } finally {
       await s.from('employees').delete().in('id', [idA, idB]);
     }
