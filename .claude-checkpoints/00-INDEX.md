@@ -4,17 +4,18 @@
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 > Última atualização: **2026-09-01** (sessão iniciada 31/08, atravessou a virada).
 
-> ✅ **Sessão 31/08→01/09: roadmap item 1 FECHADO** (facial obrigatória ligada nas duas
-> empresas) **+ aba Aprovação de Cadastro ganhou reverter decisão em qualquer sentido**
-> (`25cd77b`, pushado, CI verde, Vercel conferida). Achado no meio: `Arthur` estava `approved`
-> com a mesma nota dos 27 `rejected` de Caratinga — a aba só deixava decidir a partir do
-> filtro "Pendente", sem volta. Botões agora existem nos 3 filtros (aprovado↔recusado nos
-> dois sentidos, com confirm). E2E novo `tests/80`. 🔑 No meio da validação, achado (mostrado
-> ao Victor antes de mexer) um teste flaky intermitente pré-existente
-> (`edgeFnClockFacialGeoEstrito.spec.ts`, não é regressão de hoje — já tinha falhado num CI
-> de commit anterior à sessão) — registrado como pendência técnica, não corrigido (fora de
-> escopo). Detalhe em `CHECKPOINT_SESSAO_2026-08-31.md` §14-§17. Restam as pendências 2 e 3
-> do §13 (mesmo arquivo) + o item novo de §17.1 (`CHECKPOINT_PROXIMOS_PASSOS.md` §3).
+> ⏸️ **Sessão 31/08→01/09 pausada (madrugada, Victor foi dormir), estado seguro pra
+> retomar.** Fechado: roadmap item 1 (facial obrigatória nas duas empresas) + aba Aprovação
+> de Cadastro ganhou reverter decisão em qualquer sentido (`25cd77b`). **Última leva: roadmap
+> item 2 (4 batidas) investigado a fundo — 2 bugs reais achados e consertados** (Ponte Nova
+> nunca rodou de fato com 4 marcações apesar de configurada; cálculo da 4ª marcação não
+> descontava o almoço, já afetando 3 pilotos reais em Caratinga). Fix no ar (commit `9ae3ea8`,
+> no-op pra usuários reais hoje) — **falta só o Victor rodar o deploy da edge fn com `!`**
+> (bloqueado pelo classificador, baixa urgência). `/clock` confirmado funcionando pro pessoal
+> real (Vercel conferida, CI limpo, E2E de isolamento provando que 9 testes que falharam são
+> desatualizados — trava facial, não bug de hoje). Detalhe completo em
+> `CHECKPOINT_SESSAO_2026-08-31.md` §14-§18. Pendências: §13 (2 e 3), §17.1, §18.3
+> (`CHECKPOINT_PROXIMOS_PASSOS.md` §3), e decidir quando habilitar 4 batidas de verdade.
 
 ## 🎯 Estado atual (1 parágrafo)
 

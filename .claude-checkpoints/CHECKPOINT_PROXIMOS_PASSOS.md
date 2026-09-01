@@ -156,6 +156,13 @@ sempre vermelhos por isso). Caminho: aplicar **localmente** com lock regenerado 
   ver `CHECKPOINT_SESSAO_2026-08-31.md` §17.1): `att` vem `undefined` na conferência final de
   `attendance`. Suspeita: corrida entre a escrita da edge fn `clock-in-validated` e a leitura
   via REST logo em seguida (read-after-write). Considerar retry/wait curto no SELECT final.
+- `tests/08-geolocation.spec.ts`, `tests/23-employee-clock-complete.spec.ts` e
+  `tests/62-clock-guards.spec.ts` (9 testes) desatualizados: dependem do toggle individual
+  antigo `face_recognition_enabled=false` pra pular a facial, que não basta mais desde a trava
+  obrigatória `require_facial_clock` (ligada em Caratinga/PN em 31/08-01/09). Não é bug de
+  produto — confirmado via `git stash` que já falhava antes de qualquer mudança de hoje.
+  Precisam registrar rosto no fixture (ou usar empresa sem `require_facial_clock`) antes de
+  testar o dashboard. Ver `CHECKPOINT_SESSAO_2026-08-31.md` §18.3.
 
 ---
 
@@ -167,8 +174,15 @@ sempre vermelhos por isso). Caminho: aplicar **localmente** com lock regenerado 
    fluxo de hoje intacto, 24 E2E). Ponte Nova ligada (1 pessoa sem rosto, self-enroll cobre) e
    depois **Caratinga também** — dos 32 "sem rosto", 28 já eram `rejected` (bloqueados antes da
    facial, não afeta) e só 4 `approved` de fato caem no auto-cadastro na próxima batida.
-2. **4 batidas/dia** (entrada, saída intervalo, volta, saída) em **PN e Caratinga**:
-   cadastro, cálculo, aprovação, Financeiro e todos os relatórios.
+2. 🚧 **4 batidas/dia — EM ANDAMENTO (01/09), 2 bugs achados e consertados, ainda NÃO
+   habilitado.** Achado grande: Ponte Nova nunca rodou de fato com 4 marcações apesar de
+   `default_marking_count=4` (bug de herança na tela de bater ponto — corrigido); e a 4ª
+   marcação calculava a hora sem descontar o almoço (bug real, já afetando os 3 pilotos de
+   Caratinga — corrigido no código, **deploy da edge fn pendente**, bloqueado pelo
+   classificador de auto-mode, só o Victor libera com `!`, baixa urgência). Normalizei
+   `default_marking_count` de PN de volta pra 2 pra não habilitar sem querer. Detalhe completo
+   em `CHECKPOINT_SESSAO_2026-08-31.md` §18. **Falta:** deploy da edge fn + decidir quando
+   habilitar de verdade (cadastro, cálculo, aprovação, Financeiro e relatórios pra todo mundo).
 3. **Modo tablet (quiosque):** 2 tablets da empresa; ponto só neles, dentro da localização.
    Celular pessoal e supervisor não batem/registram ponto fora dali.
 4. **Facial sem CPF, ordem automática:** câmera aberta escaneando; reconhece → identifica →
