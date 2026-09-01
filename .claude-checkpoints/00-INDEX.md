@@ -20,7 +20,9 @@
 > Novo Funcionário viraram popup FLUTUANTE de verdade** (§30, `75b87f4`): o conserto de
 > scroll-até-lá resolvia o sintoma errado; agora é modal real (mesmo padrão do modal de
 > PIN/Importar), e o bug original (trocar de funcionário sem fechar) fica impossível por
-> desenho. Detalhe em `CHECKPOINT_SESSAO_2026-08-31.md` §25-§30.
+> desenho. **+ view Bloqueados troca Chave PIX/PIN por Motivo** (§31, `cbba51a`) — mais
+> largo, mais fácil de ler; Ativos sem mudança. Detalhe em
+> `CHECKPOINT_SESSAO_2026-08-31.md` §25-§31.
 
 > ✅ **Sessão 31/08→01/09: roadmap item 1 FECHADO** (facial obrigatória nas duas empresas) **+
 > aba Aprovação de Cadastro ganhou reverter decisão** (`25cd77b`) **+ roadmap item 2 (4

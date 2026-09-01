@@ -961,4 +961,22 @@ asserção real nos ~1220-1345 testes que completaram) — mesma família de fla
 documentada váras vezes nesta sessão (§4, §17.1, §18.2, §24.1); não re-diagnosticado do
 zero, só confirmado que bate no padrão conhecido.
 
-**Falta:** push (agrupar `75b87f4` + este checkpoint) + conferir CI/Vercel.
+Push `75b87f4`+`f7c902b` feito — **CI verde nos 3 jobs** (run `33558297507`, o job
+`vitest` passou limpo na VM do CI, confirmando que os "erros" locais eram só a máquina
+carregada, não código) · **Vercel conferida por conteúdo** (`index-D0d1fDUI.js`).
+
+## 31. ✅ View Bloqueados: Chave PIX/PIN trocados por Motivo (`cbba51a`)
+
+Vitor mandou print da lista de recusados e pediu: "tira essa parte de chave pix e pin e
+coloque a observação lá, acho que visual vai ficar melhor e mais fácil de entender".
+Chave PIX/PIN não são muito úteis pra quem está bloqueado; agora só a view Bloqueados
+troca essas duas colunas por uma coluna Motivo dedicada (mais larga, mais fácil de ler
+que o texto espremido embaixo do nome que a leva anterior tinha colocado). View Ativos
+não muda nada. Mobile mantém o texto embaixo do nome (não tem coluna lá).
+
+**Validado:** typecheck 0 · eslint 0 · build limpo · verificação ao vivo (Bloqueados
+mostra Motivo sem Chave PIX/PIN; Ativos continua com as duas colunas normais) ·
+regressão `tests/05`+`21`+`39`+`83` (19 testes, 1 flaky de cold-start não relacionado,
+17 passed).
+
+**Falta:** push (agrupar `cbba51a` + este checkpoint) + conferir CI/Vercel.
