@@ -1433,8 +1433,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                       />
                     </td>
                   )}
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5 flex-wrap">
+                  <td className="px-4 py-4">
+                    <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5 flex-wrap whitespace-nowrap">
                       {employee.name}
                       <CopyField label="Nome" value={sanitizePublicRegistrationName(employee.name)} />
                       {canViewApproval && (employee.registration_status ?? 'pending') !== 'approved' && (
@@ -1443,6 +1443,11 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                         </span>
                       )}
                     </div>
+                    {canViewApproval && employee.registration_status === 'rejected' && employee.registration_notes && (
+                      <p className="text-xs text-red-600 italic mt-0.5 max-w-xs">
+                        Motivo: {employee.registration_notes}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500 flex items-center gap-1">
@@ -1584,6 +1589,11 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                       </span>
                     )}
                   </div>
+                  {canViewApproval && employee.registration_status === 'rejected' && employee.registration_notes && (
+                    <p className="text-xs text-red-600 italic mt-0.5 break-words">
+                      Motivo: {employee.registration_notes}
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1 break-words flex items-center gap-1">
                     CPF: {formatCPF(employee.cpf)}
                     <CopyField label="CPF" value={employee.cpf ? employee.cpf.replace(/\D/g, '') : ''} />
