@@ -4,6 +4,7 @@ import { getAllEmployees, getAttendanceHistory, getPayments, getBonusTypes, Empl
 import { useCompany } from '../../contexts/useCompany';
 import { getBonusValueForType } from '../../utils/bonusHelpers';
 import { formatDateBR } from '../../utils/dateUtils';
+import { computeIntervalMinutes } from '../../utils/attendanceCalc';
 import * as XLSX from 'xlsx-js-style';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType } from '../common/EmploymentTypeFilter';
@@ -11,6 +12,23 @@ import EmploymentTypeFilter, { EmploymentType } from '../common/EmploymentTypeFi
 interface ReportsTabProps {
   userId: string;
   hasPermission: (permission: string) => boolean;
+}
+
+// Pedido do Victor (01/09/2026): mostrar o intervalo (almoço) no relatório,
+// junto de Entrada/Saída/Horas. Reusa computeIntervalMinutes (já testado em
+// attendanceCalc.spec.ts) — `marking_count: 4` fixo é seguro aqui: quem bate
+// 2 marcações nunca tem exit_1_time/entry_2_time gravados, então a função
+// já devolve 0 nesse caso, com ou sem a flag. `null` (não 0) vira "-" na
+// tela: intervalo não rastreado é diferente de "0min de intervalo".
+function intervalMinutesFor(att: Attendance): number | null {
+  const minutes = computeIntervalMinutes({
+    entry_1: att.entry_1_time ?? null,
+    exit_1: att.exit_1_time ?? null,
+    entry_2: att.entry_2_time ?? null,
+    exit_2: att.exit_2_time ?? null,
+    marking_count: 4,
+  });
+  return minutes > 0 ? minutes : null;
 }
 
 const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
@@ -235,6 +253,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
     const tableRows = rows.map(att => {
       const valuesByCode = getBonusForAttendance(att);
       const bonusCellsHtml = bonusTypes.map(bt => `<td>${formatMoney(valuesByCode[bt.code] ?? 0)}</td>`).join('');
+      const intervalMin = intervalMinutesFor(att);
       return `
       <tr>
         <td>${formatDateBR(att.date)}</td>
@@ -242,6 +261,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
         <td>${att.status === 'present' ? 'Presente' : 'Falta'}</td>
         <td>${formatT(att.entry_time)}</td>
         <td>${formatT(att.exit_time_full)}</td>
+        <td>${formatH(intervalMin != null ? intervalMin / 60 : null)}</td>
         <td>${formatH(att.hours_worked)}</td>
         <td>${formatH(att.night_hours)}</td>
         ${bonusCellsHtml}
@@ -287,7 +307,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
     <thead>
       <tr>
         <th>Data</th><th>Funcionário</th><th>Status</th>
-        <th>Entrada</th><th>Saída</th><th>Horas</th>
+        <th>Entrada</th><th>Saída</th><th>Intervalo</th><th>Horas</th>
         <th>Hs Noturnas</th>${bonusHeadersHtml}<th>Aprovação</th>
       </tr>
     </thead>
@@ -344,7 +364,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
 
       const bonusHeaders = bonusTypes.map(bt => `Bon. ${bt.code}`);
       const headers = [
-        'Data', 'Funcionário', 'CPF', 'Status', 'Entrada', 'Saída',
+        'Data', 'Funcionário', 'CPF', 'Status', 'Entrada', 'Saída', 'Intervalo',
         'Horas Trabalhadas', 'Horas Noturnas', 'Adicional Noturno',
         ...bonusHeaders,
         'Aprovação',
@@ -383,6 +403,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
           const v = valuesByCode[bt.code] ?? 0;
           return v > 0 ? `R$ ${v.toFixed(2)}` : '-';
         });
+        const intervalMin = intervalMinutesFor(att);
         const values = [
           formatDateBR(att.date),
           att.employees?.name || 'N/A',
@@ -390,6 +411,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
           att.status === 'present' ? 'Presente' : 'Falta',
           formatTimeExcel(att.entry_time ?? null),
           formatTimeExcel(att.exit_time_full ?? null),
+          formatHoursExcel(intervalMin != null ? intervalMin / 60 : null),
           formatHoursExcel(att.hours_worked ?? null),
           formatHoursExcel(att.night_hours ?? null),
           att.night_additional != null ? `R$ ${Number(att.night_additional).toFixed(2)}` : '-',
@@ -432,7 +454,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
 
       ws['!cols'] = [
         { wch: 12 }, { wch: 28 }, { wch: 15 }, { wch: 10 },
-        { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 14 },
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
         { wch: 16 },
         ...bonusTypes.map(() => ({ wch: 12 })),
         { wch: 12 }, { wch: 16 }, { wch: 12 }
@@ -743,6 +765,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrada</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Saída</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Intervalo</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Horas</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hs Noturnas</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adic. Noturno</th>
@@ -788,6 +811,12 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-700">{formatT(attendance.entry_time)}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-700">{formatT(attendance.exit_time_full)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+                      {(() => {
+                        const intervalMin = intervalMinutesFor(attendance);
+                        return formatH(intervalMin != null ? intervalMin / 60 : null);
+                      })()}
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-700">{formatH(attendance.hours_worked)}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-700">{formatH(attendance.night_hours)}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-700">
