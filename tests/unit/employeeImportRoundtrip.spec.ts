@@ -240,9 +240,11 @@ describe('Import Roundtrip - Combo I', () => {
     expect(inserted).not.toHaveProperty('pin');
     expect(inserted).not.toHaveProperty('pin_configured');
 
-    // EXCEÇÃO documentada: marking_count recebe default da EMPRESA via validator
-    // (companyDefaults.default_marking_count=2 no contexto). Não é o default do
-    // Postgres, é o default explícito do parser pra evitar NULL em campo CHECK.
-    expect(inserted.marking_count).toBe(2);
+    // 01/09/2026: marking_count deixou de ser exceção — também OMITIDO quando
+    // a planilha não informa, herdando o default da empresa de verdade (a
+    // coluna aceita NULL; o "CHECK" nunca impediu isso, era engano de quem
+    // escreveu o parser original — gravar o snapshot do default travava o
+    // funcionário nesse número mesmo que a empresa mudasse depois).
+    expect(inserted).not.toHaveProperty('marking_count');
   });
 });

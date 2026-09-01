@@ -24,6 +24,7 @@ import {
   BonusTypeRecord,
 } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
+import { resolveMarkingCount } from './attendanceTabHelpers';
 import { attendancesToReset, resetIsFiltered } from '../../utils/attendanceReset';
 import {
   bonusTargets,
@@ -1204,7 +1205,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {employee.marking_count === 4 ? (
+                      {resolveMarkingCount(employee.marking_count, company?.default_marking_count) === 4 ? (
                         hasPermission('attendance.edit') ? (
                           <div className="space-y-1">
                             <div className="grid grid-cols-2 gap-1">
@@ -1421,7 +1422,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                     </button>
                   )}
 
-                  {employee.marking_count === 4 ? (
+                  {resolveMarkingCount(employee.marking_count, company?.default_marking_count) === 4 ? (
                     hasPermission('attendance.edit') ? (
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">4 marcações (entrada/almoço/volta/saída)</label>

@@ -244,9 +244,13 @@ describe('validateImportRow - campos novos da Etapa 2', () => {
     expect(r.errors.some((e) => e.code === 'marking_count_invalid')).toBe(true);
   });
 
-  it('35. marking_count vazio → usa companyDefaults.default_marking_count (2)', () => {
+  it('35. marking_count vazio → fica sem valor (herda o default da empresa, não trava um número fixo)', () => {
+    // 01/09/2026: gravar aqui o default ATUAL da empresa travava o funcionário
+    // nesse número pra sempre, mesmo que o default mudasse depois (achado real:
+    // 26 funcionários de importações antigas presos em "2 fixo" que não
+    // acompanhariam a empresa ao ligar 4 marcações pra todo mundo).
     const r = validateImportRow(validRow(), 2, defaultContext());
-    expect(r.parsed.marking_count).toBe(2);
+    expect(r.parsed.marking_count).toBeUndefined();
   });
 
   it('36. marking_count = 4 → parsed.marking_count = 4, sem error', () => {
@@ -375,11 +379,11 @@ describe('validateImportRow - linhas completas', () => {
     expect(r.warnings.some((w) => w.code === 'date_empty')).toBe(true);
   });
 
-  it('50. Mínimo válido + marking_count vazio → parsed.marking_count = default da empresa', () => {
+  it('50. Mínimo válido + marking_count vazio → continua sem valor mesmo com empresa default=4 (herda, não trava)', () => {
     const ctx = defaultContext({
       companyDefaults: { default_marking_count: 4, default_schedule: null },
     });
     const r = validateImportRow(validRow(), 2, ctx);
-    expect(r.parsed.marking_count).toBe(4);
+    expect(r.parsed.marking_count).toBeUndefined();
   });
 });

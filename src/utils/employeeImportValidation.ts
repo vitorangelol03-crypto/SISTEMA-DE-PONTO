@@ -451,11 +451,18 @@ export function validateImportRow(
   }
 
   // marking_count
+  // 01/09/2026 (roadmap item 2, preparação pra ligar 4 marcações pra todo mundo):
+  // antes, quando a planilha não informava, gravava aqui o default ATUAL da
+  // empresa como valor FIXO no funcionário — parecia inofensivo (mesmo
+  // comportamento no dia), mas travava esse funcionário nesse valor pra
+  // sempre, mesmo que o default da empresa mudasse depois (achado real: 26
+  // funcionários de importações antigas ficaram presos em "2 marcações fixo"
+  // e não teriam ido pra 4 quando a empresa ligasse). Deixar sem valor aqui
+  // (undefined) preserva a herança de verdade — mesmo padrão já usado pelos
+  // outros campos opcionais desta função (ver employeeImport.ts:parsedToImportData).
   const markingRaw = getNumberField(raw, 'marcacoes_por_dia', 'marking_count', 'Marcações por Dia');
   if (markingRaw === undefined) {
-    // Aplica default da empresa se não veio
-    const def = context.companyDefaults.default_marking_count;
-    if (def === 2 || def === 4) parsed.marking_count = def;
+    // Não informado na planilha → fica sem valor (herda o default da empresa).
   } else if (markingRaw !== 2 && markingRaw !== 4) {
     errors.push({
       field: 'marcacoes_por_dia',
