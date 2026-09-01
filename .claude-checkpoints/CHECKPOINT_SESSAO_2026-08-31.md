@@ -395,3 +395,22 @@ ligada** (Caratinga `true`, Ponte Nova `true`). Sem deploy — mesmo código já
 **Roadmap item 1 (facial+geo sem brecha) fechado por completo — nas duas empresas, no ar.**
 Restam as pendências 2 (PROXIMOS_PASSOS §2: policy "só 2626", filtro NF, travas do import,
 Dependabot) e o próximo item do roadmap (item 2 — 4 batidas/dia).
+
+## 16. 🔑 Decisão confirmada — os 28 recusados de Caratinga NÃO voltam a pedir facial
+
+Vitor pediu "corrigir pra solicitar o cadastro da facial desses 32 quando fizerem login".
+Antes de mexer, puxei quem são os 28 `rejected`: **`registration_reviewed_by='2626'`,
+27/08/2026, 27 com nota "não está trabalhando" e 1 (Ian Willian Gomes da Silva Santos)
+com nota "fralde no sistema de ponto"** — decisão de segurança dele mesmo, recente. Pedir
+facial pra eles implicaria deixá-los passar do CPF de novo (hoje são barrados ANTES do
+PIN), inclusive o caso de fraude.
+
+Perguntado via `AskUserQuestion` com essa evidência — **confirmado: só os 4 `approved` sem
+rosto** (não os 28 `rejected`). Esses 4 já pedem cadastro sozinhos no próximo login (mesmo
+comportamento provado em §15) — **nenhuma mudança de código necessária**, pedido já estava
+atendido. Os 28 recusados continuam barrados como antes.
+
+⚠️ Achado à parte, não mexido (fora do pedido): **Arthur Teixeira de Paula Miguel** está
+`approved` mas com nota "não esta indo trabalhar" — mesma frase dos 27 rejeitados, mas
+ficou como aprovado. Pode ser inconsistência de quem revisou; avisar o Victor, não corrigir
+sem ele confirmar (ele decide status de cadastro, não eu).
