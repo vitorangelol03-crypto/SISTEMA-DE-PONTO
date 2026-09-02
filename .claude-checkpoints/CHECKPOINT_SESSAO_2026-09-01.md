@@ -278,3 +278,50 @@ de verificação, não na primeira. `tests/103` fecha essa lacuna de cobertura d
 - Os 2 testes de `tests/28-employee-import-v2.spec.ts` (`Erros` hidden, client-side,
   achado nesta leva mas não investigado) — mesma categoria dos achados do §5/§8: reportar
   e perguntar se vale consertar numa leva separada.
+
+## 10. ✅ 9999/8888 configuráveis, 2626 fixo como líder único (`2159bab`)
+
+Pedido novo do Victor (02/09/2026, meio da madrugada): "vamos tornar os usuários 9999,
+8888, 2626 em usuários normal do sistema mais com full acessos que eles vão ser os
+usuários dos chefes mas podendo ser limitados também igual outros usuários". Foi ficando
+mais preciso em 3 rodadas de mensagens curtas — resumo final:
+- **2626 = líder único, fixo.** Ponto/Pagamentos Driver/Aprovação de Cadastro continuam
+  100% exclusivos dele (sem mudar nada). Permissão dele nunca é editável, nem por ele.
+- **9999** = vê as duas empresas (igual hoje), nasce com tudo liberado (menos os 3 itens
+  do 2626 acima), mas agora É configurável/limitável de verdade.
+- **8888** = já só via Ponte Nova (não mudou), nasce com tudo liberado (mesma exceção),
+  também configurável/limitável.
+- **Só o 2626 edita a permissão do 9999/8888** — nem eles mesmos, nem outro admin com
+  "gerenciar permissões" comum.
+
+Achado no meio da investigação que **reduziu bastante o risco**: a "empresa que cada
+mestre enxerga" já era exatamente isso que o Victor queria (9999/2626 no bypass das ~60
+RLS policies de `company_id`, 8888 nunca esteve nesse bypass — `company_id` dele já era
+Ponte Nova) — **não precisou mexer em RLS nenhuma**. Só a camada de PERMISSÃO/AÇÃO
+precisava mudar (frontend + os 3 triggers da Fase B), não a de visibilidade de linha.
+
+**Implementado:**
+- Migration `20260902010000_9999_8888_configuraveis_2626_fixo.sql`: seed de permissão
+  total (UPSERT) pro 9999 (tinha linha antiga incompleta) e 8888 (nunca teve linha) +
+  os 3 triggers da Fase B (`enforce_users_permission_check`,
+  `enforce_user_permissions_permission_check`, `enforce_employees_permission_check`)
+  trocam o bypass de `sub IN ('9999','2626')` pra só `sub = '2626'`, e o trigger de
+  `user_permissions` ganha uma trava nova: mexer no `user_id` 9999 ou 8888 é exclusivo
+  do 2626, mesmo pra quem tem `managePermissions=true`.
+- Frontend: `usePermissions.ts` (2 bypasses), `validatePermission` em `database.ts`,
+  `driverPay.ts` — trocado `isMaster(userId)` por `userId === PONTO_EDITOR_ID` nos pontos
+  que davam bypass total (não nos usos cosméticos como "não pode excluir"/"mostra
+  Sistema", que continuam em `isMaster()`/`MASTER_IDS` intocados). `PermissionsModal.tsx`
+  + `UsersTab.tsx` ganham a trava "só 2626 edita 9999/8888" nas duas camadas (UI +
+  trigger real).
+
+**Validado ao vivo:** 48 testes da suíte de Funcionários/Usuários (que usam o 9999
+pesadamente como conta padrão de admin em quase todo teste da sessão) continuam 100%
+verdes — nada quebrou pro caminho "acesso total por padrão". `tests/104` novo (3 testes)
+prova as duas pontas com login real: 9999 mantém tudo funcionando, 9999 (mesmo com
+`managePermissions=true`) é bloqueado tentando mexer no 8888, e o 2626 consegue abrir a
+tela do 8888 normalmente. tsc + lint + build limpos.
+
+**Em aberto:** Victor não pediu (e não mexi) enforcement de LEITURA (SELECT) nem tornar a
+"empresa que cada um vê" editável por UI — hoje é só o bypass de RLS que já existia,
+inalterado. Se ele quiser isso configurável de verdade no futuro, é uma leva nova.

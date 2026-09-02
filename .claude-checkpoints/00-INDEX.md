@@ -40,7 +40,13 @@
 > criar/editar funcionário por ~40min até o hotfix (`38b1d1b`, §9.1.1). Corrigido,
 > validado com conta real via UI (`tests/103` novo) + suíte completa de novo, CI verde.
 > Só mutação (SELECT fica pra depois); só 2 dos 11 módulos (decisão do Victor); Fase C
-> nem começou.
+> nem começou. **✅ 9999/8888 viram configuráveis, 2626 fixo como líder** (`2159bab`, §10):
+> pedido novo do Victor — 2626 continua único e fixo (ponto/Driverpay/Aprovação
+> intocados), 9999 e 8888 nascem com tudo liberado mas agora são limitáveis de verdade,
+> só o 2626 edita a permissão deles (nem eles mesmos). Não precisou mexer nas ~60 RLS
+> policies de empresa (9999/2626 já viam as duas, 8888 já só via Ponte Nova — só a
+> camada de permissão/ação mudou). 48 testes existentes + 3 novos (`tests/104`) provam ao
+> vivo que nada quebrou e a trava funciona nos dois sentidos.
 
 > ✅ **Roadmap item 2 (4 batidas) PREPARADO pra todo mundo, sem ligar ainda** (`c191648`):
 > pedido "deixe tudo pronto, na hora que eu ativar funciona perfeitamente". Auditoria achou
