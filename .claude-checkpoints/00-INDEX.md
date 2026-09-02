@@ -22,7 +22,11 @@
 > call sites hoje) em todos os pontos de mutação de uma vez (Victor não quis faseado) +
 > diff old/new no `AuditLogsTab`. Migration aplicada em prod com OK explícito do Victor;
 > edge fn deployada e sondada pós-deploy. 20/20 E2E novo/atualizado passando em
-> chromium+mobile-pixel5. **Achado (não consertado, fora de escopo):** regressão em
+> chromium+mobile-pixel5. **CI verde nos 3 jobs + Vercel conferida por conteúdo**
+> (`bc47757`→`3795b45`). **Achado de CI no meio da leva, consertado** (§6.1): 2 testes de
+> outra leva de hoje (roadmap item 1/2, não-Usuários) computavam data em UTC vs a data
+> BRT que o edge fn grava — só quebrava na janela ~21h-00h BRT; não era bug da Fase A,
+> corrigido junto. **Achado (não consertado, fora de escopo):** regressão em
 > `tests/11`+`22`+`26` só em mobile-pixel5, pré-existente (confirmado via `git show HEAD`),
 > mesma família "tabela desktop escondida pega no locator" — reportar ao Victor.
 

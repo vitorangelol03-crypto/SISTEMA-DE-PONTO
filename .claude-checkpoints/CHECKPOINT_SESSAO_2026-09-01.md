@@ -146,17 +146,34 @@ em chromium+mobile-pixel5 por precaução: **9 falhas, nenhuma ligada à Fase A*
 quiser, o fix é mecânico e pequeno (mesmo padrão `data-testid`+`:visible` já aplicado nos
 meus arquivos) — mas cabe a ele decidir se vale abrir uma leva só pra isso.
 
-## 6. Push e deploy
+## 6. ✅ Push, CI e deploy — fechado (`bc47757` + `a246638` + `3795b45`)
 
-Commit `bc47757` pushado pra `main` (migration + edge fn + frontend + testes, tudo junto).
-CI disparado (run em andamento no momento deste checkpoint — conferir antes de fechar a
-sessão). Vercel: main = deploy automático; conferir por conteúdo, não só HTTP status
-(regra já documentada — rewrite SPA dá falso 200).
+Commit `bc47757` pushado (migration + edge fn + frontend + testes) + `a246638`
+(checkpoint) + `3795b45` (fix de teste, ver §6.1). **CI verde nos 3 jobs** no push final
+(run `33578008149`: tsc+eslint, vitest, playwright todos ✓). **Vercel confirmada por
+conteúdo**: string `"Defina uma senha nova"` (só existe no `ForceChangePasswordScreen`
+novo) presente no bundle servido em produção.
+
+### 6.1. 🔴→🟢 Achado real de CI no meio da leva (não era bug da Fase A)
+
+O primeiro push (`bc47757`+`a246638`) veio com **CI vermelho no job `vitest`** — 2 testes
+falhando com `Cannot read properties of undefined`
+(`tests/unit/edgeFnClockFacialGeoEstrito.spec.ts`, `edgeFnClockFourMarkingsLunch.spec.ts`).
+Rerun confirmou que NÃO era flake (falhou 2x igual). Investigado até a causa raiz: os dois
+arquivos (criados mais cedo hoje, antes da leva de Usuários, achado do roadmap item 1/2)
+computavam `today` com `new Date().toISOString()` (**UTC puro**), mas o edge fn
+`clock-in-validated` grava `attendance.date` com `getBrazilDateString()` (America/
+Sao_Paulo, UTC-3). Na janela ~21h-00h BRT (00h-03h UTC) o UTC já virou o dia mas o Brasil
+não — o push caiu bem nessa janela (~21:48-22:02 BRT), o `supaSelect` por `date=eq.{today}`
+voltava vazio, e `att` saía `undefined`. **Não era regressão da Fase A** (confirmado: os
+dois arquivos não tocam em `users`/permissões, e o padrão de bug — UTC vs BRT — já existia
+neles desde que foram criados; só nunca tinha rodado nessa janela de horário em CI antes).
+Fix (`3795b45`): trocado pro mesmo padrão `en-CA`+`America/Sao_Paulo` já usado em
+`tests/26-multi-company-ui-isolation.spec.ts`. Reproduzido localmente na mesma janela
+(rodando 22h BRT) — falhava antes do fix, passa depois. CI verde confirmado no push final.
 
 ## 7. Pendente / próximo passo
 
-- Confirmar CI verde nos 3 jobs + Vercel com o conteúdo novo antes de considerar a Fase A
-  "fechada de vez".
 - **Fase B não começou**: generalizar enforcement real (RLS/trigger) pros módulos
   Usuários + Funcionários primeiro, provar sem quebrar nada, só depois expandir.
 - **Fase C não começou**: plugar `auditService` em todos os pontos de mutação +
