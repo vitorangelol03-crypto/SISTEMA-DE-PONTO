@@ -12,7 +12,7 @@
  */
 import { supabase } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
-import { isMaster, isDriverpayPermission, canAccessDriverpay } from '../config/masters';
+import { PONTO_EDITOR_ID, isDriverpayPermission, canAccessDriverpay } from '../config/masters';
 import type { ImportResolvedItem, ImportApplyResult } from '../utils/driverImportApply';
 import { missingImportPlatforms } from '../utils/driverImportApply';
 import { mirrorPlatformKey, sanitizeMirrorKeyForPath } from '../components/driverpay/driverPayShared';
@@ -218,7 +218,8 @@ async function ensurePerm(userId: string, permission: string): Promise<void> {
     if (canAccessDriverpay(userId)) return;
     throw new Error('Apenas o usuário mestre 2626 pode acessar Pagamentos Driver');
   }
-  if (isMaster(userId)) return;
+  // Só o 2626 continua com bypass incondicional (líder único e fixo, 02/09/2026).
+  if (userId === PONTO_EDITOR_ID) return;
   const perms = await getUserPermissions(userId);
   if (!perms || !checkPermission(perms, permission)) {
     throw new Error(`Você não tem permissão para: ${permission}`);

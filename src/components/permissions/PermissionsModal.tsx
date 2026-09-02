@@ -4,7 +4,7 @@ import { UserPermissions, PERMISSION_LABELS, DEFAULT_ADMIN_PERMISSIONS, DEFAULT_
 import { saveUserPermissions } from '../../services/permissions';
 import { getBonusTypes, BonusTypeRecord } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
-import { isMaster } from '../../config/masters';
+import { PONTO_EDITOR_ID, isConfigurablePrivileged, canEditPrivilegedUserPermissions } from '../../config/masters';
 import toast from 'react-hot-toast';
 
 const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
@@ -73,8 +73,15 @@ export function PermissionsModal({
   if (!isOpen) return null;
 
   const handleSave = async () => {
-    if (isMaster(userId)) {
-      toast.error('Não é possível alterar permissões do administrador principal');
+    // 02/09/2026: 2626 continua o líder único e fixo — sua permissão nunca é editável
+    // (nem por ele mesmo). 9999/8888 passaram a ser configuráveis, mas só o 2626 pode
+    // editar a permissão deles (nem eles mesmos) — mesma regra do trigger no banco.
+    if (userId === PONTO_EDITOR_ID) {
+      toast.error('Não é possível alterar permissões do administrador principal (2626)');
+      return;
+    }
+    if (isConfigurablePrivileged(userId) && !canEditPrivilegedUserPermissions(currentUserId)) {
+      toast.error('Só o usuário mestre (2626) pode alterar as permissões do 9999/8888');
       return;
     }
 

@@ -77,3 +77,23 @@ export function isEmployeeApprovalPermission(permission: string): boolean {
 export function canAccessEmployeeApproval(userId: string | null | undefined): boolean {
   return userId === PONTO_EDITOR_ID;
 }
+
+/**
+ * Usuários "chefe" configuráveis (02/09/2026, pedido do Victor): nascem com acesso
+ * total (menos os 3 itens exclusivos do 2626 acima, que continuam travados pra eles
+ * também) mas são REALMENTE limitáveis via tela de Permissões — não têm mais bypass
+ * incondicional como o 2626. O 2626 NÃO entra nesta lista: ele continua o líder único
+ * e fixo (não configurável, nem por si mesmo). Espelha os triggers
+ * enforce_users_permission_check / enforce_employees_permission_check /
+ * enforce_user_permissions_permission_check no banco.
+ */
+export const CONFIGURABLE_PRIVILEGED_IDS: readonly string[] = ['9999', '8888'];
+
+export function isConfigurablePrivileged(userId: string | null | undefined): boolean {
+  return userId != null && CONFIGURABLE_PRIVILEGED_IDS.includes(userId);
+}
+
+/** Só o 2626 pode editar a configuração de permissões do 9999/8888 — nem eles mesmos. */
+export function canEditPrivilegedUserPermissions(actingUserId: string | null | undefined): boolean {
+  return actingUserId === PONTO_EDITOR_ID;
+}

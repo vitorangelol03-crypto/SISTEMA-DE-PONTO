@@ -6,7 +6,7 @@ import { isValidPassword, isNumericString } from '../../utils/validation';
 import { getUserPermissions } from '../../services/permissions';
 import { UserPermissions } from '../../types/permissions';
 import { PermissionsModal } from '../permissions/PermissionsModal';
-import { isMaster } from '../../config/masters';
+import { isMaster, PONTO_EDITOR_ID, isConfigurablePrivileged, canEditPrivilegedUserPermissions } from '../../config/masters';
 import toast from 'react-hot-toast';
 
 interface UsersTabProps {
@@ -214,6 +214,17 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
   const handleManagePermissions = async (user: User) => {
     if (!hasPermission('users.managePermissions')) {
       toast.error('Você não tem permissão para gerenciar permissões');
+      return;
+    }
+
+    // 02/09/2026: 2626 é o líder único e fixo (permissão nunca editável). 9999/8888
+    // são configuráveis, mas só o 2626 pode editar a permissão deles.
+    if (user.id === PONTO_EDITOR_ID) {
+      toast.error('Não é possível alterar permissões do administrador principal (2626)');
+      return;
+    }
+    if (isConfigurablePrivileged(user.id) && !canEditPrivilegedUserPermissions(userId)) {
+      toast.error('Só o usuário mestre (2626) pode alterar as permissões do 9999/8888');
       return;
     }
 

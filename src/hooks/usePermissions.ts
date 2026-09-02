@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UserPermissions, DEFAULT_ADMIN_PERMISSIONS } from '../types/permissions';
 import { getUserPermissions, hasPermission as checkPermission } from '../services/permissions';
-import { isMaster, isPontoEditPermission, canEditPonto, isDriverpayPermission, canAccessDriverpay, isEmployeeApprovalPermission, canAccessEmployeeApproval } from '../config/masters';
+import { PONTO_EDITOR_ID, isPontoEditPermission, canEditPonto, isDriverpayPermission, canAccessDriverpay, isEmployeeApprovalPermission, canAccessEmployeeApproval } from '../config/masters';
 
 export function usePermissions(userId: string | null) {
   const [permissions, setPermissions] = useState<UserPermissions | null>(null);
@@ -18,7 +18,10 @@ export function usePermissions(userId: string | null) {
       setLoading(true);
       const userPermissions = await getUserPermissions(userId);
 
-      if (isMaster(userId)) {
+      // 02/09/2026: só o 2626 continua com bypass incondicional (líder único e fixo).
+      // 9999/8888 passaram a ser configuráveis — usam a permissão real salva no banco
+      // (nasce com tudo true via migration, mas fica de fato limitável depois).
+      if (userId === PONTO_EDITOR_ID) {
         setPermissions(DEFAULT_ADMIN_PERMISSIONS);
       } else {
         setPermissions(userPermissions);
@@ -53,7 +56,8 @@ export function usePermissions(userId: string | null) {
         return canAccessEmployeeApproval(userId);
       }
 
-      if (isMaster(userId)) {
+      // Só o 2626 continua com bypass incondicional pro resto (ver comentário acima).
+      if (userId === PONTO_EDITOR_ID) {
         return true;
       }
 

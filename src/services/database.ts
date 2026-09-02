@@ -1,6 +1,6 @@
 import { supabase, setAuthToken, getAuthToken } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
-import { isMaster, isPontoEditPermission, canEditPonto, canAccessDriverpay, isEmployeeApprovalPermission, canAccessEmployeeApproval } from '../config/masters';
+import { isMaster, PONTO_EDITOR_ID, isPontoEditPermission, canEditPonto, canAccessDriverpay, isEmployeeApprovalPermission, canAccessEmployeeApproval } from '../config/masters';
 import {
   computeWorkedMinutes,
   computeIntervalMinutes,
@@ -398,8 +398,9 @@ async function validatePermission(
       : { allowed: false, error: 'Apenas o usuário mestre (2626) pode acessar Aprovação de Cadastro' };
   }
 
-  // Mestres (9999 / 2626) têm todas as demais permissões.
-  if (isMaster(userId)) {
+  // Só o 2626 continua com bypass incondicional (líder único e fixo, 02/09/2026).
+  // 9999/8888 passaram a ser configuráveis — caem no checkPermission normal abaixo.
+  if (userId === PONTO_EDITOR_ID) {
     return { allowed: true };
   }
 
