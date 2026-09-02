@@ -245,6 +245,30 @@ achado à parte, não investigado a fundo (fora do escopo desta leva).
 
 typecheck limpo, build não precisou rodar de novo (migration não mexe em frontend).
 
+### 9.1.1. 🔴→🟢 Bug real achado e corrigido na hora (`38b1d1b`, ~40min no ar)
+
+Victor perguntou "tudo pronto tem certeza?" depois do §9.1 — em vez de repetir a
+confirmação, reverifiquei do zero e achei um bug de verdade: `user_has_module_permission`
+tratava "usuário SEM linha em `user_permissions`" como "zero permissão nenhuma". Mas o
+frontend (`mergePermissionsWithDefaults` em `permissions.ts`) sempre tratou "sem linha"
+como `DEFAULT_SUPERVISOR_PERMISSIONS` (que já vem com `employees.create/edit/import=true`).
+Confirmado no banco: as contas **REAIS** `01` (supervisor) e `8888` (admin não-mestre)
+nunca tiveram linha própria — ficaram **bloqueadas de criar/editar/importar funcionário**
+desde o deploy da Fase B até o hotfix (~40min de janela).
+
+Avisei o Victor na hora, expliquei o alcance real, ele mandou aplicar
+(`20260902000000_fase_b_fix_default_permissions_sem_linha.sql`). Fix: mesmo fallback do
+frontend, só pros módulos que a Fase B usa hoje — linhas customizadas (ex: supervisor 04,
+restrito) continuam 100% respeitadas. Validado por 3 caminhos: (1) SQL direto, 6 casos
+batendo com o esperado incl. o supervisor 04 continuar bloqueado; (2) `tests/103` novo,
+prova a conta REAL `01` criando funcionário pela UI de verdade (login real → trigger
+real); (3) 29/29 verde na suíte completa de novo. CI verde.
+
+**Lição:** os 28 testes do §9.1 validaram o caminho de "quem tem permissão" (via admin,
+que sempre ignora a trave) mas nenhum validava especificamente "conta real sem linha
+salva" fazendo uma ação de verdade pela UI — esse buraco só apareceu numa segunda rodada
+de verificação, não na primeira. `tests/103` fecha essa lacuna de cobertura de vez.
+
 ### 9.2. Em aberto pra próxima leva
 
 - Fase B só cobre 2 dos 11 módulos (Usuários + Funcionários) — expandir pros outros 9 é

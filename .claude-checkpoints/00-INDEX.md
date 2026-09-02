@@ -33,8 +33,14 @@
 > pra `users`+`user_permissions`+`employees`; achado sério no caminho: `saveUserPermissions`
 > fazia UPDATE direto SEM NENHUM check de permissão (só a UI escondia o botão) — qualquer
 > usuário da empresa podia se auto-conceder `managePermissions` via REST direto, fechado.
-> Validado com 28 E2E reais (JWT de usuário de verdade) sem regressão — §9.1. Só mutação
-> (SELECT fica pra depois); só 2 dos 11 módulos (decisão do Victor); Fase C nem começou.
+> Validado com 28 E2E reais (JWT de usuário de verdade) sem regressão — §9.1. 🔴→🟢
+> **Bug real achado numa 2ª verificação** (Victor perguntou "tem certeza?", valeu
+> reconferir): usuário SEM linha em `user_permissions` (contas reais `01`/`8888`) ficava
+> tratado como "zero permissão" em vez do default de supervisor do frontend — bloqueou
+> criar/editar funcionário por ~40min até o hotfix (`38b1d1b`, §9.1.1). Corrigido,
+> validado com conta real via UI (`tests/103` novo) + suíte completa de novo, CI verde.
+> Só mutação (SELECT fica pra depois); só 2 dos 11 módulos (decisão do Victor); Fase C
+> nem começou.
 
 > ✅ **Roadmap item 2 (4 batidas) PREPARADO pra todo mundo, sem ligar ainda** (`c191648`):
 > pedido "deixe tudo pronto, na hora que eu ativar funciona perfeitamente". Auditoria achou
