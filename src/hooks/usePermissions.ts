@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UserPermissions, DEFAULT_ADMIN_PERMISSIONS } from '../types/permissions';
 import { getUserPermissions, hasPermission as checkPermission } from '../services/permissions';
-import { PONTO_EDITOR_ID, isPontoEditPermission, canEditPonto, isDriverpayPermission, canAccessDriverpay, isEmployeeApprovalPermission, canAccessEmployeeApproval } from '../config/masters';
+import { PONTO_EDITOR_ID } from '../config/masters';
 
 export function usePermissions(userId: string | null) {
   const [permissions, setPermissions] = useState<UserPermissions | null>(null);
@@ -40,23 +40,9 @@ export function usePermissions(userId: string | null) {
 
   const hasPermission = useCallback(
     (permission: string): boolean => {
-      // Edição de ponto (data/horário) e reset são EXCLUSIVOS do editor de ponto (2626),
-      // acima de qualquer bypass de mestre — nem o 9999 pode. Espelha o trigger no banco.
-      if (isPontoEditPermission(permission)) {
-        return canEditPonto(userId);
-      }
-
-      // Pagamentos Driver: módulo inteiro EXCLUSIVO do 2626 (nem 9999 vê a aba). Acima do bypass.
-      if (isDriverpayPermission(permission)) {
-        return canAccessDriverpay(userId);
-      }
-
-      // Aprovação de Cadastro: módulo inteiro EXCLUSIVO do 2626 (nem 9999 vê a aba). Acima do bypass.
-      if (isEmployeeApprovalPermission(permission)) {
-        return canAccessEmployeeApproval(userId);
-      }
-
-      // Só o 2626 continua com bypass incondicional pro resto (ver comentário acima).
+      // 02/09/2026: as travas exclusivas de Ponto/Driverpay/Aprovação de Cadastro
+      // foram removidas — viraram permissão normal, checada como qualquer outra.
+      // Só o 2626 continua com bypass incondicional (líder único e fixo).
       if (userId === PONTO_EDITOR_ID) {
         return true;
       }

@@ -1,6 +1,6 @@
 import { supabase, setAuthToken, getAuthToken } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
-import { isMaster, PONTO_EDITOR_ID, isPontoEditPermission, canEditPonto, canAccessDriverpay, isEmployeeApprovalPermission, canAccessEmployeeApproval } from '../config/masters';
+import { isMaster, PONTO_EDITOR_ID } from '../config/masters';
 import {
   computeWorkedMinutes,
   computeIntervalMinutes,
@@ -376,30 +376,9 @@ async function validatePermission(
   userId: string,
   permission: string
 ): Promise<PermissionCheckResult> {
-  // Edição de ponto (data/horário) e reset são EXCLUSIVOS do editor de ponto (2626),
-  // acima de qualquer bypass de mestre. Espelha o trigger enforce_ponto_master_only.
-  if (isPontoEditPermission(permission)) {
-    return canEditPonto(userId)
-      ? { allowed: true }
-      : { allowed: false, error: 'Apenas o usuário mestre (2626) pode alterar registros de ponto' };
-  }
-
-  // Pagamentos Driver: módulo EXCLUSIVO do 2626 (nem 9999), acima do bypass de mestre.
-  if (permission.startsWith('driverpay.')) {
-    return canAccessDriverpay(userId)
-      ? { allowed: true }
-      : { allowed: false, error: 'Apenas o usuário mestre (2626) pode acessar Pagamentos Driver' };
-  }
-
-  // Aprovação de Cadastro: módulo EXCLUSIVO do 2626 (nem 9999), acima do bypass de mestre.
-  if (isEmployeeApprovalPermission(permission)) {
-    return canAccessEmployeeApproval(userId)
-      ? { allowed: true }
-      : { allowed: false, error: 'Apenas o usuário mestre (2626) pode acessar Aprovação de Cadastro' };
-  }
-
-  // Só o 2626 continua com bypass incondicional (líder único e fixo, 02/09/2026).
-  // 9999/8888 passaram a ser configuráveis — caem no checkPermission normal abaixo.
+  // 02/09/2026: as travas exclusivas de Ponto/Driverpay/Aprovação de Cadastro foram
+  // removidas — viraram permissão normal, checada como qualquer outra. Só o 2626
+  // continua com bypass incondicional (líder único e fixo).
   if (userId === PONTO_EDITOR_ID) {
     return { allowed: true };
   }

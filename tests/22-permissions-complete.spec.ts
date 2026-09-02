@@ -35,21 +35,21 @@ test.describe('Permissions — Admin (9999) acesso total', () => {
     await expect(page.getByRole('button', { name: /^Relatórios$/ }).first()).toBeVisible();
   });
 
-  test('REGRA de junho: 9999 NÃO vê Reset Geral; 2626 vê (quando há attendance)', async ({ page }) => {
-    // MODERNIZADO 2026-07-19: attendance.reset é EXCLUSIVO do 2626 desde junho
-    // (masters.ts). A premissa antiga ("admin vê Reset Geral") virou o contrário.
+  // ATUALIZADO 02/09/2026 (pedido do Victor, "máximo controle"): attendance.reset era
+  // EXCLUSIVO hardcoded do 2626 (nem o 9999) desde junho até essa data — virou permissão
+  // normal configurável. 9999 foi seedado com acesso total (migration
+  // 20260902010000_...), então agora AMBOS veem Reset Geral por padrão.
+  test('9999 e 2626 (acesso total) VEEM Reset Geral (quando há attendance)', async ({ page }) => {
     const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}PermResetView `;
     await cleanupByPrefix(PREFIX);
     const empId = await createTestEmployee({ name: `${PREFIX}Emp` });
     await insertAttendance(empId, todayBR(), { status: 'present' });
 
-    // 9999: botão NÃO aparece (regra).
     await loginAs(page, ADMIN);
     await goToTab(page, 'Ponto');
     await page.waitForLoadState('networkidle');
-    expect(await page.getByRole('button', { name: /Reset Geral/i }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: /Reset Geral/i }).count()).toBeGreaterThan(0);
 
-    // 2626: botão aparece (dono da regra).
     await page.getByRole('button', { name: /Sair/ }).first().click();
     await expect(page.locator('#id')).toBeVisible({ timeout: 10_000 });
     await loginAs(page, { id: '2626', password: 'cdlogistica26' });

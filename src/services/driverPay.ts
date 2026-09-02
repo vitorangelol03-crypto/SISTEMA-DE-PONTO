@@ -12,7 +12,7 @@
  */
 import { supabase } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
-import { PONTO_EDITOR_ID, isDriverpayPermission, canAccessDriverpay } from '../config/masters';
+import { PONTO_EDITOR_ID } from '../config/masters';
 import type { ImportResolvedItem, ImportApplyResult } from '../utils/driverImportApply';
 import { missingImportPlatforms } from '../utils/driverImportApply';
 import { mirrorPlatformKey, sanitizeMirrorKeyForPath } from '../components/driverpay/driverPayShared';
@@ -213,12 +213,8 @@ export const throwDbError = (error: { message?: string; code?: string }): never 
 
 /** Espelha validatePermission (privado no database.ts) com os helpers exportados. */
 async function ensurePerm(userId: string, permission: string): Promise<void> {
-  // Modulo Pagamentos Driver e EXCLUSIVO do 2626 (nem 9999). Acima do bypass de mestre.
-  if (isDriverpayPermission(permission)) {
-    if (canAccessDriverpay(userId)) return;
-    throw new Error('Apenas o usuário mestre 2626 pode acessar Pagamentos Driver');
-  }
-  // Só o 2626 continua com bypass incondicional (líder único e fixo, 02/09/2026).
+  // 02/09/2026: Pagamentos Driver deixou de ser exclusivo do 2626 — vira permissão
+  // normal, checada como qualquer outra. Só o 2626 continua com bypass incondicional.
   if (userId === PONTO_EDITOR_ID) return;
   const perms = await getUserPermissions(userId);
   if (!perms || !checkPermission(perms, permission)) {

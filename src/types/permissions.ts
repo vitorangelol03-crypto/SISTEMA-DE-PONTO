@@ -138,7 +138,13 @@ export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
 };
 
 export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: true, edit: false, search: true, reset: false, viewHistory: true, editHistory: true, approve: true, reject: true, bulkApprove: false, manualTime: false, generateMassMirror: true },
+  // 02/09/2026: mark/editHistory zerados. Até aqui eram "true" mas 100% inertes —
+  // marcar presença/editar histórico eram exclusivos hardcoded do 2626 (incidente de
+  // 04/08: 9999 marcou 3 pessoas que não trabalharam, pagas como dia trabalhado). Agora
+  // que essa trava virou permissão normal, um valor "true" adormecido aqui passaria a
+  // valer de verdade — supervisor nasce SEM essas duas (Victor concede explicitamente
+  // quem ele quiser depois, "máximo controle").
+  attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false, approve: true, reject: true, bulkApprove: false, manualTime: false, generateMassMirror: true },
   employees: { view: true, create: true, edit: true, delete: false, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   // Sub-fase 14.13 (bug #6 audit): supervisor padrão tinha applyBonus=true mas

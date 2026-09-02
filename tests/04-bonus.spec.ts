@@ -12,13 +12,13 @@ import {
  * Bonificações (B / C1 / C2) — MODERNIZADO 2026-07-19.
  *
  * Por que mudou: a versão de maio aplicava/removia a bonificação do DIA REAL da
- * Caratinga (bonuses é por empresa+dia+tipo!) e usava Reset Geral como 9999 —
- * que desde junho é exclusivo do 2626. Em dia com bônus real da equipe, o spec
- * quebrava E ameaçava dados reais.
+ * Caratinga (bonuses é por empresa+dia+tipo!) e usava Reset Geral como 9999 — que
+ * de junho até 02/09/2026 foi exclusivo hardcoded do 2626 (virou permissão normal
+ * depois, ver nota mais abaixo). Em dia com bônus real da equipe, o spec quebrava
+ * E ameaçava dados reais.
  *
  * Molde novo: roda em PONTE NOVA com funcionário próprio (PW Test) — o bônus
- * aplicado/removido é sempre e somente o de teste. A regra de junho é testada
- * dos dois lados (9999 não vê Reset Geral; 2626 usa).
+ * aplicado/removido é sempre e somente o de teste.
  *
  * ⚠️ 17/08/2026 — Ponte Nova TEM uso real (achado ao rodar: 6 funcionários
  * batendo ponto de verdade no dia). O isolamento não vem de "empresa vazia" —
@@ -27,13 +27,13 @@ import {
  * depois) e de `openPontoPN` buscar só pelo nome do PW Test, que combinado à
  * trava de bonificação (17/08) exclui todo o resto da lista visível.
  *
- * 17/08/2026 — marcar presença virou exclusivo do 2626 desde 13/08; 9999 não
- * clica mais "Presente" na UI (botão desabilitado). Os testes que precisam de
- * alguém presente como PRÉ-CONDIÇÃO (não estão testando quem marca) passaram a
- * inserir a presença direto no banco (`markPresentViaDb`/`openPontoPNPresente`)
- * e login continua sendo de quem o teste realmente quer verificar — 9999 segue
- * podendo aplicar bônus e continua sem ver Reset Geral, exatamente como a regra
- * de junho sempre testou.
+ * 17/08/2026 — marcar presença era exclusivo do 2626 desde 13/08 (9999 não clicava
+ * "Presente" na UI, botão desabilitado). Os testes que precisam de alguém presente
+ * como PRÉ-CONDIÇÃO (não estão testando quem marca) inserem a presença direto no
+ * banco (`markPresentViaDb`/`openPontoPNPresente`) — padrão mantido mesmo depois da
+ * trava cair (02/09/2026), continua sendo a forma mais estável de montar a
+ * pré-condição sem depender de UI. Login segue sendo de quem o teste realmente quer
+ * verificar.
  */
 
 const EMP_NAME = 'PW Test Bonus PN';
@@ -236,9 +236,12 @@ test.describe('Bonificações (B / C1 / C2) — em Ponte Nova, isolado', () => {
     await expect(page.getByText(/Bonificações Aplicadas/)).toBeHidden();
   });
 
-  test('REGRA de junho: 9999 NÃO vê Reset Geral (mesmo com attendance no dia)', async ({ page }) => {
+  // ATUALIZADO 02/09/2026 (pedido do Victor, "máximo controle"): a trava exclusiva do
+  // 2626 pro Reset Geral caiu — virou permissão normal (attendance.reset), e o 9999 foi
+  // seedado com acesso total (configurável dali em diante pela tela de Permissões).
+  test('9999 (acesso total, configurável) VÊ Reset Geral (com attendance no dia)', async ({ page }) => {
     await openPontoPNPresente(page, ADMIN);
-    await expect(page.getByRole('button', { name: /^Reset Geral$/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Reset Geral$/ })).toBeVisible();
   });
 
   test('2626: Reset Geral do ponto remove bonificações também (regressão)', async ({ page }) => {

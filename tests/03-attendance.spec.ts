@@ -11,16 +11,21 @@ import {
  * Controle de Ponto — MODERNIZADO 2026-07-19 (era de maio; quebrou quando a base
  * virou produção viva + regra de junho).
  *
- * Regra vigente (masters.ts):
- *   - junho/2026: horários (manual/inline), editar histórico e Reset — SÓ o mestre 2626;
- *   - 13/08/2026: marcar Presente/Falta TAMBÉM virou exclusivo do 2626. Motivo: marcar
- *     pelo painel cria ponto SEM batida nenhuma, indistinguível na tela de quem bateu de
- *     verdade, e o Financeiro paga como dia trabalhado. Em 04/08 o 9999 marcou 3 pessoas
- *     que não trabalharam e as 3 receberam diária.
+ * Histórico: entre junho e 02/09/2026, horários (manual/inline), editar histórico,
+ * Reset e marcar Presente/Falta eram EXCLUSIVOS hardcoded do mestre 2626 (nem o 9999
+ * podia — motivo: incidente de 04/08, 9999 marcou 3 pessoas que não trabalharam e o
+ * Financeiro pagou a diária das 3).
+ *
+ * ATUALIZADO 02/09/2026 (pedido do Victor, "máximo controle"): essa trava fixa foi
+ * removida — virou permissão normal (`attendance.mark/edit/editHistory/manualTime/
+ * reset`), configurável por usuário na tela de Permissões. 2626 continua com acesso
+ * total fixo (não configurável); 9999/8888 nascem com acesso total mas são limitáveis;
+ * supervisores comuns tiveram essas 5 chaves zeradas na migration da transição (não
+ * ganharam nada à toa — ver `20260902020000_...`).
  *
  * Molde: o spec cria o PRÓPRIO funcionário (PW Test, via service role), age só na linha
  * dele (nunca na primeira linha real da base viva) e limpa o ponto dele antes de cada
- * teste. A regra é testada dos DOIS lados: o 2626 consegue; o 9999 nem vê os controles.
+ * teste.
  */
 
 const EMP_NAME = 'PW Test Ponto Spec03';
@@ -103,37 +108,41 @@ test.describe('Controle de Ponto', () => {
     expect(novoValor > ontem).toBe(true);
   });
 
-  test('REGRA de junho: 9999 NÃO vê horário manual (💾) nem Reset na linha', async ({ page }) => {
+  // ATUALIZADO 02/09/2026: pedido do Victor — as travas exclusivas hardcoded pro 2626
+  // (Ponto, Pagamentos Driver, Aprovação de Cadastro) foram removidas e viraram
+  // permissão normal. 9999 foi seedado com acesso total (migration
+  // `20260902010000_9999_8888_configuraveis_2626_fixo` + a remoção da trava em
+  // `20260902020000_...`), então agora TAMBÉM vê horário manual e Reset — controlável
+  // depois via tela de Permissões, não mais hardcoded no código.
+  test('9999 (acesso total, configurável) VÊ horário manual (💾) e Reset na linha', async ({ page }) => {
     const row = await openPontoRow(page, ADMIN);
-    await expect(row.locator('input[type="time"]')).toHaveCount(0);
-    await expect(row.getByRole('button', { name: '💾' })).toHaveCount(0);
-    await expect(row.getByRole('button', { name: /^Reset$/ })).toHaveCount(0);
+    await expect(row.locator('input[type="time"]')).toHaveCount(2);
+
+    // Reset só aparece quando HÁ status marcado (`status && hasPermission('attendance.reset')`
+    // em AttendanceTab.tsx) — precisa marcar Presente antes, senão não tem o que resetar.
+    await row.getByRole('button', { name: /^Presente$/ }).click();
+    await expect(row.locator('span').filter({ hasText: /^Presente$/ }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(row.getByRole('button', { name: /^Reset$/ })).toBeVisible();
   });
 
   /**
-   * Regressão do incidente de 04/08/2026: o 9999 marcou "Presente" em 3 pessoas que não
-   * trabalharam e o Financeiro pagou a diária das 3. Desde 13/08 registrar ponto é só do
-   * 2626 — e o banco recusa mesmo que alguém contorne a tela (gatilho
-   * enforce_ponto_master_only).
+   * Histórico do incidente de 04/08/2026 (9999 marcou "Presente" em 3 pessoas que não
+   * trabalharam, pagas como dia trabalhado) — motivo original da trava exclusiva.
+   * ATUALIZADO 02/09/2026: a trava caiu (pedido do Victor, "máximo controle" — agora é
+   * permissão normal, revogável por usuário). Supervisores comuns (ex: 04) tiveram
+   * attendance.mark zerado explicitamente nessa transição pra não reabrir o incidente à
+   * toa — só 9999/2626/8888 nascem com a capacidade, e ela é 100% revogável dali em
+   * diante pela tela de Permissões.
    */
-  test('REGRA de 13/08: 9999 não consegue marcar Presente/Falta (botão morto, sem seleção em massa)', async ({ page }) => {
+  test('9999 (acesso total, configurável) CONSEGUE marcar Presente/Falta', async ({ page }) => {
     const row = await openPontoRow(page, ADMIN);
 
-    // Os botões continuam na tela, mas MORTOS e com o motivo no title — some seria pior,
-    // porque a equipe não saberia por que sumiu.
     const btnPresente = row.getByRole('button', { name: /^Presente$/ });
-    const btnFalta = row.getByRole('button', { name: /^Falta$/ });
-    await expect(btnPresente).toBeDisabled();
-    await expect(btnFalta).toBeDisabled();
-    await expect(btnPresente).toHaveAttribute('title', /não tem permissão/i);
+    await expect(btnPresente).toBeEnabled();
+    await expect(row.locator('input[type="checkbox"]')).toHaveCount(1);
 
-    // Sem caixa de seleção na linha nem no cabeçalho => marcação em massa impossível.
-    await expect(row.locator('input[type="checkbox"]')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Marcar como Presente/ })).toHaveCount(0);
-
-    // Clicar não muda nada: a linha continua "Não marcado" (beforeEach limpou o ponto).
-    await btnPresente.click({ force: true }).catch(() => {});
-    await expect(row.locator('span').filter({ hasText: /^Não marcado$/ }).first()).toBeVisible();
+    await btnPresente.click();
+    await expect(row.locator('span').filter({ hasText: /^Presente$/ }).first()).toBeVisible({ timeout: 10_000 });
   });
 
   /** Contraprova do teste acima: os MESMOS botões estão vivos para o 2626. Separado em

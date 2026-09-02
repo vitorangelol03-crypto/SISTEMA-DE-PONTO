@@ -591,13 +591,18 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
   // H. PERMISSÕES ADMIN LOCAL 8888
   // ============================================================================
   test.describe('H. Admin local 8888 permissões', () => {
-    test('H1. Admin 8888 vê tudo (menos Pagamentos Driver, exclusivo do 2626)', async ({ page }) => {
-      // ATUALIZADO 02/09/2026: pedido do Victor — 9999/8888 nascem com acesso total
-      // configurável (antes 8888 não tinha linha em user_permissions e caía no default
-      // de supervisor, sem users.view/datamanagement.view — daí a premissa antiga deste
-      // teste). Migration `20260902010000_9999_8888_configuraveis_2626_fixo` dá permissão
-      // total ao 8888; só os 3 itens exclusivos do 2626 (ponto, Pagamentos Driver,
-      // Aprovação de Cadastro) continuam fora do alcance dele.
+    test('H1. Admin 8888 vê TUDO (acesso total configurável, 02/09/2026)', async ({ page }) => {
+      // ATUALIZADO 02/09/2026 em 2 levas na mesma madrugada, pedido do Victor:
+      // (1) 9999/8888 nascem com acesso total configurável (antes 8888 não tinha linha
+      //     em user_permissions e caía no default de supervisor, sem users.view/
+      //     datamanagement.view — daí a premissa antiga deste teste).
+      // (2) "máximo controle" — as travas exclusivas hardcoded pro 2626 (Ponto,
+      //     Pagamentos Driver, Aprovação de Cadastro) caíram de vez, viraram permissão
+      //     normal. 8888 já tinha `driverpay.view=true` salvo desde a leva (1) — só
+      //     ficava inerte enquanto a trava existia. Agora que caiu, aparece também.
+      //     Resultado: 8888 vê literalmente todas as abas (2626 continua sendo o único
+      //     não-configurável, mas isso não esconde nada DELE de ninguém — é sobre quem
+      //     pode editar a permissão do 8888, não sobre o que o 8888 vê).
       await page.goto('/');
       await page.locator('#id').fill(PN_ADMIN.id);
       await page.locator('#password').fill(PN_ADMIN.password);
@@ -616,16 +621,14 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
         await expect(mais).toHaveAttribute('aria-expanded', 'true');
       }
 
-      // Abas QUE vê agora (acesso total, menos o exclusivo do 2626)
+      // Abas QUE vê agora (acesso total de verdade, nenhuma trava exclusiva restante)
       await expect(page.getByRole('button', { name: /^Funcionários$/ }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /^Financeiro$/ }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /^Erros$/ }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /^Admin$/ }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /^Usuários$/ }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /^Gerenciamento$/ }).first()).toBeVisible();
-
-      // Só Pagamentos Driver continua fora — exclusivo do 2626, independe da permissão salva.
-      await expect(page.getByRole('button', { name: /^Pagamentos Driver$/ })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /^Pagamentos Driver$/ }).first()).toBeVisible();
     });
 
     test('H2. Admin 8888 logout limpa state corretamente', async ({ page }) => {

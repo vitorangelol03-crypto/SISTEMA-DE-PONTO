@@ -1,87 +1,40 @@
-// Fonte única de verdade sobre usuários "mestre" e quem pode editar ponto.
+// Fonte única de verdade sobre usuários "mestre".
 //
 // Contexto (2026-06-27): o sistema tinha o ID '9999' cravado em vários lugares como
 // admin mestre (bypass de permissões no frontend + bypass de RLS no banco). Foi
-// adicionado o mestre '2626' em paridade total com o 9999. Além disso, a edição de
-// ponto (data/horário) e o reset/exclusão de registros de ponto passaram a ser
-// EXCLUSIVOS do '2626' — nem o 9999 nem supervisores podem mais.
+// adicionado o mestre '2626' em paridade total com o 9999.
 //
-// O reforço de verdade é server-side (RLS aceita 9999/2626; trigger em `attendance`
-// só deixa 2626/backend mexer em horário/excluir). Estes helpers mantêm a UI
-// coerente com o servidor (esconde botões que o backend recusaria).
+// 02/09/2026 (pedido do Victor): as travas EXCLUSIVAS que existiam aqui pra Ponto
+// (editar/marcar/resetar), Pagamentos Driver e Aprovação de Cadastro — hardcoded pro
+// 2626, ignorando `user_permissions` — foram REMOVIDAS. As 3 viraram permissões normais,
+// configuráveis por usuário via PermissionsModal, do mesmo jeito que qualquer outro
+// módulo. O `2626` continua sendo o líder único e fixo (bypass total, nunca configurável
+// — ver `PONTO_EDITOR_ID`/`canEditPrivilegedUserPermissions` abaixo), mas isso não quer
+// dizer mais "só ele acessa esses 3 módulos": agora ele só continua tendo tudo por
+// padrão, igual sempre teve.
+//
+// Migration de segurança que acompanhou essa mudança
+// (`20260902020000_remove_travas_exclusivas_ponto_driverpay_aprovacao.sql`): zerou
+// `attendance.mark`/`edit`/`editHistory`/`manualTime`/`reset` pra TODOS os usuários
+// não-privilegiados que tinham algum desses valores "true" adormecido no banco (irrelevante
+// enquanto a trava existia, mas que virariam capacidade real de mexer em ponto assim que
+// a trava caiu) — ninguém ganhou acesso de repente, o Victor concede explicitamente
+// quem ele quiser depois.
 
 /** IDs com poder de mestre (cross-empresa, bypass de permissões). Paridade com o RLS. */
 export const MASTER_IDS: readonly string[] = ['9999', '2626'];
 
-/** Único usuário autorizado a alterar data/horário de ponto e resetar registros. */
+/** Único usuário com bypass total, fixo e não configurável — o líder do sistema. */
 export const PONTO_EDITOR_ID = '2626';
-
-/**
- * Permissões cuja concessão é EXCLUSIVA do PONTO_EDITOR_ID, independentemente de
- * role/bypass. Espelha o trigger `enforce_ponto_master_only` no banco.
- *
- * 2026-08-13: `attendance.mark` entrou na lista. Até então marcar presente/falta pelo
- * painel era liberado a supervisores e ao 9999 — e criava um registro de ponto SEM
- * batida nenhuma, indistinguível na tela de quem bateu de verdade, que o Financeiro
- * pagava como dia trabalhado. Em 04/08 o 9999 marcou 3 pessoas que não trabalharam e
- * as 3 receberam diária. Decisão do Victor: só o 2626 registra ponto.
- * (A batida do próprio funcionário na tela /clock NÃO passa por aqui — ela entra pela
- * edge fn `clock-in-validated`, com chave de servidor, e segue liberada.)
- */
-export const PONTO_EDIT_PERMISSIONS: readonly string[] = [
-  'attendance.edit',        // editar horário de saída (inline)
-  'attendance.editHistory', // editar registros de dias anteriores
-  'attendance.manualTime',  // inserir horário manual (entrada/saída)
-  'attendance.reset',       // resetar/excluir registros de ponto
-  'attendance.mark',        // marcar presente/falta pelo painel (individual e em massa)
-];
 
 /** True se o usuário é mestre (9999 ou 2626). */
 export function isMaster(userId: string | null | undefined): boolean {
   return userId != null && MASTER_IDS.includes(userId);
 }
 
-/** True se o usuário pode editar/alterar ponto (somente 2626). */
-export function canEditPonto(userId: string | null | undefined): boolean {
-  return userId === PONTO_EDITOR_ID;
-}
-
-/** True se a permissão pertence ao conjunto exclusivo de edição de ponto. */
-export function isPontoEditPermission(permission: string): boolean {
-  return PONTO_EDIT_PERMISSIONS.includes(permission);
-}
-
-/**
- * Pagamentos Driver (2026-07-03): TODO o módulo (aba + ações) é EXCLUSIVO do 2626 —
- * nem o 9999 nem admins/supervisores veem a aba ou usam qualquer ação. Decisão do Victor.
- */
-export function isDriverpayPermission(permission: string): boolean {
-  return permission.startsWith('driverpay.');
-}
-
-/** True se o usuário pode acessar Pagamentos Driver (somente 2626). */
-export function canAccessDriverpay(userId: string | null | undefined): boolean {
-  return userId === PONTO_EDITOR_ID;
-}
-
-/**
- * Aprovação de Cadastro (2026-08-26): TODO o módulo (aba + ações) é EXCLUSIVO
- * do 2626 — nem o 9999 nem admins/supervisores acessam. Decisão do Victor,
- * mesmo critério do Pagamentos Driver acima.
- */
-export function isEmployeeApprovalPermission(permission: string): boolean {
-  return permission.startsWith('employeeapproval.');
-}
-
-/** True se o usuário pode acessar Aprovação de Cadastro (somente 2626). */
-export function canAccessEmployeeApproval(userId: string | null | undefined): boolean {
-  return userId === PONTO_EDITOR_ID;
-}
-
 /**
  * Usuários "chefe" configuráveis (02/09/2026, pedido do Victor): nascem com acesso
- * total (menos os 3 itens exclusivos do 2626 acima, que continuam travados pra eles
- * também) mas são REALMENTE limitáveis via tela de Permissões — não têm mais bypass
+ * total mas são REALMENTE limitáveis via tela de Permissões — não têm mais bypass
  * incondicional como o 2626. O 2626 NÃO entra nesta lista: ele continua o líder único
  * e fixo (não configurável, nem por si mesmo). Espelha os triggers
  * enforce_users_permission_check / enforce_employees_permission_check /
