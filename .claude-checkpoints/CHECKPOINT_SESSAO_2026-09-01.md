@@ -464,3 +464,61 @@ cru na resposta da API, igual toda ação de permissão hoje que não seja gate 
 Victor quiser esconder de verdade no nível do banco (SELECT com coluna cortada), é uma leva
 bem maior e mais arriscada — mesma ressalva que já valia pra "enforcement de leitura" desde
 a Fase B (§9.2).
+
+## 13. ✅ Mascaramento de valores NO BANCO — fecha a ressalva do §12 (`3eb14bc`)
+
+Victor não aceitou a ressalva do §12: *"não podemos ter nenhum tipo de falha que dá pra ver
+pelo inspecionar elemento do navegador... nenhuma informação vazando"*. Investigação
+confirmou: `getPayments()` e outras 8 leituras de Pagamentos Driver mandavam a linha CRUA
+(`select('*', ...)`) pro navegador — a máscara do §12 só trocava o que a TELA desenhava,
+o valor de verdade continuava inteiro na resposta da API (visível em Network do inspecionar,
+ou em qualquer chamada REST direta, sem precisar nem de UI). Achado que ampliou o escopo:
+não é só o total — a TAXA por pacote (`rate_snapshot`/`default_rate`/`platform_rates.rate`)
+também vazava, e com a quantidade de pacotes (não secreta) dava pra reconstruir o valor de
+qualquer jeito.
+
+Dado o risco real (mexe em como o dinheiro de driver de verdade é calculado, pra todo mundo,
+não só pra quem tem a permissão nova) perguntei via `AskUserQuestion` se ele queria isso
+agora (mais devagar, testando cada passo) ou numa sessão com a cabeça fresca — ele escolheu
+**agora, com calma**.
+
+**Mecanismo (migration `20260902040000_driverpay_mask_values_at_source.sql`):** 8 views
+`_v` (`driverpay_payments`, `_payment_packages`, `_discounts`, `_vales`, `_platforms`,
+`_platform_rates`, `_deduction_ledger`, `_deduction_carryover`), todas
+`security_invoker = true` — preserva o RLS de empresa de sempre (`company_id` +
+9999/2626 no bypass, igual já era) sem reimplementar autorização nenhuma, só troca a(s)
+coluna(s) de R$ de cada tabela por `CASE WHEN user_has_module_permission(sub,'driverpay',
+'viewValues') OR sub='2626' THEN valor ELSE NULL END`. Depois `REVOKE SELECT` só na(s)
+coluna(s) de dinheiro (não a tabela inteira — id/nome/status continuam de leitura direta em
+todo código que não mexe com valor) + `GRANT SELECT` nas views. Quem esquecer de trocar uma
+chamada pra view quebra ALTO (erro claro do Postgres), nunca vaza baixo — descoberta útil:
+não precisei caçar TODO call site manualmente, rodar o app inteiro já denuncia o que faltou.
+
+Achado no caminho: `user_has_module_permission` só tem fallback de default pra LINHA
+ausente em `user_permissions`, não pra CHAVE ausente dentro de uma seção que já existe —
+9999/8888 tinham `driverpay` customizado (leva §10) de ANTES de `viewValues` nascer, sem a
+chave. Backfill defensivo na mesma migration corrige (só quem tem a seção sem a chave,
+aditivo, mesmo valor que o app já assumia pra eles).
+
+**9 pontos trocados em `driverPay.ts`** pra ler das views em vez da tabela crua:
+`getPayments` (o principal — grade inteira), `getPlatforms`, `getDriverRates`/
+`getAllDriverRates`/`getDriverDefaultRates` (taxa por pacote), `searchDiscounts`,
+`listDeductionLedger`, `listCarryoverFrom`/`listCarryoverTo`. Escrita (lançar desconto,
+editar taxa) não muda — só leitura.
+
+**Validado:** tsc+lint+build limpos · `get_advisors` (Supabase) sem achado novo nas 8 views
+(nenhuma virou `security_definer_view`, confirma que `security_invoker` pegou) ·
+**`tests/105` 4/4 rodado DEPOIS de aplicar** — prova ponta-a-ponta com login real que 2626
+continua vendo o valor de verdade e o supervisor sem `viewValues` vê "•••" (porque o banco
+não manda mais o número, não porque a tela escondeu) · regressão em 6 testes que mais
+exercitam taxa/desconto/saldo/arquivar driver (`57`, `60`, `66`, `73`, `82`) — todos
+passaram (3 tiveram falha na 1ª tentativa por flake de clique já documentado no WSL, limpo
+na repetição, nenhuma relação com a máscara).
+
+**Efeito colateral aceito, não é bug:** células que hoje só aparecem quando o valor é
+`> 0` (ex.: "Desconto: − R$ X" vs "—") passam a mostrar "—" pra quem não tem `viewValues`,
+em vez de "•••" — porque o banco agora manda `0`/`null` de verdade, não dá pra distinguir
+"não tem desconto" de "tem mas tá escondido" sem inflar bastante o trabalho (mudar todo
+tipo de `number` pra `number | null` em cascata). Dado que "nenhuma informação vazando" era
+a prioridade do Victor, esconder ATÉ a existência do desconto é mais conservador, não menos
+seguro — só uma pequena perda de contexto pra quem tem a permissão restrita.

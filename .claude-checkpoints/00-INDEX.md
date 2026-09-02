@@ -2,8 +2,23 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-02** (permissão "Ver valores" em Pagamentos Driver — pedido
-> original do Victor, agora implementada).
+> Última atualização: **2026-09-02** (valores de Pagamentos Driver mascarados NO BANCO, não
+> só na tela — fecha o vazamento por inspecionar elemento/Network).
+
+> ✅ **Mascaramento de valores NO BANCO** (`3eb14bc`, `CHECKPOINT_SESSAO_2026-09-01.md` §13):
+> Victor recusou a ressalva do item anterior ("não podemos ter nenhum vazamento pelo
+> inspecionar elemento") — a máscara de UI escondia na tela mas o valor cru continuava
+> vindo inteiro na resposta da API (Network do navegador). 8 views `security_invoker=true`
+> (`driverpay_payments/_payment_packages/_discounts/_vales/_platforms/_platform_rates/
+> _deduction_ledger/_deduction_carryover`) trocam as colunas de R$ por NULL via
+> `user_has_module_permission(...,'viewValues')` + bypass do 2626, preservando o RLS de
+> empresa de sempre; `REVOKE SELECT` só nas colunas de dinheiro (não a tabela toda) força
+> tudo pela view — quem esquece de trocar quebra alto, nunca vaza baixo. 9 pontos trocados
+> em `driverPay.ts`. Achado extra: a TAXA por pacote também vazava, não só o total.
+> Perguntado via `AskUserQuestion` se fazia agora ou depois — Victor escolheu agora, com
+> calma. Validado: tsc+lint+build limpos, advisor do Supabase sem achado novo, **`tests/105`
+> 4/4 rodado depois de aplicar** (prova real que o banco não manda mais o número), regressão
+> em 6 arquivos sem quebra no caminho padrão.
 
 > ✅ **Permissão "Ver valores" em Pagamentos Driver** (`cb68c5e`,
 > `CHECKPOINT_SESSAO_2026-09-01.md` §12): o pedido ORIGINAL do Victor desta madrugada
@@ -133,14 +148,15 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Sessão 01→02/09 — pedido original do Victor entregue: permissão "Ver valores" em
-Pagamentos Driver no ar** (`cb68c5e`, §12 do checkpoint), depois das 3 travas exclusivas do
-2626 (Ponto/Driverpay/Aprovação de Cadastro) terem virado permissão normal configurável
-(`cc81722`, §11 — pré-requisito arquitetural). Só o 2626 segue com bypass incondicional. Ver
-`CHECKPOINT_SESSAO_2026-09-01.md` §11-§12 pro detalhe, incluindo achados de teste
-(`56`/`61` do driverpay) reportados e não consertados (pré-existentes, sem relação com esta
-leva). Pendente: "máximo controle em cada aba" (pedido mais amplo) só foi atendido em
-Pagamentos Driver — as outras 10 abas não foram auditadas.
+**Sessão 01→02/09 — permissão "Ver valores" em Pagamentos Driver completa: UI (§12) +
+banco (§13, `3eb14bc`)** — o valor em R$ agora não sai do banco de jeito nenhum pra quem
+não tem a permissão, nem pela tela nem pelo Network do inspecionar. Veio depois das 3
+travas exclusivas do 2626 (Ponto/Driverpay/Aprovação de Cadastro) terem virado permissão
+normal configurável (`cc81722`, §11 — pré-requisito arquitetural). Só o 2626 segue com
+bypass incondicional. Ver `CHECKPOINT_SESSAO_2026-09-01.md` §11-§13 pro detalhe, incluindo
+achados de teste (`56`/`61` do driverpay) reportados e não consertados (pré-existentes, sem
+relação com esta leva). Pendente: "máximo controle em cada aba" (pedido mais amplo) só foi
+atendido em Pagamentos Driver — as outras 10 abas não foram auditadas.
 
 **Sessão 01/09 — rework de Usuários/Permissões/Auditoria, Fase A no ar.** Cadastro
 completo (nome+telefone), redefinir senha (padrão + troca obrigatória), edge fn
