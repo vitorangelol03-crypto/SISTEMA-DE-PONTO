@@ -450,7 +450,8 @@ export const setDriverActive = async (id: string, active: boolean, userId: strin
 // ─── Plataformas (eMile/ANJUN + custom) ──────────────────────────────────────
 
 export const getPlatforms = async (companyId: string, onlyActive = true): Promise<DriverPlatform[]> => {
-  let query = supabase.from('driverpay_platforms').select('*').eq('company_id', companyId);
+  // 02/09/2026: default_rate mascarado no banco (driverpay.viewValues) — view, não a tabela crua.
+  let query = supabase.from('driverpay_platforms_v').select('*').eq('company_id', companyId);
   if (onlyActive) query = query.eq('active', true);
   const { data, error } = await query.order('sort_order', { ascending: true }).order('name', { ascending: true });
   if (error) throwDbError(error);
@@ -881,7 +882,7 @@ export const applyPlatformToAllDrivers = async (
 
 export const getDriverRates = async (driverId: string): Promise<DriverPlatformRate[]> => {
   const { data, error } = await supabase
-    .from('driverpay_platform_rates')
+    .from('driverpay_platform_rates_v')
     .select('*')
     .eq('driver_id', driverId);
   if (error) throwDbError(error);
@@ -897,7 +898,7 @@ export const getAllDriverRates = async (
   companyId: string,
 ): Promise<Record<string, Record<string, number>>> => {
   const { data, error } = await supabase
-    .from('driverpay_platform_rates')
+    .from('driverpay_platform_rates_v')
     .select('driver_id, rate, platform:driverpay_platforms(name)')
     .eq('company_id', companyId);
   if (error) throwDbError(error);
@@ -959,7 +960,8 @@ export const getDriverDefaultRates = async (
   const lastUsed: Record<string, number> = {};
   const { data: payRows, error: payErr } = await supabase
     .from('driverpay_payments')
-    .select('id, packages:driverpay_payment_packages(platform_name, rate_snapshot, created_at)')
+    // 02/09/2026: rate_snapshot mascarado no banco (driverpay.viewValues) — view, não a tabela crua.
+    .select('id, packages:driverpay_payment_packages_v(platform_name, rate_snapshot, created_at)')
     .eq('company_id', companyId)
     .eq('driver_id', driverId)
     .order('created_at', { ascending: false })
@@ -983,7 +985,7 @@ export const getDriverDefaultRates = async (
   // Config individual explícita do cadastro (SEMPRE consultada — sem early-return).
   const config: Record<string, number> = {};
   const { data: rateRows, error: rateErr } = await supabase
-    .from('driverpay_platform_rates')
+    .from('driverpay_platform_rates_v')
     .select('rate, platform:driverpay_platforms(name)')
     .eq('company_id', companyId)
     .eq('driver_id', driverId);
@@ -1330,9 +1332,13 @@ export const getPayments = async (
   periodId: string,
   companyId: string
 ): Promise<DriverPayment[]> => {
+  // 02/09/2026: valores em R$ mascarados no banco (driverpay.viewValues) — vai tudo por
+  // view (a view não muda o RLS de linha/empresa, só troca as colunas de dinheiro por
+  // NULL quando o usuário não tem a permissão; zapex não tem coluna de dinheiro própria,
+  // fica na tabela crua mesmo).
   const { data, error } = await supabase
-    .from('driverpay_payments')
-    .select('*, packages:driverpay_payment_packages(*), discounts:driverpay_discounts(*), vales:driverpay_vales(*), zapex:driverpay_zapex(*)')
+    .from('driverpay_payments_v')
+    .select('*, packages:driverpay_payment_packages_v(*), discounts:driverpay_discounts_v(*), vales:driverpay_vales_v(*), zapex:driverpay_zapex(*)')
     .eq('period_id', periodId)
     .eq('company_id', companyId)
     .order('driver_name_snapshot', { ascending: true });
@@ -2145,8 +2151,9 @@ export const updateDiscount = async (
 
 export const searchDiscounts = async (companyId: string, code: string): Promise<DiscountSearchRow[]> => {
   const q = code.trim();
+  // 02/09/2026: amount mascarado no banco (driverpay.viewValues) — view, não a tabela crua.
   let query = supabase
-    .from('driverpay_discounts')
+    .from('driverpay_discounts_v')
     .select(
       'id, amount, package_code, package_status, observation, created_at, proof1_path, proof2_path, proof_video_path, payment:driverpay_payments!inner(driver_name_snapshot, period:driverpay_periods!inner(label, status, concluded_at))'
     )
@@ -2990,8 +2997,9 @@ export const markPaymentDone = async (
 export const listDeductionLedger = async (
   companyId: string, periodId: string,
 ): Promise<Map<string, number>> => {
+  // 02/09/2026: amount mascarado no banco (driverpay.viewValues) — view, não a tabela crua.
   const { data, error } = await supabase
-    .from('driverpay_deduction_ledger')
+    .from('driverpay_deduction_ledger_v')
     .select('driver_id, amount')
     .eq('company_id', companyId).eq('period_id', periodId);
   if (error) throwDbError(error);
@@ -3094,8 +3102,9 @@ const somaPorDriver = (rows: readonly { driver_id: unknown; amount: unknown }[])
 };
 
 export const listCarryoverFrom = async (companyId: string, fromPeriodId: string): Promise<Map<string, number>> => {
+  // 02/09/2026: amount mascarado no banco (driverpay.viewValues) — view, não a tabela crua.
   const { data, error } = await supabase
-    .from('driverpay_deduction_carryover')
+    .from('driverpay_deduction_carryover_v')
     .select('driver_id, amount')
     .eq('company_id', companyId).eq('from_period_id', fromPeriodId);
   if (error) throwDbError(error);
@@ -3104,7 +3113,7 @@ export const listCarryoverFrom = async (companyId: string, fromPeriodId: string)
 
 export const listCarryoverTo = async (companyId: string, toPeriodId: string): Promise<Map<string, number>> => {
   const { data, error } = await supabase
-    .from('driverpay_deduction_carryover')
+    .from('driverpay_deduction_carryover_v')
     .select('driver_id, amount')
     .eq('company_id', companyId).eq('to_period_id', toPeriodId);
   if (error) throwDbError(error);
