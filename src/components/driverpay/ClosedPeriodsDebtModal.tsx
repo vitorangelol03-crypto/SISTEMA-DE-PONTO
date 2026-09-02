@@ -10,7 +10,7 @@ import {
   todasVisiveisSelecionadas, alternarTodosVisiveis, alternarUma,
 } from '../../utils/closedPeriodsDebtScope';
 import { ModalShell } from './ModalShell';
-import { formatBRL } from './driverPayShared';
+import { formatBRLIf } from './driverPayShared';
 
 interface ClosedPeriodsDebtModalProps {
   companyId: string;
@@ -19,6 +19,8 @@ interface ClosedPeriodsDebtModalProps {
   onClose: () => void;
   /** Chamado depois de migrar com sucesso, pra tela de trás recarregar (livro-caixa/rows). */
   onMigrated: () => void | Promise<void>;
+  /** Ver valores em R$ (02/09/2026) — false esconde os saldos devedores. */
+  canViewValues: boolean;
 }
 
 /**
@@ -27,7 +29,7 @@ interface ClosedPeriodsDebtModalProps {
  * mostrava o buraco; agora dá pra escolher pra qual quinzena aberta cada saldo vai.
  */
 export const ClosedPeriodsDebtModal: React.FC<ClosedPeriodsDebtModalProps> = ({
-  companyId, periods, userId, onClose, onMigrated,
+  companyId, periods, userId, onClose, onMigrated, canViewValues,
 }) => {
   const [rows, setRows] = useState<SaldoQuinzenaFechada[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -143,7 +145,7 @@ export const ClosedPeriodsDebtModal: React.FC<ClosedPeriodsDebtModalProps> = ({
     try {
       await recordCarryover(companyId, r.periodId, toPeriodId, r.driverId, r.saldo, userId);
       const destinoLabel = openPeriods.find((p) => p.id === toPeriodId)?.label ?? toPeriodId;
-      toast.success(`${formatBRL(r.saldo)} de ${r.name} migrado pra quinzena ${destinoLabel}.`);
+      toast.success(`${formatBRLIf(r.saldo, canViewValues)} de ${r.name} migrado pra quinzena ${destinoLabel}.`);
       await recarregar();
       await onMigrated();
     } catch (e) {
@@ -186,7 +188,7 @@ export const ClosedPeriodsDebtModal: React.FC<ClosedPeriodsDebtModalProps> = ({
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>
                 Esses valores ficaram lançados e nunca foram abatidos, porque a quinzena fechou antes —
-                <b> {formatBRL(total)}</b> no total. Escolha pra qual quinzena aberta cada um migra;
+                <b> {formatBRLIf(total, canViewValues)}</b> no total. Escolha pra qual quinzena aberta cada um migra;
                 lá ele entra como pendência de vale/perda de novo, com a etiqueta de onde veio.
               </span>
             </div>
@@ -229,7 +231,7 @@ export const ClosedPeriodsDebtModal: React.FC<ClosedPeriodsDebtModalProps> = ({
                 data-testid="closed-debt-barra-massa"
               >
                 <span className="text-xs font-medium text-blue-800 whitespace-nowrap">
-                  {selecionadosVisiveis.length} selecionado(s) — {formatBRL(totalSelecionado)}
+                  {selecionadosVisiveis.length} selecionado(s) — {formatBRLIf(totalSelecionado, canViewValues)}
                 </span>
                 <ArrowRight className="w-3.5 h-3.5 text-blue-400" />
                 <select
@@ -281,7 +283,7 @@ export const ClosedPeriodsDebtModal: React.FC<ClosedPeriodsDebtModalProps> = ({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-sm font-bold text-red-600 whitespace-nowrap">{formatBRL(r.saldo)}</span>
+                    <span className="text-sm font-bold text-red-600 whitespace-nowrap">{formatBRLIf(r.saldo, canViewValues)}</span>
                     {openPeriods.length > 0 && (
                       <>
                         <ArrowRight className="w-3.5 h-3.5 text-gray-400" />

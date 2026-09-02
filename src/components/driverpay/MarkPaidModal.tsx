@@ -9,7 +9,7 @@ import {
 import { ModalShell } from './ModalShell';
 import {
   DriverRowData, computeRowTotals, platformPackages, deductionsOf,
-  marcasDoRelatorio, formatBRL,
+  marcasDoRelatorio, formatBRLIf,
 } from './driverPayShared';
 
 interface MarkPaidModalProps {
@@ -24,6 +24,8 @@ interface MarkPaidModalProps {
   userId: string;
   onClose: () => void;
   onChanged: () => void | Promise<void>;
+  /** Ver valores em R$ (02/09/2026) — false esconde o valor a descontar. */
+  canViewValues: boolean;
 }
 
 /**
@@ -37,7 +39,7 @@ interface MarkPaidModalProps {
  * bug do selo "vale a descontar" corrigido nesta sessão (commit `96fadb0`).
  */
 export const MarkPaidModal: React.FC<MarkPaidModalProps> = ({
-  rows, title, platformNames, deductionLedger, companyId, periodId, userId, onClose, onChanged,
+  rows, title, platformNames, deductionLedger, companyId, periodId, userId, onClose, onChanged, canViewValues,
 }) => {
   // Só entram como opção as plataformas em que ALGUÉM do escopo tem pacote — marcar uma
   // plataforma vazia não significa nada.
@@ -226,7 +228,7 @@ export const MarkPaidModal: React.FC<MarkPaidModalProps> = ({
             </div>
             {modoDesconto !== 'nenhum' && resumo.totalDescontar > 0 && (
               <p className="mt-2 text-xs text-emerald-800">
-                Vai descontar {formatBRL(resumo.totalDescontar)} de {resumo.vaoDescontar.length}
+                Vai descontar {formatBRLIf(resumo.totalDescontar, canViewValues)} de {resumo.vaoDescontar.length}
                 {resumo.vaoDescontar.length === 1 ? ' pessoa' : ' pessoas'}.
               </p>
             )}

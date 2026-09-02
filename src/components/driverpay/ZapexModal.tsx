@@ -6,7 +6,7 @@ import type { DriverZapex } from '../../services/driverPay';
 import { useCompany } from '../../contexts/useCompany';
 import { getBrazilDate } from '../../utils/dateUtils';
 import { ModalShell } from './ModalShell';
-import { DriverRowData, formatBRL } from './driverPayShared';
+import { DriverRowData, formatBRLIf } from './driverPayShared';
 
 interface ZapexModalProps {
   row: DriverRowData;
@@ -130,6 +130,8 @@ export const ZapexModal: React.FC<ZapexModalProps> = ({
   const [busy, setBusy] = useState(false);
 
   const canConfigRate = hasPermission('driverpay.configRate');
+  // 02/09/2026: esconde valor em R$ (rate/total Zapex) pra quem não tem driverpay.viewValues.
+  const canViewValues = hasPermission('driverpay.viewValues');
   const count = row.zapex.length;
   const displayRate = canConfigRate && !readOnly ? parseRate(rateInput) : row.zapexRate;
   const totalGanho = count * displayRate;
@@ -213,7 +215,7 @@ export const ZapexModal: React.FC<ZapexModalProps> = ({
             <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50">
               <span className="text-xs font-medium text-gray-500">Total de Zapex</span>
               <span className="text-sm font-bold text-green-600">
-                {count} · {formatBRL(totalGanho)}
+                {count} · {formatBRLIf(totalGanho, canViewValues)}
               </span>
             </div>
           </div>
@@ -240,7 +242,7 @@ export const ZapexModal: React.FC<ZapexModalProps> = ({
               />
             ) : (
               <div className="text-sm text-gray-700">
-                Valor unitário atual: <span className="font-semibold">{formatBRL(row.zapexRate)}</span>
+                Valor unitário atual: <span className="font-semibold">{formatBRLIf(row.zapexRate, canViewValues)}</span>
                 {!canConfigRate && !readOnly && (
                   <span className="block text-xs text-gray-400 mt-0.5">
                     Você não tem permissão para alterar o valor unitário.
@@ -249,8 +251,8 @@ export const ZapexModal: React.FC<ZapexModalProps> = ({
               </div>
             )}
             <div className="text-sm font-semibold text-gray-700">
-              {count} × {formatBRL(displayRate)} ={' '}
-              <span className="text-green-600">{formatBRL(totalGanho)}</span>
+              {count} × {formatBRLIf(displayRate, canViewValues)} ={' '}
+              <span className="text-green-600">{formatBRLIf(totalGanho, canViewValues)}</span>
             </div>
           </div>
         )}

@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { addVale, updateVale, removeVale } from '../../services/driverPay';
 import { getBrazilDate, formatDateBR } from '../../utils/dateUtils';
 import { ModalShell } from './ModalShell';
-import { DriverRowData, formatBRL } from './driverPayShared';
+import { DriverRowData, formatBRLIf } from './driverPayShared';
 
 interface ValeModalProps {
   row: DriverRowData;
@@ -13,6 +13,8 @@ interface ValeModalProps {
   readOnly: boolean;
   onClose: () => void;
   onChanged: () => void | Promise<void>;
+  /** Ver valores em R$ (02/09/2026) — false esconde os vales já lançados e o total. */
+  canViewValues: boolean;
 }
 
 const parseAmount = (raw: string): number => {
@@ -21,7 +23,7 @@ const parseAmount = (raw: string): number => {
   return Number.isFinite(value) ? value : 0;
 };
 
-export const ValeModal: React.FC<ValeModalProps> = ({ row, companyId, userId, readOnly, onClose, onChanged }) => {
+export const ValeModal: React.FC<ValeModalProps> = ({ row, companyId, userId, readOnly, onClose, onChanged, canViewValues }) => {
   const [amount, setAmount] = useState('');
   const [valeDate, setValeDate] = useState(getBrazilDate());
   const [observation, setObservation] = useState('');
@@ -109,7 +111,7 @@ export const ValeModal: React.FC<ValeModalProps> = ({ row, companyId, userId, re
             {row.vales.map((v) => (
               <div key={v.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-amber-600">− {formatBRL(v.amount)}</div>
+                  <div className="text-sm font-semibold text-amber-600">− {formatBRLIf(v.amount, canViewValues)}</div>
                   <div className="text-xs text-gray-500 break-words">
                     {v.vale_date ? formatDateBR(v.vale_date) : 'Sem data'}
                     {v.observation ? ` · ${v.observation}` : ''}
@@ -141,7 +143,7 @@ export const ValeModal: React.FC<ValeModalProps> = ({ row, companyId, userId, re
             ))}
             <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50">
               <span className="text-xs font-medium text-gray-500">Total de vales</span>
-              <span className="text-sm font-bold text-amber-600">− {formatBRL(total)}</span>
+              <span className="text-sm font-bold text-amber-600">− {formatBRLIf(total, canViewValues)}</span>
             </div>
           </div>
         ) : (

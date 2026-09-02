@@ -24,7 +24,7 @@ import {
 } from '../../services/driverPay';
 import {
   notaFiscalFileName, nfPrazoStatus, nfAtrasoLabel, contaPorPrazo,
-  valorEsperadoDaNota, formatBRL,
+  valorEsperadoDaNota, formatBRLIf,
 } from './driverPayShared';
 import { ModalShell } from './ModalShell';
 
@@ -42,6 +42,8 @@ interface NotasRecebidasModalProps {
    * chave que o resto do painel usa.
    */
   publicacoes?: readonly { driverId: string; platformKey: string; nfDueAt: string | null }[];
+  /** Ver valores em R$ (02/09/2026) — false esconde o valor esperado da nota. */
+  canViewValues: boolean;
 }
 
 const extOf = (r: NotaFiscalFileRow): string => {
@@ -136,6 +138,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
   onClose,
   onChanged,
   publicacoes,
+  canViewValues,
 }) => {
   const [files, setFiles] = useState<NotaFiscalFileRow[] | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null); // id do arquivo, ou 'ALL'
@@ -583,7 +586,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
                                 data-testid="nf-valor-esperado"
                               >
                                 {esperado.bateu ? '✓ ' : 'espelho '}
-                                {formatBRL(esperado.valor)}
+                                {formatBRLIf(esperado.valor, canViewValues)}
                               </span>
                             );
                           })()}

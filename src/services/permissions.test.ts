@@ -95,6 +95,7 @@ describe('permissions.ts - Sistema de Permissões', () => {
           complete: false,
           viewHistory: false,
           exportReport: false,
+          viewValues: false,
         },
         errors: {
           view: false,

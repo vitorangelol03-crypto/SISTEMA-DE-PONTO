@@ -32,6 +32,16 @@ import type { DriverReportRow } from '../../utils/driverReport';
 export const formatBRL = (n: number): string =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
+/** Placeholder de valor escondido (permissão `driverpay.viewValues=false`, 02/09/2026). */
+export const HIDDEN_VALUE = '•••';
+
+/**
+ * Mesmo formato de `formatBRL`, mas some com o número quando `canView=false` — pedido do
+ * Victor (02/09/2026): alguém pode lançar/gerenciar desconto sem ver quanto o driver recebe
+ * no total. `canView` vem de `hasPermission('driverpay.viewValues')`.
+ */
+export const formatBRLIf = (n: number, canView: boolean): string => (canView ? formatBRL(n) : HIDDEN_VALUE);
+
 export const formatInt = (n: number): string =>
   new Intl.NumberFormat('pt-BR').format(Math.round(n));
 

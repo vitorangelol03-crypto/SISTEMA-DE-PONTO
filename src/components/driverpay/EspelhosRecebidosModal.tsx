@@ -26,7 +26,7 @@ import {
   type DeliveryProofRow,
 } from '../../services/driverPay';
 import {
-  platformPackages, planejarCorrecaoDePacotes, formatBRL, proofPrecisaAtencao, printsRepetidos,
+  platformPackages, planejarCorrecaoDePacotes, formatBRLIf, proofPrecisaAtencao, printsRepetidos,
   type DriverRowData,
 } from './driverPayShared';
 import { ModalShell } from './ModalShell';
@@ -42,6 +42,8 @@ interface EspelhosRecebidosModalProps {
   initialBusca?: string;
   onClose: () => void;
   onChanged: () => void;
+  /** Ver valores em R$ (02/09/2026) — false esconde o efeito em R$ da correção de contagem. */
+  canViewValues: boolean;
 }
 
 const dataBr = (iso: string | null): string => {
@@ -68,7 +70,8 @@ const CorrigirContagem: React.FC<{
   /** Nomes de quem mandou um print IDENTICO a este (o app da Shopee nao mostra o dono). */
   printRepetidoDe?: string[];
   onAplicar: (novoTotal: number) => void;
-}> = ({ row, platformName, doPrint, daPlanilha, aplicando, printRepetidoDe, onAplicar }) => {
+  canViewValues: boolean;
+}> = ({ row, platformName, doPrint, daPlanilha, aplicando, printRepetidoDe, onAplicar, canViewValues }) => {
   const [outro, setOutro] = useState('');
   const alvo = outro.trim() ? Number(outro.trim()) : doPrint;
   const plano = useMemo(
@@ -137,7 +140,7 @@ const CorrigirContagem: React.FC<{
               ` — ${plano.ajustes[0].route || '(sem rota)'}: ${plano.ajustes[0].de} → ${plano.ajustes[0].para}`}
             . Total a receber muda em{' '}
             <strong className={plano.deltaReais < 0 ? 'text-red-700' : 'text-green-700'}>
-              {plano.deltaReais >= 0 ? '+' : ''}{formatBRL(plano.deltaReais)}
+              {plano.deltaReais >= 0 ? '+' : ''}{formatBRLIf(plano.deltaReais, canViewValues)}
             </strong>
           </p>
 
@@ -158,7 +161,7 @@ const CorrigirContagem: React.FC<{
                   <span className="min-w-0 flex-1 truncate">
                     {l.mudou && <strong className="text-blue-800">➜ </strong>}
                     {l.route || '(sem rota)'}
-                    <span className="text-gray-500"> · {formatBRL(l.rate)}/pct</span>
+                    <span className="text-gray-500"> · {formatBRLIf(l.rate, canViewValues)}/pct</span>
                   </span>
                   <span className={`whitespace-nowrap tabular-nums ${l.mudou ? 'font-bold text-blue-900' : 'text-gray-500'}`}>
                     {l.mudou ? (
@@ -202,7 +205,7 @@ const SeloConferencia: React.FC<{ p: DeliveryProofRow }> = ({ p }) => {
 };
 
 export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
-  companyId, periodId, periodLabel, rows, userId, initialBusca, onClose, onChanged,
+  companyId, periodId, periodLabel, rows, userId, initialBusca, onClose, onChanged, canViewValues,
 }) => {
   const [carregando, setCarregando] = useState(true);
   const [proofs, setProofs] = useState<DeliveryProofRow[]>([]);
@@ -587,6 +590,7 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
                             aplicando={ocupado === p.id}
                             printRepetidoDe={iguais}
                             onAplicar={(novoTotal) => aplicarContagem(p, novoTotal)}
+                            canViewValues={canViewValues}
                           />
                         )}
 

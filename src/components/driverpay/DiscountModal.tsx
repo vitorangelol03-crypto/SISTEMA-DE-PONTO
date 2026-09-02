@@ -5,7 +5,7 @@ import { addDiscount, updateDiscount, removeDiscount, discountProofUrl } from '.
 import { isKeptProof, type ProofSlot } from '../../utils/discountProofs';
 import { ModalShell } from './ModalShell';
 import { ImageLightbox } from './ImageLightbox';
-import { DriverRowData, formatBRL } from './driverPayShared';
+import { DriverRowData, formatBRLIf } from './driverPayShared';
 
 interface DiscountModalProps {
   row: DriverRowData;
@@ -14,6 +14,8 @@ interface DiscountModalProps {
   readOnly: boolean;
   onClose: () => void;
   onChanged: () => void | Promise<void>;
+  /** Ver valores em R$ (02/09/2026) — false esconde os descontos já lançados e o total. */
+  canViewValues: boolean;
 }
 
 const parseAmount = (raw: string): number => {
@@ -43,6 +45,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
   readOnly,
   onClose,
   onChanged,
+  canViewValues,
 }) => {
   const [amount, setAmount] = useState('');
   const [packageCode, setPackageCode] = useState('');
@@ -260,7 +263,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-red-600 flex items-center gap-2">
-                        − {formatBRL(d.amount)}
+                        − {formatBRLIf(d.amount, canViewValues)}
                         {d.package_status && <DiscountStatusPill status={d.package_status} />}
                       </div>
                       <div className="text-xs text-gray-500 break-words">
@@ -321,7 +324,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
             })}
             <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50">
               <span className="text-xs font-medium text-gray-500">Total de descontos</span>
-              <span className="text-sm font-bold text-red-600">− {formatBRL(total)}</span>
+              <span className="text-sm font-bold text-red-600">− {formatBRLIf(total, canViewValues)}</span>
             </div>
           </div>
         ) : (

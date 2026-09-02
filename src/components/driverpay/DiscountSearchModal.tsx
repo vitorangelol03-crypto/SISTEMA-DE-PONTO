@@ -5,11 +5,13 @@ import { searchDiscounts, discountProofUrl, type DiscountSearchRow } from '../..
 import { ModalShell } from './ModalShell';
 import { ImageLightbox } from './ImageLightbox';
 import { DiscountStatusPill } from './DiscountModal';
-import { formatBRL } from './driverPayShared';
+import { formatBRLIf } from './driverPayShared';
 
 interface DiscountSearchModalProps {
   companyId: string;
   onClose: () => void;
+  /** Ver valores em R$ (02/09/2026) — false esconde o valor de cada desconto encontrado. */
+  canViewValues: boolean;
 }
 
 /** Data ISO -> "DD/MM/AAAA" no fuso de São Paulo. */
@@ -22,7 +24,7 @@ const fmtDate = (iso: string | null): string => {
   }
 };
 
-export const DiscountSearchModal: React.FC<DiscountSearchModalProps> = ({ companyId, onClose }) => {
+export const DiscountSearchModal: React.FC<DiscountSearchModalProps> = ({ companyId, onClose, canViewValues }) => {
   const [query, setQuery] = useState('');
   const [rows, setRows] = useState<DiscountSearchRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -107,7 +109,7 @@ export const DiscountSearchModal: React.FC<DiscountSearchModalProps> = ({ compan
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-gray-900 break-words flex items-center gap-2 flex-wrap">
                       <span>
-                        {r.driver_name} <span className="text-red-600">· − {formatBRL(r.amount)}</span>
+                        {r.driver_name} <span className="text-red-600">· − {formatBRLIf(r.amount, canViewValues)}</span>
                       </span>
                       {r.package_status && <DiscountStatusPill status={r.package_status} />}
                     </div>

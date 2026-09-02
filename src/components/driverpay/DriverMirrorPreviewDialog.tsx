@@ -21,7 +21,7 @@ import {
   type SeparatedPlatformTotal,
 } from '../../utils/driverMirrorGenerator';
 import { ModalShell } from './ModalShell';
-import { formatBRL, formatInt, sanitizeFile, type AlreadyDeductedDriver } from './driverPayShared';
+import { formatBRLIf, formatInt, sanitizeFile, type AlreadyDeductedDriver } from './driverPayShared';
 
 export type MirrorRequest =
   | { mode: 'individual'; data: DriverMirrorData }
@@ -87,6 +87,8 @@ interface DriverMirrorPreviewDialogProps {
    * (aviso anti-desconto-duplo — decisão do Victor, 2026-07-27).
    */
   alreadyDeducted?: AlreadyDeductedDriver[];
+  /** Ver valores em R$ (02/09/2026) — false esconde os números em toda a prévia. */
+  canViewValues: boolean;
 }
 
 /** Faixa amarela do corte — mesma cara do PDF (prévia fiel). */
@@ -133,11 +135,11 @@ const PlatformNoticeBandsPreview: React.FC<{ data: DriverMirrorData; exclude?: S
 };
 
 /** Faixa amarela do valor separado — mesma cara do PDF (texto explícito pro driver leigo). */
-const SeparatedValueBannerPreview: React.FC<{ label: string; amount: number }> = ({ label, amount }) => (
+const SeparatedValueBannerPreview: React.FC<{ label: string; amount: number; canView: boolean }> = ({ label, amount, canView }) => (
   <div className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-4 py-2.5">
     <div className="flex items-center justify-between gap-2">
       <span className="font-bold text-sm text-gray-900">{label}</span>
-      <span className="font-extrabold text-lg tabular-nums text-gray-900">{formatBRL(amount)}</span>
+      <span className="font-extrabold text-lg tabular-nums text-gray-900">{formatBRLIf(amount, canView)}</span>
     </div>
     <p className="text-[11px] font-bold text-red-700 mt-0.5">
       ESTE VALOR É PAGO SEPARADO — ELE NÃO ESTÁ SOMADO NO "TOTAL A RECEBER" ACIMA.
@@ -172,19 +174,19 @@ const groupSeparated = (g: DriverGroupMirrorData): SeparatedPlatformTotal[] => {
 };
 
 /** Faixa âmbar do pagamento parcial — mesma frase do PDF (fonte única). */
-const DeferredDeductionsBandPreview: React.FC<{ amount: number }> = ({ amount }) => (
+const DeferredDeductionsBandPreview: React.FC<{ amount: number; canView: boolean }> = ({ amount, canView }) => (
   <div className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2 text-center">
     <p className="text-[13px] font-bold text-gray-900">
       Os vales e perdas acima <span className="text-red-700">NÃO</span> foram descontados deste pagamento
     </p>
     <p className="text-[11px] text-gray-800">
-      Total de <span className="font-bold">{formatBRL(amount)}</span> será descontado no pagamento das demais
+      Total de <span className="font-bold">{formatBRLIf(amount, canView)}</span> será descontado no pagamento das demais
       plataformas.
     </p>
   </div>
 );
 
-const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
+const PaperMirror: React.FC<{ data: DriverMirrorData; canViewValues: boolean }> = ({ data, canViewValues }) => {
   // Valor separado (2026-07-20): plataformas marcadas saem do total exibido.
   const sep = separatedPlatformTotals(data.platforms);
   const sepTotal = sep.reduce((s, x) => s + x.amount, 0);
@@ -259,8 +261,8 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
               <tr key={i} className={`border-t border-gray-100 ${p.highlight ? 'bg-yellow-200 font-semibold' : ''}`}>
                 <td className="py-1">{p.highlight ? '➜ ' : ''}{platformLineLabel(p)}</td>
                 <td className="py-1 text-right tabular-nums">{formatInt(p.packages)}</td>
-                <td className="py-1 text-right tabular-nums">{formatBRL(p.unitValue)}</td>
-                <td className="py-1 text-right tabular-nums">{formatBRL(p.subtotal)}</td>
+                <td className="py-1 text-right tabular-nums">{formatBRLIf(p.unitValue, canViewValues)}</td>
+                <td className="py-1 text-right tabular-nums">{formatBRLIf(p.subtotal, canViewValues)}</td>
               </tr>
             ))}
           </tbody>
@@ -270,14 +272,14 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
                 <td colSpan={3} className="py-1.5">
                   TOTAL {s.platform.toUpperCase()} — PAGO SEPARADO, FORA DO TOTAL ABAIXO
                 </td>
-                <td className="py-1.5 text-right tabular-nums">{formatBRL(s.amount)}</td>
+                <td className="py-1.5 text-right tabular-nums">{formatBRLIf(s.amount, canViewValues)}</td>
               </tr>
             ))}
             <tr className="border-t-2 border-gray-200 font-semibold">
               <td colSpan={3} className="py-1.5">
                 TOTAL A RECEBER DE PACOTES{sep.length > 0 ? ` (sem ${sepNames})` : ''}
               </td>
-              <td className="py-1.5 text-right tabular-nums">{formatBRL(data.totals.packagesValue - sepTotal)}</td>
+              <td className="py-1.5 text-right tabular-nums">{formatBRLIf(data.totals.packagesValue - sepTotal, canViewValues)}</td>
             </tr>
           </tfoot>
         </table>
@@ -293,7 +295,7 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
                   <td className="py-1 text-gray-500">{d.description || 'Pacote descontado'}</td>
                   <td className={`py-1 text-right tabular-nums ${applied ? 'text-red-600' : 'text-gray-700'}`}>
                     {applied ? '− ' : ''}
-                    {formatBRL(d.value)}
+                    {formatBRLIf(d.value, canViewValues)}
                   </td>
                 </tr>
               ))}
@@ -312,7 +314,7 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
                   <td className="py-1 text-gray-500">{v.note || 'Vale'}</td>
                   <td className={`py-1 text-right tabular-nums ${applied ? 'text-red-600' : 'text-gray-700'}`}>
                     {applied ? '− ' : ''}
-                    {formatBRL(v.value)}
+                    {formatBRLIf(v.value, canViewValues)}
                   </td>
                 </tr>
               ))}
@@ -329,28 +331,28 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
 
       {!applied && deferredTotal > 0 && (
         <div className="mt-4">
-          <DeferredDeductionsBandPreview amount={deferredTotal} />
+          <DeferredDeductionsBandPreview amount={deferredTotal} canView={canViewValues} />
         </div>
       )}
 
       <div className="mt-5 border border-gray-200 rounded-lg overflow-hidden">
         <Row
           k={sep.length > 0 ? `Total de pacotes (sem ${sepNames})` : 'Total de pacotes'}
-          v={`+ ${formatBRL(data.totals.packagesValue - sepTotal)}`}
+          v={`+ ${formatBRLIf(data.totals.packagesValue - sepTotal, canViewValues)}`}
         />
         <Row
           k={applied ? 'Descontos' : 'Descontos (não abatidos neste pagamento)'}
-          v={`${applied ? '− ' : ''}${formatBRL(data.totals.discountsValue)}`}
+          v={`${applied ? '− ' : ''}${formatBRLIf(data.totals.discountsValue, canViewValues)}`}
           danger={applied && data.totals.discountsValue > 0}
         />
         <Row
           k={applied ? 'Vales / adiantamentos' : 'Vales / adiantamentos (não abatidos neste pagamento)'}
-          v={`${applied ? '− ' : ''}${formatBRL(data.totals.valesValue)}`}
+          v={`${applied ? '− ' : ''}${formatBRLIf(data.totals.valesValue, canViewValues)}`}
           danger={applied && data.totals.valesValue > 0}
         />
         <div className="flex items-center justify-between px-4 py-3 bg-green-700 text-white">
           <span className="font-bold text-sm">TOTAL A RECEBER</span>
-          <span className="font-extrabold text-lg tabular-nums">{formatBRL(data.totals.toReceive - sepTotal)}</span>
+          <span className="font-extrabold text-lg tabular-nums">{formatBRLIf(data.totals.toReceive - sepTotal, canViewValues)}</span>
         </div>
       </div>
 
@@ -365,6 +367,7 @@ const PaperMirror: React.FC<{ data: DriverMirrorData }> = ({ data }) => {
                 <SeparatedValueBannerPreview
                   label={`TOTAL ${s.platform.toUpperCase()} (${formatInt(s.packages)} pacotes)`}
                   amount={s.amount}
+                  canView={canViewValues}
                 />
                 {noticeText && (
                   <div className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2">
@@ -418,6 +421,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   onUnpublish,
   onRebuild,
   alreadyDeducted,
+  canViewValues,
 }) => {
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -775,7 +779,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
           >
             <p className="text-xs font-semibold text-gray-700 mb-2">
               Vales e perdas deste espelho{' '}
-              <span className="font-normal text-gray-500">({formatBRL(deductionsTotal)} no total)</span>
+              <span className="font-normal text-gray-500">({formatBRLIf(deductionsTotal, canViewValues)} no total)</span>
             </p>
             <div className="space-y-1.5" role="radiogroup" aria-label="Como descontar vales e perdas">
               {([
@@ -844,7 +848,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
             <ul className="mt-1 list-disc list-inside space-y-0.5">
               {alreadyDeductedList.map((d) => (
                 <li key={d.driverId}>
-                  <b>{d.name}</b> já teve {formatBRL(d.amount)} abatido num espelho publicado.
+                  <b>{d.name}</b> já teve {formatBRLIf(d.amount, canViewValues)} abatido num espelho publicado.
                 </li>
               ))}
             </ul>
@@ -933,7 +937,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
         </div>
 
         {activeRequest.mode === 'individual' && (
-          <PaperMirror data={cutoff ? { ...activeRequest.data, cutoff } : activeRequest.data} />
+          <PaperMirror data={cutoff ? { ...activeRequest.data, cutoff } : activeRequest.data} canViewValues={canViewValues} />
         )}
 
         {activeRequest.mode === 'group' && (
@@ -988,11 +992,11 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                     <tr key={i} className="border-t border-gray-100">
                       <td className="py-1.5 break-words">{d.driver.name}</td>
                       <td className="py-1.5 text-right tabular-nums">
-                        {formatBRL(d.totals.packagesValue - zapexValueOf(d) - sepValueOf(d))}
+                        {formatBRLIf(d.totals.packagesValue - zapexValueOf(d) - sepValueOf(d), canViewValues)}
                       </td>
                       {groupHasZapex && (
                         <td className="py-1.5 text-right tabular-nums font-semibold text-green-700">
-                          {zapexValueOf(d) > 0 ? `+ ${formatBRL(zapexValueOf(d))}` : '—'}
+                          {zapexValueOf(d) > 0 ? `+ ${formatBRLIf(zapexValueOf(d), canViewValues)}` : '—'}
                         </td>
                       )}
                       <td
@@ -1001,7 +1005,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                         }`}
                       >
                         {d.totals.discountsValue > 0
-                          ? `${areDeductionsApplied(d) ? '− ' : ''}${formatBRL(d.totals.discountsValue)}`
+                          ? `${areDeductionsApplied(d) ? '− ' : ''}${formatBRLIf(d.totals.discountsValue, canViewValues)}`
                           : '—'}
                       </td>
                       <td
@@ -1010,11 +1014,11 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                         }`}
                       >
                         {d.totals.valesValue > 0
-                          ? `${areDeductionsApplied(d) ? '− ' : ''}${formatBRL(d.totals.valesValue)}`
+                          ? `${areDeductionsApplied(d) ? '− ' : ''}${formatBRLIf(d.totals.valesValue, canViewValues)}`
                           : '—'}
                       </td>
                       <td className="py-1.5 text-right tabular-nums font-semibold text-green-700">
-                        {formatBRL(d.totals.toReceive - sepValueOf(d))}
+                        {formatBRLIf(d.totals.toReceive - sepValueOf(d), canViewValues)}
                       </td>
                     </tr>
                   ))}
@@ -1062,7 +1066,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                               )}
                             </td>
                             <td className="py-1 text-gray-500">{s.description || '—'}</td>
-                            <td className="py-1 text-right text-red-600 tabular-nums">− {formatBRL(s.value)}</td>
+                            <td className="py-1 text-right text-red-600 tabular-nums">− {formatBRLIf(s.value, canViewValues)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1090,7 +1094,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                 <>
                   {!areDeductionsApplied(activeRequest.data) && gDeferred > 0 && (
                     <div className="mt-4">
-                      <DeferredDeductionsBandPreview amount={gDeferred} />
+                      <DeferredDeductionsBandPreview amount={gDeferred} canView={canViewValues} />
                     </div>
                   )}
                   <div className="mt-4 flex items-center justify-between px-4 py-3 bg-green-700 text-white rounded-lg">
@@ -1098,7 +1102,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                       TOTAL — {activeRequest.data.groupTotals.driverCount} driver(s)
                     </span>
                     <span className="font-extrabold text-lg tabular-nums">
-                      {formatBRL(activeRequest.data.groupTotals.toReceive - gSepTotal)}
+                      {formatBRLIf(activeRequest.data.groupTotals.toReceive - gSepTotal, canViewValues)}
                     </span>
                   </div>
                   {gSep.length > 0 && (
@@ -1117,6 +1121,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                             <SeparatedValueBannerPreview
                               label={`TOTAL ${s.platform.toUpperCase()} DO GRUPO (${formatInt(s.packages)} pacotes)`}
                               amount={s.amount}
+                              canView={canViewValues}
                             />
                             {noticeText && (
                               <div className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-3 py-2">
@@ -1168,7 +1173,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                     <span className="text-gray-500 font-normal">· {g.groupTotals.driverCount} driver(s)</span>
                   </span>
                   <span className="font-semibold text-green-700 tabular-nums">
-                    {formatBRL(g.groupTotals.toReceive - groupSeparated(g).reduce((s, x) => s + x.amount, 0))}
+                    {formatBRLIf(g.groupTotals.toReceive - groupSeparated(g).reduce((s, x) => s + x.amount, 0), canViewValues)}
                   </span>
                 </div>
               ))}
@@ -1176,7 +1181,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                 <div key={`s-${i}`} className="flex items-center justify-between px-3 py-2 text-sm">
                   <span className="text-gray-900 truncate">{d.driver.name}</span>
                   <span className="font-semibold text-green-700 tabular-nums">
-                    {formatBRL(d.totals.toReceive - sepValueOf(d))}
+                    {formatBRLIf(d.totals.toReceive - sepValueOf(d), canViewValues)}
                   </span>
                 </div>
               ))}
@@ -1194,7 +1199,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
                 <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
                   <span className="text-gray-900 truncate">{d.driver.name}</span>
                   <span className="font-semibold text-green-700 tabular-nums">
-                    {formatBRL(d.totals.toReceive - sepValueOf(d))}
+                    {formatBRLIf(d.totals.toReceive - sepValueOf(d), canViewValues)}
                   </span>
                 </div>
               ))}

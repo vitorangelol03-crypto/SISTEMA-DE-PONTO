@@ -3,7 +3,7 @@ import { Check, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { DriverPaymentPeriod, concludePeriod, concludePeriodOnly } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
-import { formatBRL } from './driverPayShared';
+import { formatBRLIf } from './driverPayShared';
 
 interface PeriodConcludeModalProps {
   period: DriverPaymentPeriod;
@@ -14,6 +14,8 @@ interface PeriodConcludeModalProps {
   onClose: () => void;
   onConcluded: (nextPeriodId: string) => void | Promise<void>;
   onConcludedOnly: () => void | Promise<void>;
+  /** Ver valores em R$ (02/09/2026) — false esconde o total do período. */
+  canViewValues: boolean;
 }
 
 export const PeriodConcludeModal: React.FC<PeriodConcludeModalProps> = ({
@@ -25,6 +27,7 @@ export const PeriodConcludeModal: React.FC<PeriodConcludeModalProps> = ({
   onClose,
   onConcluded,
   onConcludedOnly,
+  canViewValues,
 }) => {
   const [nextLabel, setNextLabel] = useState('');
   const [nextStart, setNextStart] = useState('');
@@ -123,7 +126,7 @@ export const PeriodConcludeModal: React.FC<PeriodConcludeModalProps> = ({
 
         <div className="text-sm text-gray-700">
           Total desta quinzena:{' '}
-          <b className={totalNet < 0 ? 'text-red-600' : 'text-green-600'}>{formatBRL(totalNet)}</b> · {driverCount}{' '}
+          <b className={totalNet < 0 ? 'text-red-600' : 'text-green-600'}>{formatBRLIf(totalNet, canViewValues)}</b> · {driverCount}{' '}
           driver(s)
         </div>
 

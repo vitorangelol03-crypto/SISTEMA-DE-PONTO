@@ -40,7 +40,7 @@ import {
   RowHandlers,
   computeRowTotals,
   platformPackages,
-  formatBRL,
+  formatBRLIf,
   formatInt,
   type NfProgress,
   type ProofProgress,
@@ -66,6 +66,8 @@ interface DriverListProps {
   canMirror: boolean;
   /** Marcar como pago manualmente, sem gerar relatório (14/08/2026). */
   canMarkPaid: boolean;
+  /** Ver valores em R$ (02/09/2026) — false esconde os números em toda a grade. */
+  canViewValues: boolean;
   handlers: RowHandlers;
   onGroupMirror: (groupName: string, rows: DriverRowData[]) => void;
   /** Marca TODOS os membros do grupo como pagos de uma vez, sem gerar relatório. */
@@ -140,6 +142,7 @@ export const DriverList: React.FC<DriverListProps> = ({
   canVale,
   canMirror,
   canMarkPaid,
+  canViewValues,
   handlers,
   onGroupMirror,
   onGroupMarkPaid,
@@ -563,6 +566,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                 canVale={canVale}
                 canMirror={canMirror}
                 canMarkPaid={canMarkPaid}
+                canViewValues={canViewValues}
                 handlers={handlers}
                 publishedInApp={rowPublishedInApp(row)}
                 nfProgress={nfProgressByPayment?.get(row.paymentId)}
@@ -584,16 +588,16 @@ export const DriverList: React.FC<DriverListProps> = ({
                   {footerLabel} — {totals.drivers} driver(s)
                 </td>
                 <td className="px-2 py-3.5 text-right text-sm font-bold text-green-600 whitespace-nowrap">
-                  {totals.zapex > 0 ? formatBRL(totals.zapex) : '—'}
+                  {totals.zapex > 0 ? formatBRLIf(totals.zapex, canViewValues) : '—'}
                 </td>
                 <td className="px-2 py-3.5 text-right text-sm font-bold text-red-600 whitespace-nowrap">
-                  {totals.discounts > 0 ? `− ${formatBRL(totals.discounts)}` : '—'}
+                  {totals.discounts > 0 ? `− ${formatBRLIf(totals.discounts, canViewValues)}` : '—'}
                 </td>
                 <td className="px-2 py-3.5 text-right text-sm font-bold text-amber-600 whitespace-nowrap">
-                  {totals.vales > 0 ? `− ${formatBRL(totals.vales)}` : '—'}
+                  {totals.vales > 0 ? `− ${formatBRLIf(totals.vales, canViewValues)}` : '—'}
                 </td>
                 <td className="px-2 py-3.5 text-right text-base font-bold text-green-600 whitespace-nowrap">
-                  {formatBRL(totals.net)}
+                  {formatBRLIf(totals.net, canViewValues)}
                 </td>
                 <td className="px-2 py-3.5 text-center text-xs font-bold text-gray-700 whitespace-nowrap">
                   NF {nfCount}/{totals.drivers}
@@ -674,7 +678,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                   >
                     {pl.name}
                   </span>
-                  <span className="text-[11px] text-gray-700 font-semibold">{formatBRL(rate)}/pc</span>
+                  <span className="text-[11px] text-gray-700 font-semibold">{formatBRLIf(rate, canViewValues)}/pc</span>
                 </div>
                 {multi ? (
                   /* Mesma caixa do campo editável (tracejada = "não se digita aqui"), pra
@@ -794,18 +798,18 @@ export const DriverList: React.FC<DriverListProps> = ({
 
         <div className="flex items-center justify-between text-sm mb-2">
           <span className="text-gray-500">
-            Desc. {t.discounts > 0 ? <span className="text-red-600">− {formatBRL(t.discounts)}</span> : '—'} · Vale{' '}
-            {t.vales > 0 ? <span className="text-amber-600">− {formatBRL(t.vales)}</span> : '—'}
+            Desc. {t.discounts > 0 ? <span className="text-red-600">− {formatBRLIf(t.discounts, canViewValues)}</span> : '—'} · Vale{' '}
+            {t.vales > 0 ? <span className="text-amber-600">− {formatBRLIf(t.vales, canViewValues)}</span> : '—'}
             {row.zapex.length > 0 && (
               <>
                 {' '}· Zapex{' '}
                 <span className="text-green-600">
-                  + {formatBRL(t.zapex)} <span className="text-gray-400">({row.zapex.length})</span>
+                  + {formatBRLIf(t.zapex, canViewValues)} <span className="text-gray-400">({row.zapex.length})</span>
                 </span>
               </>
             )}
           </span>
-          <span className={`font-bold ${t.net < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatBRL(t.net)}</span>
+          <span className={`font-bold ${t.net < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatBRLIf(t.net, canViewValues)}</span>
         </div>
 
         <div className="grid grid-cols-5 gap-2">
@@ -1032,7 +1036,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                     <span className="text-xs text-gray-500">
                       · {t.drivers} drivers · {formatInt(packages)} pacotes
                       {t.zapex > 0 && (
-                        <> · <span className="font-medium text-green-600">Zapex {formatBRL(t.zapex)}</span></>
+                        <> · <span className="font-medium text-green-600">Zapex {formatBRLIf(t.zapex, canViewValues)}</span></>
                       )}
                     </span>
                   </div>
@@ -1098,7 +1102,7 @@ export const DriverList: React.FC<DriverListProps> = ({
                       <CheckCircle2 className="w-4 h-4" /> Marcar grupo pago
                     </button>
                   )}
-                  <span className={`font-bold ${t.net < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatBRL(t.net)}</span>
+                  <span className={`font-bold ${t.net < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatBRLIf(t.net, canViewValues)}</span>
                 </div>
                 </button>
               </div>
@@ -1122,7 +1126,7 @@ export const DriverList: React.FC<DriverListProps> = ({
         {rows.map(renderMobileCard)}
         <div className="p-4 bg-gray-50 flex items-center justify-between">
           <span className="text-sm font-medium text-gray-900">{rows.length} driver(s)</span>
-          <span className="text-sm font-bold text-green-600">{formatBRL(sumTotals(rows).net)}</span>
+          <span className="text-sm font-bold text-green-600">{formatBRLIf(sumTotals(rows).net, canViewValues)}</span>
         </div>
       </div>
     </>

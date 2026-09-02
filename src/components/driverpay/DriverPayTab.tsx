@@ -94,7 +94,7 @@ import {
   type MirrorPubForNf,
   deductionsOf,
   alreadyDeductedDrivers,
-  formatBRL,
+  formatBRLIf,
   formatInt,
   MIRROR_COMPANY_NAME,
   computeProofProgressByPayment,
@@ -1050,12 +1050,13 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         const fora = row ? linhasForaDaConfig(row.routes, row.ratesByPlatform) : [];
         if (row && fora.length > 0) {
           const dif = diferencaEmReais(fora);
+          const podeVerValor = hasPermission('driverpay.viewValues');
           const linhas = [
             `O valor gravado nesta quinzena está diferente do cadastro de ${row.name}:`,
             '',
-            ...fora.map((l) => `• ${l.platformName}${l.route ? ` (${l.route})` : ''}: ${l.packages} pacote(s) a ${formatBRL(l.de)} → ${formatBRL(l.para)}`),
+            ...fora.map((l) => `• ${l.platformName}${l.route ? ` (${l.route})` : ''}: ${l.packages} pacote(s) a ${formatBRLIf(l.de, podeVerValor)} → ${formatBRLIf(l.para, podeVerValor)}`),
             '',
-            `Atualizar? O total a receber dele ${dif >= 0 ? 'sobe' : 'cai'} ${formatBRL(Math.abs(dif))}.`,
+            `Atualizar? O total a receber dele ${dif >= 0 ? 'sobe' : 'cai'} ${formatBRLIf(Math.abs(dif), podeVerValor)}.`,
             'Se algum desses valores foi combinado pra aquela rota, clique em Cancelar.',
           ];
           if (window.confirm(linhas.join('\n'))) {
@@ -1073,7 +1074,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       }
       await refresh();
     },
-    [company?.id, userId, refresh],
+    [company?.id, userId, refresh, hasPermission],
   );
 
   const handleMassMirror = () => {
@@ -1906,6 +1907,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
   const canEditDriver = hasPermission('driverpay.editDriver');
   const canMirror = hasPermission('driverpay.generateMirror');
+  // 02/09/2026 (pedido do Victor): esconde valor em R$ em toda a aba pra quem não tem
+  // essa permissão — ex.: alguém que só lança desconto sem ver o total do driver.
+  const canViewValues = hasPermission('driverpay.viewValues');
 
   if (!hasPermission('driverpay.view')) return null;
 
@@ -1956,8 +1960,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <KpiCard color="blue" icon={<Truck className="w-4 h-4" />} label="Drivers" value={formatInt(kpis.driverCount)} />
         <KpiCard color="purple" icon={<Package className="w-4 h-4" />} label="Pacotes" value={formatInt(kpis.packages)} />
-        <KpiCard color="red" icon={<Minus className="w-4 h-4" />} label="Descontos" value={formatBRL(kpis.discounts)} />
-        <KpiCard color="amber" icon={<Wallet className="w-4 h-4" />} label="Vales" value={formatBRL(kpis.vales)} />
+        <KpiCard color="red" icon={<Minus className="w-4 h-4" />} label="Descontos" value={formatBRLIf(kpis.discounts, canViewValues)} />
+        <KpiCard color="amber" icon={<Wallet className="w-4 h-4" />} label="Vales" value={formatBRLIf(kpis.vales, canViewValues)} />
         {/* Negativo = a empresa tem a receber do entregador (desconto/vale maior que os
             pacotes, ou planilha ainda não importada). Verde com tique ali seria mentira.
             Mesma regra da linha do driver e do card de grupo — telas vizinhas não podem
@@ -1966,7 +1970,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           color={kpis.net < 0 ? 'red' : 'green'}
           icon={kpis.net < 0 ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
           label="Total a receber"
-          value={formatBRL(kpis.net)}
+          value={formatBRLIf(kpis.net, canViewValues)}
         />
       </div>
 
@@ -2235,6 +2239,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             canVale={hasPermission('driverpay.manageVale')}
             canMirror={canMirror}
             canMarkPaid={canEditDriver}
+            canViewValues={canViewValues}
             handlers={handlers}
             onGroupMirror={onGroupMirror}
             onGroupMarkPaid={onGroupMarkPaid}
@@ -2279,6 +2284,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           companyId={company.id}
           userId={userId}
           readOnly={isReadOnly}
+          canViewValues={canViewValues}
           onClose={() => setDiscountRowId(null)}
           onChanged={reloadPayments}
         />
@@ -2290,6 +2296,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           companyId={company.id}
           userId={userId}
           readOnly={isReadOnly}
+          canViewValues={canViewValues}
           onClose={() => setValeRowId(null)}
           onChanged={reloadPayments}
         />
@@ -2315,6 +2322,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           companyId={company.id}
           periodId={selectedPeriod.id}
           userId={userId}
+          canViewValues={canViewValues}
           onClose={() => setMarkPaidTarget(null)}
           onChanged={async () => {
             setPaymentMarks(await listPaymentMarks(company.id, selectedPeriod.id));
@@ -2365,6 +2373,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           onClose={() => setShowNotas(false)}
           onChanged={() => reloadNotes(selectedPeriod.id)}
           publicacoes={publications}
+          canViewValues={canViewValues}
         />
       )}
 
@@ -2398,6 +2407,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           rows={rows}
           userId={userId}
           initialBusca={espelhosBuscaInicial}
+          canViewValues={canViewValues}
           onClose={() => { setShowEspelhosRecebidos(false); setEspelhosBuscaInicial(''); }}
           onChanged={() => { reloadProofs(selectedPeriod.id); reloadPayments(); }}
         />
@@ -2419,6 +2429,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           userId={userId}
           totalNet={allTotals.net}
           driverCount={allTotals.count}
+          canViewValues={canViewValues}
           onClose={() => setShowConclude(false)}
           onConcluded={handleConcluded}
           onConcludedOnly={refresh}
@@ -2447,7 +2458,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       )}
 
       {showDiscountSearch && (
-        <DiscountSearchModal companyId={company.id} onClose={() => setShowDiscountSearch(false)} />
+        <DiscountSearchModal companyId={company.id} canViewValues={canViewValues} onClose={() => setShowDiscountSearch(false)} />
       )}
 
       {showClosedDebt && (
@@ -2455,6 +2466,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           companyId={company.id}
           periods={periods}
           userId={userId}
+          canViewValues={canViewValues}
           onClose={() => setShowClosedDebt(false)}
           onMigrated={reloadPayments}
         />
@@ -2502,6 +2514,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           <DriverMirrorPreviewDialog
             request={mirror}
             canGenerate={canMirror}
+            canViewValues={canViewValues}
             onClose={() => setMirror(null)}
             companyId={company?.id}
             userId={userId}
@@ -2530,6 +2543,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             checksPreview={checksPreview}
             jaPagos={jaPagosDoRelatorio}
             pessoasDesconto={pessoasDoDesconto}
+            canViewValues={canViewValues}
             onClose={() => setReportModal(null)}
             onConfirm={handleGenerateReport}
           />

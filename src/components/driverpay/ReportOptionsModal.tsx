@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Download, Loader2, FileSpreadsheet } from 'lucide-react';
 import { ModalShell } from './ModalShell';
-import { formatBRL, type AlreadyDeductedDriver, type ChecksFilterOptions, type ChecksFilterResult } from './driverPayShared';
+import { formatBRLIf, type AlreadyDeductedDriver, type ChecksFilterOptions, type ChecksFilterResult } from './driverPayShared';
 import { descontosPendentes, totalPendente } from '../../utils/descontoPendente';
 import {
   resumoDesconto, abaterAgora,
@@ -77,6 +77,8 @@ interface ReportOptionsModalProps {
   ) => PessoaDesconto[];
   onClose: () => void;
   onConfirm: (opts: ReportOptions) => Promise<void>;
+  /** Ver valores em R$ (02/09/2026) — false esconde os totais/valores desta janela. */
+  canViewValues: boolean;
 }
 
 /**
@@ -91,14 +93,15 @@ const ResumoLinha: React.FC<{
   texto: string;
   valor: number;
   nomes: ReadonlyArray<{ driverId: string; name: string; valor: number }>;
-}> = ({ testid, cor, texto, valor, nomes }) => (
+  canViewValues: boolean;
+}> = ({ testid, cor, texto, valor, nomes, canViewValues }) => (
   <details className="text-xs" data-testid={testid}>
     <summary className={`cursor-pointer ${cor}`}>
-      <b>{texto}</b> — {formatBRL(valor)}{' '}
+      <b>{texto}</b> — {formatBRLIf(valor, canViewValues)}{' '}
       <span className="text-gray-500 font-normal">(ver nomes)</span>
     </summary>
     <p className="mt-1 ml-4 text-gray-600">
-      {nomes.map((n) => `${n.name} (${formatBRL(n.valor)})`).join(', ')}.
+      {nomes.map((n) => `${n.name} (${formatBRLIf(n.valor, canViewValues)})`).join(', ')}.
     </p>
   </details>
 );
@@ -120,6 +123,7 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
   pessoasDesconto,
   onClose,
   onConfirm,
+  canViewValues,
 }) => {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(platformOptions));
   /**
@@ -520,7 +524,7 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
           >
             <p className="text-xs font-semibold text-gray-700 mb-2">
               Vales e perdas deste relatório{' '}
-              <span className="font-normal text-gray-500">({formatBRL(deductionsTotal)} no total)</span>
+              <span className="font-normal text-gray-500">({formatBRLIf(deductionsTotal, canViewValues)} no total)</span>
             </p>
 
             <div className="space-y-1.5" role="radiogroup" aria-label="Como descontar vales e perdas">
@@ -585,6 +589,7 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
                     texto={`${resumo.vaoDescontar.length} vão ser descontados`}
                     valor={resumo.totalDescontar}
                     nomes={resumo.vaoDescontar}
+                    canViewValues={canViewValues}
                   />
                 )}
                 {resumo.jaDescontados.length > 0 && (
@@ -594,6 +599,7 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
                     texto={`${resumo.jaDescontados.length} já foram descontados antes — saem sem desconto`}
                     valor={resumo.totalJaDescontado}
                     nomes={resumo.jaDescontados}
+                    canViewValues={canViewValues}
                   />
                 )}
                 {resumo.sobrando.length > 0 && (
@@ -603,6 +609,7 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
                     texto={`${resumo.sobrando.length} ficam devendo o resto pro próximo pagamento`}
                     valor={resumo.totalSobrando}
                     nomes={resumo.sobrando}
+                    canViewValues={canViewValues}
                   />
                 )}
                 {resumo.vaoDescontar.length === 0
@@ -630,7 +637,7 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
             </p>
             <p className="text-xs mt-1">
               O sistema só sabe que {resumo.vaoDescontar.length} pessoa(s) foram descontadas em{' '}
-              {formatBRL(resumo.totalDescontar)} <b>se esta planilha for registrada como o pagamento</b>.
+              {formatBRLIf(resumo.totalDescontar, canViewValues)} <b>se esta planilha for registrada como o pagamento</b>.
               Baixando sem marcar, o próximo relatório vai descontar essa mesma gente de novo.
             </p>
           </div>
@@ -646,10 +653,10 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
           >
             <p className="font-bold">
               ⚠ {pendentes.length} entregador(es) com desconto de vale/perda PENDENTE
-              {' '}({formatBRL(totalPendente(pendentes))})
+              {' '}({formatBRLIf(totalPendente(pendentes), canViewValues)})
             </p>
             <p className="text-xs mt-1">
-              {pendentes.map((p) => `${p.name} (${formatBRL(p.valor)})`).join(', ')}.
+              {pendentes.map((p) => `${p.name} (${formatBRLIf(p.valor, canViewValues)})`).join(', ')}.
             </p>
             <p className="text-xs mt-1">
               Foram pagos sem abater e o desconto <b>não saiu em nenhuma outra plataforma</b> —
@@ -673,7 +680,7 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
             <ul className="mt-1 list-disc list-inside space-y-0.5">
               {alreadyDeducted.map((d) => (
                 <li key={d.driverId}>
-                  <b>{d.name}</b> já teve {formatBRL(d.amount)} abatido num espelho publicado.
+                  <b>{d.name}</b> já teve {formatBRLIf(d.amount, canViewValues)} abatido num espelho publicado.
                 </li>
               ))}
             </ul>

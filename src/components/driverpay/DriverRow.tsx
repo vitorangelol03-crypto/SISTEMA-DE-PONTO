@@ -24,7 +24,7 @@ import {
   computeRowTotals,
   platformPackages,
   isMultiRoute,
-  formatBRL,
+  formatBRLIf,
   formatInt,
   type NfProgress,
   type ProofProgress,
@@ -46,6 +46,8 @@ interface DriverRowProps {
   canMirror: boolean;
   /** Marcar como pago manualmente, sem gerar relatório (14/08/2026). */
   canMarkPaid: boolean;
+  /** Ver valores em R$ (02/09/2026) — false esconde os números desta linha. */
+  canViewValues: boolean;
   handlers: RowHandlers;
   /** Espelho já publicado no app do driver (selo "no app"). */
   publishedInApp?: boolean;
@@ -95,6 +97,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   canVale,
   canMirror,
   canMarkPaid,
+  canViewValues,
   handlers,
   publishedInApp,
   nfProgress,
@@ -223,10 +226,10 @@ export const DriverRow: React.FC<DriverRowProps> = ({
               {row.carryover > 0 && (
                 <span
                   data-testid="row-selo-herdado"
-                  title={`${formatBRL(row.carryover)} de vale/perda que ficou sem descontar numa quinzena fechada, migrado pra cá.`}
+                  title={`${formatBRLIf(row.carryover, canViewValues)} de vale/perda que ficou sem descontar numa quinzena fechada, migrado pra cá.`}
                   className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 whitespace-nowrap"
                 >
-                  {formatBRL(row.carryover)} herdado
+                  {formatBRLIf(row.carryover, canViewValues)} herdado
                 </span>
               )}
               </div>
@@ -338,7 +341,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
                   </span>
                 ) : (
                   <span className="text-gray-700 text-xs font-semibold whitespace-nowrap">
-                    {formatBRL(routeRates[0] ?? 0)}
+                    {formatBRLIf(routeRates[0] ?? 0, canViewValues)}
                   </span>
                 )}
               </div>
@@ -348,7 +351,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
 
         {/* Total pacotes (R$) */}
         <td className="px-2 py-3 text-right align-middle tabular-nums text-gray-900">
-          {formatBRL(totals.packagesAmount)}
+          {formatBRLIf(totals.packagesAmount, canViewValues)}
         </td>
 
         {/* Zapex (ganho por item = qtd x valor unitario do driver) */}
@@ -356,7 +359,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
           {zapexCount > 0 ? (
             <div className="inline-flex flex-col items-end leading-tight">
               <span className="font-semibold text-green-600 whitespace-nowrap tabular-nums">
-                {formatBRL(zapexAmount)}
+                {formatBRLIf(zapexAmount, canViewValues)}
               </span>
               <span className="text-[11px] text-gray-400">
                 {zapexCount} Zapex
@@ -370,7 +373,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         {/* Desconto */}
         <td className="px-2 py-3 text-right align-middle">
           {totals.discounts > 0 ? (
-            <span className="font-semibold text-red-600 whitespace-nowrap">− {formatBRL(totals.discounts)}</span>
+            <span className="font-semibold text-red-600 whitespace-nowrap">− {formatBRLIf(totals.discounts, canViewValues)}</span>
           ) : (
             <span className="text-gray-400">—</span>
           )}
@@ -379,7 +382,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
         {/* Vale */}
         <td className="px-2 py-3 text-right align-middle">
           {totals.vales > 0 ? (
-            <span className="font-semibold text-amber-600 whitespace-nowrap">− {formatBRL(totals.vales)}</span>
+            <span className="font-semibold text-amber-600 whitespace-nowrap">− {formatBRLIf(totals.vales, canViewValues)}</span>
           ) : (
             <span className="text-gray-400">—</span>
           )}
@@ -392,7 +395,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
               totals.net < 0 ? 'text-red-600' : 'text-green-600'
             }`}
           >
-            {formatBRL(totals.net)}
+            {formatBRLIf(totals.net, canViewValues)}
           </span>
         </td>
 
