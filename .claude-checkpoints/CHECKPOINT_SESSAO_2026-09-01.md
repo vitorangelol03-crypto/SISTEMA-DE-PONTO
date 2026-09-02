@@ -182,3 +182,38 @@ Fix (`3795b45`): trocado pro mesmo padrão `en-CA`+`America/Sao_Paulo` já usado
 - Reportar ao Victor o achado do §5 (9 falhas pré-existentes de mobile-pixel5 em specs
   que não fazem parte deste trabalho) e perguntar se ele quer que eu conserte numa leva
   separada.
+
+## 8. ✅ Os 3 specs de mobile-pixel5 do §5, consertados (`d1c4e99`, a pedido dele)
+
+`tests/11-permissions.spec.ts` + `tests/22-permissions-complete.spec.ts`: `tbody tr`/
+`getByTitle` → `[data-testid="user-row"]:visible` + `getByRole` (mesmo motivo do §4).
+`tests/26-multi-company-ui-isolation.spec.ts` testes 8 (Financeiro) e 9 (Admin
+GPS/faciais): sem `data-testid` pra usar, trocado por `getByText(...).and(':visible')`
+— teste 9 teve uma pegadinha a mais: o card mobile do AdminTab é um `<div>`, nem chega a
+ser `<tr>`, então `tbody tr` nunca ia bater lá (não bastava só adicionar `:visible`).
+**56/56 chromium+mobile-pixel5, typecheck limpo.** Nenhum código do app tocado — só teste.
+
+## 9. 🟡 Fase B — migration escrita, aguardando OK do Victor pra aplicar
+
+Ele mandou "pode começar a fase B" e foi tomar banho. Investigado + migration escrita
+(`supabase/migrations/20260901180000_fase_b_enforcement_usuarios_funcionarios.sql`, ainda
+NÃO aplicada — regra "migration sempre pede OK" vale mesmo com o sinal verde geral).
+
+Fecha, com trigger no banco (mesmo padrão do `enforce_ponto_master_only`, já provado em
+produção): `users` (create/edit/delete real, hoje já protegido pela edge fn mas sem
+segunda camada se alguém pular ela), `user_permissions` (🔴 achado sério: `saveUserPermissions`
+em `permissions.ts` fazia UPDATE/INSERT direto SEM NENHUM check de permissão no código —
+só a UI escondia o botão; qualquer usuário da mesma empresa podia se auto-conceder
+`managePermissions` via REST direto) e `employees` (create/edit/delete real — hoje só
+`validatePermission` client-side "de aviso"; aprovação de cadastro continua exclusiva do
+2626, mesmo critério de `canAccessEmployeeApproval`).
+
+Achado extra ao mapear os call sites de `employees` em `database.ts`: `resetEmployeePin`,
+`setFaceRecognitionForEmployee` e `resetFaceForEmployee` (as 2 últimas só no AdminTab,
+gated pela senha interna "Clayton2024") não tinham NENHUM check de permissão — a migration
+passa a exigir `employees.edit` nas 3. Risco baixo (supervisor padrão já nasce com
+`employees.edit=true`), mas é uma mudança de comportamento real — avisado ao Victor antes
+de aplicar. Decisão deliberadamente FORA desta migration: enforcement de LEITURA (SELECT) —
+Victor falou em "realmente tira a visão", que pode significar isso também, mas é bem mais
+arriscado (relatórios/joins hoje dependem de leitura ampla) — fica pra perguntar depois,
+separado desta leva.
