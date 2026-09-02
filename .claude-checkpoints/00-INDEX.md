@@ -26,9 +26,13 @@
 > (`bc47757`→`3795b45`). **Achado de CI no meio da leva, consertado** (§6.1): 2 testes de
 > outra leva de hoje (roadmap item 1/2, não-Usuários) computavam data em UTC vs a data
 > BRT que o edge fn grava — só quebrava na janela ~21h-00h BRT; não era bug da Fase A,
-> corrigido junto. **Achado (não consertado, fora de escopo):** regressão em
-> `tests/11`+`22`+`26` só em mobile-pixel5, pré-existente (confirmado via `git show HEAD`),
-> mesma família "tabela desktop escondida pega no locator" — reportar ao Victor.
+> corrigido junto. **Os 3 specs de mobile-pixel5 também consertados** (`d1c4e99`, a pedido
+> dele — §8 do checkpoint): 56/56 chromium+mobile-pixel5, só teste, zero código do app
+> tocado. **Fase B: migration escrita, aguardando OK dele pra aplicar** (§9) — trigger no
+> banco (mesmo padrão do `enforce_ponto_master_only`) pra `users`+`user_permissions`+
+> `employees`; achado sério no caminho: `saveUserPermissions` fazia UPDATE direto SEM
+> NENHUM check de permissão (só a UI escondia o botão) — qualquer usuário da empresa
+> podia se auto-conceder `managePermissions` via REST direto.
 
 > ✅ **Roadmap item 2 (4 batidas) PREPARADO pra todo mundo, sem ligar ainda** (`c191648`):
 > pedido "deixe tudo pronto, na hora que eu ativar funciona perfeitamente". Auditoria achou
