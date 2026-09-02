@@ -2,7 +2,30 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-01** (rework de Usuários/Permissões/Auditoria, Fase A no ar).
+> Última atualização: **2026-09-02** (as 3 travas exclusivas do 2626 — Ponto/Driverpay/
+> Aprovação — viraram permissão normal configurável).
+
+> ✅ **As 3 travas exclusivas do 2626 removidas, viram permissão normal** (`cc81722`,
+> `CHECKPOINT_SESSAO_2026-09-01.md` §11): Victor pediu permissão granular "mostra valores"
+> em Pagamentos Driver e, ao investigar, achei que era impossível — o módulo inteiro era
+> 100% exclusivo hardcoded do 2626, sem meio-termo. Ele mandou remover as 3 travas
+> exclusivas (Ponto, Pagamentos Driver, Aprovação de Cadastro) de vez, incluindo Ponto
+> (confirmado apesar do risco do incidente de 04/08 — 9999 marcou 3 pessoas presentes sem
+> terem trabalhado). Achado de segurança ANTES de aplicar (não incidente): contas reais
+> 02/03/04 já tinham valores `true` adormecidos em `attendance.mark/editHistory/manualTime/
+> reset` — inertes com a trava, viravam capacidade perigosa real assim que ela caísse.
+> Corrigido na mesma migration (zera as 5 chaves pra quem não é privilegiado, preserva o
+> resto). 2626 continua o único bypass incondicional do sistema. Validado: tsc+build+unit
+> limpos, 4 testes que assumiam a trava antiga corrigidos (viraram o oposto — 9999 agora
+> VÊ o que antes não via, de propósito), regressão dirigida verde. **Bateria driverpay (25
+> arquivos) investigada a fundo:** `69`/`71` são projetados pra rodar contra dado real da
+> quinzena aberta (falham por volume de dados, não por código); `56`/`61` reproduziram
+> falha 2x isolados — mas os dois autenticam como 2626 (caminho de permissão idêntico
+> antes/depois) e nenhum tocou em código de cálculo/UI de grupos — reportado ao Victor,
+> **não consertado** (fora de escopo, regra "mostra o erro antes de consertar"). Pedido
+> original (granularidade "mostra valores" em Driverpay) e o pedido mais amplo ("máximo de
+> controle em cada aba") **ainda não implementados** — só o pré-requisito arquitetural foi
+> feito nesta leva. Push feito, CI disparado.
 
 > ✅ **Rework de Usuários/Permissões/Auditoria — Fase A no ar** (`bc47757`,
 > `CHECKPOINT_SESSAO_2026-09-01.md`): pedido do Victor pra deixar a aba Usuários "bem mais
@@ -96,6 +119,13 @@
 > 4 batidas de verdade pra todo mundo.
 
 ## 🎯 Estado atual (1 parágrafo)
+
+**Sessão 01→02/09 — as 3 travas exclusivas do 2626 (Ponto/Driverpay/Aprovação de Cadastro)
+viraram permissão normal, configurável, no ar** (`cc81722`, §11 do checkpoint). Só o 2626
+segue com bypass incondicional. Pendente: a feature que motivou tudo isso (permissão
+granular "mostra valores" em Pagamentos Driver) ainda não foi implementada — só o
+pré-requisito. Ver `CHECKPOINT_SESSAO_2026-09-01.md` §11 pro detalhe, incluindo achados de
+teste (`56`/`61` do driverpay) reportados e não consertados.
 
 **Sessão 01/09 — rework de Usuários/Permissões/Auditoria, Fase A no ar.** Cadastro
 completo (nome+telefone), redefinir senha (padrão + troca obrigatória), edge fn

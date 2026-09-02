@@ -331,3 +331,99 @@ H1 esperava 8888 SEM acesso a Usuários/Gerenciamento — premissa correta ANTES
 migration, agora o oposto do pretendido (8888 ganhou acesso total de propósito).
 Atualizado pra esperar acesso total (menos Pagamentos Driver, que continua exclusivo do
 2626). 25/25 do arquivo inteiro verde depois do fix.
+
+## 11. ✅ Removidas as 3 travas exclusivas do 2626 — viram permissão normal (`cc81722`)
+
+Pedido novo do Victor (02/09/2026, mesma madrugada, seguindo direto do §10): mandou print
+da tela de Permissões da aba Pagamentos Driver pedindo uma permissão granular "mostra
+valores" (funcionário lança desconto sem ver o total do driver) e, junto, "QUERO MAXIMO DE
+CONTROLE POSSIVEL EM CADA ABA". Ao investigar como entregar isso descobri que era
+**impossível**: Pagamentos Driver inteiro (não só o total) era 100% exclusivo hardcoded do
+2626 (`canAccessDriverpay`) — não dava pra liberar uma ação parcial pra ninguém. Avisei o
+Victor com essa trava antes de programar (`AskUserQuestion` — ele rejeitou a pergunta e
+mandou direto): **"VAMOS REMOVER TODAS ESSES REGRAS QUE IMPLEMENTAMOS ANTES DE USUARIOS E
+VAMSO USAR PARTE DE PERMISÃO AGORA"** — tirar as 3 travas exclusivas (Ponto, Pagamentos
+Driver, Aprovação de Cadastro) e usar permissão normal, igual todo o resto do sistema.
+
+Levantei um risco real antes de mexer: a trava de Ponto existe especificamente por causa do
+incidente de 04/08/2026 (9999 marcou 3 pessoas como presentes sem terem trabalhado,
+Financeiro pagou a diária das 3) — perguntei via `AskUserQuestion` se ele queria incluir
+Ponto também ou deixar de fora. Ele confirmou: **"As 3 juntas, incluindo Ponto."**
+
+**Achado de segurança antes de aplicar (não depois — investigação prévia, não incidente):**
+consultei direto o banco e achei que contas REAIS (02, 03, 04 — supervisores de verdade, já
+em uso) já tinham valores `true` **adormecidos** em `attendance.mark/editHistory/manualTime/
+reset` salvos em `user_permissions` — inertes enquanto a trava hardcoded existia, mas que
+virariam capacidade real e perigosa no instante em que a trava caísse (reabriria o
+incidente de 04/08 sem ninguém ter pedido). Corrigi em dois lugares na mesma migration,
+ANTES de aplicar, e expliquei isso ao Victor junto do pedido de OK:
+1. `DEFAULT_SUPERVISOR_PERMISSIONS.attendance` no código: `mark`/`editHistory` que eram
+   `true` por padrão (só nunca tinham efeito) viraram `false`.
+2. Migration faz um `UPDATE` (via `jsonb_set` aninhado) zerando essas 5 chaves de
+   `attendance` pra TODO usuário não-privilegiado que tinha algum valor `true` salvo —
+   preservando o resto das permissões customizadas de cada um (ex.: outras restrições do
+   supervisor 04 continuam intactas).
+
+**Implementado** (`supabase/migrations/20260902020000_remove_travas_exclusivas_ponto_driverpay_aprovacao.sql`
++ frontend, tudo no mesmo commit `cc81722`):
+- `src/config/masters.ts`: removidas `PONTO_EDIT_PERMISSIONS`/`isPontoEditPermission`/
+  `canEditPonto`, `isDriverpayPermission`/`canAccessDriverpay`,
+  `isEmployeeApprovalPermission`/`canAccessEmployeeApproval`. Só sobra `PONTO_EDITOR_ID =
+  '2626'` como o ÚNICO bypass incondicional que resta no sistema (o líder fixo do §10, sem
+  mudança de conceito — só perdeu os 3 módulos que tratava como exclusivos).
+- `usePermissions.ts`, `database.ts` (`validatePermission`), `driverPay.ts` (`ensurePerm`):
+  os 3 checks exclusivos viraram checagem de permissão normal (`checkPermission`), com o
+  2626 mantendo bypass total via `PONTO_EDITOR_ID`.
+- Trigger `enforce_ponto_master_only` (banco) reescrito pra usar
+  `user_has_module_permission(sub, 'attendance', <ação>)` por ação, em vez de checar só
+  `sub = '2626'`. Trigger `enforce_employees_permission_check` (ramo de aprovação de
+  cadastro) idem, usando `employeeapproval.approve/reject`. Os dois preservam o bypass do
+  2626. Pagamentos Driver nunca teve trigger de banco dedicado (só RLS de `company_id`) —
+  não precisou mexer em trigger nenhum ali, só no `ensurePerm` do frontend/edge.
+
+**Validado:**
+- `npm run typecheck` limpo · `npm run build` limpo · `masters.test.ts` 13/13 (removidos os
+  testes das funções apagadas, adicionados 8 novos pra `CONFIGURABLE_PRIVILEGED_IDS`/
+  `isConfigurablePrivileged`/`canEditPrivilegedUserPermissions`, que não mudaram).
+- SQL direto pós-migration: contas 02/03/04 confirmadas com as 5 chaves zeradas, resto das
+  permissões de cada uma preservado.
+- 4 testes que assumiam a trava antiga corrigidos porque viraram o oposto do esperado (9999
+  passou a ENXERGAR o que antes não via, de propósito): `tests/03-attendance.spec.ts` (2),
+  `tests/04-bonus.spec.ts` (1), `tests/22-permissions-complete.spec.ts` (1) — reescritos pra
+  afirmação positiva (9999 vê horário manual/Reset/Reset Geral). `tests/101-supremo-pn.spec.ts`
+  H1 precisou de um SEGUNDO ajuste na mesma sessão (o do §10 dizia "8888 vê tudo menos
+  Pagamentos Driver" — essa exceção também caiu agora que Driverpay perdeu a exclusividade).
+- Regressão dirigida: `tests/03` 9/9, `tests/04`, `tests/22`, `tests/101` (25/25) verdes.
+- **Bateria driverpay (25 arquivos) rodada 3 vezes pra separar regressão real de ruído:**
+  1ª rodada (todos juntos) achou falha em 5 arquivos (`56`, `57`, `61`, `69`, `71`). 2ª
+  rodada (só os 5, isolados) recuperou o `57` de primeira — os outros 4 falharam de novo.
+  Investigação arquivo por arquivo (servidor dev reiniciado do zero, `69` rodado sozinho):
+  - **`69` e `71` são projetados de propósito pra rodar contra a quinzena REAL aberta**
+    (doc-comment de cada um confirma: precisam de volume real de prints/notas que uma
+    fixture descartável não teria) — falham/pulam dependendo do volume real de dados na
+    quinzena aberta HOJE, sem nenhuma relação com este código. Pré-existente, não é
+    regressão.
+  - **`56` e `61` usam fixture própria descartável** (prefixo `PW Test`, limpa sozinha) —
+    reproduziram falha 2x seguidas mesmo isolados. Investigação até a causa: `61` mostra
+    uma DIVERGÊNCIA REAL de cálculo (total R$ 38,00 em vez de R$ 36,00 esperado — a rota 2
+    da plataforma A está sendo cobrada na taxa da rota 1 em vez da taxa própria editada,
+    feature de "taxa por rota" de 20/07/2026). `56` trava num clique (`getByTitle('Membros')`)
+    logo após criar 2 grupos em sequência. **Nenhum dos dois tem relação de código com esta
+    leva**: os dois autenticam como 2626, cujo caminho de permissão é comprovadamente
+    IDÊNTICO antes/depois desta mudança (bypass incondicional, sempre foi e continua sendo);
+    e nenhuma linha de cálculo de taxa/mirror ou de UI de grupos foi tocada nesta leva —
+    só código de permissão. **Reportado ao Victor, NÃO consertado** (fora de escopo desta
+    leva + regra do projeto "mostra o erro antes de tentar consertar") — parece um bug
+    pré-existente real na feature de taxa por rota (`61`) e possível flake de UI (`56`), mas
+    fica pra ele decidir se abre uma leva separada pra investigar a fundo.
+- `git push` feito (`cc81722`), CI disparado — conferir resultado no próximo checkpoint/sessão.
+
+**Em aberto:**
+- Pedido original do Victor (permissão granular "mostra valores" em Pagamentos Driver, pra
+  alguém lançar desconto sem ver o total do driver) agora está TECNICAMENTE desbloqueado
+  (Driverpay é módulo de permissão normal) mas **ainda não foi implementado** — só o
+  pré-requisito arquitetural (esta leva) foi feito.
+  "QUERO MAXIMO DE CONTROLE POSSIVEL EM CADA ABA" (o pedido mais amplo) também não foi
+  atendido além de remover as 3 travas — não fiz auditoria de "que permissão granular falta
+  em cada aba".
+- `56`/`61` (achado acima) — decidir se vale investigar/consertar numa leva própria.
