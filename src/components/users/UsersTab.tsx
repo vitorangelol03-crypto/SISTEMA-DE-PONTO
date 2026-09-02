@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserCog, Plus, Trash2, Eye, EyeOff, RefreshCw, Shield } from 'lucide-react';
-import { getAllUsers, createUser, deleteUser, User } from '../../services/database';
+import { UserCog, Plus, Trash2, Eye, EyeOff, RefreshCw, Shield, Pencil, KeyRound } from 'lucide-react';
+import { getAllUsers, createUser, updateUser, resetUserPassword, deleteUser, User } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import { isValidPassword, isNumericString } from '../../utils/validation';
 import { getUserPermissions } from '../../services/permissions';
@@ -24,8 +24,14 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userPermissions, setUserPermissions] = useState<UserPermissions | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', phone: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [resettingId, setResettingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     id: '',
+    name: '',
+    phone: '',
     password: '',
     confirmPassword: ''
   });
@@ -57,11 +63,12 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
     setShowForm(false);
     setShowPassword(false);
     setShowConfirmPassword(false);
-    setFormData({ id: '', password: '', confirmPassword: '' });
+    setEditingUser(null);
+    setFormData({ id: '', name: '', phone: '', password: '', confirmPassword: '' });
   }, [company?.id]);
 
   const resetForm = () => {
-    setFormData({ id: '', password: '', confirmPassword: '' });
+    setFormData({ id: '', name: '', phone: '', password: '', confirmPassword: '' });
     setShowForm(false);
     setShowPassword(false);
     setShowConfirmPassword(false);
@@ -77,6 +84,16 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
 
     if (!formData.id.trim() || !isNumericString(formData.id.trim())) {
       toast.error('ID deve conter apenas números');
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      toast.error('Informe o nome completo');
+      return;
+    }
+
+    if (!formData.phone.trim()) {
+      toast.error('Informe o telefone');
       return;
     }
 
@@ -96,7 +113,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
     }
 
     try {
-      await createUser(formData.id.trim(), formData.password, 'supervisor', userId, company.id);
+      await createUser(formData.id.trim(), formData.password, 'supervisor', userId, company.id, formData.name.trim(), formData.phone.trim());
       toast.success('Supervisor criado com sucesso!');
       resetForm();
       loadUsers();
@@ -127,7 +144,70 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
       loadUsers();
     } catch (error) {
       console.error('Erro ao excluir supervisor:', error);
-      toast.error('Erro ao excluir supervisor');
+      const message = error instanceof Error ? error.message : 'Erro ao excluir supervisor';
+      toast.error(message);
+    }
+  };
+
+  const openEdit = (user: User) => {
+    if (!hasPermission('users.edit')) {
+      toast.error('Você não tem permissão para editar usuários');
+      return;
+    }
+    setEditingUser(user);
+    setEditForm({ name: user.name || '', phone: user.phone || '' });
+  };
+
+  const closeEdit = () => {
+    setEditingUser(null);
+    setEditForm({ name: '', phone: '' });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    if (!editForm.name.trim()) {
+      toast.error('Informe o nome completo');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      await updateUser(editingUser.id, { name: editForm.name.trim(), phone: editForm.phone.trim() }, userId);
+      toast.success('Usuário atualizado com sucesso!');
+      closeEdit();
+      loadUsers();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao atualizar usuário';
+      toast.error(message);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleResetPassword = async (user: User) => {
+    if (!hasPermission('users.resetPassword')) {
+      toast.error('Você não tem permissão para redefinir senhas');
+      return;
+    }
+
+    if (!confirm(`Redefinir a senha de ${user.name || `ID ${user.id}`} pra senha padrão? A pessoa vai ter que trocar por uma própria no próximo login.`)) {
+      return;
+    }
+
+    setResettingId(user.id);
+    try {
+      const defaultPassword = await resetUserPassword(user.id, userId);
+      toast.success(
+        `Senha redefinida! Nova senha padrão: ${defaultPassword} (a pessoa vai ter que trocar no próximo login)`,
+        { duration: 10000 },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao redefinir senha';
+      toast.error(message);
+    } finally {
+      setResettingId(null);
     }
   };
 
@@ -199,7 +279,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   ID do Usuário *
                 </label>
@@ -219,6 +299,34 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                 <p className="text-xs text-gray-500 mt-1">
                   Use apenas números. Ex: 1001, 1002, etc.
                 </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome completo *
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
+                  placeholder="Digite o nome completo"
+                  required
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Telefone *
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
+                  placeholder="(00) 00000-0000"
+                  required
+                />
               </div>
 
               <div>
@@ -310,6 +418,12 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                   ID
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Nome
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Telefone
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Tipo
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -325,14 +439,20 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {users.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50">
+                <tr key={user.id} data-testid="user-row" className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{user.id}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{user.name || <span className="text-gray-400">—</span>}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500">{user.phone || <span className="text-gray-400">—</span>}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      user.role === 'admin' 
-                        ? 'bg-blue-100 text-blue-800' 
+                      user.role === 'admin'
+                        ? 'bg-blue-100 text-blue-800'
                         : 'bg-green-100 text-green-800'
                     }`}>
                       {user.role === 'admin' ? 'Administrador' : 'Supervisor'}
@@ -353,6 +473,25 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                     <div className="flex items-center justify-center gap-2">
+                      {hasPermission('users.edit') && (
+                        <button
+                          onClick={() => openEdit(user)}
+                          className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                          title="Editar"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                      {hasPermission('users.resetPassword') && (
+                        <button
+                          onClick={() => handleResetPassword(user)}
+                          disabled={resettingId === user.id}
+                          className="p-2 text-amber-600 hover:bg-amber-50 rounded-md transition-colors disabled:opacity-50"
+                          title="Redefinir Senha"
+                        >
+                          <KeyRound className="w-4 h-4" />
+                        </button>
+                      )}
                       {hasPermission('users.managePermissions') && (
                         <button
                           onClick={() => handleManagePermissions(user)}
@@ -382,11 +521,11 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
         {/* Mobile: cards */}
         <div className="md:hidden divide-y divide-gray-200">
           {users.map((user) => (
-            <div key={user.id} className="p-4 hover:bg-gray-50">
+            <div key={user.id} data-testid="user-row" className="p-4 hover:bg-gray-50">
               <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium text-gray-900">ID: {user.id}</span>
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="text-sm font-medium text-gray-900">{user.name || `ID: ${user.id}`}</span>
                     <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
                       user.role === 'admin'
                         ? 'bg-blue-100 text-blue-800'
@@ -395,6 +534,8 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                       {user.role === 'admin' ? 'Admin' : 'Supervisor'}
                     </span>
                   </div>
+                  {user.name && <p className="text-xs text-gray-500">ID: {user.id}</p>}
+                  {user.phone && <p className="text-xs text-gray-500">Telefone: {user.phone}</p>}
                   <p className="text-xs text-gray-500">
                     Criado em: {isMaster(user.id) ? 'Sistema' : new Date(user.created_at).toLocaleDateString('pt-BR')}
                   </p>
@@ -403,7 +544,26 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                   </p>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                {hasPermission('users.edit') && (
+                  <button
+                    onClick={() => openEdit(user)}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors min-h-[44px]"
+                  >
+                    <Pencil className="w-4 h-4" />
+                    <span>Editar</span>
+                  </button>
+                )}
+                {hasPermission('users.resetPassword') && (
+                  <button
+                    onClick={() => handleResetPassword(user)}
+                    disabled={resettingId === user.id}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100 transition-colors min-h-[44px] disabled:opacity-50"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    <span>Redefinir Senha</span>
+                  </button>
+                )}
                 {hasPermission('users.managePermissions') && (
                   <button
                     onClick={() => handleManagePermissions(user)}
@@ -436,6 +596,69 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
         )}
       </div>
 
+      {editingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-[95vw] sm:max-w-md w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+              <h3 className="text-base sm:text-lg font-medium">Editar Usuário — ID {editingUser.id}</h3>
+              <button
+                onClick={closeEdit}
+                className="text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-4 sm:p-6 space-y-4 overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome completo *
+                </label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
+                  placeholder="Digite o nome completo"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Telefone
+                </label>
+                <input
+                  type="tel"
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
+                  placeholder="(00) 00000-0000"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors min-h-[44px] w-full sm:w-auto disabled:opacity-50"
+                >
+                  {savingEdit ? 'Salvando...' : 'Salvar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeEdit}
+                  className="px-4 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors min-h-[44px] w-full sm:w-auto"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showPermissionsModal && selectedUser && (
         <PermissionsModal
           isOpen={showPermissionsModal}
@@ -445,7 +668,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
             setUserPermissions(null);
           }}
           userId={selectedUser.id}
-          userName={`${selectedUser.role === 'admin' ? 'Admin' : 'Supervisor'} - ID: ${selectedUser.id}`}
+          userName={`${selectedUser.name || (selectedUser.role === 'admin' ? 'Admin' : 'Supervisor')} - ID: ${selectedUser.id}`}
           currentPermissions={userPermissions}
           currentUserId={userId}
           onSaved={handlePermissionsSaved}

@@ -91,7 +91,9 @@ export interface SettingsPermissions extends TabPermissions {
 
 export interface UsersPermissions extends TabPermissions {
   create: boolean;
+  edit: boolean;
   delete: boolean;
+  resetPassword: boolean;
   managePermissions: boolean;
 }
 
@@ -130,7 +132,7 @@ export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
   driverpay: { view: true, createDriver: true, editDriver: true, deleteDriver: true, configRate: true, manageDiscount: true, manageVale: true, manageGroups: true, managePlatforms: true, generateMirror: true, managePeriods: true, complete: true, viewHistory: true, exportReport: true },
   errors: { view: true, create: true, createByValue: true, edit: true, delete: true, viewStats: true, viewTriage: true, createTriage: true, distributeTriage: true },
   settings: { view: true, editDailyRate: true, editOther: true },
-  users: { view: true, create: true, delete: true, managePermissions: true },
+  users: { view: true, create: true, edit: true, delete: true, resetPassword: true, managePermissions: true },
   datamanagement: { view: true, viewStats: true, configRetention: true, manualCleanup: true, autoCleanup: true },
   employeeapproval: { view: true, approve: true, reject: true }
 };
@@ -150,7 +152,7 @@ export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
   driverpay: { view: false, createDriver: false, editDriver: false, deleteDriver: false, configRate: false, manageDiscount: false, manageVale: false, manageGroups: false, managePlatforms: false, generateMirror: false, managePeriods: false, complete: false, viewHistory: false, exportReport: false },
   errors: { view: true, create: true, createByValue: false, edit: true, delete: false, viewStats: true, viewTriage: true, createTriage: true, distributeTriage: true },
   settings: { view: false, editDailyRate: false, editOther: false },
-  users: { view: false, create: false, delete: false, managePermissions: false },
+  users: { view: false, create: false, edit: false, delete: false, resetPassword: false, managePermissions: false },
   datamanagement: { view: false, viewStats: false, configRetention: false, manualCleanup: false, autoCleanup: false },
   // Análise de antecedentes: admin/mestre por padrão (mesmo critério do driverpay
   // acima). Liberável por usuário via PermissionsModal.
@@ -166,7 +168,7 @@ export const DEFAULT_READONLY_PERMISSIONS: UserPermissions = {
   driverpay: { view: false, createDriver: false, editDriver: false, deleteDriver: false, configRate: false, manageDiscount: false, manageVale: false, manageGroups: false, managePlatforms: false, generateMirror: false, managePeriods: false, complete: false, viewHistory: false, exportReport: false },
   errors: { view: true, create: false, createByValue: false, edit: false, delete: false, viewStats: true, viewTriage: false, createTriage: false, distributeTriage: false },
   settings: { view: false, editDailyRate: false, editOther: false },
-  users: { view: false, create: false, delete: false, managePermissions: false },
+  users: { view: false, create: false, edit: false, delete: false, resetPassword: false, managePermissions: false },
   datamanagement: { view: false, viewStats: false, configRetention: false, manualCleanup: false, autoCleanup: false },
   employeeapproval: { view: false, approve: false, reject: false }
 };
@@ -288,7 +290,9 @@ export const PERMISSION_LABELS = {
     title: 'Usuários',
     view: 'Ver aba',
     create: 'Criar supervisor',
+    edit: 'Editar nome/telefone',
     delete: 'Excluir supervisor',
+    resetPassword: 'Redefinir senha',
     managePermissions: 'Gerenciar permissões'
   },
   datamanagement: {

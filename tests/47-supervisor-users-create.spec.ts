@@ -45,7 +45,7 @@ test.describe('Supervisor com users.create perm (sub-fase 16.3)', () => {
       c6payment: { view: false, import: false, bulkEdit: false, edit: false, delete: false },
       errors: { view: false, create: false, createByValue: false, edit: false, delete: false, viewStats: false, viewTriage: false, createTriage: false, distributeTriage: false },
       settings: { view: false, edit: false },
-      users: { view: true, create: true, delete: false, managePermissions: false },
+      users: { view: true, create: true, edit: false, delete: false, resetPassword: false, managePermissions: false },
       datamanagement: { view: false, manage: false },
     };
 
@@ -86,8 +86,11 @@ test.describe('Supervisor com users.create perm (sub-fase 16.3)', () => {
     await expect(newBtn).toBeEnabled({ timeout: 10_000 });
     await newBtn.click();
 
-    // Form abre — preencher ID via placeholder específico
+    // Form abre — preencher ID via placeholder específico (nome/telefone viraram
+    // obrigatórios na Fase A do rework de Usuários, 01/09/2026)
     await page.getByPlaceholder(/Digite apenas números/).fill(NEW_USER_ID);
+    await page.getByPlaceholder('Digite o nome completo').fill('PW Teste Supervisor 2');
+    await page.getByPlaceholder('(00) 00000-0000').fill('31999990001');
     await page.getByPlaceholder('Digite uma senha segura').fill(NEW_USER_PASS);
     await page.getByPlaceholder('Confirme a senha').fill(NEW_USER_PASS);
 
@@ -95,9 +98,13 @@ test.describe('Supervisor com users.create perm (sub-fase 16.3)', () => {
     // .last() pra escapar o botão de abrir form (que tem mesmo texto)
     await page.getByRole('button', { name: /^Criar Supervisor$/ }).last().click();
 
-    // Aguarda lista atualizada com novo user (created_at coluna mostra ID).
-    // .first() porque ID aparece em desktop tabela + mobile cards.
-    await expect(page.getByText(new RegExp(NEW_USER_ID)).first()).toBeVisible({ timeout: 15_000 });
+    // Aguarda lista atualizada com novo user. data-testid="user-row" (Fase A,
+    // 01/09/2026) em vez de getByText: desktop tabela + card mobile SEMPRE
+    // coexistem no DOM (só um fica visível via CSS `hidden md:block`/`md:hidden`).
+    // `:visible` no seletor (não só .first()) é o que garante pegar a linha
+    // que REALMENTE aparece no viewport atual — em mobile-pixel5 a linha da
+    // tabela vem primeiro no DOM mas fica escondida; só o card mobile é visível.
+    await expect(page.locator('[data-testid="user-row"]:visible').filter({ hasText: NEW_USER_ID }).first()).toBeVisible({ timeout: 15_000 });
 
     // Validação no DB: user criado com created_by = supervisor
     const s = getClient();

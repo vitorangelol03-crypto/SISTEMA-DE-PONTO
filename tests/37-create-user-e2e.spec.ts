@@ -134,8 +134,10 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     await page.getByRole('button', { name: /Criar Supervisor/ }).first().click();
     await expect(page.getByRole('heading', { name: /Criar Novo Supervisor/ })).toBeVisible({ timeout: 10_000 });
 
-    // Preenche
+    // Preenche (nome/telefone viraram obrigatórios na Fase A do rework de Usuários, 01/09/2026)
     await page.locator('input[placeholder*="apenas números"]').fill(id);
+    await page.getByPlaceholder('Digite o nome completo').fill('PW Teste Supervisor');
+    await page.getByPlaceholder('(00) 00000-0000').fill('31999990000');
     await page.locator('input[placeholder*="senha segura"]').fill(TEST_PASSWORD);
     await page.locator('input[placeholder*="Confirme a senha"]').fill(TEST_PASSWORD);
 
@@ -187,6 +189,8 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     await goToTab(page, 'Usuários');
     await page.getByRole('button', { name: /Criar Supervisor/ }).first().click();
     await page.locator('input[placeholder*="apenas números"]').fill(id);
+    await page.getByPlaceholder('Digite o nome completo').fill('PW Teste Supervisor');
+    await page.getByPlaceholder('(00) 00000-0000').fill('31999990000');
     await page.locator('input[placeholder*="senha segura"]').fill(TEST_PASSWORD);
     await page.locator('input[placeholder*="Confirme a senha"]').fill(TEST_PASSWORD);
     await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();
@@ -203,6 +207,8 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     await goToTab(page, 'Usuários');
     await page.getByRole('button', { name: /Criar Supervisor/ }).first().click();
     await page.locator('input[placeholder*="apenas números"]').fill(id);
+    await page.getByPlaceholder('Digite o nome completo').fill('PW Teste Supervisor');
+    await page.getByPlaceholder('(00) 00000-0000').fill('31999990000');
     await page.locator('input[placeholder*="senha segura"]').fill(SHORT_PASSWORD);
     await page.locator('input[placeholder*="Confirme a senha"]').fill(SHORT_PASSWORD);
     await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();
@@ -223,6 +229,8 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     await goToTab(page, 'Usuários');
     await page.getByRole('button', { name: /Criar Supervisor/ }).first().click();
     await page.locator('input[placeholder*="apenas números"]').fill(id);
+    await page.getByPlaceholder('Digite o nome completo').fill('PW Teste Supervisor');
+    await page.getByPlaceholder('(00) 00000-0000').fill('31999990000');
     await page.locator('input[placeholder*="senha segura"]').fill(TEST_PASSWORD);
     await page.locator('input[placeholder*="Confirme a senha"]').fill('outra-senha');
     await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();
@@ -248,6 +256,8 @@ test.describe('CreateUser E2E via UsersTab (sub-fase 14.5)', () => {
     await goToTab(page, 'Usuários');
     await page.getByRole('button', { name: /Criar Supervisor/ }).first().click();
     await page.locator('input[placeholder*="apenas números"]').fill(id);
+    await page.getByPlaceholder('Digite o nome completo').fill('PW Teste Supervisor');
+    await page.getByPlaceholder('(00) 00000-0000').fill('31999990000');
     await page.locator('input[placeholder*="senha segura"]').fill(TEST_PASSWORD);
     await page.locator('input[placeholder*="Confirme a senha"]').fill(TEST_PASSWORD);
     await page.locator('form').getByRole('button', { name: /^Criar Supervisor$/ }).click();

@@ -44,6 +44,10 @@ export interface User {
   role: 'admin' | 'supervisor';
   created_by: string | null;
   created_at: string;
+  company_id?: string;
+  name: string | null;
+  phone: string | null;
+  must_change_password: boolean;
 }
 
 export interface Employee {
@@ -473,16 +477,12 @@ export const getAllUsers = async (companyId: string): Promise<User[]> => {
   return data || [];
 };
 
-// Sub-fase 11.7 — createUser via edge fn create-user.
-// Edge fn faz bcrypt(password) server-side + INSERT password_hash (a coluna
-// users.password plain foi dropada na sub-fase 11.1). validatePermission no
-// frontend continua como gate de UX; o edge fn faz a checagem real.
-export const createUser = async (id: string, password: string, role: 'supervisor', createdBy: string, companyId: string): Promise<void> => {
-  const permissionCheck = await validatePermission(createdBy, 'users.create');
-  if (!permissionCheck.allowed) {
-    throw new Error(permissionCheck.error || 'Permissão negada');
-  }
-
+// Sub-fase 11.7 + Fase A (01/09/2026) — todas as ações de gestão de usuário
+// (create/update/resetPassword/delete/changeOwnPassword) passam pelo mesmo
+// edge fn create-user (dispatcher por `action`), que faz o permission check
+// real server-side. validatePermission aqui é só gate de UX (feedback rápido
+// sem round-trip); quem decide de verdade é o edge fn.
+async function callUserManageApi<T = { ok: true }>(action: string, params: Record<string, unknown>): Promise<T> {
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
   const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
   const token = getAuthToken();
@@ -495,14 +495,62 @@ export const createUser = async (id: string, password: string, role: 'supervisor
       apikey: ANON_KEY,
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ id, password, role, companyId }),
+    body: JSON.stringify({ action, ...params }),
   });
 
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
     if (resp.status === 409) throw new Error('ID já existe');
-    throw new Error(data?.error || 'Falha ao criar usuário');
+    throw new Error(data?.error || `Falha em ${action}`);
   }
+  return data as T;
+}
+
+export const createUser = async (
+  id: string,
+  password: string,
+  role: 'supervisor',
+  createdBy: string,
+  companyId: string,
+  name?: string,
+  phone?: string,
+): Promise<void> => {
+  const permissionCheck = await validatePermission(createdBy, 'users.create');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  await callUserManageApi('create', { id, password, role, companyId, name, phone });
+};
+
+export const updateUser = async (
+  id: string,
+  updates: { name?: string; phone?: string },
+  requestedBy: string,
+): Promise<void> => {
+  const permissionCheck = await validatePermission(requestedBy, 'users.edit');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  await callUserManageApi('update', { id, ...updates });
+};
+
+// Retorna a senha padrão aplicada, pra exibir pro admin que redefiniu.
+export const resetUserPassword = async (id: string, requestedBy: string): Promise<string> => {
+  const permissionCheck = await validatePermission(requestedBy, 'users.resetPassword');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  const data = await callUserManageApi<{ ok: true; defaultPassword: string }>('resetPassword', { id });
+  return data.defaultPassword;
+};
+
+// Troca a PRÓPRIA senha (fluxo de "defina uma senha nova" após reset). Sem
+// validatePermission — o edge fn já garante que o alvo é sempre o caller.
+export const changeOwnPassword = async (newPassword: string): Promise<void> => {
+  await callUserManageApi('changeOwnPassword', { newPassword });
 };
 
 export const deleteUser = async (id: string, userId: string): Promise<void> => {
@@ -515,12 +563,7 @@ export const deleteUser = async (id: string, userId: string): Promise<void> => {
     throw new Error('Não é possível excluir o administrador principal');
   }
 
-  const { error } = await supabase
-    .from('users')
-    .delete()
-    .eq('id', id);
-
-  if (error) throw error;
+  await callUserManageApi('delete', { id });
 };
 
 // Employee functions

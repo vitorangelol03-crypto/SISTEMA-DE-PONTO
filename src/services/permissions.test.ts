@@ -115,7 +115,9 @@ describe('permissions.ts - Sistema de Permissões', () => {
         users: {
           view: false,
           create: false,
+          edit: false,
           delete: false,
+          resetPassword: false,
           managePermissions: false,
         },
         datamanagement: {

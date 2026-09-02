@@ -1,6 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { LoginForm } from './components/auth/LoginForm';
+import { ForceChangePasswordScreen } from './components/auth/ForceChangePasswordScreen';
 import { CompanySelector } from './components/auth/CompanySelector';
 import { Layout } from './components/common/Layout';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
@@ -163,6 +164,22 @@ function App() {
     return (
       <>
         <LoginForm onLogin={handleLogin} />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
+
+  // Senha redefinida pelo admin (Fase A do rework de Usuários, 01/09/2026) —
+  // bloqueia tudo até o usuário definir uma senha própria. Vem antes até da
+  // escolha de empresa: é um gate de segurança, não de navegação.
+  if (user.must_change_password) {
+    return (
+      <>
+        <ForceChangePasswordScreen
+          userId={user.id}
+          onChanged={() => login({ ...user, must_change_password: false })}
+          onLogout={handleLogout}
+        />
         <Toaster position="top-right" />
       </>
     );
