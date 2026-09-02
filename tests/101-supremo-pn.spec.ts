@@ -591,10 +591,13 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
   // H. PERMISSÕES ADMIN LOCAL 8888
   // ============================================================================
   test.describe('H. Admin local 8888 permissões', () => {
-    test('H1. Admin 8888 vê abas operacionais + Admin, NÃO vê Usuários/Gerenciamento', async ({ page }) => {
-      // Admin local 8888 tem role='admin' mas permissões restritas (sem users.view,
-      // sem datamanagement.view). Master 9999 vê tudo; 8888 vê 8 abas:
-      // Ponto, Funcionários, Relatórios, Financeiro, Pagamento C6, Erros, Ajuda, Admin.
+    test('H1. Admin 8888 vê tudo (menos Pagamentos Driver, exclusivo do 2626)', async ({ page }) => {
+      // ATUALIZADO 02/09/2026: pedido do Victor — 9999/8888 nascem com acesso total
+      // configurável (antes 8888 não tinha linha em user_permissions e caía no default
+      // de supervisor, sem users.view/datamanagement.view — daí a premissa antiga deste
+      // teste). Migration `20260902010000_9999_8888_configuraveis_2626_fixo` dá permissão
+      // total ao 8888; só os 3 itens exclusivos do 2626 (ponto, Pagamentos Driver,
+      // Aprovação de Cadastro) continuam fora do alcance dele.
       await page.goto('/');
       await page.locator('#id').fill(PN_ADMIN.id);
       await page.locator('#password').fill(PN_ADMIN.password);
@@ -605,24 +608,24 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
 
       await expect(page.getByRole('button', { name: 'Ponto', exact: true })).toBeVisible({ timeout: 15_000 });
 
-      // Abas QUE vê
-      await expect(page.getByRole('button', { name: /^Funcionários$/ }).first()).toBeVisible();
-      await expect(page.getByRole('button', { name: /^Financeiro$/ }).first()).toBeVisible();
-      await expect(page.getByRole('button', { name: /^Erros$/ }).first()).toBeVisible();
-      await expect(page.getByRole('button', { name: /^Admin$/ }).first()).toBeVisible();
-
-      // Abas QUE NÃO vê (permission restrita vs admin master).
-      // 🔑 Desde o menu "Mais (N)" da barra (06/08/2026), as últimas abas saem da barra e
-      // só entram no DOM quando o menu abre — então `toHaveCount(0)` com o menu fechado
-      // passava MESMO se a aba existisse escondida lá dentro (teste fraco, visto em
-      // 30/08). Abre o menu (quando houver) antes de afirmar que a aba não existe.
+      // Abre o menu "Mais" (quando houver) — abas que não cabem na barra só entram
+      // no DOM com o menu aberto (mesma pegadinha documentada em 30/08).
       const mais = page.getByTestId('abas-mais');
       if (await mais.count()) {
         await mais.click();
         await expect(mais).toHaveAttribute('aria-expanded', 'true');
       }
-      await expect(page.getByRole('button', { name: /^Usuários$/ })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: /^Gerenciamento$/ })).toHaveCount(0);
+
+      // Abas QUE vê agora (acesso total, menos o exclusivo do 2626)
+      await expect(page.getByRole('button', { name: /^Funcionários$/ }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Financeiro$/ }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Erros$/ }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Admin$/ }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Usuários$/ }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Gerenciamento$/ }).first()).toBeVisible();
+
+      // Só Pagamentos Driver continua fora — exclusivo do 2626, independe da permissão salva.
+      await expect(page.getByRole('button', { name: /^Pagamentos Driver$/ })).toHaveCount(0);
     });
 
     test('H2. Admin 8888 logout limpa state corretamente', async ({ page }) => {
