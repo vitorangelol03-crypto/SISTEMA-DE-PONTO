@@ -132,7 +132,12 @@ describe.skipIf(!HAS_SERVICE_ROLE)(
     let companyId = '';
     let employeeId = '';
     let cpf = '';
-    const today = new Date().toISOString().slice(0, 10);
+    // Data em UTC (toISOString) diverge da data que o edge fn grava
+    // (getBrazilDateString(), America/Sao_Paulo) na janela ~21h-00h BRT, onde o
+    // UTC já virou o dia mas o Brasil não — achado real em CI (01/09/2026): o
+    // supaSelect por `date=eq.{today}` voltava vazio e `att` saía `undefined`.
+    // Mesmo padrão já usado em tests/26-multi-company-ui-isolation.spec.ts.
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
     beforeAll(async () => {
       expect(SUPABASE_URL).toMatch(/^https:\/\//);
