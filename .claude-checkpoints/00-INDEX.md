@@ -2,8 +2,21 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-02** (as 3 travas exclusivas do 2626 — Ponto/Driverpay/
-> Aprovação — viraram permissão normal configurável).
+> Última atualização: **2026-09-02** (permissão "Ver valores" em Pagamentos Driver — pedido
+> original do Victor, agora implementada).
+
+> ✅ **Permissão "Ver valores" em Pagamentos Driver** (`cb68c5e`,
+> `CHECKPOINT_SESSAO_2026-09-01.md` §12): o pedido ORIGINAL do Victor desta madrugada
+> ("funcionário lança desconto sem ver o total do driver") — só virou possível depois da
+> remoção das travas exclusivas (item anterior). `driverpay.viewValues` nova (default true,
+> aditivo) mascara R$ como "•••" em **89 pontos, 14 arquivos** (grade, modal de
+> desconto/vale/Zapex, espelho, relatório, notas/prints recebidos, correção de contagem) —
+> campo de DIGITAR valor novo continua normal. É mascaramento de UI (mesma categoria do
+> resto do sistema hoje), não corte de coluna no SELECT — ressalva registrada. Validado:
+> tsc+lint+build limpos, 1325/1325 unit, **E2E novo `tests/105`** (3/3 sem retry, prova as
+> duas pontas com login real: supervisor sem a permissão vê "•••" na grade e no desconto já
+> lançado mas consegue lançar novo; com a permissão vê R$ normal) + regressão 4/4 nos
+> arquivos que mais exercitam os componentes tocados.
 
 > ✅ **As 3 travas exclusivas do 2626 removidas, viram permissão normal** (`cc81722`,
 > `CHECKPOINT_SESSAO_2026-09-01.md` §11): Victor pediu permissão granular "mostra valores"
@@ -120,12 +133,14 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Sessão 01→02/09 — as 3 travas exclusivas do 2626 (Ponto/Driverpay/Aprovação de Cadastro)
-viraram permissão normal, configurável, no ar** (`cc81722`, §11 do checkpoint). Só o 2626
-segue com bypass incondicional. Pendente: a feature que motivou tudo isso (permissão
-granular "mostra valores" em Pagamentos Driver) ainda não foi implementada — só o
-pré-requisito. Ver `CHECKPOINT_SESSAO_2026-09-01.md` §11 pro detalhe, incluindo achados de
-teste (`56`/`61` do driverpay) reportados e não consertados.
+**Sessão 01→02/09 — pedido original do Victor entregue: permissão "Ver valores" em
+Pagamentos Driver no ar** (`cb68c5e`, §12 do checkpoint), depois das 3 travas exclusivas do
+2626 (Ponto/Driverpay/Aprovação de Cadastro) terem virado permissão normal configurável
+(`cc81722`, §11 — pré-requisito arquitetural). Só o 2626 segue com bypass incondicional. Ver
+`CHECKPOINT_SESSAO_2026-09-01.md` §11-§12 pro detalhe, incluindo achados de teste
+(`56`/`61` do driverpay) reportados e não consertados (pré-existentes, sem relação com esta
+leva). Pendente: "máximo controle em cada aba" (pedido mais amplo) só foi atendido em
+Pagamentos Driver — as outras 10 abas não foram auditadas.
 
 **Sessão 01/09 — rework de Usuários/Permissões/Auditoria, Fase A no ar.** Cadastro
 completo (nome+telefone), redefinir senha (padrão + troca obrigatória), edge fn

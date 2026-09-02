@@ -419,11 +419,48 @@ ANTES de aplicar, e expliquei isso ao Victor junto do pedido de OK:
 - `git push` feito (`cc81722`), CI disparado — conferir resultado no próximo checkpoint/sessão.
 
 **Em aberto:**
-- Pedido original do Victor (permissão granular "mostra valores" em Pagamentos Driver, pra
-  alguém lançar desconto sem ver o total do driver) agora está TECNICAMENTE desbloqueado
-  (Driverpay é módulo de permissão normal) mas **ainda não foi implementado** — só o
-  pré-requisito arquitetural (esta leva) foi feito.
-  "QUERO MAXIMO DE CONTROLE POSSIVEL EM CADA ABA" (o pedido mais amplo) também não foi
-  atendido além de remover as 3 travas — não fiz auditoria de "que permissão granular falta
-  em cada aba".
+- "QUERO MAXIMO DE CONTROLE POSSIVEL EM CADA ABA" (o pedido mais amplo) só foi atendido em
+  Pagamentos Driver (§12 abaixo) — não fiz auditoria de "que permissão granular falta" nas
+  outras 10 abas.
 - `56`/`61` (achado acima) — decidir se vale investigar/consertar numa leva própria.
+
+## 12. ✅ Permissão "Ver valores" em Pagamentos Driver — implementada (`cb68c5e`)
+
+Pedido original do Victor (print da tela de Permissões): "tem um funcionário pra lançar os
+descontos mas não quero que ele veja o valor total do driver". Só ficou possível DEPOIS do
+§11 (antes, Driverpay inteiro era exclusivo do 2626, sem meio-termo). Perguntei o escopo via
+`AskUserQuestion` — "só grade + modal de desconto" vs. "tudo (grade, modal, espelho,
+relatório, histórico, Zapex...)" — Victor escolheu **tudo**.
+
+**Implementado:** `driverpay.viewValues` nova (default `true` nos 3 presets — aditivo,
+ninguém perde nada até o Victor desligar na tela dele) + `formatBRLIf(valor, canView)` em
+`driverPayShared.ts` (mostra `formatBRL` normal ou `•••` quando `canView=false`). Aplicado
+em **89 pontos de exibição de R$ em 14 arquivos**: `DriverRow`/`DriverList` (grade
+desktop+mobile, individual e por grupo), `DiscountModal`/`ValeModal`/`ZapexModal` (valores já
+lançados + total — o campo pra DIGITAR um valor novo continua normal, é o funcionário
+lançando o PRÓPRIO número), `DriverMirrorPreviewDialog` (prévia do espelho antes de
+publicar — 25 pontos, o maior arquivo), `ReportOptionsModal`, `MarkPaidModal`,
+`PeriodConcludeModal`, `ClosedPeriodsDebtModal`, `DiscountSearchModal`,
+`NotasRecebidasModal`, `EspelhosRecebidosModal` (inclusive a correção de contagem
+`CorrigirContagem`, que mostra o efeito em R$ de mudar a quantidade). Nenhuma mudança em
+banco/RLS — é mascaramento de UI (a mesma categoria de todo o resto do sistema de permissão
+hoje: gate de ação + esconde o número; não é um SELECT com coluna cortada no banco).
+
+**Validado:** typecheck+lint+build limpos · **1325/1325 unitários** (suíte inteira, 0
+regressão real — os "2 errors" são o timeout de worker do vitest já documentado, exit 0) ·
+**E2E novo `tests/105-driverpay-view-values.spec.ts`** (3/3, sem retry): 2626 cria driver
+descartável + lança desconto real de R$ 25,00 → supervisor descartável (`7772`, RPC
+`_test_create_supervisor_with_perms`, só `driverpay.view`+`manageDiscount`=true,
+`viewValues`=false) vê "•••" na grade E no desconto já lançado, mas continua conseguindo
+digitar um desconto novo → contraprova: o MESMO supervisor com `viewValues=true` vê os R$
+normalmente. Regressão dirigida nos 3 arquivos que mais exercitam os componentes tocados
+(`57`-edições, `60`-espelhos, `66`-provas de desconto) — 4/4, sem retry, caminho padrão
+(valores visíveis, 2626/9999) intacto.
+
+**Fora de escopo desta leva (não confundir com bug):** isto é mascaramento de UI, não uma
+segunda camada de segurança tipo RLS — alguém com acesso a devtools/rede ainda vê o número
+cru na resposta da API, igual toda ação de permissão hoje que não seja gate de ESCRITA
+(`ensurePerm` já bloqueia a escrita de verdade; só a LEITURA/exibição é que é só de UI). Se o
+Victor quiser esconder de verdade no nível do banco (SELECT com coluna cortada), é uma leva
+bem maior e mais arriscada — mesma ressalva que já valia pra "enforcement de leitura" desde
+a Fase B (§9.2).
