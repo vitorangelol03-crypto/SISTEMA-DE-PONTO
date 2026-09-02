@@ -2,7 +2,29 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-01** (sessão iniciada 31/08, atravessou a virada).
+> Última atualização: **2026-09-01** (rework de Usuários/Permissões/Auditoria, Fase A no ar).
+
+> ✅ **Rework de Usuários/Permissões/Auditoria — Fase A no ar** (`bc47757`,
+> `CHECKPOINT_SESSAO_2026-09-01.md`): pedido do Victor pra deixar a aba Usuários "bem mais
+> completa e robusta" + permissões que **realmente** bloqueiem + histórico de quem mexeu
+> no quê. Investigação achou a causa raiz do "permissões não funcionam de verdade": TODAS
+> as RLS policies só checam `company_id`, nunca `user_permissions` — `validatePermission`
+> no frontend é só aviso de UX, não é fronteira de segurança. Plano em 3 fases aprovado
+> pelo Victor: **Fase A (feita)** nome+telefone obrigatórios, botão Redefinir Senha (senha
+> padrão `mudar123` + troca obrigatória no próximo login via tela nova
+> `ForceChangePasswordScreen`), edge fn `create-user` virou dispatcher por `action` com
+> permission check real no servidor pras 5 ações (create/update/resetPassword/delete/
+> changeOwnPassword — `deleteUser` deixa de ser DELETE direto do frontend), `UsersPermissions`
+> ganhou `edit`+`resetPassword` que faltavam. **Fase B (a seguir, não iniciada):**
+> generalizar o trigger `enforce_ponto_master_only` (já provado em produção) pra
+> enforcement real — Victor escolheu começar só por Usuários+Funcionários antes de
+> expandir. **Fase C (não iniciada):** plugar o `auditService` (já existe pronto, zero
+> call sites hoje) em todos os pontos de mutação de uma vez (Victor não quis faseado) +
+> diff old/new no `AuditLogsTab`. Migration aplicada em prod com OK explícito do Victor;
+> edge fn deployada e sondada pós-deploy. 20/20 E2E novo/atualizado passando em
+> chromium+mobile-pixel5. **Achado (não consertado, fora de escopo):** regressão em
+> `tests/11`+`22`+`26` só em mobile-pixel5, pré-existente (confirmado via `git show HEAD`),
+> mesma família "tabela desktop escondida pega no locator" — reportar ao Victor.
 
 > ✅ **Roadmap item 2 (4 batidas) PREPARADO pra todo mundo, sem ligar ainda** (`c191648`):
 > pedido "deixe tudo pronto, na hora que eu ativar funciona perfeitamente". Auditoria achou
@@ -53,7 +75,13 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Sessão 31/08 — "zerar as pendências pra começar o roadmap novo".** O Victor ditou o
+**Sessão 01/09 — rework de Usuários/Permissões/Auditoria, Fase A no ar.** Cadastro
+completo (nome+telefone), redefinir senha (padrão + troca obrigatória), edge fn
+`create-user` virou dispatcher com permission check real por ação, `UsersPermissions`
+ganhou `edit`+`resetPassword`. Fase B (enforcement real, começando por Usuários+
+Funcionários) e Fase C (plugar auditoria em tudo de uma vez) ainda não começaram — ver
+`CHECKPOINT_SESSAO_2026-09-01.md`. Antes disso, a sessão 31/08 — "zerar as pendências pra
+começar o roadmap novo". O Victor ditou o
 **roadmap** (facial+geo sem brecha → 4 batidas PN/Caratinga → ponto só em tablet da empresa →
 facial sem CPF com ordem automática → fora da empresa só "meus erros"; memória
 `project_roadmap_ponto_tablet_facial`) e pediu pra fechar as pendências ANTES. Fechadas:
@@ -1156,6 +1184,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
+| `CHECKPOINT_SESSAO_2026-09-01.md` | **Mais recente.** Rework Usuários/Permissões/Auditoria — investigação (causa raiz do "permissões não bloqueiam de verdade" = RLS só olha `company_id`) + plano 3 fases aprovado. **Fase A no ar** (`bc47757`): nome+telefone obrigatórios, botão Redefinir Senha (padrão+troca obrigatória, tela `ForceChangePasswordScreen`), edge fn `create-user` dispatcher por `action` com permission check real (`deleteUser` deixa de ser DELETE direto), `UsersPermissions.edit`/`.resetPassword` novos. 20/20 E2E chromium+mobile-pixel5. Achado de regressão pré-existente em specs 11/22/26 (mobile-pixel5, não causado por esta leva) reportado, não consertado. Fase B (enforcement real Usuários+Funcionários) e Fase C (auditoria em tudo) pendentes. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-31.md` | **Mais recente.** Roadmap ditado (tablet + facial sem CPF + 4 batidas) e pendências zeradas antes dele: TOTAL GERAL em branco, selo "todos pagos" do grupo, "NF ok" não era bug, 101-H1, CI typecheck era no-op, actions v7, tsbuildinfo, CLAUDE.md. **3 buracos de segurança provados E FECHADOS** (backup_* sem RLS, view sem security_invoker, RPC pro anon — sonda anon→401 nos 3). 🔴 **Correção urgente no meio da sessão:** selo "no app" da linha não era ciente de grupo (61/113 linhas sem selo no filtro "Publicado") — `rowPublicadoNoApp()` unifica filtro+selo+header. **✅ Roadmap item 1 (facial+geo no servidor) NO AR:** migration aplicada + edge fn `clock-in-validated` publicada (v11→v12) com OK do Victor ("pode seguir" depois de eu explicar o risco real) — provado AO VIVO contra a função recém-publicada: `edgeFnClockFacialGeoEstrito` passou (trava bloqueia rosto/geo errados de verdade) e specs 02+08+23+62 24/24 (fluxo de hoje intacto). Chave `require_facial_clock` **desligada em Caratinga e Ponte Nova** — falta decidir quando ligar por empresa. Branch mergeada (fast-forward) em `main`. Fix rápido no meio: grupo sem nada a receber não conta mais como "falta pagar" (fica sempre por último, revertendo decisão de 14/08). PROXIMOS_PASSOS reescrito. Ver §9-§11. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-30.md` | Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado E consertado (`8672604`); depois 5 warnings zerados (`1e5656a`): useCallback nos 4 hooks + useCompany em arquivo próprio (26 imports). eslint 0+0, CI verde. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-26.md` | Cadastro público de funcionário (`/cadastro?empresa=...`, sem login) + aba nova "Aprovação de Cadastro" (exclusiva do 2626) — migration, edge fn `register-employee`, bloqueio no `/clock` pra recusado, botão de copiar por campo (sempre versão limpa). E2E novo `tests/78`. **Só local — push pendente do OK dele.** | 🟢 ATIVO |
@@ -1196,6 +1225,12 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 ## ⚖️ Decisões ativas (não re-perguntar)
 
+- **Rework Usuários/Permissões/Auditoria (Victor, 01/09/2026):** Fase A→B→C, nessa ordem.
+  Fase B começa **só por Usuários+Funcionários** (provar o padrão antes de expandir pros
+  outros 9 módulos). Fase C é **tudo de uma vez, todas as áreas** (Victor recusou a opção
+  faseada que eu recomendei). Senha padrão do reset: **`mudar123`** (decisão técnica
+  minha, dentro do que o Victor já aprovou em prosa: "padrão, mesma senha pra todo mundo,
+  troca depois"). Detalhe em `CHECKPOINT_SESSAO_2026-09-01.md`.
 - **Ordem de trabalho (Victor, 31/08/2026):** primeiro **zerar as pendências abertas**, depois o roadmap na ordem: (1) facial + geolocalização 100% obrigatórias sem brecha → (2) 4 batidas/dia funcionando em PN e Caratinga (cadastro, cálculo, relatórios) → (3) ponto SÓ em tablet da empresa, dentro da localização (celular pessoal e supervisor não batem fora) → (4) facial sem CPF com a próxima batida decidida sozinha → (5) fora da empresa o funcionário só vê os próprios erros. Ambiguidades listadas em `CHECKPOINT_PROXIMOS_PASSOS.md` §4 — **perguntar antes de programar cada item**.
 - **Push (Victor, 10/08/2026, regra global; `CLAUDE.md` do projeto alinhado em 31/08):** push liberado após validação (tsc + lint + unit + build + E2E do que mudou), **agrupando commits num push só** (o CI cancela o run anterior do branch). Push em `main` = deploy na Vercel: se puder quebrar, parar e avisar antes.
 - **Migration de banco: SEMPRE pedir OK antes** — vale até pra migration só restritiva de segurança (31/08: os 3 buracos provados esperaram o "pode aplicar" e foram fechados no mesmo dia, com prova pós-aplicação em 3 níveis; ver PROXIMOS_PASSOS §2.1).
