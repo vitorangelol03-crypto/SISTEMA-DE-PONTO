@@ -382,7 +382,11 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     // 1. Caratinga (default): tabela populada com o employee CT; o de PN NÃO vaza.
     await goToTab(page, 'Financeiro');
     await expect(page.locator('tbody tr').first()).toBeAttached({ timeout: 15_000 });
-    await expect(page.getByText(ctName).first()).toBeVisible({ timeout: 10_000 });
+    // .and(':visible') (não só .first()): tabela desktop e card mobile de
+    // FinancialTab coexistem no DOM (só um fica visível via CSS) — sem o
+    // filtro de visibilidade, .first() pode pegar a linha da tabela escondida
+    // em viewport mobile (achado rodando em mobile-pixel5, 01/09/2026).
+    await expect(page.getByText(ctName).and(page.locator(':visible')).first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(pnName)).toHaveCount(0, { timeout: 5_000 });
 
     // 2. Trocar empresa + re-navegar
@@ -390,7 +394,7 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     await goToTab(page, 'Financeiro');
 
     // 3. PN: employee de PN visível; o de CT NÃO vaza.
-    await expect(page.getByText(pnName).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(pnName).and(page.locator(':visible')).first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(ctName)).toHaveCount(0, { timeout: 5_000 });
   });
 
@@ -405,6 +409,11 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
    * Tentativas Faciais, Suspeitas), só que agora o que se verifica é o isolamento.
    */
   test('9. Admin: cada empresa vê só as SUAS tentativas de GPS e faciais (isolamento real)', async ({ page }) => {
+    // 2 ciclos completos de abrirAdmin (nav + senha + esperar até 20s) +
+    // asserts (até 20s cada) somados facilmente estouram o timeout padrão de
+    // 30s do playwright.config — achado em CI (01/09/2026), timeout puro sem
+    // erro de asserção específico, tanto em chromium quanto mobile-pixel5.
+    test.setTimeout(90_000);
     const s = getClient();
     const ctName = 'PW Test Iso Adm CT';
     const pnName = 'PW Test Iso Adm PN';
@@ -441,16 +450,25 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
       // Igual ao teste 3: o nome aparece num <option> HIDDEN do filtro de
       // funcionário do AdminTab, então o assert vai na LINHA da tabela.
       const linha = (nome: string) => page.locator('tbody tr', { hasText: nome });
+      // Só pro "aparece" (.first().toBeVisible): o card mobile do AdminTab é um
+      // <div> (não <tr>), então filtrar `tbody tr` por :visible ainda dava zero
+      // match em viewport mobile — usa getByText (bate no <td> desktop E no
+      // <div> mobile) + :visible pra pegar SÓ a representação visível de fato
+      // (achado em mobile-pixel5, 01/09/2026). NÃO aplicar no "não aparece"
+      // (toHaveCount(0) abaixo) — isolamento de verdade exige zero linhas no
+      // DOM, visíveis ou não (e `tbody tr` já cobre isso: a tabela desktop
+      // sempre é renderizada junto, só escondida por CSS).
+      const linhaVisivel = (nome: string) => page.getByText(nome).and(page.locator(':visible'));
 
       // 1. Caratinga: vê o SEU funcionário nas tentativas; o de PN não vaza.
       await abrirAdmin();
-      await expect(linha(ctName).first()).toBeVisible({ timeout: 20_000 });
+      await expect(linhaVisivel(ctName).first()).toBeVisible({ timeout: 20_000 });
       await expect(linha(pnName)).toHaveCount(0, { timeout: 5_000 });
 
       // 2. Ponte Nova: o inverso (re-autentica — o switch derruba a sessão do painel).
       await switchCompany(page, 'Ponte Nova');
       await abrirAdmin();
-      await expect(linha(pnName).first()).toBeVisible({ timeout: 20_000 });
+      await expect(linhaVisivel(pnName).first()).toBeVisible({ timeout: 20_000 });
       await expect(linha(ctName)).toHaveCount(0, { timeout: 5_000 });
     } finally {
       for (const id of [ctId, pnId]) {

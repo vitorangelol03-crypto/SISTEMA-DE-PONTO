@@ -125,8 +125,10 @@ test.describe('Permissions — Catálogo no modal de Permissões', () => {
   test('modal lista permissões de Ponto', async ({ page }) => {
     await loginAs(page, ADMIN);
     await goToTab(page, 'Usuários');
-    const row = page.locator('tbody tr').filter({ hasText: /01/ }).first();
-    await row.getByTitle('Gerenciar Permissões').click();
+    // data-testid+:visible (não getByTitle/tbody tr): tabela desktop e card
+    // mobile coexistem no DOM (achado rodando em mobile-pixel5, 01/09/2026).
+    const row = page.locator('[data-testid="user-row"]:visible').filter({ hasText: /01/ }).first();
+    await row.getByRole('button', { name: /Permiss/i }).click();
     const modal = page.locator('[class*="max-w-4xl"]');
     await modal.getByRole('button', { name: /^Ponto/ }).click();
     for (const txt of [
@@ -142,8 +144,10 @@ test.describe('Permissions — Catálogo no modal de Permissões', () => {
   test('modal lista permissões financeiras (B/C1/C2)', async ({ page }) => {
     await loginAs(page, ADMIN);
     await goToTab(page, 'Usuários');
-    const row = page.locator('tbody tr').filter({ hasText: /01/ }).first();
-    await row.getByTitle('Gerenciar Permissões').click();
+    // data-testid+:visible (não getByTitle/tbody tr): tabela desktop e card
+    // mobile coexistem no DOM (achado rodando em mobile-pixel5, 01/09/2026).
+    const row = page.locator('[data-testid="user-row"]:visible').filter({ hasText: /01/ }).first();
+    await row.getByRole('button', { name: /Permiss/i }).click();
     const modal = page.locator('[class*="max-w-4xl"]');
     await modal.getByRole('button', { name: /^Financeiro/ }).click();
     for (const txt of [
@@ -159,8 +163,10 @@ test.describe('Permissions — Catálogo no modal de Permissões', () => {
   test('modal lista permissões de erros (createByValue, viewTriage, distribuir)', async ({ page }) => {
     await loginAs(page, ADMIN);
     await goToTab(page, 'Usuários');
-    const row = page.locator('tbody tr').filter({ hasText: /01/ }).first();
-    await row.getByTitle('Gerenciar Permissões').click();
+    // data-testid+:visible (não getByTitle/tbody tr): tabela desktop e card
+    // mobile coexistem no DOM (achado rodando em mobile-pixel5, 01/09/2026).
+    const row = page.locator('[data-testid="user-row"]:visible').filter({ hasText: /01/ }).first();
+    await row.getByRole('button', { name: /Permiss/i }).click();
     const modal = page.locator('[class*="max-w-4xl"]');
     await modal.getByRole('button', { name: /^Erros/ }).click();
     for (const txt of [
