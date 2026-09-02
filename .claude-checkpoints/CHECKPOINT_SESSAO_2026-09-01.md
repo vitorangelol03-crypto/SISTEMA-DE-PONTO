@@ -325,3 +325,9 @@ tela do 8888 normalmente. tsc + lint + build limpos.
 **Em aberto:** Victor não pediu (e não mexi) enforcement de LEITURA (SELECT) nem tornar a
 "empresa que cada um vê" editável por UI — hoje é só o bypass de RLS que já existia,
 inalterado. Se ele quiser isso configurável de verdade no futuro, é uma leva nova.
+
+**CI pegou 1 teste desatualizado, corrigido (`6c638e7`):** `tests/101-supremo-pn.spec.ts`
+H1 esperava 8888 SEM acesso a Usuários/Gerenciamento — premissa correta ANTES desta
+migration, agora o oposto do pretendido (8888 ganhou acesso total de propósito).
+Atualizado pra esperar acesso total (menos Pagamentos Driver, que continua exclusivo do
+2626). 25/25 do arquivo inteiro verde depois do fix.
