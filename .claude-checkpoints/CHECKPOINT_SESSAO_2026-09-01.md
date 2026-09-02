@@ -193,11 +193,13 @@ GPS/faciais): sem `data-testid` pra usar, trocado por `getByText(...).and(':visi
 ser `<tr>`, então `tbody tr` nunca ia bater lá (não bastava só adicionar `:visible`).
 **56/56 chromium+mobile-pixel5, typecheck limpo.** Nenhum código do app tocado — só teste.
 
-## 9. 🟡 Fase B — migration escrita, aguardando OK do Victor pra aplicar
+## 9. ✅ Fase B — APLICADA em produção e validada ao vivo (`4759f2e`)
 
-Ele mandou "pode começar a fase B" e foi tomar banho. Investigado + migration escrita
-(`supabase/migrations/20260901180000_fase_b_enforcement_usuarios_funcionarios.sql`, ainda
-NÃO aplicada — regra "migration sempre pede OK" vale mesmo com o sinal verde geral).
+Ele mandou "pode começar a fase B" e foi tomar banho; migration escrita, apresentada, e
+**"pode aplicar" explícito recebido** antes de rodar (regra "migration sempre pede OK"
+respeitada mesmo com o sinal verde geral já dado antes).
+(`supabase/migrations/20260901180000_fase_b_enforcement_usuarios_funcionarios.sql`,
+aplicada via `apply_migration`, commitada depois de validada).
 
 Fecha, com trigger no banco (mesmo padrão do `enforce_ponto_master_only`, já provado em
 produção): `users` (create/edit/delete real, hoje já protegido pela edge fn mas sem
@@ -217,3 +219,38 @@ de aplicar. Decisão deliberadamente FORA desta migration: enforcement de LEITUR
 Victor falou em "realmente tira a visão", que pode significar isso também, mas é bem mais
 arriscado (relatórios/joins hoje dependem de leitura ampla) — fica pra perguntar depois,
 separado desta leva.
+
+### 9.1. Validação pós-apply
+
+Confirmado com SQL direto que os 4 triggers existem e estão `enabled` (`tgenabled='O'`):
+`trg_enforce_users_permission_check`, `trg_enforce_user_permissions_permission_check`,
+`trg_enforce_employees_permission_check` (novos) + `trg_enforce_ponto_master_only`
+(já existia, intacto). Tentei uma sonda negativa direta (JWT real do supervisor 04 —
+restrito, `employees.edit=false`/`users.*=false` confirmado no banco — tentando um UPDATE
+via REST puro) mas o classificador do Claude Code bloqueou a chamada `curl` direta contra
+prod (razoável — é mutação bruta em prod). Validação girou então pra bateria de testes
+E2E reais (JWT de usuário de verdade, não bypass de service_role):
+
+**28/28 verdes** (`tests/05`, `21`, `39`, `78`, `80`, `37`, `47`, `102`, chromium): criar/
+editar/excluir funcionário via UI, cadastro público → aprovação (exclusiva do 2626, mesmo
+critério que a migration usa — os testes 78/80 JÁ esperavam isso antes de eu tocar em
+nada, confirma que meu mapeamento bateu com o comportamento real), criar/editar usuário,
+fluxo completo de redefinir senha. `tests/28` (import em massa): o teste que REALMENTE
+insere no banco (`2. Importar 3 funcionários OK... 3 inseridos`) passou — prova que
+`employees.import` funciona pelo trigger. 2 testes desse mesmo arquivo falharam
+(`getByText('Erros')` hidden em chromium) mas são validação 100% client-side (preview
+antes de qualquer escrita no banco) — confirmado que não têm NENHUMA relação com a
+migration (zero interação com banco nesses 2 casos específicos); reportado ao Victor como
+achado à parte, não investigado a fundo (fora do escopo desta leva).
+
+typecheck limpo, build não precisou rodar de novo (migration não mexe em frontend).
+
+### 9.2. Em aberto pra próxima leva
+
+- Fase B só cobre 2 dos 11 módulos (Usuários + Funcionários) — expandir pros outros 9 é
+  decisão explícita do Victor pra quando ele quiser.
+- Enforcement de LEITURA (SELECT) — deliberadamente fora desta migration, mais arriscado.
+- Fase C (auditoria) nem começou.
+- Os 2 testes de `tests/28-employee-import-v2.spec.ts` (`Erros` hidden, client-side,
+  achado nesta leva mas não investigado) — mesma categoria dos achados do §5/§8: reportar
+  e perguntar se vale consertar numa leva separada.

@@ -28,11 +28,13 @@
 > BRT que o edge fn grava — só quebrava na janela ~21h-00h BRT; não era bug da Fase A,
 > corrigido junto. **Os 3 specs de mobile-pixel5 também consertados** (`d1c4e99`, a pedido
 > dele — §8 do checkpoint): 56/56 chromium+mobile-pixel5, só teste, zero código do app
-> tocado. **Fase B: migration escrita, aguardando OK dele pra aplicar** (§9) — trigger no
-> banco (mesmo padrão do `enforce_ponto_master_only`) pra `users`+`user_permissions`+
-> `employees`; achado sério no caminho: `saveUserPermissions` fazia UPDATE direto SEM
-> NENHUM check de permissão (só a UI escondia o botão) — qualquer usuário da empresa
-> podia se auto-conceder `managePermissions` via REST direto.
+> tocado. **✅ Fase B APLICADA em produção** (`4759f2e`, §9, OK explícito do Victor antes
+> de aplicar) — trigger no banco (mesmo padrão do `enforce_ponto_master_only`, já provado)
+> pra `users`+`user_permissions`+`employees`; achado sério no caminho: `saveUserPermissions`
+> fazia UPDATE direto SEM NENHUM check de permissão (só a UI escondia o botão) — qualquer
+> usuário da empresa podia se auto-conceder `managePermissions` via REST direto, fechado.
+> Validado com 28 E2E reais (JWT de usuário de verdade) sem regressão — §9.1. Só mutação
+> (SELECT fica pra depois); só 2 dos 11 módulos (decisão do Victor); Fase C nem começou.
 
 > ✅ **Roadmap item 2 (4 batidas) PREPARADO pra todo mundo, sem ligar ainda** (`c191648`):
 > pedido "deixe tudo pronto, na hora que eu ativar funciona perfeitamente". Auditoria achou
@@ -1235,10 +1237,13 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 - **Rework Usuários/Permissões/Auditoria (Victor, 01/09/2026):** Fase A→B→C, nessa ordem.
   Fase B começa **só por Usuários+Funcionários** (provar o padrão antes de expandir pros
-  outros 9 módulos). Fase C é **tudo de uma vez, todas as áreas** (Victor recusou a opção
-  faseada que eu recomendei). Senha padrão do reset: **`mudar123`** (decisão técnica
-  minha, dentro do que o Victor já aprovou em prosa: "padrão, mesma senha pra todo mundo,
-  troca depois"). Detalhe em `CHECKPOINT_SESSAO_2026-09-01.md`.
+  outros 9 módulos) — **aplicada em produção** (`4759f2e`) com OK explícito antes do
+  `apply_migration`. Fase C é **tudo de uma vez, todas as áreas** (Victor recusou a opção
+  faseada que eu recomendei) — ainda não iniciada. Senha padrão do reset: **`mudar123`**
+  (decisão técnica minha, dentro do que o Victor já aprovou em prosa: "padrão, mesma senha
+  pra todo mundo, troca depois"). Enforcement de Fase B é só MUTAÇÃO — leitura (SELECT)
+  ficou de fora de propósito, decisão separada e mais arriscada, perguntar antes. Detalhe
+  em `CHECKPOINT_SESSAO_2026-09-01.md`.
 - **Ordem de trabalho (Victor, 31/08/2026):** primeiro **zerar as pendências abertas**, depois o roadmap na ordem: (1) facial + geolocalização 100% obrigatórias sem brecha → (2) 4 batidas/dia funcionando em PN e Caratinga (cadastro, cálculo, relatórios) → (3) ponto SÓ em tablet da empresa, dentro da localização (celular pessoal e supervisor não batem fora) → (4) facial sem CPF com a próxima batida decidida sozinha → (5) fora da empresa o funcionário só vê os próprios erros. Ambiguidades listadas em `CHECKPOINT_PROXIMOS_PASSOS.md` §4 — **perguntar antes de programar cada item**.
 - **Push (Victor, 10/08/2026, regra global; `CLAUDE.md` do projeto alinhado em 31/08):** push liberado após validação (tsc + lint + unit + build + E2E do que mudou), **agrupando commits num push só** (o CI cancela o run anterior do branch). Push em `main` = deploy na Vercel: se puder quebrar, parar e avisar antes.
 - **Migration de banco: SEMPRE pedir OK antes** — vale até pra migration só restritiva de segurança (31/08: os 3 buracos provados esperaram o "pode aplicar" e foram fechados no mesmo dia, com prova pós-aplicação em 3 níveis; ver PROXIMOS_PASSOS §2.1).
