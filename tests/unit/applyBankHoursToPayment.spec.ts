@@ -250,8 +250,10 @@ describe('applyBankHoursToPayment', () => {
     expect(r.paymentBefore).toBe(1000);
     expect(r.paymentAfter).toBe(1025);
     expect(r.logId).toBe('log-1');
-    // Sub-fase 8.5: RPC chamada 1× (substitui 3 ops anteriores)
-    expect(mockSupabase.rpc).toHaveBeenCalledTimes(1);
+    // Sub-fase 8.5: escrita vira 1 RPC (substitui 3 ops anteriores). 03/09/2026:
+    // leitura do payment âncora também passou a ser RPC (get_payments_masked,
+    // REST-bypass fix) — total agora é 2 chamadas de rpc().
+    expect(mockSupabase.rpc).toHaveBeenCalledTimes(2);
     expect(mockSupabase.rpc).toHaveBeenCalledWith('apply_bank_hours_to_payment', expect.any(Object));
   });
 
@@ -362,7 +364,8 @@ describe('applyBankHoursToPayment', () => {
       attendance: [{ data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
     });
     await applyBankHoursToPayment(ARGS);
-    expect(mockSupabase.rpc).toHaveBeenCalledTimes(1);
+    // 03/09/2026: leitura do payment âncora também é RPC agora (get_payments_masked) → 2 chamadas.
+    expect(mockSupabase.rpc).toHaveBeenCalledTimes(2);
     expect(mockSupabase.rpc).toHaveBeenCalledWith(
       'apply_bank_hours_to_payment',
       expect.objectContaining({ p_zero_balance: true }),
@@ -893,8 +896,9 @@ describe('Edge cases extremos - Combo I', () => {
     // Sub-fase 8.5: o UPDATE attendance virou parte da RPC. setupSupabaseQueue
     // SUBSTITUI o mock de rpc a cada chamada, então o histórico do 1º run é
     // perdido após setup do 2º. Validamos o estado atual do mock após o 2º:
-    // 1 chamada total no mock atual, com p_zero_balance=false (run KH).
-    expect(mockSupabase.rpc).toHaveBeenCalledTimes(1);
+    // 2 chamadas no mock atual (03/09/2026: leitura get_payments_masked +
+    // escrita apply_bank_hours_to_payment com p_zero_balance=false, run KH).
+    expect(mockSupabase.rpc).toHaveBeenCalledTimes(2);
     expect(mockSupabase.rpc).toHaveBeenCalledWith(
       'apply_bank_hours_to_payment',
       expect.objectContaining({ p_zero_balance: false }),
@@ -980,9 +984,11 @@ describe('Edge cases extremos - Combo I', () => {
     // Nenhum INSERT no log e nenhum UPDATE em payment
     const logCalls = fromMock.mock.calls.filter((c) => c[0] === 'bank_hours_application_log').length;
     expect(logCalls).toBe(0);
-    // payments_v só foi chamado 1x (SELECT que retornou vazio)
+    // 03/09/2026: leitura do payment âncora não usa mais .from('payments_v')
+    // (REST-bypass fix — agora é .rpc('get_payments_masked')), então aqui é 0.
     const paymentsCalls = fromMock.mock.calls.filter((c) => c[0] === 'payments_v').length;
-    expect(paymentsCalls).toBe(1);
+    expect(paymentsCalls).toBe(0);
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('get_payments_masked', expect.any(Object));
   });
 });
 
