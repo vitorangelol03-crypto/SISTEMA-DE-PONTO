@@ -566,7 +566,14 @@ Deno.serve(async (req: Request) => {
         .eq("date", today)
         .maybeSingle();
 
-      if (existErr || !existing || !existing.entry_1_time) {
+      // Fallback pro campo legacy (entry_time): quem é migrado de 2→4 marcações no
+      // MEIO do dia já bateu a entrada pelo fluxo antigo (só entry_time, sem
+      // entry_1_time — o campo posicional só é escrito quando marking_position=1
+      // chega no request). Sem este fallback a pessoa ficava travada o resto do
+      // dia, sem jeito de bater posição 2+ (achado real, 03/09/2026 — Diendrel e
+      // Iago, CLAYTON B DOS SANTOS, migrados no meio do expediente).
+      const entry1TimeResolved = existing?.entry_1_time ?? existing?.entry_time ?? null;
+      if (existErr || !existing || !entry1TimeResolved) {
         return new Response(
           JSON.stringify({ error: "Nenhuma entrada (posição 1) registrada hoje" }),
           { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
@@ -576,13 +583,16 @@ Deno.serve(async (req: Request) => {
       const updateRecord: Record<string, unknown> = {
         company_id: effectiveCompanyId,
       };
+      // Autocura: grava o campo posicional que faltava, pra próximas leituras
+      // deste registro não precisarem mais do fallback.
+      if (!existing.entry_1_time) updateRecord.entry_1_time = entry1TimeResolved;
       if (markingPosition === 2) updateRecord.exit_1_time = now;
       if (markingPosition === 3) updateRecord.entry_2_time = now;
       if (markingPosition === 4) updateRecord.exit_2_time = now;
 
       // Posição 4 = saída final → também grava campos legacy + cálculo agregado.
       if (markingPosition === 4) {
-        const entry = new Date(existing.entry_1_time);
+        const entry = new Date(entry1TimeResolved);
         const exitTime = new Date();
         const { hoursWorked, nightHours } = calcHoursFourMarkings(
           entry,
