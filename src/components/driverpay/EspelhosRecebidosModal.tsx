@@ -115,6 +115,13 @@ const CorrigirContagem: React.FC<{
         >
           {repetido ? '⚠ ' : ''}Usar {doPrint} (do print)
         </button>
+        <button
+          type="button" disabled={aplicando} data-testid="usar-da-planilha"
+          onClick={() => onAplicar(daPlanilha)}
+          className="px-2.5 py-1.5 text-xs font-medium rounded-md bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50"
+        >
+          Usar {daPlanilha} (da planilha)
+        </button>
         <span className="text-xs text-gray-500">ou</span>
         <input
           type="number" value={outro} onChange={(e) => setOutro(e.target.value)}
