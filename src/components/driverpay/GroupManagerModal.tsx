@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Tag, Plus, Trash2, Edit2, Users, Save, X, Info, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -53,12 +53,24 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
   const [newRate, setNewRate] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Carrega os membros de cada grupo (recarrega quando groups muda apos onChanged).
+  // Carrega os membros de cada grupo — só dos que ainda não temos (grupo novo/recém-
+  // aberto). Achado real (não flake) rodando tests/56 repetidas vezes: recarregar TODOS
+  // os grupos toda vez que `groups` muda (ex.: criar um grupo novo, ou o onChanged() do
+  // próprio toggleMember) reconsultava membros que não mudaram e corria com a atualização
+  // otimista do toggleMember — a resposta tardia sobrescrevia o que já estava certo na
+  // tela e derrubava o card no meio de um clique.
+  const membersByGroupRef = useRef<Record<string, string[]>>({});
+  useEffect(() => {
+    membersByGroupRef.current = membersByGroup;
+  }, [membersByGroup]);
+
   useEffect(() => {
     let cancelled = false;
-    Promise.all(groups.map(async (g) => [g.id, await getGroupMembers(g.id)] as const))
+    const faltando = groups.filter((g) => !(g.id in membersByGroupRef.current));
+    if (faltando.length === 0) return;
+    Promise.all(faltando.map(async (g) => [g.id, await getGroupMembers(g.id)] as const))
       .then((entries) => {
-        if (!cancelled) setMembersByGroup(Object.fromEntries(entries));
+        if (!cancelled) setMembersByGroup((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
       })
       .catch((e) => console.error('Erro ao carregar membros dos grupos:', e));
     return () => {

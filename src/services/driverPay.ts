@@ -1346,6 +1346,16 @@ export const getPayments = async (
   return (data || []).map(mapPayment);
 };
 
+/**
+ * Fila por (payment_id, plataforma, rota): editar pacotes e, na sequência, a taxa da
+ * MESMA rota (ou vice-versa) dispara duas chamadas assíncronas independentes pro banco —
+ * sem serializar, a resposta que chega DEPOIS vence mesmo sendo a mais antiga, e pode
+ * apagar silenciosamente a edição mais recente do usuário. Achado real (não flake) rodando
+ * `tests/61-driverpay-mirror-separate-multiroute.spec.ts` repetidas vezes: a taxa editada
+ * por último "sumia", o total voltava pro valor com a taxa antiga.
+ */
+const upsertPackageQueue = new Map<string, Promise<unknown>>();
+
 /** Cria (se faltar) e atualiza os pacotes de um driver por (plataforma, rota). */
 export const upsertPackage = async (
   companyId: string,
@@ -1357,12 +1367,18 @@ export const upsertPackage = async (
   userId: string
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.editDriver');
-  const { error } = await supabase
-    .from('driverpay_payment_packages')
-    .upsert(
-      [{ company_id: companyId, payment_id: paymentId, platform_name: platformName, route, packages, rate_snapshot: rateSnapshot }],
-      { onConflict: 'payment_id,platform_name,route' }
-    );
+  const key = `${paymentId}|${platformName}|${route}`;
+  const prior = upsertPackageQueue.get(key) ?? Promise.resolve();
+  const run = prior.catch(() => {}).then(() =>
+    supabase
+      .from('driverpay_payment_packages')
+      .upsert(
+        [{ company_id: companyId, payment_id: paymentId, platform_name: platformName, route, packages, rate_snapshot: rateSnapshot }],
+        { onConflict: 'payment_id,platform_name,route' }
+      )
+  );
+  upsertPackageQueue.set(key, run);
+  const { error } = await run;
   if (error) throwDbError(error);
   await recomputePaymentTotals(paymentId);
 };

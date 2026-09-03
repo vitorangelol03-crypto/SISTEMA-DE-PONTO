@@ -275,6 +275,21 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const proofRequestsRef = useRef<ProofRequest[]>([]);
   const selectedPeriodIdRef = useRef<string | null>(null);
   const isReadOnlyRef = useRef(false);
+  /**
+   * Timestamp da última edição local na grade (pacotes/taxa/rota) — não persistida ainda.
+   * Achado real (não flake) rodando tests/61: a varredura automática de "espelho
+   * conferido por dispensa" (mais abaixo) roda em TODA mudança de `rows` — inclusive uma
+   * edição local que ainda não foi salva — e se ela decidir marcar/desmarcar alguém,
+   * chama `reloadPayments()`, que troca a grade INTEIRA pelo dado do servidor. Se isso
+   * cair bem no meio de uma edição (o onBlur que salva ainda não rodou/terminou), o
+   * reload apaga a edição sem avisar. Não mexe na lógica da varredura em si (existe por
+   * causa do incidente de 18/08) — só evita ela recarregar por cima de uma edição
+   * recente, deixando a próxima rodada natural (depois do onBlur) cobrir o caso.
+   */
+  const lastLocalEditAtRef = useRef(0);
+  /** Força a varredura de "espelho conferido por dispensa" (mais abaixo) a reavaliar
+   *  depois do cooldown de edição local, mesmo se `rows` não mudar de novo sozinho. */
+  const [varreduraTick, setVarreduraTick] = useState(0);
 
   useEffect(() => {
     driversRef.current = drivers;
@@ -376,6 +391,18 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   }, [company?.id]);
 
   const reloadPayments = useCallback(async () => {
+    // Espera uma edição local recente (pacotes/taxa/rota, ainda não persistida) assentar
+    // antes de recarregar. Achado real rodando tests/61 (não era flake): renomear uma
+    // rota (onCityBlur) dispara este reload SEM esperar terminar — o teste seguia
+    // editando pacotes e taxa na mesma rota, e quando o reload atrasado chegava, trocava
+    // a grade inteira pelo dado do servidor por cima da edição mais nova, sem avisar.
+    // Reconfere depois de cada espera (outra edição pode ter acontecido enquanto
+    // esperava) — limite de 20 voltas (~30s) pra nunca travar pra sempre.
+    for (let guard = 0; guard < 20; guard++) {
+      const restante = 1500 - (Date.now() - lastLocalEditAtRef.current);
+      if (restante <= 0) break;
+      await new Promise((r) => setTimeout(r, restante));
+    }
     try {
       await rebuildFromServer(selectedPeriodIdRef.current);
     } catch (e) {
@@ -649,15 +676,21 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
   const onPackageChange = useCallback(
     (paymentId: string, routeIndex: number, platformName: string, value: number) => {
-      setRows((prev) =>
-        prev.map((r) => {
+      lastLocalEditAtRef.current = Date.now();
+      setRows((prev) => {
+        const next = prev.map((r) => {
           if (r.paymentId !== paymentId) return r;
           const routes = r.routes.map((rl, i) =>
             i === routeIndex ? { ...rl, packages: { ...rl.packages, [platformName]: value } } : rl,
           );
           return { ...r, routes };
-        }),
-      );
+        });
+        // Mesmo motivo do onRateChange: sincroniza a ref na hora, não espera o
+        // useEffect de [rows] (passive effect, sem garantia de rodar antes do próximo
+        // evento no React 18).
+        rowsRef.current = next;
+        return next;
+      });
     },
     [],
   );
@@ -683,13 +716,18 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   );
 
   const onCityChange = useCallback((paymentId: string, routeIndex: number, value: string) => {
-    setRows((prev) =>
-      prev.map((r) => {
+    lastLocalEditAtRef.current = Date.now();
+    setRows((prev) => {
+      const next = prev.map((r) => {
         if (r.paymentId !== paymentId) return r;
         const routes = r.routes.map((rl, i) => (i === routeIndex ? { ...rl, route: value } : rl));
         return { ...r, routes };
-      }),
-    );
+      });
+      // Mesmo motivo do onRateChange/onPackageChange: onCityBlur lê rowsRef.current logo
+      // em seguida (prevRoute) — sincroniza na hora, não espera o useEffect de [rows].
+      rowsRef.current = next;
+      return next;
+    });
   }, []);
 
   const onCityBlur = useCallback(
@@ -767,15 +805,20 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // Taxa POR ROTA: atualiza o rate local da rota (reflete no total e no "vários" na hora).
   const onRateChange = useCallback(
     (paymentId: string, routeIndex: number, platformName: string, value: number) => {
-      setRows((prev) =>
-        prev.map((r) => {
+      lastLocalEditAtRef.current = Date.now();
+      setRows((prev) => {
+        const next = prev.map((r) => {
           if (r.paymentId !== paymentId) return r;
           const routes = r.routes.map((rl, i) =>
             i === routeIndex ? { ...rl, rates: { ...rl.rates, [platformName]: value } } : rl,
           );
           return { ...r, routes };
-        }),
-      );
+        });
+        // Sincroniza a ref NA HORA (não espera o useEffect de [rows], que no React 18 é
+        // um passive effect — não roda garantidamente antes do próximo evento).
+        rowsRef.current = next;
+        return next;
+      });
     },
     [],
   );
@@ -1524,6 +1567,18 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   useEffect(() => {
     if (!company?.id || !selectedPeriod || isReadOnly) return;
     if (!hasPermission('driverpay.editDriver')) return;
+    // Edição local muito recente (pacotes/taxa/rota, ainda não salva): não recarrega por
+    // cima agora — o `reloadPayments()` no fim desta varredura troca a grade INTEIRA pelo
+    // servidor, e se cair no meio de uma edição apaga o que a pessoa acabou de digitar sem
+    // avisar (achado real rodando tests/61 — não era flake, era isto). Normalmente a
+    // varredura roda de novo sozinha na próxima mudança de `rows`, mas se a pessoa não
+    // mexer mais na grade depois de editar, `rows` não muda de novo e a varredura ficaria
+    // pulada pra sempre — por isso agenda um retry pro fim da janela em vez de só sair.
+    const emCooldown = Date.now() - lastLocalEditAtRef.current;
+    if (emCooldown < 1500) {
+      const t = setTimeout(() => setVarreduraTick((n) => n + 1), 1500 - emCooldown + 50);
+      return () => clearTimeout(t);
+    }
     // Humano marcou/desmarcou: a varredura não passa por cima (nem pra marcar de volta).
     const linhasDaVarredura = rows.filter(
       (r) => !r.espelhoConferidoBy || r.espelhoConferidoBy === 'auto',
@@ -1558,7 +1613,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         varreduraEspelhoBusyRef.current = false;
       }
     })();
-  }, [rows, proofRequests, semPlanilha, proofProgressByPayment, company?.id, selectedPeriod, isReadOnly, hasPermission, userId, reloadPayments]);
+  }, [rows, proofRequests, semPlanilha, proofProgressByPayment, company?.id, selectedPeriod, isReadOnly, hasPermission, userId, reloadPayments, varreduraTick]);
 
   /**
    * Quem tem pacote numa plataforma pedida "pra todos" mas ficou de fora **por não estar em
