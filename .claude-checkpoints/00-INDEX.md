@@ -2,8 +2,27 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-02** (valores de Pagamentos Driver mascarados NO BANCO, não
-> só na tela — fecha o vazamento por inspecionar elemento/Network).
+> Última atualização: **2026-09-03** (3 bugs reais de corrida achados e corrigidos
+> investigando a fundo os testes `56`/`61` do driverpay — não eram flake).
+
+> ✅ **3 bugs reais de corrida em Pagamentos Driver** (`3961694`,
+> `CHECKPOINT_SESSAO_2026-09-01.md` §14): Victor pediu pra atacar os testes `56`/`61`, que
+> uma leva anterior tinha classificado (errado) como "pré-existente, sem relação". Reabri
+> com log de rede + instrumentação de estado real: eram 3 bugs de corrida de verdade, que
+> qualquer edição rápida na grade podia disparar em produção — (1) refs sincronizadas só
+> via `useEffect` (passive effect, sem garantia de ordem no React 18) faziam `onBlur` ler
+> valor antigo; (2) **causa raiz real do `61`**: `onCityBlur` dispara `reloadPayments()`
+> sem esperar terminar — se a pessoa continua editando enquanto o reload atrasado está em
+> voo, ele apaga a edição mais nova por cima sem avisar (o comentário do próprio teste, de
+> 20/07, já descrevia o sintoma sem ninguém ter achado a causa); (3) a varredura automática
+> de "espelho por dispensa" (18/08) tinha o mesmo problema. Corrigido na raiz dentro do
+> próprio `reloadPayments` (protege todo chamador): espera ~1,5s de silêncio antes de
+> recarregar. Bônus: `GroupManagerModal` refazia fetch dos 55 grupos reais da Caratinga a
+> cada mudança — agora só busca o que falta. Validado: 1345/1345 unit (0 erro, nem o
+> timeout de worker apareceu), `tests/61` 3/3 sem retry, regressão 6/6 sem retry. `56` ficou
+> com 1 falha intermitente residual (sinal diferente, parece sensibilidade real a volume de
+> dado + bot externo consumindo CPU, não bug de código — registrado, não é mais
+> "pré-existente sem investigar").
 
 > ✅ **Mascaramento de valores NO BANCO** (`3eb14bc`, `CHECKPOINT_SESSAO_2026-09-01.md` §13):
 > Victor recusou a ressalva do item anterior ("não podemos ter nenhum vazamento pelo
@@ -148,15 +167,17 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Sessão 01→02/09 — permissão "Ver valores" em Pagamentos Driver completa: UI (§12) +
-banco (§13, `3eb14bc`)** — o valor em R$ agora não sai do banco de jeito nenhum pra quem
-não tem a permissão, nem pela tela nem pelo Network do inspecionar. Veio depois das 3
-travas exclusivas do 2626 (Ponto/Driverpay/Aprovação de Cadastro) terem virado permissão
-normal configurável (`cc81722`, §11 — pré-requisito arquitetural). Só o 2626 segue com
-bypass incondicional. Ver `CHECKPOINT_SESSAO_2026-09-01.md` §11-§13 pro detalhe, incluindo
-achados de teste (`56`/`61` do driverpay) reportados e não consertados (pré-existentes, sem
-relação com esta leva). Pendente: "máximo controle em cada aba" (pedido mais amplo) só foi
-atendido em Pagamentos Driver — as outras 10 abas não foram auditadas.
+**Sessão 01→03/09 — permissão "Ver valores" em Pagamentos Driver completa (UI §12 + banco
+§13) + 3 bugs de corrida reais achados e corrigidos nos testes `56`/`61` (§14,
+`3961694`)** — a investigação mais funda dos testes revelou que a classificação anterior
+("pré-existente, sem relação") estava errada; eram bugs reais de corrida em edições rápidas
+da grade. Veio depois das 3 travas exclusivas do 2626 (Ponto/Driverpay/Aprovação de
+Cadastro) terem virado permissão normal configurável (`cc81722`, §11 — pré-requisito
+arquitetural). Só o 2626 segue com bypass incondicional. Ver
+`CHECKPOINT_SESSAO_2026-09-01.md` §11-§14 pro detalhe. Pendente (pedido do Victor,
+madrugada de 02→03/09, ainda não atacado): auditar o resto do sistema (Financeiro, C6,
+etc.) atrás do mesmo tipo de vazamento do §13, e levantar "máximo controle em cada aba" —
+só Pagamentos Driver foi coberto até aqui.
 
 **Sessão 01/09 — rework de Usuários/Permissões/Auditoria, Fase A no ar.** Cadastro
 completo (nome+telefone), redefinir senha (padrão + troca obrigatória), edge fn

@@ -522,3 +522,60 @@ em vez de "•••" — porque o banco agora manda `0`/`null` de verdade, não
 tipo de `number` pra `number | null` em cascata). Dado que "nenhuma informação vazando" era
 a prioridade do Victor, esconder ATÉ a existência do desconto é mais conservador, não menos
 seguro — só uma pequena perda de contexto pra quem tem a permissão restrita.
+
+## 14. ✅ 3 bugs reais achados e corrigidos investigando os testes 56/61 (`3961694`)
+
+Depois do §13, Victor pediu pra atacar as 3 pendências que eu tinha deixado em aberto:
+"máximo controle em cada aba" (auditoria, ainda não feita — ver §15), os 2 testes do
+driverpay reportados como pré-existentes (`56`/`61`, este parágrafo), e auditar o resto do
+sistema atrás do mesmo tipo de vazamento do §13 (ver §15).
+
+Reabri a investigação de `56`/`61` — que eu tinha classificado como "pré-existente, sem
+relação com a leva de hoje" — com mais rigor (log de rede real + instrumentação de estado
+no navegador, não só reler o código). Achei que ESTAVA errado nessa classificação: não eram
+flake nem coisa antiga — eram **3 bugs reais de corrida** que qualquer edição rápida na
+grade de Pagamentos Driver podia disparar em produção, silenciosamente, hoje mesmo:
+
+1. **`onRateChange`/`onPackageChange`/`onCityChange`** sincronizavam a réplica em `ref`
+   (`rowsRef`, usada pelos `onBlur` pra saber o valor atual) só dentro de um `useEffect` —
+   no React 18 isso é um *passive effect*, sem garantia de rodar antes do próximo evento.
+   Editar um campo e sair dele rápido podia fazer o `onBlur` ler o valor ANTIGO e persistir
+   o dado errado. Corrigido: sincroniza a ref na hora, dentro do próprio `setRows`.
+
+2. **A causa raiz de verdade do `61`** (achada só depois de instrumentar de verdade,
+   duas hipóteses anteriores minhas — corrida de rede no upsert, depois só o item 1 acima —
+   não resolveram sozinhas): `onCityBlur` (renomear rota) dispara `reloadPayments()` **sem
+   esperar terminar** — troca a grade INTEIRA pelo servidor. Se a pessoa continuar editando
+   (pacotes, taxa) enquanto esse reload ainda está em voo, ele chega atrasado e apaga a
+   edição mais nova por cima, sem avisar — exatamente o que um comentário do próprio teste,
+   de 20/07, já descrevia ("reload atrasado engole a taxa recém-digitada") sem que ninguém
+   tivesse achado a causa exata até agora. Corrigido NA RAIZ, dentro do próprio
+   `reloadPayments` (protege QUALQUER chamador, não só `onCityBlur`): espera ~1,5s de
+   silêncio depois da última edição local antes de recarregar.
+
+3. A varredura automática de "espelho conferido por dispensa" (§ já documentada em sessões
+   de agosto, existe por causa do incidente real de 18/08) roda em toda mudança de `rows`
+   — inclusive uma edição local ainda não salva — e podia disparar o mesmo tipo de reload
+   por cima. Ganhou o mesmo cooldown, com retry agendado (`setTimeout` + tick de estado) pra
+   não ficar pulada pra sempre se ninguém mexer mais na grade depois de editar.
+
+**Bônus (achado no caminho, mesma categoria):** `GroupManagerModal` recarregava os membros
+de TODOS os grupos toda vez que qualquer grupo mudava — inclusive os **55 grupos reais da
+Caratinga** — mesmo quando só UM grupo novo tinha sido criado. Corrigido: só busca os
+grupos que ainda não tem carregados, evitando um refetch caro e redundante que corria com a
+atualização otimista de quem marca/desmarca membro (`toggleMember`).
+
+**Validado:** tsc+lint+build limpos · suíte unitária inteira **1345/1345, 0 erro** (dessa
+vez nem o timeout de worker apareceu) · `tests/61` **3/3 sem retry** (era o mais
+consistentemente quebrado a noite toda) · regressão em 6 arquivos que mais exercitam
+edição de grade/desconto/saldo (`57`, `60`, `66`, `73`, `82`) — **todos limpos, 0 retry**.
+`tests/56` ficou com 1 falha intermitente residual num clique (`Membros`) logo após criar
+2 grupos — reproduzida 2x mesmo isolado, mas com sinal diferente das vezes anteriores
+("elemento cobrindo a tela", não mais o padrão de corrida investigado acima); a modal
+precisa buscar membros dos 55 grupos reais no primeiro open, o que por si só já é uma carga
+maior — e havia um bot Chrome de OUTRO projeto (Shopee/CRIADOR DE AT) consumindo CPU o
+tempo todo em paralelo (load average ~7, confirmado via `ps`/`uptime`, sem relação com este
+projeto). Não persegui mais fundo — parece mais sensibilidade a tempo por volume real de
+dado + carga externa do que um bug de código isolado, mesma categoria dos achados de `69`/
+`71` do §11. Fica registrado, não é mais tratado como "pré-existente sem investigar": os
+3 bugs de corrida acima eram reais e já estão corrigidos.
