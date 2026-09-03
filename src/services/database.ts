@@ -1092,22 +1092,17 @@ export const upsertPayment = async (
     throw new Error(permissionCheck.error || 'Permissão negada');
   }
 
-  const total = dailyRate + bonus;
-
-  const { error } = await supabase
-    .from('payments')
-    .upsert([{
-      employee_id: employeeId,
-      date,
-      daily_rate: dailyRate,
-      bonus,
-      total,
-      created_by: createdBy,
-      updated_at: new Date().toISOString(),
-      company_id: companyId,
-    }], {
-      onConflict: 'employee_id,date'
-    });
+  // 03/09/2026: UPSERT (ON CONFLICT DO UPDATE) em payments exige SELECT nas
+  // colunas de dinheiro que atualiza — REST-bypass fix travou isso pra
+  // authenticated. Passa pela function SECURITY DEFINER em vez do .upsert() direto.
+  const { error } = await supabase.rpc('upsert_payment_rate_masked', {
+    p_employee_id: employeeId,
+    p_date: date,
+    p_daily_rate: dailyRate,
+    p_bonus: bonus,
+    p_created_by: createdBy,
+    p_company_id: companyId,
+  });
 
   if (error) throw error;
 };
@@ -1320,8 +1315,6 @@ export const applyBonusToAllPresent = async (
     const newB = type === 'B' ? bonusAmount : currentB;
     const newC1 = type === 'C1' ? bonusAmount : currentC1;
     const newC2 = type === 'C2' ? bonusAmount : currentC2;
-    const newBonus = newB + newC1 + newC2;
-    const newTotal = currentDailyRate + newBonus;
 
     // bonus_breakdown reflete os valores aplicados por código.
     const existingBreakdown = (existingPayment?.bonus_breakdown ?? {}) as Record<string, number>;
@@ -1330,24 +1323,20 @@ export const applyBonusToAllPresent = async (
       [type]: bonusAmount,
     };
 
-    await supabase
-      .from('payments')
-      .upsert([{
-        employee_id: attendance.employee_id,
-        date,
-        daily_rate: currentDailyRate,
-        bonus_b: newB,
-        bonus_c1: newC1,
-        bonus_c2: newC2,
-        bonus: newBonus,
-        total: newTotal,
-        bonus_breakdown: newBreakdown,
-        created_by: createdBy,
-        updated_at: new Date().toISOString(),
-        company_id: companyId,
-      }], {
-        onConflict: 'employee_id,date'
-      });
+    // 03/09/2026: UPSERT em payments exige SELECT nas colunas de dinheiro que
+    // atualiza (REST-bypass fix) — passa pela function SECURITY DEFINER.
+    // bonus/total são recalculados dentro dela (mesma fórmula: soma dos 3 tipos).
+    await supabase.rpc('upsert_payment_bonus_masked', {
+      p_employee_id: attendance.employee_id,
+      p_date: date,
+      p_daily_rate: currentDailyRate,
+      p_bonus_b: newB,
+      p_bonus_c1: newC1,
+      p_bonus_c2: newC2,
+      p_bonus_breakdown: newBreakdown,
+      p_created_by: createdBy,
+      p_company_id: companyId,
+    });
 
     applied++;
   }
