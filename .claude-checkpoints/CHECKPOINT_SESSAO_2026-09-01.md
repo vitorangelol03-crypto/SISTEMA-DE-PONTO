@@ -672,3 +672,38 @@ mudou hoje no driverpay (só a checagem de permissão pro espelho).
 - Auditoria "máximo controle em cada aba" nos ~7 módulos que faltam (Ponto, Funcionários,
   Relatórios, Configurações, Usuários, Gerenciamento de Dados, Aprovação de Cadastro) —
   ainda não começada, não fazia parte do pedido de hoje.
+
+## 16. ✅ Ponto travava na 2ª marcação pra quem migra de 2→4 marcações no meio do dia (`d12db0d`)
+
+Victor reportou (print do WhatsApp): Diendrel bateu entrada, fez a validação facial certa,
+mas "Saída almoço" deu **"Erro ao registrar ponto"**. Pediu investigação a fundo (não
+descartar como cache sem provar) + teste especializado se fosse o caso.
+
+**Causa raiz confirmada no banco (não foi suposição)**: Diendrel é 1 de 5 funcionários que
+alguém configurou hoje pra usar "4 marcações" (`employees.marking_count = 4`, feature nova
+do roadmap — item 2, "4 batidas"). Ele **já tinha batido a entrada ANTES dessa configuração
+valer pra ele** — gravou só no campo legado (`attendance.entry_time`), não no campo por
+posição (`entry_1_time`, que só é escrito quando o request manda `marking_position: 1`). A
+tela mostrou "Entrada ✓" certinha (ela já tem fallback: `entry_1_time ?? entry_time`) — mas
+a Edge Function `clock-in-validated`, na hora de aceitar a posição 2 (Saída almoço), só
+aceitava `entry_1_time` puro, **sem esse mesmo fallback**. Resultado: travado o resto do
+dia, sem jeito de corrigir tentando de novo — bate com o relato do Victor (facial passou,
+começou a carregar, travou na hora de gravar) e explica por que ele suspeitou de cache: o
+funcionário só passou a ver a tela de 4 marcações DEPOIS de recarregar em algum momento do
+dia, quando o registro dele já tinha sido criado pelo fluxo antigo. Confirmado também o
+Iago, mesma empresa (CLAYTON B DOS SANTOS), mesmo problema, mesma hora.
+
+**Corrigido (2 partes, ambas com OK do Victor):**
+1. Destravado o registro de HOJE do Diendrel e do Iago: `UPDATE attendance SET
+   entry_1_time = entry_time WHERE ...` — só preenche o campo que faltava, não inventa
+   horário novo.
+2. `clock-in-validated` (Edge Function): mesmo fallback que a tela já usa
+   (`entry_1_time ?? entry_time`) antes de recusar a posição 2+, e "autocura" — grava o
+   campo que faltava na primeira leitura, pra não precisar do fallback de novo depois.
+   Deploy confirmado (**v14**) + sonda na rota (`OPTIONS` → 200).
+
+**Não fiz** (fora do escopo do que foi pedido, e não é este o tipo de falha): não escrevi
+um teste E2E automatizado simulando facial real (exigiria mockar a câmera/face-api, escopo
+maior) — a investigação foi por leitura de código + evidência direta no banco de produção
+(mais rápido e mais preciso pra este caso específico, já que a causa já tinha 2 casos reais
+pra comparar). Se aparecer de novo em outro cenário, vale considerar o teste automatizado.
