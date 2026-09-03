@@ -2,28 +2,36 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-03** (brecha REST fechada de verdade nas 6 tabelas de
-> hoje — function `SECURITY DEFINER` em vez de view, testada com prova real antes de
-> confiar. Driverpay, 8 tabelas, ainda pendente — já desenhado).
+> Última atualização: **2026-09-03** (brecha REST fechada e CONFIRMADA verde no CI
+> completo nas 6 tabelas de hoje — function `SECURITY DEFINER` em vez de view, 2
+> regressões reais achadas pelo CI e corrigidas. Driverpay, 8 tabelas, ainda pendente —
+> já desenhado).
 
-> ✅ **Brecha REST fechada — 1ª leva (6 tabelas de Financeiro/Erros/C6)** (migrations
-> `20260903201150` a `20260903204857`, `CHECKPOINT_SESSAO_2026-09-01.md` §17): pendência
-> do §15 resolvida com a arquitetura certa — function `SECURITY DEFINER` (não view, que
-> quebrou hoje de manhã) faz o mascaramento sem exigir NENHUM privilégio do invocador na
-> tabela crua. Testado com prova real (papel de banco sem privilégio nenhum, valor real
-> aparece pra quem pode, `NULL` pra quem não pode, 0 linhas pra empresa errada) ANTES de
-> aplicar. Achado um bug real no meio do caminho: `employeeId ?? null` não pegava string
-> vazia (só `null`/`undefined`), quebrando o filtro — corrigido pra `|| null`. Ordem
-> disciplinada (aprendida com o susto de hoje de manhã): cria function → troca código →
-> valida com E2E completo → SÓ DEPOIS revoga a tabela → valida de novo. `payments`,
-> `error_records`, `triage_errors`, `triage_distribution_employees`, `bonus_removals`
-> agora 100% bloqueadas por fora (`has_table_privilege`=false confirmado);
-> `triage_error_distributions` só precisou de REVOKE de coluna (ninguém lê o valor dela
-> na tela). Validado: tsc+lint limpos, E2E rodado 3x nesta leva sem falha persistente.
+> ✅ **Brecha REST fechada — 1ª leva (6 tabelas de Financeiro/Erros/C6), CI verde de
+> verdade** (migrations `20260903201150` a `20260903223712`, `CHECKPOINT_SESSAO_2026-09-01.md`
+> §17/§17.1): pendência do §15 resolvida com a arquitetura certa — function
+> `SECURITY DEFINER` (não view, que quebrou hoje de manhã) faz o mascaramento sem exigir
+> NENHUM privilégio do invocador na tabela crua. Testado com prova real (papel de banco
+> sem privilégio nenhum) ANTES de aplicar. `payments`, `error_records`, `triage_errors`,
+> `triage_distribution_employees`, `bonus_removals` bloqueadas por fora;
+> `triage_error_distributions` só precisou de REVOKE de coluna. **2 regressões reais que a
+> validação LOCAL não pegou, só o CI completo achou** (lição: mudança de GRANT/REVOKE é
+> transversal, validação parcial não basta): (1) `getDataStatistics` (aba Gerenciamento de
+> Dados) lia `date` direto da tabela sem valor de dinheiro nenhum — REVOKE da tabela
+> inteira quebrou isso, corrigido com GRANT nas colunas seguras; (2) "editar diária" e
+> "aplicar bonificação" quebrados — `UPSERT` (`ON CONFLICT DO UPDATE`) exige SELECT nas
+> colunas de dinheiro que atualiza, não só leitura simples — corrigido com 2 functions
+> `SECURITY DEFINER` novas pro upsert. **CI final 100% verde nos 3 jobs** (run
+> `33815272551`: tsc+eslint, vitest, playwright 114 passed/2 skipped/0 failed/0 flaky).
 > Suíte unitária do banco de horas com mock ajustado mas **não confirmada rodando**
-> (ambiente vitest travando ao iniciar worker, confirmado NÃO relacionado ao código —
-> mesmo erro num arquivo não tocado — fica pendente rodar quando o ambiente normalizar).
+> localmente (ambiente vitest travando ao iniciar worker, confirmado NÃO relacionado ao
+> código — mesmo erro num arquivo não tocado — mas o CI, que roda num ambiente limpo,
+> CONFIRMOU essa suíte passando, então a validação real já está feita).
 > Driverpay (8 tabelas) ainda pendente — já desenhado, nada aplicado.
+
+> ✅ **Botão "usar da planilha" nos espelhos recebidos** (`4b689f5`,
+> `CHECKPOINT_SESSAO_2026-09-01.md` §18): pedido pontual, fora do fluxo da brecha REST.
+> UI-only, validado no mesmo CI verde acima.
 
 > ✅ **Ponto travava na 2ª marcação (2→4 marcações no meio do dia)** (`d12db0d`,
 > `CHECKPOINT_SESSAO_2026-09-01.md` §16): Diendrel/Iago (CLAYTON B DOS SANTOS) migrados pra

@@ -761,3 +761,45 @@ normalizar).
 é o caso mais complexo, com 3 relações aninhadas: pacotes/descontos/vales por pagamento) —
 já desenhado (mesmo padrão, function `can_view_driverpay_values()` como atalho pra não
 repetir a condição 9x por função), mas NADA aplicado ainda.
+
+### 17.1. 🔴→🟢 2 regressões reais achadas SÓ pelo CI completo (E2E local não pegou)
+
+O E2E local rodado 3x acima (item "Validado") **não** incluía a suíte completa
+(`100-supremo-v2`, `101-supremo-pn`, `38-system-walkthrough`) — só os specs diretamente
+ligados ao que mexi. Depois do push, o CI (que roda TUDO) achou 2 problemas reais que a
+validação local não cobriu. Lição: mudança de GRANT/REVOKE em tabela é transversal — só a
+suíte completa garante, validação parcial local não é suficiente pra esse tipo de mudança.
+
+1. **`getDataStatistics` (aba Gerenciamento de Dados) quebrada** — ela lê só a coluna
+   `date` de `payments`/`error_records` direto (sem nenhum valor de dinheiro), mas o
+   REVOKE final travou a tabela INTEIRA, não só as colunas de dinheiro. 4 testes
+   quebraram com 403 real (sweep de todas as abas admin). Fix: `GRANT SELECT` só nas
+   colunas seguras (mesmo padrão do `triage_error_distributions`) — dinheiro continua sem
+   grant nenhum (validado: `SELECT date` funciona, `SELECT daily_rate` dá permission
+   denied, pro papel `authenticated`).
+
+2. **"Editar diária" e "Aplicar bonificação" quebrados** — `INSERT ... ON CONFLICT DO
+   UPDATE` (upsert) em `payments` TAMBÉM exige `SELECT` nas colunas de dinheiro
+   referenciadas no `SET` (via `excluded.col`), não só leitura simples. Confirmado
+   empiricamente: `UPDATE` simples (sem `ON CONFLICT`) não precisa dessa permissão extra,
+   só o upsert. Fix: 2 functions `SECURITY DEFINER` novas (`upsert_payment_rate_masked`,
+   `upsert_payment_bonus_masked`) fazem o upsert com a permissão da function — `database.ts`
+   trocado pra chamar elas em vez de `.from('payments').upsert(...)`.
+
+Migrations: `20260903220447_rest_bypass_fix_payments_error_records_safe_columns.sql`,
+`20260903223712_rest_bypass_fix_payments_upsert_functions.sql`. As duas aplicadas em
+produção com OK explícito do Victor antes de cada uma (regra de migration).
+
+**Validação final**: CI completo (`gh run` `33815272551`) fechou 100% verde nos 3 jobs —
+`tsc+eslint`, `vitest` (unit) e `playwright` (e2e: **114 passed, 2 skipped, 0 failed, 0
+flaky**). Essa é a validação que realmente fecha a leva 1 — as rodadas locais anteriores
+tinham sido insuficientes.
+
+## 18. ✅ Botão "usar da planilha" nos espelhos recebidos (`4b689f5`)
+
+Pedido pontual do Victor, fora do fluxo da brecha REST. `EspelhosRecebidosModal.tsx` já
+tinha o botão rápido "Usar X (do print)" na correção de contagem, mas pra usar o número da
+planilha era preciso digitar manualmente em "outro número". Adicionado um segundo botão
+"Usar X (da planilha)" no mesmo estilo — o comentário do componente já documentava que a
+intenção original era escolher entre print/planilha/digitado. UI-only, sem banco. tsc+lint
+limpos, validado junto no mesmo CI verde do §17.1 (`33815272551`).
