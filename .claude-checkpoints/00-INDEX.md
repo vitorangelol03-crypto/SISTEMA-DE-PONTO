@@ -2,8 +2,28 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-03** (ponto travava na 2ª marcação pra quem migra de 2→4
-> marcações no meio do dia — achado real reportado pelo Victor, corrigido e reimplantado).
+> Última atualização: **2026-09-03** (brecha REST fechada de verdade nas 6 tabelas de
+> hoje — function `SECURITY DEFINER` em vez de view, testada com prova real antes de
+> confiar. Driverpay, 8 tabelas, ainda pendente — já desenhado).
+
+> ✅ **Brecha REST fechada — 1ª leva (6 tabelas de Financeiro/Erros/C6)** (migrations
+> `20260903201150` a `20260903204857`, `CHECKPOINT_SESSAO_2026-09-01.md` §17): pendência
+> do §15 resolvida com a arquitetura certa — function `SECURITY DEFINER` (não view, que
+> quebrou hoje de manhã) faz o mascaramento sem exigir NENHUM privilégio do invocador na
+> tabela crua. Testado com prova real (papel de banco sem privilégio nenhum, valor real
+> aparece pra quem pode, `NULL` pra quem não pode, 0 linhas pra empresa errada) ANTES de
+> aplicar. Achado um bug real no meio do caminho: `employeeId ?? null` não pegava string
+> vazia (só `null`/`undefined`), quebrando o filtro — corrigido pra `|| null`. Ordem
+> disciplinada (aprendida com o susto de hoje de manhã): cria function → troca código →
+> valida com E2E completo → SÓ DEPOIS revoga a tabela → valida de novo. `payments`,
+> `error_records`, `triage_errors`, `triage_distribution_employees`, `bonus_removals`
+> agora 100% bloqueadas por fora (`has_table_privilege`=false confirmado);
+> `triage_error_distributions` só precisou de REVOKE de coluna (ninguém lê o valor dela
+> na tela). Validado: tsc+lint limpos, E2E rodado 3x nesta leva sem falha persistente.
+> Suíte unitária do banco de horas com mock ajustado mas **não confirmada rodando**
+> (ambiente vitest travando ao iniciar worker, confirmado NÃO relacionado ao código —
+> mesmo erro num arquivo não tocado — fica pendente rodar quando o ambiente normalizar).
+> Driverpay (8 tabelas) ainda pendente — já desenhado, nada aplicado.
 
 > ✅ **Ponto travava na 2ª marcação (2→4 marcações no meio do dia)** (`d12db0d`,
 > `CHECKPOINT_SESSAO_2026-09-01.md` §16): Diendrel/Iago (CLAYTON B DOS SANTOS) migrados pra
@@ -193,26 +213,23 @@
 ## 🎯 Estado atual (1 parágrafo)
 
 **Sessão 01→03/09 — mascaramento de valores no banco fechado em Pagamentos Driver +
-Financeiro + Erros + C6 (§12-§15) + bug real do "4 batidas" corrigido (§16)**. O §16 é
-importante pra decidir o próximo passo do rollout "4 batidas": Diendrel/Iago foram
-migrados pra `marking_count=4` DEPOIS de já terem batido entrada no dia — o servidor não
-tinha fallback pro campo antigo e travava a 2ª marcação pra sempre. Corrigido (function +
-dado dos 2 destravado), mas reforça: **migrar alguém pra 4 marcações no MEIO do
-expediente é um caso de borda real, não hipotético** — vale considerar só migrar
-funcionário ANTES do primeiro ponto do dia, até decidir algo mais robusto. Isso inclui os
-3 bugs de corrida do driverpay (§14) e a auditoria "mesmo tipo de vazamento" que Victor
-tinha pedido pros outros módulos (§15, agora feita pra Financeiro/Erros/C6). **Pendência
-real deixada pelo §15**: a trava contra
-alguém chamar a API do Supabase direto na tabela crua (bypass do REST) não está fechada em
-NENHUM dos módulos (nem driverpay de ontem, nem os 3 de hoje) — o `REVOKE SELECT` de coluna
-nunca funcionou de verdade (achado e confirmado com evidência real, não suposição); só o
-mascaramento por permissão na tela/view continua ativo. Precisa de function `SECURITY
-DEFINER` em vez de view pra fechar isso sem quebrar tudo de novo (ver §15 pro porquê). Veio
-depois das 3 travas exclusivas do 2626 (Ponto/Driverpay/Aprovação de Cadastro) terem virado
-permissão normal configurável (`cc81722`, §11). Só o 2626 segue com bypass incondicional.
-Ver `CHECKPOINT_SESSAO_2026-09-01.md` §11-§15 pro detalhe. Ainda não atacado: "máximo
-controle em cada aba" nos ~7 módulos restantes (Ponto, Funcionários, Relatórios,
-Configurações, Usuários, Gerenciamento de Dados, Aprovação de Cadastro).
+Financeiro + Erros + C6 (§12-§15) + bug real do "4 batidas" corrigido (§16) + brecha REST
+fechada de verdade na 1ª leva de 6 tabelas (§17)**. Vitor pediu "continua e ataca tudo" —
+3 frentes: (1) fechar a brecha REST — **1ª leva PRONTA** (Financeiro/Erros/C6, 6 tabelas,
+§17); driverpay (8 tabelas, mais complexo, já desenhado) ainda falta; (2) auditar as ~7
+abas restantes (Ponto, Funcionários, Relatórios, Configurações, Usuários, Gerenciamento de
+Dados, Aprovação de Cadastro) atrás do mesmo tipo de vazamento — não começada; (3)
+histórico de auditoria completo (Fase C do rework de Usuários) — não começada. §17: a
+trava de ontem/hoje de manhã (view + REVOKE de coluna) nunca fechou o bypass por REST
+direto de verdade — corrigido com function `SECURITY DEFINER`, testada com prova real
+(papel sem privilégio nenhum) ANTES de aplicar, e só revogada a tabela DEPOIS do código
+trocado e validado com E2E — ordem aprendida com o susto de hoje de manhã, pra não repetir.
+§16: Diendrel/Iago migrados pra `marking_count=4` DEPOIS de já terem batido entrada no dia
+travava a 2ª marcação pra sempre — corrigido (function + dado dos 2 destravado); reforça
+que migrar alguém pra 4 marcações no MEIO do expediente é caso de borda real. Isso tudo
+veio depois das 3 travas exclusivas do 2626 (Ponto/Driverpay/Aprovação de Cadastro) terem
+virado permissão normal configurável (`cc81722`, §11). Só o 2626 segue com bypass
+incondicional. Ver `CHECKPOINT_SESSAO_2026-09-01.md` §11-§17 pro detalhe.
 
 **Sessão 01/09 — rework de Usuários/Permissões/Auditoria, Fase A no ar.** Cadastro
 completo (nome+telefone), redefinir senha (padrão + troca obrigatória), edge fn
@@ -1323,7 +1340,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-09-01.md` | **Mais recente.** Rework Usuários/Permissões — Fase A (`bc47757`) → 3 travas exclusivas do 2626 viram permissão normal (§11, `cc81722`) → "Ver valores" em Pagamentos Driver, UI (§12) + banco (§13, `3eb14bc`) → 3 bugs de corrida reais em `56`/`61` (§14, `3961694`) → mascaramento no banco em Financeiro/Erros/C6 (§15) com incidente real (trava de coluna nunca funcionou, 1ª correção derrubou as 4 telas ~15min, revertido no mesmo dia) + bug do `bonus_c2` achado e corrigido → ponto travava na 2ª marcação pra quem migra de 2→4 marcações no meio do dia (§16, `d12db0d`, achado real reportado pelo Victor, function corrigida + deploy v14). Pendência real: trava contra REST direto na tabela crua ainda aberta em TODOS os módulos (driverpay + hoje) — precisa de function `SECURITY DEFINER`. Fase B/C de Usuários/auditoria ainda pendentes. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-01.md` | **Mais recente.** Rework Usuários/Permissões — Fase A (`bc47757`) → 3 travas exclusivas do 2626 viram permissão normal (§11, `cc81722`) → "Ver valores" em Pagamentos Driver, UI (§12) + banco (§13, `3eb14bc`) → 3 bugs de corrida reais em `56`/`61` (§14, `3961694`) → mascaramento no banco em Financeiro/Erros/C6 (§15) com incidente real (trava de coluna nunca funcionou, 1ª correção derrubou as 4 telas ~15min, revertido no mesmo dia) + bug do `bonus_c2` achado e corrigido → ponto travava na 2ª marcação pra quem migra de 2→4 marcações no meio do dia (§16, `d12db0d`, function corrigida + deploy v14) → brecha REST fechada de verdade na 1ª leva de 6 tabelas (§17, function `SECURITY DEFINER`, testada com prova real, E2E 3x sem falha persistente). Pendência real: driverpay (8 tabelas) ainda com a brecha aberta — já desenhado, não aplicado. Fase B/C de Usuários/auditoria e as ~7 abas restantes ainda pendentes. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-31.md` | **Mais recente.** Roadmap ditado (tablet + facial sem CPF + 4 batidas) e pendências zeradas antes dele: TOTAL GERAL em branco, selo "todos pagos" do grupo, "NF ok" não era bug, 101-H1, CI typecheck era no-op, actions v7, tsbuildinfo, CLAUDE.md. **3 buracos de segurança provados E FECHADOS** (backup_* sem RLS, view sem security_invoker, RPC pro anon — sonda anon→401 nos 3). 🔴 **Correção urgente no meio da sessão:** selo "no app" da linha não era ciente de grupo (61/113 linhas sem selo no filtro "Publicado") — `rowPublicadoNoApp()` unifica filtro+selo+header. **✅ Roadmap item 1 (facial+geo no servidor) NO AR:** migration aplicada + edge fn `clock-in-validated` publicada (v11→v12) com OK do Victor ("pode seguir" depois de eu explicar o risco real) — provado AO VIVO contra a função recém-publicada: `edgeFnClockFacialGeoEstrito` passou (trava bloqueia rosto/geo errados de verdade) e specs 02+08+23+62 24/24 (fluxo de hoje intacto). Chave `require_facial_clock` **desligada em Caratinga e Ponte Nova** — falta decidir quando ligar por empresa. Branch mergeada (fast-forward) em `main`. Fix rápido no meio: grupo sem nada a receber não conta mais como "falta pagar" (fica sempre por último, revertendo decisão de 14/08). PROXIMOS_PASSOS reescrito. Ver §9-§11. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-30.md` | Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado E consertado (`8672604`); depois 5 warnings zerados (`1e5656a`): useCallback nos 4 hooks + useCompany em arquivo próprio (26 imports). eslint 0+0, CI verde. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-26.md` | Cadastro público de funcionário (`/cadastro?empresa=...`, sem login) + aba nova "Aprovação de Cadastro" (exclusiva do 2626) — migration, edge fn `register-employee`, bloqueio no `/clock` pra recusado, botão de copiar por campo (sempre versão limpa). E2E novo `tests/78`. **Só local — push pendente do OK dele.** | 🟢 ATIVO |

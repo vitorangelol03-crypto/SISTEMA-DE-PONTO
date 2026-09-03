@@ -87,7 +87,22 @@ function setupSupabaseQueue(queueByTable: Record<string, SupabaseResponse[]>) {
   // Override via __rpc__ no queueByTable; default: sucesso com log_id mock.
   const rpcQueue = queueByTable.__rpc__ ?? [{ data: 'log-rpc-mock', error: null }];
   let rpcIdx = 0;
-  mockSupabase.rpc = vi.fn(() => {
+  // 03/09/2026: payments_v virou function get_payments_masked (fechamento da
+  // brecha REST) — reusa a MESMA fila "payments_v" já configurada em cada teste
+  // (fixture não muda, só troca de .from() pra .rpc() na forma de entrega).
+  // get_payments_masked sempre devolve ARRAY (SETOF), então normaliza objeto
+  // único/null da fixture antiga pro formato novo.
+  mockSupabase.rpc = vi.fn((fnName: string) => {
+    if (fnName === 'get_payments_masked') {
+      const queue = queueByTable['payments_v'] ?? [];
+      const idx = indices['payments_v'] ?? 0;
+      indices['payments_v'] = idx + 1;
+      const response = queue[idx] ?? { data: null, error: null };
+      if (response.error) return Promise.resolve({ data: null, error: response.error });
+      const raw = response.data;
+      const arr = raw == null ? [] : Array.isArray(raw) ? raw : [raw];
+      return Promise.resolve({ data: arr, error: null });
+    }
     const res = rpcQueue[rpcIdx] ?? { data: 'log-rpc-mock', error: null };
     rpcIdx++;
     return Promise.resolve(res);

@@ -405,12 +405,13 @@ async function validatePermission(
 }
 
 /**
- * `payments` tem valor mascarado no banco (payments_v) pra quem não tem AS DUAS
+ * `payments` tem valor mascarado no banco (function get_payments_masked, SECURITY
+ * DEFINER — não view, ver migration rest_bypass_fix_*) pra quem não tem AS DUAS
  * permissões juntas: financial.viewPayments E c6payment.viewValues (decisão do
  * Victor, 03/09/2026 — a tabela é lida tanto pelo Financeiro quanto pelo C6, e o
  * banco não sabe de qual tela veio o pedido). Toda função que LÊ um valor de
  * payments pra RECALCULAR e escrever de volta (não só mostrar na tela) precisa
- * confirmar isto ANTES — senão a viewzinha devolve NULL e a conta quebra silenciosa
+ * confirmar isto ANTES — senão a function devolve NULL e a conta quebra silenciosa
  * (ex.: aplicar bônus B zeraria o C1/C2 que a pessoa já tinha, por ler NULL em vez
  * do valor real).
  */
@@ -1053,43 +1054,29 @@ export const getPayments = async (
   companyId: string
 ): Promise<Payment[]> => {
   // 03/09/2026: valores em R$ mascarados no banco (financial.viewPayments +
-  // c6payment.viewValues) — vai por view, não pela tabela crua.
-  let query = supabase
-    .from('payments_v')
-    .select(`
-      *,
-      employees (
-        id,
-        name,
-        cpf,
-        employment_type
-      )
-    `)
-    .eq('company_id', companyId);
-
-  if (startDate) {
-    query = query.gte('date', startDate);
-  }
-
-  if (endDate) {
-    query = query.lte('date', endDate);
-  }
-
-  if (employeeId) {
-    query = query.eq('employee_id', employeeId);
-  }
-
-  const { data, error } = await query.order('date', { ascending: false });
+  // c6payment.viewValues) — vai por function SECURITY DEFINER (não view: view com
+  // security_invoker exige SELECT do invocador na coluna crua, mesmo mascarada —
+  // achado real, ver migration rest_bypass_fix_functions_batch1). A function não
+  // exige NENHUM privilégio na tabela crua, só EXECUTE nela mesma.
+  const { data, error } = await supabase.rpc('get_payments_masked', {
+    p_company_id: companyId,
+    p_start_date: startDate || null,
+    p_end_date: endDate || null,
+    p_employee_id: employeeId || null,
+  });
 
   if (error) throw error;
 
-  if (employmentType && employmentType !== 'all' && data) {
-    return data.filter(payment =>
+  let result = (data || []) as Payment[];
+  result = result.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+  if (employmentType && employmentType !== 'all') {
+    result = result.filter(payment =>
       payment.employees?.employment_type === employmentType
     );
   }
 
-  return data || [];
+  return result;
 };
 
 export const upsertPayment = async (
@@ -1317,12 +1304,13 @@ export const applyBonusToAllPresent = async (
       continue;
     }
 
-    const { data: existingPayment } = await supabase
-      .from('payments_v')
-      .select('*')
-      .eq('employee_id', attendance.employee_id)
-      .eq('date', date)
-      .maybeSingle();
+    const { data: existingPaymentRows } = await supabase.rpc('get_payments_masked', {
+      p_company_id: companyId,
+      p_start_date: date,
+      p_end_date: date,
+      p_employee_id: attendance.employee_id,
+    });
+    const existingPayment = (existingPaymentRows || [])[0] as (Payment & { bonus_breakdown?: Record<string, number> | null }) | undefined;
 
     const currentDailyRate = parseFloat((existingPayment?.daily_rate ?? 0).toString());
     const currentB = parseFloat((existingPayment?.bonus_b ?? 0).toString());
@@ -1413,22 +1401,21 @@ export const getBonusInfoForDate = async (date: string, companyId: string): Prom
     if (!type || !(type in BONUS_COLUMNS)) continue;
 
     const column = BONUS_COLUMNS[type];
-    // 03/09/2026: bonus_b/c1/c2 mascarados no banco — filtro ".gt" numa coluna
-    // revogada quebraria na tabela crua. Vai por payments_v (quem não tem "ver
-    // valor" só conta 0 aqui — efeito colateral aceito, não é vazamento de R$).
-    const { data: payments } = await supabase
-      .from('payments_v')
-      .select('employee_id')
-      .eq('date', date)
-      .gt(column, 0)
-      .eq('company_id', companyId);
+    // 03/09/2026: bonus_b/c1/c2 mascarados no banco — filtrar EM CIMA da coluna
+    // também exige SELECT nela, então vai por function dedicada (quem não tem
+    // "ver valor" só conta 0 aqui — efeito colateral aceito, não é vazamento de R$).
+    const { data: employeesCount } = await supabase.rpc('count_payments_with_bonus_type', {
+      p_company_id: companyId,
+      p_date: date,
+      p_bonus_column: column,
+    });
 
     info[type] = {
       hasBonus: true,
       amount: parseFloat(bonus.amount.toString()),
       appliedBy: bonus.created_by,
       appliedAt: bonus.created_at,
-      employeesCount: payments?.length || 0,
+      employeesCount: employeesCount ?? 0,
     };
     info.hasAny = true;
   }
@@ -1477,12 +1464,13 @@ export const removeBonusFromEmployee = async (
   }
 
   // Buscar pagamento do funcionário
-  const { data: payment } = await supabase
-    .from('payments_v')
-    .select('*')
-    .eq('employee_id', employeeId)
-    .eq('date', date)
-    .maybeSingle();
+  const { data: paymentRows } = await supabase.rpc('get_payments_masked', {
+    p_company_id: companyId,
+    p_start_date: date,
+    p_end_date: date,
+    p_employee_id: employeeId,
+  });
+  const payment = (paymentRows || [])[0] as (Payment & { bonus_breakdown?: Record<string, number> | null }) | undefined;
 
   const typeAmount = payment ? parseFloat((payment[column] ?? 0).toString()) : 0;
   if (!payment || typeAmount === 0) {
@@ -1586,15 +1574,19 @@ export const removeAllBonusesForDate = async (
     typeIdMap[t] = rec?.id ?? null;
   }
 
-  // Buscar todos os pagamentos com bonificação no dia
-  const { data: payments, error: paymentsError } = await supabase
-    .from('payments_v')
-    .select('*')
-    .eq('date', date)
-    .gt('bonus', 0)
-    .eq('company_id', companyId);
+  // Buscar todos os pagamentos com bonificação no dia. Filtro "bonus > 0" em JS
+  // (não no banco): a permissão de ver valor já foi confirmada acima, então o
+  // valor aqui é sempre real, sem risco de mascarar o filtro por engano.
+  const { data: paymentsRaw, error: paymentsError } = await supabase.rpc('get_payments_masked', {
+    p_company_id: companyId,
+    p_start_date: date,
+    p_end_date: date,
+    p_employee_id: null,
+  });
 
   if (paymentsError) throw paymentsError;
+
+  const payments = ((paymentsRaw || []) as Payment[]).filter(p => Number(p.bonus ?? 0) > 0);
 
   if (!payments || payments.length === 0) {
     throw new Error('Nenhuma bonificação encontrada para este dia');
@@ -1746,32 +1738,15 @@ export const getBonusRemovalHistory = async (
   endDate: string | undefined,
   companyId: string
 ): Promise<BonusRemoval[]> => {
-  // 03/09/2026: bonus_amount_removed mascarado no banco (financial.viewPayments).
-  let query = supabase
-    .from('bonus_removals_v')
-    .select(`
-      *,
-      employees (
-        id,
-        name,
-        cpf
-      )
-    `)
-    .eq('company_id', companyId);
-
-  if (employeeId) {
-    query = query.eq('employee_id', employeeId);
-  }
-
-  if (startDate) {
-    query = query.gte('date', startDate);
-  }
-
-  if (endDate) {
-    query = query.lte('date', endDate);
-  }
-
-  const { data, error } = await query.order('removed_at', { ascending: false });
+  // 03/09/2026: bonus_amount_removed mascarado no banco (financial.viewPayments) —
+  // function SECURITY DEFINER (get_bonus_removals_masked), já ordenada por
+  // removed_at DESC dentro dela mesma.
+  const { data, error } = await supabase.rpc('get_bonus_removals_masked', {
+    p_company_id: companyId,
+    p_start_date: startDate || null,
+    p_end_date: endDate || null,
+    p_employee_id: employeeId || null,
+  });
 
   if (error) throw error;
   return data || [];
@@ -1785,43 +1760,27 @@ export const getErrorRecords = async (
   employmentType: string | undefined,
   companyId: string
 ): Promise<ErrorRecord[]> => {
-  // 03/09/2026: error_value mascarado no banco (errors.viewValues).
-  let query = supabase
-    .from('error_records_v')
-    .select(`
-      *,
-      employees (
-        id,
-        name,
-        cpf,
-        employment_type
-      )
-    `)
-    .eq('company_id', companyId);
-
-  if (startDate) {
-    query = query.gte('date', startDate);
-  }
-
-  if (endDate) {
-    query = query.lte('date', endDate);
-  }
-
-  if (employeeId) {
-    query = query.eq('employee_id', employeeId);
-  }
-
-  const { data, error } = await query.order('date', { ascending: false });
+  // 03/09/2026: error_value mascarado no banco (errors.viewValues) — function
+  // SECURITY DEFINER (get_error_records_masked).
+  const { data, error } = await supabase.rpc('get_error_records_masked', {
+    p_company_id: companyId,
+    p_start_date: startDate || null,
+    p_end_date: endDate || null,
+    p_employee_id: employeeId || null,
+  });
 
   if (error) throw error;
 
-  if (employmentType && employmentType !== 'all' && data) {
-    return data.filter(errorRecord =>
+  let result = (data || []) as ErrorRecord[];
+  result = result.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+  if (employmentType && employmentType !== 'all') {
+    result = result.filter(errorRecord =>
       errorRecord.employees?.employment_type === employmentType
     );
   }
 
-  return data || [];
+  return result;
 };
 
 // Vários erros por dia são permitidos (decisão 26/07) — insert puro, sem upsert.
@@ -2220,13 +2179,16 @@ export const getTriageErrors = async (
   endDate: string | undefined,
   companyId: string
 ): Promise<TriageError[]> => {
-  // 03/09/2026: direct_value mascarado no banco (errors.viewValues).
-  let query = supabase.from('triage_errors_v').select('*').eq('company_id', companyId);
-  if (startDate) query = query.gte('date', startDate);
-  if (endDate) query = query.lte('date', endDate);
-  const { data, error } = await query.order('date', { ascending: false });
+  // 03/09/2026: direct_value mascarado no banco (errors.viewValues) — function
+  // SECURITY DEFINER (get_triage_errors_masked).
+  const { data, error } = await supabase.rpc('get_triage_errors_masked', {
+    p_company_id: companyId,
+    p_start_date: startDate || null,
+    p_end_date: endDate || null,
+  });
   if (error) throw error;
-  return data || [];
+  const result = ((data || []) as TriageError[]).slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return result;
 };
 
 // Vários registros de triagem por dia são permitidos (decisão 26/07) — insert puro.
@@ -2617,11 +2579,12 @@ export const getTriageDistributionsForEmployees = async (
 }>> => {
   if (employeeIds.length === 0) return [];
 
-  // 03/09/2026: value_deducted mascarado no banco (errors.viewValues) — a view não
-  // carrega relação de FK pro PostgREST fazer embed automático, então em vez de
-  // um JOIN só (como antes), busca as distribuições do período primeiro (sem
-  // coluna de dinheiro, tabela crua mesmo) e depois os valores por funcionário
-  // pela view, cruzando os distribution_id em memória.
+  // 03/09/2026: value_deducted mascarado no banco (errors.viewValues) — function
+  // SECURITY DEFINER (get_triage_distribution_employees_masked) não faz embed de
+  // FK automático, então em vez de um JOIN só (como antes), busca as
+  // distribuições do período primeiro (sem coluna de dinheiro, tabela crua mesmo,
+  // só as colunas seguras foram liberadas) e depois os valores por funcionário
+  // pela function, cruzando os distribution_id em memória.
   const { data: distributions, error: distError } = await supabase
     .from('triage_error_distributions')
     .select('id, period_start, period_end')
@@ -2633,12 +2596,11 @@ export const getTriageDistributionsForEmployees = async (
 
   const periodById = new Map(distributions.map((d) => [d.id, { period_start: d.period_start, period_end: d.period_end }]));
 
-  const { data, error } = await supabase
-    .from('triage_distribution_employees_v')
-    .select('employee_id, errors_share, value_deducted, distribution_id')
-    .in('employee_id', employeeIds)
-    .in('distribution_id', distributions.map((d) => d.id))
-    .eq('company_id', companyId);
+  const { data, error } = await supabase.rpc('get_triage_distribution_employees_masked', {
+    p_company_id: companyId,
+    p_employee_ids: employeeIds,
+    p_distribution_ids: distributions.map((d) => d.id),
+  });
 
   if (error) throw error;
 
@@ -4968,19 +4930,20 @@ async function _previewBankHoursForEmployee(args: {
 
   // 6. Payment âncora (último do período). 03/09/2026: daily_rate/total mascarados
   // no banco — o caller (applyBankHoursToPayment) já confirma ensureCanViewPaymentValues
-  // antes de chegar aqui, mas o SELECT tem que ir pela view de qualquer forma
-  // (REVOKE na tabela crua é incondicional).
-  const { data: paymentRow, error: paymentErr } = await supabase
-    .from('payments_v')
-    .select('id, daily_rate, total, bank_hours_applied_at')
-    .eq('employee_id', employeeId)
-    .eq('company_id', company.id)
-    .gte('date', period.start_date)
-    .lte('date', period.end_date)
-    .order('date', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // antes de chegar aqui, mas o SELECT tem que ir pela function de qualquer forma
+  // (REVOKE na tabela crua é incondicional). Pega o de data mais recente em JS —
+  // a function não garante ordenação/limite do lado do banco.
+  const { data: paymentRowsInRange, error: paymentErr } = await supabase.rpc('get_payments_masked', {
+    p_company_id: company.id,
+    p_start_date: period.start_date,
+    p_end_date: period.end_date,
+    p_employee_id: employeeId,
+  });
   if (paymentErr) throw paymentErr;
+  const paymentRow = ((paymentRowsInRange || []) as Payment[])
+    .slice()
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))[0] as
+    { id: string; daily_rate: number; total: number; bank_hours_applied_at: string | null } | undefined;
   if (!paymentRow) {
     return {
       status: 'no_payment_in_period', creditMinutes: 0, debitMinutes: 0, netMinutes: 0,
@@ -5253,19 +5216,20 @@ export async function previewBankHoursForPeriod(args: {
   const employeeIds = employees.map(e => e.id);
 
   // ─── BATCH 3: payments + attendance em paralelo ───────────────────────
-  // 03/09/2026: daily_rate/total mascarados no banco — vai por payments_v. Isto
-  // é só PREVIEW (grid antes de aplicar); quem não tem "ver valor" vê o preview
+  // 03/09/2026: daily_rate/total mascarados no banco — vai por function (não
+  // aceita lista de employee_id, então busca a empresa+período inteiro e filtra
+  // em JS — mesmo volume de dado que a query antiga já trazia). Isto é só
+  // PREVIEW (grid antes de aplicar); quem não tem "ver valor" vê o preview
   // zerado, mas a gravação de verdade (applyBankHoursToPayment) já exige a
   // permissão antes de gravar qualquer coisa.
-  const [paymentsRes, attendancesRes] = await Promise.all([
-    supabase
-      .from('payments_v')
-      .select('id, employee_id, daily_rate, total, bank_hours_applied_at, date')
-      .in('employee_id', employeeIds)
-      .eq('company_id', args.companyId)
-      .gte('date', period.start_date)
-      .lte('date', period.end_date)
-      .order('date', { ascending: false }),
+  const employeeIdSet = new Set(employeeIds);
+  const [paymentsRpcRes, attendancesRes] = await Promise.all([
+    supabase.rpc('get_payments_masked', {
+      p_company_id: args.companyId,
+      p_start_date: period.start_date,
+      p_end_date: period.end_date,
+      p_employee_id: null,
+    }),
     supabase
       .from('attendance')
       // Sub-fase 8.3: inclui daytime/nighttime/expected pra calcular nightCredit.
@@ -5274,13 +5238,19 @@ export async function previewBankHoursForPeriod(args: {
       .gte('date', rangeStart)
       .lte('date', rangeEnd),
   ]);
-  if (paymentsRes.error) throw paymentsRes.error;
+  if (paymentsRpcRes.error) throw paymentsRpcRes.error;
   if (attendancesRes.error) throw attendancesRes.error;
 
-  // Index payments por employee_id (mais recente primeiro, já ordenado DESC).
-  type PaymentRow = { id: string; employee_id: string; daily_rate: number | null; total: number | null; bank_hours_applied_at: string | null };
+  // Index payments por employee_id (mais recente primeiro — ordenado em JS, a
+  // function não garante ordem do lado do banco). Filtra pro conjunto de
+  // employeeIds aqui também (a function não aceita lista de employee_id).
+  type PaymentRow = { id: string; employee_id: string; date: string; daily_rate: number | null; total: number | null; bank_hours_applied_at: string | null };
+  const sortedPayments = ((paymentsRpcRes.data ?? []) as PaymentRow[])
+    .filter(p => employeeIdSet.has(p.employee_id))
+    .slice()
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const paymentByEmp = new Map<string, PaymentRow>();
-  for (const p of (paymentsRes.data ?? []) as PaymentRow[]) {
+  for (const p of sortedPayments) {
     if (!paymentByEmp.has(p.employee_id)) {
       paymentByEmp.set(p.employee_id, p);
     }

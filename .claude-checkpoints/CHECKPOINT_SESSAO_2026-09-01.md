@@ -707,3 +707,57 @@ um teste E2E automatizado simulando facial real (exigiria mockar a câmera/face-
 maior) — a investigação foi por leitura de código + evidência direta no banco de produção
 (mais rápido e mais preciso pra este caso específico, já que a causa já tinha 2 casos reais
 pra comparar). Se aparecer de novo em outro cenário, vale considerar o teste automatizado.
+
+## 17. ✅ Fechada a brecha REST — 1ª leva: as 6 tabelas de hoje (Financeiro/Erros/C6)
+
+Victor pediu "continua e ataca tudo": (1) fechar a brecha do REST direto (pendência do
+§15), (2) auditar as ~7 abas restantes, (3) o histórico de auditoria completo. Este
+parágrafo cobre o item (1), 1ª leva (6 tabelas de hoje — driverpay, 8 tabelas, fica pra
+outra leva, já desenhado mas não aplicado).
+
+**A correção certa**: function `SECURITY DEFINER` em vez de view `security_invoker`.
+Testado com PROVA REAL antes de confiar (aprendendo com o erro do §15): criei um papel
+de banco temporário SEM NENHUM privilégio nas tabelas cruas, dei só `EXECUTE` na
+function, e confirmei — valor real aparece pra quem tem permissão, `NULL` pra quem não
+tem, `0` linhas pra empresa errada. Só depois disso apliquei de verdade.
+
+**6 functions novas** (`get_payments_masked` — AND das duas permissões, com JOIN pra
+`employees` embutido; `get_error_records_masked`; `get_triage_errors_masked`;
+`get_triage_distribution_employees_masked` — aceita lista de IDs; `get_bonus_removals_masked`;
+`count_payments_with_bonus_type` — helper pontual pro Ponto, que filtra `payments` por
+`bonus_b/c1/c2 > 0` e quebraria com REVOKE simples). `triage_error_distributions` não
+precisou de function — ninguém lê o valor dela na tela, só REVOKE de coluna resolveu (e a
+view morta de hoje foi removida).
+
+**Bug real achado no meio do caminho**: depois de trocar `database.ts` pra chamar as
+functions, o primeiro teste E2E quebrou — `employeeId` chegava como **string vazia**
+(`""`), não `undefined`, quando nenhum funcionário estava selecionado no filtro.
+`employeeId ?? null` não pega string vazia (só `null`/`undefined`), e Postgres não aceita
+`""` como uuid — erro 400 em cascata. Trocado por `employeeId || null` (e o mesmo pros
+outros parâmetros opcionais) nos 4 pontos afetados.
+
+**Ordem de aplicação (aprendida com o susto do §15 — nunca mais misturar "mecanismo novo"
+com "revoga acesso" no mesmo passo sem testar no meio):**
+1. Cria as functions (sem mexer em GRANT/REVOKE da tabela).
+2. Troca o código do cliente pra chamar as functions.
+3. Valida com E2E completo — **44/46 limpo, 0 falha, 0 retry** — só DEPOIS disso.
+4. Aplica o REVOKE final na tabela inteira (`payments`, `error_records`, `triage_errors`,
+   `triage_distribution_employees`, `bonus_removals`).
+5. Confirma que a trava é real (`has_table_privilege` = false pras 5) e roda o E2E de
+   novo — **41/44, 3 flaky recuperados na repetição (CPU disputada com outro projeto do
+   Victor rodando build ao mesmo tempo), 0 falha persistente**.
+
+**Validado**: tsc + lint limpos. E2E rodado 3 vezes nesta leva (antes das functions,
+depois das functions sem revoke, depois do revoke final) — todas fecharam sem falha
+persistente. `tests/unit/applyBankHoursToPayment.spec.ts` teve o mock ajustado pra
+`get_payments_masked` (a fixture antiga de `payments_v` é reaproveitada, só normalizada
+pro formato de array que a function devolve) — **não consegui RODAR essa suíte pra
+confirmar** (o ambiente vitest ficou 6x seguidas travando no início do worker, inclusive
+pra um arquivo não relacionado ao que mexi — confirmado ambiental, não é bug meu, mas
+fica registrado como validação pendente pra próxima sessão rodar assim que o ambiente
+normalizar).
+
+**Pendência real deixada por este parágrafo**: driverpay (8 tabelas — `driverpay_payments`
+é o caso mais complexo, com 3 relações aninhadas: pacotes/descontos/vales por pagamento) —
+já desenhado (mesmo padrão, function `can_view_driverpay_values()` como atalho pra não
+repetir a condição 9x por função), mas NADA aplicado ainda.
