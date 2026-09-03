@@ -1008,7 +1008,8 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
 
         const row = page.locator('table tr', { hasText: `${PREFIX}H2Import` }).first();
         await expect(row).toBeVisible({ timeout: 30_000 });
-        await expect(row).toContainText(/100\.00/);
+        // 03/09/2026: C6 passou a usar moneyBRL (mascaramento) — vírgula agora.
+        await expect(row).toContainText(/100,00/);
       } finally {
         const s = getClient();
         await s.from('payments').delete().eq('employee_id', empId);

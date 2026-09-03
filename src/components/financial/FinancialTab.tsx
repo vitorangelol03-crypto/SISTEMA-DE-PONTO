@@ -18,6 +18,7 @@ import {
 import { getBonusValueForType } from '../../utils/bonusHelpers';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
+import { moneyBRL, HIDDEN_VALUE } from '../../utils/moneyMask';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 import FunctionRoleFilter, { FUNCTION_ROLE_ALL, FUNCTION_ROLE_NONE } from '../common/FunctionRoleFilter';
@@ -68,6 +69,20 @@ const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
 
 export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermission }) => {
   const { company } = useCompany();
+  // 03/09/2026: `financial.viewPayments` já existia na tela de Permissões mas nunca era
+  // checado em lugar nenhum — desligar pra alguém não fazia nada. Agora esconde valor de
+  // verdade (mascarado como "•••") em toda a aba, com o valor cru travado no BANCO, não
+  // só na tela.
+  //
+  // As 3 permissões: `payments` é lida tanto pelo Financeiro quanto pelo C6, e o banco só
+  // devolve o valor cru quando a pessoa tem financial.viewPayments E c6payment.viewValues
+  // juntas (decisão do Victor — mais seguro). Os totais desta aba também misturam desconto
+  // de erro/triagem (errors.viewValues) — sem as 3, o banco devolve NULL em algum pedaço da
+  // conta e o total ficaria errado (não "•••", errado de verdade) se essa variável checasse
+  // só uma permissão. Por isso as 3 juntas aqui.
+  const canViewValues = hasPermission('financial.viewPayments')
+    && hasPermission('c6payment.viewValues')
+    && hasPermission('errors.viewValues');
   const [bonusTypes, setBonusTypes] = useState<BonusTypeRecord[]>(FALLBACK_BONUS_TYPES);
   const [_employees, setEmployees] = useState<Employee[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -314,6 +329,12 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       toast.error('Você não tem permissão para aplicar valores de pagamento');
       return;
     }
+    // 03/09/2026: preserva o bônus já existente ao aplicar a diária em massa — sem
+    // ver o valor real, zeraria o bônus de todo mundo por engano.
+    if (!canViewValues) {
+      toast.error('Você precisa da permissão de ver valores em R$ pra aplicar valores em massa (essa ação preserva o bônus já lançado).');
+      return;
+    }
 
     if (!bulkDailyRate || selectedEmployees.size === 0) {
       toast.error('Selecione funcionários e defina um valor diário');
@@ -356,6 +377,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   };
 
   const handleEditPayment = (employeeId: string, date: string) => {
+    // 03/09/2026: o formulário pré-preenche com a diária/bônus ATUAIS pra editar em
+    // cima — sem ver o valor real, mostraria "0" no lugar do valor de verdade, e
+    // salvar sem perceber apagaria o valor real (não é só esconder na tela).
+    if (!canViewValues) {
+      toast.error('Você precisa da permissão de ver valores em R$ pra editar um pagamento (o formulário precisa mostrar o valor atual pra editar em cima dele).');
+      return;
+    }
     const payment = payments.find(pay => pay.employee_id === employeeId && pay.date === date);
     setEditingPayment({ employeeId, date });
     setEditValues({
@@ -367,6 +395,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const handleSaveEdit = async () => {
     if (!hasPermission('financial.editRate')) {
       toast.error('Você não tem permissão para editar pagamentos');
+      return;
+    }
+    if (!canViewValues) {
+      toast.error('Você precisa da permissão de ver valores em R$ pra editar um pagamento.');
       return;
     }
 
@@ -468,6 +500,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const handleErrorDiscount = async () => {
     if (!hasPermission('financial.applyDiscount')) {
       toast.error('Você não tem permissão para aplicar descontos');
+      return;
+    }
+    // 03/09/2026: lê a diária/bônus atuais pra recalcular o total com o desconto —
+    // sem ver o valor real, o total sairia errado (não zerado, ERRADO — ex.: só o
+    // desconto vira o total, o resto do pagamento some).
+    if (!canViewValues) {
+      toast.error('Você precisa da permissão de ver valores em R$ pra aplicar desconto por erro.');
       return;
     }
 
@@ -605,7 +644,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       'Data': formatDateBR(removal.date),
       'Funcionário': removal.employees?.name || 'N/A',
       'CPF': formatCPF(removal.employees?.cpf || ''),
-      'Valor Removido (R$)': removal.bonus_amount_removed.toFixed(2),
+      // 03/09/2026: exportar pra Excel não pode furar o mascaramento — quem não tem
+      // financial.viewPayments não pode baixar o valor num arquivo.
+      'Valor Removido (R$)': canViewValues ? removal.bonus_amount_removed.toFixed(2) : HIDDEN_VALUE,
       'Observação': removal.observation,
       'Removido Por': removal.removed_by,
       'Data da Remoção': formatDateBR(removal.removed_at.split('T')[0])
@@ -892,7 +933,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 <DollarSign className="w-5 h-5 text-green-600" />
               </div>
               <div className="text-2xl font-bold text-green-600">
-                R$ {totalEarnings.toFixed(2)}
+                {moneyBRL(totalEarnings, canViewValues)}
               </div>
             </div>
 
@@ -941,7 +982,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 <DollarSign className="w-5 h-5 text-red-600" />
               </div>
               <div className="text-2xl font-bold text-red-600">
-                R$ {displayedBonusRemovals.reduce((sum, r) => sum + Number(r.bonus_amount_removed), 0).toFixed(2)}
+                {moneyBRL(displayedBonusRemovals.reduce((sum, r) => sum + Number(r.bonus_amount_removed), 0), canViewValues)}
               </div>
             </div>
 
@@ -1129,7 +1170,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                           : severity === 'yellow'
                           ? 'bg-yellow-100 text-yellow-800'
                           : 'bg-red-100 text-red-800';
-                        const valStr = `R$ ${data.totalErrorValue.toFixed(2).replace('.', ',')}`;
+                        const valStr = moneyBRL(data.totalErrorValue, canViewValues);
                         const label = empty
                           ? '0 erros'
                           : hasQty && hasVal
@@ -1146,21 +1187,21 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-green-600">
-                        R$ {data.totalEarned.toFixed(2).replace('.', ',')}
+                        {moneyBRL(data.totalEarned, canViewValues)}
                       </div>
                       {(data.totalErrorValue > 0 || data.totalTriageDiscount > 0) && (
                         <div className="text-xs text-gray-500 mt-0.5">
-                          Bruto: R$ {data.totalEarnedGross.toFixed(2).replace('.', ',')}
+                          Bruto: {moneyBRL(data.totalEarnedGross, canViewValues)}
                         </div>
                       )}
                       {data.totalErrorValue > 0 && (
                         <div className="text-xs text-red-600">
-                          -R$ {data.totalErrorValue.toFixed(2).replace('.', ',')} erro valor
+                          -{moneyBRL(data.totalErrorValue, canViewValues)} erro valor
                         </div>
                       )}
                       {data.totalTriageDiscount > 0 && (
                         <div className="text-xs text-red-600">
-                          -R$ {data.totalTriageDiscount.toFixed(2).replace('.', ',')} triagem
+                          -{moneyBRL(data.totalTriageDiscount, canViewValues)} triagem
                         </div>
                       )}
                     </td>
@@ -1178,6 +1219,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                       </button>
                       <button
                         onClick={async () => {
+                          // 03/09/2026: o holerite é um documento real que vai pro FUNCIONÁRIO —
+                          // sem ver o valor real, sairia com o pagamento errado/zerado nas mãos
+                          // de uma pessoa de verdade (mesmo risco do espelho do motorista).
+                          if (!canViewValues) {
+                            toast.error('Você precisa da permissão de ver valores em R$ pra gerar o holerite (o PDF sai com o valor de verdade, então precisa ver o valor pra gerar).');
+                            return;
+                          }
                           // Sub-fase 17.2: gera holerite PDF MVP do funcionário no período atual
                           const { downloadHoleritePdf } = await import('../../utils/holeritePdf');
                           await downloadHoleritePdf({
@@ -1272,7 +1320,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                   <div>
                                     <div className="text-sm font-medium">{formatDateBR(payment.date)}</div>
                                     <div className="text-xs text-gray-600">
-                                      Diária: R$ {payment.daily_rate?.toFixed(2) || '0.00'}
+                                      Diária: {moneyBRL(payment.daily_rate ?? 0, canViewValues)}
                                     </div>
                                     {(() => {
                                       const perType = bonusTypes.map(bt => ({
@@ -1287,16 +1335,16 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                         <>
                                           {perType.map(({ bt, value }) => (
                                             <div key={bt.id} className="text-xs text-gray-600">
-                                              Bônus {bt.code}: R$ {value.toFixed(2)}
+                                              Bônus {bt.code}: {moneyBRL(value, canViewValues)}
                                             </div>
                                           ))}
                                           <div className="text-xs text-gray-700 font-medium border-t border-gray-200 mt-1 pt-1">
-                                            Bônus Total: R$ {bonusTotal.toFixed(2)}
+                                            Bônus Total: {moneyBRL(bonusTotal, canViewValues)}
                                           </div>
                                           {mismatch && (
                                             <div
                                               className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 mt-1"
-                                              title={`Soma por tipo = R$ ${sumParts.toFixed(2)} / Bônus salvo = R$ ${bonusTotal.toFixed(2)}`}
+                                              title={canViewValues ? `Soma por tipo = R$ ${sumParts.toFixed(2)} / Bônus salvo = R$ ${bonusTotal.toFixed(2)}` : HIDDEN_VALUE}
                                             >
                                               ⚠️ Valor editado manualmente
                                             </div>
@@ -1328,12 +1376,12 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                         <>
                                           {quantityCount > 0 && valuePerError > 0 && (
                                             <div className="text-xs text-red-600">
-                                              Desconto por erro ({quantityCount} unidades): -{quantityCount} × R$ {valuePerError.toFixed(2)} = -R$ {totalDiscount.toFixed(2)}
+                                              Desconto por erro ({quantityCount} unidades): -{quantityCount} × {moneyBRL(valuePerError, canViewValues)} = -{moneyBRL(totalDiscount, canViewValues)}
                                             </div>
                                           )}
                                           {valueDiscount > 0 && (
                                             <div className="text-xs text-red-600">
-                                              Desconto por erro (valor): -R$ {valueDiscount.toFixed(2)}
+                                              Desconto por erro (valor): -{moneyBRL(valueDiscount, canViewValues)}
                                             </div>
                                           )}
                                         </>
@@ -1348,10 +1396,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                       const displayTotal = Math.max(0, rawTotal - valueDiscountForDay);
                                       return (
                                         <div className="text-sm font-medium text-green-600">
-                                          Total: R$ {displayTotal.toFixed(2).replace('.', ',')}
+                                          Total: {moneyBRL(displayTotal, canViewValues)}
                                           {valueDiscountForDay > 0 && (
                                             <span className="text-[11px] text-gray-500 ml-2">
-                                              (bruto R$ {rawTotal.toFixed(2).replace('.', ',')})
+                                              (bruto {moneyBRL(rawTotal, canViewValues)})
                                             </span>
                                           )}
                                         </div>
@@ -1392,7 +1440,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                             <div className="space-y-1">
                               {data.triageDiscounts.map((t, idx) => (
                                 <div key={idx} className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
-                                  Desconto triagem (período {formatDateBR(t.period_start)} a {formatDateBR(t.period_end)}): <span className="font-semibold">-R$ {t.value_deducted.toFixed(2).replace('.', ',')}</span>
+                                  Desconto triagem (período {formatDateBR(t.period_start)} a {formatDateBR(t.period_end)}): <span className="font-semibold">-{moneyBRL(t.value_deducted, canViewValues)}</span>
                                   <span className="text-xs text-gray-600 ml-2">({t.errors_share} erros)</span>
                                 </div>
                               ))}
@@ -1418,7 +1466,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                                   </div>
                                   <div className="text-sm text-red-600 font-bold">
                                     {isValue
-                                      ? `R$ ${Number(errorRecord.error_value ?? 0).toFixed(2).replace('.', ',')}`
+                                      ? moneyBRL(Number(errorRecord.error_value ?? 0), canViewValues)
                                       : `${errorRecord.error_count} erro(s)`}
                                   </div>
                                   {errorRecord.observations && (
@@ -1480,7 +1528,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                   <span className="text-xs text-yellow-800 block">Erros</span>
                   <span className="text-sm font-semibold text-yellow-700">
                     {data.totalErrors > 0 || data.totalErrorValue > 0
-                      ? `${data.totalErrors}${data.totalErrorValue > 0 ? ` + R$${data.totalErrorValue.toFixed(2)}` : ''}`
+                      ? `${data.totalErrors}${data.totalErrorValue > 0 ? ` + ${moneyBRL(data.totalErrorValue, canViewValues)}` : ''}`
                       : '0'}
                   </span>
                 </div>
@@ -1489,13 +1537,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               <div className="bg-gray-50 rounded p-2 mb-3">
                 <span className="text-xs text-gray-500 block">Total Ganho</span>
                 <span className="text-base font-bold text-green-600">
-                  R$ {data.totalEarned.toFixed(2).replace('.', ',')}
+                  {moneyBRL(data.totalEarned, canViewValues)}
                 </span>
                 {(data.totalErrorValue > 0 || data.totalTriageDiscount > 0) && (
                   <div className="text-xs text-gray-500 mt-0.5">
-                    Bruto: R$ {data.totalEarnedGross.toFixed(2).replace('.', ',')}
-                    {data.totalErrorValue > 0 && <div className="text-red-600">-R$ {data.totalErrorValue.toFixed(2).replace('.', ',')} erro valor</div>}
-                    {data.totalTriageDiscount > 0 && <div className="text-red-600">-R$ {data.totalTriageDiscount.toFixed(2).replace('.', ',')} triagem</div>}
+                    Bruto: {moneyBRL(data.totalEarnedGross, canViewValues)}
+                    {data.totalErrorValue > 0 && <div className="text-red-600">-{moneyBRL(data.totalErrorValue, canViewValues)} erro valor</div>}
+                    {data.totalTriageDiscount > 0 && <div className="text-red-600">-{moneyBRL(data.totalTriageDiscount, canViewValues)} triagem</div>}
                   </div>
                 )}
               </div>
@@ -1521,18 +1569,18 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                     const inlineLabel = perType.length === 0
                       ? null
                       : perType
-                          .map((p, i) => `${i === 0 ? `Bônus ${p.bt.code}` : p.bt.code}: R$ ${p.value.toFixed(2)}`)
+                          .map((p, i) => `${i === 0 ? `Bônus ${p.bt.code}` : p.bt.code}: ${moneyBRL(p.value, canViewValues)}`)
                           .join(' · ');
                     return (
                       <div key={payment.id} className="bg-white p-3 rounded border text-sm">
                         <div className="font-medium mb-1">{formatDateBR(payment.date)}</div>
                         <div className="text-xs text-gray-600 space-y-0.5">
-                          <div>Diária: R$ {payment.daily_rate?.toFixed(2) || '0.00'}</div>
+                          <div>Diária: {moneyBRL(payment.daily_rate ?? 0, canViewValues)}</div>
                           {inlineLabel && <div>{inlineLabel}</div>}
-                          <div className="font-medium border-t border-gray-200 mt-1 pt-1">Bônus Total: R$ {bonusTotal.toFixed(2)}</div>
+                          <div className="font-medium border-t border-gray-200 mt-1 pt-1">Bônus Total: {moneyBRL(bonusTotal, canViewValues)}</div>
                         </div>
                         <div className="text-sm font-medium text-green-600 mt-1">
-                          Total: R$ {Number(payment.total ?? 0).toFixed(2).replace('.', ',')}
+                          Total: {moneyBRL(Number(payment.total ?? 0), canViewValues)}
                         </div>
                         <div className="flex gap-2 mt-2">
                           {hasPermission('financial.editRate') && (
@@ -1636,7 +1684,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                          R$ {Number(removal.bonus_amount_removed).toFixed(2)}
+                          {moneyBRL(Number(removal.bonus_amount_removed), canViewValues)}
                         </span>
                       </td>
                       <td className="px-6 py-4 max-w-md">
@@ -1674,7 +1722,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                       <div className="text-xs text-gray-500">{removal.employees?.cpf ? formatCPF(removal.employees.cpf) : 'N/A'}</div>
                     </div>
                     <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 whitespace-nowrap">
-                      R$ {Number(removal.bonus_amount_removed).toFixed(2)}
+                      {moneyBRL(Number(removal.bonus_amount_removed), canViewValues)}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs mb-2">
@@ -1876,6 +1924,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           paymentPeriodId={selectedPeriodId}
           period={periods.find(p => p.id === selectedPeriodId) ?? null}
           supervisorId={userId}
+          canViewValues={canViewValues}
           onClose={() => setShowApplyModal(false)}
           onApplied={() => { setShowApplyModal(false); loadData(); }}
         />
@@ -1902,6 +1951,8 @@ interface BankHoursApplyModalProps {
   supervisorId: string;
   onClose: () => void;
   onApplied: () => void;
+  /** Ver valores em R$ (03/09/2026) — false esconde os valores desta janela. */
+  canViewValues: boolean;
 }
 
 const STATUS_LABELS: Record<BankHoursPreviewItem['status'], { label: string; cls: string }> = {
@@ -1913,12 +1964,8 @@ const STATUS_LABELS: Record<BankHoursPreviewItem['status'], { label: string; cls
   toggle_off:        { label: 'Desligado',         cls: 'text-gray-500 bg-gray-100' },
 };
 
-function formatBRL(value: number): string {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 const BankHoursApplyModal: React.FC<BankHoursApplyModalProps> = ({
-  companyId, companyLabel, paymentPeriodId, period, supervisorId, onClose, onApplied,
+  companyId, companyLabel, paymentPeriodId, period, supervisorId, canViewValues, onClose, onApplied,
 }) => {
   const [items, setItems] = useState<BankHoursPreviewItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2149,13 +2196,13 @@ const BankHoursApplyModal: React.FC<BankHoursApplyModalProps> = ({
                             {item.saldoLabel}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {item.valorAplicar !== 0 ? formatBRL(item.valorAplicar) : '—'}
+                            {item.valorAplicar !== 0 ? moneyBRL(item.valorAplicar, canViewValues) : '—'}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums text-gray-600">
-                            {item.liquidoAntes ? formatBRL(item.liquidoAntes) : '—'}
+                            {item.liquidoAntes ? moneyBRL(item.liquidoAntes, canViewValues) : '—'}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums font-medium">
-                            {item.liquidoDepois ? formatBRL(item.liquidoDepois) : '—'}
+                            {item.liquidoDepois ? moneyBRL(item.liquidoDepois, canViewValues) : '—'}
                           </td>
                           <td className="px-3 py-2">
                             <span className={`inline-block px-2 py-0.5 rounded text-xs ${statusInfo.cls}`}>
@@ -2197,16 +2244,16 @@ const BankHoursApplyModal: React.FC<BankHoursApplyModalProps> = ({
                 </div>
                 <div>
                   <div className="text-xs text-gray-600">Total a creditar</div>
-                  <div className="font-semibold text-green-700">{formatBRL(aggregated.totalCredit)}</div>
+                  <div className="font-semibold text-green-700">{moneyBRL(aggregated.totalCredit, canViewValues)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-600">Total a debitar</div>
-                  <div className="font-semibold text-red-700">-{formatBRL(aggregated.totalDebit)}</div>
+                  <div className="font-semibold text-red-700">-{moneyBRL(aggregated.totalDebit, canViewValues)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-600">Líquido geral</div>
                   <div className={`font-semibold ${aggregated.net >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                    {aggregated.net >= 0 ? '+' : ''}{formatBRL(aggregated.net)}
+                    {aggregated.net >= 0 ? '+' : ''}{moneyBRL(aggregated.net, canViewValues)}
                   </div>
                 </div>
               </div>

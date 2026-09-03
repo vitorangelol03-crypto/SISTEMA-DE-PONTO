@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType } from '../common/EmploymentTypeFilter';
 import { TriageTab } from './TriageTab';
 import { PaymentPeriodsTab } from './PaymentPeriodsTab';
+import { moneyBRL } from '../../utils/moneyMask';
 
 interface ErrorsTabProps {
   userId: string;
@@ -25,6 +26,9 @@ interface EmployeeWithErrors {
 
 export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) => {
   const { company } = useCompany();
+  // 03/09/2026: esconde valor em R$ (multa por erro, valor direto) pra quem não tem
+  // errors.viewValues. Taxa/frequência de erro (errorRate) não é dinheiro, continua normal.
+  const canViewValues = hasPermission('errors.viewValues');
   const [activeSubTab, setActiveSubTab] = useState<'individual' | 'triage' | 'periods'>('individual');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeesWithErrors, setEmployeesWithErrors] = useState<EmployeeWithErrors[]>([]);
@@ -250,6 +254,13 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
     }
 
     const type: ErrorType = (errorRecord.error_type ?? 'quantity');
+    // 03/09/2026: erro tipo "valor" pré-preenche o formulário com o error_value ATUAL
+    // pra editar em cima — sem ver o valor real (mascarado no banco), o formulário
+    // mostraria "0,00" em vez do valor de verdade.
+    if (type === 'value' && !canViewValues) {
+      toast.error('Você precisa da permissão de ver valores em R$ pra editar um erro lançado por valor.');
+      return;
+    }
     setEditingError(errorRecord.id);
     setErrorFormData({
       employeeId: errorRecord.employee_id,
@@ -533,7 +544,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
             <div className="text-2xl font-bold text-red-600">{statistics.totalQuantityErrors}</div>
             {statistics.totalValueErrors > 0 && (
               <div className="text-xs text-red-700 mt-1 font-semibold">
-                + R$ {statistics.totalValueErrors.toFixed(2).replace('.', ',')} em valor
+                + {moneyBRL(statistics.totalValueErrors, canViewValues)} em valor
               </div>
             )}
           </div>
@@ -864,7 +875,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                                 </div>
                                 <div className="text-sm text-red-600 font-bold">
                                   {isValue
-                                    ? `R$ ${Number(errorRecord.error_value ?? 0).toFixed(2).replace('.', ',')}`
+                                    ? moneyBRL(Number(errorRecord.error_value ?? 0), canViewValues)
                                     : `${errorRecord.error_count} erro(s)`}
                                 </div>
                                 {errorRecord.observations && (
@@ -982,7 +993,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                         </div>
                         <div className="text-sm text-red-600 font-bold">
                           {isValue
-                            ? `R$ ${Number(errorRecord.error_value ?? 0).toFixed(2).replace('.', ',')}`
+                            ? moneyBRL(Number(errorRecord.error_value ?? 0), canViewValues)
                             : `${errorRecord.error_count} erro(s)`}
                         </div>
                         {errorRecord.observations && (
@@ -1089,7 +1100,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                   ℹ️ Já registrado neste dia:{' '}
                   {existingDayErrors.map(e =>
                     (e.error_type ?? 'quantity') === 'value'
-                      ? `💰 R$ ${Number(e.error_value ?? 0).toFixed(2).replace('.', ',')}`
+                      ? `💰 ${moneyBRL(Number(e.error_value ?? 0), canViewValues)}`
                       : `📦 ${e.error_count} unidade(s)`
                   ).join(' · ')}
                   {' — este lançamento será adicionado.'}

@@ -184,7 +184,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: paymentRow(), error: null }],
+      payments_v: [{ data: paymentRow(), error: null }],
       attendance: [{ data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
     });
     const r = await applyBankHoursToPayment(ARGS);
@@ -199,7 +199,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null }, // UPDATE
       ],
@@ -223,7 +223,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: paymentRow(), error: null }],
+      payments_v: [{ data: paymentRow(), error: null }],
       attendance: [{ data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
       __rpc__: [{ data: 'log-1', error: null }], // RPC retorna o log_id
     });
@@ -246,7 +246,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -269,7 +269,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow({ bank_hours_applied_at: '2026-04-15T12:00:00Z' }), error: null },
       ],
     });
@@ -299,7 +299,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [{ apply_bank_hours: true, reason: 'política excepcional' }], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -320,7 +320,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [{ apply_bank_hours: false, reason: 'antigo' }], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -343,7 +343,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: paymentRow(), error: null }],
+      payments_v: [{ data: paymentRow(), error: null }],
       attendance: [{ data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
     });
     await applyBankHoursToPayment(ARGS);
@@ -360,7 +360,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -378,7 +378,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -400,7 +400,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -422,7 +422,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: { id: 'period-1', start_date: '2026-04-10', end_date: '2026-04-20' }, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -443,7 +443,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -464,7 +464,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: null, error: null }],
+      payments_v: [{ data: null, error: null }],
     });
     const r = await applyBankHoursToPayment(ARGS);
     expect(r.success).toBe(false);
@@ -483,7 +483,7 @@ describe('applyBankHoursToPayment', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: paymentRow(), error: null }],
+      payments_v: [{ data: paymentRow(), error: null }],
       attendance: [{ data: [{ bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
       __rpc__: [{ data: null, error: { message: 'simulated INSERT log failure inside RPC' } }],
     });
@@ -530,7 +530,7 @@ describe('previewBankHoursForPeriod', () => {
       payment_periods: [{ data: PERIOD, error: null }],
       employees: [{ data: [{ id: 'emp-1', name: 'Renata', expected_schedule: [0, 480, 480, 480, 480, 480, 240] }], error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: [{ ...paymentRow(), employee_id: 'emp-1' }], error: null }],
+      payments_v: [{ data: [{ ...paymentRow(), employee_id: 'emp-1' }], error: null }],
       attendance: [{ data: [{ employee_id: 'emp-1', bank_credit_minutes: 120, bank_debit_minutes: 0 }], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
@@ -550,7 +550,7 @@ describe('previewBankHoursForPeriod', () => {
       payment_periods: [{ data: PERIOD, error: null }],
       employees: [{ data: [{ id: 'emp-1', name: 'Renata', expected_schedule: [0, 480, 480, 480, 480, 480, 240] }], error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: [{ ...paymentRow({ bank_hours_applied_at: '2026-04-15T12:00:00Z' }), employee_id: 'emp-1' }], error: null }],
+      payments_v: [{ data: [{ ...paymentRow({ bank_hours_applied_at: '2026-04-15T12:00:00Z' }), employee_id: 'emp-1' }], error: null }],
       attendance: [{ data: [], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
@@ -565,7 +565,7 @@ describe('previewBankHoursForPeriod', () => {
       payment_periods: [{ data: PERIOD, error: null }],
       employees: [{ data: [{ id: 'emp-1', name: 'Renata', expected_schedule: [0, 480, 480, 480, 480, 480, 240] }], error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: [], error: null }],
+      payments_v: [{ data: [], error: null }],
       attendance: [{ data: [], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
@@ -579,7 +579,7 @@ describe('previewBankHoursForPeriod', () => {
       payment_periods: [{ data: PERIOD, error: null }],
       employees: [{ data: [{ id: 'emp-1', name: 'Renata', expected_schedule: [0, 480, 480, 480, 480, 480, 240] }], error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: [{ ...paymentRow(), employee_id: 'emp-1' }], error: null }],
+      payments_v: [{ data: [{ ...paymentRow(), employee_id: 'emp-1' }], error: null }],
       attendance: [{ data: [{ employee_id: 'emp-1', bank_credit_minutes: 0, bank_debit_minutes: 0 }], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
@@ -595,7 +595,7 @@ describe('previewBankHoursForPeriod', () => {
       payment_periods: [{ data: PERIOD, error: null }],
       employees: [{ data: [{ id: 'emp-1', name: 'Renata', expected_schedule: [0, 480, 480, 480, 480, 480, 240] }], error: null }],
       bank_hours_overrides: [{ data: [{ employee_id: 'emp-1', apply_bank_hours: false, created_at: '2026-04-10T00:00:00Z' }], error: null }],
-      payments: [{ data: [{ ...paymentRow(), employee_id: 'emp-1' }], error: null }],
+      payments_v: [{ data: [{ ...paymentRow(), employee_id: 'emp-1' }], error: null }],
       attendance: [{ data: [], error: null }],
     });
     const items = await previewBankHoursForPeriod(PREVIEW_ARGS);
@@ -612,7 +612,7 @@ describe('previewBankHoursForPeriod', () => {
         { id: 'emp-2', name: 'João', expected_schedule: [0, 480, 480, 480, 480, 480, 240] },
       ], error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: [
+      payments_v: [{ data: [
         { ...paymentRow(), employee_id: 'emp-1' },
         { ...paymentRow(), employee_id: 'emp-2' },
       ], error: null }],
@@ -638,7 +638,7 @@ describe('previewBankHoursForPeriod', () => {
         { id: 'emp-3', name: 'C', expected_schedule: [0, 480, 480, 480, 480, 480, 240] },
       ], error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: [
+      payments_v: [{ data: [
         { ...paymentRow(), employee_id: 'emp-1' },                                                  // A → pending
         { ...paymentRow({ bank_hours_applied_at: '2026-04-15T12:00:00Z' }), employee_id: 'emp-2' }, // B → already_applied
         // emp-3 sem payment → no_payment (não vem na resposta)
@@ -678,7 +678,7 @@ describe('Edge cases extremos - Combo I', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null }, // UPDATE
       ],
@@ -703,7 +703,7 @@ describe('Edge cases extremos - Combo I', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -724,7 +724,7 @@ describe('Edge cases extremos - Combo I', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -746,7 +746,7 @@ describe('Edge cases extremos - Combo I', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -771,7 +771,7 @@ describe('Edge cases extremos - Combo I', () => {
       payment_periods: [{ data: PERIOD, error: null }],
       // Override OFF presente
       bank_hours_overrides: [{ data: [{ apply_bank_hours: false, reason: 'antigo' }], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -795,7 +795,7 @@ describe('Edge cases extremos - Combo I', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [{ apply_bank_hours: true, reason: 'política excepcional' }], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -818,7 +818,7 @@ describe('Edge cases extremos - Combo I', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -841,7 +841,7 @@ describe('Edge cases extremos - Combo I', () => {
       employees: [{ data: fixtureEmployee(companyZB), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -859,7 +859,7 @@ describe('Edge cases extremos - Combo I', () => {
       employees: [{ data: fixtureEmployee(companyKH), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -907,7 +907,7 @@ describe('Edge cases extremos - Combo I', () => {
         employees: [{ data: fixtureEmployee(company), error: null }],
         payment_periods: [{ data: PERIOD, error: null }],
         bank_hours_overrides: [{ data: [], error: null }],
-        payments: i === 0
+        payments_v: i === 0
           ? [{ data: paymentData, error: null }, { data: null, error: null }]
           : [{ data: paymentData, error: null }], // só SELECT, não chega no UPDATE
         attendance: i === 0
@@ -933,7 +933,7 @@ describe('Edge cases extremos - Combo I', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -956,7 +956,7 @@ describe('Edge cases extremos - Combo I', () => {
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [{ data: null, error: null }], // SELECT vazio
+      payments_v: [{ data: null, error: null }], // SELECT vazio
     });
     const r = await applyBankHoursToPayment(ARGS);
     expect(r.success).toBe(false);
@@ -965,8 +965,8 @@ describe('Edge cases extremos - Combo I', () => {
     // Nenhum INSERT no log e nenhum UPDATE em payment
     const logCalls = fromMock.mock.calls.filter((c) => c[0] === 'bank_hours_application_log').length;
     expect(logCalls).toBe(0);
-    // payments só foi chamado 1x (SELECT que retornou vazio)
-    const paymentsCalls = fromMock.mock.calls.filter((c) => c[0] === 'payments').length;
+    // payments_v só foi chamado 1x (SELECT que retornou vazio)
+    const paymentsCalls = fromMock.mock.calls.filter((c) => c[0] === 'payments_v').length;
     expect(paymentsCalls).toBe(1);
   });
 });
@@ -1003,7 +1003,7 @@ describe('Sub-fase 8.3 — nightCreditMinutes derivação (D1=C diurno primeiro)
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -1037,7 +1037,7 @@ describe('Sub-fase 8.3 — nightCreditMinutes derivação (D1=C diurno primeiro)
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -1068,7 +1068,7 @@ describe('Sub-fase 8.3 — nightCreditMinutes derivação (D1=C diurno primeiro)
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -1099,7 +1099,7 @@ describe('Sub-fase 8.3 — nightCreditMinutes derivação (D1=C diurno primeiro)
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -1131,7 +1131,7 @@ describe('Sub-fase 8.3 — nightCreditMinutes derivação (D1=C diurno primeiro)
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],
@@ -1158,7 +1158,7 @@ describe('Sub-fase 8.3 — nightCreditMinutes derivação (D1=C diurno primeiro)
       employees: [{ data: fixtureEmployee(company), error: null }],
       payment_periods: [{ data: PERIOD, error: null }],
       bank_hours_overrides: [{ data: [], error: null }],
-      payments: [
+      payments_v: [
         { data: paymentRow(), error: null },
         { data: null, error: null },
       ],

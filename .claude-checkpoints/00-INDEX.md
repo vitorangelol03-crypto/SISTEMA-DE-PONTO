@@ -2,8 +2,26 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-03** (3 bugs reais de corrida achados e corrigidos
-> investigando a fundo os testes `56`/`61` do driverpay — não eram flake).
+> Última atualização: **2026-09-03** (mascaramento de valores no banco pra Financeiro/
+> Erros/C6 — com um incidente real no meio: a trava de coluna nunca funcionou e minha
+> primeira correção derrubou as 4 telas por ~15min, revertido no mesmo dia).
+
+> ✅ **Mascaramento de valores NO BANCO — Financeiro + Erros + C6** (migrations
+> `20260903120000`/`20260903130000`/`20260903140000`, `CHECKPOINT_SESSAO_2026-09-01.md`
+> §15): mesmo padrão do driverpay (§13) aplicado nos 3 módulos que faltavam. Achado sério
+> no meio do caminho: várias contas (aplicar/remover bônus, distribuir triagem, banco de
+> horas, holerite PDF, valor pro arquivo do C6, espelho do motorista) LEEM o valor pra
+> RECALCULAR, não só mostram na tela — agora exigem a permissão de ver valor também, com
+> erro claro em vez de conta errada. **Incidente real**: o `REVOKE SELECT` de coluna nunca
+> bloqueou nada (o Supabase já libera a tabela inteira de fábrica) — a correção que tentei
+> aplicar quebrou as views inteiras pra todo mundo (view com `security_invoker=true` exige
+> permissão de coluna do invocador pra QUALQUER coluna referenciada, mesmo atrás de um CASE
+> WHEN). Revertido na hora. A trava contra REST direto na tabela crua fica PENDENTE (precisa
+> de function `SECURITY DEFINER`, não view) — o mascaramento por permissão normal continua
+> funcionando. Também achado e corrigido: `payments_v` esqueceu a coluna `bonus_c2`.
+> Validado: tsc+lint+build limpos, E2E de Financeiro/Erros/C6/integridade financeira 100%
+> limpos depois das correções, `tests/105` do driverpay com falha de layout não relacionada
+> (documentada).
 
 > ✅ **3 bugs reais de corrida em Pagamentos Driver** (`3961694`,
 > `CHECKPOINT_SESSAO_2026-09-01.md` §14): Victor pediu pra atacar os testes `56`/`61`, que
@@ -167,17 +185,20 @@
 
 ## 🎯 Estado atual (1 parágrafo)
 
-**Sessão 01→03/09 — permissão "Ver valores" em Pagamentos Driver completa (UI §12 + banco
-§13) + 3 bugs de corrida reais achados e corrigidos nos testes `56`/`61` (§14,
-`3961694`)** — a investigação mais funda dos testes revelou que a classificação anterior
-("pré-existente, sem relação") estava errada; eram bugs reais de corrida em edições rápidas
-da grade. Veio depois das 3 travas exclusivas do 2626 (Ponto/Driverpay/Aprovação de
-Cadastro) terem virado permissão normal configurável (`cc81722`, §11 — pré-requisito
-arquitetural). Só o 2626 segue com bypass incondicional. Ver
-`CHECKPOINT_SESSAO_2026-09-01.md` §11-§14 pro detalhe. Pendente (pedido do Victor,
-madrugada de 02→03/09, ainda não atacado): auditar o resto do sistema (Financeiro, C6,
-etc.) atrás do mesmo tipo de vazamento do §13, e levantar "máximo controle em cada aba" —
-só Pagamentos Driver foi coberto até aqui.
+**Sessão 01→03/09 — mascaramento de valores no banco fechado em Pagamentos Driver +
+Financeiro + Erros + C6 (§12-§15)**, incluindo os 3 bugs de corrida do driverpay (§14) e a
+auditoria "mesmo tipo de vazamento" que Victor tinha pedido pros outros módulos (§15,
+agora feita pra Financeiro/Erros/C6). **Pendência real deixada pelo §15**: a trava contra
+alguém chamar a API do Supabase direto na tabela crua (bypass do REST) não está fechada em
+NENHUM dos módulos (nem driverpay de ontem, nem os 3 de hoje) — o `REVOKE SELECT` de coluna
+nunca funcionou de verdade (achado e confirmado com evidência real, não suposição); só o
+mascaramento por permissão na tela/view continua ativo. Precisa de function `SECURITY
+DEFINER` em vez de view pra fechar isso sem quebrar tudo de novo (ver §15 pro porquê). Veio
+depois das 3 travas exclusivas do 2626 (Ponto/Driverpay/Aprovação de Cadastro) terem virado
+permissão normal configurável (`cc81722`, §11). Só o 2626 segue com bypass incondicional.
+Ver `CHECKPOINT_SESSAO_2026-09-01.md` §11-§15 pro detalhe. Ainda não atacado: "máximo
+controle em cada aba" nos ~7 módulos restantes (Ponto, Funcionários, Relatórios,
+Configurações, Usuários, Gerenciamento de Dados, Aprovação de Cadastro).
 
 **Sessão 01/09 — rework de Usuários/Permissões/Auditoria, Fase A no ar.** Cadastro
 completo (nome+telefone), redefinir senha (padrão + troca obrigatória), edge fn
@@ -1288,7 +1309,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-09-01.md` | **Mais recente.** Rework Usuários/Permissões/Auditoria — investigação (causa raiz do "permissões não bloqueiam de verdade" = RLS só olha `company_id`) + plano 3 fases aprovado. **Fase A no ar** (`bc47757`): nome+telefone obrigatórios, botão Redefinir Senha (padrão+troca obrigatória, tela `ForceChangePasswordScreen`), edge fn `create-user` dispatcher por `action` com permission check real (`deleteUser` deixa de ser DELETE direto), `UsersPermissions.edit`/`.resetPassword` novos. 20/20 E2E chromium+mobile-pixel5. Achado de regressão pré-existente em specs 11/22/26 (mobile-pixel5, não causado por esta leva) reportado, não consertado. Fase B (enforcement real Usuários+Funcionários) e Fase C (auditoria em tudo) pendentes. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-01.md` | **Mais recente.** Rework Usuários/Permissões — Fase A (`bc47757`) → 3 travas exclusivas do 2626 viram permissão normal (§11, `cc81722`) → "Ver valores" em Pagamentos Driver, UI (§12) + banco (§13, `3eb14bc`) → 3 bugs de corrida reais em `56`/`61` (§14, `3961694`) → mascaramento no banco em Financeiro/Erros/C6 (§15) com incidente real (trava de coluna nunca funcionou, 1ª correção derrubou as 4 telas ~15min, revertido no mesmo dia) + bug do `bonus_c2` achado e corrigido. Pendência real: trava contra REST direto na tabela crua ainda aberta em TODOS os módulos (driverpay + hoje) — precisa de function `SECURITY DEFINER`. Fase B/C de Usuários/auditoria ainda pendentes. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-31.md` | **Mais recente.** Roadmap ditado (tablet + facial sem CPF + 4 batidas) e pendências zeradas antes dele: TOTAL GERAL em branco, selo "todos pagos" do grupo, "NF ok" não era bug, 101-H1, CI typecheck era no-op, actions v7, tsbuildinfo, CLAUDE.md. **3 buracos de segurança provados E FECHADOS** (backup_* sem RLS, view sem security_invoker, RPC pro anon — sonda anon→401 nos 3). 🔴 **Correção urgente no meio da sessão:** selo "no app" da linha não era ciente de grupo (61/113 linhas sem selo no filtro "Publicado") — `rowPublicadoNoApp()` unifica filtro+selo+header. **✅ Roadmap item 1 (facial+geo no servidor) NO AR:** migration aplicada + edge fn `clock-in-validated` publicada (v11→v12) com OK do Victor ("pode seguir" depois de eu explicar o risco real) — provado AO VIVO contra a função recém-publicada: `edgeFnClockFacialGeoEstrito` passou (trava bloqueia rosto/geo errados de verdade) e specs 02+08+23+62 24/24 (fluxo de hoje intacto). Chave `require_facial_clock` **desligada em Caratinga e Ponte Nova** — falta decidir quando ligar por empresa. Branch mergeada (fast-forward) em `main`. Fix rápido no meio: grupo sem nada a receber não conta mais como "falta pagar" (fica sempre por último, revertendo decisão de 14/08). PROXIMOS_PASSOS reescrito. Ver §9-§11. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-30.md` | Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado E consertado (`8672604`); depois 5 warnings zerados (`1e5656a`): useCallback nos 4 hooks + useCompany em arquivo próprio (26 imports). eslint 0+0, CI verde. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-26.md` | Cadastro público de funcionário (`/cadastro?empresa=...`, sem login) + aba nova "Aprovação de Cadastro" (exclusiva do 2626) — migration, edge fn `register-employee`, bloqueio no `/clock` pra recusado, botão de copiar por campo (sempre versão limpa). E2E novo `tests/78`. **Só local — push pendente do OK dele.** | 🟢 ATIVO |

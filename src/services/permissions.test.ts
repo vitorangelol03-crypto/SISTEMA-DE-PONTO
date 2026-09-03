@@ -79,6 +79,7 @@ describe('permissions.ts - Sistema de Permissões', () => {
           edit: false,
           bulkEdit: false,
           delete: false,
+          viewValues: false,
         },
         driverpay: {
           view: false,
@@ -107,6 +108,7 @@ describe('permissions.ts - Sistema de Permissões', () => {
           viewTriage: false,
           createTriage: false,
           distributeTriage: false,
+          viewValues: false,
         },
         settings: {
           view: false,

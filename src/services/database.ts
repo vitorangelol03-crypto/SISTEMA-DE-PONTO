@@ -404,6 +404,49 @@ async function validatePermission(
   return { allowed: true };
 }
 
+/**
+ * `payments` tem valor mascarado no banco (payments_v) pra quem não tem AS DUAS
+ * permissões juntas: financial.viewPayments E c6payment.viewValues (decisão do
+ * Victor, 03/09/2026 — a tabela é lida tanto pelo Financeiro quanto pelo C6, e o
+ * banco não sabe de qual tela veio o pedido). Toda função que LÊ um valor de
+ * payments pra RECALCULAR e escrever de volta (não só mostrar na tela) precisa
+ * confirmar isto ANTES — senão a viewzinha devolve NULL e a conta quebra silenciosa
+ * (ex.: aplicar bônus B zeraria o C1/C2 que a pessoa já tinha, por ler NULL em vez
+ * do valor real).
+ */
+async function ensureCanViewPaymentValues(userId: string): Promise<PermissionCheckResult> {
+  if (userId === PONTO_EDITOR_ID) return { allowed: true };
+  const userPermissions = await getUserPermissions(userId);
+  if (!userPermissions) {
+    return { allowed: false, error: 'Permissões não encontradas para este usuário' };
+  }
+  const ok = checkPermission(userPermissions, 'financial.viewPayments')
+    && checkPermission(userPermissions, 'c6payment.viewValues');
+  if (!ok) {
+    return {
+      allowed: false,
+      error: 'Esta ação recalcula o valor do pagamento — precisa das permissões "Ver pagamentos" (Financeiro) e "Ver valores em R$" (C6) juntas.',
+    };
+  }
+  return { allowed: true };
+}
+
+/** Mesma ideia de ensureCanViewPaymentValues, pra error_records/triage_errors/triage_error_distributions (só errors.viewValues, não é tabela compartilhada com outro módulo). */
+async function ensureCanViewErrorValues(userId: string): Promise<PermissionCheckResult> {
+  if (userId === PONTO_EDITOR_ID) return { allowed: true };
+  const userPermissions = await getUserPermissions(userId);
+  if (!userPermissions) {
+    return { allowed: false, error: 'Permissões não encontradas para este usuário' };
+  }
+  if (!checkPermission(userPermissions, 'errors.viewValues')) {
+    return {
+      allowed: false,
+      error: 'Esta ação recalcula um valor de erro/triagem — precisa da permissão "Ver valores em R$" de Erros.',
+    };
+  }
+  return { allowed: true };
+}
+
 // Auth functions
 // Sub-fase 11.3/11.1 — loginUser via edge fn auth-login (bcrypt + JWT custom).
 // JWT custom é injetado no supabase client via headers globais, atendendo
@@ -1009,8 +1052,10 @@ export const getPayments = async (
   employmentType: string | undefined,
   companyId: string
 ): Promise<Payment[]> => {
+  // 03/09/2026: valores em R$ mascarados no banco (financial.viewPayments +
+  // c6payment.viewValues) — vai por view, não pela tabela crua.
   let query = supabase
-    .from('payments')
+    .from('payments_v')
     .select(`
       *,
       employees (
@@ -1242,6 +1287,14 @@ export const applyBonusToAllPresent = async (
     throw new Error(`Permissão negada para bônus ${type}`);
   }
 
+  // 03/09/2026: esta função LÊ o bônus atual de cada funcionário pra somar com o
+  // novo e recalcular o total — precisa ver o valor real, senão zeraria os outros
+  // tipos de bônus que a pessoa já tinha (lendo NULL em vez do valor real).
+  const viewCheck = await ensureCanViewPaymentValues(createdBy);
+  if (!viewCheck.allowed) {
+    throw new Error(viewCheck.error || 'Permissão negada');
+  }
+
   const { data: attendances, error: attendanceError } = await supabase
     .from('attendance')
     .select('employee_id')
@@ -1265,7 +1318,7 @@ export const applyBonusToAllPresent = async (
     }
 
     const { data: existingPayment } = await supabase
-      .from('payments')
+      .from('payments_v')
       .select('*')
       .eq('employee_id', attendance.employee_id)
       .eq('date', date)
@@ -1360,8 +1413,11 @@ export const getBonusInfoForDate = async (date: string, companyId: string): Prom
     if (!type || !(type in BONUS_COLUMNS)) continue;
 
     const column = BONUS_COLUMNS[type];
+    // 03/09/2026: bonus_b/c1/c2 mascarados no banco — filtro ".gt" numa coluna
+    // revogada quebraria na tabela crua. Vai por payments_v (quem não tem "ver
+    // valor" só conta 0 aqui — efeito colateral aceito, não é vazamento de R$).
     const { data: payments } = await supabase
-      .from('payments')
+      .from('payments_v')
       .select('employee_id')
       .eq('date', date)
       .gt(column, 0)
@@ -1413,9 +1469,16 @@ export const removeBonusFromEmployee = async (
     throw new Error('Observação deve ter no máximo 500 caracteres');
   }
 
+  // 03/09/2026: lê o valor atual pra zerar só o tipo removido e recalcular o total —
+  // precisa ver o valor real, senão zeraria os outros tipos junto.
+  const viewCheck = await ensureCanViewPaymentValues(userId);
+  if (!viewCheck.allowed) {
+    throw new Error(viewCheck.error || 'Permissão negada');
+  }
+
   // Buscar pagamento do funcionário
   const { data: payment } = await supabase
-    .from('payments')
+    .from('payments_v')
     .select('*')
     .eq('employee_id', employeeId)
     .eq('date', date)
@@ -1508,6 +1571,13 @@ export const removeAllBonusesForDate = async (
     throw new Error('Observação deve ter no máximo 500 caracteres');
   }
 
+  // 03/09/2026: lê o valor atual de cada pagamento pra zerar e registrar o quanto
+  // foi removido — precisa ver o valor real.
+  const viewCheck = await ensureCanViewPaymentValues(userId);
+  if (!viewCheck.allowed) {
+    throw new Error(viewCheck.error || 'Permissão negada');
+  }
+
   // Pré-resolve UUIDs de tipos para preencher bonus_type_id ao registrar remoções
   const types: BonusType[] = ['B', 'C1', 'C2'];
   const typeIdMap: Record<BonusType, string | null> = { B: null, C1: null, C2: null };
@@ -1518,7 +1588,7 @@ export const removeAllBonusesForDate = async (
 
   // Buscar todos os pagamentos com bonificação no dia
   const { data: payments, error: paymentsError } = await supabase
-    .from('payments')
+    .from('payments_v')
     .select('*')
     .eq('date', date)
     .gt('bonus', 0)
@@ -1676,8 +1746,9 @@ export const getBonusRemovalHistory = async (
   endDate: string | undefined,
   companyId: string
 ): Promise<BonusRemoval[]> => {
+  // 03/09/2026: bonus_amount_removed mascarado no banco (financial.viewPayments).
   let query = supabase
-    .from('bonus_removals')
+    .from('bonus_removals_v')
     .select(`
       *,
       employees (
@@ -1714,8 +1785,9 @@ export const getErrorRecords = async (
   employmentType: string | undefined,
   companyId: string
 ): Promise<ErrorRecord[]> => {
+  // 03/09/2026: error_value mascarado no banco (errors.viewValues).
   let query = supabase
-    .from('error_records')
+    .from('error_records_v')
     .select(`
       *,
       employees (
@@ -2148,7 +2220,8 @@ export const getTriageErrors = async (
   endDate: string | undefined,
   companyId: string
 ): Promise<TriageError[]> => {
-  let query = supabase.from('triage_errors').select('*').eq('company_id', companyId);
+  // 03/09/2026: direct_value mascarado no banco (errors.viewValues).
+  let query = supabase.from('triage_errors_v').select('*').eq('company_id', companyId);
   if (startDate) query = query.gte('date', startDate);
   if (endDate) query = query.lte('date', endDate);
   const { data, error } = await query.order('date', { ascending: false });
@@ -2290,8 +2363,17 @@ export const computeTriageDistribution = async (
   startDate: string,
   endDate: string,
   valuePerError: number,
-  companyId: string
+  companyId: string,
+  userId: string
 ): Promise<TriageDistributionPreview> => {
+  // 03/09/2026: lê direct_value de cada dia pra calcular quanto descontar de cada
+  // funcionário — precisa ver o valor real, senão distribuiria R$ 0,00 (lido NULL)
+  // em vez do valor de verdade.
+  const viewCheck = await ensureCanViewErrorValues(userId);
+  if (!viewCheck.allowed) {
+    throw new Error(viewCheck.error || 'Permissão negada');
+  }
+
   const triageErrors = await getTriageErrors(startDate, endDate, companyId);
   const daysWithErrors = triageErrors.filter(e => {
     const type = (e.triage_type ?? 'quantity') as TriageType;
@@ -2472,7 +2554,7 @@ export const distributeTriageErrors = async (
     throw new Error('Valor por erro deve ser maior que zero (há dias por quantidade no período)');
   }
 
-  const preview = await computeTriageDistribution(startDate, endDate, valuePerError, companyId);
+  const preview = await computeTriageDistribution(startDate, endDate, valuePerError, companyId, distributedBy);
   if (preview.totalErrors <= 0 && preview.totalDirectValue <= 0) {
     throw new Error('Nenhum erro de triagem registrado no período');
   }
@@ -2535,32 +2617,46 @@ export const getTriageDistributionsForEmployees = async (
 }>> => {
   if (employeeIds.length === 0) return [];
 
+  // 03/09/2026: value_deducted mascarado no banco (errors.viewValues) — a view não
+  // carrega relação de FK pro PostgREST fazer embed automático, então em vez de
+  // um JOIN só (como antes), busca as distribuições do período primeiro (sem
+  // coluna de dinheiro, tabela crua mesmo) e depois os valores por funcionário
+  // pela view, cruzando os distribution_id em memória.
+  const { data: distributions, error: distError } = await supabase
+    .from('triage_error_distributions')
+    .select('id, period_start, period_end')
+    .gte('period_start', startDate)
+    .lte('period_end', endDate)
+    .eq('company_id', companyId);
+  if (distError) throw distError;
+  if (!distributions || distributions.length === 0) return [];
+
+  const periodById = new Map(distributions.map((d) => [d.id, { period_start: d.period_start, period_end: d.period_end }]));
+
   const { data, error } = await supabase
-    .from('triage_distribution_employees')
-    .select('employee_id, errors_share, value_deducted, triage_error_distributions!inner(period_start, period_end)')
+    .from('triage_distribution_employees_v')
+    .select('employee_id, errors_share, value_deducted, distribution_id')
     .in('employee_id', employeeIds)
-    .gte('triage_error_distributions.period_start', startDate)
-    .lte('triage_error_distributions.period_end', endDate)
+    .in('distribution_id', distributions.map((d) => d.id))
     .eq('company_id', companyId);
 
   if (error) throw error;
 
-  return (data || []).map((row: {
+  return (data || []).flatMap((row: {
     employee_id: string;
     errors_share: number;
     value_deducted: number;
-    triage_error_distributions: { period_start: string; period_end: string } | { period_start: string; period_end: string }[];
+    distribution_id: string;
   }) => {
-    const dist = Array.isArray(row.triage_error_distributions)
-      ? row.triage_error_distributions[0]
-      : row.triage_error_distributions;
-    return {
+    const period = periodById.get(row.distribution_id);
+    if (!period) return [];
+    return [{
       employee_id: row.employee_id,
-      period_start: dist.period_start,
-      period_end: dist.period_end,
+      period_start: period.period_start,
+      period_end: period.period_end,
       value_deducted: Number(row.value_deducted),
       errors_share: row.errors_share,
-    };
+    }];
   });
 };
 
@@ -2591,6 +2687,18 @@ export const getEmployeeNetPayments = async (
     const permissionCheck = await validatePermission(userId, 'c6payment.import');
     if (!permissionCheck.allowed) {
       throw new Error(permissionCheck.error || 'Permissão negada');
+    }
+    // 03/09/2026: esta função soma payments.total - error_records.error_value -
+    // triage value_deducted pra calcular o líquido que vai pro arquivo do banco —
+    // precisa ver os TRÊS valores reais, senão o arquivo sai com o pagamento
+    // errado pra pessoa de verdade (o pior caso: paga menos que devia).
+    const paymentsCheck = await ensureCanViewPaymentValues(userId);
+    if (!paymentsCheck.allowed) {
+      throw new Error(paymentsCheck.error || 'Permissão negada');
+    }
+    const errorsCheck = await ensureCanViewErrorValues(userId);
+    if (!errorsCheck.allowed) {
+      throw new Error(errorsCheck.error || 'Permissão negada');
     }
   }
 
@@ -4858,9 +4966,12 @@ async function _previewBankHoursForEmployee(args: {
     rangeStart = '1970-01-01';
   }
 
-  // 6. Payment âncora (último do período).
+  // 6. Payment âncora (último do período). 03/09/2026: daily_rate/total mascarados
+  // no banco — o caller (applyBankHoursToPayment) já confirma ensureCanViewPaymentValues
+  // antes de chegar aqui, mas o SELECT tem que ir pela view de qualquer forma
+  // (REVOKE na tabela crua é incondicional).
   const { data: paymentRow, error: paymentErr } = await supabase
-    .from('payments')
+    .from('payments_v')
     .select('id, daily_rate, total, bank_hours_applied_at')
     .eq('employee_id', employeeId)
     .eq('company_id', company.id)
@@ -4954,6 +5065,14 @@ export async function applyBankHoursToPayment(args: {
   }
 
   try {
+    // 03/09/2026: esta ação lê daily_rate/total pra calcular o valor líquido do
+    // banco de horas e grava de volta — precisa ver o valor real, senão calcularia
+    // em cima de daily_rate=0 (lido NULL) e gravaria um valor errado no pagamento.
+    const viewCheck = await ensureCanViewPaymentValues(supervisorId);
+    if (!viewCheck.allowed) {
+      throw new Error(viewCheck.error || 'Permissão negada');
+    }
+
     const preview = await _previewBankHoursForEmployee({
       employeeId, paymentPeriodId, forceOverride,
     });
@@ -5134,9 +5253,13 @@ export async function previewBankHoursForPeriod(args: {
   const employeeIds = employees.map(e => e.id);
 
   // ─── BATCH 3: payments + attendance em paralelo ───────────────────────
+  // 03/09/2026: daily_rate/total mascarados no banco — vai por payments_v. Isto
+  // é só PREVIEW (grid antes de aplicar); quem não tem "ver valor" vê o preview
+  // zerado, mas a gravação de verdade (applyBankHoursToPayment) já exige a
+  // permissão antes de gravar qualquer coisa.
   const [paymentsRes, attendancesRes] = await Promise.all([
     supabase
-      .from('payments')
+      .from('payments_v')
       .select('id, employee_id, daily_rate, total, bank_hours_applied_at, date')
       .in('employee_id', employeeIds)
       .eq('company_id', args.companyId)

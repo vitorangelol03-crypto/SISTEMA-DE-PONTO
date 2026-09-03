@@ -1825,6 +1825,12 @@ const clearMirrorDeductions = async (
  */
 export const publishDriverMirror = async (i: PublishMirrorInput): Promise<void> => {
   await ensurePerm(i.userId, 'driverpay.generateMirror');
+  // 03/09/2026: o PDF é montado no navegador a partir dos `rows` já carregados — se
+  // quem gera não tiver "ver valor", o PDF sai com valor mascarado/errado e o
+  // MOTORISTA recebe o espelho errado. Por isso publicar exige as duas permissões
+  // juntas (achado ao investigar o mesmo problema no Financeiro/C6 — o lançamento de
+  // desconto em si, que foi o pedido original, não tem esse risco: é escrita direta).
+  await ensurePerm(i.userId, 'driverpay.viewValues');
   const platformKey = mirrorPlatformKey(i.platformFilter);
   // A plataforma entra no NOME do arquivo: sem isso um espelho sobrescreve o outro.
   const path = `${i.companyId}/${i.periodId}/${i.driverId}${platformKey ? `__${sanitizeMirrorKeyForPath(platformKey)}` : ''}.pdf`;

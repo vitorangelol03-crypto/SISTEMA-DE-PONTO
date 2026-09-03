@@ -227,11 +227,12 @@ test.describe('Integridade Financeira (cálculos reais)', () => {
 
     const row = page.locator('table tr', { hasText: `${PREFIX}LiquidoC6` }).first();
     await expect(row).toBeVisible();
-    // C6 usa toFixed(2) sem replace — formato com ponto: R$ 70.00
-    await expect(row).toContainText(/R\$\s*70\.00/);
-    await expect(row).toContainText(/Bruto:\s*R\$\s*100\.00/);
-    await expect(row).toContainText(/-R\$\s*20\.00\s*erro/);
-    await expect(row).toContainText(/-R\$\s*10\.00\s*triagem/);
+    // 03/09/2026: C6 passou a usar moneyBRL (mascaramento) — formato com vírgula agora,
+    // igual ao resto do sistema: R$ 70,00.
+    await expect(row).toContainText(/R\$\s*70,00/);
+    await expect(row).toContainText(/Bruto:\s*R\$\s*100,00/);
+    await expect(row).toContainText(/-R\$\s*20,00\s*erro/);
+    await expect(row).toContainText(/-R\$\s*10,00\s*triagem/);
   });
 
   test('3. Bônus: payment com bonus_b=15, c1=20, c2=15 → bônus total = 50', async ({ page }) => {
@@ -249,10 +250,11 @@ test.describe('Integridade Financeira (cálculos reais)', () => {
     // Expandir Ver Detalhes para checar quebra de bônus
     await row.getByRole('button', { name: 'Ver Detalhes' }).click();
     const detailsRow = page.locator(`tr#payments-${empId}`);
-    await expect(detailsRow).toContainText(/Bônus B:\s*R\$\s*15\.00/);
-    await expect(detailsRow).toContainText(/Bônus C1:\s*R\$\s*20\.00/);
-    await expect(detailsRow).toContainText(/Bônus C2:\s*R\$\s*15\.00/);
-    await expect(detailsRow).toContainText(/Bônus Total:\s*R\$\s*50\.00/);
+    // 03/09/2026: quebra de bônus passou a usar moneyBRL (mascaramento) — vírgula agora.
+    await expect(detailsRow).toContainText(/Bônus B:\s*R\$\s*15,00/);
+    await expect(detailsRow).toContainText(/Bônus C1:\s*R\$\s*20,00/);
+    await expect(detailsRow).toContainText(/Bônus C2:\s*R\$\s*15,00/);
+    await expect(detailsRow).toContainText(/Bônus Total:\s*R\$\s*50,00/);
   });
 
   test('4. Triagem por VALOR: R$ 90 ÷ 3 presentes = R$ 30,00 cada', async ({ page }) => {

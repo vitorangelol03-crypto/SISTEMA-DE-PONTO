@@ -77,10 +77,11 @@ test.describe('C6 — completo', () => {
     await importC6(page, SAFE_DATE);
     const row = page.locator('table tr', { hasText: `${PREFIX}Liq` }).first();
     await expect(row).toBeVisible();
-    await expect(row).toContainText(/R\$\s*150\.00/);
-    await expect(row).toContainText(/Bruto:\s*R\$\s*200\.00/);
-    await expect(row).toContainText(/-R\$\s*30\.00\s*erro/);
-    await expect(row).toContainText(/-R\$\s*20\.00\s*triagem/);
+    // 03/09/2026: C6 passou a usar moneyBRL (mascaramento) — vírgula agora.
+    await expect(row).toContainText(/R\$\s*150,00/);
+    await expect(row).toContainText(/Bruto:\s*R\$\s*200,00/);
+    await expect(row).toContainText(/-R\$\s*30,00\s*erro/);
+    await expect(row).toContainText(/-R\$\s*20,00\s*triagem/);
   });
 
   test('funcionário sem PIX: NÃO aparece no lote (toast informa)', async ({ page }) => {
@@ -134,7 +135,7 @@ test.describe('C6 — completo', () => {
 
     await importC6(page, SAFE_DATE);
     const row = page.locator('table tr', { hasText: `${PREFIX}Breakdown` }).first();
-    await expect(row).toContainText(/225\.00/);
+    await expect(row).toContainText(/225,00/);
     await expect(row).toContainText(/Bruto:\s*R\$\s*300/);
     await expect(row).toContainText(/-R\$\s*50/);
     await expect(row).toContainText(/-R\$\s*25/);
@@ -184,7 +185,7 @@ test.describe('C6 — completo', () => {
     await page.waitForTimeout(500);
 
     await expect(row).toContainText(/teste-novo@pix\.com/);
-    await expect(row).toContainText(/250\.00/);
+    await expect(row).toContainText(/250,00/);
   });
 
   test('gerar planilha com dados válidos: download .xlsx dispara', async ({ page }) => {

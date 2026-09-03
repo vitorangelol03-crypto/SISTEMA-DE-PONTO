@@ -13,6 +13,7 @@ import {
 } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
+import { moneyBRL } from '../../utils/moneyMask';
 import toast from 'react-hot-toast';
 
 interface TriageTabProps {
@@ -26,6 +27,8 @@ interface Preview extends TriageDistributionPreview {
 
 export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) => {
   const { company } = useCompany();
+  // 03/09/2026: esconde valor em R$ pra quem não tem errors.viewValues.
+  const canViewValues = hasPermission('errors.viewValues');
   const [records, setRecords] = useState<TriageError[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -197,7 +200,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
     if (!company?.id) return;
     setCalculating(true);
     try {
-      const result = await computeTriageDistribution(distRange.startDate, distRange.endDate, value, company.id);
+      const result = await computeTriageDistribution(distRange.startDate, distRange.endDate, value, company.id, userId);
 
       if (result.totalErrors <= 0 && result.totalDirectValue <= 0) {
         toast.error('Nenhum erro de triagem no período');
@@ -225,7 +228,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
       toast.error('Sem permissão para distribuir erros');
       return;
     }
-    if (!confirm(`Confirmar distribuição? R$ ${preview.totalDeducted.toFixed(2).replace('.', ',')} serão descontados de ${preview.perEmployee.length} funcionários.`)) {
+    if (!confirm(`Confirmar distribuição? ${moneyBRL(preview.totalDeducted, canViewValues)} serão descontados de ${preview.perEmployee.length} funcionários.`)) {
       return;
     }
     if (!company?.id) return;
@@ -239,7 +242,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
         company.id
       );
       toast.success(
-        `Distribuição realizada! R$ ${result.totalDeducted.toFixed(2).replace('.', ',')} descontados de ${result.totalEmployees} funcionários`
+        `Distribuição realizada! ${moneyBRL(result.totalDeducted, canViewValues)} descontados de ${result.totalEmployees} funcionários`
       );
       setPreview(null);
       setValuePerError('');
@@ -350,7 +353,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
               ℹ️ Este dia já tem:{' '}
               {existingDayRecords.map(r =>
                 (r.triage_type ?? 'quantity') === 'value'
-                  ? `💰 R$ ${Number(r.direct_value ?? 0).toFixed(2).replace('.', ',')}`
+                  ? `💰 ${moneyBRL(Number(r.direct_value ?? 0), canViewValues)}`
                   : `📦 ${r.error_count} ${r.error_count === 1 ? 'pacote' : 'pacotes'}`
               ).join(' · ')}
               {' — este lançamento será adicionado.'}
@@ -428,7 +431,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
                         </td>
                         <td className="px-4 py-2 text-sm font-medium text-red-600">
                           {isValue
-                            ? `R$ ${Number(r.direct_value ?? 0).toFixed(2).replace('.', ',')}`
+                            ? moneyBRL(Number(r.direct_value ?? 0), canViewValues)
                             : `${r.error_count} ${r.error_count === 1 ? 'pacote' : 'pacotes'}`}
                         </td>
                         <td className="px-4 py-2 text-sm text-gray-600">{r.observations || '—'}</td>
@@ -510,7 +513,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
               </div>
               <div>
                 <div className="text-gray-600">Total R$ direto</div>
-                <div className="text-xl font-bold text-emerald-700">R$ {preview.totalDirectValue.toFixed(2).replace('.', ',')}</div>
+                <div className="text-xl font-bold text-emerald-700">{moneyBRL(preview.totalDirectValue, canViewValues)}</div>
               </div>
               <div>
                 <div className="text-gray-600">Dias com registro</div>
@@ -540,8 +543,8 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
                       <span className="text-gray-600 text-right">
                         {isValue ? (
                           <>
-                            R$ {d.direct_value.toFixed(2).replace('.', ',')} ÷ {d.present} presentes ={' '}
-                            <span className="font-semibold text-emerald-700">R$ {d.valuePerPerson.toFixed(2).replace('.', ',')}/pessoa</span>
+                            {moneyBRL(d.direct_value, canViewValues)} ÷ {d.present} presentes ={' '}
+                            <span className="font-semibold text-emerald-700">{moneyBRL(d.valuePerPerson, canViewValues)}/pessoa</span>
                             {d.remainder > 0 && <span className="text-xs text-gray-500 ml-1">(resto {d.remainder}¢)</span>}
                           </>
                         ) : (
@@ -565,7 +568,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
                   <div key={emp.employee_id} className="flex justify-between text-sm py-1 border-b border-gray-100 last:border-b-0">
                     <span className="text-gray-800">{emp.name}</span>
                     <span className="text-gray-600">
-                      {emp.days_present} dias{emp.total_errors > 0 && <> · {emp.total_errors} pacotes</>} · <span className="font-semibold text-red-600">-R$ {emp.value_deducted.toFixed(2).replace('.', ',')}</span>
+                      {emp.days_present} dias{emp.total_errors > 0 && <> · {emp.total_errors} pacotes</>} · <span className="font-semibold text-red-600">-{moneyBRL(emp.value_deducted, canViewValues)}</span>
                     </span>
                   </div>
                 ))}
@@ -576,7 +579,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
               <div className="text-sm">
                 <span className="text-gray-600">Total a descontar: </span>
                 <span className="text-xl font-bold text-red-600">
-                  R$ {preview.totalDeducted.toFixed(2).replace('.', ',')}
+                  {moneyBRL(preview.totalDeducted, canViewValues)}
                 </span>
               </div>
               <button

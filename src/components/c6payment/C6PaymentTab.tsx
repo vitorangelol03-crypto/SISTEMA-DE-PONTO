@@ -4,6 +4,7 @@ import { getAllEmployees, getEmployeeNetPayments, Employee } from '../../service
 import { useCompany } from '../../contexts/useCompany';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { exportC6PaymentSheet } from '../../utils/c6Export';
+import { moneyBRL } from '../../utils/moneyMask';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType } from '../common/EmploymentTypeFilter';
 
@@ -26,6 +27,15 @@ interface PaymentRow {
 
 export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermission }) => {
   const { company } = useCompany();
+  // 03/09/2026: esconde valor em R$ nesta tela pra quem não tem c6payment.viewValues.
+  // CORREÇÃO do plano original (o valor agora é mascarado no BANCO, não só na tela):
+  // getEmployeeNetPayments (que carrega TUDO desta aba, inclusive o que vai pro arquivo
+  // do banco) passou a EXIGIR financial.viewPayments + c6payment.viewValues +
+  // errors.viewValues juntas — sem as 3, a tela nem carrega dado nenhum (erro claro),
+  // porque o valor líquido usa payments.total + error_records.error_value +
+  // triage value_deducted, e não dá pra gerar o arquivo do banco com um desses
+  // mascarado (pagaria a pessoa errado). Não é mais possível "gerar sem ver".
+  const canViewValues = hasPermission('c6payment.viewValues');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -182,7 +192,11 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
       );
     } catch (error) {
       console.error('Erro ao importar dados:', error);
-      toast.error('Erro ao importar dados financeiros');
+      // 03/09/2026: mostra a mensagem real (ex.: falta de permissão de ver valor)
+      // em vez de sempre um texto genérico — senão "sem permissão" vira "erro" sem
+      // explicação nenhuma.
+      const message = error instanceof Error ? error.message : 'Erro ao importar dados financeiros';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -694,15 +708,15 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                               {row.pixKey}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              <div className="font-semibold text-green-700">R$ {row.amount.toFixed(2)}</div>
+                              <div className="font-semibold text-green-700">{moneyBRL(row.amount, canViewValues)}</div>
                               {(row.errorValueDiscount > 0 || row.triageDiscount > 0) && (
                                 <div className="text-[11px] text-gray-500 leading-tight mt-0.5" data-testid="c6-breakdown">
-                                  <div>Bruto: R$ {row.grossAmount.toFixed(2)}</div>
+                                  <div>Bruto: {moneyBRL(row.grossAmount, canViewValues)}</div>
                                   {row.errorValueDiscount > 0 && (
-                                    <div className="text-red-600">-R$ {row.errorValueDiscount.toFixed(2)} erro</div>
+                                    <div className="text-red-600">-{moneyBRL(row.errorValueDiscount, canViewValues)} erro</div>
                                   )}
                                   {row.triageDiscount > 0 && (
-                                    <div className="text-red-600">-R$ {row.triageDiscount.toFixed(2)} triagem</div>
+                                    <div className="text-red-600">-{moneyBRL(row.triageDiscount, canViewValues)} triagem</div>
                                   )}
                                 </div>
                               )}
@@ -747,7 +761,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                         Total: {paymentRows.length} pagamento(s)
                       </td>
                       <td colSpan={4} className="px-6 py-4 text-sm font-bold text-green-600 text-right">
-                        R$ {totalAmount.toFixed(2)}
+                        {moneyBRL(totalAmount, canViewValues)}
                       </td>
                     </tr>
                   </tfoot>
@@ -857,15 +871,15 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                         <div className="grid grid-cols-2 gap-2 mb-3">
                           <div className="bg-green-50 rounded p-2">
                             <span className="text-xs text-green-800 block">Valor líquido</span>
-                            <span className="text-sm font-semibold text-green-700">R$ {row.amount.toFixed(2)}</span>
+                            <span className="text-sm font-semibold text-green-700">{moneyBRL(row.amount, canViewValues)}</span>
                             {(row.errorValueDiscount > 0 || row.triageDiscount > 0) && (
                               <div className="text-[11px] text-gray-500 leading-tight mt-0.5">
-                                <div>Bruto: R$ {row.grossAmount.toFixed(2)}</div>
+                                <div>Bruto: {moneyBRL(row.grossAmount, canViewValues)}</div>
                                 {row.errorValueDiscount > 0 && (
-                                  <div className="text-red-600">-R$ {row.errorValueDiscount.toFixed(2)} erro</div>
+                                  <div className="text-red-600">-{moneyBRL(row.errorValueDiscount, canViewValues)} erro</div>
                                 )}
                                 {row.triageDiscount > 0 && (
-                                  <div className="text-red-600">-R$ {row.triageDiscount.toFixed(2)} triagem</div>
+                                  <div className="text-red-600">-{moneyBRL(row.triageDiscount, canViewValues)} triagem</div>
                                 )}
                               </div>
                             )}
@@ -908,7 +922,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                 ))}
                 <div className="p-4 bg-gray-50 flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-900">Total: {paymentRows.length} pagamento(s)</span>
-                  <span className="text-sm font-bold text-green-600">R$ {totalAmount.toFixed(2)}</span>
+                  <span className="text-sm font-bold text-green-600">{moneyBRL(totalAmount, canViewValues)}</span>
                 </div>
               </div>
             </div>
@@ -1016,7 +1030,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                 </p>
                 <ul className="text-sm text-green-800 space-y-1">
                   <li>• Pagamentos: {paymentRows.length}</li>
-                  <li>• Valor Total: R$ {totalAmount.toFixed(2)}</li>
+                  <li>• Valor Total: {moneyBRL(totalAmount, canViewValues)}</li>
                   <li>• Período: {formatDateBR(filters.startDate)} a {formatDateBR(filters.endDate)}</li>
                 </ul>
               </div>
@@ -1096,7 +1110,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                                 <p className="text-xs text-gray-500 mt-0.5 break-all">PIX: {row.pixKey}</p>
                               )}
                               {!zero && (
-                                <p className="text-xs text-gray-500 mt-0.5">Valor: R$ {row.amount.toFixed(2)}</p>
+                                <p className="text-xs text-gray-500 mt-0.5">Valor: {moneyBRL(row.amount, canViewValues)}</p>
                               )}
                             </div>
                           </div>

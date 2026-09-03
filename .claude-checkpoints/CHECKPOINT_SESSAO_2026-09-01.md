@@ -579,3 +579,96 @@ projeto). Não persegui mais fundo — parece mais sensibilidade a tempo por vol
 dado + carga externa do que um bug de código isolado, mesma categoria dos achados de `69`/
 `71` do §11. Fica registrado, não é mais tratado como "pré-existente sem investigar": os
 3 bugs de corrida acima eram reais e já estão corrigidos.
+
+## 15. ✅ Mascaramento de valores NO BANCO — Financeiro + Erros + Pagamento C6 (03/09/2026)
+
+Terceira pendência do §14: Victor pediu pra fazer os 3 módulos que faltavam (Financeiro,
+Erros, C6) com o MESMO padrão do driverpay (§13) — valor mascarado no BANCO, não só na
+tela. Confirmado via `AskUserQuestion`: "fazer os 3 agora, com calma".
+
+**UI (mascaramento em tela)**: nova permissão `viewValues` em `errors` e `c6payment`
+(`financial.viewPayments` já existia, mas nunca era checado em lugar nenhum — achado
+igual ao §12 do driverpay). Novo `src/utils/moneyMask.ts` (`moneyBRL`/`HIDDEN_VALUE`,
+mesma lógica do `formatBRLIf` do driverpay, mas separado pra não mexer em código já
+validado). ~70 pontos trocados em `FinancialTab.tsx`/`ErrorsTab.tsx`/`TriageTab.tsx`/
+`C6PaymentTab.tsx`. Mesma exceção de sempre: nunca mascara o que a PESSOA está digitando
+agora (preview ao vivo, form de edição do próprio lançamento).
+
+**Achado no meio do caminho (o que tomou o dia)**: ao investigar o mascaramento NO BANCO,
+achei que várias contas LEEM um valor existente pra RECALCULAR e escrever de volta — não é
+só mostrar na tela: aplicar/remover bônus (soma B+C1+C2), distribuir erro de triagem
+(divide entre presentes), banco de horas, desconto por erro em massa, o valor líquido que
+vai pro arquivo do C6, o holerite PDF, e — já em produção — o espelho do motorista
+(`driverpay.generateMirror`, achado ao investigar o mesmo padrão, não fazia parte do pedido
+original). Se a view mascarada devolve NULL pra essas contas, elas quebram silenciosas
+(ex.: aplicar bônus B zeraria o C1/C2 que a pessoa já tinha) ou — no caso do C6/holerite/
+espelho — geram um DOCUMENTO REAL com valor errado pra uma PESSOA REAL. Resolvido com
+`AskUserQuestion`: essas ações passam a EXIGIR a permissão de ver valor também (com erro
+claro), em vez de arriscar conta errada — `ensureCanViewPaymentValues`/
+`ensureCanViewErrorValues` em `database.ts`, checks equivalentes em `FinancialTab.tsx` e
+`ensurePerm(driverpay.viewValues)` em `publishDriverMirror` (driverpay). Efeito colateral
+avisado a Victor: como `payments` é lida tanto pelo Financeiro quanto pelo C6, e ele
+escolheu a versão mais segura (exige as DUAS permissões juntas), aplicar/editar bônus no
+Financeiro passou a exigir também "ver valor" do C6.
+
+**Migration `20260903120000`**: 6 views `security_invoker=true` (`payments_v` — AND entre
+`financial.viewPayments` e `c6payment.viewValues` — `error_records_v`, `triage_errors_v`,
+`triage_error_distributions_v`, `triage_distribution_employees_v`, `bonus_removals_v`, as
+5 últimas só com `errors.viewValues`/`financial.viewPayments`), `REVOKE SELECT` só nas
+colunas de dinheiro, `GRANT SELECT` nas views. 9 pontos de leitura trocados em
+`database.ts` pra usar as views.
+
+**🔴 INCIDENTE (resolvido no mesmo dia): a trava de coluna não travava nada — e minha
+"correção" derrubou o sistema inteiro por ~15 min.** Ao validar de verdade (não só o
+`get_advisors` do Supabase, que não pegou isso), descobri com `has_column_privilege` que o
+`REVOKE SELECT (coluna)` de ONTEM (driverpay, §13) e de HOJE nunca bloqueou nada: o
+Supabase já concede `GRANT ALL` na TABELA INTEIRA pra `authenticated` de fábrica, e essa
+concessão ampla não é sobreposta por um REVOKE de coluna específica — ou seja, a tabela
+crua sempre esteve 100% legível por chamada REST direta, nos dois dias. Apliquei uma
+correção (`REVOKE SELECT` da tabela inteira + `GRANT SELECT` só nas colunas seguras) —
+**e ela quebrou TODAS as views mascaradas pra TODO MUNDO, inclusive o 2626**: descobri (só
+depois, simulando a query como o Postgres real faz) que view com `security_invoker=true`
+faz o Postgres checar a permissão de coluna do INVOCADOR pra QUALQUER coluna referenciada
+na view — mesmo dentro de um `CASE WHEN` que devolveria NULL. Sem SELECT na coluna crua, a
+view inteira vira "permission denied", pra qualquer um. Financeiro/Erros/C6/Pagamentos
+Driver ficaram fora do ar. Revertido de imediato (com OK do Victor, pedido em cima da hora
+por ser produção quebrada) — a trava contra chamada REST direta na tabela crua fica
+PENDENTE (fica só o mascaramento por permissão de sempre, que continua funcionando) até eu
+desenhar a versão certa (function `SECURITY DEFINER` no banco em vez de view — não tem
+esse problema, já é o padrão usado em outras rotinas do projeto tipo
+`apply_bank_hours_to_payment`). Migration `20260903130000` documenta o incidente e a
+reversão.
+
+**Bug real achado pelos próprios testes (não pela auditoria manual)**: a view `payments_v`
+esqueceu a coluna `bonus_c2` (estava no REVOKE, nunca foi adicionada na view) — todo mundo
+via "Bônus C2: R$ 0,00" mesmo com valor real gravado, e um aviso falso de "valor editado
+manualmente" (a soma batia errado). Corrigido (migration `20260903140000` — nome real:
+`fix_payments_v_missing_bonus_c2`). Revisei as outras 5 views coluna por coluna depois
+disso — só esta tinha o problema.
+
+**Achado colateral (correto, não é bug)**: unificar o C6 pro `moneyBRL` (vírgula, padrão
+BR) trocou o formato de exibição — ele usava `.toFixed(2)` puro (ponto) antes, inconsistente
+com o resto do sistema (o próprio teste antigo tinha comentário reconhecendo isso). 6
+arquivos de teste tiveram os regex de ponto→vírgula corrigidos pra bater com o formato
+novo, mais correto (`07-financial`, `14-financial-integrity`, `16-financial-complete`,
+`20-c6-complete`, `100-supremo-v2`, `applyBankHoursToPayment.spec.ts` — este último por um
+motivo diferente: mock de tabela desatualizado, `payments`→`payments_v`).
+
+**Validado**: tsc+lint+build limpos · suíte unitária 1309-1345 passando conforme a rodada
+(instabilidade de worker por CPU externa, nunca falha real — cada arquivo confirmado limpo
+isolado) · E2E: Financeiro completo (16), Erros completo (18), C6 completo (20), filtro por
+função (51) e integridade financeira (14) — **100% limpos, 0 retry, depois das 2 correções
+de banco**. Espelhos do driverpay (58/60/61) passam, com uma repetição normal (mesmo padrão
+de sensibilidade a volume de dado já registrado no §14). `tests/105` (driverpay viewValues)
+ficou com falha consistente — mas é bug de LAYOUT (botão flutuante de ajuda cobrindo "Novo
+driver", nada a ver com valor/permissão), confirmado por não ter relação nenhuma com o que
+mudou hoje no driverpay (só a checagem de permissão pro espelho).
+
+**Pendências reais deixadas por este parágrafo:**
+- Fechar a trava contra chamada REST direta na tabela crua (14 tabelas: as 6 de hoje + as 8
+  do driverpay de ontem) com a arquitetura certa (function `SECURITY DEFINER`), sem quebrar
+  as views de novo.
+- `tests/105` com falha de layout — não investiguei a fundo (confirmado não relacionado).
+- Auditoria "máximo controle em cada aba" nos ~7 módulos que faltam (Ponto, Funcionários,
+  Relatórios, Configurações, Usuários, Gerenciamento de Dados, Aprovação de Cadastro) —
+  ainda não começada, não fazia parte do pedido de hoje.

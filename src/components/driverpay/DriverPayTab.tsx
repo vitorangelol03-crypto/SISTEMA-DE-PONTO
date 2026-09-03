@@ -1961,10 +1961,14 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const zapexRow = zapexRowId ? rows.find((r) => r.paymentId === zapexRowId) ?? null : null;
 
   const canEditDriver = hasPermission('driverpay.editDriver');
-  const canMirror = hasPermission('driverpay.generateMirror');
   // 02/09/2026 (pedido do Victor): esconde valor em R$ em toda a aba pra quem não tem
   // essa permissão — ex.: alguém que só lança desconto sem ver o total do driver.
   const canViewValues = hasPermission('driverpay.viewValues');
+  // 03/09/2026: o espelho é montado com os valores que já estão em `rows` — sem "ver
+  // valor" o PDF sai errado pro motorista. `publishDriverMirror` já bloqueia no
+  // banco; aqui é só pra não deixar nem tentar gerar (mensagem clara, sem quebrar
+  // no meio do fluxo).
+  const canMirror = hasPermission('driverpay.generateMirror') && canViewValues;
 
   if (!hasPermission('driverpay.view')) return null;
 

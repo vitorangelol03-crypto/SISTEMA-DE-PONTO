@@ -76,7 +76,8 @@ test.describe('Financeiro', () => {
     // Lemos via textContent pra evitar reset por re-render do React.
     const detailsRow = page.locator(`tr#payments-${empId}`);
     const rowText = await detailsRow.textContent({ timeout: 5_000 });
-    expect(rowText ?? '').toMatch(/Bônus B:.*5\.00.*C1:.*10\.00.*C2:.*15\.00/s);
+    // 03/09/2026: breakdown passou a usar moneyBRL (mascaramento) — vírgula agora.
+    expect(rowText ?? '').toMatch(/Bônus B:.*5,00.*C1:.*10,00.*C2:.*15,00/s);
   });
 
   test('Ver Detalhes — sem pagamento mostra "Nenhum pagamento registrado"', async ({ page }) => {

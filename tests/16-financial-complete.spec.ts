@@ -165,9 +165,10 @@ test.describe('Financial — completo', () => {
     await row.getByRole('button', { name: 'Ver Detalhes' }).click();
 
     const details = page.locator(`tr#payments-${empId}`);
-    await expect(details).toContainText(/Diária:\s*R\$\s*100\.00/);
-    await expect(details).toContainText(/Bônus B:.*5\.00.*C1:.*10\.00.*C2:.*15\.00/s);
-    await expect(details).toContainText(/Bônus Total:\s*R\$\s*30\.00/);
+    // 03/09/2026: breakdown passou a usar moneyBRL (mascaramento) — vírgula agora.
+    await expect(details).toContainText(/Diária:\s*R\$\s*100,00/);
+    await expect(details).toContainText(/Bônus B:.*5,00.*C1:.*10,00.*C2:.*15,00/s);
+    await expect(details).toContainText(/Bônus Total:\s*R\$\s*30,00/);
   });
 
   test('histórico de remoções: bonus removido aparece em audit log', async ({ page }) => {
