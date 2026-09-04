@@ -2186,36 +2186,28 @@ export const updateDiscount = async (
 
 export const searchDiscounts = async (companyId: string, code: string): Promise<DiscountSearchRow[]> => {
   const q = code.trim();
-  // 02/09/2026: amount mascarado no banco (driverpay.viewValues) — view, não a tabela crua.
-  let query = supabase
-    .from('driverpay_discounts_v')
-    .select(
-      'id, amount, package_code, package_status, observation, created_at, proof1_path, proof2_path, proof_video_path, payment:driverpay_payments!inner(driver_name_snapshot, period:driverpay_periods!inner(label, status, concluded_at))'
-    )
-    .eq('company_id', companyId);
-  if (q) query = query.ilike('package_code', `%${q}%`);
-  const { data, error } = await query.order('created_at', { ascending: false }).limit(200);
-  if (error) throwDbError(error);
-  return (data ?? []).map((r) => {
-    const rec = r as Record<string, unknown>;
-    const payment = rec.payment as Record<string, unknown> | null;
-    const period = (payment?.period as Record<string, unknown> | null) ?? null;
-    return {
-      id: String(rec.id),
-      amount: num(rec.amount),
-      package_code: (rec.package_code as string | null) ?? null,
-      package_status: (rec.package_status as 'PNR' | 'LOST' | null) ?? null,
-      observation: (rec.observation as string | null) ?? null,
-      created_at: String(rec.created_at),
-      driver_name: (payment?.driver_name_snapshot as string) ?? '—',
-      period_label: (period?.label as string) ?? '—',
-      period_status: (period?.status as DriverPeriodStatus) ?? 'aberto',
-      concluded_at: (period?.concluded_at as string | null) ?? null,
-      proof1_path: (rec.proof1_path as string | null) ?? null,
-      proof2_path: (rec.proof2_path as string | null) ?? null,
-      proof_video_path: (rec.proof_video_path as string | null) ?? null,
-    };
+  // 03/09/2026: REST-bypass fix — a view security_invoker (02/09) nunca travou a tabela
+  // crua. Function SECURITY DEFINER já resolve o join com payments/periods.
+  const { data, error } = await supabase.rpc('search_driverpay_discounts_masked', {
+    p_company_id: companyId,
+    p_code: q,
   });
+  if (error) throwDbError(error);
+  return ((data ?? []) as Record<string, unknown>[]).map((rec) => ({
+    id: String(rec.id),
+    amount: num(rec.amount),
+    package_code: (rec.package_code as string | null) ?? null,
+    package_status: (rec.package_status as 'PNR' | 'LOST' | null) ?? null,
+    observation: (rec.observation as string | null) ?? null,
+    created_at: String(rec.created_at),
+    driver_name: (rec.driver_name as string) ?? '—',
+    period_label: (rec.period_label as string) ?? '—',
+    period_status: (rec.period_status as DriverPeriodStatus) ?? 'aberto',
+    concluded_at: (rec.period_concluded_at as string | null) ?? null,
+    proof1_path: (rec.proof1_path as string | null) ?? null,
+    proof2_path: (rec.proof2_path as string | null) ?? null,
+    proof_video_path: (rec.proof_video_path as string | null) ?? null,
+  }));
 };
 
 export const addVale = async (
@@ -3022,16 +3014,16 @@ export const markPaymentDone = async (
 export const listDeductionLedger = async (
   companyId: string, periodId: string,
 ): Promise<Map<string, number>> => {
-  // 02/09/2026: amount mascarado no banco (driverpay.viewValues) — view, não a tabela crua.
-  const { data, error } = await supabase
-    .from('driverpay_deduction_ledger_v')
-    .select('driver_id, amount')
-    .eq('company_id', companyId).eq('period_id', periodId);
+  // 03/09/2026: REST-bypass fix — view security_invoker (02/09) nunca travou a tabela crua.
+  const { data, error } = await supabase.rpc('get_driverpay_deduction_ledger_masked', {
+    p_company_id: companyId,
+    p_period_id: periodId,
+  });
   if (error) throwDbError(error);
   const out = new Map<string, number>();
-  for (const r of data ?? []) {
-    const id = String((r as { driver_id: string }).driver_id);
-    const v = Number((r as { amount: number | string }).amount) || 0;
+  for (const r of (data ?? []) as Record<string, unknown>[]) {
+    const id = String(r.driver_id);
+    const v = Number(r.amount) || 0;
     out.set(id, Math.round(((out.get(id) ?? 0) + v) * 100) / 100);
   }
   return out;
@@ -3127,22 +3119,24 @@ const somaPorDriver = (rows: readonly { driver_id: unknown; amount: unknown }[])
 };
 
 export const listCarryoverFrom = async (companyId: string, fromPeriodId: string): Promise<Map<string, number>> => {
-  // 02/09/2026: amount mascarado no banco (driverpay.viewValues) — view, não a tabela crua.
-  const { data, error } = await supabase
-    .from('driverpay_deduction_carryover_v')
-    .select('driver_id, amount')
-    .eq('company_id', companyId).eq('from_period_id', fromPeriodId);
+  // 03/09/2026: REST-bypass fix — view security_invoker (02/09) nunca travou a tabela crua.
+  const { data, error } = await supabase.rpc('get_driverpay_deduction_carryover_masked', {
+    p_company_id: companyId,
+    p_from_period_id: fromPeriodId,
+    p_to_period_id: null,
+  });
   if (error) throwDbError(error);
-  return somaPorDriver(data ?? []);
+  return somaPorDriver((data ?? []) as { driver_id: unknown; amount: unknown }[]);
 };
 
 export const listCarryoverTo = async (companyId: string, toPeriodId: string): Promise<Map<string, number>> => {
-  const { data, error } = await supabase
-    .from('driverpay_deduction_carryover_v')
-    .select('driver_id, amount')
-    .eq('company_id', companyId).eq('to_period_id', toPeriodId);
+  const { data, error } = await supabase.rpc('get_driverpay_deduction_carryover_masked', {
+    p_company_id: companyId,
+    p_from_period_id: null,
+    p_to_period_id: toPeriodId,
+  });
   if (error) throwDbError(error);
-  return somaPorDriver(data ?? []);
+  return somaPorDriver((data ?? []) as { driver_id: unknown; amount: unknown }[]);
 };
 
 /**
