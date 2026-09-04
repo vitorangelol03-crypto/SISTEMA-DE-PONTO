@@ -631,6 +631,27 @@ async function buildValueCandidates(
     }
   }
 
+  /**
+   * O escopo (grupo/individual, com o filtro do espelho) tem pacote de algum
+   * CNPJ DIFERENTE de `emitterId`? (04/09/2026, achado real — "dividir a
+   * nota" mostrava o MESMO valor pros dois CNPJs de uma empresa multi-CNPJ.)
+   * Toda empresa aqui publica só espelho "quinzena completa" — 1 documento
+   * cobrindo TODOS os CNPJs juntos, com 1 total IMPRESSO só. Esse total não
+   * separa "quanto é de cada CNPJ" — usá-lo como candidato faria os dois
+   * CNPJs mostrarem o mesmo número (o combinado), nenhum dos dois certo.
+   */
+  const hasOtherEmitterInScope = (ids: string[], filter: string[] | null): boolean => {
+    for (const pk of packs ?? []) {
+      const dId = driverOf.get(pk.payment_id as string);
+      if (!dId || !ids.includes(dId)) continue;
+      if ((pk.packages ?? 0) <= 0) continue;
+      if (filter && !filter.includes(pk.platform_name as string)) continue;
+      const em = emitterByPlatform.get(pk.platform_name as string);
+      if (em && em !== emitterId) return true;
+    }
+    return false;
+  };
+
   const { data: pubs } = await supabase.from('driverpay_mirror_publications')
     .select('scope, platform_filter, include_deductions, printed_total')
     .eq('driver_id', driverId).eq('period_id', periodId);
@@ -639,6 +660,10 @@ async function buildValueCandidates(
       ? (pub.platform_filter as string[])
       : null;
     const ids = pub.scope === 'group' && groupIds.length > 1 ? groupIds : [driverId];
+    // Espelho cobre CNPJ diferente do que esta nota é pra este: o total
+    // impresso é combinado, não confiável pra ESTE CNPJ — pula o candidato
+    // (sobra somaCnpj_*/liquido_* abaixo, sempre filtrado por CNPJ certo).
+    if (hasOtherEmitterInScope(ids, filter)) continue;
     // include_deductions=false (pagamento parcial por plataforma): o espelho lista os
     // vales/perdas mas NÃO abate — a nota vem pelo bruto. Coluna nova (default true):
     // publicação antiga/sem a coluna segue como sempre.
