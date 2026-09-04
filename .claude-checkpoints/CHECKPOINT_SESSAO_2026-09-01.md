@@ -873,3 +873,45 @@ meio desta leva, ainda não investigado): quando um driver entra num grupo que j
 `default_rate` configurado, ele deveria herdar essa taxa automaticamente na aba de
 Pagamentos Driver — precisa achar onde `addDriverToGroup`/fluxo de entrada no grupo
 vive em `driverPay.ts` e decidir se aplica via `upsertDriverRate` na hora de entrar.
+
+## 21. ✅ Brecha REST no driverpay — leva 3 de 3 fechada (FECHA AS 8 TABELAS)
+
+Última leva, mesmo processo das §19/§20. 3 functions `SECURITY DEFINER`:
+`search_driverpay_discounts_masked` (join 2 níveis discounts→payments→periods,
+substitui `searchDiscounts`; validado — soma bate exata, 5537.35 em 116 descontos),
+`get_driverpay_deduction_ledger_masked` (substitui `listDeductionLedger`; validado —
+983.81 em 14 linhas), `get_driverpay_deduction_carryover_masked` (cobre
+`listCarryoverFrom` E `listCarryoverTo` com from/to nuláveis).
+
+Confirmado empiricamente (com `BYPASSRLS` temporário no papel de teste, pra isolar
+só o privilégio de coluna da questão de RLS) que `recordDeductions` NÃO precisa de
+function: o upsert usa `ON CONFLICT ... DO NOTHING` (sem `SET`), e só o
+`conflict_target` precisa de `SELECT` — que aqui são só colunas seguras
+(`company_id, period_id, driver_id, source, source_ref`), nenhuma delas é dinheiro.
+Achado útil: `DO NOTHING` é mais barato em privilégio que `DO UPDATE` (que exige
+`SELECT` nas colunas do `SET`, achado de hoje cedo).
+
+Client migrado (`searchDiscounts`, `listDeductionLedger`, `listCarryoverFrom`,
+`listCarryoverTo`). CI verde 2x (`33826641223` functions+client, `33827823583`
+pós-REVOKE: **114 passed/2 skipped/0 failed/0 flaky**, fechamento limpo).
+
+### 21.1. 🎉 Resumo: driverpay REST-bypass 100% fechado (8 tabelas, 3 levas)
+
+| Leva | Tabelas | Functions | CI final |
+|---|---|---|---|
+| 1 | `driverpay_payments`, `driverpay_payment_packages` | 5 (leitura da grade + motor de recálculo + upsert de pacote + update-por-mudança + última taxa usada) | `33822200486`: 113/1 flaky/2 skip/0 falha |
+| 2 | `driverpay_platforms`, `driverpay_platform_rates` | 4 (leitura + criar plataforma + leitura de taxas + upsert de taxas) | `33824991899`: 114/2 skip/0 falha/0 flaky |
+| 3 | `driverpay_discounts`, `driverpay_vales`, `driverpay_deduction_ledger`, `driverpay_deduction_carryover` | 3 (busca de descontos + ledger + saldo herdado) | `33827823583`: 114/2 skip/0 falha/0 flaky |
+
+**Achados-chave que não estavam no desenho original** (todos descobertos e corrigidos
+ao longo das 3 levas, não deixados pendentes): (1) a trava de 02/09 nunca funcionou de
+verdade — mesmo bug do incidente desta manhã; (2) `INSERT...RETURNING`/`.insert().select()`
+numa coluna de dinheiro exige `SELECT` nela; (3) filtrar update por `.neq('coluna_dinheiro', x)`
+idem; (4) `ON CONFLICT DO UPDATE` exige `SELECT` nas colunas do `SET`, mas `DO NOTHING`
+só exige nas do `conflict_target`; (5) uma view `security_invoker` usada só
+INTERNAMENTE (`driverpay_payment_computed`, motor de recálculo) também quebraria sem
+function, mesmo nunca sendo exposta ao PostgREST diretamente.
+
+**Pendente**: item (2) e (3) de "atacar tudo" (auditar os outros ~7 módulos; completar
+o audit trail) — ainda não iniciados. E os 2 pedidos de feature que o Victor fez no
+meio deste trabalho (ver próxima seção).

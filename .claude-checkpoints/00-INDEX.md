@@ -2,11 +2,23 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-04** (brecha REST: as 6 tabelas de Financeiro/Erros/C6
-> FECHADAS. Driverpay dividido em 3 levas — **levas 1 (payments+payment_packages) e 2
-> (platforms+platform_rates) FECHADAS e confirmadas no CI**; leva 3 pendente. Pedido
-> pendente do Victor, ainda não investigado: driver que entra num grupo com taxa
-> configurada devia herdar ela automaticamente).
+> Última atualização: **2026-09-04** (🎉 brecha REST 100% FECHADA — as 6 tabelas de
+> Financeiro/Erros/C6 + as 8 do driverpay, todas com function `SECURITY DEFINER` +
+> REVOKE confirmado, CI verde em cada leva. 2 pedidos de feature do Victor na fila,
+> ainda não investigados: (1) driver que entra num grupo com taxa configurada devia
+> herdar ela automaticamente; (2) nota fiscal conferida automaticamente devia avisar
+> o driver — sucesso ou motivo da recusa + apagar e pedir outra).
+
+> ✅ **Brecha REST no driverpay — leva 3 de 3 fechada, FECHA AS 8 TABELAS** (migrations
+> `20260904013558`/`20260904015824`, `CHECKPOINT_SESSAO_2026-09-01.md` §21/§21.1):
+> `driverpay_discounts` + `driverpay_vales` + `driverpay_deduction_ledger` +
+> `driverpay_deduction_carryover`. Achado útil: `ON CONFLICT DO NOTHING` (sem SET) só
+> exige SELECT no conflict_target, não na coluna de dinheiro — `recordDeductions` não
+> precisou de function. CI verde 2x, final limpo (114 passed/2 skipped/0 failed/0
+> flaky). **Resumo completo das 3 levas do driverpay na tabela do §21.1** — mesma
+> arquitetura das 6 tabelas de Financeiro/Erros/C6, mais 5 armadilhas de escrita
+> descobertas ao longo do caminho (RETURNING, filtro por coluna de dinheiro, ON
+> CONFLICT DO UPDATE vs DO NOTHING, view security_invoker interna).
 
 > ✅ **Brecha REST no driverpay — leva 2 de 3 fechada** (migrations `20260904004942`/
 > `20260904011353`, `CHECKPOINT_SESSAO_2026-09-01.md` §20): `driverpay_platforms` +
