@@ -2,7 +2,18 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-04 (fim da tarde/noite)** — **✅ 2 bugs reais de nota fiscal
+> Última atualização: **2026-09-04 (noite)** — **✅ Bug real AO VIVO corrigido** (`51acb9f`,
+> `CHECKPOINT_SESSAO_2026-09-01.md` §27): driver Gessiley travado tentando emitir nota (Victor
+> mandou print + áudio de voz dele). `liquido_individual`/`liquido_grupo` tinham a MESMA doença
+> do bug do §26 (candidato de nota que soma CNPJ diferente do pedido) — a nota do CNPJ Shopee
+> dele era recusada cobrando R$9.339,00, que é Shopee (R$8.434,80) + iMile (R$904,20) somados,
+> não o valor de UM CNPJ só. Corrigido: os dois candidatos só entram quando a pessoa/grupo não
+> tem pacote de outro CNPJ na quinzena. Validado com os números reais do grupo dele antes de
+> mexer no código. Deploy via CLI, versão 38 confirmada. Achado extra registrado (não mexido):
+> a tela de "dividir nota" cacheia a prévia e nunca refaz a busca — quem já tinha a tela aberta
+> antes de um deploy fica vendo valor velho pra sempre até recarregar a página.
+>
+> Atualização anterior do mesmo dia — **✅ 2 bugs reais de nota fiscal
 > corrigidos** (`CHECKPOINT_SESSAO_2026-09-01.md` §25/§26, ambos reportados pelo Victor com
 > print): (1) `e87f454` — nota validada do líder do grupo não reconferia quando um driver
 > novo entrava no meio da quinzena (caso real: Diego entrou no grupo do Meirivaldo, total

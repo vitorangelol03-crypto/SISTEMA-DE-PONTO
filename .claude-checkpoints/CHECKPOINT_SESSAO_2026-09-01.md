@@ -1249,3 +1249,40 @@ R$5.452,00, bate exato com o impresso. Deploy via CLI (`npx supabase functions d
 driver-public-api`), versão 37 confirmada com o fix presente (`get_edge_function` mostrou as
 2 ocorrências de `hasOtherEmitterInScope`). tsc+eslint limpos. Push feito, no ar via Vercel
 (mudança é só na edge fn — a Vercel não builda nada novo aqui, mas o push mantém histórico).
+
+## 27. ✅ Bug real ao vivo: `liquido_individual`/`liquido_grupo` também misturava CNPJ — travava nota do Gessiley (`51acb9f`)
+
+Achado com um driver REAL travado na hora (Victor mandou print + áudio de voz do driver
+reclamando: "tirei uma nota de R$7.930 no meu nome e outra de R$7.930 no nome do pai, deu
+erro tanto na eMile quanto na Shopee"). Print mostrava a tela do Gessiley: os dois cartões de
+CNPJ ainda mostravam a MESMA divisão (R$7.990,30 + R$7.990,30 nos dois) — e o envio real
+recusava com "esperado: R$9.339,00".
+
+**Investigação em 2 camadas**:
+1. **R$7.990,30×2 na tela** era **cache velho do navegador** — o app só busca a prévia da
+   divisão UMA VEZ por CNPJ (`splitMenu[k]`, guarda em `useState` e nunca refaz) — se o
+   Gessiley abriu a tela antes do deploy da §26 (15h03 de hoje), ficou vendo pra sempre o
+   valor combinado antigo, mesmo com o servidor já corrigido. **Não mexido** (é um achado,
+   registrado — mexer nisso é escopo novo, não pedido).
+2. **R$9.339,00 no erro de verdade era OUTRO bug, mais fundo**: confirmado com os números
+   reais do grupo dele (SQL) — `liquido_individual` do Gessiley é R$9.339,00, que é
+   R$8.434,80 (Shopee) + R$904,20 (iMile) SOMADOS — exatamente a MESMA doença do §26
+   (candidato que soma CNPJ diferente do que a nota é), só que em `liquido_individual`/
+   `liquido_grupo` (soma o `total_net` do pagamento inteiro, nunca por CNPJ) em vez de
+   `espelho_*` — o §26 não cobriu esses dois candidatos.
+
+**Corrigido**: `hasOtherEmitterInScope` (criada no §26) subiu de posição na função (agora
+antes do `cands` inicial) e passou a proteger `liquido_individual`/`liquido_grupo` também —
+só entram como candidato quando a pessoa/grupo NÃO tem pacote de outro CNPJ na quinzena.
+`somaCnpj_individual`/`somaCnpj_grupo` (já sempre corretos) continuam valendo.
+
+**Validado com os números reais do grupo do Gessiley** (Caratinga, 5 pessoas): Shopee/Loggi
+grupo R$14.476,00 / individual R$8.434,80; iMile grupo R$1.504,60 / individual R$904,20 —
+8.434,80+904,20=9.339,00 bate exato com o valor que travava, confirmando a causa raiz antes
+de mexer no código (regra "não chuta fix sem entender a falha"). tsc+eslint limpos. Deploy
+via CLI, versão 38 confirmada com a correção (4 ocorrências de `hasOtherEmitterInScope`: 1
+definição + 3 usos). Push feito.
+
+**Pendência avisada ao Victor, não decidida ainda**: o cache do item 1 (`splitMenu[k]` nunca
+refaz a busca) é um risco estrutural — qualquer futura correção no servidor fica invisível
+pra quem já tinha a tela aberta. Falta o Victor decidir se quer que eu mexa nisso.
