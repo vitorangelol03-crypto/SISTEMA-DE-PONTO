@@ -840,11 +840,10 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
       mirrorPlatformKey,
     );
     if (ocupando.length > 0) {
-      const recusada = ocupando.every((f) => f.status === 'rejeitada');
+      // 04/09/2026: nota recusada já foi filtrada de `consideradas` acima — quem
+      // chega aqui só pode ser recebida/validada de verdade ocupando a vaga.
       return json({
-        error: recusada
-          ? `Voce ja enviou uma nota para ${em.label} e ela foi RECUSADA. Peca a CD para excluir a nota anterior — so depois da pra mandar outra.`
-          : `Voce ja enviou a nota de ${em.label} desta quinzena. Para mandar outra, a atual precisa ser excluida pela CD.`,
+        error: `Voce ja enviou a nota de ${em.label} desta quinzena. Para mandar outra, a atual precisa ser excluida pela CD.`,
         alreadySent: true,
       }, 409);
     }
