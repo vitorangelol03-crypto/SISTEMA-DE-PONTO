@@ -97,7 +97,10 @@ test.describe('Pagamentos Driver — driver herda taxa do grupo ao entrar', () =
     await expect(rowA.locator('input[type="checkbox"]')).toBeChecked({ timeout: 10_000 });
     await card.getByPlaceholder('valor/pacote').fill('3,00');
     await card.getByRole('button', { name: 'Aplicar' }).click();
-    await expect(page.getByText(/Valor por pacote aplicado/)).toBeVisible({ timeout: 15_000 });
+    // 45s: aplicar percorre TODAS as plataformas ativas da empresa em série (5 na
+    // Caratinga real) — 15s bastava em ambiente isolado, mas estourava contra dado
+    // real sob carga de CPU concorrente (medido: rede sempre 200/204, só lenta).
+    await expect(page.getByText(/Valor por pacote aplicado/)).toBeVisible({ timeout: 45_000 });
 
     // O CERNE: adiciona o driver B — SEM clicar Aplicar de novo
     await card.getByPlaceholder(/Buscar driver/).fill(DRIVER_B);
