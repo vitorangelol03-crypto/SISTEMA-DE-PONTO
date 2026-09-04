@@ -29,6 +29,14 @@ export const TEST_EMPLOYEE_NAME_PREFIX = 'PW Test ';
 // timestamp de início da suíte.
 export const SUITE_START_FILE = path.join(process.cwd(), 'tests', '.suite-start.tmp');
 
+// 04/09/2026: empresas cujo require_facial_clock/face_identify_default global-setup.ts
+// desliga durante a suíte inteira (restaurado por global-teardown.ts) — ver comentário lá.
+export const FACIAL_FLAGS_COMPANIES = [
+  '6583bb2a-e334-41a7-b69c-7d98f3b46dfc', // Caratinga
+  '2b2abc4b-084c-4cf0-b5f1-02792513241d', // Ponte Nova
+];
+export const FACIAL_FLAGS_FILE = path.join(process.cwd(), 'tests', '.facial-flags-original.tmp');
+
 function readDotEnv(): Record<string, string> {
   const envPath = path.join(process.cwd(), '.env');
   if (!fs.existsSync(envPath)) return {};

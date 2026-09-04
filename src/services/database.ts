@@ -263,6 +263,13 @@ export interface Company {
    * false (comportamento legado). Ligado empresa por empresa após todos terem rosto.
    */
   require_facial_clock?: boolean | null;
+  /**
+   * Ponto sem CPF (04/09/2026): quando true, a tela de bater ponto abre direto
+   * no reconhecimento facial (1:N) em vez de pedir CPF. Padrão/ausente = false
+   * (CPF primeiro, comportamento legado). Separada de require_facial_clock e
+   * de face_recognition_config.enabled de propósito — ver a migration.
+   */
+  face_identify_default?: boolean | null;
   bank_hours_enabled: boolean;
   bank_hours_apply_in_payment?: boolean | null;
   // Configuração do banco de horas no pagamento (combo G — sub-fase 2.16).
@@ -4491,6 +4498,24 @@ export const saveFaceData = async (
 export const getFaceDescriptor = async (employeeId: string): Promise<number[] | null> => {
   const data = await callEmployeePublicApi<{ descriptor: number[] | null }>('face-descriptor', { employeeId });
   return data.descriptor ?? null;
+};
+
+export interface FaceIdentifyResult {
+  matched: boolean;
+  ambiguous?: boolean;
+  employeeId?: string;
+  employeeName?: string;
+  cpf?: string;
+  faceDistance?: number;
+}
+
+/**
+ * Ponto sem CPF (04/09/2026): identifica QUEM é o rosto capturado agora,
+ * comparando contra todos os rostos cadastrados da empresa — a comparação
+ * roda inteira no servidor (`identify-face`), nunca no navegador.
+ */
+export const identifyFace = async (companyId: string, descriptorNow: number[]): Promise<FaceIdentifyResult> => {
+  return await callEmployeePublicApi<FaceIdentifyResult>('identify-face', { companyId, descriptorNow });
 };
 
 // Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).

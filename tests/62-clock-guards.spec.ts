@@ -16,6 +16,10 @@ import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from '
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}Guard `;
 const CD_CARATINGA = { latitude: -19.8023373, longitude: -42.1360937 };
 
+// 04/09/2026: `require_facial_clock`/`face_identify_default` (Caratinga, produção)
+// ficam desligados durante TODA a suíte via tests/global-setup.ts (restaurados no
+// global-teardown.ts) — esta spec testa guards de UI, não facial.
+
 async function cleanup() {
   await cleanupByPrefix(PREFIX);
 }

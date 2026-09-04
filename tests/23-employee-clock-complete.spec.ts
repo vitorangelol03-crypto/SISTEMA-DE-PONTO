@@ -18,6 +18,10 @@ import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from '
 
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}Clock `;
 
+// 04/09/2026: `require_facial_clock`/`face_identify_default` (Caratinga, produção)
+// ficam desligados durante TODA a suíte via tests/global-setup.ts (restaurados no
+// global-teardown.ts) — este arquivo testa CPF/PIN/dashboard/logout, não facial.
+
 async function cleanup() {
   await cleanupByPrefix(PREFIX);
 }

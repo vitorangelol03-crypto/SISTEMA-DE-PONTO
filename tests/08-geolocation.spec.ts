@@ -34,6 +34,9 @@ test.describe('Geolocalização (/clock)', () => {
   const supabase = getClient();
   let employeeId: string;
   let originalConfig: Record<string, unknown> | null = null;
+  // 04/09/2026: `require_facial_clock`/`face_identify_default` (Caratinga,
+  // produção) ficam desligados durante TODA a suíte via tests/global-setup.ts
+  // (restaurados no global-teardown.ts) — esta spec testa geolocalização.
 
   test.beforeAll(async () => {
     // Remove leftover from crashed previous run

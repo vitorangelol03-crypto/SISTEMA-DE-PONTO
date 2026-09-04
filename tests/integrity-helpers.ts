@@ -27,7 +27,19 @@ export interface CreateEmployeeOpts {
   withPix?: boolean;
   employmentType?: 'CLT' | 'PJ' | 'Diarista' | 'Carteira Assinada';
   pin?: string;
+  /**
+   * 04/09/2026: `require_facial_clock` (trava dura de rosto+geo em toda
+   * marcação) está ligada em produção — sem isto, o funcionário de teste cai
+   * na tela de cadastrar rosto (sem câmera real em CI) e nunca chega no
+   * dashboard. Passar `true` só em testes que precisam logar até o painel de
+   * ponto; os demais ficam como sempre (sem rosto).
+   */
+  faceRegistered?: boolean;
 }
+
+/** Descriptor de 128 números — não precisa ser um rosto de verdade, só passar
+ *  na checagem de formato (`!emp.face_registered` fica false). */
+const DUMMY_FACE_DESCRIPTOR = Array(128).fill(0);
 
 export async function createTestEmployee(opts: CreateEmployeeOpts): Promise<string> {
   const s = getClient();
@@ -45,6 +57,10 @@ export async function createTestEmployee(opts: CreateEmployeeOpts): Promise<stri
   if (opts.pin) {
     row.pin = opts.pin;
     row.pin_configured = true;
+  }
+  if (opts.faceRegistered) {
+    row.face_registered = true;
+    row.face_descriptor = DUMMY_FACE_DESCRIPTOR;
   }
   const { data, error } = await s.from('employees').insert([row]).select('id').single();
   if (error) throw error;

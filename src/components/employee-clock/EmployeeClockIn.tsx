@@ -16,7 +16,11 @@ import { useCompany } from '../../contexts/useCompany';
 import { FaceRegistration } from './FaceRegistration';
 import { FaceVerification } from './FaceVerification';
 import { clockFailureMessage } from './clockMessages';
-import { AUTO_LOGOUT_SECONDS, quickExitMinutes } from './clockGuards';
+import {
+  AUTO_LOGOUT_SECONDS, quickExitMinutes,
+  MarkingPosition, MARKING_LABELS, getTimestampForPosition, getNextMarkingPosition,
+} from './clockGuards';
+import { FaceIdentifyClock } from './FaceIdentifyClock';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -44,7 +48,7 @@ const APPROVAL_BADGE: Record<string, { label: string; cls: string }> = {
   manual:   { label: '📝 Manual',               cls: 'bg-gray-100 text-gray-700' },
 };
 
-type Step = 'cpf' | 'company-select' | 'pin' | 'setup-pin' | 'face-register' | 'dashboard' | 'error';
+type Step = 'cpf' | 'company-select' | 'pin' | 'setup-pin' | 'face-register' | 'dashboard' | 'error' | 'face-scan';
 
 /** Solicita geolocalização. Resolve com a position, ou rejeita com o código do erro. */
 function requestGeolocation(): Promise<GeolocationPosition> {
@@ -67,31 +71,6 @@ function formatCPFMask(value: string): string {
   if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
   if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-}
-
-// Sub-fase 2.10: 4 marcações
-type MarkingPosition = 1 | 2 | 3 | 4;
-
-const MARKING_LABELS: Record<MarkingPosition, string> = {
-  1: 'Entrada manhã',
-  2: 'Saída almoço',
-  3: 'Volta almoço',
-  4: 'Saída final',
-};
-
-function getTimestampForPosition(att: Attendance | null, pos: MarkingPosition): string | null {
-  if (!att) return null;
-  if (pos === 1) return att.entry_1_time ?? att.entry_time ?? null;
-  if (pos === 2) return att.exit_1_time ?? null;
-  if (pos === 3) return att.entry_2_time ?? null;
-  return att.exit_2_time ?? att.exit_time_full ?? null;
-}
-
-function getNextMarkingPosition(att: Attendance | null): MarkingPosition | null {
-  for (const p of [1, 2, 3, 4] as const) {
-    if (!getTimestampForPosition(att, p)) return p;
-  }
-  return null;
 }
 
 /** Timestamp da marcação ANTERIOR a uma saída (pra trava de saída rápida):
@@ -120,6 +99,18 @@ async function isGeoPermissionDenied(): Promise<boolean> {
 export const EmployeeClockIn: React.FC = () => {
   const { company, setCompany } = useCompany();
   const [step, setStep] = useState<Step>('cpf');
+  // Ponto sem CPF (04/09/2026): quando a empresa tem reconhecimento facial
+  // ligado, a tela abre direto na câmera em vez de pedir CPF — o CPF vira só
+  // uma alternativa manual (botão "Prefere digitar CPF e senha?"). Resolvido
+  // uma vez, quando a empresa fica disponível; nunca sobrescreve depois disso
+  // (senão brigaria com o usuário navegando pra "digitar CPF" de propósito).
+  const [defaultStep, setDefaultStep] = useState<Step>('cpf');
+  const defaultStepResolvedRef = useRef(false);
+  // Guarda a marcação decidida pelo reconhecimento sem CPF até `employee`
+  // (state) realmente virar essa pessoa — evita o closure velho de
+  // executeClock/callClockValidated (que leem `employee` do escopo do
+  // componente, não de parâmetro) rodar com o funcionário antigo.
+  const pendingFaceIdentifyRef = useRef<{ type: 'entry' | 'exit'; markingPosition?: MarkingPosition; descriptor: number[] } | null>(null);
   const [cpfInput, setCpfInput] = useState('');
   const [pin, setPin] = useState('');
   const [setupField, setSetupField] = useState<'new' | 'confirm'>('new');
@@ -189,6 +180,29 @@ export const EmployeeClockIn: React.FC = () => {
     if (clockWatchdogRef.current) clearTimeout(clockWatchdogRef.current);
     if (autoLogoutRef.current) clearTimeout(autoLogoutRef.current);
   }, []);
+
+  // Resolve o modo padrão da tela (câmera aberta × CPF) uma única vez, assim
+  // que a empresa fica disponível — nunca de novo depois (ver comentário no
+  // state). Lê `company.face_identify_default` direto (já veio junto com a
+  // empresa, sem chamada extra) — de propósito: uma 2ª chamada de rede aqui
+  // criaria uma corrida real contra a pessoa já digitando o CPF na tela.
+  useEffect(() => {
+    if (!company?.id || defaultStepResolvedRef.current) return;
+    defaultStepResolvedRef.current = true;
+    const resolved: Step = company.face_identify_default === true ? 'face-scan' : 'cpf';
+    setDefaultStep(resolved);
+    setStep((prev) => (prev === 'cpf' ? resolved : prev));
+  }, [company?.id, company?.face_identify_default]);
+
+  // Dispara o registro assim que `employee` (state) realmente virar a pessoa
+  // identificada pela câmera sem CPF (ver comentário no ref, acima).
+  useEffect(() => {
+    const pending = pendingFaceIdentifyRef.current;
+    if (!pending || !employee) return;
+    pendingFaceIdentifyRef.current = null;
+    executeClock(pending.type, pending.markingPosition, pending.descriptor);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employee]);
 
   // ─── Face recognition gate ────────────────────────────────────────────────
   // Decide o próximo passo após autenticação por PIN:
@@ -600,9 +614,20 @@ export const EmployeeClockIn: React.FC = () => {
     setClockMsg('❌ Reconhecimento facial falhou. Procure o supervisor.');
   };
 
+  // Ponto sem CPF (04/09/2026): a câmera já identificou a pessoa, mostrou o
+  // nome com 3s pra cancelar, e ninguém cancelou — troca pra essa pessoa e
+  // deixa o efeito (acima) disparar o registro assim que `employee` atualizar.
+  const handleFaceIdentifyConfirmed = (
+    emp: Employee, descriptor: number[], type: 'entry' | 'exit', markingPosition?: MarkingPosition,
+  ) => {
+    pendingFaceIdentifyRef.current = { type, markingPosition, descriptor };
+    setEmployee(emp);
+    setStep('dashboard');
+  };
+
   const handleLogout = () => {
     if (autoLogoutRef.current) { clearTimeout(autoLogoutRef.current); autoLogoutRef.current = null; }
-    setStep('cpf');
+    setStep(defaultStep);
     setCpfInput('');
     setPin('');
     setNewPin('');
@@ -690,6 +715,14 @@ export const EmployeeClockIn: React.FC = () => {
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Continuar'}
               </button>
+              {defaultStep === 'face-scan' && (
+                <button
+                  onClick={() => setStep('face-scan')}
+                  className="w-full text-sm text-blue-500 hover:text-blue-700 py-1"
+                >
+                  ← Voltar pro reconhecimento facial
+                </button>
+              )}
             </div>
           </>
         )}
@@ -1112,6 +1145,15 @@ export const EmployeeClockIn: React.FC = () => {
         )}
 
       </div>
+
+      {/* ── PONTO SEM CPF (overlay full-screen — câmera aberta, sem funcionário conhecido) ── */}
+      {step === 'face-scan' && company && (
+        <FaceIdentifyClock
+          company={company}
+          onConfirmed={handleFaceIdentifyConfirmed}
+          onUseCpf={() => setStep('cpf')}
+        />
+      )}
 
       {/* ── FACE REGISTRATION (overlay full-screen — primeiro acesso) ── */}
       {step === 'face-register' && employee && (

@@ -25,6 +25,12 @@
 //   face-config              { companyId } → { enabled: boolean }
 //   face-descriptor          { employeeId } → { descriptor: number[] | null }
 //   save-face                { employeeId, photoUrl, descriptor } → { ok: true }
+//   identify-face            { companyId, descriptorNow } → { matched, employeeId?, employeeName?, cpf?, faceDistance? }
+//     04/09/2026 — ponto SÓ pela facial, sem digitar CPF. Compara contra TODOS
+//     os rostos ativos da empresa (1:N) com limite mais rígido (0.42) e margem
+//     mínima contra o 2º colocado (0.08) — ambíguo ou sem certeza = não bate.
+//     Isto só IDENTIFICA; quem registra o ponto de fato é o clock-in-validated
+//     de sempre, reconferindo o mesmo rosto 1:1 contra a pessoa identificada.
 //   log-face-attempt         { employeeId, success, confidence, clockType, companyId } → { ok: true }
 //   employee-errors-by-period { employeeId, periodId, companyId } → { period, individual_errors, triage_errors, total_individual, total_triage }
 //   employee-error-periods    { employeeId, companyId } → { periods: Array<{ period, has_errors, total_errors }> }
@@ -61,6 +67,35 @@ function getBrazilDateString(): string {
   const now = new Date();
   const local = new Date(now.getTime() + (-3 * 60) * 60_000);
   return local.toISOString().slice(0, 10);
+}
+
+// ── Facial 1:N — reconhecimento sem CPF (04/09/2026) ──────────────────────────
+// Mesma conta do servidor de clock-in-validated (euclideanDistance sobre os 128
+// números do face-api), mas aqui comparando contra TODOS os rostos da empresa,
+// não contra um só. Por isso o limite é mais RIGOROSO que o 0.5 do 1:1 (pedido
+// do Victor: "não pode confundir, tem que ser robusta") — e exige MARGEM contra
+// o segundo colocado: se dois funcionários ficarem parecidos demais entre si,
+// recusa em vez de arriscar escolher o errado.
+const FACE_1N_THRESHOLD = 0.42;
+const FACE_1N_MIN_MARGIN = 0.08;
+
+function euclideanDistance(a: number[], b: number[]): number {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    const d = a[i] - b[i];
+    sum += d * d;
+  }
+  return Math.sqrt(sum);
+}
+
+function parseDescriptor(raw: unknown): number[] | null {
+  let arr: unknown = raw;
+  if (typeof raw === 'string') {
+    try { arr = JSON.parse(raw); } catch { return null; }
+  }
+  if (!Array.isArray(arr) || arr.length !== 128) return null;
+  const nums = arr.map(Number);
+  return nums.every((n) => Number.isFinite(n)) ? nums : null;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -369,6 +404,75 @@ async function saveFace(body: Body): Promise<Response> {
   return json({ ok: true });
 }
 
+/**
+ * Reconhece o rosto SEM saber quem é de antemão (04/09/2026, pedido do Victor:
+ * "bater ponto só pela facial, sem digitar CPF"). Recebe o rosto capturado
+ * agora e devolve quem é (se achar) — a comparação contra TODOS os rostos
+ * cadastrados da empresa acontece AQUI, no servidor, nunca no navegador: mandar
+ * o rosto de 90 pessoas pro cliente comparar lá seria expor dado biométrico de
+ * todo mundo numa tela pública sem senha nenhuma.
+ *
+ * Isto é só a IDENTIFICAÇÃO (1:N, mais frouxa por natureza — comparar contra
+ * muita gente aumenta o risco de confundir). Quem bate o ponto de fato é o
+ * fluxo já existente (clock-in-validated), que reconfere o MESMO rosto 1:1
+ * contra o descriptor da pessoa identificada, com o limite de sempre — duas
+ * conferências, não uma.
+ */
+async function identifyFace(body: Body): Promise<Response> {
+  const companyId = String(body.companyId ?? '').trim();
+  const now = parseDescriptor(body.descriptorNow);
+  if (!companyId) return json({ error: 'Invalid companyId' }, 400);
+  if (!now) return json({ error: 'Invalid descriptorNow' }, 400);
+
+  // employees não tem coluna "active" (diferente de driverpay_drivers/platforms) —
+  // quem sai da empresa hoje é excluído da tabela, não desativado. `registration_status`
+  // é o único filtro de elegibilidade que existe (fora abaixo).
+  const { data, error } = await supabase
+    .from('employees')
+    .select('id, name, cpf, face_descriptor, registration_status')
+    .eq('company_id', companyId)
+    .not('face_descriptor', 'is', null);
+  if (error) return json({ error: 'Database error', details: error.message }, 500);
+
+  type Candidate = { id: string; name: string; cpf: string; distance: number };
+  const candidates: Candidate[] = [];
+  for (const emp of data ?? []) {
+    if (emp.registration_status === 'rejected') continue;
+    const enrolled = parseDescriptor(emp.face_descriptor);
+    if (!enrolled) continue;
+    candidates.push({ id: emp.id, name: emp.name, cpf: emp.cpf, distance: euclideanDistance(now, enrolled) });
+  }
+  candidates.sort((a, b) => a.distance - b.distance);
+
+  const best = candidates[0];
+  const second = candidates[1];
+  const ambiguous = !!second && (second.distance - (best?.distance ?? 0)) < FACE_1N_MIN_MARGIN;
+  const matched = !!best && best.distance < FACE_1N_THRESHOLD && !ambiguous;
+
+  // Log da tentativa — sem employee_id quando não deu pra confirmar (não
+  // registra um "quase" como se fosse a pessoa certa).
+  await supabase.from('face_auth_attempts').insert([{
+    employee_id: matched ? best!.id : null,
+    date: getBrazilDateString(),
+    attempted_at: new Date().toISOString(),
+    success: matched,
+    confidence: best ? Math.max(0, 1 - best.distance) : null,
+    clock_type: null,
+    company_id: companyId,
+  }]);
+
+  if (!matched) {
+    return json({ matched: false, ambiguous });
+  }
+  return json({
+    matched: true,
+    employeeId: best!.id,
+    employeeName: best!.name,
+    cpf: best!.cpf,
+    faceDistance: best!.distance,
+  });
+}
+
 async function logFaceAttempt(body: Body): Promise<Response> {
   const employeeId = String(body.employeeId ?? '').trim();
   const success = Boolean(body.success);
@@ -541,6 +645,7 @@ Deno.serve(async (req) => {
       case 'face-config': return await faceConfig(body);
       case 'face-descriptor': return await faceDescriptor(body);
       case 'save-face': return await saveFace(body);
+      case 'identify-face': return await identifyFace(body);
       case 'log-face-attempt': return await logFaceAttempt(body);
       case 'employee-errors-by-period': return await employeeErrorsByPeriod(body);
       case 'employee-error-periods': return await employeeErrorPeriods(body);
