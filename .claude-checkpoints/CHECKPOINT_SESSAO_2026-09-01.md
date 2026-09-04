@@ -915,3 +915,97 @@ function, mesmo nunca sendo exposta ao PostgREST diretamente.
 **Pendente**: item (2) e (3) de "atacar tudo" (auditar os outros ~7 módulos; completar
 o audit trail) — ainda não iniciados. E os 2 pedidos de feature que o Victor fez no
 meio deste trabalho (ver próxima seção).
+
+## 22. ✅ 2 pedidos de feature do Victor (04/09) — grupo herda taxa + nota recusada libera reenvio
+
+### 22.1. Driver que entra num grupo com taxa já configurada herda ela automaticamente (`1efd35b`)
+
+Pedido: "quando movimenta um driver para um grupo e aquele grupo já tiver valor definido
+nas config de grupo esse driver já entra com valor do grupo aplicado". `addDriverToGroup`
+(`driverPay.ts`) agora, depois do upsert de membro, lê `driverpay_groups.default_rate` do
+grupo e, se setado, aplica em todas as plataformas ativas via a RPC
+`upsert_driverpay_platform_rates_masked` (leva 2, §20) — direto, sem passar por
+`upsertDriverRate`, pra não exigir a permissão `configRate` além de `manageGroups` (já
+checada na entrada da função; mesmo padrão de `applyGroupRate`). Decisão implícita
+(perguntado, ele respondeu só "pode começar" sem responder a pergunta específica — tratado
+como aprovação da recomendação: **a taxa do grupo SOBRESCREVE** o que o driver já tinha
+configurado, porque entrar no grupo é escolha explícita do operador).
+
+**Validação real, com ressalva honesta**: `tests/106-driverpay-group-rate-inherit-on-join.spec.ts`
+(E2E completo, clique real) foi escrito mas **falhou 3x localmente por motivo ambiental**,
+não por bug — (1ª tentativa) Vite com o esbuild interno morto (`[plugin:vite:esbuild] The
+service is no longer running`, matei o processo e subi de novo); (2ª/3ª) depois do restart,
+o teste avançou até o login mas travou esperando o botão "Novo driver" estabilizar — a
+quinzena real da Caratinga tem 132 drivers/159.814 pacotes reais, e o sistema estava sob
+carga real concorrente de OUTRAS sessões do Victor (Chrome automation do shopee-bot +
+`next build` + backup tar/gzip — `uptime` confirmou load 8-12+). Como as 3 falhas
+aconteceram ANTES do código novo sequer rodar, pivotei pra validar a lógica de negócio
+direto via SQL (Supabase MCP): simulei a sequência exata de `addDriverToGroup` com um
+grupo/driver de teste descartável (rate 3,00 aplicado a 7/7 plataformas ativas, confirmado,
+depois apagado). **Isso NÃO substitui o E2E de clique real — `tests/106` continua sem
+rodar com sucesso em lugar nenhum** (nem local, nem CI — ver próximo parágrafo). Fica
+pendente rodar localmente quando a máquina estiver sem concorrência, ou aceitar a validação
+por SQL como suficiente.
+
+🔑 **Achado sobre o CI**: o job de push do CI roda uma lista FIXA de 10 specs "essenciais"
+(`01,02,25,38,47,49,50,51,100,101` — ver `.github/workflows/ci.yml`), não um glob — specs
+novos como `106` **nunca rodam** no push normal, só via `workflow_dispatch` manual ("run
+full suite") ou local. O run `33832069375` (114 passed/0 failed) que pareceu confirmar o
+106 na hora **não confirmou nada**: a contagem bateu por coincidência de flake normal da
+suíte fixa, não porque o arquivo novo rodou. Documentado aqui pra não repetir a falsa
+confiança.
+
+### 22.2. Nota fiscal recusada não segura mais o lugar — apaga e libera reenvio automático (`1a3f8a6`+`4739c6a`)
+
+Pedido (com print): quando o driver manda a nota e a conferência automática recusa, quer
+mensagem clara do motivo E que a nota recusada seja apagada com reenvio liberado na hora —
+sem esperar a CD excluir manualmente.
+
+**Conflito com decisão anterior dele mesmo, sinalizado antes de mexer**: em 05/08/2026 ele
+tinha pedido o OPOSTO — "vamos permitir apenas um envio por nota pedida... eles só vão poder
+anexar outra quando a atual for excluída" — trava anti-spam deliberada (guardada em
+comentário no código). Perguntei explicitamente se ele queria mesmo trocar pro modo
+automático ou só melhorar a mensagem mantendo a trava; ele perguntou "qual trava?", expliquei
+com exemplo concreto, e ele confirmou a reversão: **"coloque para excluir e forma
+automatica"**.
+
+Implementado em `supabase/functions/driver-public-api/{index.ts,nfCheck.ts}`: o bloco
+`autoReject` foi movido pra ANTES do INSERT (logo após o upload) — nota recusada não chega a
+ser gravada, o arquivo recém-subido é apagado do storage, e a resposta 422 devolve o motivo
+sem nunca ocupar a vaga; `notasQueOcupamVaga` passou a receber a lista já filtrada
+(`status !== 'rejeitada'`) antes de checar ocupação. Achados extras durante o preparo do
+deploy (2 referências que ficaram desatualizadas e só foram achadas na hora de montar o
+payload, corrigidas no commit `4739c6a`): o handler 409 de "já enviado" ainda tinha um
+branch morto pra mensagem de nota recusada, e o JSDoc de `notasQueOcupamVaga` ainda
+documentava o comportamento antigo. `DriverApp.tsx` (app do driver) ajustado pra reabrir o
+botão de envio quando só existe nota `rejected` (sem `sent`), com mensagem "Envie outra."
+em vez de pedir a CD. `NotasRecebidasModal.tsx` (painel) já tinha o toast certo desde antes
+(estava aspiracionalmente errado — dizia isso mas não era verdade; agora é).
+
+🚨 **Incidente durante o deploy da edge function, corrigido no mesmo fluxo**: a primeira
+tentativa de publicar via MCP (`deploy_edge_function`) foi cortada por um limite de output
+no meio da construção da chamada e saiu com `"content": "PLACEHOLDER"` pro `index.ts` —
+essa chamada **teve sucesso** e publicou o placeholder como versão 35 em produção
+(`verify_jwt: false`, é o backend inteiro do app do driver — login, notas, prints, tudo).
+Detectado na hora pelo tamanho suspeito da resposta e pelo bump de versão. Depois de mais
+uma tentativa via MCP que falhou por bundling (faltavam 2 dos 5 arquivos — erro limpo, não
+publicou nada) e outra tentativa acidental com placeholder em todos os arquivos (bloqueada
+pelo classificador de permissão antes de rodar), **troquei de abordagem**: em vez de inlinar
+~150KB de conteúdo numa chamada de tool (que estava estourando o limite de output
+repetidamente), usei `npx supabase functions deploy driver-public-api --no-verify-jwt
+--project-ref flcncdidxmmornkgkfbb` — o CLI lê os arquivos direto do disco, sem precisar
+que eu digite o conteúdo. Deploy confirmado: versão 36, zero ocorrência de "PLACEHOLDER" no
+conteúdo publicado, `verify_jwt` continua `false`, sonda real (`login` com CPF inválido)
+devolveu 401 — comportamento correto, não erro de função quebrada. **Produção ficou com o
+placeholder ativo por alguns minutos** entre o deploy quebrado e a correção — não deu pra
+medir se algum driver tentou usar o app nesse intervalo específico (ninguém reportou).
+Lição gravada: preferir CLI (lê do disco) a inlinar arquivo grande numa tool call quando o
+conteúdo se aproxima do limite de output de uma resposta.
+
+**Validado**: `npm run typecheck` limpo depois de todos os ajustes. CI do push `4739c6a`
+disparado (run `33843484938`), resultado ainda não confirmado no momento deste registro —
+ver próxima atualização do índice.
+
+**Pendente**: nenhum teste E2E dedicado escrito pra este fluxo (a mudança é 100% na edge
+function + app do driver, fora do alcance direto do Playwright que roda contra o painel
+supervisor) — validado só por leitura de código + typecheck + a sonda HTTP pós-deploy.

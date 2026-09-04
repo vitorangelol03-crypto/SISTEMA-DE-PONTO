@@ -4,10 +4,15 @@
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 > Última atualização: **2026-09-04** (🎉 brecha REST 100% FECHADA — as 6 tabelas de
 > Financeiro/Erros/C6 + as 8 do driverpay, todas com function `SECURITY DEFINER` +
-> REVOKE confirmado, CI verde em cada leva. 2 pedidos de feature do Victor na fila,
-> ainda não investigados: (1) driver que entra num grupo com taxa configurada devia
-> herdar ela automaticamente; (2) nota fiscal conferida automaticamente devia avisar
-> o driver — sucesso ou motivo da recusa + apagar e pedir outra).
+> REVOKE confirmado, CI verde em cada leva. **+ os 2 pedidos de feature do Victor
+> implementados e no ar** (§22): grupo herda taxa automática ao entrar driver (`1efd35b`,
+> validação real de UI bloqueada por ambiente, validado por SQL direto — `tests/106`
+> ainda não rodou com sucesso em lugar nenhum); nota fiscal recusada apaga e libera
+> reenvio automático (`1a3f8a6`+`4739c6a`, edge fn `driver-public-api` redeployada).
+> 🚨 **Incidente no meio do deploy da edge function**: uma chamada MCP cortada por limite
+> de output publicou `"PLACEHOLDER"` como versão 35 em produção por alguns minutos —
+> detectado na hora, corrigido via `npx supabase functions deploy` (CLI lê do disco,
+> evita reinlinar ~150KB), versão 36 confirmada limpa + sonda HTTP real 401 correto.)
 
 > ✅ **Brecha REST no driverpay — leva 3 de 3 fechada, FECHA AS 8 TABELAS** (migrations
 > `20260904013558`/`20260904015824`, `CHECKPOINT_SESSAO_2026-09-01.md` §21/§21.1):
