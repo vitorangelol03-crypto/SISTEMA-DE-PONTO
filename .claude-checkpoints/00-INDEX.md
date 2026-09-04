@@ -2,7 +2,21 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-04 (fim da tarde)** — **✅ Bug real corrigido** (`fb1af64`,
+> Última atualização: **2026-09-04 (fim da tarde/noite)** — **✅ 2 bugs reais de nota fiscal
+> corrigidos** (`CHECKPOINT_SESSAO_2026-09-01.md` §25/§26, ambos reportados pelo Victor com
+> print): (1) `e87f454` — nota validada do líder do grupo não reconferia quando um driver
+> novo entrava no meio da quinzena (caso real: Diego entrou no grupo do Meirivaldo, total
+> subiu de R$5.300,50 pra R$7.700,50, tela seguiu com "NF ok"); corrigido em
+> `addDriverToGroup` — volta a(s) nota(s) validada(s) do líder pra "recebida" nas quinzenas
+> abertas. (2) `97967d6` — tela de "dividir a nota" mostrava o MESMO valor pros dois CNPJs de
+> uma empresa multi-CNPJ (Shopee/Anjun/Loggi + iMile); causa: espelho "quinzena completa" tem
+> só 1 total IMPRESSO combinado, que `mirrorExpectedValue` usa direto ignorando a soma por
+> CNPJ; corrigido pulando o candidato do espelho quando o escopo mistura CNPJ diferente do
+> consultado — sobra a soma já filtrada certa. Validado com dados reais de produção (grupo do
+> HIGINO ALVES: R$5.452,00 combinado errado → R$4.830,00+R$622,00 corretos, bate com o
+> impresso). Edge fn `driver-public-api` redeployada via CLI (versão 37, conteúdo conferido).
+>
+> Atualização anterior do mesmo dia — **✅ Bug real corrigido** (`fb1af64`,
 > §24): rota nova (driver multi-rota, ex. Pablo) sumia da tela ao digitar a cidade e sair
 > do campo — rota sem pacote nenhum não existe de verdade no banco ainda, o "renomear" no
 > blur não achava nada e o reload seguinte apagava. Corrigido + provado nos dois sentidos

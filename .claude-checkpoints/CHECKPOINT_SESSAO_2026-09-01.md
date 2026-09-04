@@ -1187,3 +1187,65 @@ assim que o 1º pacote for lançado, com o nome novo desde o início.
 temporariamente, o teste 61 reforçado (agora espera 2s após o blur e confere que a rota
 continua lá antes de lançar o pacote) travou/estourou timeout; com a correção de volta,
 passou limpo (1.5min). Push feito, no ar via Vercel.
+
+## 25. ✅ Bug real: nota fiscal validada não reconferia após novo driver entrar no grupo (`e87f454`)
+
+Reportado pelo Victor com prints (grupo "Conceição de Ipanema - MEIRIVALDO"): a nota do
+Meirivaldo validou em R$5.300,50 (correto na hora), mas o grupo passou pra R$7.700,50 depois
+que o Diego entrou no grupo — a tela continuou mostrando "NF ok" mesmo o valor não batendo
+mais. Confirmado por SQL: Diego entrou às 14:12 de hoje, nova publicação de espelho às
+14:55 com `printed_total: 7700.50`; a nota do Meirivaldo foi validada às 02:01 (antes do
+Diego entrar), quando R$5.300,50 era o total certo do grupo.
+
+**Causa raiz**: `computeNfProgressByPayment` (`driverPayShared.ts`) rastreia a "vaga" de nota
+por identidade CNPJ/espelho ("existe nota validada pra este slot?"), nunca reconferindo se o
+VALOR da nota validada ainda bate com o total ATUAL depois de mudanças (entrada de novo
+driver no grupo).
+
+**Perguntado ao Victor via `AskUserQuestion`** (2 perguntas): (1) o que fazer com a nota do
+Meirivaldo especificamente — escolheu **"Pedir nota nova pra ele"** (ele mesmo resolve,
+nenhuma ação de sistema nesse caso pontual); (2) corrigir a lacuna sistêmica agora — escolheu
+**"Sim, corrigir agora"**.
+
+**Corrigido**: `addDriverToGroup` (`driverPay.ts`) agora, ao adicionar alguém a um grupo,
+busca as notas do LÍDER com `status='validada'` nas quinzenas ABERTAS (nunca mexe em
+concluída/paga) e volta pra `status='recebida'` (pendente de reconferência). De propósito
+"robusto demais": dispara sempre que alguém entra no grupo, mesmo sem pacote lançado ainda —
+melhor pedir reconferência à toa do que deixar nota faltando passar batido.
+
+**Validado**: tsc+lint limpos; simulação SQL com dados descartáveis (UUIDs fixos, apagados
+no final) rodando a mesma sequência de 3 queries do fix, confirmando que a nota do líder
+flipa de 'validada' pra 'recebida' quando um membro novo entra. Push feito, no ar via Vercel.
+
+## 26. ✅ Bug real: "dividir a nota" mostrava o mesmo valor pros dois CNPJs (`97967d6`)
+
+Reportado pelo Victor com print (tela "Anexar nota" de um driver): os dois cartões de CNPJ
+("Shopee/Anjun/Loggi" e "iMile"), ambos "Quinzena completa", mostravam EXATAMENTE os mesmos
+valores de divisão (mesmo total, mesmas parcelas 50/50 e 70/30) — errado, já que cada CNPJ
+cobre plataformas/valores diferentes.
+
+**Causa raiz, mais funda do que parecia**: toda empresa aqui publica só espelho "quinzena
+completa" — 1 documento cobrindo TODOS os CNPJs somados, com 1 total IMPRESSO só
+(`driverpay_mirror_publications.printed_total`). `mirrorExpectedValue` (`nfCheck.ts`), quando
+esse total impresso existe, devolve ele DIRETO — ignora a soma calculada por CNPJ
+(`grossInScope`). Então `buildValueCandidates` (`driver-public-api/index.ts`), chamada uma
+vez por CNPJ (`nfSplitPreview`), gerava o candidato "espelho" com o MESMO valor combinado pros
+dois CNPJs — e a tela sempre preferia esse candidato (o maior) sobre a soma certa já filtrada
+por CNPJ (`somaCnpj_*`).
+
+**Corrigido**: dentro de `buildValueCandidates`, nova função `hasOtherEmitterInScope` — antes
+de aceitar o candidato "espelho" de uma publicação, confere se o escopo (grupo/individual,
+respeitando o `platform_filter` da publicação) tem pacote de algum CNPJ DIFERENTE do que está
+sendo consultado. Se tiver (é o caso de toda "quinzena completa" numa empresa multi-CNPJ),
+pula o candidato do espelho pra aquele CNPJ — sobra `somaCnpj_individual`/`somaCnpj_grupo`
+(já corretamente filtrada por CNPJ) como o candidato usado. Publicação com CNPJ único ou já
+filtrada por plataforma (`platform_filter`) continua usando o espelho normalmente — zero
+mudança de comportamento nesses casos.
+
+**Validado com dados reais de produção** (sem fixture): grupo do HIGINO ALVES (Caratinga) —
+antes do fix, os dois CNPJs mostrariam o mesmo R$5.452,00 (o combinado impresso); com o fix,
+`somaCnpj_grupo` calcula R$4.830,00 pro CNPJ Shopee/Loggi e R$622,00 pro CNPJ iMile — soma
+R$5.452,00, bate exato com o impresso. Deploy via CLI (`npx supabase functions deploy
+driver-public-api`), versão 37 confirmada com o fix presente (`get_edge_function` mostrou as
+2 ocorrências de `hasOtherEmitterInScope`). tsc+eslint limpos. Push feito, no ar via Vercel
+(mudança é só na edge fn — a Vercel não builda nada novo aqui, mas o push mantém histórico).
