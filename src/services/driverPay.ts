@@ -957,19 +957,16 @@ export const getDriverDefaultRates = async (
   driverId: string
 ): Promise<Record<string, number>> => {
   // "Última taxa usada": pacotes do pagamento mais recente do driver.
+  // 03/09/2026: REST-bypass fix — view security_invoker nunca travou a tabela crua;
+  // function SECURITY DEFINER já devolve só os pacotes do pagamento mais recente.
   const lastUsed: Record<string, number> = {};
-  const { data: payRows, error: payErr } = await supabase
-    .from('driverpay_payments')
-    // 02/09/2026: rate_snapshot mascarado no banco (driverpay.viewValues) — view, não a tabela crua.
-    .select('id, packages:driverpay_payment_packages_v(platform_name, rate_snapshot, created_at)')
-    .eq('company_id', companyId)
-    .eq('driver_id', driverId)
-    .order('created_at', { ascending: false })
-    .limit(1);
+  const { data: pkgRows, error: payErr } = await supabase.rpc('get_driverpay_last_used_rates_masked', {
+    p_company_id: companyId,
+    p_driver_id: driverId,
+  });
   if (payErr) throwDbError(payErr);
 
-  const latest = (payRows || [])[0] as { packages?: Record<string, unknown>[] } | undefined;
-  const pkgs = latest?.packages;
+  const pkgs = (pkgRows || []) as Record<string, unknown>[];
   if (Array.isArray(pkgs) && pkgs.length > 0) {
     // ordena por created_at asc: o pacote mais recente de cada plataforma sobrescreve.
     const ordered = [...pkgs].sort((a, b) =>
@@ -1158,16 +1155,22 @@ export const applyGroupRate = async (
     if (payErr) throwDbError(payErr);
     for (const pay of pays || []) {
       const paymentId = (pay as { id: string }).id;
-      const { data: mudadas, error: pkErr } = await supabase
-        .from('driverpay_payment_packages')
-        .update({ rate_snapshot: rate })
-        .eq('payment_id', paymentId)
-        .eq('platform_name', platformName)
-        .neq('rate_snapshot', rate) // não reescreve o que já está certo
-        .select('id');
+      // 03/09/2026: REST-bypass fix — o filtro .neq('rate_snapshot', rate) exige SELECT
+      // na coluna, que vai ser travada; passa pela function SECURITY DEFINER (mesma
+      // regra: só atualiza e conta as linhas que realmente mudaram).
+      const { data: mudadasCount, error: pkErr } = await supabase.rpc(
+        'update_driverpay_package_rate_where_changed_masked',
+        {
+          p_company_id: companyId,
+          p_payment_id: paymentId,
+          p_platform_name: platformName,
+          p_new_rate: rate,
+        },
+      );
       if (pkErr) throwDbError(pkErr);
-      linhasAtualizadas += (mudadas ?? []).length;
-      if ((mudadas ?? []).length > 0) await recomputePaymentTotals(paymentId);
+      const changed = Number(mudadasCount) || 0;
+      linhasAtualizadas += changed;
+      if (changed > 0) await recomputePaymentTotals(paymentId);
     }
   }
   console.info(
@@ -1332,18 +1335,15 @@ export const getPayments = async (
   periodId: string,
   companyId: string
 ): Promise<DriverPayment[]> => {
-  // 02/09/2026: valores em R$ mascarados no banco (driverpay.viewValues) — vai tudo por
-  // view (a view não muda o RLS de linha/empresa, só troca as colunas de dinheiro por
-  // NULL quando o usuário não tem a permissão; zapex não tem coluna de dinheiro própria,
-  // fica na tabela crua mesmo).
-  const { data, error } = await supabase
-    .from('driverpay_payments_v')
-    .select('*, packages:driverpay_payment_packages_v(*), discounts:driverpay_discounts_v(*), vales:driverpay_vales_v(*), zapex:driverpay_zapex(*)')
-    .eq('period_id', periodId)
-    .eq('company_id', companyId)
-    .order('driver_name_snapshot', { ascending: true });
+  // 03/09/2026: REST-bypass fix — a view security_invoker (02/09) nunca travou a leitura
+  // direta da tabela crua (mesmo bug de hoje pro Financeiro). Function SECURITY DEFINER
+  // já vem com packages/discounts/vales/zapex embutidos (mascarados por driverpay.viewValues).
+  const { data, error } = await supabase.rpc('get_driverpay_payments_masked', {
+    p_period_id: periodId,
+    p_company_id: companyId,
+  });
   if (error) throwDbError(error);
-  return (data || []).map(mapPayment);
+  return ((data || []) as Record<string, unknown>[]).map(mapPayment);
 };
 
 /**
@@ -1369,13 +1369,17 @@ export const upsertPackage = async (
   await ensurePerm(userId, 'driverpay.editDriver');
   const key = `${paymentId}|${platformName}|${route}`;
   const prior = upsertPackageQueue.get(key) ?? Promise.resolve();
+  // 03/09/2026: REST-bypass fix — o upsert (ON CONFLICT DO UPDATE) em rate_snapshot
+  // exige SELECT na coluna, que vai ser travada; passa pela function SECURITY DEFINER.
   const run = prior.catch(() => {}).then(() =>
-    supabase
-      .from('driverpay_payment_packages')
-      .upsert(
-        [{ company_id: companyId, payment_id: paymentId, platform_name: platformName, route, packages, rate_snapshot: rateSnapshot }],
-        { onConflict: 'payment_id,platform_name,route' }
-      )
+    supabase.rpc('upsert_driverpay_package_masked', {
+      p_company_id: companyId,
+      p_payment_id: paymentId,
+      p_platform_name: platformName,
+      p_route: route,
+      p_packages: packages,
+      p_rate_snapshot: rateSnapshot,
+    })
   );
   upsertPackageQueue.set(key, run);
   const { error } = await run;
@@ -2319,27 +2323,17 @@ export const setZapexRate = async (
  * Recomputa total_* de um pagamento a partir das filhas, usando a view
  * driverpay_payment_computed (fonte unica da formula) e grava na driverpay_payments.
  * total_net pode ser negativo (vale > pacotes) — sem CHECK no net.
+ *
+ * 03/09/2026: REST-bypass fix — driverpay_payment_computed é security_invoker e lê
+ * rate_snapshot/amount das tabelas filhas; sem function, quebra assim que essas
+ * colunas forem travadas pra authenticated. Function SECURITY DEFINER faz leitura
+ * + gravação juntas (mesmo formato, sem mudar o comportamento).
  */
 export const recomputePaymentTotals = async (paymentId: string): Promise<void> => {
-  const { data, error } = await supabase
-    .from('driverpay_payment_computed')
-    .select('calc_packages, calc_discounts, calc_vales, calc_zapex, calc_net')
-    .eq('payment_id', paymentId)
-    .maybeSingle();
+  const { error } = await supabase.rpc('recompute_driverpay_payment_totals_masked', {
+    p_payment_id: paymentId,
+  });
   if (error) throwDbError(error);
-  if (!data) return;
-  const { error: upErr } = await supabase
-    .from('driverpay_payments')
-    .update({
-      total_packages_amount: num(data.calc_packages),
-      total_discounts: num(data.calc_discounts),
-      total_vales: num(data.calc_vales),
-      total_zapex: num(data.calc_zapex),
-      total_net: num(data.calc_net),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', paymentId);
-  if (upErr) throwDbError(upErr);
 };
 
 // ─── Import em massa (seed dos drivers da planilha) ──────────────────────────
