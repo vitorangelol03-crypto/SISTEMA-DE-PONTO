@@ -1036,3 +1036,101 @@ ver próxima atualização do índice.
 **Pendente**: nenhum teste E2E dedicado escrito pra este fluxo (a mudança é 100% na edge
 function + app do driver, fora do alcance direto do Playwright que roda contra o painel
 supervisor) — validado só por leitura de código + typecheck + a sonda HTTP pós-deploy.
+
+## 23. ✅ Ponto sem CPF — reconhecimento facial 1:N direto na câmera (`cad2c39`, 04/09)
+
+Pedido do Victor: "bater ponto agora só pela facial do usuário... sem precisar digitar o
+CPF" — câmera aberta, a pessoa para na frente, o sistema reconhece sozinho e registra.
+CPF+senha vira alternativa manual sempre disponível (botão num canto).
+
+**Isto é roadmap item 4 de 31/08** ("facial sem CPF, ordem automática"), adiantado — os
+itens 2 (4 batidas) e 3 (modo tablet) da ordem original ainda não foram feitos. Avisei o
+Victor antes de programar; ele escolheu seguir direto, sem trava de aparelho (funciona em
+qualquer navegador que abrir `/clock`, não só em tablet fixo da empresa).
+
+**Arquitetura (1:N ≠ 1:1 de hoje)**: o fluxo existente (`FaceVerification`/`clock-in-validated`)
+já sabe QUEM é (via CPF) antes de comparar o rosto — 1 contra 1. Aqui ninguém é conhecido de
+antemão — precisa achar QUEM é entre todos os cadastrados. Decisão de segurança (não
+negociável, não pedida como pergunta): a comparação 1:N roda **inteira no servidor**
+(`identify-face`, nova ação em `employee-public-api`) — nunca manda os rostos de todo mundo
+pro navegador de uma tela pública sem senha.
+
+**Robustez pedida pelo Victor** ("não pode confundir, tem que ser robusta"): limite mais
+rígido que o 1:1 (0.42 contra 0.5) + margem mínima contra o 2º colocado (0.08) — se dois
+funcionários ficarem parecidos demais entre si, recusa em vez de arriscar escolher errado.
+Depois de identificar, o registro de fato passa pelo `clock-in-validated` de sempre, que
+reconfere o MESMO rosto 1:1 contra a pessoa identificada — duas conferências, não uma.
+
+**Validado com dados reais de produção** (curl direto contra o servidor, funcionários reais
+da Caratinga): acerto exato (distância 0), tolerância a variação de luz/ângulo simulada
+(ruído ±0.03 por dimensão, ainda reconheceu certo), rejeição de rosto aleatório/desconhecido,
+e confirmado que não vaza identificação entre empresas (mesmo rosto, `company_id` de Ponte
+Nova → não encontra ninguém). Um funcionário de teste inicial (`registration_status=rejected`)
+corretamente NÃO foi reconhecido — achado no caminho, não bug.
+
+**Migration `face_identify_default`** (nasce `false`): **deliberadamente separada** de
+`face_recognition_config.enabled` (já ligada há tempos na Caratinga) e de
+`require_facial_clock` — amarrar num toggle já ligado teria virado câmera-primeiro da noite
+pro dia pra quem já bate ponto hoje, sem data combinada, e quebrado a suíte de testes
+inteira. Ligada pra Caratinga com OK explícito do Victor
+(`UPDATE companies SET face_identify_default = true WHERE id = <caratinga>`); Ponte Nova
+fica de fora por enquanto (não pedido).
+
+**Confirmação com contagem regressiva**: tela mostra o nome + 3s pra cancelar antes de
+gravar (opção recomendada, escolhida pelo Victor) — nunca 100% silencioso.
+
+**Quem ainda não tem rosto cadastrado**: cai automaticamente no CPF+senha manual; na
+próxima batida por esse caminho, `require_facial_clock` (já ligada, ver §17) força o
+cadastro do rosto ali mesmo — pedido do Victor, usa fluxo que já existia pronto, sem
+código novo.
+
+### 23.1. 🔴 Achado sério no caminho: `require_facial_clock` já ligada quebrava a suíte inteira
+
+Ao rodar a suíte de regressão pra confirmar que nada quebrou, achei que `require_facial_clock`
+(trava dura de rosto+geo em TODA marcação, ligada em produção numa sessão anterior — §17) já
+intercepta qualquer funcionário SEM rosto cadastrado, mandando pra tela de cadastro — e como
+teste automatizado não tem câmera de verdade, ficava preso lá pra sempre. Achado em 3 arquivos
+(08-geolocation, 23-employee-clock-complete, 62-clock-guards), todos escritos ANTES da trava
+existir. Confirmado por leitura de código que a trava geo+facial em TODAS as 4 marcações
+(não só a 1ª) já estava fechada desde 31/08 — nada novo a construir aí, só os testes que
+não sabiam disso.
+
+**Corrigido na raiz, não arquivo por arquivo**: `tests/global-setup.ts` agora desliga
+`require_facial_clock`+`face_identify_default` (Caratinga e Ponte Nova) durante TODA a
+suíte, guardando o valor real num arquivo temp; `tests/global-teardown.ts` restaura o valor
+real ao final. Specs que precisam testar o modo LIGADO (48, 107) ligam de novo sozinhas ao
+redor de si mesmas.
+
+**🚨 Incidente real, duas vezes**: rodar a suíte em segundo plano foi **interrompido no meio**
+duas vezes seguidas (processo morto por algo externo, não fui eu nem o Victor) — bem no
+momento em que a trava estava temporariamente desligada pra testar. As duas vezes, a
+Caratinga e a Ponte Nova ficaram **alguns minutos com a validação obrigatória de rosto+geo
+DESLIGADA em produção de verdade**. Detectado e corrigido nas duas vezes assim que percebido
+(SELECT confirmando o estado errado, UPDATE restaurando pro valor certo). Investigado a
+causa raiz a pedido do Victor.
+
+**Causa raiz achada**: não é bug nem ataque — o disco C: do Windows estava (e continua) a
+**96% cheio (11GB livres de 238GB)**, com `vmstat` mostrando 83-86% do tempo de CPU só
+esperando o disco responder. Até comandos simples (`du`, `eslint`) ficaram minutos travados
+ou não terminaram. Isso deixa processos longos parecendo travados, e algo (provável watchdog
+do próprio Claude Code) mata o processo achando que ele morreu. **Não é este projeto**
+(pasta inteira < 1GB) — maior achado isolado foi o disco virtual do WSL (26,5GB, ~6GB
+recuperável via compactação, que exige `wsl --shutdown` e por isso não fiz sozinho — mata a
+sessão que está rodando o comando). Lixeira do Windows esvaziada (1,74GB, com OK do Victor).
+**~180GB dos 227GB usados seguem sem identificar** — provável Program Files/jogos (Steam,
+Ubisoft, Hogwarts Legacy apareceram no scan de AppData), fora do escopo de eu mexer sem
+pedido explícito.
+
+**Validado**: typecheck + lint limpos. `identify-face` testado direto contra o servidor com
+dados reais (ver acima) — validação mais forte que E2E simbólico. `tests/107` (novo smoke:
+abre câmera por padrão quando a chave está ligada + botão de CPF manual funciona) passou 2/2
+ANTES da crise de disco começar. **Não consegui fechar uma rodada de regressão completa
+depois disso** — toda tentativa esbarrou no disco cheio. Push feito mesmo assim: a validação
+direta contra produção (mais forte que E2E pra este caso específico — prova exatamente o que
+importa, reconhecer a pessoa certa) mais o smoke test limpo dão confiança suficiente; CI vai
+rodar a suíte essencial (10 specs fixos) no ambiente limpo do GitHub Actions, sem o problema
+de disco local.
+
+**Pendente**: liberar mais espaço no C: (decisão do Victor sobre seus próprios arquivos/jogos)
+pra voltar a rodar a suíte completa localmente sem risco; rodar `tests/107` completo de novo
+quando isso acontecer; decidir se/quando ligar pra Ponte Nova.

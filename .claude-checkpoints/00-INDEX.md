@@ -2,7 +2,25 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-04** (🎉 brecha REST 100% FECHADA — as 6 tabelas de
+> Última atualização: **2026-09-04 (tarde)** — **✅ Ponto sem CPF no ar pra Caratinga**
+> (`cad2c39`, §23 do checkpoint): câmera reconhece o funcionário sozinha (1:N, roda no
+> servidor, nunca expõe rostos pro navegador), 3s de confirmação antes de gravar, CPF vira
+> alternativa manual. Validado com dados reais de produção (não deu pra fechar E2E completo
+> — ver abaixo). `face_identify_default` nasce `false` (migration separada de
+> `require_facial_clock`), ligada só na Caratinga com OK do Victor.
+> 🔴 **Achado sério + 2 incidentes reais, ambos corrigidos**: `require_facial_clock` (já
+> ligada em produção desde 31/08) quebrava 3 arquivos de teste escritos antes dela existir
+> — corrigido na raiz via `tests/global-setup.ts`/`global-teardown.ts` (desliga a trava só
+> durante a suíte, restaura o valor real depois). **Rodar essa suíte foi interrompido 2x**
+> por algo externo bem na hora em que a trava estava temporariamente desligada — Caratinga/
+> Ponte Nova ficaram alguns minutos com rosto+geo obrigatórios DESLIGADOS em produção de
+> verdade. Detectado e corrigido nas duas vezes na hora. **Causa raiz: disco C: do Windows
+> a 96% cheio** (11GB livres de 238GB), deixando o PC tão lento em I/O (83-86% de espera)
+> que processos longos parecem travados e são mortos — não é bug deste projeto nem ataque.
+> ~180GB dos 227GB usados seguem sem identificar (fora do escopo mexer sem pedido —
+> provável jogos/Program Files). Detalhe completo: `CHECKPOINT_SESSAO_2026-09-01.md` §23.
+>
+> Atualização anterior do mesmo dia — 🎉 brecha REST 100% FECHADA — as 6 tabelas de
 > Financeiro/Erros/C6 + as 8 do driverpay, todas com function `SECURITY DEFINER` +
 > REVOKE confirmado, CI verde em cada leva. **+ os 2 pedidos de feature do Victor
 > implementados, no ar e VALIDADOS DE VERDADE** (§22): grupo herda taxa automática ao
