@@ -597,13 +597,41 @@ async function buildValueCandidates(
     return round2(total);
   };
 
+  /**
+   * O escopo (individual/grupo) tem pacote de algum CNPJ DIFERENTE de `emitterId`?
+   * (04/09/2026, achado real — driver GESSILEY: seu `liquido_individual` soma
+   * Shopee+eMile JUNTOS — R$9.339,00 — e a conferência da nota do CNPJ Shopee
+   * recusava cobrando esse total combinado, que nenhuma nota de UM CNPJ só bate.
+   * Mesma causa raiz do achado do espelho combinado, só que em `liquido_*` em vez
+   * de `espelho_*` — subiu antes por ser usada só embaixo; movida pra cima porque
+   * `liquido_*` agora também depende dela.)
+   */
+  const hasOtherEmitterInScope = (ids: string[], filter: string[] | null): boolean => {
+    for (const pk of packs ?? []) {
+      const dId = driverOf.get(pk.payment_id as string);
+      if (!dId || !ids.includes(dId)) continue;
+      if ((pk.packages ?? 0) <= 0) continue;
+      if (filter && !filter.includes(pk.platform_name as string)) continue;
+      const em = emitterByPlatform.get(pk.platform_name as string);
+      if (em && em !== emitterId) return true;
+    }
+    return false;
+  };
+
   const cands: Record<string, number> = {
     somaCnpj_individual: platformSum([driverId], null, true),
-    liquido_individual: netSum([driverId]),
   };
+  // liquido_* soma o NET de TODAS as plataformas da pessoa junto (nunca só do CNPJ
+  // pedido) — só entra como candidato quando a pessoa/grupo não tem pacote de NENHUM
+  // outro CNPJ na quinzena, senão "bate" com um total que a nota nem cobre inteira.
+  if (!hasOtherEmitterInScope([driverId], null)) {
+    cands.liquido_individual = netSum([driverId]);
+  }
   if (groupIds.length > 1) {
     cands.somaCnpj_grupo = platformSum(groupIds, null, true);
-    cands.liquido_grupo = netSum(groupIds);
+    if (!hasOtherEmitterInScope(groupIds, null)) {
+      cands.liquido_grupo = netSum(groupIds);
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -630,27 +658,6 @@ async function buildValueCandidates(
       cands.somaCnpj_grupo_abatido = abatidoGrupo;
     }
   }
-
-  /**
-   * O escopo (grupo/individual, com o filtro do espelho) tem pacote de algum
-   * CNPJ DIFERENTE de `emitterId`? (04/09/2026, achado real — "dividir a
-   * nota" mostrava o MESMO valor pros dois CNPJs de uma empresa multi-CNPJ.)
-   * Toda empresa aqui publica só espelho "quinzena completa" — 1 documento
-   * cobrindo TODOS os CNPJs juntos, com 1 total IMPRESSO só. Esse total não
-   * separa "quanto é de cada CNPJ" — usá-lo como candidato faria os dois
-   * CNPJs mostrarem o mesmo número (o combinado), nenhum dos dois certo.
-   */
-  const hasOtherEmitterInScope = (ids: string[], filter: string[] | null): boolean => {
-    for (const pk of packs ?? []) {
-      const dId = driverOf.get(pk.payment_id as string);
-      if (!dId || !ids.includes(dId)) continue;
-      if ((pk.packages ?? 0) <= 0) continue;
-      if (filter && !filter.includes(pk.platform_name as string)) continue;
-      const em = emitterByPlatform.get(pk.platform_name as string);
-      if (em && em !== emitterId) return true;
-    }
-    return false;
-  };
 
   const { data: pubs } = await supabase.from('driverpay_mirror_publications')
     .select('scope, platform_filter, include_deductions, printed_total')
