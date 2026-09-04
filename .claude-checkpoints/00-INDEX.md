@@ -5,14 +5,17 @@
 > Última atualização: **2026-09-04** (🎉 brecha REST 100% FECHADA — as 6 tabelas de
 > Financeiro/Erros/C6 + as 8 do driverpay, todas com function `SECURITY DEFINER` +
 > REVOKE confirmado, CI verde em cada leva. **+ os 2 pedidos de feature do Victor
-> implementados e no ar** (§22): grupo herda taxa automática ao entrar driver (`1efd35b`,
-> validação real de UI bloqueada por ambiente, validado por SQL direto — `tests/106`
-> ainda não rodou com sucesso em lugar nenhum); nota fiscal recusada apaga e libera
-> reenvio automático (`1a3f8a6`+`4739c6a`, edge fn `driver-public-api` redeployada).
-> 🚨 **Incidente no meio do deploy da edge function**: uma chamada MCP cortada por limite
-> de output publicou `"PLACEHOLDER"` como versão 35 em produção por alguns minutos —
-> detectado na hora, corrigido via `npx supabase functions deploy` (CLI lê do disco,
-> evita reinlinar ~150KB), versão 36 confirmada limpa + sonda HTTP real 401 correto.)
+> implementados, no ar e VALIDADOS DE VERDADE** (§22): grupo herda taxa automática ao
+> entrar driver (`1efd35b`+`6d4df3b`, `tests/106` 2/2 verde com clique real — as 3
+> falhas anteriores eram timeout de teste curto demais pra 5 plataformas reais em
+> série, não bug); nota fiscal recusada apaga e libera reenvio automático
+> (`1a3f8a6`+`4739c6a`, edge fn `driver-public-api` redeployada e Vercel confirmada por
+> conteúdo do bundle `DriverApp-*.js`). CI verde (`33846168956`), tudo no `main`.
+> 🚨 **Incidente no meio do deploy da edge function (resolvido)**: uma chamada MCP
+> cortada por limite de output publicou `"PLACEHOLDER"` como versão 35 em produção por
+> alguns minutos — detectado na hora, corrigido via `npx supabase functions deploy`
+> (CLI lê do disco, evita reinlinar ~150KB), versão 36 confirmada limpa + sonda HTTP
+> real 401 correto.)
 
 > ✅ **Brecha REST no driverpay — leva 3 de 3 fechada, FECHA AS 8 TABELAS** (migrations
 > `20260904013558`/`20260904015824`, `CHECKPOINT_SESSAO_2026-09-01.md` §21/§21.1):

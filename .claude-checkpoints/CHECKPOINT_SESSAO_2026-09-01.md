@@ -955,6 +955,33 @@ full suite") ou local. O run `33832069375` (114 passed/0 failed) que pareceu con
 suíte fixa, não porque o arquivo novo rodou. Documentado aqui pra não repetir a falsa
 confiança.
 
+### 22.1.1. ✅ `tests/106` validado de verdade — 2/2 verde com clique real (`6d4df3b`)
+
+Com a máquina livre (confirmado pelo Victor + `uptime` mostrando load ~5, bem abaixo do
+8-12+ de antes), rodei o teste de novo. Ainda falhou — mas desta vez chegou muito mais
+longe (criou driver, plataforma, período, grupo, adicionou driver A) e travou esperando o
+toast "Valor por pacote aplicado" depois de clicar "Aplicar". **Investiguei a fundo antes
+de mexer** (regra do Victor: mostrar o erro antes de consertar) — extraí o trace de rede do
+Playwright e conferi TODAS as chamadas: `upsert_driverpay_platform_rates_masked` +
+`update_driverpay_package_rate_where_changed_masked` + leituras auxiliares, uma sequência de
+~5-6 requisições **por plataforma**, todas 200/204, nenhum erro. A Caratinga tem **5
+plataformas ativas** (confirmado via SQL) — `applyGroupRate` aplica em série, uma de cada
+vez, e sob a carga residual do ambiente (ainda tinha Chrome do shopee-bot + outras sessões
+Claude rodando) o ciclo completo passou dos 15s que o teste esperava. Achado: não é bug de
+produto, é o timeout da MINHA PRÓPRIA asserção (que eu mesmo escrevi) curto demais pra
+dado real com múltiplas plataformas.
+
+Corrigido no escopo certo — só o teste, não o produto (`applyGroupRate` não foi tocado,
+sua velocidade/arquitetura fica fora deste escopo): timeout da linha 100 subiu de 15s pra
+45s, com comentário explicando o porquê. Rodei **2x seguidas, 2/2 verde** (2.1min e
+1.6min). **Agora sim `tests/106` está genuinely validado por clique real de ponta a
+ponta** — substitui a validação por SQL do parágrafo anterior, que fica só como registro
+histórico de como foi contornado enquanto a máquina estava ocupada.
+
+CI do push (`33846168956`) verde nos 3 jobs. Vercel confirmada por **conteúdo real** (não
+só HTTP status — regra do projeto): bundle `DriverApp-D4MpXyom.js` em produção tem o texto
+novo da feature 2 ("Envie outra") e não tem mais o texto antigo ("assim que ela sair").
+
 ### 22.2. Nota fiscal recusada não segura mais o lugar — apaga e libera reenvio automático (`1a3f8a6`+`4739c6a`)
 
 Pedido (com print): quando o driver manda a nota e a conferência automática recusa, quer
