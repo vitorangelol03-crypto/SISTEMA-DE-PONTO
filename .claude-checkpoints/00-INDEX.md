@@ -18,7 +18,12 @@
 > a 96% cheio** (11GB livres de 238GB), deixando o PC tão lento em I/O (83-86% de espera)
 > que processos longos parecem travados e são mortos — não é bug deste projeto nem ataque.
 > ~180GB dos 227GB usados seguem sem identificar (fora do escopo mexer sem pedido —
-> provável jogos/Program Files). Detalhe completo: `CHECKPOINT_SESSAO_2026-09-01.md` §23.
+> provável jogos/Program Files). **✅ FECHADO DE VEZ (`d19dffc`, §23.2)**: a 1ª correção
+> (toggle no banco pra suíte inteira) ainda deixava uma janela de risco real — confirmado
+> que até um cancelamento normal de CI (2 pushes seguidos) reabria o problema. Trocado por
+> interceptação de rede (`mockCompanyFacialFlags` em `tests/helpers.ts`) — nenhum teste
+> mais toca no banco de produção, em lugar nenhum. Risco eliminado, não só mitigado.
+> Detalhe completo: `CHECKPOINT_SESSAO_2026-09-01.md` §23.
 >
 > Atualização anterior do mesmo dia — 🎉 brecha REST 100% FECHADA — as 6 tabelas de
 > Financeiro/Erros/C6 + as 8 do driverpay, todas com function `SECURITY DEFINER` +

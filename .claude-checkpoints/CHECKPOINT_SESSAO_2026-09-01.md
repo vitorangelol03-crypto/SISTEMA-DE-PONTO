@@ -1134,3 +1134,32 @@ de disco local.
 **Pendente**: liberar mais espaço no C: (decisão do Victor sobre seus próprios arquivos/jogos)
 pra voltar a rodar a suíte completa localmente sem risco; rodar `tests/107` completo de novo
 quando isso acontecer; decidir se/quando ligar pra Ponte Nova.
+
+### 23.2. ✅ Fechado de vez: testes NUNCA MAIS tocam nas chaves reais (`d19dffc`)
+
+O §23.1 tinha corrigido o SINTOMA (specs travando) trocando a trava por dois toggles no
+banco (`global-setup.ts` desliga no início da suíte inteira, `global-teardown.ts` restaura
+no fim) — mas isso manteve a CAUSA do incidente: ainda existia uma janela real, só que maior
+(a suíte inteira, não um teste só), em que a validação ficava desligada em produção se algo
+interrompesse o processo antes do teardown rodar.
+
+**Confirmado que o risco era recorrente, não raro**: ao dar push do commit anterior, o
+PRÓPRIO CI (que roda a suíte, então também aciona o toggle) teve seu job de playwright
+CANCELADO pelo push seguinte (comportamento normal de `cancel-in-progress` deste repo — 2
+pushes seguidos sempre cancelam o anterior) — e isso sozinho já deixou as chaves desligadas
+de novo, detectado e corrigido na hora. Ou seja: bastava um segundo push logo em seguida
+(coisa comum) pra repetir o incidente. Não dava pra aceitar isso como "raro".
+
+**Solução de verdade**: trocar o toggle no banco por **interceptação de rede dentro do
+navegador do teste** (`mockCompanyFacialFlags`/`mockFacialFlagsOff`, novo em `helpers.ts`) —
+`page.route('**/rest/v1/companies*', ...)` reescreve a resposta da API só PRA AQUELE
+navegador daquele teste, sem nenhuma chamada ao banco real. O banco de produção nunca é
+tocado por nenhum teste, em lugar nenhum — não existe mais "esquecer de restaurar" porque não
+há nada pra restaurar. `global-setup.ts`/`global-teardown.ts`/`cleanup.ts` voltaram exatamente
+ao estado de antes desta feature (zero lógica de empresa neles). Os 4 arquivos afetados
+(08, 23, 62, 107) usam o novo helper no lugar do UPDATE.
+
+**Validado**: typecheck limpo, eslint limpo (rodado com escopo estreito nos arquivos
+alterados — o disco continuava lento demais pra rodar a suíte completa). Push feito e
+confirmado seguro mesmo com o CI antigo sendo cancelado no meio (nada mais fica pra trás no
+banco). **Este é o fechamento definitivo do incidente — não uma mitigação.**
