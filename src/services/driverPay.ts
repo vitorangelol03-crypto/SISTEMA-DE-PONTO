@@ -1109,6 +1109,33 @@ export const addDriverToGroup = async (companyId: string, groupId: string, drive
       if (rateErr) throwDbError(rateErr);
     }
   }
+
+  // 04/09/2026 (achado real, pedido do Victor — caso Meirivaldo/Diego): a "vaga"
+  // de nota fiscal do grupo é por CNPJ/espelho, não por VALOR (ver
+  // computeNfProgressByPayment) — então quando um driver novo entra num grupo
+  // cuja nota do líder JÁ validou, a tela segue mostrando "NF ok" mesmo a nota
+  // não cobrindo mais o valor de quem acabou de entrar. Volta a(s) nota(s) do
+  // líder pra "recebida" (pendente de reconferência) nas quinzenas ABERTAS —
+  // nunca mexe em quinzena já concluída/paga. Robusto de propósito: dispara
+  // sempre que alguém entra no grupo, mesmo que ainda não tenha pacote lançado
+  // — melhor pedir reconferência à toa do que deixar nota faltando passar batido.
+  const { data: leaderRow } = await supabase
+    .from('driverpay_groups').select('leader_driver_id').eq('id', groupId).maybeSingle();
+  const leaderId = leaderRow?.leader_driver_id as string | null | undefined;
+  if (leaderId) {
+    const { data: openPeriods } = await supabase
+      .from('driverpay_periods').select('id').eq('company_id', companyId).eq('status', 'aberto');
+    const openPeriodIds = (openPeriods ?? []).map((p) => p.id as string);
+    if (openPeriodIds.length > 0) {
+      const { error: reopenErr } = await supabase
+        .from('driverpay_nota_fiscal_files')
+        .update({ status: 'recebida', validated_at: null, validated_by: null })
+        .eq('driver_id', leaderId)
+        .in('period_id', openPeriodIds)
+        .eq('status', 'validada');
+      if (reopenErr) throwDbError(reopenErr);
+    }
+  }
 };
 
 export const removeDriverFromGroup = async (groupId: string, driverId: string, userId: string): Promise<void> => {
