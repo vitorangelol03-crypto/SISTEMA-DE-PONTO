@@ -450,12 +450,14 @@ export const setDriverActive = async (id: string, active: boolean, userId: strin
 // ─── Plataformas (eMile/ANJUN + custom) ──────────────────────────────────────
 
 export const getPlatforms = async (companyId: string, onlyActive = true): Promise<DriverPlatform[]> => {
-  // 02/09/2026: default_rate mascarado no banco (driverpay.viewValues) — view, não a tabela crua.
-  let query = supabase.from('driverpay_platforms_v').select('*').eq('company_id', companyId);
-  if (onlyActive) query = query.eq('active', true);
-  const { data, error } = await query.order('sort_order', { ascending: true }).order('name', { ascending: true });
+  // 03/09/2026: REST-bypass fix — a view security_invoker (02/09) nunca travou a tabela
+  // crua (mesmo bug de hoje pro Financeiro). Function SECURITY DEFINER no lugar.
+  const { data, error } = await supabase.rpc('get_driverpay_platforms_masked', {
+    p_company_id: companyId,
+    p_only_active: onlyActive,
+  });
   if (error) throwDbError(error);
-  return (data || []).map(mapPlatform);
+  return ((data || []) as Record<string, unknown>[]).map(mapPlatform);
 };
 
 export const createPlatform = async (
@@ -464,20 +466,18 @@ export const createPlatform = async (
   data: { name: string; default_rate?: number; sort_order?: number; color?: string | null }
 ): Promise<DriverPlatform> => {
   await ensurePerm(userId, 'driverpay.managePlatforms');
-  const { data: row, error } = await supabase
-    .from('driverpay_platforms')
-    .insert([{
-      company_id: companyId,
-      name: data.name.trim(),
-      default_rate: data.default_rate ?? 2.0,
-      sort_order: data.sort_order ?? 0,
-      color: data.color ?? null,
-      created_by: userId,
-    }])
-    .select()
-    .single();
+  // 03/09/2026: REST-bypass fix — .insert().select() (RETURNING) numa coluna de dinheiro
+  // também exige SELECT nela, achado novo hoje; passa pela function SECURITY DEFINER.
+  const { data: rows, error } = await supabase.rpc('create_driverpay_platform_masked', {
+    p_company_id: companyId,
+    p_name: data.name.trim(),
+    p_default_rate: data.default_rate ?? 2.0,
+    p_sort_order: data.sort_order ?? 0,
+    p_color: data.color ?? null,
+    p_created_by: userId,
+  });
   if (error) throwDbError(error);
-  return mapPlatform(row);
+  return mapPlatform((rows || [])[0] as Record<string, unknown>);
 };
 
 export const updatePlatform = async (
@@ -864,29 +864,30 @@ export const applyPlatformToAllDrivers = async (
   await ensurePerm(userId, 'driverpay.managePlatforms');
   const drivers = await getDrivers(companyId, { activeOnly: true });
   if (drivers.length === 0) return 0;
-  const rows = drivers.map((d) => ({
-    company_id: companyId,
-    driver_id: d.id,
-    platform_id: platformId,
-    rate,
-    updated_by: userId,
-  }));
-  const { error } = await supabase
-    .from('driverpay_platform_rates')
-    .upsert(rows, { onConflict: 'driver_id,platform_id' });
+  // 03/09/2026: REST-bypass fix — upsert (ON CONFLICT DO UPDATE) em rate exige SELECT
+  // na coluna, que vai ser travada; passa pela function SECURITY DEFINER.
+  const { error } = await supabase.rpc('upsert_driverpay_platform_rates_masked', {
+    p_company_id: companyId,
+    p_driver_ids: drivers.map((d) => d.id),
+    p_platform_id: platformId,
+    p_rate: rate,
+    p_updated_by: userId,
+  });
   if (error) throwDbError(error);
-  return rows.length;
+  return drivers.length;
 };
 
 // ─── Taxa por driver x plataforma ────────────────────────────────────────────
 
 export const getDriverRates = async (driverId: string): Promise<DriverPlatformRate[]> => {
-  const { data, error } = await supabase
-    .from('driverpay_platform_rates_v')
-    .select('*')
-    .eq('driver_id', driverId);
+  // 03/09/2026: REST-bypass fix — a view security_invoker (02/09) nunca travou a tabela
+  // crua. Function resolve company_id a partir do próprio driver (não recebido aqui).
+  const { data, error } = await supabase.rpc('get_driverpay_platform_rates_masked', {
+    p_company_id: null,
+    p_driver_id: driverId,
+  });
   if (error) throwDbError(error);
-  return (data || []).map((r) => ({ ...(r as unknown as DriverPlatformRate), rate: num((r as Record<string, unknown>).rate) }));
+  return ((data || []) as Record<string, unknown>[]).map((r) => ({ ...(r as unknown as DriverPlatformRate), rate: num(r.rate) }));
 };
 
 /**
@@ -897,19 +898,19 @@ export const getDriverRates = async (driverId: string): Promise<DriverPlatformRa
 export const getAllDriverRates = async (
   companyId: string,
 ): Promise<Record<string, Record<string, number>>> => {
-  const { data, error } = await supabase
-    .from('driverpay_platform_rates_v')
-    .select('driver_id, rate, platform:driverpay_platforms(name)')
-    .eq('company_id', companyId);
+  // 03/09/2026: REST-bypass fix — view security_invoker (02/09) nunca travou a tabela crua.
+  const { data, error } = await supabase.rpc('get_driverpay_platform_rates_masked', {
+    p_company_id: companyId,
+    p_driver_id: null,
+  });
   if (error) throwDbError(error);
   const map: Record<string, Record<string, number>> = {};
-  (data ?? []).forEach((r) => {
-    const row = r as Record<string, unknown>;
-    const driverId = row.driver_id as string;
-    const plat = row.platform as { name?: string } | null;
-    const rate = num(row.rate);
-    if (driverId && plat?.name) {
-      (map[driverId] ??= {})[plat.name] = rate;
+  ((data ?? []) as Record<string, unknown>[]).forEach((r) => {
+    const driverId = r.driver_id as string;
+    const platformName = r.platform_name as string | null;
+    const rate = num(r.rate);
+    if (driverId && platformName) {
+      (map[driverId] ??= {})[platformName] = rate;
     }
   });
   return map;
@@ -923,12 +924,14 @@ export const upsertDriverRate = async (
   userId: string
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.configRate');
-  const { error } = await supabase
-    .from('driverpay_platform_rates')
-    .upsert(
-      [{ company_id: companyId, driver_id: driverId, platform_id: platformId, rate, updated_by: userId, updated_at: new Date().toISOString() }],
-      { onConflict: 'driver_id,platform_id' }
-    );
+  // 03/09/2026: REST-bypass fix — mesmo motivo do applyPlatformToAllDrivers acima.
+  const { error } = await supabase.rpc('upsert_driverpay_platform_rates_masked', {
+    p_company_id: companyId,
+    p_driver_ids: [driverId],
+    p_platform_id: platformId,
+    p_rate: rate,
+    p_updated_by: userId,
+  });
   if (error) throwDbError(error);
 };
 
@@ -980,17 +983,17 @@ export const getDriverDefaultRates = async (
   }
 
   // Config individual explícita do cadastro (SEMPRE consultada — sem early-return).
+  // 03/09/2026: REST-bypass fix — mesma function usada em getDriverRates/getAllDriverRates.
   const config: Record<string, number> = {};
-  const { data: rateRows, error: rateErr } = await supabase
-    .from('driverpay_platform_rates_v')
-    .select('rate, platform:driverpay_platforms(name)')
-    .eq('company_id', companyId)
-    .eq('driver_id', driverId);
+  const { data: rateRows, error: rateErr } = await supabase.rpc('get_driverpay_platform_rates_masked', {
+    p_company_id: companyId,
+    p_driver_id: driverId,
+  });
   if (rateErr) throwDbError(rateErr);
-  (rateRows || []).forEach((r: Record<string, unknown>) => {
-    const plat = r.platform as { name?: string } | null;
+  ((rateRows || []) as Record<string, unknown>[]).forEach((r) => {
+    const platformName = r.platform_name as string | null;
     const rate = num(r.rate);
-    if (plat?.name && rate > 0) config[plat.name] = rate;
+    if (platformName && rate > 0) config[platformName] = rate;
   });
 
   return mergeDriverRatePriority(config, lastUsed);
@@ -1118,8 +1121,14 @@ export const applyGroupRate = async (
   const platformName = (platRow as { name: string }).name;
 
   // Grava a config nova de todos os membros + o default do grupo.
-  const rows = memberIds.map((driverId) => ({ company_id: companyId, driver_id: driverId, platform_id: platformId, rate, updated_by: userId }));
-  const { error } = await supabase.from('driverpay_platform_rates').upsert(rows, { onConflict: 'driver_id,platform_id' });
+  // 03/09/2026: REST-bypass fix — mesmo motivo do applyPlatformToAllDrivers.
+  const { error } = await supabase.rpc('upsert_driverpay_platform_rates_masked', {
+    p_company_id: companyId,
+    p_driver_ids: memberIds,
+    p_platform_id: platformId,
+    p_rate: rate,
+    p_updated_by: userId,
+  });
   if (error) throwDbError(error);
   await updateGroup(groupId, userId, { default_rate: rate });
 
@@ -1174,9 +1183,9 @@ export const applyGroupRate = async (
     }
   }
   console.info(
-    `[grupo] ${platformName} a ${rate}: ${rows.length} membro(s), ${linhasAtualizadas} linha(s) de pacote atualizada(s).`,
+    `[grupo] ${platformName} a ${rate}: ${memberIds.length} membro(s), ${linhasAtualizadas} linha(s) de pacote atualizada(s).`,
   );
-  return rows.length;
+  return memberIds.length;
 };
 
 // ─── Periodos (quinzenas) ────────────────────────────────────────────────────
