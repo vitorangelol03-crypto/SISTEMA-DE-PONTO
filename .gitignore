@@ -50,6 +50,7 @@ prints-espelhos/
 
 # lixo do supabase CLI
 supabase/.temp/
+deno.lock
 prints-espelho-app/
 prints-grade/
 .env*
