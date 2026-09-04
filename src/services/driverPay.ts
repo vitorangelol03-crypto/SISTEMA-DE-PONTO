@@ -1085,6 +1085,30 @@ export const addDriverToGroup = async (companyId: string, groupId: string, drive
     .from('driverpay_group_members')
     .upsert([{ company_id: companyId, group_id: groupId, driver_id: driverId }], { onConflict: 'group_id,driver_id' });
   if (error) throwDbError(error);
+
+  // 04/09/2026 (pedido do Victor): se o grupo já tem valor por pacote configurado,
+  // o driver que entra já herda essa taxa em todas as plataformas ativas — sobrescreve
+  // o que ele já tinha configurado antes (entrar no grupo é uma escolha explícita do
+  // operador). Chama a RPC direto (não upsertDriverRate) pra não exigir a permissão
+  // configRate além de manageGroups, já checada acima — mesma regra de autorização de
+  // applyGroupRate.
+  const { data: group, error: gErr } = await supabase
+    .from('driverpay_groups').select('default_rate').eq('id', groupId).maybeSingle();
+  if (gErr) throwDbError(gErr);
+  const rate = group?.default_rate != null ? Number(group.default_rate) : null;
+  if (rate && rate > 0) {
+    const platforms = await getPlatforms(companyId, true);
+    for (const pl of platforms) {
+      const { error: rateErr } = await supabase.rpc('upsert_driverpay_platform_rates_masked', {
+        p_company_id: companyId,
+        p_driver_ids: [driverId],
+        p_platform_id: pl.id,
+        p_rate: rate,
+        p_updated_by: userId,
+      });
+      if (rateErr) throwDbError(rateErr);
+    }
+  }
 };
 
 export const removeDriverFromGroup = async (groupId: string, driverId: string, userId: string): Promise<void> => {
