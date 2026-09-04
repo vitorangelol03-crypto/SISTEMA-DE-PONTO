@@ -786,20 +786,22 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   if (bytes.length > MAX_NF_BYTES) return json({ error: 'Arquivo muito grande (max 8MB)' }, 413);
 
   // ══════════════════════════════════════════════════════════════════════════
-  // UMA NOTA POR VAGA  (05/08/2026, decisão do Victor)
+  // UMA NOTA POR VAGA — só enquanto está VÁLIDA (05/08/2026 → revisto 04/09/2026)
   //
-  // "vamos permitir apenas um envio por nota pedida, está ficando com muitas notas
-  // no sistema" · "eles só vão poder anexar outra quando a atual for excluída".
+  // Regra original (05/08): "vamos permitir apenas um envio por nota pedida,
+  // está ficando com muitas notas no sistema" · "eles só vão poder anexar outra
+  // quando a atual for excluída" — nota RECUSADA também segurava o lugar, só a
+  // CD liberava excluindo manualmente. O GESSILEY tinha 7 notas na quinzena —
+  // 4 num CNPJ e 3 no outro.
   //
-  // A vaga é (espelho × CNPJ) — a MESMA chave do `nfSlots`, inclusive a regra da
-  // nota legada (mirror_platform_key NULL vale pra qualquer espelho): se as duas
-  // contas fossem diferentes, existiria a vaga que a tela mostra como livre e o
-  // envio recusa. O GESSILEY tinha 7 notas na quinzena — 4 num CNPJ e 3 no outro.
-  //
-  // ⚠️ Diferente da regra do PRINT (onde recusado libera a vaga), aqui a nota
-  // RECUSADA também segura o lugar — foi o que ele pediu com todas as letras. A
-  // consequência é real: quem mandou errado espera a CD excluir. Por isso a
-  // mensagem já diz exatamente o que o driver tem que pedir.
+  // 04/09/2026 (pedido do Victor, revisto): nota recusada agora NÃO segura mais
+  // o lugar — ela é apagada na hora (registro + arquivo, ver mais abaixo) e o
+  // driver já pode reenviar sozinho, sem esperar a CD excluir. O "muitas notas
+  // no sistema" do pedido original fica resolvido pela raiz (a nota errada nem
+  // fica acumulada) em vez de bloquear o reenvio. A vaga é (espelho × CNPJ) — a
+  // MESMA chave do `nfSlots`, inclusive a regra da nota legada (mirror_platform_key
+  // NULL vale pra qualquer espelho): se as duas contas fossem diferentes,
+  // existiria a vaga que a tela mostra como livre e o envio recusa.
   //
   // Vem ANTES do upload pra não deixar PDF órfão no bucket.
   // ══════════════════════════════════════════════════════════════════════════
@@ -826,7 +828,10 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
       // Dupla expirada não segura a vaga (ver parte1AbertaDoSlot) …
       .filter((f) => !ehSplitExpirada({ status: f.status as string, check_details: f.check_details }))
       // … e, no envio da PARTE 2, a própria parte 1 aberta é esperada na vaga.
-      .filter((f) => !(splitPart === 2 && parte1 && f.id === parte1.id));
+      .filter((f) => !(splitPart === 2 && parte1 && f.id === parte1.id))
+      // 04/09/2026: nota RECUSADA não segura mais o lugar (ver comentário grande
+      // acima) — só recebida/validada ocupam a vaga de verdade.
+      .filter((f) => f.status !== 'rejeitada');
     const ocupando = notasQueOcupamVaga(
       consideradas.map((f) => ({
         status: f.status as string,
@@ -1000,6 +1005,17 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   const { error: upErr } = await supabase.storage.from(NF_BUCKET).upload(path, bytes, { contentType, upsert: false });
   if (upErr) return json({ error: 'Falha ao subir a nota', details: upErr.message }, 500);
 
+  // 04/09/2026 (pedido do Victor): nota recusada na hora do envio nem chega a ser
+  // gravada — apaga o arquivo que acabou de subir e devolve o motivo. O slot já
+  // fica livre pro driver mandar outra na hora (nada ficou pra segurar a vaga).
+  if (autoReject) {
+    const { error: rmErr } = await supabase.storage.from(NF_BUCKET).remove([path]);
+    if (rmErr) console.error('Falha ao apagar nota recusada do storage:', rmErr.message);
+    // HTTP 422 de propósito: o client (novo E antigo em cache) trata não-2xx como
+    // erro e mostra a mensagem — nota recusada NUNCA aparece como "enviada".
+    return json({ ok: false, rejected: true, error: rejectReason, reason: rejectReason, checks: check }, 422);
+  }
+
   const { data: pay } = await supabase.from('driverpay_payments')
     .select('id').eq('period_id', periodId).eq('driver_id', claims.driver_id).maybeSingle();
 
@@ -1008,8 +1024,8 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     payment_id: pay?.id ?? null, nota_emitter_id: emitterId, file_path: path,
     file_type: contentType, original_filename: filename, uploaded_by: claims.driver_id,
     mirror_platform_key: mirrorPlatformKey,
-    status: autoReject ? 'rejeitada' : (autoValidate ? 'validada' : 'recebida'),
-    reject_reason: rejectReason,
+    status: autoValidate ? 'validada' : 'recebida',
+    reject_reason: null,
     // validated_by tem FK pra users(id) — validação AUTOMÁTICA fica com null e o
     // marcador vive em check_details.autoValidated (validação manual sempre tem usuário).
     validated_at: autoValidate ? new Date().toISOString() : null,
@@ -1020,10 +1036,10 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     check_nome: check?.nomeOk ?? null,
     // Nota dividida (19/08/2026): NULL em tudo na nota única — nada muda pra ela.
     read_value: readValue,
-    split_group: autoReject ? null : splitGroup,
-    split_form: autoReject ? null : splitForm,
-    split_part: autoReject ? null : splitPart,
-    split_expected: autoReject ? null : readValue,
+    split_group: splitGroup,
+    split_form: splitForm,
+    split_part: splitPart,
+    split_expected: readValue,
     matched_name: matchedName,
     check_details: check ? {
       autoValidated: autoValidate,
@@ -1046,12 +1062,6 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
 
   // NAO marca mais o "nota recebida" antigo automaticamente: agora quem deixa a NF verde
   // no painel e a VALIDACAO da nota pelo mestre (status 'validada'), nao o simples upload.
-  if (autoReject) {
-    // HTTP 422 de propósito: o client (novo E antigo em cache) trata não-2xx como
-    // erro e mostra a mensagem — nota recusada NUNCA aparece como "enviada".
-    // A nota fica registrada como 'rejeitada' e o slot reabre pro reenvio.
-    return json({ ok: false, rejected: true, error: rejectReason, reason: rejectReason, checks: check }, 422);
-  }
 
   // ── Nota dividida: a parte 2 fechou a soma → a PARTE 1 acompanha o veredito ──
   // (validada junto, ou 'recebida' aguardando o clique quando a auto-validação

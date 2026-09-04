@@ -435,8 +435,9 @@ export function DriverApp() {
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else if (errStatus(e) === 422) {
-        // Nota RECUSADA pela conferência automática: mostra o motivo e recarrega os
-        // slots (o CNPJ passa a mostrar o motivo + "peça à CD para excluir").
+        // Nota RECUSADA pela conferência automática (04/09/2026: não fica gravada —
+        // a edge fn já apagou o arquivo). Mostra o motivo no toast; o CNPJ volta
+        // pendente na recarga, pronto pra reenvio na hora.
         toast.error(errMsg(e, 'Nota recusada na conferência.'), { duration: 12000 });
         await loadNf(nfCtx.periodId);
         loadMirrors(token);
@@ -786,14 +787,15 @@ export function DriverApp() {
               {s.sent === 0 && s.rejected > 0 && (
                 <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                   <b>Nota recusada.</b>{s.rejectReason ? ` Motivo: ${s.rejectReason}.` : ''}
-                  {' '}Peça à CD para excluir esta nota — assim que ela sair, o envio libera de novo.
+                  {' '}Envie outra.
                 </div>
               )}
-              {/* UMA NOTA POR VAGA (05/08). Com nota no lugar — boa ou recusada — o
-                  botão some: a edge fn recusa o envio com 409, e um botão que só dá
-                  erro é pior do que botão nenhum. O caminho passa a ser a CD.
-                  NOTA DIVIDIDA (19/08): dupla em andamento vem ANTES de tudo — a 1ª
-                  conta como enviada, mas o que falta é a 2ª. */}
+              {/* UMA NOTA POR VAGA (05/08 → revisto 04/09/2026). Só nota ENVIADA
+                  (recebida/validada) segura o lugar e esconde o botão — a edge fn
+                  recusa o reenvio com 409 nesse caso. Nota RECUSADA não segura mais:
+                  o botão de enviar continua aparecendo (banner acima já mostra o
+                  motivo). NOTA DIVIDIDA (19/08): dupla em andamento vem ANTES de
+                  tudo — a 1ª conta como enviada, mas o que falta é a 2ª. */}
               {s.splitOpen ? (
                 <>
                   <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -810,11 +812,9 @@ export function DriverApp() {
                     />
                   </label>
                 </>
-              ) : s.sent > 0 || s.rejected > 0 ? (
+              ) : s.sent > 0 ? (
                 <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs text-gray-600 text-center">
-                  {s.sent > 0
-                    ? <><b className="text-green-700">Nota enviada.</b> Precisa trocar? Peça à CD para excluir a atual.</>
-                    : <>Só dá pra enviar outra depois que a CD excluir a recusada.</>}
+                  <b className="text-green-700">Nota enviada.</b> Precisa trocar? Peça à CD para excluir a atual.
                 </div>
               ) : (() => {
                 const k = `${s.mirrorKey ?? '*'}|${s.emitterId}`;
