@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { getClient } from './cleanup';
 import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from './integrity-helpers';
+import { mockFacialFlagsOff } from './helpers';
 
 /**
  * Cobertura completa do EmployeeClockIn (/clock):
@@ -17,10 +18,12 @@ import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from '
  */
 
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}Clock `;
+const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
 // 04/09/2026: `require_facial_clock`/`face_identify_default` (Caratinga, produção)
-// ficam desligados durante TODA a suíte via tests/global-setup.ts (restaurados no
-// global-teardown.ts) — este arquivo testa CPF/PIN/dashboard/logout, não facial.
+// — o beforeEach intercepta a resposta da API pra este arquivo ver as duas
+// desligadas, sem tocar no banco real (ver mockFacialFlagsOff em helpers.ts).
+// Este arquivo testa CPF/PIN/dashboard/logout, não facial.
 
 async function cleanup() {
   await cleanupByPrefix(PREFIX);
@@ -32,6 +35,7 @@ test.describe('EmployeeClockIn — completo', () => {
 
   test.beforeEach(async ({ page }) => {
     await cleanup();
+    await mockFacialFlagsOff(page, [CARATINGA_ID]);
     await page.goto('/clock');
   });
 

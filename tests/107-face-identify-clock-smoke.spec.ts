@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { getClient } from './cleanup';
+import { mockCompanyFacialFlags } from './helpers';
 
 /**
  * Ponto sem CPF (04/09/2026) — Spec smoke da tela nova (FaceIdentifyClock).
@@ -12,29 +12,18 @@ import { getClient } from './cleanup';
  * `companies.face_identify_default = true`, o overlay da câmera renderiza sem
  * quebrar a página, e o botão de voltar pro CPF manual funciona.
  *
- * `face_identify_default` nasce false em toda empresa (migration
- * 20260904053929) — este teste ativa e desativa só pra Caratinga, ao redor de
- * si mesmo, pra não afetar nenhum outro teste que assume CPF como padrão.
+ * 🔑 NUNCA testa isso ligando a chave via UPDATE no banco de verdade — a
+ * suíte já causou incidente real (validação de rosto+geo desligada em
+ * produção por minutos, 2x, quando um processo de teste foi morto no meio).
+ * Em vez disso, intercepta a resposta da API só para ESTE navegador
+ * (mockCompanyFacialFlags) — o banco de produção nunca é tocado.
  */
 const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
 test.describe('Ponto sem CPF — smoke da tela de reconhecimento', () => {
-  let original: boolean | null = null;
-
-  test.beforeAll(async () => {
-    const s = getClient();
-    const { data } = await s.from('companies').select('face_identify_default').eq('id', CARATINGA_ID).maybeSingle();
-    original = data?.face_identify_default ?? null;
-    await s.from('companies').update({ face_identify_default: true }).eq('id', CARATINGA_ID);
-  });
-
-  test.afterAll(async () => {
-    const s = getClient();
-    await s.from('companies').update({ face_identify_default: original ?? false }).eq('id', CARATINGA_ID);
-  });
-
   test('abre direto na câmera (não pede CPF primeiro) e o botão de CPF manual funciona', async ({ page, context }) => {
     await context.grantPermissions(['camera']);
+    await mockCompanyFacialFlags(page, CARATINGA_ID, { face_identify_default: true });
     await page.goto('/clock');
 
     // Prova que o gate montou: título da barra superior da câmera, OU um dos
@@ -59,12 +48,14 @@ test.describe('Ponto sem CPF — smoke da tela de reconhecimento', () => {
 });
 
 /**
- * Confirma que, com `face_identify_default` no padrão (false/ausente), NADA
- * muda — a tela continua abrindo em CPF, exatamente como hoje. Roda contra
- * o estado REAL do banco (sem tocar em nada), pra provar que a feature nova
- * é aditiva de verdade.
+ * Confirma que, com `face_identify_default` desligada, NADA muda — a tela
+ * continua abrindo em CPF, exatamente como sempre foi. Mockado (não lê o
+ * estado real do banco): a Caratinga já está com a chave ligada de verdade
+ * em produção, então este teste prova o comportamento da flag em si, não
+ * depende de qual empresa está ligada ou desligada hoje.
  */
-test('sem a chave ligada, continua pedindo CPF primeiro (comportamento de hoje intacto)', async ({ page }) => {
+test('sem a chave ligada, continua pedindo CPF primeiro (comportamento aditivo)', async ({ page }) => {
+  await mockCompanyFacialFlags(page, CARATINGA_ID, { face_identify_default: false });
   await page.goto('/clock');
   await expect(page.getByText('Digite seu CPF')).toBeVisible({ timeout: 15_000 });
 });

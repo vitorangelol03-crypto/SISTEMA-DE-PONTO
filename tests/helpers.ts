@@ -8,6 +8,47 @@ export const TEST_EMPLOYEE_CPF = '12232625613';
 export const TEST_EMPLOYEE_CPF_MASKED = '122.326.256-13';
 
 /**
+ * `require_facial_clock`/`face_identify_default` são reais em produção (04/09/2026)
+ * e a suíte tem vários arquivos escritos ANTES delas existirem, que travam se elas
+ * estiverem ligadas (funcionário de teste sem rosto real / sem câmera em CI).
+ *
+ * 🔑 NUNCA desliga isso via UPDATE no banco — já causou incidente real 2x: um
+ * processo de teste morto no meio (por algo fora do nosso controle — disco cheio
+ * deixando tudo lento) deixou a validação de rosto+geo REALMENTE desligada em
+ * produção por minutos, sem ninguém perceber na hora. Em vez disso, intercepta a
+ * resposta da API só DENTRO do navegador deste teste — o banco real nunca muda,
+ * então não existe "esquecer de restaurar": não há nada pra restaurar.
+ */
+export async function mockCompanyFacialFlags(
+  page: Page,
+  companyId: string,
+  overrides: { require_facial_clock?: boolean; face_identify_default?: boolean },
+): Promise<void> {
+  await page.route('**/rest/v1/companies*', async (route) => {
+    const response = await route.fetch();
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      await route.fulfill({ response });
+      return;
+    }
+    const patch = (row: Record<string, unknown>) => {
+      if (row?.id === companyId) Object.assign(row, overrides);
+      return row;
+    };
+    const patched = Array.isArray(body) ? body.map((r) => patch(r as Record<string, unknown>)) : patch(body as Record<string, unknown>);
+    await route.fulfill({ response, json: patched });
+  });
+}
+
+export async function mockFacialFlagsOff(page: Page, companyIds: string[]): Promise<void> {
+  for (const id of companyIds) {
+    await mockCompanyFacialFlags(page, id, { require_facial_clock: false, face_identify_default: false });
+  }
+}
+
+/**
  * Faz login no painel de supervisor. Assume que estamos em `/`.
  *
  * Admin (id === '9999') passa por uma tela de seleção de empresa após o

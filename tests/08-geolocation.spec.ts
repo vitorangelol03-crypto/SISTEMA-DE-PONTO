@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { getClient } from './cleanup';
+import { mockFacialFlagsOff } from './helpers';
 
 const TEST_CPF = '99988877766';
 const TEST_PIN = '1234';
@@ -16,6 +17,7 @@ const OUTSIDE_LON = -42.200000;
 const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
 async function loginEmployee(page: Page) {
+  await mockFacialFlagsOff(page, [CARATINGA_ID]);
   await page.goto('/clock');
   await expect(page.getByText('Registro de Ponto')).toBeVisible();
   const input = page.locator('input[placeholder="000.000.000-00"]');
@@ -35,8 +37,9 @@ test.describe('Geolocalização (/clock)', () => {
   let employeeId: string;
   let originalConfig: Record<string, unknown> | null = null;
   // 04/09/2026: `require_facial_clock`/`face_identify_default` (Caratinga,
-  // produção) ficam desligados durante TODA a suíte via tests/global-setup.ts
-  // (restaurados no global-teardown.ts) — esta spec testa geolocalização.
+  // produção) — `loginEmployee` intercepta a resposta da API pra este teste
+  // ver as duas desligadas, sem tocar no banco real (ver mockFacialFlagsOff).
+  // Esta spec testa geolocalização, não facial.
 
   test.beforeAll(async () => {
     // Remove leftover from crashed previous run

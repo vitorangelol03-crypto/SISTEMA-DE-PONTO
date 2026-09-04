@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { getClient } from './cleanup';
 import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from './integrity-helpers';
+import { mockFacialFlagsOff } from './helpers';
 
 /**
  * Spec 62 — Proteções da tela de ponto (decisões do Victor, 2026-07-20):
@@ -15,10 +16,12 @@ import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from '
 
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}Guard `;
 const CD_CARATINGA = { latitude: -19.8023373, longitude: -42.1360937 };
+const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
 // 04/09/2026: `require_facial_clock`/`face_identify_default` (Caratinga, produção)
-// ficam desligados durante TODA a suíte via tests/global-setup.ts (restaurados no
-// global-teardown.ts) — esta spec testa guards de UI, não facial.
+// — `loginToDashboard` intercepta a resposta da API pra esta spec ver as duas
+// desligadas, sem tocar no banco real (ver mockFacialFlagsOff em helpers.ts).
+// Esta spec testa guards de UI, não facial.
 
 async function cleanup() {
   await cleanupByPrefix(PREFIX);
@@ -35,6 +38,7 @@ async function createClockEmployee(name: string): Promise<{ empId: string; cpfMa
 }
 
 async function loginToDashboard(page: Page, cpfMasked: string) {
+  await mockFacialFlagsOff(page, [CARATINGA_ID]);
   await page.goto('/clock');
   await page.locator('input').first().fill(cpfMasked);
   await page.getByRole('button', { name: /Continuar/i }).click();
