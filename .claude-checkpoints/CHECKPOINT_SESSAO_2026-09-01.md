@@ -803,3 +803,44 @@ planilha era preciso digitar manualmente em "outro número". Adicionado um segun
 "Usar X (da planilha)" no mesmo estilo — o comentário do componente já documentava que a
 intenção original era escolher entre print/planilha/digitado. UI-only, sem banco. tsc+lint
 limpos, validado junto no mesmo CI verde do §17.1 (`33815272551`).
+
+## 19. ✅ Brecha REST no driverpay — leva 1 de 3 fechada (payments + payment_packages)
+
+Item (1) de "atacar tudo" (§17) continua: driverpay tem a MESMA brecha REST, e a trava de
+02/09 (`driverpay_mask_values_at_source`) nunca funcionou de verdade — confirmado
+empiricamente (`has_table_privilege('authenticated', 'driverpay_payments', 'SELECT')` =
+`true`, mesmo depois daquela migration). Os valores do Driver Pay estavam expostos por
+REST direto desde 02/09.
+
+**Escopo maior que o esperado**: mapeamento completo do `driverPay.ts` (3400+ linhas)
+achou 3 armadilhas de escrita NOVAS além do upsert-precisa-de-SELECT de hoje cedo:
+1. `INSERT ... RETURNING coluna_de_dinheiro` (o `.insert().select()` do supabase-js)
+   também exige SELECT na coluna retornada — confirmado empiricamente com papel
+   zero-privilégio.
+2. Filtrar update por `.neq('coluna_de_dinheiro', x)` também exige SELECT nessa coluna.
+3. **A mais séria**: `recomputePaymentTotals` (motor de recálculo, chamado em quase toda
+   edição de pacote/desconto/vale/zapex) lê de `driverpay_payment_computed`, uma view
+   `security_invoker` que referencia `rate_snapshot`/`amount` das tabelas filhas — ia
+   quebrar o Driver Pay inteiro assim que as colunas fossem travadas.
+
+Dado o tamanho real (~12 functions, ~20 pontos de código, não os "9" estimados antes de
+olhar o código), Victor decidiu (perguntado explicitamente) dividir em **3 levas
+menores**, validando com CI completo entre cada uma, em vez de uma leva só.
+
+**Leva 1 (a mais usada): `driverpay_payments` + `driverpay_payment_packages`.** 5
+functions `SECURITY DEFINER` novas: `get_driverpay_payments_masked` (grade principal,
+packages/discounts/vales/zapex embutidos via `jsonb_agg` — validado: soma bate exato com
+a query antiga, 339415.95 em 132 pagamentos reais), `recompute_driverpay_payment_totals_masked`,
+`upsert_driverpay_package_masked`, `update_driverpay_package_rate_where_changed_masked`,
+`get_driverpay_last_used_rates_masked`. Todas testadas com papel de banco zero-privilégio
+ANTES de mexer no client (mascara certo, valor real só com permissão). Client migrado
+(`getPayments`, `recomputePaymentTotals`, `upsertPackage`, `applyGroupRate`,
+`getDriverDefaultRates`). Ordem disciplinada: functions → client → **CI verde**
+(`33821222840`) → REVOKE final (tabela inteira + GRANT nas colunas seguras, mesmo padrão
+de hoje) → **CI verde de novo** (`33822200486`: tsc+eslint, vitest, playwright 113
+passed/1 flaky recuperado no retry/2 skipped/0 falha persistente).
+
+**Pendente**: leva 2 (`driverpay_platforms` + `driverpay_platform_rates` — inclui o
+achado do `INSERT...RETURNING` em `createPlatform`) e leva 3 (`driverpay_discounts` +
+`driverpay_vales` + `driverpay_deduction_ledger` + `driverpay_deduction_carryover`),
+mesmo processo.

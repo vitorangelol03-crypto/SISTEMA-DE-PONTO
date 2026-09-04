@@ -2,10 +2,51 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-03** (brecha REST fechada e CONFIRMADA verde no CI
-> completo nas 6 tabelas de hoje — function `SECURITY DEFINER` em vez de view, 2
-> regressões reais achadas pelo CI e corrigidas. Driverpay, 8 tabelas, ainda pendente —
-> já desenhado).
+> Última atualização: **2026-09-04** (brecha REST: as 6 tabelas de Financeiro/Erros/C6
+> FECHADAS e confirmadas no CI. Driverpay (8 tabelas, achado que a trava de 02/09 nunca
+> funcionou de verdade) dividido em 3 levas — **leva 1 (payments+payment_packages)
+> FECHADA e confirmada no CI**; levas 2 e 3 pendentes).
+
+> ✅ **Brecha REST no driverpay — leva 1 de 3 fechada** (migrations `20260904001037`/
+> `20260904003146`, `CHECKPOINT_SESSAO_2026-09-01.md` §19): mesma brecha do §17, só que
+> no driverpay — a trava de coluna de 02/09 (`driverpay_mask_values_at_source`) nunca
+> funcionou de verdade (confirmado: `authenticated` ainda lia a tabela inteira). Mapeamento
+> completo do `driverPay.ts` achou 3 armadilhas de escrita NOVAS: `INSERT...RETURNING`
+> numa coluna de dinheiro também exige SELECT nela; filtrar update por
+> `.neq('coluna_dinheiro', x)` idem; e a mais séria — `recomputePaymentTotals` (motor de
+> recálculo chamado em quase toda edição) lia de uma view `security_invoker` que ia
+> quebrar o Driver Pay inteiro. Escopo real (~12 functions, ~20 pontos de código) bem
+> maior que o estimado — Victor decidiu dividir em 3 levas menores com CI completo entre
+> cada uma, em vez de uma leva só. **Leva 1** (`driverpay_payments` +
+> `driverpay_payment_packages`, as mais usadas): 5 functions `SECURITY DEFINER`,
+> validadas com papel zero-privilégio ANTES do client, `get_driverpay_payments_masked`
+> conferida contra a query antiga (soma bate exata). CI verde 2x (functions+client, depois
+> REVOKE final: `33822200486`, playwright 113 passed/1 flaky recuperado/0 falha
+> persistente). **Levas 2 (`driverpay_platforms`+`driverpay_platform_rates`) e 3
+> (`driverpay_discounts`+`driverpay_vales`+`driverpay_deduction_ledger`+
+> `driverpay_deduction_carryover`) ainda pendentes**, mesmo processo.
+
+> ✅ **Brecha REST fechada — 1ª leva (6 tabelas de Financeiro/Erros/C6), CI verde de
+> verdade** (migrations `20260903201150` a `20260903223712`, `CHECKPOINT_SESSAO_2026-09-01.md`
+> §17/§17.1): pendência do §15 resolvida com a arquitetura certa — function
+> `SECURITY DEFINER` (não view, que quebrou hoje de manhã) faz o mascaramento sem exigir
+> NENHUM privilégio do invocador na tabela crua. Testado com prova real (papel de banco
+> sem privilégio nenhum) ANTES de aplicar. `payments`, `error_records`, `triage_errors`,
+> `triage_distribution_employees`, `bonus_removals` bloqueadas por fora;
+> `triage_error_distributions` só precisou de REVOKE de coluna. **2 regressões reais que a
+> validação LOCAL não pegou, só o CI completo achou** (lição: mudança de GRANT/REVOKE é
+> transversal, validação parcial não basta): (1) `getDataStatistics` (aba Gerenciamento de
+> Dados) lia `date` direto da tabela sem valor de dinheiro nenhum — REVOKE da tabela
+> inteira quebrou isso, corrigido com GRANT nas colunas seguras; (2) "editar diária" e
+> "aplicar bonificação" quebrados — `UPSERT` (`ON CONFLICT DO UPDATE`) exige SELECT nas
+> colunas de dinheiro que atualiza, não só leitura simples — corrigido com 2 functions
+> `SECURITY DEFINER` novas pro upsert. **CI final 100% verde nos 3 jobs** (run
+> `33815272551`: tsc+eslint, vitest, playwright 114 passed/2 skipped/0 failed/0 flaky).
+> Suíte unitária do banco de horas com mock ajustado mas **não confirmada rodando**
+> localmente (ambiente vitest travando ao iniciar worker, confirmado NÃO relacionado ao
+> código — mesmo erro num arquivo não tocado — mas o CI, que roda num ambiente limpo,
+> CONFIRMOU essa suíte passando, então a validação real já está feita).
+> Driverpay (8 tabelas) ainda pendente — já desenhado, nada aplicado.
 
 > ✅ **Brecha REST fechada — 1ª leva (6 tabelas de Financeiro/Erros/C6), CI verde de
 > verdade** (migrations `20260903201150` a `20260903223712`, `CHECKPOINT_SESSAO_2026-09-01.md`
