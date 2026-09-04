@@ -2,7 +2,13 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-04 (tarde)** — **✅ Ponto sem CPF no ar pra Caratinga**
+> Última atualização: **2026-09-04 (fim da tarde)** — **✅ Bug real corrigido** (`fb1af64`,
+> §24): rota nova (driver multi-rota, ex. Pablo) sumia da tela ao digitar a cidade e sair
+> do campo — rota sem pacote nenhum não existe de verdade no banco ainda, o "renomear" no
+> blur não achava nada e o reload seguinte apagava. Corrigido + provado nos dois sentidos
+> (sem a correção o teste trava, com ela passa).
+>
+> Atualização anterior do mesmo dia — **✅ Ponto sem CPF no ar pra Caratinga**
 > (`cad2c39`, §23 do checkpoint): câmera reconhece o funcionário sozinha (1:N, roda no
 > servidor, nunca expõe rostos pro navegador), 3s de confirmação antes de gravar, CPF vira
 > alternativa manual. Validado com dados reais de produção (não deu pra fechar E2E completo

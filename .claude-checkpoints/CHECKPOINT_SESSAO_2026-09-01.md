@@ -1163,3 +1163,27 @@ ao estado de antes desta feature (zero lógica de empresa neles). Os 4 arquivos 
 alterados — o disco continuava lento demais pra rodar a suíte completa). Push feito e
 confirmado seguro mesmo com o CI antigo sendo cancelado no meio (nada mais fica pra trás no
 banco). **Este é o fechamento definitivo do incidente — não uma mitigação.**
+
+## 24. ✅ Bug real: rota nova some da tela ao digitar a cidade (`fb1af64`)
+
+Reportado pelo Victor com print real (driver Pablo, Pagamentos Driver): clicar "Adicionar
+rota" e digitar o nome da cidade numa rota ainda sem pacote nenhum lançado fazia a rota
+sumir sozinha da tela.
+
+**Causa raiz**: uma rota nova (`packages: {}`) não existe de verdade em
+`driverpay_payment_packages` até o primeiro pacote ser lançado nela. `onCityBlur`
+(`DriverPayTab.tsx`) tentava renomear via `UPDATE ... WHERE route = ''` — não achava
+nenhuma linha (0 afetadas, sem erro) — e o `reloadPayments()` seguinte sobrescrevia o
+estado local com o que veio do servidor, que nunca teve essa rota. **Corrida de tempo**: o
+teste automatizado que já cobria isso (`tests/61`) não pegava o bug porque lançava o pacote
+rápido demais, batendo o reload assíncrono; no uso real, com mais tempo entre uma ação e
+outra, o reload sempre ganha e apaga a rota.
+
+**Corrigido**: pula o UPDATE+reload quando a rota ainda não tem nenhum pacote (`packageIds`
+vazio) — o nome já está certo no estado local (`onCityChange`) e é salvo sozinho no banco
+assim que o 1º pacote for lançado, com o nome novo desde o início.
+
+**Validado nos dois sentidos** (não só "parece certo"): revertida a correção
+temporariamente, o teste 61 reforçado (agora espera 2s após o blur e confere que a rota
+continua lá antes de lançar o pacote) travou/estourou timeout; com a correção de volta,
+passou limpo (1.5min). Push feito, no ar via Vercel.
