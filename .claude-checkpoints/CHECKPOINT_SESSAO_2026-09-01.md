@@ -844,3 +844,32 @@ passed/1 flaky recuperado no retry/2 skipped/0 falha persistente).
 achado do `INSERT...RETURNING` em `createPlatform`) e leva 3 (`driverpay_discounts` +
 `driverpay_vales` + `driverpay_deduction_ledger` + `driverpay_deduction_carryover`),
 mesmo processo.
+
+## 20. ✅ Brecha REST no driverpay — leva 2 de 3 fechada (platforms + platform_rates)
+
+Mesmo processo do §19. 4 functions `SECURITY DEFINER`: `get_driverpay_platforms_masked`
+(substitui `driverpay_platforms_v`, validado contra a soma antiga — 9.00 em 5
+plataformas), `create_driverpay_platform_masked` (corrige o `INSERT...RETURNING`
+achado ontem — `.insert().select()` numa coluna de dinheiro também exige `SELECT`
+nela), `get_driverpay_platform_rates_masked` (cobre os 3 consumidores — `getDriverRates`,
+`getAllDriverRates`, `getDriverDefaultRates` — resolvendo `company_id` a partir do
+driver quando não informado; validado contra a soma antiga — 8.80 em 4 taxas),
+`upsert_driverpay_platform_rates_masked` (cobre os 3 upserts — `applyPlatformToAllDrivers`,
+`upsertDriverRate`, `applyGroupRate` — com array de `driver_ids`). Confirmado também
+que `UPDATE` simples (sem `ON CONFLICT`) em `default_rate` NÃO precisa de `SELECT` —
+`updatePlatform`/`setPlatformNotaEmitter`/`setPlatformsActive`/`renamePlatform`
+continuam sem mudança nenhuma.
+
+Todas validadas com papel zero-privilégio ANTES do client. Client migrado (`getPlatforms`,
+`createPlatform`, `getDriverRates`, `getAllDriverRates`, `getDriverDefaultRates`,
+`applyPlatformToAllDrivers`, `upsertDriverRate`, `applyGroupRate`). Ordem disciplinada:
+functions → client → CI verde (`33823806883`) → REVOKE final → CI verde de novo
+(`33824991899`: tsc+eslint, vitest, playwright **114 passed/2 skipped/0 failed/0 flaky**
+— fechamento limpo, sem nenhum flake desta vez).
+
+**Pendente**: leva 3 (`driverpay_discounts` + `driverpay_vales` + `driverpay_deduction_ledger`
++ `driverpay_deduction_carryover`), mesmo processo. Também pendente (pedido do Victor no
+meio desta leva, ainda não investigado): quando um driver entra num grupo que já tem
+`default_rate` configurado, ele deveria herdar essa taxa automaticamente na aba de
+Pagamentos Driver — precisa achar onde `addDriverToGroup`/fluxo de entrada no grupo
+vive em `driverPay.ts` e decidir se aplica via `upsertDriverRate` na hora de entrar.

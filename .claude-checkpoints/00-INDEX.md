@@ -3,9 +3,19 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 > Última atualização: **2026-09-04** (brecha REST: as 6 tabelas de Financeiro/Erros/C6
-> FECHADAS e confirmadas no CI. Driverpay (8 tabelas, achado que a trava de 02/09 nunca
-> funcionou de verdade) dividido em 3 levas — **leva 1 (payments+payment_packages)
-> FECHADA e confirmada no CI**; levas 2 e 3 pendentes).
+> FECHADAS. Driverpay dividido em 3 levas — **levas 1 (payments+payment_packages) e 2
+> (platforms+platform_rates) FECHADAS e confirmadas no CI**; leva 3 pendente. Pedido
+> pendente do Victor, ainda não investigado: driver que entra num grupo com taxa
+> configurada devia herdar ela automaticamente).
+
+> ✅ **Brecha REST no driverpay — leva 2 de 3 fechada** (migrations `20260904004942`/
+> `20260904011353`, `CHECKPOINT_SESSAO_2026-09-01.md` §20): `driverpay_platforms` +
+> `driverpay_platform_rates`. Achado extra: `INSERT...RETURNING` numa coluna de dinheiro
+> (`.insert().select()` do supabase-js) também exige SELECT nela — `createPlatform`
+> corrigido. 4 functions validadas (soma bate exata com as views antigas). CI verde 2x
+> (`33823806883` functions+client, `33824991899` pós-REVOKE: **114 passed/2 skipped/0
+> failed/0 flaky**, fechamento limpo). Leva 3 pendente (`discounts`+`vales`+
+> `deduction_ledger`+`deduction_carryover`).
 
 > ✅ **Brecha REST no driverpay — leva 1 de 3 fechada** (migrations `20260904001037`/
 > `20260904003146`, `CHECKPOINT_SESSAO_2026-09-01.md` §19): mesma brecha do §17, só que
