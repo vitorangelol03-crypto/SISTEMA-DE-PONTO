@@ -736,6 +736,14 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       const row = rowsRef.current.find((r) => r.paymentId === paymentId);
       const rl = row?.routes[routeIndex];
       if (!row || !rl || rl.route === prevRoute) return;
+      // Rota ainda SEM nenhum pacote lançado (packageIds vazio) não existe de
+      // verdade no banco — não há linha nenhuma em driverpay_payment_packages
+      // pra renomear. Achado real (Victor, 04/09/2026): ao digitar o nome de
+      // uma rota nova e sair do campo, o UPDATE abaixo não achava nada (0
+      // linhas afetadas) e o reload em seguida apagava a rota da tela — ela
+      // nunca tinha sido salva de verdade. O nome já está certo no estado
+      // local (onCityChange); grava sozinho quando o 1º pacote for lançado.
+      if (Object.keys(rl.packageIds).length === 0) return;
       try {
         // Renomeia a rota de forma ATOMICA (um UPDATE do campo route), preservando
         // packages e rate_snapshot. Substitui o delete+reinsert nao-atomico que dependia

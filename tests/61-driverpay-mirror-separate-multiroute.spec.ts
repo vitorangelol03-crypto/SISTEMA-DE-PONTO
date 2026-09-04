@@ -166,6 +166,17 @@ test.describe('Pagamentos Driver — multi-rota sem média + valor separado do t
     await cityInputs.nth(1).fill(ROTA_2);
     await cityInputs.nth(1).blur();
 
+    // 🔑 Achado real (Victor, 04/09/2026): rota nova (sem pacote nenhum ainda)
+    // não existe de verdade no banco — o blur tentava "renomear" uma rota que
+    // não tem nenhuma linha em driverpay_payment_packages (UPDATE de 0 linhas),
+    // e o reload que vinha em seguida apagava a rota da tela por ela nunca ter
+    // sido salva. Rodando rápido (como antes deste comentário), o teste lançava
+    // o pacote ANTES do reload assíncrono terminar e mascarava o bug — por isso
+    // esperar aqui, do jeito que o uso real acontece, é o que prova a correção.
+    await page.waitForTimeout(2000);
+    await expect(cityInputs).toHaveCount(2);
+    await expect(cityInputs.nth(1)).toHaveValue(ROTA_2);
+
     // Sub-linha da rota 2: as sub-linhas de rota são os tr que contêm o input "cidade"
     // (na ordem das rotas). 1º td tem colSpan=2 → td da plataforma = índice do header - 1.
     const route2Row = page
