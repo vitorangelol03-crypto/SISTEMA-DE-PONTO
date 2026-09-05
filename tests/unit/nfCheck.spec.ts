@@ -15,14 +15,14 @@ import {
 
 const CNPJ_CD = '11802464000138';
 
-function danfse(opts: { valor: string; emitente: string; tomadorCnpj?: string }): string {
+function danfse(opts: { valor: string; emitente: string; tomadorCnpj?: string; emitenteCnpj?: string }): string {
   return `DANFSe v1.0
 Documento Auxiliar da NFS-e
 Municipio de Caratinga
 EMITENTE DA NFS-e
 Prestador do Serviço
 CNPJ / CPF / NIF
-61.875.012/0001-54
+${opts.emitenteCnpj ?? '61.875.012/0001-54'}
 Nome / Nome Empresarial
 61.875.012 ${opts.emitente}
 TOMADOR DO SERVIÇO
@@ -344,51 +344,82 @@ describe('ehNossoEspelho — recusar o próprio espelho como nota', () => {
  * "continuamos usando a validação por nome". E o resultado agora CONTA quais
  * nomes casaram (a dupla exige nomes diferentes entre as duas notas).
  */
-describe('runNfCheck — nomes autorizados (nota dividida, 19/08/2026)', () => {
+describe('runNfCheck — quem EMITE a nota: nome + CNPJ cadastrados (05/09/2026)', () => {
+  // Regra do Victor, depois da nota do GESSILEY ter passado no nome/CNPJ errado:
+  // com cadastro na ficha, a nota só vale com o NOME de um cadastrado E o CNPJ DA
+  // MESMA LINHA. Nome cadastrado sem CNPJ = recusa (ele decidiu assim).
+  const CNPJ_JOAERSON = '55.857.717/0001-46';
+  const CNPJ_GESSILEY = '51.046.418/0001-70';
   const base = {
     expectedCnpj: CNPJ_CD,
     expectedCnpjLabel: 'Shopee/Anjun/Loggi',
-    driverName: 'WILLKERSON MOISES DORNELAS BATISTA',
-    recebedorNome: null as string | null,
-    valueCandidates: { espelho_individual_cheio: 2470 },
+    driverName: 'GESSILEY RODRIGUES DE FREITAS',
+    recebedorNome: 'Joaerson Antônio de Freitas' as string | null,
+    valueCandidates: { combo_parte1: 7990.30 },
+    authorizedIssuers: [
+      { name: 'Joaerson Antônio de Freitas', cnpj: CNPJ_JOAERSON },
+      { name: 'GESSILEY RODRIGUES DE FREITAS', cnpj: CNPJ_GESSILEY },
+    ],
   };
 
-  it('🎯 nota no nome AUTORIZADO (ex.: esposa) → nomeOk, e o nome casado fica registrado', () => {
+  it('🎯 nome cadastrado + CNPJ da MESMA linha → passa', () => {
     const r = runNfCheck({
       ...base,
-      authorizedNames: ['NEILIZANA DA SILVA DORNELAS'],
-      text: danfse({ valor: '2.470,00', emitente: 'NEILIZANA DA SILVA DORNELAS' }),
+      text: danfse({ valor: '7.990,30', emitente: 'Joaerson Antônio de Freitas', emitenteCnpj: CNPJ_JOAERSON }),
     });
     expect(r.status).toBe('ok');
     expect(r.nomeOk).toBe(true);
-    expect(r.matchedNames).toEqual(['NEILIZANA DA SILVA DORNELAS']);
+    expect(r.matchedNames).toEqual(['Joaerson Antônio de Freitas']);
   });
 
-  it('🔴 nome de ESTRANHO (fora do driver/recebedor/autorizados) → recusa citando quem pode', () => {
+  it('🎯 o OUTRO cadastrado (o próprio driver, com o CNPJ dele) também passa', () => {
     const r = runNfCheck({
       ...base,
-      authorizedNames: ['NEILIZANA DA SILVA DORNELAS'],
-      text: danfse({ valor: '2.470,00', emitente: 'FULANO QUALQUER DE TAL' }),
+      text: danfse({ valor: '7.990,30', emitente: 'GESSILEY RODRIGUES DE FREITAS', emitenteCnpj: CNPJ_GESSILEY }),
+    });
+    expect(r.status).toBe('ok');
+    expect(r.matchedNames).toEqual(['GESSILEY RODRIGUES DE FREITAS']);
+  });
+
+  it('🔴 nome certo, CNPJ de quem emitiu DIFERENTE do cadastrado → recusa', () => {
+    const r = runNfCheck({
+      ...base,
+      text: danfse({ valor: '7.990,30', emitente: 'Joaerson Antônio de Freitas', emitenteCnpj: '99.999.999/0001-99' }),
     });
     expect(r.status).toBe('divergente');
     expect(r.nomeOk).toBe(false);
     expect(r.matchedNames).toEqual([]);
-    expect(r.reasons.join(' ')).toContain('NEILIZANA DA SILVA DORNELAS (nome autorizado)');
+    expect(r.reasons.join(' ')).toContain('55.857.717/0001-46');
   });
 
-  it('sem lista, o comportamento de sempre não muda (driver/recebedor)', () => {
+  it('🔴 nome cadastrado SEM CNPJ na ficha → recusa pedindo pra CD cadastrar', () => {
     const r = runNfCheck({
       ...base,
-      text: danfse({ valor: '2.470,00', emitente: 'WILLKERSON MOISES DORNELAS BATISTA' }),
+      authorizedIssuers: [{ name: 'Joaerson Antônio de Freitas', cnpj: null }],
+      text: danfse({ valor: '7.990,30', emitente: 'Joaerson Antônio de Freitas', emitenteCnpj: CNPJ_JOAERSON }),
     });
-    expect(r.status).toBe('ok');
-    expect(r.matchedNames).toEqual(['WILLKERSON MOISES DORNELAS BATISTA']);
+    expect(r.status).toBe('divergente');
+    expect(r.nomeOk).toBe(false);
+    expect(r.reasons.join(' ')).toContain('não está cadastrado');
   });
 
-  it('nota com o nome do DRIVER continua valendo mesmo com lista cadastrada', () => {
+  it('🔴 estranho → recusa listando quem pode emitir, com CNPJ', () => {
     const r = runNfCheck({
       ...base,
-      authorizedNames: ['NEILIZANA DA SILVA DORNELAS', 'OUTRO NOME AUTORIZADO'],
+      text: danfse({ valor: '7.990,30', emitente: 'FULANO QUALQUER DE TAL', emitenteCnpj: '99.999.999/0001-99' }),
+    });
+    expect(r.status).toBe('divergente');
+    expect(r.reasons.join(' ')).toContain('Joaerson');
+    expect(r.reasons.join(' ')).toContain('55.857.717/0001-46');
+  });
+
+  it('sem cadastro nenhum, a regra antiga continua (driver ou recebedor, sem olhar CNPJ)', () => {
+    const r = runNfCheck({
+      ...base,
+      authorizedIssuers: [],
+      valueCandidates: { espelho_individual_cheio: 2470 },
+      driverName: 'WILLKERSON MOISES DORNELAS BATISTA',
+      recebedorNome: null,
       text: danfse({ valor: '2.470,00', emitente: 'WILLKERSON MOISES DORNELAS BATISTA' }),
     });
     expect(r.status).toBe('ok');

@@ -12,7 +12,7 @@ import {
   driverNfSlots, driverNfList, driverNfUpload, driverNfSplitPreview,
   driverProofSlots, driverProofUpload,
   getDriverToken, getDriverName, setDriverSession, clearDriverSession,
-  DriverApiError, type DriverMirror, type NfSlot, type NfFile,
+  DriverApiError, type DriverMirror, type NfSlot, type NfFile, type NfIssuer,
   type ProofSlot,
 } from '../../services/driverApp';
 import { estadoBotaoNota } from '../../utils/notaBotao';
@@ -147,10 +147,14 @@ export function DriverApp() {
   const [splitEnabled, setSplitEnabled] = useState(false);
   const [nfFiles, setNfFiles] = useState<NfFile[]>([]);
   const [nfUploading, setNfUploading] = useState<string | null>(null);
-  // Nota dividida (19/08/2026): menu de formas por slot (valores exatos vindos do
-  // robô — a MESMA conta que vai conferir) e a forma escolhida antes do 1º envio.
-  const [splitMenu, setSplitMenu] = useState<Record<string, { total: number; forms: Record<'50' | '70-30', [number, number]> } | null>>({});
-  const [splitChoice, setSplitChoice] = useState<Record<string, { form: '50' | '70-30'; slices: [number, number] } | null>>({});
+  // Quem pode emitir nota por este motorista (nome + CNPJ) — a tela mostra a lista
+  // pro driver saber ANTES de emitir (pedido do Victor, 05/09/2026).
+  const [nfIssuers, setNfIssuers] = useState<NfIssuer[]>([]);
+  // Como ele vai emitir esta quinzena (05/09/2026): a escolha aparece logo ao abrir
+  // a tela, antes de qualquer botão de enviar. `null` = ainda não escolheu.
+  const [nfMode, setNfMode] = useState<'integral' | 'dividir' | null>(null);
+  // Valores exatos da divisão meio a meio, vindos do robô — a MESMA conta que confere.
+  const [splitInfo, setSplitInfo] = useState<{ total: number; slices: [number, number] } | null>(null);
 
   // Espelho do app da Shopee (print da tela) — 04/08/2026.
   // ⚠️ Nada aqui guarda quantidade: o driver so anexa a foto.
@@ -274,7 +278,23 @@ export function DriverApp() {
     try {
       const [slotsRes, filesRes] = await Promise.all([driverNfSlots(periodId, token), driverNfList(periodId, token)]);
       setNfSlots(slotsRes.slots); setNfFiles(filesRes.files);
-      setSplitEnabled(slotsRes.splitEnabled === true);
+      const habilitado = slotsRes.splitEnabled === true;
+      setSplitEnabled(habilitado);
+      setNfIssuers(slotsRes.issuers ?? []);
+      // Quem não pode dividir não escolhe nada: é sempre nota por CNPJ.
+      setNfMode(habilitado ? null : 'integral');
+      // Busca os valores da divisão já na abertura da tela — a escolha aparece com o
+      // número na frente, sem o driver ter que clicar em nada antes.
+      if (habilitado && slotsRes.slots.length > 0) {
+        try {
+          const prev = await driverNfSplitPreview(periodId, slotsRes.slots[0].emitterId, token);
+          setSplitInfo({ total: prev.total, slices: prev.forms['50'] });
+        } catch {
+          setSplitInfo(null); // sem valor calculado ainda: some a opção de dividir
+        }
+      } else {
+        setSplitInfo(null);
+      }
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else { setNfSlots([]); toast.error(errMsg(e, 'Nao consegui carregar os CNPJs.')); }
@@ -385,22 +405,10 @@ export function DriverApp() {
     }
   }
 
-  /** Abre o menu "dividir em 2 notas" com os valores EXATOS de cada forma (do robô). */
-  async function abrirMenuSplit(slot: NfSlot) {
-    const k = `${slot.mirrorKey ?? '*'}|${slot.emitterId}`;
-    if (!token || !nfCtx || splitMenu[k]) return;
-    try {
-      const prev = await driverNfSplitPreview(nfCtx.periodId, slot.emitterId, token);
-      setSplitMenu((m) => ({ ...m, [k]: { total: prev.total, forms: prev.forms } }));
-    } catch (e) {
-      toast.error(errMsg(e, 'Não consegui calcular a divisão — envie a nota única.'), { duration: 8000 });
-    }
-  }
-
   async function handleNfFile(
     slot: NfSlot,
     file: File | null | undefined,
-    split?: { form: '50' | '70-30'; part: 1 | 2 },
+    split?: { form: '50'; part: 1 | 2 },
   ) {
     const emitterId = slot.emitterId;
     if (!file || !token || !nfCtx) return;
@@ -422,13 +430,12 @@ export function DriverApp() {
         },
         token,
       );
-      // Nota dividida: a 1ª entrou — o relógio dos 10 minutos está correndo.
+      // Nota dividida: a 1ª entrou — o relógio dos 30 minutos está correndo.
       if (res.splitOpen) {
         toast.success(
-          `1ª nota recebida!${typeof res.splitRemaining === 'number' ? ` Agora envie a 2ª, de ${fmtBRL(res.splitRemaining)},` : ' Agora envie a 2ª'} em até 10 minutos.`,
+          `1ª nota recebida!${typeof res.splitRemaining === 'number' ? ` Agora envie a 2ª, de ${fmtBRL(res.splitRemaining)},` : ' Agora envie a 2ª'} em até 30 minutos.`,
           { duration: 10000 },
         );
-        setSplitChoice((m) => ({ ...m, [`${slot.mirrorKey ?? '*'}|${emitterId}`]: null }));
       }
       // Conferência automática: 3 checks verdes = já validada; senão fica pra conferência manual.
       else if (res.validated) toast.success(res.splitClosed ? 'Dupla completa! ✓ As duas notas foram validadas.' : 'Nota enviada e validada! ✓ Valor, CNPJ e nome conferidos.', { duration: 6000 });
@@ -768,6 +775,59 @@ export function DriverApp() {
             </div>
           )}
 
+          {/* ── COMO VOCÊ VAI EMITIR (05/09/2026, pedido do Victor) ──
+              Aparece já na abertura da tela, antes de qualquer botão de enviar, e só
+              pra quem a CD habilitou a dividir. Junto vão o aviso do CNPJ diferente e
+              QUEM pode emitir (nome + CNPJ cadastrados) — o driver fica ciente antes
+              de emitir, em vez de descobrir na recusa. */}
+          {splitEnabled && nfSlots !== null && nfSlots.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+              <div className="font-semibold text-gray-800 text-sm">Como você vai emitir as notas desta quinzena?</div>
+              <div className="space-y-2">
+                <button type="button"
+                  onClick={() => setNfMode('integral')}
+                  className={`w-full rounded-lg border-2 px-3 py-2.5 text-left ${nfMode === 'integral' ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <div className="text-sm font-semibold text-gray-800">Notas no valor integral</div>
+                  <div className="text-xs text-gray-600">
+                    Uma nota por CNPJ, cada uma com o valor daquele CNPJ:{' '}
+                    {nfSlots.map((s) => s.label).join(' e ')}.
+                  </div>
+                </button>
+                {splitInfo && (
+                  <button type="button"
+                    onClick={() => setNfMode('dividir')}
+                    className={`w-full rounded-lg border-2 px-3 py-2.5 text-left ${nfMode === 'dividir' ? 'border-amber-500 bg-amber-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                    <div className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                      <Scissors size={14} /> Dividir em 2 notas (metade cada)
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      Total de {fmtBRL(splitInfo.total)} dividido no meio:{' '}
+                      <b>{fmtBRL(splitInfo.slices[0])}</b> + <b>{fmtBRL(splitInfo.slices[1])}</b>.
+                    </div>
+                  </button>
+                )}
+              </div>
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                ⚠️ <b>Cada nota tem que ser emitida em um CNPJ DIFERENTE.</b> As duas no mesmo CNPJ são recusadas.
+              </div>
+              {nfIssuers.length > 0 && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                  <div className="text-xs font-semibold text-gray-700 mb-1">A nota tem que ser emitida por:</div>
+                  <ul className="text-xs text-gray-700 space-y-0.5">
+                    {nfIssuers.map((i) => (
+                      <li key={i.name}>
+                        • <b>{i.name}</b>{i.cnpj ? <> — CNPJ {i.cnpj}</> : <span className="text-red-600"> — sem CNPJ cadastrado, avise a CD</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="text-[11px] text-gray-500 mt-1">
+                    Nome ou CNPJ diferente destes = nota recusada.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {nfSlots?.map((s) => (
             <div key={`${s.mirrorKey ?? '*'}|${s.emitterId}`} className="bg-white rounded-xl shadow-sm p-4">
               <div className="flex items-start justify-between gap-2">
@@ -813,7 +873,7 @@ export function DriverApp() {
                     <input
                       type="file" accept="application/pdf" className="hidden"
                       disabled={nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}`}
-                      onChange={(e) => { handleNfFile(s, e.target.files?.[0], { form: s.splitOpen!.form as '50' | '70-30', part: 2 }); e.currentTarget.value = ''; }}
+                      onChange={(e) => { handleNfFile(s, e.target.files?.[0], { form: '50', part: 2 }); e.currentTarget.value = ''; }}
                     />
                   </label>
                 </>
@@ -823,63 +883,39 @@ export function DriverApp() {
                 </div>
               ) : (() => {
                 const k = `${s.mirrorKey ?? '*'}|${s.emitterId}`;
-                const escolha = splitChoice[k];
-                const menu = splitMenu[k];
-                if (escolha) {
-                  // Forma escolhida: valores exatos + o aviso dos 10 minutos ANTES da 1ª.
+                // Habilitado que ainda não disse COMO vai emitir: nada de botão de
+                // enviar (05/09/2026 — era mandando pelo botão errado que o driver
+                // queimava nota de verdade).
+                if (splitEnabled && nfMode === null) {
                   return (
-                    <>
-                      <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                        <b>Dupla {escolha.form === '50' ? 'metade/metade' : '70% e 30%'}:</b>{' '}
-                        nota 1 de <b>{fmtBRL(escolha.slices[0])}</b> aqui + nota 2 de <b>{fmtBRL(escolha.slices[1])}</b> no OUTRO CNPJ.
-                        <br /><b>⏰ Você terá 10 minutos</b> para enviar a segunda depois da primeira.
-                      </div>
-                      <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === k ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
-                        {nfUploading === k ? <Spinner /> : <><Upload size={16} /> Enviar 1ª nota ({fmtBRL(escolha.slices[0])})</>}
-                        <input
-                          type="file" accept="application/pdf" className="hidden" disabled={nfUploading === k}
-                          onChange={(e) => { handleNfFile(s, e.target.files?.[0], { form: escolha.form, part: 1 }); e.currentTarget.value = ''; }}
-                        />
-                      </label>
-                      <button type="button" className="mt-1.5 w-full text-[11px] text-gray-500 underline"
-                        onClick={() => setSplitChoice((m) => ({ ...m, [k]: null }))}>
-                        Voltar (enviar nota única)
-                      </button>
-                    </>
+                    <div className="mt-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2.5 text-xs text-gray-600 text-center">
+                      Escolha lá em cima como você vai emitir — inteira ou dividida — pra liberar o envio.
+                    </div>
                   );
                 }
+                const dividindo = nfMode === 'dividir' && splitInfo !== null;
                 return (
                   <>
+                    {dividindo && (
+                      <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        Esta nota tem que ser de <b>{fmtBRL(splitInfo!.slices[0])}</b>, emitida contra o CNPJ{' '}
+                        <b>{s.cnpj}</b> ({s.label}). A outra, do mesmo valor, vai no <b>OUTRO CNPJ</b>.
+                        <br /><b>⏰ Você tem 30 minutos</b> para enviar a segunda depois da primeira.
+                      </div>
+                    )}
                     <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === k ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
-                      {nfUploading === k ? <Spinner /> : <><Upload size={16} /> Enviar PDF da nota</>}
+                      {nfUploading === k ? <Spinner /> : (
+                        <><Upload size={16} /> {dividindo ? `Enviar nota de ${fmtBRL(splitInfo!.slices[0])}` : 'Enviar PDF da nota'}</>
+                      )}
                       <input
                         type="file" accept="application/pdf" className="hidden" disabled={nfUploading === k}
-                        onChange={(e) => { handleNfFile(s, e.target.files?.[0]); e.currentTarget.value = ''; }}
+                        onChange={(e) => {
+                          handleNfFile(s, e.target.files?.[0], dividindo ? { form: '50', part: 1 } : undefined);
+                          e.currentTarget.value = '';
+                        }}
                       />
                     </label>
                     <p className="mt-1.5 text-[11px] text-gray-400 text-center">Somente arquivo PDF — foto não é aceita.</p>
-                    {/* Dividir em 2 notas: só pra quem a CD habilitou (05/09/2026 —
-                        pedido do Victor). Era um link de 11px embaixo do aviso do
-                        PDF e passava batido: o driver mandava pelo botão grande de
-                        nota única e a conferência cobrava o valor do CNPJ inteiro. */}
-                    {!splitEnabled ? null : menu ? (
-                      <div className="mt-2 space-y-1.5">
-                        {(['50', '70-30'] as const).map((f) => (
-                          <button key={f} type="button"
-                            className="w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 hover:bg-blue-100 text-left"
-                            onClick={() => setSplitChoice((m) => ({ ...m, [k]: { form: f, slices: menu.forms[f] } }))}>
-                            <b>{f === '50' ? '2 notas: metade / metade' : '2 notas: 70% e 30%'}</b>
-                            <span className="block">{fmtBRL(menu.forms[f][0])} + {fmtBRL(menu.forms[f][1])} (uma em cada CNPJ)</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <button type="button"
-                        className="mt-2 w-full flex items-center justify-center gap-2 rounded-lg border-2 border-amber-500 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
-                        onClick={() => abrirMenuSplit(s)}>
-                        <Scissors size={16} /> Preciso dividir em 2 notas
-                      </button>
-                    )}
                   </>
                 );
               })()}

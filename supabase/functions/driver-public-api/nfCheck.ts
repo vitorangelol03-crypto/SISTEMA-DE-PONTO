@@ -71,12 +71,18 @@ export interface NfCheckInput {
   driverName: string;
   recebedorNome: string | null;
   /**
-   * Nota dividida (19/08/2026): nomes AUTORIZADOS a emitir nota por este driver
-   * (tabela driverpay_driver_nota_names, máx 2). Contam junto com driver/recebedor
-   * na validação por nome — decisão do Victor: "continuamos usando a validação
-   * por nome".
+   * Quem está CADASTRADO pra emitir nota por este driver — nome + CNPJ, da ficha
+   * dele (`driverpay_driver_nota_names`).
+   *
+   * 05/09/2026, regra do Victor: "o sistema não pode aceitar nota com o nome errado,
+   * nem CNPJ errado". Quando existe cadastro, ele MANDA: a nota tem que trazer o nome
+   * de uma dessas pessoas E o CNPJ **da mesma linha**. Nome cadastrado sem CNPJ =
+   * recusa (decisão dele, 05/09) — cadastra o CNPJ antes de mandar a nota.
+   *
+   * Vazio = driver sem cadastro: segue a regra antiga (nome do driver ou do recebedor,
+   * sem conferir CNPJ de quem emitiu).
    */
-  authorizedNames?: readonly string[];
+  authorizedIssuers?: readonly { name: string; cnpj: string | null }[];
   /** label -> valor esperado (ex.: espelho_group_LOGGI: 238). Vazio = sem base p/ conferir valor. */
   valueCandidates: Record<string, number>;
   /** Tolerância em centavos (padrão 2 = ±R$ 0,02, só arredondamento). */
@@ -279,27 +285,63 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
     }
   }
 
-  // Nome: driver, recebedor cadastrado OU nome autorizado (nota dividida, 19/08/2026).
-  // Registra QUAIS casaram — a dupla da nota dividida exige nomes diferentes.
-  const nomesConferidos: Array<{ nome: string; hit: boolean | null }> = [
-    { nome: input.driverName, hit: nameMatches(input.driverName, ntext) },
-    { nome: input.recebedorNome ?? '', hit: nameMatches(input.recebedorNome, ntext) },
-    ...(input.authorizedNames ?? []).map((n) => ({ nome: n, hit: nameMatches(n, ntext) })),
-  ];
-  const matchedNames = nomesConferidos.filter((c) => c.hit === true).map((c) => c.nome);
-  const algumConferivel = nomesConferidos.some((c) => c.hit !== null);
-  const nomeOk = !algumConferivel ? null : matchedNames.length > 0;
-  if (nomeOk === false) {
-    const autorizados = (input.authorizedNames ?? []).filter((n) => n && n.trim());
-    const lista = [
-      input.driverName,
-      ...(input.recebedorNome ? [`${input.recebedorNome} (recebedor cadastrado)`] : []),
-      ...autorizados.map((n) => `${n} (nome autorizado)`),
-    ].filter(Boolean).join(' ou ');
-    reasons.push(
-      `A nota deve estar no nome de ${lista}. ` +
-      'Se quem emite a nota mudou, avise a CD pra atualizar o cadastro.'
-    );
+  // ── Quem EMITIU a nota ────────────────────────────────────────────────────
+  // 05/09/2026 (regra do Victor, 4ª volta no assunto): com cadastro de emissores na
+  // ficha, a nota só passa se trouxer o NOME de um deles E o CNPJ DA MESMA LINHA.
+  // Antes o sistema olhava só o nome e ignorava o CNPJ de quem emitiu — foi assim que
+  // passou nota do CNPJ errado. Sem cadastro nenhum, segue a regra antiga (nome do
+  // driver ou do recebedor), pra não recusar a nota de quem nunca teve esse cadastro.
+  const cadastrados = (input.authorizedIssuers ?? []).filter((i) => i.name && i.name.trim());
+  const matchedNames: string[] = [];
+  let nomeOk: boolean | null;
+
+  if (cadastrados.length > 0) {
+    const nomeBateu = cadastrados.filter((i) => nameMatches(i.name, ntext) === true);
+    const cnpjDe = (i: { cnpj: string | null }) => (i.cnpj ?? '').replace(/\D/g, '');
+    const tudoBateu = nomeBateu.filter((i) => cnpjDe(i).length === 14 && foundCnpjs.includes(cnpjDe(i)));
+    matchedNames.push(...tudoBateu.map((i) => i.name));
+    nomeOk = tudoBateu.length > 0;
+
+    if (!nomeOk) {
+      const semCnpjCadastrado = nomeBateu.filter((i) => cnpjDe(i).length !== 14);
+      if (semCnpjCadastrado.length > 0) {
+        reasons.push(
+          `A nota está no nome de ${semCnpjCadastrado[0].name}, mas o CNPJ dessa pessoa não está ` +
+          'cadastrado no sistema. Peça pra CD cadastrar o CNPJ antes de enviar a nota.'
+        );
+      } else if (nomeBateu.length > 0) {
+        reasons.push(
+          `A nota está no nome de ${nomeBateu[0].name}, mas não foi emitida pelo CNPJ cadastrado ` +
+          `dele (${formatCnpj(cnpjDe(nomeBateu[0]))}). Emita a nota por esse CNPJ e envie de novo.`
+        );
+      } else {
+        const lista = cadastrados
+          .map((i) => `${i.name}${cnpjDe(i).length === 14 ? ` (CNPJ ${formatCnpj(cnpjDe(i))})` : ''}`)
+          .join(' ou ');
+        reasons.push(
+          `A nota tem que ser emitida por ${lista}. ` +
+          'Se quem emite a nota mudou, avise a CD pra atualizar o cadastro.'
+        );
+      }
+    }
+  } else {
+    const nomesConferidos: Array<{ nome: string; hit: boolean | null }> = [
+      { nome: input.driverName, hit: nameMatches(input.driverName, ntext) },
+      { nome: input.recebedorNome ?? '', hit: nameMatches(input.recebedorNome, ntext) },
+    ];
+    matchedNames.push(...nomesConferidos.filter((c) => c.hit === true).map((c) => c.nome));
+    const algumConferivel = nomesConferidos.some((c) => c.hit !== null);
+    nomeOk = !algumConferivel ? null : matchedNames.length > 0;
+    if (nomeOk === false) {
+      const lista = [
+        input.driverName,
+        ...(input.recebedorNome ? [`${input.recebedorNome} (recebedor cadastrado)`] : []),
+      ].filter(Boolean).join(' ou ');
+      reasons.push(
+        `A nota deve estar no nome de ${lista}. ` +
+        'Se quem emite a nota mudou, avise a CD pra atualizar o cadastro.'
+      );
+    }
   }
 
   const status: NfCheckResult['status'] = reasons.length > 0 ? 'divergente' : 'ok';
@@ -321,7 +363,11 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
 // 04/09/2026: virou "2 CNPJs diferentes", ver driver-public-api/index.ts) ────
 
 /** Formas de parcelamento da nota (decisão do Victor: só estas três; 'unica' = sem divisão). */
-export type NfSplitForm = '50' | '70-30';
+/**
+ * Forma de divisão. 05/09/2026, decisão do Victor: sobrou SÓ meio a meio — o 70/30
+ * deixou de existir (uma fatia igual pra cada CNPJ).
+ */
+export type NfSplitForm = '50';
 
 /**
  * As DUAS fatias de um total para a forma escolhida — o valor EXATO que cada
@@ -329,14 +375,14 @@ export type NfSplitForm = '50' | '70-30';
  *
  * Regra do centavo: a fatia 1 arredonda pro centavo mais próximo e a fatia 2
  * leva o resto — a soma fecha SEMPRE no total, sem centavo perdido.
- * Ex.: 10.356,81 em 50/50 → 5.178,41 + 5.178,40 · em 70/30 → 7.249,77 + 3.107,04.
+ * Ex.: 10.356,81 → 5.178,41 + 5.178,40.
  *
  * ⚠️ Existe uma cópia desta conta no painel/app (src/utils/nfSplit.ts) e um teste
  * roda as duas LADO A LADO — se divergirem, o app mostraria um valor e o robô
  * cobraria outro. Mudou aqui, mudou lá.
  */
-export function nfSplitSlices(total: number, form: NfSplitForm): [number, number] {
+export function nfSplitSlices(total: number, _form: NfSplitForm = '50'): [number, number] {
   const cents = Math.round(total * 100);
-  const first = form === '50' ? Math.round(cents / 2) : Math.round(cents * 0.7);
+  const first = Math.round(cents / 2);
   return [first / 100, (cents - first) / 100];
 }

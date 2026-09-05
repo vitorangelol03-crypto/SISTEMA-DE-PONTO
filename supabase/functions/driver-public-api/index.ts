@@ -479,12 +479,12 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
     }
   }
 
-  // 05/09/2026 (pedido do Victor): a opção "dividir em 2 notas" passa a aparecer
-  // SÓ pra quem a CD habilitou. A habilitação é o cadastro que já existe na ficha
-  // do motorista — "Nomes autorizados a emitir nota" (`driverpay_driver_nota_names`):
-  // sem nenhum nome lá, o app não mostra a opção de dividir.
-  const splitEnabled = (await nomesAutorizadosDe(claims.driver_id)).length > 0;
-  return json({ slots, splitEnabled });
+  // 05/09/2026 (pedido do Victor): a opção "dividir em 2 notas" aparece SÓ pra quem a
+  // CD habilitou — a habilitação é o cadastro de emissores na ficha do motorista
+  // (`driverpay_driver_nota_names`). A lista vai junto porque o app mostra na tela
+  // QUEM pode emitir (nome + CNPJ), pro driver já saber antes de emitir.
+  const emissores = await emissoresAutorizadosDe(claims.driver_id);
+  return json({ slots, splitEnabled: emissores.length > 0, issuers: emissores });
 }
 
 /**
@@ -507,12 +507,11 @@ async function nfSplitPreview(req: Request, body: Body): Promise<Response> {
   if (total <= 0) {
     return json({ error: 'Ainda não há valor calculado pra dividir — aguarde ou envie a nota única.' }, 409);
   }
+  // 05/09/2026 (decisão do Victor): a divisão é SÓ meio a meio — o 70/30 deixou de
+  // existir. Uma fatia por CNPJ, sempre igual.
   return json({
     total,
-    forms: {
-      '50': nfSplitSlices(total, '50'),
-      '70-30': nfSplitSlices(total, '70-30'),
-    },
+    forms: { '50': nfSplitSlices(total, '50') },
     windowMinutes: NF_SPLIT_WINDOW_MS / 60_000,
   });
 }
@@ -779,14 +778,23 @@ async function buildComboTotal(
 // por nota, tipo limite do MEI, que uma nota só com o total de UM CNPJ estoura)
 // ──────────────────────────────────────────────────────────────────────────
 
-/** Janela pra segunda nota da dupla chegar depois da primeira. */
-const NF_SPLIT_WINDOW_MS = 10 * 60_000;
+/**
+ * Janela pra segunda nota da dupla chegar depois da primeira.
+ * 05/09/2026: 10 → 30 minutos (decisão do Victor). Dez minutos obrigavam o driver a
+ * emitir as duas notas correndo; errando, ele tinha que CANCELAR nota de verdade na
+ * Receita — que é o que ele não pode ficar fazendo.
+ */
+const NF_SPLIT_WINDOW_MS = 30 * 60_000;
 
-/** Nomes AUTORIZADOS a emitir nota por este driver (tabela nova, máx 2). */
-async function nomesAutorizadosDe(driverId: string): Promise<string[]> {
+/** Quem está cadastrado pra emitir nota por este driver: nome + CNPJ (máx 2). */
+async function emissoresAutorizadosDe(
+  driverId: string,
+): Promise<{ name: string; cnpj: string | null }[]> {
   const { data } = await supabase.from('driverpay_driver_nota_names')
-    .select('name').eq('driver_id', driverId);
-  return (data ?? []).map((r) => String(r.name)).filter((n) => n.trim().length > 0);
+    .select('name, cnpj').eq('driver_id', driverId);
+  return (data ?? [])
+    .map((r) => ({ name: String(r.name ?? ''), cnpj: (r.cnpj as string | null) ?? null }))
+    .filter((r) => r.name.trim().length > 0);
 }
 
 type Parte1Aberta = {
@@ -884,7 +892,8 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   // ── Nota dividida (19/08/2026): forma escolhida no app + qual das duas é esta ──
   // Ausente = nota única (comportamento de sempre, cliente antigo incluso).
   const splitFormRaw = body.splitForm === undefined || body.splitForm === null ? null : String(body.splitForm);
-  const splitForm: NfSplitForm | null = splitFormRaw === '50' || splitFormRaw === '70-30' ? splitFormRaw : null;
+  // Só meio a meio desde 05/09/2026 (decisão do Victor) — '70-30' não é mais aceito.
+  const splitForm: NfSplitForm | null = splitFormRaw === '50' ? splitFormRaw : null;
   const splitPartNum = body.splitPart === undefined || body.splitPart === null ? null : Number(body.splitPart);
   const splitPart: 1 | 2 | null = splitPartNum === 1 || splitPartNum === 2 ? splitPartNum : null;
   if ((splitForm === null) !== (splitPart === null)) {
@@ -1026,7 +1035,7 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
 
     const { data: driver } = await supabase.from('driverpay_drivers')
       .select('name, recebedor_nome').eq('id', claims.driver_id).maybeSingle();
-    const nomesAutorizados = await nomesAutorizadosDe(claims.driver_id);
+    const emissoresAutorizados = await emissoresAutorizadosDe(claims.driver_id);
     candidates = await buildValueCandidates(claims.driver_id, claims.company_id, periodId, emitterId);
 
     // ── Nota dividida: o valor esperado vira a FATIA (19/08/2026, cross-CNPJ
@@ -1055,7 +1064,7 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
       expectedCnpjLabel: em.label ?? '',
       driverName: driver?.name ?? '',
       recebedorNome: driver?.recebedor_nome ?? null,
-      authorizedNames: nomesAutorizados,
+      authorizedIssuers: emissoresAutorizados,
       valueCandidates: candidatosComparados,
     });
     // 04/09/2026: a dupla deixou de exigir nomes diferentes entre as 2 notas — CNPJ

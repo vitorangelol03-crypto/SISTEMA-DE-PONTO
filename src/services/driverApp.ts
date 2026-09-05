@@ -147,15 +147,21 @@ export function driverMirrorUrl(publicationId: string, token: string): Promise<{
 }
 
 // ─── Nota Fiscal (Fase 3) ────────────────────────────────────────────────────
+/** Quem está cadastrado pra emitir nota por este motorista (nome + CNPJ). */
+export interface NfIssuer { name: string; cnpj: string | null }
+
 /**
  * `splitEnabled` (05/09/2026): a CD habilitou ESTE motorista a dividir a nota em 2?
  * É o cadastro "Nomes autorizados a emitir nota" da ficha dele. Ausente (servidor
  * antigo) = trata como não habilitado — a opção some em vez de aparecer errada.
+ * `issuers`: a mesma lista, com CNPJ, pra tela mostrar quem pode emitir.
  */
 export function driverNfSlots(
   periodId: string, token: string,
-): Promise<{ slots: NfSlot[]; splitEnabled?: boolean }> {
-  return callDriverApi<{ slots: NfSlot[]; splitEnabled?: boolean }>('nf-slots', { periodId }, token);
+): Promise<{ slots: NfSlot[]; splitEnabled?: boolean; issuers?: NfIssuer[] }> {
+  return callDriverApi<{ slots: NfSlot[]; splitEnabled?: boolean; issuers?: NfIssuer[] }>(
+    'nf-slots', { periodId }, token,
+  );
 }
 export function driverNfList(periodId: string, token: string): Promise<{ files: NfFile[] }> {
   return callDriverApi<{ files: NfFile[] }>('nf-list', { periodId }, token);
@@ -167,7 +173,7 @@ export function driverNfUpload(
     /** De qual espelho é esta nota (28/07). Omitido = sem espelho publicado. */
     mirrorKey?: string | null;
     /** Nota dividida (19/08/2026): forma escolhida + qual das duas é esta. Omitido = única. */
-    splitForm?: '50' | '70-30';
+    splitForm?: '50';
     splitPart?: 1 | 2;
   },
   token: string,
@@ -186,7 +192,7 @@ export function driverNfUpload(
  */
 export function driverNfSplitPreview(
   periodId: string, emitterId: string, token: string,
-): Promise<{ total: number; forms: Record<'50' | '70-30', [number, number]>; windowMinutes: number }> {
+): Promise<{ total: number; forms: Record<'50', [number, number]>; windowMinutes: number }> {
   return callDriverApi('nf-split-preview', { periodId, emitterId }, token);
 }
 
