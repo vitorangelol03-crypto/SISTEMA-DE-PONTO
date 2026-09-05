@@ -794,14 +794,15 @@ export function DriverApp() {
                   (recebida/validada) segura o lugar e esconde o botão — a edge fn
                   recusa o reenvio com 409 nesse caso. Nota RECUSADA não segura mais:
                   o botão de enviar continua aparecendo (banner acima já mostra o
-                  motivo). NOTA DIVIDIDA (19/08): dupla em andamento vem ANTES de
-                  tudo — a 1ª conta como enviada, mas o que falta é a 2ª. */}
+                  motivo). NOTA DIVIDIDA (19/08 → cross-CNPJ desde 04/09): dupla em
+                  andamento aparece aqui, no CNPJ que AINDA falta — o CNPJ onde a 1ª
+                  já caiu mostra só "Nota enviada" (mais abaixo). */}
               {s.splitOpen ? (
                 <>
                   <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    <b>1ª nota recebida{s.splitOpen.part1Value !== null ? ` (${fmtBRL(s.splitOpen.part1Value)})` : ''}.</b>
-                    {' '}Envie a 2ª{s.splitOpen.remaining !== null ? <>, de <b>{fmtBRL(s.splitOpen.remaining)}</b>,</> : ''} até{' '}
-                    <b>{fmtHora(s.splitOpen.expiresAt)}</b> — em nome DIFERENTE da primeira. Passou da hora, as duas caem e você reenvia a dupla.
+                    <b>1ª nota recebida (outro CNPJ){s.splitOpen.part1Value !== null ? `, de ${fmtBRL(s.splitOpen.part1Value)}` : ''}.</b>
+                    {' '}Envie a 2ª AQUI{s.splitOpen.remaining !== null ? <>, de <b>{fmtBRL(s.splitOpen.remaining)}</b>,</> : ''} até{' '}
+                    <b>{fmtHora(s.splitOpen.expiresAt)}</b>. Passou da hora, as duas caem e você reenvia a dupla.
                   </div>
                   <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer'}`}>
                     {nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? <Spinner /> : <><Upload size={16} /> Enviar 2ª nota{s.splitOpen.remaining !== null ? ` (${fmtBRL(s.splitOpen.remaining)})` : ''}</>}
@@ -826,7 +827,7 @@ export function DriverApp() {
                     <>
                       <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                         <b>Dupla {escolha.form === '50' ? 'metade/metade' : '70% e 30%'}:</b>{' '}
-                        nota 1 de <b>{fmtBRL(escolha.slices[0])}</b> + nota 2 de <b>{fmtBRL(escolha.slices[1])}</b>, em nomes diferentes.
+                        nota 1 de <b>{fmtBRL(escolha.slices[0])}</b> aqui + nota 2 de <b>{fmtBRL(escolha.slices[1])}</b> no OUTRO CNPJ.
                         <br /><b>⏰ Você terá 10 minutos</b> para enviar a segunda depois da primeira.
                       </div>
                       <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === k ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
@@ -860,14 +861,14 @@ export function DriverApp() {
                             className="w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 hover:bg-blue-100 text-left"
                             onClick={() => setSplitChoice((m) => ({ ...m, [k]: { form: f, slices: menu.forms[f] } }))}>
                             <b>{f === '50' ? '2 notas: metade / metade' : '2 notas: 70% e 30%'}</b>
-                            <span className="block">{fmtBRL(menu.forms[f][0])} + {fmtBRL(menu.forms[f][1])} (nomes diferentes)</span>
+                            <span className="block">{fmtBRL(menu.forms[f][0])} + {fmtBRL(menu.forms[f][1])} (uma em cada CNPJ)</span>
                           </button>
                         ))}
                       </div>
                     ) : (
                       <button type="button" className="mt-1.5 w-full text-[11px] text-blue-600 underline"
                         onClick={() => abrirMenuSplit(s)}>
-                        Dividir em 2 notas (2 nomes)
+                        Dividir em 2 notas (2 CNPJs)
                       </button>
                     )}
                   </>

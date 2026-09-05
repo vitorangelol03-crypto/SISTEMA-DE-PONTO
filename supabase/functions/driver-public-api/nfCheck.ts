@@ -317,7 +317,8 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
   };
 }
 
-// ─── Nota dividida em 2 nomes (19/08/2026, decisão do Victor) ────────────────
+// ─── Nota dividida em 2 CNPJs (19/08/2026, decisão do Victor — redesenhada
+// 04/09/2026: virou "2 CNPJs diferentes", ver driver-public-api/index.ts) ────
 
 /** Formas de parcelamento da nota (decisão do Victor: só estas três; 'unica' = sem divisão). */
 export type NfSplitForm = '50' | '70-30';

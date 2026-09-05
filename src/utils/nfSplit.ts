@@ -1,6 +1,7 @@
 /**
- * Nota dividida em 2 nomes (19/08/2026, decisão do Victor): formas de
- * parcelamento e a conta das fatias — o lado do PAINEL/APP.
+ * Nota dividida em 2 CNPJs (19/08/2026, decisão do Victor — redesenhada
+ * 04/09/2026: virou "2 CNPJs diferentes"): formas de parcelamento e a conta
+ * das fatias — o lado do PAINEL/APP.
  *
  * ⚠️ A MESMA conta existe no robô (supabase/functions/driver-public-api/nfCheck.ts,
  * `nfSplitSlices`) e um teste roda as duas lado a lado: o valor que o app mostra
