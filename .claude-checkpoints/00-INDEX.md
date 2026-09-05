@@ -2,7 +2,30 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-04 (noite)** — **✅ Câmera bloqueada passa a ensinar a
+> Última atualização: **2026-09-05** — **NOTA FISCAL DIVIDIDA reescrita de ponta a ponta**
+> (`3edace8`, `4d85bc9`, `daa35b2`, `7b2677f`, `069e12c`; detalhe em
+> `CHECKPOINT_SESSAO_2026-09-05.md`). Dia inteiro com o Victor ao vivo junto do driver
+> GESSILEY, 4 voltas até a regra ficar clara. 🔴 **Bug de dinheiro achado e fechado:** a
+> nota do LÍDER de grupo era aceita cobrindo só a parte dele — a do Gessiley validou por
+> R$ 8.434,80 num grupo que soma R$ 14.476,00 naquele CNPJ, deixando **R$ 6.041,20 sem
+> nota** com a tela dizendo "NF ok". Levantamento no histórico achou **4 notas assim**
+> (as 3 de quinzena aberta já tratadas; a do FERNANDO, de quinzena FECHADA, espera
+> decisão). **Regra final da divisão:** só pra habilitado (= ter recebedor cadastrado na
+> ficha), escolha "integral × dividir" **antes de qualquer botão de enviar**, **só 50/50**
+> (70/30 morreu), CNPJs diferentes, prazo **10 → 30 min**, e a conferência recusa valor,
+> nome **e CNPJ do emitente** errados (nome+CNPJ na MESMA linha do cadastro; sem CNPJ
+> cadastrado = recusa). **Pagamento segue as notas:** dupla completa → relatório geral e
+> simples viram 2 linhas, metade pra cada recebedor, **cada uma na chave PIX dele**
+> (coluna nova `driverpay_driver_nota_names.pix`, migration `20260905190000`). Provado
+> com **E2E novo `tests/107` 4/4 verde** contra a edge fn deployada, com PDFs de verdade
+> + 11 unitários novos do pagamento dividido. Edge fn v39 → **v42**. 🔴 **`supabase db
+> push` é PERIGOSO neste projeto** — aplicaria ~90 migrations locais nunca registradas
+> (algumas de nov/2025); migration aqui se aplica UMA A UMA pelo MCP. Também corrigido:
+> a tela de "câmera bloqueada" do ponto aparecia **cortada, lado a lado com o painel**
+> (faltava `fixed inset-0`) e o botão "já liberei" mostrava "procure o supervisor" em vez
+> de reabrir a câmera.
+>
+> Atualização anterior — **2026-09-04 (noite)** — **✅ Câmera bloqueada passa a ensinar a
 > liberar** (`4541e41`, `CHECKPOINT_SESSAO_2026-09-01.md` §29): pedido do Victor —
 > funcionário que negar câmera/geo tem que ser perguntado de novo a CADA aperto no botão de
 > ponto. Geo já tinha isso; câmera não tinha nada (erro genérico "procure o supervisor").
@@ -1499,6 +1522,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
+| `CHECKPOINT_SESSAO_2026-09-05.md` | **Mais recente.** Nota fiscal dividida reescrita com o Victor ao vivo junto do driver GESSILEY (4 voltas até a regra sair). 🔴 Bug de dinheiro: nota do LÍDER aceita cobrindo só a parte dele (R$ 6.041,20 do grupo sem nota, tela dizendo "NF ok") — corrigido e 4 notas do histórico levantadas/tratadas. Regra final: opção só pra habilitado, escolha "integral × dividir" antes de qualquer botão de enviar, só 50/50, CNPJs diferentes, prazo 30 min, conferência de valor + nome + **CNPJ do emitente** (mesma linha do cadastro; sem CNPJ = recusa). Pagamento segue as notas: relatórios geral e simples viram 2 linhas, metade por recebedor, cada uma no PIX dele (migration `20260905190000`). E2E novo `tests/107` 4/4 com PDFs reais + 11 unitários do pagamento dividido. Edge fn v39→v42. 🔴 `supabase db push` é perigoso aqui (~90 migrations locais nunca registradas). Corrigido também o aviso de câmera bloqueada do ponto (aparecia cortado, lado a lado com o painel). Pendências: nota do FERNANDO (quinzena fechada, R$ 13,20) espera decisão; cadastrar as chaves PIX do Gessiley/Joaerson; confirmar com o Gessiley que a dupla passou. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-01.md` | **Mais recente.** Rework Usuários/Permissões — Fase A (`bc47757`) → 3 travas exclusivas do 2626 viram permissão normal (§11, `cc81722`) → "Ver valores" em Pagamentos Driver, UI (§12) + banco (§13, `3eb14bc`) → 3 bugs de corrida reais em `56`/`61` (§14, `3961694`) → mascaramento no banco em Financeiro/Erros/C6 (§15) com incidente real (trava de coluna nunca funcionou, 1ª correção derrubou as 4 telas ~15min, revertido no mesmo dia) + bug do `bonus_c2` achado e corrigido → ponto travava na 2ª marcação pra quem migra de 2→4 marcações no meio do dia (§16, `d12db0d`, function corrigida + deploy v14) → brecha REST fechada de verdade na 1ª leva de 6 tabelas (§17, function `SECURITY DEFINER`, testada com prova real, E2E 3x sem falha persistente). Pendência real: driverpay (8 tabelas) ainda com a brecha aberta — já desenhado, não aplicado. Fase B/C de Usuários/auditoria e as ~7 abas restantes ainda pendentes. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-31.md` | **Mais recente.** Roadmap ditado (tablet + facial sem CPF + 4 batidas) e pendências zeradas antes dele: TOTAL GERAL em branco, selo "todos pagos" do grupo, "NF ok" não era bug, 101-H1, CI typecheck era no-op, actions v7, tsbuildinfo, CLAUDE.md. **3 buracos de segurança provados E FECHADOS** (backup_* sem RLS, view sem security_invoker, RPC pro anon — sonda anon→401 nos 3). 🔴 **Correção urgente no meio da sessão:** selo "no app" da linha não era ciente de grupo (61/113 linhas sem selo no filtro "Publicado") — `rowPublicadoNoApp()` unifica filtro+selo+header. **✅ Roadmap item 1 (facial+geo no servidor) NO AR:** migration aplicada + edge fn `clock-in-validated` publicada (v11→v12) com OK do Victor ("pode seguir" depois de eu explicar o risco real) — provado AO VIVO contra a função recém-publicada: `edgeFnClockFacialGeoEstrito` passou (trava bloqueia rosto/geo errados de verdade) e specs 02+08+23+62 24/24 (fluxo de hoje intacto). Chave `require_facial_clock` **desligada em Caratinga e Ponte Nova** — falta decidir quando ligar por empresa. Branch mergeada (fast-forward) em `main`. Fix rápido no meio: grupo sem nada a receber não conta mais como "falta pagar" (fica sempre por último, revertendo decisão de 14/08). PROXIMOS_PASSOS reescrito. Ver §9-§11. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-08-30.md` | Investigação do auto-deploy da Vercel: integração intacta, foi 1 push perdido em 26/08; push de teste disparou build git em 3s. Regra do `vercel --prod` obrigatório cai. CI vermelho desde 21/07 investigado E consertado (`8672604`); depois 5 warnings zerados (`1e5656a`): useCallback nos 4 hooks + useCompany em arquivo próprio (26 imports). eslint 0+0, CI verde. | 🟢 ATIVO |
@@ -1539,6 +1563,10 @@ janela). **Nada foi pro ar** — espera o OK dele.
 | `CHECKPOINT_PROXIMOS_PASSOS.md` | **Reescrito em 31/08/2026:** pendências fechadas, **decisões que o Victor precisa tomar** (segurança com SQL pronto, policy só-2626, filtro NF, travas do import, Dependabot npm), pendências técnicas abertas e o **roadmap** (facial+geo sem brecha, 4 batidas, tablet, facial sem CPF). A versão de 05/2026 (go-live/APK) está no git. | 🟢 ATIVO — ler ao retomar |
 
 ## ⚖️ Decisões ativas (não re-perguntar)
+
+- **Nota fiscal dividida (Victor, 05/09/2026 — regra FINAL, depois de 4 voltas no mesmo dia):** a opção só aparece pra quem a CD **habilitou** (= tem recebedor cadastrado em "Nomes autorizados a emitir nota" na ficha); ao abrir "Anexar nota" a **escolha vem antes de qualquer botão de enviar** ("notas no valor integral" × "dividir em 2"); **só 50/50** (o 70/30 morreu dos dois lados da conta); as duas notas em **CNPJs diferentes**, com a tela avisando e **listando quem pode emitir (nome + CNPJ)**; prazo da 2ª nota **30 minutos** (era 10); a conferência recusa **valor errado, nome errado E CNPJ do emitente errado** — nome e CNPJ têm que bater na **MESMA linha** do cadastro, e **nome cadastrado sem CNPJ = recusa**. Driver **sem** cadastro nenhum segue na regra antiga (nome do driver ou do recebedor, sem olhar CNPJ do emitente).
+- **Nota do LÍDER de grupo (05/09/2026):** tem que cobrir o **grupo inteiro** naquele CNPJ. A soma só dele **nunca** vale — deixava a parte dos membros sem nota com a tela dizendo "NF ok". Candidatos individuais só existem pra quem não lidera ninguém.
+- **Pagamento dividido (Victor, 05/09/2026):** "os relatórios geral e simples devem saber a metade para um CNPJ e outro para outro, **de acordo com como foi feito as notas**" + "**cada recebedor deve ter sua chave PIX cadastrada**". Dupla **completa** (as 2 notas, nenhuma recusada) → relatório vira 2 linhas, metade pra cada recebedor, cada uma na chave PIX dele (coluna `driverpay_driver_nota_names.pix`; vazia = cai no CNPJ). Dupla pela metade, nota recusada, nota única ou nenhuma nota → **uma linha só**, como sempre.
 
 - **Rework Usuários/Permissões/Auditoria (Victor, 01/09/2026):** Fase A→B→C, nessa ordem.
   Fase B começa **só por Usuários+Funcionários** (provar o padrão antes de expandir pros
@@ -1598,6 +1626,9 @@ janela). **Nada foi pro ar** — espera o OK dele.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
+
+- 🔴 **`npx supabase db push` é PERIGOSO neste projeto (05/09/2026)** — o comando aplicaria **~90 migrations locais** que nunca foram registradas no banco remoto, algumas de **novembro de 2025**. O histórico está descasado porque as migrations vêm sendo aplicadas pelo MCP (`apply_migration`), que grava com outro carimbo. **Migration aqui se aplica UMA A UMA** (MCP, com o SQL da migration nova) e se confere com `select` no catálogo depois. Conferir SEMPRE com `supabase migration list` antes de qualquer comando que aplique em lote.
+- 🟡 **Nota do FERNANDO MARTINS a descoberto em quinzena FECHADA** (05/09): R$ 7.760,00 no lugar de R$ 7.773,20 (diferença de R$ 13,20), 1ª quinzena de julho, já paga. Não tocada de propósito — mexer em nota de quinzena concluída precisa de ordem explícita do Victor.
 
 - 🔴 **Promover o login de um spec pode ARMAR caminho destrutivo morto** (13/08, aprendido
   apagando 27 pontos reais): o `tests/40` entrava como 9999 e seu `afterEach` clicava em
