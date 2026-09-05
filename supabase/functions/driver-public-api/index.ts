@@ -626,16 +626,24 @@ async function buildValueCandidates(
     return false;
   };
 
-  const cands: Record<string, number> = {
-    somaCnpj_individual: platformSum([driverId], null, true),
-  };
-  // liquido_* soma o NET de TODAS as plataformas da pessoa junto (nunca só do CNPJ
-  // pedido) — só entra como candidato quando a pessoa/grupo não tem pacote de NENHUM
-  // outro CNPJ na quinzena, senão "bate" com um total que a nota nem cobre inteira.
-  if (!hasOtherEmitterInScope([driverId], null)) {
-    cands.liquido_individual = netSum([driverId]);
-  }
-  if (groupIds.length > 1) {
+  // 05/09/2026 — ACHADO REAL, nota do GESSILEY validada sozinha por R$ 8.434,80
+  // quando o grupo dele soma R$ 14.476,00 naquele CNPJ: quem LIDERA um grupo é quem
+  // recebe o dinheiro do grupo INTEIRO (regra de 24/07: só o líder recebe o espelho,
+  // agregando todos os membros; membro não anexa nota). Então a soma SÓ DELE não
+  // pode valer como nota: ela deixa a parte dos membros sem nota nenhuma — R$ 6.041,20
+  // no caso dele — e a tela ainda mostra "NF ok". Os candidatos individuais passam a
+  // existir só pra quem NÃO lidera ninguém.
+  const lideraGrupo = groupIds.length > 1;
+  const cands: Record<string, number> = {};
+  if (!lideraGrupo) {
+    cands.somaCnpj_individual = platformSum([driverId], null, true);
+    // liquido_* soma o NET de TODAS as plataformas da pessoa junto (nunca só do CNPJ
+    // pedido) — só entra como candidato quando a pessoa não tem pacote de NENHUM
+    // outro CNPJ na quinzena, senão "bate" com um total que a nota nem cobre inteira.
+    if (!hasOtherEmitterInScope([driverId], null)) {
+      cands.liquido_individual = netSum([driverId]);
+    }
+  } else {
     cands.somaCnpj_grupo = platformSum(groupIds, null, true);
     if (!hasOtherEmitterInScope(groupIds, null)) {
       cands.liquido_grupo = netSum(groupIds);
@@ -656,11 +664,12 @@ async function buildValueCandidates(
   // ANTES do desconto entrar tem um PDF com o valor cheio, e a nota dele nao pode
   // passar a ser recusada. Sem desconto os dois candidatos sao iguais e nada muda.
   // ══════════════════════════════════════════════════════════════════════════
-  const abatidoIndividual = round2(cands.somaCnpj_individual - deductionsSum([driverId]));
-  if (abatidoIndividual !== cands.somaCnpj_individual && abatidoIndividual > 0) {
-    cands.somaCnpj_individual_abatido = abatidoIndividual;
-  }
-  if (groupIds.length > 1) {
+  if (!lideraGrupo) {
+    const abatidoIndividual = round2(cands.somaCnpj_individual - deductionsSum([driverId]));
+    if (abatidoIndividual !== cands.somaCnpj_individual && abatidoIndividual > 0) {
+      cands.somaCnpj_individual_abatido = abatidoIndividual;
+    }
+  } else {
     const abatidoGrupo = round2(cands.somaCnpj_grupo - deductionsSum(groupIds));
     if (abatidoGrupo !== cands.somaCnpj_grupo && abatidoGrupo > 0) {
       cands.somaCnpj_grupo_abatido = abatidoGrupo;
