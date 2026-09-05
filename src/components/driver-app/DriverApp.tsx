@@ -6,7 +6,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { CircleDollarSign, LogOut, Eye, FileText, KeyRound, Upload, ChevronLeft, CheckCircle2, Download } from 'lucide-react';
+import { CircleDollarSign, LogOut, Eye, FileText, KeyRound, Upload, ChevronLeft, CheckCircle2, Download, Scissors } from 'lucide-react';
 import {
   driverLogin, driverChangePassword, driverMyMirrors, driverMirrorUrl,
   driverNfSlots, driverNfList, driverNfUpload, driverNfSplitPreview,
@@ -142,6 +142,9 @@ export function DriverApp() {
   // Anexar nota (Fase 3)
   const [nfCtx, setNfCtx] = useState<{ periodId: string; periodLabel: string } | null>(null);
   const [nfSlots, setNfSlots] = useState<NfSlot[] | null>(null);
+  // A CD habilitou este motorista a dividir a nota em 2? (05/09/2026 — pedido do
+  // Victor: quem não está habilitado nem vê a opção.)
+  const [splitEnabled, setSplitEnabled] = useState(false);
   const [nfFiles, setNfFiles] = useState<NfFile[]>([]);
   const [nfUploading, setNfUploading] = useState<string | null>(null);
   // Nota dividida (19/08/2026): menu de formas por slot (valores exatos vindos do
@@ -271,6 +274,7 @@ export function DriverApp() {
     try {
       const [slotsRes, filesRes] = await Promise.all([driverNfSlots(periodId, token), driverNfList(periodId, token)]);
       setNfSlots(slotsRes.slots); setNfFiles(filesRes.files);
+      setSplitEnabled(slotsRes.splitEnabled === true);
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else { setNfSlots([]); toast.error(errMsg(e, 'Nao consegui carregar os CNPJs.')); }
@@ -854,7 +858,11 @@ export function DriverApp() {
                       />
                     </label>
                     <p className="mt-1.5 text-[11px] text-gray-400 text-center">Somente arquivo PDF — foto não é aceita.</p>
-                    {menu ? (
+                    {/* Dividir em 2 notas: só pra quem a CD habilitou (05/09/2026 —
+                        pedido do Victor). Era um link de 11px embaixo do aviso do
+                        PDF e passava batido: o driver mandava pelo botão grande de
+                        nota única e a conferência cobrava o valor do CNPJ inteiro. */}
+                    {!splitEnabled ? null : menu ? (
                       <div className="mt-2 space-y-1.5">
                         {(['50', '70-30'] as const).map((f) => (
                           <button key={f} type="button"
@@ -866,9 +874,10 @@ export function DriverApp() {
                         ))}
                       </div>
                     ) : (
-                      <button type="button" className="mt-1.5 w-full text-[11px] text-blue-600 underline"
+                      <button type="button"
+                        className="mt-2 w-full flex items-center justify-center gap-2 rounded-lg border-2 border-amber-500 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
                         onClick={() => abrirMenuSplit(s)}>
-                        Dividir em 2 notas (2 CNPJs)
+                        <Scissors size={16} /> Preciso dividir em 2 notas
                       </button>
                     )}
                   </>

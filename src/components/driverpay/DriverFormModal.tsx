@@ -434,8 +434,10 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
             <div>
               <p className="text-sm font-medium text-gray-700">Nomes autorizados a emitir nota (máx. 2)</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                Pra nota dividida em 2 nomes: o robô só aceita nota destes nomes (além do driver e do recebedor).
-                No app, o driver escolhe dividir em 2 notas — metade/metade ou 70%/30% — em nomes diferentes.
+                Serve pra duas coisas: o robô passa a aceitar nota emitida nestes nomes (além do driver e do
+                recebedor) e, com pelo menos um nome aqui, o app deste driver mostra o botão
+                <b> “Preciso dividir em 2 notas”</b>. Sem nome nenhum, ele só consegue mandar nota única.
+                A divisão é entre os <b>2 CNPJs</b> (metade/metade ou 70%/30%), com 10 minutos entre a 1ª e a 2ª.
               </p>
             </div>
             {notaNames.length > 0 && (

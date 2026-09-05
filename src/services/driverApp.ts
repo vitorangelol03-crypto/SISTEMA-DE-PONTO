@@ -147,8 +147,15 @@ export function driverMirrorUrl(publicationId: string, token: string): Promise<{
 }
 
 // ─── Nota Fiscal (Fase 3) ────────────────────────────────────────────────────
-export function driverNfSlots(periodId: string, token: string): Promise<{ slots: NfSlot[] }> {
-  return callDriverApi<{ slots: NfSlot[] }>('nf-slots', { periodId }, token);
+/**
+ * `splitEnabled` (05/09/2026): a CD habilitou ESTE motorista a dividir a nota em 2?
+ * É o cadastro "Nomes autorizados a emitir nota" da ficha dele. Ausente (servidor
+ * antigo) = trata como não habilitado — a opção some em vez de aparecer errada.
+ */
+export function driverNfSlots(
+  periodId: string, token: string,
+): Promise<{ slots: NfSlot[]; splitEnabled?: boolean }> {
+  return callDriverApi<{ slots: NfSlot[]; splitEnabled?: boolean }>('nf-slots', { periodId }, token);
 }
 export function driverNfList(periodId: string, token: string): Promise<{ files: NfFile[] }> {
   return callDriverApi<{ files: NfFile[] }>('nf-list', { periodId }, token);

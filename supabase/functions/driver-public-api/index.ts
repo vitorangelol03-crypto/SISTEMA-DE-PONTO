@@ -478,7 +478,13 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
       };
     }
   }
-  return json({ slots });
+
+  // 05/09/2026 (pedido do Victor): a opção "dividir em 2 notas" passa a aparecer
+  // SÓ pra quem a CD habilitou. A habilitação é o cadastro que já existe na ficha
+  // do motorista — "Nomes autorizados a emitir nota" (`driverpay_driver_nota_names`):
+  // sem nenhum nome lá, o app não mostra a opção de dividir.
+  const splitEnabled = (await nomesAutorizadosDe(claims.driver_id)).length > 0;
+  return json({ slots, splitEnabled });
 }
 
 /**
