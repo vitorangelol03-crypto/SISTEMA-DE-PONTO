@@ -21,7 +21,8 @@ type Phase =
   | 'success'
   | 'fail-retry'
   | 'fail-final'
-  | 'error';
+  | 'error'
+  | 'camera-blocked';
 
 const MATCH_THRESHOLD = 0.5; // distância < 0.5 = mesmo rosto
 const DETECT_WINDOW_MS = 3000; // tempo com rosto detectado antes de declarar falha
@@ -128,6 +129,13 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
         }, 2000);
       } catch (err) {
         console.error('Erro ao iniciar verificação:', err);
+        // 04/09/2026: câmera BLOQUEADA (o driver já negou antes) é diferente de
+        // qualquer outro erro — o navegador não vai perguntar de novo sozinho, e
+        // "procure o supervisor" não ajuda em nada. Mostra como liberar de verdade.
+        if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+          setPhase('camera-blocked');
+          return;
+        }
         const msg = err instanceof Error ? err.message : 'Não foi possível acessar a câmera.';
         setErrorMsg(msg.includes('HTTPS') ? msg : 'Não foi possível acessar a câmera.');
         setPhase('error');
@@ -254,6 +262,34 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
           <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-blue-600" />
           <h2 className="text-lg font-bold text-gray-800 mb-1">Preparando verificação...</h2>
           <p className="text-sm text-gray-500">Iniciando reconhecimento facial</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === 'camera-blocked') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center">
+          <h2 className="text-lg font-bold text-gray-800 mb-2">📷 Câmera bloqueada</h2>
+          <p className="text-sm text-gray-600 mb-3 text-left">
+            Para bater o ponto, o sistema precisa da sua câmera — e ela está{' '}
+            <strong>bloqueada no navegador</strong>. Libere assim:
+          </p>
+          <ol className="text-sm text-gray-700 space-y-1.5 list-decimal list-inside bg-gray-50 rounded-xl p-3 mb-3 text-left">
+            <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
+            <li>Toque em <strong>Permissões</strong></li>
+            <li>Em <strong>Câmera</strong>, escolha <strong>Permitir</strong></li>
+          </ol>
+          <p className="text-xs text-gray-500 mb-5 text-left">
+            Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Câmera → Permitir.
+          </p>
+          <button
+            onClick={onFail}
+            className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 min-h-[48px]"
+          >
+            Já liberei — vou tentar de novo
+          </button>
         </div>
       </div>
     );

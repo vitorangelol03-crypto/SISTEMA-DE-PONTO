@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { getClient } from './cleanup';
 import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from './integrity-helpers';
-import { mockFacialFlagsOff } from './helpers';
+import { mockFacialFlagsOff, mockCompanyFacialFlags } from './helpers';
 
 /**
  * Spec 62 — Proteções da tela de ponto (decisões do Victor, 2026-07-20):
@@ -141,6 +141,67 @@ test.describe('Spec 62 — proteções da tela de ponto', () => {
       // Botão do overlay fecha a instrução
       await page.getByRole('button', { name: /Já liberei/i }).click();
       await expect(page.getByText(/Localização bloqueada/i)).not.toBeVisible();
+    });
+  });
+
+  test.describe('com câmera bloqueada (04/09/2026)', () => {
+    // GPS liberado de propósito — isola o teste na câmera (senão o overlay de
+    // GPS apareceria primeiro, já que ele é checado antes na mesma função).
+    test.use({ geolocation: CD_CARATINGA, permissions: ['geolocation'] });
+
+    // Mesma técnica do bloco "com GPS bloqueado" acima: simula o ESTADO
+    // 'denied' que `navigator.permissions.query('camera')` reporta pra quem já
+    // negou a câmera uma vez — o Playwright só sabe CONCEDER, não negar de verdade.
+    async function loginComFacialLigada(page: Page, cpfMasked: string) {
+      await mockCompanyFacialFlags(page, CARATINGA_ID, { require_facial_clock: true, face_identify_default: false });
+      await page.goto('/clock');
+      await page.locator('input').first().fill(cpfMasked);
+      await page.getByRole('button', { name: /Continuar/i }).click();
+      await expect(page.getByRole('button', { name: '4', exact: true })).toBeVisible({ timeout: 15_000 });
+      for (const d of ['4', '3', '2', '1']) {
+        await page.getByRole('button', { name: d, exact: true }).click();
+      }
+      await page.getByRole('button', { name: /Confirmar PIN/i }).click();
+      await expect(page.getByRole('button', { name: /REGISTRAR ENTRADA/i })).toBeVisible({ timeout: 20_000 });
+    }
+
+    test('overlay ensina a liberar e NÃO abre a câmera nem chama o servidor', async ({ page }) => {
+      test.setTimeout(180_000);
+      await page.addInitScript(() => {
+        const orig = navigator.permissions.query.bind(navigator.permissions);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (navigator.permissions as any).query = (desc: PermissionDescriptor) =>
+          desc?.name === 'camera'
+            ? Promise.resolve({ state: 'denied', onchange: null } as unknown as PermissionStatus)
+            : orig(desc);
+      });
+      // `faceRegistered: true` pula a tela de CADASTRAR rosto (sem câmera real em
+      // CI) — o gate que importa aqui é o de VERIFICAR, que roda a cada aperto.
+      const empId = await createTestEmployee({ name: `${PREFIX}CameraBloq`, pin: '4321', faceRegistered: true });
+      const s = getClient();
+      const { data: emp } = await s.from('employees').select('cpf').eq('id', empId).single();
+      const cpf = (emp?.cpf as string) ?? '';
+      const cpfMasked = `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
+
+      await loginComFacialLigada(page, cpfMasked);
+      await page.getByRole('button', { name: /REGISTRAR ENTRADA/i }).click();
+      await expect(page.getByText(/Câmera bloqueada/i)).toBeVisible({ timeout: 10_000 });
+
+      // Nada chegou ao servidor: sem tentativa de rosto, sem ponto registrado
+      const { data: faceLog } = await s.from('face_auth_attempts').select('id').eq('employee_id', empId);
+      const { data: att } = await s.from('attendance').select('id').eq('employee_id', empId);
+      expect(faceLog ?? []).toHaveLength(0);
+      expect(att ?? []).toHaveLength(0);
+
+      // Botão do overlay fecha a instrução — pode tentar de novo apertando o botão
+      await page.getByRole('button', { name: /Já liberei/i }).click();
+      await expect(page.getByText(/Câmera bloqueada/i)).not.toBeVisible();
+
+      // Apertar de novo mostra a MESMA instrução (é isso que o Victor pediu:
+      // "toda vez que apertar, pergunta de novo" — o navegador não pergunta
+      // sozinho, mas o SISTEMA confere e ensina de novo a cada tentativa).
+      await page.getByRole('button', { name: /REGISTRAR ENTRADA/i }).click();
+      await expect(page.getByText(/Câmera bloqueada/i)).toBeVisible({ timeout: 10_000 });
     });
   });
 });

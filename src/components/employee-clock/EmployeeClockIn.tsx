@@ -94,6 +94,23 @@ async function isGeoPermissionDenied(): Promise<boolean> {
   }
 }
 
+/**
+ * Permissão de câmera BLOQUEADA no navegador? (04/09/2026, pedido do Victor —
+ * mesmo padrão do GPS acima.) Safari/iOS não suporta `permissions.query('camera')`
+ * — cai no catch e segue o fluxo normal; nesse caso quem pega o bloqueio é o
+ * `NotAllowedError` do próprio `getUserMedia`, dentro de FaceVerification/
+ * FaceIdentifyClock (mostra a mesma instrução, na hora que a câmera abre).
+ */
+async function isCameraPermissionDenied(): Promise<boolean> {
+  try {
+    if (!navigator.permissions?.query) return false;
+    const status = await navigator.permissions.query({ name: 'camera' as PermissionName });
+    return status.state === 'denied';
+  } catch {
+    return false;
+  }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const EmployeeClockIn: React.FC = () => {
@@ -134,6 +151,8 @@ export const EmployeeClockIn: React.FC = () => {
   const [confirmExit, setConfirmExit] = useState<{ markingPosition?: MarkingPosition; minutesAgo: number } | null>(null);
   // Overlay de instrução quando a permissão de localização está bloqueada
   const [geoBlocked, setGeoBlocked] = useState(false);
+  // Overlay de instrução quando a permissão de câmera está bloqueada (04/09/2026)
+  const [cameraBlocked, setCameraBlocked] = useState(false);
   // Volta pro início (CPF) sozinho após registrar ponto (aparelho compartilhado)
   const autoLogoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -551,6 +570,9 @@ export const EmployeeClockIn: React.FC = () => {
   // 1. localização BLOQUEADA no navegador → instrui como liberar (não gasta
   //    tentativa nem gera bloqueio de bônus); se nunca foi pedida, o próprio
   //    navegador pergunta na hora da batida (fluxo normal)
+  // 1.1 câmera BLOQUEADA (04/09/2026), só quando a facial é exigida → mesma
+  //     instrução — sem isso, quem já negou a câmera uma vez cai direto no
+  //     "reconhecimento falhou, procure o supervisor" pra sempre
   // 2. saída < QUICK_EXIT_CONFIRM_MINUTES da marcação anterior → confirmação
   //    (saídas fantasma de 10-15s: funcionário achava que era "confirmar entrada")
   // 3. facial ativa → overlay de verificação; senão → executa direto
@@ -562,6 +584,10 @@ export const EmployeeClockIn: React.FC = () => {
 
     if (await isGeoPermissionDenied()) {
       setGeoBlocked(true);
+      return;
+    }
+    if (faceGateActive && await isCameraPermissionDenied()) {
+      setCameraBlocked(true);
       return;
     }
 
@@ -642,6 +668,7 @@ export const EmployeeClockIn: React.FC = () => {
     setPendingClockType(null);
     setConfirmExit(null);
     setGeoBlocked(false);
+    setCameraBlocked(false);
   };
 
   // ─── Resume do mês ────────────────────────────────────────────────────────
@@ -1226,6 +1253,33 @@ export const EmployeeClockIn: React.FC = () => {
             </p>
             <button
               onClick={() => setGeoBlocked(false)}
+              className="w-full py-4 bg-blue-600 text-white text-base font-bold rounded-xl hover:bg-blue-700 transition-colors"
+            >
+              Já liberei — vou tentar de novo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── CÂMERA BLOQUEADA (instrução pra liberar, 04/09/2026) ── */}
+      {step === 'dashboard' && cameraBlocked && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+            <h2 className="text-lg font-bold text-gray-900 text-center">📷 Câmera bloqueada</h2>
+            <p className="text-gray-600 text-sm">
+              Para bater o ponto, o sistema precisa da sua câmera — e ela está{' '}
+              <strong>bloqueada no navegador</strong>. Libere assim:
+            </p>
+            <ol className="text-gray-700 text-sm space-y-2 list-decimal list-inside bg-gray-50 rounded-xl p-3">
+              <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
+              <li>Toque em <strong>Permissões</strong></li>
+              <li>Em <strong>Câmera</strong>, escolha <strong>Permitir</strong></li>
+            </ol>
+            <p className="text-gray-500 text-xs">
+              Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Câmera → Permitir.
+            </p>
+            <button
+              onClick={() => setCameraBlocked(false)}
               className="w-full py-4 bg-blue-600 text-white text-base font-bold rounded-xl hover:bg-blue-700 transition-colors"
             >
               Já liberei — vou tentar de novo

@@ -19,7 +19,8 @@ type Phase =
   | 'identified'
   | 'no-match'
   | 'already-done'
-  | 'error';
+  | 'error'
+  | 'camera-blocked';
 
 // Pedido do Victor (04/09/2026): "não pode confundir, tem que ser robusta" —
 // nunca gravamos ponto sem a pessoa ver o próprio nome e ter uma chance real
@@ -111,6 +112,13 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({ company, o
         }, 2000);
       } catch (err) {
         console.error('Erro ao iniciar reconhecimento:', err);
+        // 04/09/2026: câmera BLOQUEADA é diferente de qualquer outro erro — o
+        // navegador não pergunta de novo sozinho. Mostra como liberar de verdade
+        // (o botão de CPF/senha continua disponível como saída, como sempre).
+        if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+          setPhase('camera-blocked');
+          return;
+        }
         const msg = err instanceof Error ? err.message : 'Não foi possível acessar a câmera.';
         setErrorMsg(msg.includes('HTTPS') ? msg : 'Não foi possível acessar a câmera.');
         setPhase('error');
@@ -238,6 +246,30 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({ company, o
           {/* Conexão lenta pode deixar isto demorado — nunca prende a pessoa sem saída. */}
           <button onClick={onUseCpf} className="w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 min-h-[44px]">
             Prefere digitar CPF e senha?
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === 'camera-blocked') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center space-y-3">
+          <h2 className="text-lg font-bold text-gray-800">📷 Câmera bloqueada</h2>
+          <p className="text-sm text-gray-600 text-left">
+            Para bater o ponto pela câmera, ela precisa estar <strong>liberada no navegador</strong>. Libere assim:
+          </p>
+          <ol className="text-sm text-gray-700 space-y-1.5 list-decimal list-inside bg-gray-50 rounded-xl p-3 text-left">
+            <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
+            <li>Toque em <strong>Permissões</strong></li>
+            <li>Em <strong>Câmera</strong>, escolha <strong>Permitir</strong></li>
+          </ol>
+          <p className="text-xs text-gray-500 text-left">
+            Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Câmera → Permitir.
+          </p>
+          <button onClick={onUseCpf} className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 min-h-[48px]">
+            Prefere entrar com CPF e senha?
           </button>
         </div>
       </div>
