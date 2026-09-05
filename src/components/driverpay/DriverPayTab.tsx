@@ -44,6 +44,8 @@ import {
   unpublishDriverMirror,
   unpublishAllMirrorsForPeriod,
   listNotaFiscalFiles,
+  listDriverNotaNamesByCompany,
+  type DriverNotaName,
   type NotaFiscalFileRow,
   reconferirPrintsComPlanilha,
   listPaymentMarks,
@@ -88,6 +90,7 @@ import {
   estaEmAlgumGrupo,
   buildLeaderReportRows,
   buildSimpleReportRows,
+  splitRecipientsFromNotes,
   planRateReapply,
   computeNfProgressByPayment,
   nfSlotKey,
@@ -258,6 +261,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [proofRows, setProofRows] = useState<DeliveryProofRow[]>([]);
   /** Notas cruas da quinzena — só o filtro de PRAZO dos relatórios usa (04/08/2026). */
   const [nfFiles, setNfFiles] = useState<NotaFiscalFileRow[]>([]);
+  // Recebedores cadastrados (nome + CNPJ + PIX) — o pagamento dividido paga cada
+  // metade na chave PIX de quem emitiu aquela nota (05/09/2026).
+  const [notaNames, setNotaNames] = useState<DriverNotaName[]>([]);
   /** Quem JA RECEBEU nesta quinzena, por (entregador, plataforma) — a tag de pago. */
   const [paymentMarks, setPaymentMarks] = useState<PaymentMark[]>([]);
   /**
@@ -580,6 +586,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       if (!company?.id || !periodId) {
         setNfByDriver(new Map());
         setNfFiles([]);
+        setNotaNames([]);
         setPaymentMarks([]);
         return;
       }
@@ -604,6 +611,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         }
         setNfByDriver(map);
         setNfFiles(files);
+        setNotaNames(await listDriverNotaNamesByCompany(company.id));
         setPaymentMarks(await listPaymentMarks(company.id, periodId));
         setDeductionLedger(await listDeductionLedger(company.id, periodId));
       } catch (e) {
@@ -1441,6 +1449,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       allowedPlatformNames: allowedSet,
       includeDeductions: opts.includeDeductions,
       deductionByDriver: opts.modoDesconto === 'pendentes' ? opts.deductionByDriver : undefined,
+      // Nota dividida (05/09/2026): quem emitiu cada metade recebe a metade dela, na
+      // chave PIX dele. Só quando a dupla está completa — senão paga numa linha só.
+      splitRecipientsByLeader: splitRecipientsFromNotes(nfFiles, notaNames),
     };
     const filterLabel = opts.allowed && opts.allowed.length > 0 ? opts.allowed.join(' + ') : null;
     const scopedPlatformNames = (opts.allowed && opts.allowed.length > 0

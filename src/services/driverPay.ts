@@ -737,25 +737,46 @@ export interface DriverNotaName {
   driver_id: string;
   name: string;
   cnpj: string | null;
+  /**
+   * Chave PIX DESTE recebedor (05/09/2026, decisão do Victor: "cada recebedor deve
+   * ter sua chave pix cadastrada"). Com nota dividida o pagamento também divide, e
+   * o relatório precisa de uma chave por linha. Vazio = cai no CNPJ dele.
+   */
+  pix: string | null;
 }
 
 export const listDriverNotaNames = async (companyId: string, driverId: string): Promise<DriverNotaName[]> => {
   const { data, error } = await supabase
     .from('driverpay_driver_nota_names')
-    .select('id, driver_id, name, cnpj')
+    .select('id, driver_id, name, cnpj, pix')
     .eq('company_id', companyId).eq('driver_id', driverId)
     .order('created_at', { ascending: true });
   if (error) throwDbError(error);
   return (data ?? []) as DriverNotaName[];
 };
 
+/**
+ * Todos os recebedores cadastrados da empresa (nome + CNPJ + PIX), pra montar o
+ * pagamento dividido do relatório sem uma consulta por driver (05/09/2026).
+ */
+export const listDriverNotaNamesByCompany = async (companyId: string): Promise<DriverNotaName[]> => {
+  const { data, error } = await supabase
+    .from('driverpay_driver_nota_names')
+    .select('id, driver_id, name, cnpj, pix')
+    .eq('company_id', companyId);
+  if (error) throwDbError(error);
+  return (data ?? []) as DriverNotaName[];
+};
+
 export const addDriverNotaName = async (
-  companyId: string, driverId: string, name: string, cnpj: string | null, userId: string,
+  companyId: string, driverId: string, name: string, cnpj: string | null,
+  pix: string | null, userId: string,
 ): Promise<void> => {
   await ensurePerm(userId, 'driverpay.editDriver');
   const { error } = await supabase.from('driverpay_driver_nota_names').insert({
     company_id: companyId, driver_id: driverId,
-    name: name.trim(), cnpj: cnpj?.trim() || null, created_by: userId,
+    name: name.trim(), cnpj: cnpj?.trim() || null, pix: pix?.trim() || null,
+    created_by: userId,
   });
   if (error) throwDbError(error);
 };

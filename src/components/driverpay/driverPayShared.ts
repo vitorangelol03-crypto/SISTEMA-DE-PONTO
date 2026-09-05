@@ -2236,6 +2236,22 @@ export interface ReportBuildOptions {
    * Ausente = tudo-ou-nada pelo `includeDeductions`, como sempre foi.
    */
   deductionByDriver?: ReadonlyMap<string, number>;
+  /**
+   * NOTA DIVIDIDA (05/09/2026, pedido do Victor: "os relatórios geral e simples devem
+   * saber a metade para um CNPJ e outro para outro, de acordo com como foi feito as
+   * notas"). Chave = driverId do LÍDER da unidade; valor = os 2 recebedores que
+   * emitiram a dupla, cada um com a chave PIX dele. Presente = a linha de pagamento
+   * da unidade vira DUAS, meio a meio (o centavo ímpar fica na 1ª, igual à conta das
+   * notas). Ausente = uma linha só, como sempre foi.
+   */
+  splitRecipientsByLeader?: ReadonlyMap<string, ReadonlyArray<{ name: string; pix: string | null }>>;
+}
+
+/** As duas metades de um total, com o centavo ímpar na primeira (igual às notas). */
+function metadeAMetade(total: number): [number, number] {
+  const cents = Math.round(total * 100);
+  const first = Math.round(cents / 2);
+  return [first / 100, (cents - first) / 100];
 }
 
 /** Normaliza as opções: conjunto vazio = sem filtro (evita relatório vazio por engano). */
@@ -2243,12 +2259,85 @@ function normalizeReportOptions(opts: ReportBuildOptions): {
   allowed?: ReadonlySet<string>;
   includeDeductions: boolean;
   deductionByDriver?: ReadonlyMap<string, number>;
+  splitRecipientsByLeader?: ReadonlyMap<string, ReadonlyArray<{ name: string; pix: string | null }>>;
 } {
   const allowed =
     opts.allowedPlatformNames && opts.allowedPlatformNames.size > 0 ? opts.allowedPlatformNames : undefined;
   const deductionByDriver =
     opts.deductionByDriver && opts.deductionByDriver.size > 0 ? opts.deductionByDriver : undefined;
-  return { allowed, includeDeductions: opts.includeDeductions !== false, deductionByDriver };
+  const splitRecipientsByLeader =
+    opts.splitRecipientsByLeader && opts.splitRecipientsByLeader.size > 0 ? opts.splitRecipientsByLeader : undefined;
+  return {
+    allowed, includeDeductions: opts.includeDeductions !== false, deductionByDriver, splitRecipientsByLeader,
+  };
+}
+
+/**
+ * Quem recebe cada metade, LIDO DAS NOTAS que o driver mandou (05/09/2026).
+ *
+ * Regra do Victor: "os relatórios geral e simples devem saber a metade para um CNPJ e
+ * outro para outro, DE ACORDO COM COMO FOI FEITO AS NOTAS". Então o pagamento só se
+ * divide quando a DUPLA está completa (as duas notas existem e nenhuma foi recusada) —
+ * senão paga como sempre, numa linha só, e ninguém recebe metade à toa.
+ *
+ * A chave PIX vem do cadastro do recebedor; vazia, cai no CNPJ dele (que também é
+ * chave PIX válida).
+ */
+export function splitRecipientsFromNotes(
+  files: ReadonlyArray<{
+    driverId: string; splitGroup: string | null; splitPart: number | null;
+    matchedName: string | null; status: string;
+  }>,
+  cadastro: ReadonlyArray<{ driver_id: string; name: string; cnpj: string | null; pix: string | null }>,
+): Map<string, Array<{ name: string; pix: string | null }>> {
+  const chaveNome = (n: string) => stripAccents(n).toUpperCase().replace(/\s+/g, ' ').trim();
+  const pixDe = (driverId: string, nome: string): string | null => {
+    const alvo = chaveNome(nome);
+    const linha = cadastro.find((c) => c.driver_id === driverId && chaveNome(c.name) === alvo);
+    return linha?.pix?.trim() || linha?.cnpj?.trim() || null;
+  };
+
+  const duplas = new Map<string, Map<number, string>>(); // `${driverId}|${splitGroup}` -> parte -> nome
+  for (const f of files) {
+    if (!f.splitGroup || (f.splitPart !== 1 && f.splitPart !== 2)) continue;
+    if (f.status === 'rejeitada' || !f.matchedName) continue;
+    const k = `${f.driverId}|${f.splitGroup}`;
+    const partes = duplas.get(k) ?? new Map<number, string>();
+    partes.set(f.splitPart, f.matchedName);
+    duplas.set(k, partes);
+  }
+
+  const out = new Map<string, Array<{ name: string; pix: string | null }>>();
+  for (const [k, partes] of duplas) {
+    const um = partes.get(1);
+    const dois = partes.get(2);
+    if (!um || !dois) continue; // dupla pela metade não divide pagamento
+    const driverId = k.slice(0, k.indexOf('|'));
+    if (out.has(driverId)) continue; // 1ª dupla completa do período manda
+    out.set(driverId, [
+      { name: um, pix: pixDe(driverId, um) },
+      { name: dois, pix: pixDe(driverId, dois) },
+    ]);
+  }
+  return out;
+}
+
+/** driverId do líder da unidade (avulso = a própria linha) — chave do split de recebedores. */
+function unitLeaderDriverId(unit: ReportUnit): string | null {
+  const leaderRow = unit.isGroup ? unit.rows.find((r) => r.name === unit.recipient) : unit.rows[0];
+  return leaderRow?.driverId ?? null;
+}
+
+/** Os 2 recebedores da nota dividida desta unidade, se houve dupla. */
+function unitSplitRecipients(
+  unit: ReportUnit,
+  mapa?: ReadonlyMap<string, ReadonlyArray<{ name: string; pix: string | null }>>,
+): ReadonlyArray<{ name: string; pix: string | null }> | null {
+  if (!mapa) return null;
+  const leaderId = unitLeaderDriverId(unit);
+  if (!leaderId) return null;
+  const rec = mapa.get(leaderId);
+  return rec && rec.length === 2 ? rec : null;
 }
 
 /** A unidade tem movimento nas plataformas do escopo? (pacotes ou itens Zapex). */
@@ -2349,11 +2438,13 @@ export function buildLeaderReportRows(
   leaderNameByGroup: ReadonlyMap<string, string>,
   opts: ReportBuildOptions = {},
 ): DriverReportRow[] {
-  const { allowed, includeDeductions, deductionByDriver } = normalizeReportOptions(opts);
+  const { allowed, includeDeductions, deductionByDriver, splitRecipientsByLeader } = normalizeReportOptions(opts);
   const scopedPlatforms = allowed ? platforms.filter((pl) => allowed.has(pl.name)) : platforms;
   const out: DriverReportRow[] = [];
   for (const unit of groupReportUnits(rows, leaderNameByGroup)) {
     const recipient = unitRecipientInfo(unit);
+    // Nota dividida: quem recebe cada metade (null = pagamento normal, 1 recebedor).
+    const dupla = unitSplitRecipients(unit, splitRecipientsByLeader);
     let discount = 0;
     let vale = 0;
     let net = 0;
@@ -2407,7 +2498,7 @@ export function buildLeaderReportRows(
       }
       const first = i === 0;
       out.push({
-        name: first ? recipient.name : '',
+        name: first ? (dupla ? dupla[0].name : recipient.name) : '',
         route: rname,
         // Grupo repetido em todas as rotas do bloco (avulso = '' -> "Sem grupo"); nome só na 1ª.
         group: unit.group,
@@ -2415,10 +2506,28 @@ export function buildLeaderReportRows(
         totalPackages: routeGross,
         discount: first ? discount : 0,
         vale: first ? vale : 0,
-        totalToReceive: first ? net : 0,
-        pixKey: first ? recipient.pix : null,
+        totalToReceive: first ? (dupla ? metadeAMetade(net)[0] : net) : 0,
+        pixKey: first ? (dupla ? dupla[0].pix : recipient.pix) : null,
       });
     });
+    // Nota dividida (05/09/2026): a 2ª metade vira uma linha própria no fim do bloco,
+    // com o nome e a chave PIX do outro recebedor. As duas somadas continuam dando o
+    // total da unidade — o rodapé não muda.
+    if (dupla) {
+      const vazio: Record<string, { packages: number; value: number }> = {};
+      for (const pl of scopedPlatforms) vazio[pl.name] = { packages: 0, value: 0 };
+      out.push({
+        name: dupla[1].name,
+        route: '(2ª nota)',
+        group: unit.group,
+        platforms: vazio,
+        totalPackages: 0,
+        discount: 0,
+        vale: 0,
+        totalToReceive: metadeAMetade(net)[1],
+        pixKey: dupla[1].pix,
+      });
+    }
   }
   return out;
 }
@@ -2498,7 +2607,7 @@ export function buildSimpleReportRows(
   leaderNameByGroup: ReadonlyMap<string, string>,
   opts: ReportBuildOptions = {},
 ): SimpleReportRow[] {
-  const { allowed, includeDeductions, deductionByDriver } = normalizeReportOptions(opts);
+  const { allowed, includeDeductions, deductionByDriver, splitRecipientsByLeader } = normalizeReportOptions(opts);
   const out: SimpleReportRow[] = [];
   for (const unit of groupReportUnits(rows, leaderNameByGroup)) {
     const recipient = unitRecipientInfo(unit);
@@ -2510,6 +2619,15 @@ export function buildSimpleReportRows(
       if (hasPackagesInScope(t)) unitHasPackages = true;
     }
     if (allowed && !unitHasPackages) continue;
+    // Nota dividida: o pagamento segue as notas — metade pra cada recebedor, na chave
+    // PIX dele (05/09/2026). Sem dupla, uma linha só, como sempre foi.
+    const dupla = unitSplitRecipients(unit, splitRecipientsByLeader);
+    if (dupla) {
+      const [a, b] = metadeAMetade(total);
+      out.push({ name: stripAccents(dupla[0].name), total: a, pix: dupla[0].pix });
+      out.push({ name: stripAccents(dupla[1].name), total: b, pix: dupla[1].pix });
+      continue;
+    }
     out.push({ name: stripAccents(recipient.name), total, pix: recipient.pix });
   }
   return out;

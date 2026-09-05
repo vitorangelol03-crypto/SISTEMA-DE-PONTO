@@ -77,6 +77,9 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
   const [notaNames, setNotaNames] = useState<DriverNotaName[]>([]);
   const [novoNotaNome, setNovoNotaNome] = useState('');
   const [novoNotaCnpj, setNovoNotaCnpj] = useState('');
+  // Chave PIX DESTE recebedor (05/09/2026): com nota dividida o pagamento divide, e o
+  // relatório paga a fatia de cada um na chave dele. Vazio = cai no CNPJ.
+  const [novoNotaPix, setNovoNotaPix] = useState('');
   const [salvandoNotaNome, setSalvandoNotaNome] = useState(false);
 
   useEffect(() => {
@@ -90,10 +93,11 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
     if (!driver?.id || !novoNotaNome.trim()) return;
     setSalvandoNotaNome(true);
     try {
-      await addDriverNotaName(companyId, driver.id, novoNotaNome, novoNotaCnpj || null, userId);
+      await addDriverNotaName(companyId, driver.id, novoNotaNome, novoNotaCnpj || null, novoNotaPix || null, userId);
       setNotaNames(await listDriverNotaNames(companyId, driver.id));
       setNovoNotaNome('');
       setNovoNotaCnpj('');
+      setNovoNotaPix('');
       toast.success('Nome autorizado cadastrado.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao cadastrar o nome');
@@ -447,6 +451,9 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
                     <div className="min-w-0 text-sm text-gray-800">
                       <span className="font-medium">{n.name}</span>
                       {n.cnpj && <span className="text-xs text-gray-500"> · CNPJ {n.cnpj}</span>}
+                      <span className="block text-xs text-gray-500">
+                        PIX: {n.pix?.trim() ? n.pix : <span className="text-amber-700">vazio — paga no CNPJ</span>}
+                      </span>
                     </div>
                     <button
                       type="button"
@@ -460,7 +467,7 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
               </div>
             )}
             {notaNames.length < 2 && (
-              <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_170px_170px_auto] gap-2">
                 <input
                   type="text"
                   value={novoNotaNome}
@@ -472,7 +479,14 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
                   type="text"
                   value={novoNotaCnpj}
                   onChange={(e) => setNovoNotaCnpj(e.target.value)}
-                  placeholder="CNPJ (opcional)"
+                  placeholder="CNPJ de quem emite"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
+                />
+                <input
+                  type="text"
+                  value={novoNotaPix}
+                  onChange={(e) => setNovoNotaPix(e.target.value)}
+                  placeholder="Chave PIX dele"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 min-h-[40px]"
                 />
                 <button
