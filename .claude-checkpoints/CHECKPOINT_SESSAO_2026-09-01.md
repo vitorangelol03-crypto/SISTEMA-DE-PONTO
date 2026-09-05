@@ -1286,3 +1286,50 @@ definição + 3 usos). Push feito.
 **Pendência avisada ao Victor, não decidida ainda**: o cache do item 1 (`splitMenu[k]` nunca
 refaz a busca) é um risco estrutural — qualquer futura correção no servidor fica invisível
 pra quem já tinha a tela aberta. Falta o Victor decidir se quer que eu mexa nisso.
+
+## 28. ✅ "Dividir em 2 notas" virou entre CNPJs, não mais entre nomes (`620e3ac`)
+
+Depois do §27, o Gessiley continuava travado — mandou print (ver acima) mostrando os dois
+CNPJs com a MESMA divisão duplicada e um erro citando um 3º valor (R$9.339,00 → depois
+R$8.434,80, ambos "certos" pra conta antiga mas nenhum o que ele precisava). Perguntei ao
+Victor pra confirmar o mecanismo antes de mexer de novo (regra "não chuta fix"), e a resposta
+mudou o desenho da feature: **"dividir em 2 notas" deixou de ser "2 pessoas no mesmo CNPJ"
+(exigia nomes diferentes) e virou "2 CNPJs diferentes, cada um levando uma fatia do total
+COMBINADO"** — motivo real, confirmado por ele: **teto de valor por nota, tipo limite do
+MEI** — uma nota só com o total de UM CNPJ (ex. R$14.476,00 do Shopee) estoura esse limite.
+Confirmado também: pode ser o mesmo nome nas 2 notas agora (CNPJ diferente já as diferencia)
+e os 10 minutos entre a 1ª e a 2ª continuam valendo.
+
+**Implementado** em `driver-public-api/index.ts`:
+- `buildComboTotal()` (nova): soma bruta de TODAS as plataformas — todos os CNPJs juntos —
+  do escopo (grupo se a pessoa lidera um, senão individual) menos vale/perda. Não filtra por
+  emitterId — ao contrário de `buildValueCandidates`, que continua intocado e correto pra
+  nota ÚNICA (sem divisão), onde o valor tem mesmo que ser só do CNPJ pedido.
+- `nfSplitPreview`: usa `buildComboTotal` em vez do maior candidato por CNPJ — os dois
+  cartões agora mostram a MESMA prévia de propósito (fatiam o mesmo total combinado).
+- `parte1AbertaDoSlot`: parou de filtrar por `emitterId` — a parte 1 pode estar em QUALQUER
+  CNPJ do driver. `nfUpload` passa a EXIGIR que a parte 2 seja de CNPJ DIFERENTE da parte 1
+  (novo erro 409 claro) — no lugar da exigência de nome diferente, removida.
+- `nfSlots`: a dupla aberta aparece no CNPJ que AINDA falta (antes aparecia no mesmo CNPJ da
+  parte 1, que agora já conta como "enviada" normalmente assim que a parte 1 chega).
+
+**Frontend** (`DriverApp.tsx`) só precisou de ajuste de TEXTO (removido "em nome(s)
+diferentes", trocado por linguagem de CNPJ) — o cálculo das fatias já vem pronto do servidor,
+então os dois cartões passam a mostrar os mesmos valores automaticamente. `nfSplit.ts`
+(cópia da fórmula pro lado do painel, hoje sem nenhum import ativo — achado, não mexido além
+do comentário) e o comentário-cabeçalho de `nfCheck.ts` também atualizados por precisão.
+
+**Validado com os números reais do grupo do Gessiley** (Caratinga, 5 pessoas): combinado
+R$15.980,60 (mesmo total já conferido no §27) → 50/50 = R$7.990,30 + R$7.990,30, uma nota pra
+cada CNPJ — bate exatamente com o que os prints dele mostravam desde o começo (era o design
+certo, só faltava o mecanismo de validação/pareamento acompanhar). tsc+eslint limpos; o teste
+unitário puro da fórmula (`nfSplit.spec.ts`) não rodou local por travamento de worker do
+vitest (mesmo problema de ambiente já documentado em checkpoint anterior — não relacionado a
+este código, a fórmula `nfSplitSlices` em si não foi alterada, só o valor que ela recebe).
+Deploy via CLI, versão 39 confirmada com `buildComboTotal` e a checagem de CNPJ diferente
+presentes. Push feito — **este toca frontend (`DriverApp.tsx`), então também disparou deploy
+na Vercel** (diferente dos §26/§27, que eram só edge fn).
+
+**Pendência**: a mudança não foi validada ponta-a-ponta com um upload real do Gessiley ainda
+(ele estava no meio da tentativa quando isso foi implementado) — conferir com ele se as duas
+notas passaram depois desta versão.

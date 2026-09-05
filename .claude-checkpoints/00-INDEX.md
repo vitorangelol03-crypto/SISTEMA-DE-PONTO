@@ -2,7 +2,21 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-04 (noite)** — **✅ Bug real AO VIVO corrigido** (`51acb9f`,
+> Última atualização: **2026-09-04 (noite)** — **✅ "Dividir em 2 notas" redesenhado: virou
+> entre CNPJs, não mais entre nomes** (`620e3ac`, `CHECKPOINT_SESSAO_2026-09-01.md` §28).
+> O Gessiley continuava travado depois do fix do §27 — investigando com ele em tempo real,
+> Victor confirmou que a feature precisava mudar de vez: motivo real é **teto de valor por
+> nota (tipo limite do MEI)** — uma nota só com o total de UM CNPJ (ex. R$14.476,00 do
+> Shopee) estoura esse limite. Virou: soma os DOIS CNPJs (R$15.980,60), divide em 2 (50/50 ou
+> 70/30), e cada fatia vira a nota de UM CNPJ diferente — sem mais exigir nomes diferentes
+> nas duas notas (CNPJ diferente já basta), mantendo os 10 minutos entre a 1ª e a 2ª. Nova
+> `buildComboTotal()` soma todos os CNPJs juntos (só pra essa divisão); a nota ÚNICA (sem
+> dividir) continua exigindo o valor do CNPJ certo, intocada. Validado com os números reais
+> do grupo do Gessiley. Deploy via CLI (versão 39). **Este push tocou o app do motorista
+> também (só texto, sem mudar cálculo) — foi pra Vercel, não só a edge fn.** Pendência: ainda
+> não confirmado com o Gessiley se a nota dele passou depois desta versão.
+>
+> Atualização anterior do mesmo dia — **✅ Bug real AO VIVO corrigido** (`51acb9f`,
 > `CHECKPOINT_SESSAO_2026-09-01.md` §27): driver Gessiley travado tentando emitir nota (Victor
 > mandou print + áudio de voz dele). `liquido_individual`/`liquido_grupo` tinham a MESMA doença
 > do bug do §26 (candidato de nota que soma CNPJ diferente do pedido) — a nota do CNPJ Shopee
