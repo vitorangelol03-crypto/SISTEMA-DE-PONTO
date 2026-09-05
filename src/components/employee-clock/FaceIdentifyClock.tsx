@@ -236,7 +236,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({ company, o
 
   if (modelsLoading || phase === 'loading') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-8 text-center space-y-4">
           <Loader2 className="w-12 h-12 mx-auto animate-spin text-blue-600" />
           <div>
@@ -254,7 +254,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({ company, o
 
   if (phase === 'camera-blocked') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center space-y-3">
           <h2 className="text-lg font-bold text-gray-800">📷 Câmera bloqueada</h2>
           <p className="text-sm text-gray-600 text-left">
@@ -278,7 +278,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({ company, o
 
   if (modelsError || phase === 'error') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center space-y-4">
           <X className="w-12 h-12 mx-auto text-red-600" />
           <h2 className="text-lg font-bold text-gray-800">Erro na câmera</h2>

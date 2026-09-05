@@ -48,6 +48,9 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
   const [confidence, setConfidence] = useState(0); // 0..1 (1 = match perfeito)
   const [errorMsg, setErrorMsg] = useState('');
   const [debug, setDebug] = useState({ w: 0, h: 0, ready: 0, active: false, retries: 0 });
+  // Bump manual pra reabrir a câmera sem sair da tela (botão "Já liberei —
+  // vou tentar de novo" da tela de câmera bloqueada, 05/09/2026).
+  const [retryToken, setRetryToken] = useState(0);
 
   const stopStream = () => {
     if (streamRef.current) {
@@ -149,7 +152,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
       if (retryTimer) clearTimeout(retryTimer);
       stopStream();
     };
-  }, [modelsReady, employee.id]);
+  }, [modelsReady, employee.id, retryToken]);
 
   // Atualiza badge de debug a cada 500ms
   useEffect(() => {
@@ -257,7 +260,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
   // Loading / erro
   if (modelsLoading || phase === 'loading') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-8 text-center">
           <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-blue-600" />
           <h2 className="text-lg font-bold text-gray-800 mb-1">Preparando verificação...</h2>
@@ -269,7 +272,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
 
   if (phase === 'camera-blocked') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center">
           <h2 className="text-lg font-bold text-gray-800 mb-2">📷 Câmera bloqueada</h2>
           <p className="text-sm text-gray-600 mb-3 text-left">
@@ -285,7 +288,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
             Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Câmera → Permitir.
           </p>
           <button
-            onClick={onFail}
+            onClick={() => setRetryToken(t => t + 1)}
             className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 min-h-[48px]"
           >
             Já liberei — vou tentar de novo
@@ -297,7 +300,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
 
   if (modelsError || phase === 'error') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center">
           <X className="w-12 h-12 mx-auto mb-4 text-red-600" />
           <h2 className="text-lg font-bold text-gray-800 mb-2">Erro na verificação</h2>
