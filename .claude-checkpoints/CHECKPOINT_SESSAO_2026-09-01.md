@@ -1333,3 +1333,44 @@ na Vercel** (diferente dos §26/§27, que eram só edge fn).
 **Pendência**: a mudança não foi validada ponta-a-ponta com um upload real do Gessiley ainda
 (ele estava no meio da tentativa quando isso foi implementado) — conferir com ele se as duas
 notas passaram depois desta versão.
+
+## 29. ✅ Câmera bloqueada passa a ensinar a liberar, igual já fazia o GPS (`4541e41`)
+
+Pedido do Victor: funcionário que negar câmera OU geolocalização precisa ser perguntado de
+novo a CADA aperto no botão de bater ponto — sem os dois o ponto não é aceito (trava
+`require_facial_clock`) — até liberar ou usar outro aparelho.
+
+**Investigação achou assimetria real**: geolocalização já tinha exatamente esse
+comportamento desde antes (`isGeoPermissionDenied()` checado a cada aperto + overlay
+"📍 Localização bloqueada" com passo a passo). Câmera não tinha nada — negar caía num erro
+genérico ("Não foi possível acessar a câmera... Procure o supervisor"), sem instrução.
+
+**Explicado ao Victor antes de programar** (feature nova, plano curto + decisão dele via
+pergunta direta): uma vez que o navegador REALMENTE nega, ele não volta a perguntar sozinho —
+só o próprio usuário reativa nas configurações. O que dá (e já funciona pro GPS) é conferir
+de novo a cada aperto e mostrar instrução clara. Decisão dele: a instrução **NÃO** menciona
+"bata de outro aparelho" — só ensina a liberar, pra não incentivar todo mundo a sempre usar o
+mesmo celular liberado em vez de consertar o próprio.
+
+**Implementado**: `isCameraPermissionDenied()` (mesmo molde do GPS) em `EmployeeClockIn.tsx`,
+checada em `performClock` antes de ativar o gate facial + overlay novo (mesmo estilo visual
+do de localização). Rede de segurança em `FaceVerification.tsx`/`FaceIdentifyClock.tsx` pro
+Safari/iOS (não suporta `permissions.query('camera')`) — detecta `NotAllowedError` do próprio
+`getUserMedia` e mostra a mesma instrução em vez do erro genérico.
+
+**Validado**: tsc+eslint limpos. Novo teste E2E em `tests/62` (mesmo molde do "com GPS
+bloqueado" já existente) prova ponta a ponta: overlay aparece, ZERO linha chega em
+`face_auth_attempts`/`attendance`, e apertar de novo mostra a instrução de novo — rodado 2x,
+passou as 2. 🔴 **Achado no caminho, não é regressão minha**: os 2 testes "com GPS liberado"
+da mesma suíte falharam (`REGISTRAR ENTRADA` não completa em 30s) — confirmado via
+`git stash` que já falhavam ANTES desta mudança, no código original. Causa provável: **disco
+do Windows piorou pra 8,1GB livres** (era 11GB mais cedo hoje, já era crítico) — mesmo tipo de
+problema do incidente de I/O documentado no §23, agora mais grave. Rede de segurança do
+Safari/iOS não tem teste E2E separado (limite de simular via Chromium), só leitura cuidadosa
+do código no mesmo padrão já provado. Push feito — **toca frontend, foi pra Vercel também**.
+
+**⚠️ Aviso pro Victor**: disco do Windows caiu pra 8,1GB livres (97% cheio) — pior que os
+11GB de mais cedo hoje. Vale ele rodar a compactação do disco virtual WSL (`wsl --shutdown`
++ passo do Windows, discutido mais cedo — mata a sessão do WSL, por isso não fiz sozinho) ou
+liberar espaço, antes que volte a causar processo "travado"/morto como no incidente de hoje
+de manhã.

@@ -2,7 +2,19 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-04 (noite)** — **✅ "Dividir em 2 notas" redesenhado: virou
+> Última atualização: **2026-09-04 (noite)** — **✅ Câmera bloqueada passa a ensinar a
+> liberar** (`4541e41`, `CHECKPOINT_SESSAO_2026-09-01.md` §29): pedido do Victor —
+> funcionário que negar câmera/geo tem que ser perguntado de novo a CADA aperto no botão de
+> ponto. Geo já tinha isso; câmera não tinha nada (erro genérico "procure o supervisor").
+> Nova `isCameraPermissionDenied()` (mesmo molde do GPS) + overlay com passo a passo; rede de
+> segurança no Safari/iOS via `NotAllowedError`. Decisão dele: instrução NÃO menciona "outro
+> aparelho", só ensina a liberar. Validado com teste E2E novo (2x verde). 🔴 **Achado, não
+> regressão**: disco do Windows caiu pra **8,1GB livres (97% cheio)** — pior que os 11GB de
+> mais cedo hoje (§23) — confirmado via `git stash` que 2 testes falhando são do ambiente, não
+> do código. **Vale rodar a compactação do disco/limpar espaço antes que repita o incidente de
+> hoje de manhã.** Push feito (toca frontend, foi pra Vercel).
+>
+> Atualização anterior do mesmo dia — **✅ "Dividir em 2 notas" redesenhado: virou
 > entre CNPJs, não mais entre nomes** (`620e3ac`, `CHECKPOINT_SESSAO_2026-09-01.md` §28).
 > O Gessiley continuava travado depois do fix do §27 — investigando com ele em tempo real,
 > Victor confirmou que a feature precisava mudar de vez: motivo real é **teto de valor por
