@@ -121,6 +121,10 @@ export interface NfSlot {
     part1Value: number | null;
     remaining: number | null;
     expiresAt: string;
+    /** Nome do emissor que assinou a 1ª nota (07/09/2026). Null = nota sem emissor casado. */
+    part1Issuer?: string | null;
+    /** CNPJ (só dígitos) da 1ª — a 2ª tem que ser de OUTRO. */
+    part1Cnpj?: string | null;
   } | null;
 }
 export interface NfFile {

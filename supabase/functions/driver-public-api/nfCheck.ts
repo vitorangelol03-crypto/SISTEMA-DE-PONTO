@@ -102,6 +102,13 @@ export interface NfCheckResult {
    * A dupla da nota dividida exige que as 2 notas casem nomes DIFERENTES.
    */
   matchedNames: string[];
+  /**
+   * CNPJs (só dígitos) dos emissores CADASTRADOS que casaram nesta nota — mesma
+   * ordem de `matchedNames`, vindo sempre da MESMA LINHA do cadastro (07/09/2026).
+   * É o que a dupla compara: as 2 notas têm que ser de CNPJs diferentes. Vazio
+   * quando o driver não tem emissor cadastrado (regra antiga, só por nome).
+   */
+  matchedCnpjs: string[];
   /** Maiores valores achados na nota (p/ mensagem e auditoria). */
   foundValues: number[];
   /** CNPJs achados na nota (só dígitos, p/ auditoria). */
@@ -219,7 +226,7 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
   const tolerance = (input.toleranceCents ?? 2) / 100;
   const base: Omit<NfCheckResult, 'status' | 'reasons'> = {
     cnpjOk: null, valorOk: null, nomeOk: null,
-    matchedCandidates: [], matchedNames: [], foundValues: [], foundCnpjs: [],
+    matchedCandidates: [], matchedNames: [], matchedCnpjs: [], foundValues: [], foundCnpjs: [],
   };
 
   const text = input.text ?? '';
@@ -293,6 +300,7 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
   // driver ou do recebedor), pra não recusar a nota de quem nunca teve esse cadastro.
   const cadastrados = (input.authorizedIssuers ?? []).filter((i) => i.name && i.name.trim());
   const matchedNames: string[] = [];
+  const matchedCnpjs: string[] = [];
   let nomeOk: boolean | null;
 
   if (cadastrados.length > 0) {
@@ -300,6 +308,7 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
     const cnpjDe = (i: { cnpj: string | null }) => (i.cnpj ?? '').replace(/\D/g, '');
     const tudoBateu = nomeBateu.filter((i) => cnpjDe(i).length === 14 && foundCnpjs.includes(cnpjDe(i)));
     matchedNames.push(...tudoBateu.map((i) => i.name));
+    matchedCnpjs.push(...tudoBateu.map((i) => cnpjDe(i)));
     nomeOk = tudoBateu.length > 0;
 
     if (!nomeOk) {
@@ -353,6 +362,7 @@ export function runNfCheck(input: NfCheckInput): NfCheckResult {
     nomeOk,
     matchedCandidates,
     matchedNames: [...new Set(matchedNames)],
+    matchedCnpjs: [...new Set(matchedCnpjs)],
     foundValues: foundValues.sort((a, b) => b - a).slice(0, 8),
     foundCnpjs,
     reasons,

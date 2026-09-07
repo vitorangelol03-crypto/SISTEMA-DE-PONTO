@@ -26,6 +26,7 @@ import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
 import { extractText, getDocumentProxy } from 'npm:unpdf@1.8.0';
 import {
   runNfCheck, mirrorExpectedValue, nfTextoIlegivel, notasQueOcupamVaga, nfSplitSlices,
+  formatCnpj,
   type NfCheckResult, type NfSplitForm,
 } from './nfCheck.ts';
 import {
@@ -472,6 +473,10 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
       s.splitOpen = {
         form: abertaGlobal.split_form,
         part1Value: Number.isFinite(veio) ? veio : null,
+        // Quem emitiu a 1ª (07/09/2026): a tela precisa dizer qual CNPJ ainda falta,
+        // em vez do aviso genérico "tem que ser outro CNPJ".
+        part1Issuer: abertaGlobal.matched_name,
+        part1Cnpj: abertaGlobal.matched_cnpj,
         remaining: Number.isFinite(total) && Number.isFinite(veio)
           ? Math.round((total - veio) * 100) / 100 : null,
         expiresAt: new Date(new Date(abertaGlobal.uploaded_at).getTime() + NF_SPLIT_WINDOW_MS).toISOString(),
@@ -484,7 +489,11 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
   // (`driverpay_driver_nota_names`). A lista vai junto porque o app mostra na tela
   // QUEM pode emitir (nome + CNPJ), pro driver já saber antes de emitir.
   const emissores = await emissoresAutorizadosDe(claims.driver_id);
-  return json({ slots, splitEnabled: emissores.length > 0, issuers: emissores });
+  // 07/09/2026: dividir exige DOIS CNPJs cadastrados — a dupla só fecha com uma nota
+  // em cada um. Com um só (ou nenhum com CNPJ), dividir é impossível e a opção nem
+  // aparece: melhor não oferecer do que recusar a 2ª nota depois de emitida.
+  const comCnpj = emissores.filter((i) => (i.cnpj ?? '').replace(/\D/g, '').length === 14);
+  return json({ slots, splitEnabled: comCnpj.length >= 2, issuers: emissores });
 }
 
 /**
@@ -801,6 +810,8 @@ type Parte1Aberta = {
   id: string; split_group: string; split_form: string; read_value: number | null;
   split_expected: number | null; matched_name: string | null; uploaded_at: string;
   check_details: Record<string, unknown> | null; nota_emitter_id: string;
+  /** CNPJ do emissor que casou na parte 1 — a parte 2 tem que vir de outro (07/09/2026). */
+  matched_cnpj: string | null;
 };
 
 /**
@@ -822,7 +833,7 @@ async function parte1AbertaDoSlot(
   driverId: string, periodId: string,
 ): Promise<Parte1Aberta | null> {
   const { data: partes } = await supabase.from('driverpay_nota_fiscal_files')
-    .select('id, split_group, split_form, split_part, read_value, split_expected, matched_name, uploaded_at, status, check_details, nota_emitter_id')
+    .select('id, split_group, split_form, split_part, read_value, split_expected, matched_name, matched_cnpj, uploaded_at, status, check_details, nota_emitter_id')
     .eq('driver_id', driverId).eq('period_id', periodId)
     .not('split_group', 'is', null)
     .order('uploaded_at', { ascending: true });
@@ -1001,6 +1012,9 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   let comboTotalParaSplit: number | null = null;
   /** A transcricao veio da IA? Vai pro check_details, pra dar pra auditar depois. */
   let lidoPorIa = false;
+  /** Emissores cadastrados na ficha (nome + CNPJ) — fora do try: a trava do CNPJ
+      repetido precisa deles pra dizer QUAL CNPJ falta na 2ª nota. */
+  let emissoresAutorizados: { name: string; cnpj: string | null }[] = [];
   try {
     const pdf = await getDocumentProxy(new Uint8Array(bytes));
     const { text } = await extractText(pdf, { mergePages: true });
@@ -1035,7 +1049,7 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
 
     const { data: driver } = await supabase.from('driverpay_drivers')
       .select('name, recebedor_nome').eq('id', claims.driver_id).maybeSingle();
-    const emissoresAutorizados = await emissoresAutorizadosDe(claims.driver_id);
+    emissoresAutorizados = await emissoresAutorizadosDe(claims.driver_id);
     candidates = await buildValueCandidates(claims.driver_id, claims.company_id, periodId, emitterId);
 
     // ── Nota dividida: o valor esperado vira a FATIA (19/08/2026, cross-CNPJ
@@ -1074,9 +1088,46 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     check = null;
   }
 
-  const autoReject = check !== null && check.status !== 'ok';
+  // ══════════════════════════════════════════════════════════════════════════
+  // AS 2 NOTAS DA DUPLA TÊM QUE SER DE CNPJs DIFERENTES  (07/09/2026)
+  //
+  // A tela do app promete isso desde 05/09 ("cada nota tem que ser emitida em um
+  // CNPJ DIFERENTE"), mas o backend só comparava o `nota_emitter_id` — que é o CNPJ
+  // do TOMADOR (Shopee x iMile), não o de quem EMITE. Caso real que escapou
+  // (GESSILEY, 1ª quinzena de agosto): as duas notas saíram no CNPJ do Joaerson, uma
+  // pra cada tomador, e passaram — o relatório pagou as duas metades no mesmo nome,
+  // e o teto por CNPJ, que é o motivo da feature existir, não foi respeitado.
+  //
+  // Compara pelo CNPJ do emissor CADASTRADO que a conferência casou (`matchedCnpjs`,
+  // sempre da mesma linha nome+CNPJ da ficha). Nome não serve: a mesma pessoa pode
+  // ter mais de um CNPJ cadastrado.
+  //
+  // Sem CNPJ pra comparar dos dois lados (nota antiga, ou driver sem cadastro) NÃO
+  // recusa — nunca recusar no escuro.
+  // ══════════════════════════════════════════════════════════════════════════
+  const matchedCnpj = check && check.matchedCnpjs.length > 0 ? check.matchedCnpjs[0] : null;
+  const emissorRepetido = splitPart === 2 && parte1 !== null
+    && matchedCnpj !== null && parte1.matched_cnpj !== null
+    && matchedCnpj === parte1.matched_cnpj;
+  const outrosEmissores = emissoresAutorizados
+    .filter((i) => {
+      const d = (i.cnpj ?? '').replace(/\D/g, '');
+      return d.length === 14 && d !== matchedCnpj;
+    })
+    .map((i) => `${i.name} (CNPJ ${formatCnpj((i.cnpj ?? '').replace(/\D/g, ''))})`);
+  const motivoEmissorRepetido = emissorRepetido
+    ? `A segunda nota da dupla tem que ser emitida por um CNPJ DIFERENTE da primeira. `
+      + `Esta veio do mesmo CNPJ (${formatCnpj(matchedCnpj!)})`
+      + `${parte1!.matched_name ? `, de ${parte1!.matched_name}` : ''}. `
+      + (outrosEmissores.length > 0
+        ? `Emita a segunda por ${outrosEmissores.join(' ou ')} e envie de novo.`
+        : 'Peça pra CD cadastrar o segundo CNPJ antes de dividir a nota.')
+    : null;
+
+  const autoReject = (check !== null && check.status !== 'ok') || emissorRepetido;
   const rejectReason = autoReject
-    ? `[automático] ${check!.reasons.join(' ')}`
+    ? `[automático] ${[check && check.status !== 'ok' ? check.reasons.join(' ') : null, motivoEmissorRepetido]
+        .filter(Boolean).join(' ')}`
     : null;
   // Auto-validação (decisão do Victor 26/07, "validar já no envio"): só quando os
   // TRÊS checks confirmaram positivo. Check null (ex.: sem espelho publicado pra
@@ -1150,6 +1201,8 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     split_part: splitPart,
     split_expected: readValue,
     matched_name: matchedName,
+    // CNPJ do emissor casado (07/09/2026): é o que a trava da dupla compara.
+    matched_cnpj: matchedCnpj,
     check_details: check ? {
       autoValidated: autoValidate,
       // Auto-validação estava desligada e a nota passou nos 3 checks: o painel

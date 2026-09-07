@@ -608,12 +608,18 @@ export interface NotaFiscalFileRow {
   readValue: number | null;
   /** Nome (driver/recebedor/autorizado) que casou nesta nota. */
   matchedName: string | null;
+  /**
+   * CNPJ (só dígitos) do emissor cadastrado que casou nesta nota (07/09/2026) — vem
+   * da MESMA LINHA nome+CNPJ da ficha. É o que separa as 2 notas da dupla, e o que o
+   * relatório usa pra achar a chave PIX certa. Null nas notas anteriores à feature.
+   */
+  matchedCnpj: string | null;
 }
 
 export const listNotaFiscalFiles = async (companyId: string, periodId: string): Promise<NotaFiscalFileRow[]> => {
   const { data, error } = await supabase
     .from('driverpay_nota_fiscal_files')
-    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, reject_reason, uploaded_at, check_status, check_valor, check_cnpj, check_nome, check_details, validated_by, mirror_platform_key, split_group, split_form, split_part, read_value, matched_name, driverpay_drivers(name, recebedor_nome), driverpay_nota_emitters(label, cnpj)')
+    .select('id, driver_id, nota_emitter_id, file_path, file_type, original_filename, status, reject_reason, uploaded_at, check_status, check_valor, check_cnpj, check_nome, check_details, validated_by, mirror_platform_key, split_group, split_form, split_part, read_value, matched_name, matched_cnpj, driverpay_drivers(name, recebedor_nome), driverpay_nota_emitters(label, cnpj)')
     .eq('company_id', companyId)
     .eq('period_id', periodId)
     .order('uploaded_at', { ascending: true });
@@ -650,6 +656,7 @@ export const listNotaFiscalFiles = async (companyId: string, periodId: string): 
       splitPart: (r.split_part as number | null) ?? null,
       readValue: r.read_value === null || r.read_value === undefined ? null : Number(r.read_value),
       matchedName: (r.matched_name as string | null) ?? null,
+      matchedCnpj: (r.matched_cnpj as string | null) ?? null,
     };
   });
 };

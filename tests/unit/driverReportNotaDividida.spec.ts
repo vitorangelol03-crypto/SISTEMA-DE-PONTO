@@ -90,6 +90,41 @@ describe('splitRecipientsFromNotes — quem recebe cada metade sai das notas', (
     expect(m.size).toBe(0);
   });
 
+  // ── Casamento pelo CNPJ (07/09/2026) ──
+  // O nome sozinho não identifica a linha do cadastro: a mesma pessoa pode ter mais
+  // de um CNPJ. Quando a nota traz o CNPJ que casou, é ele que manda.
+  it('🎯 mesma pessoa com 2 CNPJs: a chave PIX vem do CNPJ da NOTA, não do nome', () => {
+    const doisCnpjsMesmoNome = [
+      { driver_id: 'd1', name: 'Joaerson Antônio de Freitas', cnpj: '55857717000146', pix: 'pix-do-primeiro' },
+      { driver_id: 'd1', name: 'Joaerson Antônio de Freitas', cnpj: '51046418000170', pix: 'pix-do-segundo' },
+    ];
+    const m = splitRecipientsFromNotes([
+      { ...nota('d1', 'g1', 1, 'Joaerson Antônio de Freitas'), matchedCnpj: '55857717000146' },
+      { ...nota('d1', 'g1', 2, 'Joaerson Antônio de Freitas'), matchedCnpj: '51046418000170' },
+    ], doisCnpjsMesmoNome);
+    expect(m.get('d1')).toEqual([
+      { name: 'Joaerson Antônio de Freitas', pix: 'pix-do-primeiro' },
+      { name: 'Joaerson Antônio de Freitas', pix: 'pix-do-segundo' },
+    ]);
+  });
+
+  it('🎯 nota antiga (sem CNPJ gravado) continua achando o PIX pelo nome', () => {
+    const m = splitRecipientsFromNotes([
+      { ...nota('d1', 'g1', 1, 'Joaerson Antônio de Freitas'), matchedCnpj: null },
+      { ...nota('d1', 'g1', 2, 'GESSILEY RODRIGUES DE FREITAS'), matchedCnpj: null },
+    ], CADASTRO);
+    expect(m.get('d1')?.[0].pix).toBe('pix-joaerson');
+    expect(m.get('d1')?.[1].pix).toBe('51.046.418/0001-70');
+  });
+
+  it('CNPJ da nota fora do cadastro: cai no nome (não fica sem chave)', () => {
+    const m = splitRecipientsFromNotes([
+      { ...nota('d1', 'g1', 1, 'Joaerson Antônio de Freitas'), matchedCnpj: '99999999000199' },
+      { ...nota('d1', 'g1', 2, 'GESSILEY RODRIGUES DE FREITAS'), matchedCnpj: null },
+    ], CADASTRO);
+    expect(m.get('d1')?.[0].pix).toBe('pix-joaerson');
+  });
+
   it('nome com acento/caixa diferente ainda acha o PIX no cadastro', () => {
     const m = splitRecipientsFromNotes([
       nota('d1', 'g1', 1, 'JOAERSON ANTONIO DE FREITAS'),

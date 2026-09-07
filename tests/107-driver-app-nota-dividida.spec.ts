@@ -195,14 +195,20 @@ test.describe('Nota dividida — portal do entregador (05/09/2026)', () => {
     // 2. O valor da divisão sai calculado: 960,00 → 480,00 + 480,00
     await expect(page.getByText(/R\$ 480,00/).first()).toBeVisible();
 
-    // 3. O aviso do CNPJ diferente
-    await expect(page.getByText(/Cada nota tem que ser emitida em um CNPJ DIFERENTE/i)).toBeVisible();
+    // 3. O aviso do CNPJ diferente — desde 07/09/2026 ele NOMEIA os dois emissores
+    //    (o genérico deixava o driver emitir as duas no mesmo CNPJ sem perceber).
+    await expect(page.getByText(/Uma nota em cada CNPJ/i)).toBeVisible();
+    await expect(page.getByText(/As duas no mesmo CNPJ são recusadas/i)).toBeVisible();
 
     // 4. Quem pode emitir, com nome E CNPJ
     await expect(page.getByText(/A nota tem que ser emitida por/i)).toBeVisible();
-    await expect(page.getByText(EMISSOR_A.nome, { exact: false })).toBeVisible();
-    await expect(page.getByText(EMISSOR_A.cnpj, { exact: false })).toBeVisible();
-    await expect(page.getByText(EMISSOR_B.cnpj, { exact: false })).toBeVisible();
+    await expect(page.getByText(EMISSOR_A.nome, { exact: false }).first()).toBeVisible();
+    await expect(page.getByText(EMISSOR_A.cnpj, { exact: false }).first()).toBeVisible();
+    await expect(page.getByText(EMISSOR_B.cnpj, { exact: false }).first()).toBeVisible();
+    // 07/09/2026: o aviso NOMEIA os dois emissores — é o que evita as duas notas no
+    // mesmo CNPJ. Os dois nomes aparecem 2x na tela (aviso + lista): 2 ocorrências cada.
+    await expect(page.getByText(EMISSOR_A.nome, { exact: false })).toHaveCount(2);
+    await expect(page.getByText(EMISSOR_B.nome, { exact: false })).toHaveCount(2);
 
     // 5. Sem escolher, não existe botão de enviar (era assim que o driver mandava errado)
     await expect(page.getByText(/Escolha lá em cima como você vai emitir/i).first()).toBeVisible();
@@ -244,6 +250,52 @@ test.describe('Nota dividida — portal do entregador (05/09/2026)', () => {
     const { data } = await db.from('driverpay_nota_fiscal_files')
       .select('id').eq('driver_id', criados.drivers[0]);
     expect(data ?? [], 'nota recusada não pode ficar gravada').toHaveLength(0);
+  });
+
+  /**
+   * E. A TRAVA DE 07/09/2026 — as 2 notas da dupla têm que ser de CNPJs de EMISSOR
+   * diferentes. Até aqui o sistema só comparava o CNPJ do TOMADOR (iMile x Shopee),
+   * então dava pra emitir as duas pelo MESMO CNPJ — foi o que aconteceu de verdade
+   * com o GESSILEY na 1ª quinzena de agosto (as duas no CNPJ do Joaerson), e o
+   * pagamento saiu com as duas metades no mesmo nome.
+   */
+  test('E. a 2ª nota do MESMO emissor da 1ª é RECUSADA (CNPJs de emissor diferentes)', async ({ page }) => {
+    test.setTimeout(420_000);
+    await entrarNoPortal(page, CPF_LIDER);
+    await page.getByRole('button', { name: /Anexar nota|Nota|Enviar/i }).first().click();
+    await page.getByRole('button', { name: /Dividir em 2 notas/i }).click();
+
+    // 1ª nota: emissor A, tomador iMile — correta, abre a dupla.
+    await enviarNota(page, CNPJ_IMILE, notaPdf({
+      valor: FATIA, emitenteNome: EMISSOR_A.nome,
+      emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_IMILE,
+    }));
+    await expect(page.getByText(/1ª nota recebida/i)).toBeVisible({ timeout: 90_000 });
+
+    // A tela diz QUEM tem que emitir a 2ª (o outro cadastrado), não só "outro CNPJ".
+    await expect(page.getByText(/A 2ª tem que ser emitida por/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(EMISSOR_B.nome, { exact: false }).first()).toBeVisible();
+
+    // 2ª nota: TOMADOR diferente (Shopee), mas o MESMO EMISSOR da 1ª → tem que recusar.
+    await enviarNota(page, CNPJ_SHOPEE, notaPdf({
+      valor: FATIA, emitenteNome: EMISSOR_A.nome,
+      emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_SHOPEE,
+    }));
+    await expect(page.getByText(/CNPJ DIFERENTE da primeira/i)).toBeVisible({ timeout: 90_000 });
+
+    // No banco: só a parte 1 ficou. A parte 2 recusada não é gravada (nem o PDF sobe).
+    const { data: notas } = await db.from('driverpay_nota_fiscal_files')
+      .select('split_part, status, matched_cnpj').eq('driver_id', criados.drivers[0]);
+    expect(notas ?? [], 'a 2ª do mesmo CNPJ não pode ser gravada').toHaveLength(1);
+    expect(notas![0].split_part).toBe(1);
+    expect(String(notas![0].matched_cnpj), 'o CNPJ do emissor tem que ficar gravado')
+      .toBe(EMISSOR_A.cnpj.replace(/\D/g, ''));
+
+    // Limpa a dupla aberta pra o teste D começar do zero (serial).
+    const { data: paraApagar } = await db.from('driverpay_nota_fiscal_files')
+      .select('file_path').eq('driver_id', criados.drivers[0]);
+    if (paraApagar?.length) await db.storage.from(BUCKET).remove(paraApagar.map((n) => n.file_path));
+    await db.from('driverpay_nota_fiscal_files').delete().eq('driver_id', criados.drivers[0]);
   });
 
   test('D. a dupla certa passa: R$ 480,00 em cada CNPJ, em nomes cadastrados', async ({ page }) => {

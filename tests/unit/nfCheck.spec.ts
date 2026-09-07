@@ -372,6 +372,44 @@ describe('runNfCheck — quem EMITE a nota: nome + CNPJ cadastrados (05/09/2026)
     expect(r.matchedNames).toEqual(['Joaerson Antônio de Freitas']);
   });
 
+  // ── matchedCnpjs (07/09/2026) — é o que a trava da dupla compara ──
+  // A conferência precisa dizer QUAL CNPJ emitiu, não só qual nome: as 2 notas da
+  // dupla têm que ser de CNPJs diferentes, e nome não distingue CNPJ (a mesma
+  // pessoa pode ter mais de um cadastrado).
+  it('🎯 devolve o CNPJ da MESMA LINHA que casou (matchedCnpjs)', () => {
+    const r = runNfCheck({
+      ...base,
+      text: danfse({ valor: '7.990,30', emitente: 'Joaerson Antônio de Freitas', emitenteCnpj: CNPJ_JOAERSON }),
+    });
+    expect(r.matchedCnpjs).toEqual(['55857717000146']);
+  });
+
+  it('🎯 o CNPJ devolvido acompanha QUEM emitiu (o outro cadastrado → o outro CNPJ)', () => {
+    const r = runNfCheck({
+      ...base,
+      text: danfse({ valor: '7.990,30', emitente: 'GESSILEY RODRIGUES DE FREITAS', emitenteCnpj: CNPJ_GESSILEY }),
+    });
+    expect(r.matchedCnpjs).toEqual(['51046418000170']);
+  });
+
+  it('🔴 nada casou → matchedCnpjs vazio (a trava não recusa no escuro)', () => {
+    const r = runNfCheck({
+      ...base,
+      text: danfse({ valor: '7.990,30', emitente: 'Joaerson Antônio de Freitas', emitenteCnpj: '99.999.999/0001-99' }),
+    });
+    expect(r.matchedCnpjs).toEqual([]);
+  });
+
+  it('🔴 driver SEM emissor cadastrado (regra antiga, só nome) → matchedCnpjs vazio', () => {
+    const r = runNfCheck({
+      ...base,
+      authorizedIssuers: [],
+      text: danfse({ valor: '7.990,30', emitente: 'GESSILEY RODRIGUES DE FREITAS' }),
+    });
+    expect(r.nomeOk).toBe(true);
+    expect(r.matchedCnpjs).toEqual([]);
+  });
+
   it('🎯 o OUTRO cadastrado (o próprio driver, com o CNPJ dele) também passa', () => {
     const r = runNfCheck({
       ...base,

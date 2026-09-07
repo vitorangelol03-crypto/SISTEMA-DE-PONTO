@@ -16,6 +16,7 @@ import {
   type ProofSlot,
 } from '../../services/driverApp';
 import { estadoBotaoNota } from '../../utils/notaBotao';
+import { formatCnpj } from '../../utils/mirrorGenerator';
 
 type Screen = 'login' | 'change' | 'mirrors' | 'nf' | 'proof';
 
@@ -155,6 +156,15 @@ export function DriverApp() {
   const [nfMode, setNfMode] = useState<'integral' | 'dividir' | null>(null);
   // Valores exatos da divisão meio a meio, vindos do robô — a MESMA conta que confere.
   const [splitInfo, setSplitInfo] = useState<{ total: number; slices: [number, number] } | null>(null);
+  // Emissores que REALMENTE dá pra usar na divisão: a dupla exige um CNPJ em cada
+  // nota, então quem está sem CNPJ cadastrado não conta (07/09/2026).
+  const cnpjsAutorizados = nfIssuers.filter((i) => (i.cnpj ?? '').replace(/\D/g, '').length === 14);
+  /** O emissor que AINDA falta na dupla — o que não é o CNPJ da 1ª nota. */
+  const outroEmissorQue = (cnpjDaPrimeira: string | null): NfIssuer | null => {
+    const um = (cnpjDaPrimeira ?? '').replace(/\D/g, '');
+    if (um.length !== 14) return null;
+    return cnpjsAutorizados.find((i) => (i.cnpj ?? '').replace(/\D/g, '') !== um) ?? null;
+  };
 
   // Espelho do app da Shopee (print da tela) — 04/08/2026.
   // ⚠️ Nada aqui guarda quantidade: o driver so anexa a foto.
@@ -808,7 +818,17 @@ export function DriverApp() {
                 )}
               </div>
               <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                ⚠️ <b>Cada nota tem que ser emitida em um CNPJ DIFERENTE.</b> As duas no mesmo CNPJ são recusadas.
+                {/* 07/09/2026: o aviso deixou de ser genérico e passou a NOMEAR os dois
+                    CNPJs. Antes dizia só "tem que ser CNPJ diferente" e o driver emitia
+                    as duas no mesmo — o backend agora recusa, e emitir errado custa
+                    cancelamento na Receita. */}
+                ⚠️ <b>Uma nota em cada CNPJ.</b>{' '}
+                {cnpjsAutorizados.length >= 2 ? (
+                  <>Uma no CNPJ de <b>{cnpjsAutorizados[0].name}</b> e a outra no de{' '}
+                  <b>{cnpjsAutorizados[1].name}</b>. As duas no mesmo CNPJ são recusadas.</>
+                ) : (
+                  <>As duas no mesmo CNPJ são recusadas.</>
+                )}
               </div>
               {nfIssuers.length > 0 && (
                 <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
@@ -864,9 +884,20 @@ export function DriverApp() {
               {s.splitOpen ? (
                 <>
                   <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    <b>1ª nota recebida (outro CNPJ){s.splitOpen.part1Value !== null ? `, de ${fmtBRL(s.splitOpen.part1Value)}` : ''}.</b>
+                    <b>1ª nota recebida{s.splitOpen.part1Issuer ? ` — emitida por ${s.splitOpen.part1Issuer}` : ' (outro CNPJ)'}{s.splitOpen.part1Value !== null ? `, de ${fmtBRL(s.splitOpen.part1Value)}` : ''}.</b>
                     {' '}Envie a 2ª AQUI{s.splitOpen.remaining !== null ? <>, de <b>{fmtBRL(s.splitOpen.remaining)}</b>,</> : ''} até{' '}
                     <b>{fmtHora(s.splitOpen.expiresAt)}</b>. Passou da hora, as duas caem e você reenvia a dupla.
+                    {/* 07/09/2026: diz QUAL CNPJ falta em vez de "tem que ser outro" — a
+                        2ª no mesmo CNPJ da 1ª é recusada pelo servidor. */}
+                    {(() => {
+                      const falta = outroEmissorQue(s.splitOpen?.part1Cnpj ?? null);
+                      return falta ? (
+                        <div className="mt-1">
+                          A 2ª tem que ser emitida por <b>{falta.name}</b>
+                          {falta.cnpj ? <> — CNPJ {formatCnpj(falta.cnpj)}</> : null}.
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                   <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer'}`}>
                     {nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? <Spinner /> : <><Upload size={16} /> Enviar 2ª nota{s.splitOpen.remaining !== null ? ` (${fmtBRL(s.splitOpen.remaining)})` : ''}</>}

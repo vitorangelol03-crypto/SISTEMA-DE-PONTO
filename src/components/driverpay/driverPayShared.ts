@@ -2287,23 +2287,37 @@ export function splitRecipientsFromNotes(
   files: ReadonlyArray<{
     driverId: string; splitGroup: string | null; splitPart: number | null;
     matchedName: string | null; status: string;
+    /** CNPJ do emissor que casou na nota (07/09/2026). Null nas notas antigas. */
+    matchedCnpj?: string | null;
   }>,
   cadastro: ReadonlyArray<{ driver_id: string; name: string; cnpj: string | null; pix: string | null }>,
 ): Map<string, Array<{ name: string; pix: string | null }>> {
   const chaveNome = (n: string) => stripAccents(n).toUpperCase().replace(/\s+/g, ' ').trim();
-  const pixDe = (driverId: string, nome: string): string | null => {
-    const alvo = chaveNome(nome);
-    const linha = cadastro.find((c) => c.driver_id === driverId && chaveNome(c.name) === alvo);
+  const soDigitos = (v: string | null | undefined) => (v ?? '').replace(/\D/g, '');
+  /**
+   * A chave PIX de quem emitiu a nota. Procura primeiro pelo CNPJ (07/09/2026) —
+   * é ele que identifica a linha do cadastro sem ambiguidade, já que a mesma pessoa
+   * pode ter mais de um CNPJ; sem CNPJ na nota (as antigas), cai no nome como antes.
+   * Vazia no cadastro, usa o próprio CNPJ, que também é chave PIX válida.
+   */
+  const pixDe = (driverId: string, nome: string, cnpj: string | null | undefined): string | null => {
+    const doDriver = cadastro.filter((c) => c.driver_id === driverId);
+    const alvoCnpj = soDigitos(cnpj);
+    const linha = (alvoCnpj.length === 14
+      ? doDriver.find((c) => soDigitos(c.cnpj) === alvoCnpj)
+      : undefined)
+      ?? doDriver.find((c) => chaveNome(c.name) === chaveNome(nome));
     return linha?.pix?.trim() || linha?.cnpj?.trim() || null;
   };
 
-  const duplas = new Map<string, Map<number, string>>(); // `${driverId}|${splitGroup}` -> parte -> nome
+  type Emissor = { name: string; cnpj: string | null };
+  const duplas = new Map<string, Map<number, Emissor>>(); // `${driverId}|${splitGroup}` -> parte -> emissor
   for (const f of files) {
     if (!f.splitGroup || (f.splitPart !== 1 && f.splitPart !== 2)) continue;
     if (f.status === 'rejeitada' || !f.matchedName) continue;
     const k = `${f.driverId}|${f.splitGroup}`;
-    const partes = duplas.get(k) ?? new Map<number, string>();
-    partes.set(f.splitPart, f.matchedName);
+    const partes = duplas.get(k) ?? new Map<number, Emissor>();
+    partes.set(f.splitPart, { name: f.matchedName, cnpj: f.matchedCnpj ?? null });
     duplas.set(k, partes);
   }
 
@@ -2315,8 +2329,8 @@ export function splitRecipientsFromNotes(
     const driverId = k.slice(0, k.indexOf('|'));
     if (out.has(driverId)) continue; // 1ª dupla completa do período manda
     out.set(driverId, [
-      { name: um, pix: pixDe(driverId, um) },
-      { name: dois, pix: pixDe(driverId, dois) },
+      { name: um.name, pix: pixDe(driverId, um.name, um.cnpj) },
+      { name: dois.name, pix: pixDe(driverId, dois.name, dois.cnpj) },
     ]);
   }
   return out;
