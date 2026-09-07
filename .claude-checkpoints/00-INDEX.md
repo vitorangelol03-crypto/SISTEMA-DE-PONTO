@@ -2,7 +2,24 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-07** — **AS 2 NOTAS DA DUPLA TÊM QUE SER DE CNPJs DE
+> Última atualização: **2026-09-07 (2ª leva)** — **✅ 4 BATIDAS/DIA: LIGADO SÓ PRO
+> ESCRITÓRIO — item 2 do roadmap FECHADO.** O Victor pediu pra ligar as 4 batidas só pro
+> escritório; investigando antes de mexer, **já estava ligado e funcionando**: os 3
+> Auxiliares Administrativos de Caratinga (Diendrel, Iago, Pablo) já tinham
+> `marking_count=4`, e Diendrel/Iago **batem as 4 de verdade desde 03/09** (conferido nos
+> registros: 07/09 → entrada 07:31, almoço 13:09→13:41, saída 14:23, 6,33h com o almoço
+> descontado certo). `default_marking_count` segue **2** nas duas empresas, então os 86 da
+> triagem de CT e os 6 de PN nunca pegaram 4. **Decisões do Victor:** escritório = só esses
+> 3; **não** vai pra todo mundo (encerra a pendência "quando habilitar"); funcionário novo
+> continua nascendo com 2 e quem for do escritório é marcado na mão (**herança automática
+> por função descartada** — risco de função digitada diferente). Única mudança: 1 `UPDATE`
+> em prod devolvendo o **Victor Angelo** (Triagem - Shopee, sobra do piloto) de 4 pra herdar
+> o padrão — impacto conferido antes: os 4 dias dele com marcação intermediária são 3 testes
+> de segundos + 1 lançamento manual que já tem entrada/saída nos campos normais, **nenhuma
+> hora muda**. **Nenhuma linha de código mudou** (por isso sem build/E2E nesta leva).
+> Detalhe em `CHECKPOINT_SESSAO_2026-09-07.md` §6.
+>
+> Atualização anterior — **2026-09-07** — **AS 2 NOTAS DA DUPLA TÊM QUE SER DE CNPJs DE
 > EMISSOR DIFERENTES** (`9bc2172`; detalhe em `CHECKPOINT_SESSAO_2026-09-07.md`). O
 > Victor validou as notas do GESSILEY e mandou conferir se o relatório simples sai com
 > 2 pagamentos separados. **Sai** — R$ 7.990,30 + R$ 7.990,30, fechando exato os

@@ -188,7 +188,7 @@ sempre vermelhos por isso). Caminho: aplicar **localmente** com lock regenerado 
    fluxo de hoje intacto, 24 E2E). Ponte Nova ligada (1 pessoa sem rosto, self-enroll cobre) e
    depois **Caratinga também** — dos 32 "sem rosto", 28 já eram `rejected` (bloqueados antes da
    facial, não afeta) e só 4 `approved` de fato caem no auto-cadastro na próxima batida.
-2. 🚧 **4 batidas/dia — 2 bugs achados, corrigidos E deployados (01/09), ainda NÃO
+2. ✅ **4 batidas/dia — 2 bugs achados, corrigidos E deployados (01/09), ainda NÃO
    habilitado.** Achado grande: Ponte Nova nunca rodou de fato com 4 marcações apesar de
    `default_marking_count=4` (bug de herança na tela de bater ponto — corrigido); e a 4ª
    marcação calculava a hora sem descontar o almoço (bug real, já afetando os 3 pilotos de
@@ -198,8 +198,13 @@ sempre vermelhos por isso). Caminho: aplicar **localmente** com lock regenerado 
    faltava **corrigir ponto manualmente** pra quem tem 4 marcações (não existia NENHUM jeito de
    um supervisor corrigir um erro) — **fechado (01/09)**, `setManualTimeFourMarkings` +
    4 campos editáveis na aba Ponto, E2E provando. Detalhe completo em
-   `CHECKPOINT_SESSAO_2026-08-31.md` §18-§20. **Sem bloqueios técnicos restantes — falta só
-   decidir quando habilitar de verdade** (pra todo mundo, nas duas empresas).
+   `CHECKPOINT_SESSAO_2026-08-31.md` §18-§20. **✅ DECIDIDO E FECHADO (07/09):** não vai pra todo mundo — fica **só no escritório**
+   (os 3 Auxiliares Administrativos de Caratinga: Diendrel, Iago e Pablo), que já estavam
+   com `marking_count=4` e batendo as 4 de verdade desde 03/09. `default_marking_count`
+   segue **2** nas duas empresas; funcionário novo nasce com 2 e quem for do escritório é
+   marcado na mão (herança automática por função foi **descartada** — risco de função
+   digitada diferente). Único ajuste: Victor Angelo (Triagem - Shopee) voltou de 4 pra
+   herdar o padrão. Detalhe em `CHECKPOINT_SESSAO_2026-09-07.md` §6.
 3. **Modo tablet (quiosque):** 2 tablets da empresa; ponto só neles, dentro da localização.
    Celular pessoal e supervisor não batem/registram ponto fora dali.
 4. **Facial sem CPF, ordem automática:** câmera aberta escaneando; reconhece → identifica →
