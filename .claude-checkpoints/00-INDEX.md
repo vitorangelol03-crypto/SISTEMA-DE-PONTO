@@ -2,7 +2,29 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-08** — **✅ PONTO DO WASHINGTON E DO VICTOR ANGELO
+> Última atualização: **2026-09-08 (2ª leva)** — **🔒 §2.2 FECHADO (LEVA 1 de 2): a trava do
+> banco do driverpay passa a seguir a PERMISSÃO da tela, não o número do usuário**
+> (`202c908`, migration `20260908120000` aplicada em produção). Investigação com 12 agentes
+> read-only + verificação adversarial mostrou que **minha recomendação de 31/08 ("só 2626")
+> estava OBSOLETA** — em 02/09 o Victor decidiu o oposto ("máximo de controle em cada aba") e
+> em cima disso foi construída uma semana de trabalho (permissão `viewValues`, 8 tabelas
+> mascaradas, 19 funções). O buraco continuava aberto e era MAIOR: a leva de 03–04/09 fechou
+> só a LEITURA de valores em R$ — `authenticated` seguia com INSERT/UPDATE/DELETE em tudo, e
+> os supervisores 01/02/03/04/7770 (sem a aba) liam 133 entregadores com 97 CPFs e 44 chaves
+> PIX. **Achado novo:** as 3 RPCs de período eram SECURITY DEFINER sem checar o chamador — o
+> 8888 de Ponte Nova concluía a quinzena de Caratinga. ⚠️ **O 2626 não tem linha em
+> `user_permissions`** e usa a aba pelo bypass do frontend (`usePermissions.ts:47`); a
+> migration precisou espelhar esse bypass no banco, senão o próprio Victor perderia a aba.
+> **Provado depois de aplicar:** supervisor 02 → 0 em tudo (via 133/97/44); 2626 → tudo
+> intacto (133 entregadores, 4 quinzenas, 457 pagamentos, 256 notas, 55 grupos, 182 espelhos);
+> 8888 → perdeu Caratinga, manteve PN; 24/24 policies com `with_check` e 0 número cravado;
+> typecheck 0, lint 0, **1361 unitários**. **Falta a LEVA 2:** 19 funções `*_masked`, 5
+> policies de storage e fechar o bucket público de fotos de desconto. 🟠 **Risco ARMADO no
+> §2.3:** na quinzena ABERTA, se alguém despublicar o espelho "de todas" e republicar por
+> plataforma, **44 unidades / 109 pessoas / R$ 301.430,62 perdem a NF na hora**.
+> Detalhe em `CHECKPOINT_SESSAO_2026-09-08.md` §2-§4.
+>
+> Atualização anterior do mesmo dia — **✅ PONTO DO WASHINGTON E DO VICTOR ANGELO
 > CORRIGIDO (dados de produção, nenhuma linha de código).** Detalhe em
 > `CHECKPOINT_SESSAO_2026-09-08.md`. A triagem de Caratinga trabalha de **madrugada
 > (~02:08 → ~09:00 BRT, dentro do mesmo dia)** — não existe turno virando a noite, o que

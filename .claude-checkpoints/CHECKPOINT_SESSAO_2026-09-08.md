@@ -95,16 +95,90 @@ o registro de 04/09 (feito pela tela) como modelo de quais colunas preencher.
 
 ---
 
-## 2. Pendências desta sessão
+## 2. Investigação das 4 pendências (§2.2 a §2.5)
 
-- 🔄 A investigação das 4 pendências (§2.2 RLS driverpay / §2.3 filtro NF ok / §2.4 travas
-  do import / §2.5 Dependabot) foi lançada em background e **ainda não teve resultado
-  lido** — retomar por aí.
-- 🟠 **Achado que muda o §2.2:** as migrations de 02/09
-  (`20260902010000_9999_8888_configuraveis_2626_fixo`,
-  `20260902020000_remove_travas_exclusivas_ponto_driverpay_aprovacao`) mostram que o Victor
-  decidiu o **oposto** da recomendação de 31/08: as travas exclusivas do 2626 (Ponto,
-  Pagamentos Driver, Aprovação de Cadastro) viraram **permissão normal configurável**. E as
-  8 migrations de `rest_bypass_fix` + 3 levas de revoke do driverpay (03–04/09) podem já ter
-  fechado o buraco. **Não propor "só 2626" sem reler isso.**
-- 🟡 Seguem intocadas as pendências antigas de `CHECKPOINT_PROXIMOS_PASSOS.md`.
+12 agentes read-only (6 investigadores + 1 verificador adversarial cada). O resultado
+completo está no journal do run `wf_193f5e83-868`. O essencial:
+
+### 🔴 §2.2 — a recomendação de 31/08 estava OBSOLETA e o buraco era MAIOR
+
+**"Só 2626" contradizia o próprio Victor.** Em 02/09 ele mandou o oposto ("quero máximo de
+controle possível em cada aba") e em cima disso foi construída uma semana de trabalho: a
+permissão `driverpay.viewValues`, 8 tabelas de dinheiro mascaradas e 19 funções novas.
+
+O que a leva de 03–04/09 fechou: **só a leitura de valores em R$**. O que continuava aberto
+(provado no banco, não deduzido): a policy ainda era "mesma empresa", `authenticated` ainda
+tinha INSERT/UPDATE/DELETE em tudo, `driverpay_drivers` ainda entregava CPF/pix_key/phone/
+recebedor_pix, e — **achado novo** — as 3 RPCs de período eram SECURITY DEFINER sem NENHUMA
+checagem do chamador (o 8888 de PN concluía a quinzena de Caratinga).
+
+**Dois achados dos agentes que eu DERRUBEI ao conferir:** `_test_create_supervisor_with_perms`
+existe em produção com EXECUTE pro authenticated mas **não é SECURITY DEFINER** (risco bem
+menor que o alegado); e a policy `anon_spreadsheets_all` (ALL pro anon) existe, mas o bucket
+`spreadsheets` está **vazio** — não vaza nada hoje.
+
+### 🟠 §2.3 — os 2 achados vivos, e um risco ARMADO agora
+7 unidades marcadas "na mão" (R$ 21.083,91), todas já pagas e todas em quinzena concluída.
+Caso ANDREA reproduzido rodando o código real sobre dados reais (3 notas validadas → "1/3").
+**O que preocupa:** na quinzena ABERTA as 71 notas validadas estão na chave do espelho "de
+todas" — se alguém despublicar e republicar por plataforma, **44 unidades / 109 pessoas /
+R$ 301.430,62 perdem a NF na hora**. `slotCoberto` não muda desde 28/07.
+
+### 🟡 §2.4 e §2.5
+Import: os 3 achados intactos (nenhum arquivo mudou desde 31/08). Dependabot: 8 PRs; os 3 de
+Actions **não** se fecham sozinhos (o robô logou "No update needed" em 07/09) e estão
+obsoletos — fechar na mão é seguro. #18 (typescript 7) barrado por motivo real (typescript-eslint
+só aceita < 6.1); #8 (react 19 sem react-dom) em conflito. A checar: um agente afirma que o
+**E2E do main está vermelho desde 07/09** (1 teste do /clock, câmera) — não confirmei.
+
+---
+
+## 3. §2.2 LEVA 1 — APLICADA EM PRODUÇÃO (`202c908`)
+
+Decisões do Victor (08/09): a trava do banco segue a **permissão da tela**, não o número do
+usuário; **9999 continua vendo as duas empresas**; trabalho **fatiado** em 2 levas; o bucket
+público de fotos entra no escopo (leva 2). No filtro NF: marca na mão vira **opção separada**.
+
+Migration `20260908120000_driverpay_rls_por_permissao_leva1.sql`:
+1. 3 funções novas — `driverpay_acesso_total()`, `driverpay_tem_aba()`, `driverpay_pode()`.
+2. As 24 policies recriadas usando elas (role `authenticated`, com `with check`).
+3. As 3 RPCs de período passam a checar quem chamou (corpo original intacto).
+
+⚠️ **O 2626 PRECISA do bypass explícito:** ele **não tem linha** em `user_permissions` (só 02,
+03, 04, 8888 e 9999 têm) e usa a aba pelo bypass do frontend em `usePermissions.ts:47`. Sem
+espelhar isso no banco, o próprio Victor perderia a aba. Isso quase passou batido.
+
+**Validação (simulando o JWT de cada um, depois de aplicar):**
+
+| Quem | Antes | Depois |
+|---|---|---|
+| supervisor 02 | 133 entregadores, 97 CPFs, 44 PIX | **0 em tudo** |
+| 2626 | tudo | **tudo igual** — 133 / 4 quinzenas / 457 pagamentos / 256 notas / 55 grupos / 182 espelhos |
+| 8888 | fechava quinzena de Caratinga | **bloqueado** em CT, mantém PN |
+| 9999 | tudo | tudo, as duas empresas |
+
+24/24 policies no role certo, com `with_check`, **0 com número cravado**.
+typecheck 0 · lint 0 · **1361 unitários passando** (90 arquivos).
+
+**Falha honesta:** o teste de escrita (UPDATE trocando chave PIX como o supervisor 02, dentro
+de transação com rollback) **foi interrompido por um 502 do proxy do MCP**. Conferi
+imediatamente pela API REST: **0 linhas com a chave adulterada** — a queda da conexão fez o
+Postgres desfazer sozinho. Não repeti o UPDATE em produção: a prova de bloqueio já vem da
+leitura (no Postgres a cláusula `USING` da policy governa quais linhas um UPDATE alcança, e
+ele enxerga 0).
+
+**Reversão:** recriar as 24 policies com
+`(company_id)::text = coalesce((select auth.jwt()->>'company_id'),'') or (select auth.jwt()->>'sub') = any(array['9999','2626'])`
+e tirar o `IF NOT public.driverpay_pode(...)` do topo das 3 RPCs.
+
+---
+
+## 4. Pendências
+
+- 🔜 **§2.2 LEVA 2:** as 19 funções `*_masked` (hoje só conferem empresa, não a permissão),
+  as 5 policies de storage (presas em `9999`/`2626` — quem for liberado hoje não consegue
+  anexar foto de desconto e o erro some em silêncio) e **fechar o bucket público
+  `driverpay-discount-proofs`** com URL assinada (decisão do Victor: entra agora).
+- 🔜 §2.3 (filtro NF com opção separada + fix do `slotCoberto`), §2.4 (import), §2.5 (Dependabot).
+- 🟠 Conferir se o E2E do main está mesmo vermelho desde 07/09.
+- 🟡 Nota do FERNANDO MARTINS (R$ 13,20) e avisar o Gessiley — desde 05 e 07/09.
