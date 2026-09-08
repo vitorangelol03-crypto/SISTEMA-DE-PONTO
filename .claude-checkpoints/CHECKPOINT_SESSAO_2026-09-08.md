@@ -210,7 +210,48 @@ coisas diferentes e eu tinha passado só o maior).
 
 ---
 
-## 5. Pendências
+## 5. Quinzena fechada: NINGUÉM edita, nem o 2626 (`6d54d5c`)
+
+Ordem do Victor: *"não né, 2626 mexe em quinzena fechada ninguém"*. Pra editar, reabre —
+caminho que já existia (`reopenPeriod`, `driverPay.ts:1352`, ligado em `DriverPayTab.tsx:2022`;
+`driverpay_periods` não tem trava, então reabrir segue funcionando). Confirmei isso ANTES de
+tirar o bypass, senão a quinzena fechada viraria imutável sem saída.
+
+### 🔴 Furo achado no caminho — a trava não valia nem antes (PROVADO)
+
+A trava decidia "é backend, deixa passar" olhando `current_user`. Só que **`current_user` vira
+`postgres` dentro de qualquer função `SECURITY DEFINER`** — e as **7 RPCs `*_masked` que
+escrevem** são SECURITY DEFINER com dono `postgres` e EXECUTE pro `authenticated`
+(`upsert_driverpay_package_masked`, `recompute_driverpay_payment_totals_masked`,
+`update_driverpay_package_rate_where_changed_masked`, `create_driverpay_platform_masked`,
+`upsert_driverpay_platform_rates_masked`, `upsert_payment_bonus_masked`,
+`upsert_payment_rate_masked`).
+
+Medido como 9999 numa quinzena **concluída**:
+
+| Caminho | Resultado |
+|---|---|
+| escrever direto na tabela | BARRADO |
+| **pela RPC masked** | **GRAVOU — trava furada** |
+
+Ou seja: desde a leva de segurança de 03–04/09, a trava de quinzena concluída **já não valia
+para pacotes e totais, para qualquer usuário**. Isso confirma (com prova) o que o agente da
+dimensão 5 tinha marcado só como "provavelmente".
+
+### Correção
+
+A decisão de "é backend?" passa a olhar o **JWT da requisição**, que não muda dentro de
+`SECURITY DEFINER`: sem claims (psql/cron/migration) passa; `claims.role = 'service_role'`
+passa (mantém o app do entregador); qualquer usuário logado → trava aplica, **inclusive dentro
+das RPCs**. E o bypass do 2626 saiu.
+
+**Provado contra a função já no ar:** 2626 em quinzena fechada pela função de valor →
+`"Quinzena concluida: reabra a quinzena para editar"`; 2626 em quinzena aberta → passou;
+app do entregador (service_role) em fechada → passou.
+
+---
+
+## 6. Pendências
 
 - 🔜 **§2.2 LEVA 2:** as 19 funções `*_masked` (hoje só conferem empresa, não a permissão),
   as 5 policies de storage (presas em `9999`/`2626` — quem for liberado hoje não consegue

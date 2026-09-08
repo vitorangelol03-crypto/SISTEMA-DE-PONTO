@@ -2,7 +2,21 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-08 (3ª leva)** — **🔒 TRAVA DE QUINZENA CONCLUÍDA AGORA VALE
+> Última atualização: **2026-09-08 (4ª leva)** — **🔒 QUINZENA CONCLUÍDA: NINGUÉM EDITA, NEM
+> O 2626** (`6d54d5c`, migration `20260908160000`). Ordem do Victor; pra editar, reabre a
+> quinzena (`reopenPeriod` já existia e segue funcionando — conferido ANTES de tirar o bypass).
+> 🔴 **Furo achado e provado no caminho:** a trava decidia "é backend" por `current_user`, que
+> vira **`postgres` dentro de qualquer `SECURITY DEFINER`** — e as **7 RPCs `*_masked` que
+> escrevem** são SECURITY DEFINER com EXECUTE pro `authenticated`. Medido como 9999 em quinzena
+> concluída: escrever direto na tabela = BARRADO, **pela RPC = GRAVOU**. Ou seja, desde a leva
+> de 03–04/09 a trava **já não valia** pra pacotes e totais, pra qualquer usuário. Corrigido:
+> a decisão passa a olhar o **JWT**, que não muda dentro de SECURITY DEFINER (sem claims →
+> passa; `role=service_role` → passa, mantendo o app do entregador; usuário logado → trava
+> aplica até dentro das RPCs). **⚠️ LIÇÃO:** `current_user` NUNCA serve pra identificar o
+> chamador num projeto com funções `SECURITY DEFINER` — use o JWT.
+> Detalhe em `CHECKPOINT_SESSAO_2026-09-08.md` §5.
+>
+> Atualização anterior do mesmo dia (3ª leva) — **🔒 TRAVA DE QUINZENA CONCLUÍDA AGORA VALE
 > EM TUDO: 5 → 11 tabelas** (`0f9daa3`, migration `20260908150000`). O Victor perguntou se
 > quinzena fechada já não impedia despublicar espelho — **estava certo pela metade**: a trava
 > existia só em 5 tabelas (payments/packages/discounts/vales/zapex), protegendo só o
