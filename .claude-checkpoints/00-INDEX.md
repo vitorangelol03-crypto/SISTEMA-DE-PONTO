@@ -2,7 +2,20 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-08 (2ª leva)** — **🔒 §2.2 FECHADO (LEVA 1 de 2): a trava do
+> Última atualização: **2026-09-08 (3ª leva)** — **🔒 TRAVA DE QUINZENA CONCLUÍDA AGORA VALE
+> EM TUDO: 5 → 11 tabelas** (`0f9daa3`, migration `20260908150000`). O Victor perguntou se
+> quinzena fechada já não impedia despublicar espelho — **estava certo pela metade**: a trava
+> existia só em 5 tabelas (payments/packages/discounts/vales/zapex), protegendo só o
+> **dinheiro**; espelhos, notas, marcas de pago, pedidos de print, prints e razão de descontos
+> **nunca tiveram trava**. Entraram as 6 que faltavam; as outras 14 ficam de fora por não
+> pertencerem a quinzena nenhuma. Impacto medido ANTES: 0 ações reais depois de fechar em
+> todas, exceto 5 notas enviadas por entregadores (que passam por service_role e seguem
+> furando de propósito) — **nada quebrou**. Provado em transação com rollback: 9999 em fechada
+> BARRADO, em aberta passou, 2626 fura (bypass mantido). ⚠️ **Isso NÃO resolve o risco das
+> notas órfãs** — ele vive na quinzena ABERTA, onde republicar espelho é operação normal.
+> Detalhe em `CHECKPOINT_SESSAO_2026-09-08.md` §4.
+>
+> Atualização anterior do mesmo dia (2ª leva) — **🔒 §2.2 FECHADO (LEVA 1 de 2): a trava do
 > banco do driverpay passa a seguir a PERMISSÃO da tela, não o número do usuário**
 > (`202c908`, migration `20260908120000` aplicada em produção). Investigação com 12 agentes
 > read-only + verificação adversarial mostrou que **minha recomendação de 31/08 ("só 2626")

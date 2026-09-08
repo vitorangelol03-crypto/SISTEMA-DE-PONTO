@@ -173,7 +173,44 @@ e tirar o `IF NOT public.driverpay_pode(...)` do topo das 3 RPCs.
 
 ---
 
-## 4. Pendências
+## 4. Trava de quinzena concluída em TUDO (`0f9daa3`) — pedido do Victor
+
+Pergunta dele: *"mas quinzenas fechadas não podem ser editadas sem ser abertas certo? então
+não podem ser despublicadas certo?"* — **certo pela metade**, e a metade que falhava importava:
+
+- A trava existia em **5 tabelas só** (payments, packages, discounts, vales, zapex): protegia
+  o **dinheiro**. Espelhos, notas, marcas de pago, pedidos de print, prints do entregador e o
+  razão de descontos **nunca tiveram trava** — dava pra despublicar espelho de quinzena fechada.
+- O 2626 **fura a trava** de propósito (está escrito na mensagem de erro: "somente mestre 2626
+  ou backend"). service_role também.
+
+Ordem do Victor: **"coloque a trava em tudo"**. Agora são **11 tabelas** (as 5 + 6 novas:
+nota_fiscal_files, mirror_publications, payment_marks, proof_requests, deduction_ledger,
+delivery_proofs). As outras 14 ficam de fora porque não pertencem a quinzena nenhuma
+(cadastro, grupos, plataformas, tarifas, apelidos, configurações).
+
+A função deixou de ser hardcoded (`se é payments usa period_id, SENÃO payment_id`) e passa a
+olhar as colunas que a linha tem — as 5 antigas se comportam idêntico.
+
+**Impacto medido ANTES de aplicar** (ações reais feitas depois de fechar a quinzena):
+marcar pago 552→**0**; publicar espelho 182→**0**; pedir print 6→**0**; desconto parcelado
+60→**0**; print do entregador 277→**0**; enviar nota 256→**5** (3 entregadores pelo app, que
+passa por service_role e segue furando a trava). **Nada do fluxo real quebra.**
+
+**Provado em transação com rollback, com o trigger no ar:** 9999 em quinzena fechada →
+BARRADO; 9999 em aberta → passou; 2626 em fechada → passou.
+
+⚠️ **Isto NÃO resolve o risco do §2.3.** Aquele vive na quinzena **ABERTA** (1ª de agosto),
+onde despublicar/republicar espelho é operação normal. Trava de período concluído não age em
+período aberto. Números conferidos por mim: 71 notas validadas de 44 entregadores, **todas**
+presas à chave do espelho "de todas"; as 51 publicações vivas são **todas** "de todas as
+plataformas". Se republicarem por plataforma: 44 grupos, **110 pessoas**, **R$ 301.430,62**
+perdem o "NF ok" (desses, R$ 183.583,34 são dos 44 que emitiram nota — os dois números medem
+coisas diferentes e eu tinha passado só o maior).
+
+---
+
+## 5. Pendências
 
 - 🔜 **§2.2 LEVA 2:** as 19 funções `*_masked` (hoje só conferem empresa, não a permissão),
   as 5 policies de storage (presas em `9999`/`2626` — quem for liberado hoje não consegue
