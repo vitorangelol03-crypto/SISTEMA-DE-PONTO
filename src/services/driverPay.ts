@@ -14,7 +14,7 @@ import { supabase } from '../lib/supabase';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
 import { PONTO_EDITOR_ID } from '../config/masters';
 import type { ImportResolvedItem, ImportApplyResult } from '../utils/driverImportApply';
-import { missingImportPlatforms } from '../utils/driverImportApply';
+import { missingImportPlatforms, driverIdDeApelidoConhecido } from '../utils/driverImportApply';
 import { mirrorPlatformKey, sanitizeMirrorKeyForPath } from '../components/driverpay/driverPayShared';
 import type { ProofRequest, PaymentMark } from '../components/driverpay/driverPayShared';
 import { statusPorQuantidade, taxasDePlataformasQueExistem } from '../components/driverpay/driverPayShared';
@@ -2704,6 +2704,12 @@ export const applyDriverImport = async (
   const createdByRaw = new Map<string, string>();
   const ignoredNormsSaved = new Set<string>();
 
+  // Apelidos JA gravados na empresa. Sao a memoria de uma importacao anterior que tenha
+  // falhado no meio: os entregadores criados ate ali ficaram no banco e cada um deixou o
+  // apelido dele. Sem consultar isso, reimportar criaria todos de novo (duplicados).
+  const { aliases: aliasesExistentes } = await getDriverMatchContext(companyId);
+  const aliasParaDriver = new Map(aliasesExistentes.map((a) => [a.alias_norm, a.driver_id]));
+
   let driversCreated = 0;
   let aliasesLearned = 0;
   let packagesApplied = 0;
@@ -2724,13 +2730,18 @@ export const applyDriverImport = async (
     let driverId: string;
     let driverName: string;
     if (it.resolution.kind === 'create') {
-      const cached = createdByRaw.get(it.driverRaw);
-      if (cached) {
-        driverId = cached;
+      // Reaproveita quem ja existe: o mesmo driverRaw dentro desta chamada, OU o apelido
+      // gravado por uma tentativa anterior que falhou no meio. Sem isso, reimportar
+      // duplicava os entregadores novos (bug de 31/08, corrigido em 08/09).
+      const jaExiste = driverIdDeApelidoConhecido(it.driverRaw, it.aliasNorm, aliasParaDriver, createdByRaw);
+      if (jaExiste) {
+        driverId = jaExiste;
+        createdByRaw.set(it.driverRaw, driverId);
       } else {
         const d = await createDriver(companyId, userId, { name: it.resolution.name, route: it.city || null });
         driverId = d.id;
         createdByRaw.set(it.driverRaw, driverId);
+        aliasParaDriver.set(it.aliasNorm, driverId);
         driversCreated += 1;
         await upsertDriverAlias(companyId, driverId, it.driverRaw, it.aliasNorm, source, userId);
         aliasesLearned += 1;

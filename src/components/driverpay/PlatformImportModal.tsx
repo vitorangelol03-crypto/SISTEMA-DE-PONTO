@@ -93,8 +93,11 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
         setIgnoredNames(ctx.ignored);
         setPeriods(pers);
         setPlatforms(plats);
+        // 08/09/2026: só quinzena ABERTA pode ser destino. Antes o `?? pers[0]?.id` caía
+        // numa concluída quando não havia nenhuma aberta, e a lista mostrava as concluídas
+        // como opção — um clique errado tentava reescrever totais já pagos.
         const open = pers.filter((p) => p.status === 'aberto');
-        setPeriodId(open[0]?.id ?? pers[0]?.id ?? '');
+        setPeriodId(open[0]?.id ?? '');
         setResolutions({});
         if (parsed.warnings.length) parsed.warnings.forEach((w) => toast(w, { icon: '⚠️' }));
       } catch (e) {
@@ -161,6 +164,9 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
 
   const setResolution = (driverRaw: string, res: ImportResolution) =>
     setResolutions((prev) => ({ ...prev, [driverRaw]: res }));
+
+  /** Só quinzena aberta pode receber importação (08/09/2026). */
+  const periodsAbertos = periods.filter((p) => p.status === 'aberto');
 
   const handleApply = async () => {
     if (!result || !periodId) {
@@ -303,13 +309,20 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
               onChange={(e) => setPeriodId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[40px]"
             >
-              {periods.length === 0 && <option value="">Nenhum período — crie um antes</option>}
-              {periods.map((p) => (
+              {periodsAbertos.length === 0 && (
+                <option value="">Nenhuma quinzena aberta — abra ou reabra uma antes</option>
+              )}
+              {periodsAbertos.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.label} {p.status === 'concluido' ? '(concluído)' : '(aberto)'}
+                  {p.label}
                 </option>
               ))}
             </select>
+            {periodsAbertos.length === 0 && (
+              <span className="text-xs text-amber-700">
+                Quinzena concluída não aceita importação — os totais dela já foram fechados.
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2 text-sm text-green-700">

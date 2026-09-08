@@ -81,6 +81,34 @@ export function missingImportPlatforms(
     .sort((a, b) => b.packages - a.packages || a.name.localeCompare(b.name));
 }
 
+/**
+ * Qual driver ja responde por este apelido — ou null se e pra criar um novo.
+ *
+ * 🔴 Existe por um bug real (achado em 31/08/2026, corrigido em 08/09): se o import
+ * falhava NO MEIO, os entregadores ja criados ficavam no banco, mas o modal mantinha as
+ * resolucoes antigas ("criar novo"). Clicar "Importar" de novo criava os MESMOS
+ * entregadores outra vez — gente duplicada, com os pacotes contados duas vezes. E como
+ * `createDriver` chama `ensureDriverInOpenPeriods`, cada duplicado ainda poluia a grade
+ * de todas as quinzenas abertas.
+ *
+ * A saida e o proprio apelido: `upsertDriverAlias` e idempotente por
+ * (company_id, alias_norm) e roda LOGO DEPOIS de criar o driver. Entao, numa segunda
+ * tentativa, o apelido ja aponta pro entregador criado na primeira — basta reaproveitar
+ * em vez de criar. Assim o import vira repetivel de verdade, e a protecao vale mesmo
+ * quando a chamada nao vem da tela.
+ *
+ * `criadosNestaChamada` tem precedencia: dentro da mesma execucao, o mesmo `driverRaw`
+ * aparece varias vezes (uma por cidade/plataforma) e so pode criar UM driver.
+ */
+export function driverIdDeApelidoConhecido(
+  driverRaw: string,
+  aliasNorm: string,
+  aliasesExistentes: ReadonlyMap<string, string>,
+  criadosNestaChamada: ReadonlyMap<string, string>,
+): string | null {
+  return criadosNestaChamada.get(driverRaw) ?? aliasesExistentes.get(aliasNorm) ?? null;
+}
+
 /** Resumo do que a aplicacao VAI fazer (para a previa/confirmacao na tela). */
 export function summarizeDriverImport(items: ImportResolvedItem[]): ImportSummary {
   const toCreate = new Set<string>(); // driverRaw dos "create" (dedup por entregador)
