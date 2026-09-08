@@ -356,7 +356,64 @@ público, mas está com **0 arquivos**.
 
 ---
 
-## 8. Pendências
+## 8. §2.4 — import de planilha (`864eaf9`)
+
+**(1) Reclicar "Importar" depois de falha no meio duplicava os entregadores novos.**
+Mecanismo: `createdByRaw` é cache **local da chamada**. Se o import quebrava no meio, os
+entregadores já criados ficavam no banco, o cache morria com a função, e o modal mantinha
+as resoluções antigas ("criar novo") — o segundo clique criava os mesmos de novo, com os
+pacotes contados duas vezes. Pior: `createDriver` chama `ensureDriverInOpenPeriods`, então
+cada duplicado poluía a grade de **todas** as quinzenas abertas.
+
+Corrigido na **raiz, no service** (não paliativo na tela): `applyDriverImport` carrega os
+apelidos já gravados e reaproveita o entregador em vez de criar. Funciona porque
+`upsertDriverAlias` é idempotente por (empresa, apelido) e roda logo depois de criar —
+numa segunda tentativa o apelido já aponta pro entregador da primeira. A decisão virou
+função pura (`driverIdDeApelidoConhecido`), testável.
+
+**(2) O modal deixava escolher quinzena concluída como destino.** A lista mostrava as
+concluídas e o default caía numa delas quando não havia aberta
+(`open[0]?.id ?? pers[0]?.id`). Agora lista **só quinzena aberta** e, sem nenhuma, explica
+o porquê. (Desde `6d54d5c` o banco já recusaria a escrita — mas o erro cairia no meio do
+import, que era justamente o gatilho do bug 1.)
+
+**Validação:** typecheck 0 · lint 0 · build limpo · **1382 unitários** (6 novos), incluindo
+o cenário "falha no meio + reimportação": 3 entregadores no total, nenhum duplicado.
+
+🟡 **Pendente do §2.4:** o teste ponta a ponta com arquivo real grande + falha no meio +
+reimport. Depende do OK do Victor pra usar Ponte Nova como área de teste e dos arquivos
+reais dele.
+
+---
+
+## 9. §2.5 — Dependabot (`b9c54b9`)
+
+**3 PRs fechados à mão** (#13 checkout, #16 setup-node, #3 upload-artifact): estavam
+**obsoletos** — o `ci.yml` do main já está em v7 nas três desde 31/08, conferido linha a
+linha. O bot registrou "No update needed" em 07/09 mas não fecha PR sozinho.
+
+**#26 + #19 aplicados à mão**, com lock regenerado. Não dava pra usar o botão: o lock que
+o bot gera vem quebrado (apaga a pasta `esbuild` de dentro do vitest), e o `npm ci` do CI
+morre em ~6s com "Missing: esbuild@0.28.2 from lock file". 18 pacotes, **todos minor/patch
+dentro do mesmo major** (conferido no diff — sem major escondido no grupo).
+
+**Validação:** `npm ci --dry-run` OK (lock sadio, ao contrário do PR) · typecheck 0 ·
+lint 0 · build limpo · 1382 unitários · **E2E 107 10/10**.
+
+⚠️ **Pegadinha do upgrade do Playwright (1.61 → 1.62):** a versão nova espera outra build
+de navegador (`chromium_headless_shell-1243`) e o E2E quebra com "Executable doesn't exist"
+até rodar `npx playwright install chromium` — já rodado. Firefox/WebKit seguem ausentes:
+o install deles falha por falta de `libx264.so` no WSL (precisa de `sudo playwright
+install-deps`). No CI, runner limpo, não acontece.
+
+**Sobraram 3 PRs**, todos major e todos com motivo: **#18** typescript 7 (o
+typescript-eslint, até a 8.69 que acabou de entrar, só aceita typescript < 6.1); **#8**
+react 19 sem react-dom (e em conflito); **#5** rollup-plugin-visualizer 7 (só relatório de
+bundle). Esperando decisão do Victor sobre ignorar os majors.
+
+---
+
+## 10. Pendências
 
 - 🔜 **§2.2 LEVA 2:** as 19 funções `*_masked` (hoje só conferem empresa, não a permissão),
   as 5 policies de storage (presas em `9999`/`2626` — quem for liberado hoje não consegue

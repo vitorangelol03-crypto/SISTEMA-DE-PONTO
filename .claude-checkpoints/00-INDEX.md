@@ -2,7 +2,22 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-08 (6ª leva)** — **✅ §2.2 LEVA 2 FECHADA: funções de valor,
+> Última atualização: **2026-09-08 (7ª leva)** — **✅ §2.4 e §2.5 FECHADOS** (`864eaf9`,
+> `b9c54b9`). **Import:** reclicar depois de falha no meio duplicava os entregadores novos
+> (`createdByRaw` é cache local da chamada; os criados ficavam no banco e o modal mantinha
+> "criar novo" — e cada duplicado ainda poluía a grade de todas as quinzenas abertas via
+> `ensureDriverInOpenPeriods`). Corrigido **na raiz, no service**: reaproveita pelo apelido
+> já gravado (`upsertDriverAlias` é idempotente e roda logo após criar), então o import
+> virou repetível. O modal também passou a listar **só quinzena aberta**. **Dependabot:**
+> 3 PRs de Actions fechados (obsoletos — ci.yml já em v7); #26 e #19 aplicados à mão com
+> lock regenerado (18 pacotes, todos minor/patch no mesmo major); `npm ci --dry-run` OK,
+> 1382 unitários, E2E 107 10/10. ⚠️ **Pegadinha:** subir o Playwright (1.61→1.62) quebra o
+> E2E com "Executable doesn't exist" até rodar `npx playwright install chromium`.
+> Firefox/WebKit seguem ausentes (falta `libx264.so` no WSL, precisa de sudo).
+> Sobraram 3 PRs, todos major com motivo (#18 typescript 7, #8 react 19, #5 visualizer 7) —
+> **esperando decisão**. Detalhe em `CHECKPOINT_SESSAO_2026-09-08.md` §8-§9.
+>
+> Atualização anterior do mesmo dia (6ª leva) — **✅ §2.2 LEVA 2 FECHADA: funções de valor,
 > arquivos e o bucket público** (`2de908a`, `91cead8`, `204ce6a`). Depois da leva 1 (tabelas)
 > sobravam dois caminhos que ignoravam a permissão: as funções `*_masked` (gate próprio
 > "mesma empresa OU 9999/2626") e as 6 policies de Storage (presas em `9999`/`2626` — efeito
