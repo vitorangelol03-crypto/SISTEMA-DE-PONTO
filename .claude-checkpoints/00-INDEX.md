@@ -2,7 +2,22 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-08 (4ª leva)** — **🔒 QUINZENA CONCLUÍDA: NINGUÉM EDITA, NEM
+> Última atualização: **2026-09-08 (5ª leva)** — **✅ §2.3 FECHADO: nota validada para de
+> sumir quando o espelho é republicado** (`5552c65`). Era o risco **armado na quinzena
+> aberta**: a nota guarda a chave do espelho de quando foi enviada, e despublicar o espelho
+> "de todas" para republicar **por plataforma** (operação normal) fazia a nota validada
+> deixar de casar com qualquer vaga — atingindo 44 grupos / 110 pessoas / R$ 301.430,62.
+> Regra nova: **nota presa a espelho que não existe mais volta a valer pelo CNPJ**; com o
+> espelho dela vivo, nada muda. Corrigido nos DOIS lados — painel (`slotCoberto` +
+> `espelhosVivos`) e app do entregador (edge fn, `sentOrfa`), senão o entregador seguiria
+> sendo cobrado de nota que já mandou. **Provado com os dados reais da ANDREA: 1/3 → 3/3**,
+> `complete` e sem precisar da marca na mão. typecheck 0 · lint 0 · build limpo · **1370
+> unitários** (9 novos, 3 falhavam antes) · **E2E 107 10/10** contra a edge fn deployada
+> (conteúdo novo conferido no ar). ⚠️ Firefox/WebKit não rodaram: `playwright install` falha
+> por falta de `libx264.so` no WSL (precisa de sudo) — ambiente, não produto.
+> Detalhe em `CHECKPOINT_SESSAO_2026-09-08.md` §6.
+>
+> Atualização anterior do mesmo dia (4ª leva) — **🔒 QUINZENA CONCLUÍDA: NINGUÉM EDITA, NEM
 > O 2626** (`6d54d5c`, migration `20260908160000`). Ordem do Victor; pra editar, reabre a
 > quinzena (`reopenPeriod` já existia e segue funcionando — conferido ANTES de tirar o bypass).
 > 🔴 **Furo achado e provado no caminho:** a trava decidia "é backend" por `current_user`, que

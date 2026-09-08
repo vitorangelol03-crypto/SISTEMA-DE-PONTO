@@ -251,7 +251,43 @@ app do entregador (service_role) em fechada → passou.
 
 ---
 
-## 6. Pendências
+## 6. Nota validada para de sumir quando o espelho é republicado (`5552c65`) — §2.3 fechado
+
+O risco que estava **armado na quinzena aberta**. A nota grava a chave do espelho de quando
+foi enviada; despublicar o espelho "de todas" e republicar **por plataforma** (operação
+normal numa quinzena aberta) fazia a nota validada deixar de casar com qualquer vaga e sumir
+da conta. Não era enfeite: a mesma conta decide quem entra no relatório de pagamento quando
+o operador filtra "só nota validada".
+
+**Regra nova:** nota cuja chave de espelho não corresponde a nenhuma publicação viva volta a
+valer pelo CNPJ — mesmo tratamento da nota antiga. Com o espelho dela vivo, nada muda.
+
+Corrigido nos **dois lados**: painel (`slotCoberto` ganha `espelhosVivos`, montado em
+`computeNfProgressByPayment`) e app do entregador (edge fn, via `sentOrfa`) — sem o segundo,
+o entregador continuaria sendo cobrado de nota que já mandou.
+
+**Prova com dados REAIS da ANDREA**, rodando as funções de verdade:
+
+| Vaga | Antes | Depois |
+|---|---|---|
+| espelho ANJUN+SHOPEE+eMile · CNPJ iMile | false | **true** |
+| espelho ANJUN+SHOPEE+eMile · CNPJ Shopee | true | true |
+| espelho LOGGI · CNPJ Shopee | false | **true** |
+| | **1/3** | **3/3** — `complete`, `manual=false` |
+
+**Validação:** typecheck 0 · lint 0 · build limpo · **1370 unitários** (91 arquivos), sendo
+**9 novos** (`driverPayNfEspelhoRepublicado.spec.ts`) — 3 deles falhavam antes do fix, e os
+outros cobrem não-regressão (espelho vivo continua exigindo a nota dele; nota de um CNPJ não
+cobre vaga de outro; sem o parâmetro nada muda). **E2E 107 10/10** (chromium + mobile) contra
+a edge fn já deployada. Edge fn redeployada e conteúdo novo **conferido na função no ar**.
+
+⚠️ **Firefox/WebKit não rodaram:** navegador ausente no ambiente. `npx playwright install`
+falha por falta de `libx264.so` no WSL — precisa de `sudo playwright install-deps`, que não
+rodei. É ambiente, não produto (o erro é `browserType.launch: Executable doesn't exist`).
+
+---
+
+## 7. Pendências
 
 - 🔜 **§2.2 LEVA 2:** as 19 funções `*_masked` (hoje só conferem empresa, não a permissão),
   as 5 policies de storage (presas em `9999`/`2626` — quem for liberado hoje não consegue
