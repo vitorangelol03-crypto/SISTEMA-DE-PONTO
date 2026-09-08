@@ -1,0 +1,21 @@
+-- Pedido do Victor (08/09/2026): fechar o bucket publico das provas de desconto.
+--
+-- Era public=true: qualquer pessoa com o link abria a foto SEM LOGIN e o link nunca
+-- expirava (116 fotos). PROVADO antes de fechar: GET na URL publica devolvia 200.
+--
+-- ORDEM PROPOSITAL: o codigo que usa link assinado (commit 91cead8) JA estava em producao
+-- quando isto rodou -- conferido no bundle no ar (createSignedUrl 4x, getPublicUrl 0x).
+-- Fechar antes do deploy faria as fotos sumirem da tela no intervalo.
+--
+-- DEPOIS de fechar (medido):
+--   URL publica com cache-buster ....... 400  (bloqueado)
+--   URL publica sem cache-buster ....... 200 com cf-cache-status: HIT
+--       -> e o cache do Cloudflare (cache-control: public, max-age=3600). Os links que ja
+--          estavam em cache seguem respondendo por ate 1 hora e depois morrem. Nao e falha
+--          do fechamento.
+--   Link ASSINADO (o que a tela usa) ... 200  (a tela continua mostrando a foto)
+--
+-- Observacao registrada, NAO alterada (fora do pedido): o bucket `employee-photos` tambem
+-- e publico, mas esta com 0 arquivos.
+
+update storage.buckets set public = false where id = 'driverpay-discount-proofs';

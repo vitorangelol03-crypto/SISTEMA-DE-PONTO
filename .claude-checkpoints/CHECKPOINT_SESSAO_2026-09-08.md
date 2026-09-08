@@ -287,7 +287,76 @@ rodei. É ambiente, não produto (o erro é `browserType.launch: Executable does
 
 ---
 
-## 7. Pendências
+## 7. §2.2 LEVA 2 — funções de valor, arquivos e o bucket público (`2de908a`, `91cead8`)
+
+### 7.1 As 12 funções `*_masked` do driverpay + as 6 policies de Storage (`2de908a`)
+
+Depois da leva 1 (tabelas), sobravam **dois caminhos** que ignoravam a permissão:
+- as funções `*_masked` tinham gate próprio ("mesma empresa OU 9999/2626") — quem não tinha
+  a aba continuava lendo tudo por elas;
+- as 6 policies de Storage estavam presas em `sub IN ('9999','2626')` — efeito colateral:
+  **quem o Victor liberasse na tela hoje não conseguiria anexar foto de desconto nem ver
+  nota/espelho**, e o erro do Storage some em silêncio.
+
+⚠️ **Escopo deliberado: só as 12 DO DRIVERPAY.** As outras 7 (`get_payments_masked`,
+`get_error_records_masked`, `get_bonus_removals_masked`, `get_triage_errors_masked`,
+`get_triage_distribution_employees_masked`, `upsert_payment_bonus_masked`,
+`upsert_payment_rate_masked`) são do **Financeiro/Erros/Triagem** — exigir permissão de
+driverpay nelas quebraria esses módulos. Ficam intocadas.
+
+As funções foram reescritas por **substituição do gate sobre `pg_get_functiondef`**, não
+copiadas à mão: o resto do corpo fica byte a byte igual, e a migration **aborta** se o gate
+não for achado em alguma (não deixa passar em silêncio uma função que continuaria aberta).
+A máscara de valores (`viewValues`) ficou intacta.
+
+Removida também a policy `anon_spreadsheets_all` (ALL pro anon no bucket `spreadsheets`).
+Conferido antes: bucket **vazio** e a string não aparece em `src/`, `supabase/functions/`
+nem `scripts/`.
+
+**Provado depois de aplicar:** funções — 2626 e 9999 com 5 plataformas/132 pagamentos, 02 e
+8888-em-Caratinga com 0 e 0. Arquivos — 2626 e 9999 com 116 fotos/257 notas/183 espelhos,
+02 com 0/0/0. 12/12 funções com a regra nova, 0 com número cravado, 7 de outros módulos
+intocadas, 6/6 policies de storage com a regra no lugar certo, 0 policy pro anon.
+
+### 7.2 Bucket das provas deixa de ser público (`91cead8`)
+
+Era público: qualquer um com o link abria a foto **sem login**, e o link **nunca expirava**
+(116 fotos). `discountProofUrl` (síncrona, `getPublicUrl`) saiu; entrou
+`discountProofSignedUrl` (assíncrona, `createSignedUrl`, TTL 1h) + o hook
+`useDiscountProofUrls`, porque as telas montavam o `src` de forma síncrona dentro de
+`useMemo`.
+
+Detalhe não óbvio que o hook resolve: **o array de caminhos chega novo a cada render** — se
+o efeito dependesse dele, cada render reassinaria tudo (loop de chamadas ao Storage). A
+dependência é uma chave estável derivada do conteúdo, e há teste específico pra isso.
+
+**Validação:** typecheck 0 · lint 0 · build limpo · **1376 unitários** (92 arquivos), 6
+novos cobrindo: resolve o mapa, ignora null, lista vazia não chama Storage, re-render com
+os mesmos caminhos não reassina, caminho novo entra sem perder os anteriores, prova que
+falha não entra no mapa.
+
+**Ordem proposital:** o código foi pro ar ANTES de fechar o bucket. Fechar primeiro faria as
+fotos sumirem da tela no intervalo até o deploy. Confirmei o deploy pelo **conteúdo do
+bundle no ar** (`createSignedUrl` 4x, `getPublicUrl` **0x**), não só pelo status.
+
+**Bucket fechado** (migration `20260908190000`), com prova dos dois lados:
+
+| | Antes | Depois |
+|---|---|---|
+| URL pública, sem login | **200** (qualquer um abria) | **400** (com cache-buster) |
+| URL pública sem cache-buster | 200 | 200 com `cf-cache-status: HIT` |
+| Link assinado (o que a tela usa) | — | **200** |
+
+⚠️ O 200 remanescente é **cache do Cloudflare** (`max-age=3600`): links que já estavam em
+cache respondem por até 1 hora e depois morrem. Não é falha do fechamento — com
+cache-buster o origin já devolve 400, e `storage.buckets.public = false` está confirmado.
+
+📌 Registrado e **não alterado** (fora do pedido): o bucket `employee-photos` também é
+público, mas está com **0 arquivos**.
+
+---
+
+## 8. Pendências
 
 - 🔜 **§2.2 LEVA 2:** as 19 funções `*_masked` (hoje só conferem empresa, não a permissão),
   as 5 policies de storage (presas em `9999`/`2626` — quem for liberado hoje não consegue
