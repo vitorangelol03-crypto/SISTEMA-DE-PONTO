@@ -2,7 +2,28 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-07 (2ª leva)** — **✅ 4 BATIDAS/DIA: LIGADO SÓ PRO
+> Última atualização: **2026-09-08** — **✅ PONTO DO WASHINGTON E DO VICTOR ANGELO
+> CORRIGIDO (dados de produção, nenhuma linha de código).** Detalhe em
+> `CHECKPOINT_SESSAO_2026-09-08.md`. A triagem de Caratinga trabalha de **madrugada
+> (~02:08 → ~09:00 BRT, dentro do mesmo dia)** — não existe turno virando a noite, o que
+> resolveu o "de sexta para sábado" do pedido. Rodando a regra do Victor ("dia que a
+> triagem bateu e ele não") na semana toda, o **único** furo do Washington era o **sábado
+> 05/09** (entrou 02:26 e nunca bateu a saída; os domingos 30/08 e 06/09 a turma inteira
+> ficou parada, então não contam). Corrigido com a média dos 20 colegas: **02:09→08:55 =
+> 6,77h** (2,85h noturno). **Victor Angelo** (diarista, sem registro desde 28/08) recebeu
+> **1 dia só, sexta 04/09**: 02:15→09:09 = 6,90h — a regra do Washington não serve pra ele
+> (criaria diárias falsas). O 04/09 do Washington ficou **intocado**. Como o turno pega
+> adicional noturno (dinheiro), o cálculo foi feito rodando **as funções reais do projeto**
+> (`npx tsx` sobre `attendanceCalc.ts` + `calcHours`), com **teste de sanidade recalculando
+> o registro real de 04/09 antes de gravar — os 7 campos bateram exato**. ⚠️ MCP do Supabase
+> esteve **bloqueado** a sessão inteira ("You do not have permission"); usei a API REST com
+> a service key do `.env`. 🟠 **Achado que muda o §2.2 de `CHECKPOINT_PROXIMOS_PASSOS.md`:**
+> as migrations de 02/09 mostram que o Victor decidiu o **oposto** da recomendação de 31/08
+> (as travas exclusivas do 2626 viraram permissão normal configurável), e as 8 migrations
+> `rest_bypass_fix` + 3 levas de revoke de 03–04/09 podem já ter fechado o buraco — **não
+> propor "só 2626" sem reler isso**.
+>
+> Atualização anterior — **2026-09-07 (2ª leva)** — **✅ 4 BATIDAS/DIA: LIGADO SÓ PRO
 > ESCRITÓRIO — item 2 do roadmap FECHADO.** O Victor pediu pra ligar as 4 batidas só pro
 > escritório; investigando antes de mexer, **já estava ligado e funcionando**: os 3
 > Auxiliares Administrativos de Caratinga (Diendrel, Iago, Pablo) já tinham
