@@ -15,9 +15,9 @@
 > (criaria diárias falsas). O 04/09 do Washington ficou **intocado**. Como o turno pega
 > adicional noturno (dinheiro), o cálculo foi feito rodando **as funções reais do projeto**
 > (`npx tsx` sobre `attendanceCalc.ts` + `calcHours`), com **teste de sanidade recalculando
-> o registro real de 04/09 antes de gravar — os 7 campos bateram exato**. ⚠️ MCP do Supabase
-> esteve **bloqueado** a sessão inteira ("You do not have permission"); usei a API REST com
-> a service key do `.env`. 🟠 **Achado que muda o §2.2 de `CHECKPOINT_PROXIMOS_PASSOS.md`:**
+> o registro real de 04/09 antes de gravar — os 7 campos bateram exato**. ⚠️ **O `project_id`
+> do Supabase é `flcncdidxmmornkgkfbb`** (está no `.env`) — errar uma letra dá "You do not
+> have permission", que parece bloqueio de MCP e não é; aconteceu comigo nesta sessão. 🟠 **Achado que muda o §2.2 de `CHECKPOINT_PROXIMOS_PASSOS.md`:**
 > as migrations de 02/09 mostram que o Victor decidiu o **oposto** da recomendação de 31/08
 > (as travas exclusivas do 2626 viraram permissão normal configurável), e as 8 migrations
 > `rest_bypass_fix` + 3 levas de revoke de 03–04/09 podem já ter fechado o buraco — **não
