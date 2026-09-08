@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Tag, CheckCircle2, Clock, Loader2, Play } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { searchDiscounts, discountProofUrl, type DiscountSearchRow } from '../../services/driverPay';
+import { searchDiscounts, type DiscountSearchRow } from '../../services/driverPay';
+import { useDiscountProofUrls } from '../../hooks/useDiscountProofUrls';
 import { ModalShell } from './ModalShell';
 import { ImageLightbox } from './ImageLightbox';
 import { DiscountStatusPill } from './DiscountModal';
@@ -29,6 +30,12 @@ export const DiscountSearchModal: React.FC<DiscountSearchModalProps> = ({ compan
   const [rows, setRows] = useState<DiscountSearchRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+
+  // 08/09/2026: bucket das provas virou privado — a URL e assinada e vem de chamada
+  // assincrona. Resolve de uma vez os caminhos de todos os resultados da busca.
+  const proofUrls = useDiscountProofUrls(
+    rows.flatMap((r) => [r.proof1_path, r.proof2_path, r.proof_video_path]),
+  );
 
   // Busca com debounce (sem código = descontos mais recentes).
   useEffect(() => {
@@ -139,17 +146,17 @@ export const DiscountSearchModal: React.FC<DiscountSearchModalProps> = ({ compan
                         <button
                           key={i}
                           type="button"
-                          onClick={() => setLightbox(discountProofUrl(p))}
+                          onClick={() => { const u = proofUrls.get(p); if (u) setLightbox(u); }}
                           title="Ver prova (sem baixar)"
                           className="block w-12 h-12 rounded border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-400"
                         >
-                          <img src={discountProofUrl(p)} alt="prova" className="w-full h-full object-cover" />
+                          <img src={proofUrls.get(p) ?? ''} alt="prova" className="w-full h-full object-cover" />
                         </button>
                       ))}
                       {videoPath && (
                         <button
                           type="button"
-                          onClick={() => setLightbox(discountProofUrl(videoPath))}
+                          onClick={() => { const u = proofUrls.get(videoPath); if (u) setLightbox(u); }}
                           title="Ver vídeo (sem baixar)"
                           className="flex items-center justify-center w-12 h-12 rounded border border-gray-200 bg-gray-900 text-white hover:ring-2 hover:ring-blue-400"
                         >

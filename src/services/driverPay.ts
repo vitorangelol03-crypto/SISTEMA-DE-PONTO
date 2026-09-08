@@ -1742,9 +1742,29 @@ const videoExt = (blob: Blob): string => {
   return 'mp4';
 };
 
-/** URL publica de uma prova de desconto (path do Storage -> URL exibivel). */
-export const discountProofUrl = (path: string): string =>
-  supabase.storage.from(DISCOUNT_PROOF_BUCKET).getPublicUrl(path).data.publicUrl;
+/**
+ * URL TEMPORARIA (assinada) de uma prova de desconto.
+ *
+ * 08/09/2026 — o bucket era PUBLICO: qualquer pessoa com o link abria a foto sem login, e
+ * o link nunca expirava. Passou a ser privado, e a URL agora e assinada e expira. Por isso
+ * esta funcao virou assincrona (a antiga `discountProofUrl` era sincrona e devolvia a URL
+ * publica direto).
+ *
+ * Devolve string vazia se falhar — quem chama trata como "sem imagem" em vez de quebrar a
+ * tela inteira por causa de uma prova.
+ */
+export const PROOF_URL_TTL_SEGUNDOS = 60 * 60; // 1 hora: cobre uma sessao de conferencia
+
+export const discountProofSignedUrl = async (path: string): Promise<string> => {
+  const { data, error } = await supabase.storage
+    .from(DISCOUNT_PROOF_BUCKET)
+    .createSignedUrl(path, PROOF_URL_TTL_SEGUNDOS);
+  if (error || !data?.signedUrl) {
+    console.warn('Nao consegui gerar o link da prova de desconto:', error?.message);
+    return '';
+  }
+  return data.signedUrl;
+};
 
 /** Sufixo curto que torna unico o nome de cada prova nova. */
 const proofUnique = (): string =>

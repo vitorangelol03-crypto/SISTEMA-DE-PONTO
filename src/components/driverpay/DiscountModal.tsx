@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Minus, Trash2, Plus, ImagePlus, X, AlertTriangle, Play, Video, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { addDiscount, updateDiscount, removeDiscount, discountProofUrl } from '../../services/driverPay';
+import { addDiscount, updateDiscount, removeDiscount } from '../../services/driverPay';
+import { useDiscountProofUrls } from '../../hooks/useDiscountProofUrls';
 import { isKeptProof, type ProofSlot } from '../../utils/discountProofs';
 import { ModalShell } from './ModalShell';
 import { ImageLightbox } from './ImageLightbox';
@@ -63,24 +64,40 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
 
   const total = row.discounts.reduce((s, d) => s + d.amount, 0);
 
-  // Previews: prova já salva usa a URL pública; arquivo novo usa objectURL — e só
-  // o objectURL pode ser revogado (revogar a URL pública quebraria a imagem).
+  // 08/09/2026: o bucket das provas deixou de ser público — a URL agora é assinada e vem
+  // de chamada assíncrona. Todos os caminhos que a tela precisa mostrar (os descontos já
+  // lançados + as provas mantidas no formulário) são resolvidos de uma vez pelo hook.
+  const proofUrls = useDiscountProofUrls([
+    ...row.discounts.flatMap((d) => [d.proof1_path, d.proof2_path, d.proof_video_path]),
+    ...images.map((p) => (isKeptProof(p) ? p.keep : null)),
+    video && isKeptProof(video) ? video.keep : null,
+  ]);
+
+  // Previews: prova já salva usa a URL assinada; arquivo novo usa objectURL — e só
+  // o objectURL pode ser revogado (revogar a URL assinada quebraria a imagem).
   const previews = useMemo(
     () =>
       images.map((p) =>
-        isKeptProof(p) ? { url: discountProofUrl(p.keep), local: false } : { url: URL.createObjectURL(p.blob), local: true },
+        isKeptProof(p)
+          ? { url: proofUrls.get(p.keep) ?? '', local: false }
+          : { url: URL.createObjectURL(p.blob), local: true },
       ),
-    [images],
+    [images, proofUrls],
   );
   useEffect(
     () => () => previews.forEach((p) => p.local && URL.revokeObjectURL(p.url)),
     [previews],
   );
 
-  // Preview do vídeo; mesma regra das imagens (salvo = URL pública, novo = objectURL).
+  // Preview do vídeo; mesma regra das imagens (salvo = URL assinada, novo = objectURL).
   const videoPreview = useMemo(
-    () => (video ? (isKeptProof(video) ? { url: discountProofUrl(video.keep), local: false } : { url: URL.createObjectURL(video.blob), local: true }) : null),
-    [video],
+    () =>
+      video
+        ? isKeptProof(video)
+          ? { url: proofUrls.get(video.keep) ?? '', local: false }
+          : { url: URL.createObjectURL(video.blob), local: true }
+        : null,
+    [video, proofUrls],
   );
   useEffect(() => {
     if (!videoPreview?.local) return;
@@ -300,17 +317,17 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
                         <button
                           key={i}
                           type="button"
-                          onClick={() => setLightbox(discountProofUrl(p))}
+                          onClick={() => { const u = proofUrls.get(p); if (u) setLightbox(u); }}
                           title="Ver prova (sem baixar)"
                           className="block w-14 h-14 rounded border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-400"
                         >
-                          <img src={discountProofUrl(p)} alt="prova" className="w-full h-full object-cover" />
+                          <img src={proofUrls.get(p) ?? ''} alt="prova" className="w-full h-full object-cover" />
                         </button>
                       ))}
                       {videoPath && (
                         <button
                           type="button"
-                          onClick={() => setLightbox(discountProofUrl(videoPath))}
+                          onClick={() => { const u = proofUrls.get(videoPath); if (u) setLightbox(u); }}
                           title="Ver vídeo (sem baixar)"
                           className="inline-flex items-center gap-1 h-14 px-3 rounded border border-gray-200 text-xs font-medium text-gray-700 hover:ring-2 hover:ring-blue-400"
                         >
