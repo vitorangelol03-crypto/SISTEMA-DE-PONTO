@@ -2,7 +2,26 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-08 (5ª leva)** — **✅ §2.3 FECHADO: nota validada para de
+> Última atualização: **2026-09-08 (6ª leva)** — **✅ §2.2 LEVA 2 FECHADA: funções de valor,
+> arquivos e o bucket público** (`2de908a`, `91cead8`, `204ce6a`). Depois da leva 1 (tabelas)
+> sobravam dois caminhos que ignoravam a permissão: as funções `*_masked` (gate próprio
+> "mesma empresa OU 9999/2626") e as 6 policies de Storage (presas em `9999`/`2626` — efeito
+> colateral: **quem fosse liberado na tela não conseguiria anexar foto nem ver nota/espelho**,
+> com o erro sumindo em silêncio). ⚠️ **Só as 12 funções DO DRIVERPAY** foram mexidas — as
+> outras 7 são do Financeiro/Erros/Triagem e exigir permissão de driverpay nelas quebraria
+> esses módulos. As funções foram reescritas por **substituição do gate sobre
+> `pg_get_functiondef`** (corpo byte a byte igual; a migration aborta se o gate não aparecer
+> em alguma). Removida também `anon_spreadsheets_all` (ALL pro anon; bucket vazio e sem uso
+> no código). **Bucket das provas deixou de ser público**: `discountProofUrl` (síncrona,
+> pública) → `discountProofSignedUrl` (assinada, TTL 1h) + hook `useDiscountProofUrls`, com
+> chave estável pra não reassinar a cada render. **Provas:** funções — 2626/9999 com 5
+> plataformas e 132 pagamentos, 02 e 8888-em-CT com 0; arquivos — 2626/9999 com
+> 116/257/183, 02 com 0/0/0; bucket — URL pública **200 → 400**, link assinado 200 (o 200
+> remanescente sem cache-buster é **cache do Cloudflare**, `max-age=3600`). typecheck 0 ·
+> lint 0 · build limpo · **1376 unitários** (6 novos). 📌 `employee-photos` também é público
+> (0 arquivos) — registrado, não alterado. Detalhe em `CHECKPOINT_SESSAO_2026-09-08.md` §7.
+>
+> Atualização anterior do mesmo dia (5ª leva) — **✅ §2.3 FECHADO: nota validada para de
 > sumir quando o espelho é republicado** (`5552c65`). Era o risco **armado na quinzena
 > aberta**: a nota guarda a chave do espelho de quando foi enviada, e despublicar o espelho
 > "de todas" para republicar **por plataforma** (operação normal) fazia a nota validada
