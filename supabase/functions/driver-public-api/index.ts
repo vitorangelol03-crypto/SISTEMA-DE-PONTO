@@ -393,15 +393,35 @@ async function vagasDeNotaPorPeriodo(
   const slotKey = (periodId: string, mirrorKey: string | null, emitterId: string) =>
     `${periodId}|${mirrorKey ?? '*'}|${emitterId}`;
 
+  // 08/09/2026 — nota presa a um espelho que NAO existe mais volta a valer pelo CNPJ.
+  // Sem isso, despublicar o espelho "de todas" e republicar POR PLATAFORMA fazia a nota ja
+  // enviada sumir da conta e o entregador era cobrado DE NOVO por uma nota que ele ja
+  // mandou. Mesmo bug da tela do painel (caso ANDREA) — ver slotCoberto em
+  // src/components/driverpay/driverPayShared.ts.
+  const espelhosVivos = new Map<string, Set<string>>();
+  for (const p of pubs ?? []) {
+    const pid = p.period_id as string;
+    let set = espelhosVivos.get(pid);
+    if (!set) { set = new Set(); espelhosVivos.set(pid, set); }
+    set.add((p.platform_key as string) ?? '');
+  }
+  const orfaKey = (periodId: string, emitterId: string) => `${periodId}|${emitterId}`;
+  const sentOrfa: Record<string, number> = {};
+
   for (const f of files ?? []) {
-    const k = slotKey(
-      f.period_id as string, (f.mirror_platform_key as string | null) ?? null, f.nota_emitter_id as string,
-    );
+    const mk = (f.mirror_platform_key as string | null) ?? null;
+    const k = slotKey(f.period_id as string, mk, f.nota_emitter_id as string);
     if (f.status === 'rejeitada') {
       rejected[k] = (rejected[k] ?? 0) + 1;
       rejectReason[k] = (f.reject_reason as string | null) ?? null; // ordem asc -> fica a mais recente
     } else {
       sent[k] = (sent[k] ?? 0) + 1;
+      // Nota com espelho gravado que nao bate com nenhuma publicacao viva do periodo.
+      // (mk null ja e o coringa legado, contado via kLegado no push abaixo.)
+      if (mk !== null && !(espelhosVivos.get(f.period_id as string)?.has(mk) ?? false)) {
+        const ko = orfaKey(f.period_id as string, f.nota_emitter_id as string);
+        sentOrfa[ko] = (sentOrfa[ko] ?? 0) + 1;
+      }
     }
   }
 
@@ -413,7 +433,9 @@ async function vagasDeNotaPorPeriodo(
     saida.get(periodId)!.push({
       emitterId, cnpj: em.cnpj as string, label: em.label as string,
       mirrorKey, mirrorLabel,
-      sent: (sent[k] ?? 0) + (mirrorKey ? (sent[kLegado] ?? 0) : 0),
+      sent: (sent[k] ?? 0)
+        + (mirrorKey ? (sent[kLegado] ?? 0) : 0)
+        + (sentOrfa[orfaKey(periodId, emitterId)] ?? 0),
       rejected: rejected[k] ?? 0,
       rejectReason: rejectReason[k] ?? null,
     });

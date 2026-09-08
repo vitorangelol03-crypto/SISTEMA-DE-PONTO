@@ -358,11 +358,38 @@ export function expectedNfSlotKeys(
  *  3. `CNPJ` puro — formato ANTERIOR a 28/07. Aceitar isso não é gentileza: qualquer
  *     caller que ainda monte o conjunto pelo id do emitente continua funcionando, em
  *     vez de a coluna NF zerar silenciosamente pra todo mundo.
+ *
+ * `espelhosVivos` (08/09/2026) é o conjunto de `platformKey` das publicações que ainda
+ * existem. Quando informado, a nota presa a um espelho que NÃO está mais publicado volta
+ * a valer pelo CNPJ — mesmo tratamento do caso 2. Sem ele o comportamento é o de antes.
+ *
+ * 🔴 Bug real que isso corrige (caso ANDREA, 2ª quinzena de julho): o espelho "de todas as
+ * plataformas" foi publicado, ela mandou as notas (que gravam a chave DAQUELE espelho) e
+ * depois o espelho foi despublicado e republicado POR PLATAFORMA. Os slots esperados
+ * viraram `SHOPEE|CNPJ` / `LOGGI|CNPJ`, as notas continuaram com `|CNPJ`, nada casou e a
+ * tela passou a dizer "NF 1/3" com 3 notas validadas no banco — o operador contornou
+ * marcando na mão. Republicar espelho é operação normal numa quinzena aberta, então o
+ * mesmo estrago estava armado pra quem tivesse nota validada.
  */
-export function slotCoberto(slot: string, chavesDasNotas: ReadonlySet<string>): boolean {
+export function slotCoberto(
+  slot: string,
+  chavesDasNotas: ReadonlySet<string>,
+  espelhosVivos?: ReadonlySet<string>,
+): boolean {
   if (chavesDasNotas.has(slot)) return true;
   const emitterId = slot.slice(slot.indexOf('|') + 1);
-  return chavesDasNotas.has(nfSlotKey(null, emitterId)) || chavesDasNotas.has(emitterId);
+  if (chavesDasNotas.has(nfSlotKey(null, emitterId)) || chavesDasNotas.has(emitterId)) return true;
+  if (!espelhosVivos) return false;
+  // Nota órfã: a chave de espelho dela não corresponde a nenhuma publicação viva.
+  for (const chave of chavesDasNotas) {
+    const corte = chave.indexOf('|');
+    if (corte < 0) continue; // formato antigo (CNPJ puro), já tratado acima
+    if (chave.slice(corte + 1) !== emitterId) continue; // outro CNPJ: não cobre
+    const espelhoDaNota = chave.slice(0, corte);
+    if (espelhoDaNota === '*') continue; // coringa, já tratado acima
+    if (!espelhosVivos.has(espelhoDaNota)) return true;
+  }
+  return false;
 }
 
 /** Progresso da NF de um driver: quantas das CNPJs esperadas já têm nota VALIDADA. */
@@ -460,10 +487,17 @@ export function computeNfProgressByPayment(
       }
       if (row.notaFiscal) manual = true;
     }
+    // Espelhos que a unidade AINDA tem publicados. Uma nota presa a um espelho fora desta
+    // lista (porque foi despublicado/republicado) volta a valer pelo CNPJ — sem isso, nota
+    // validada some da conta quando o espelho é republicado por plataforma.
+    const espelhosVivos = new Set(pubsDaUnidade.map((p) => p.platformKey));
+
     const slots = [...expectedSlots];
     const expected = slots.length;
-    const validated = slots.filter((s) => slotCoberto(s, validatedKeys)).length;
-    const pending = slots.filter((s) => !slotCoberto(s, validatedKeys) && slotCoberto(s, receivedKeys)).length;
+    const validated = slots.filter((s) => slotCoberto(s, validatedKeys, espelhosVivos)).length;
+    const pending = slots.filter(
+      (s) => !slotCoberto(s, validatedKeys, espelhosVivos) && slotCoberto(s, receivedKeys, espelhosVivos),
+    ).length;
     const complete = manual || (expected > 0 && validated >= expected);
     const progress: NfProgress = { expected, validated, pending, complete, manual };
     for (const row of unitRows) out.set(row.paymentId, progress);
