@@ -32,9 +32,13 @@ export const ModalShell: React.FC<ModalShellProps> = ({
               {subtitle && <p className="text-xs text-gray-500 mt-0.5 break-words">{subtitle}</p>}
             </div>
           </div>
+          {/* 09/09/2026: o X não tinha nome nenhum — quem usa leitor de tela ouvia só
+              "botão", e nos testes não havia como fechar um popup de forma confiável. */}
           <button
             type="button"
             onClick={onClose}
+            aria-label="Fechar"
+            title="Fechar"
             className="text-gray-400 hover:text-gray-600 flex-shrink-0 min-h-[36px] min-w-[36px] flex items-center justify-center"
           >
             <X className="w-5 h-5" />

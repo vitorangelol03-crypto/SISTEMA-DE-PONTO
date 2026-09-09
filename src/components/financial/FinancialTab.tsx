@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
   getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance,
@@ -24,6 +24,17 @@ import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../co
 import FunctionRoleFilter, { FUNCTION_ROLE_ALL, FUNCTION_ROLE_NONE } from '../common/FunctionRoleFilter';
 import * as XLSX from 'xlsx';
 import { somarTotaisDoHolerite } from '../../utils/holeriteTotals';
+import { ModalShell } from '../driverpay/ModalShell';
+
+/**
+ * 09/09/2026 — o Pagamento C6 deixou de ser aba e passou a abrir num popup DAQUI
+ * (pedido do Victor: "sem precisar de uma nova aba pra isso... vamos otimizar esse
+ * processo"). `lazy` de propósito: a tela do C6 tem 1.2k linhas e não pode pesar no
+ * carregamento do Financeiro de quem nunca vai gerar pagamento.
+ */
+const C6PaymentTab = lazy(() =>
+  import('../c6payment/C6PaymentTab').then(m => ({ default: m.C6PaymentTab })),
+);
 
 interface FinancialTabProps {
   userId: string;
@@ -90,6 +101,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const [financialData, setFinancialData] = useState<EmployeeFinancialData[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<'financial' | 'history'>('financial');
+  /** Popup do Pagamento C6 (09/09/2026 — a aba virou botão daqui). */
+  const [showC6Modal, setShowC6Modal] = useState(false);
 
   const [filters, setFilters] = useState({
     startDate: getBrazilDate(),
@@ -688,7 +701,23 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             Gestão Financeira
           </h2>
 
-          <div className="flex items-center gap-2">
+          {/* 09/09/2026: virou `flex-col` no celular. Antes havia um botão só aqui; com
+              dois (C6 + banco de horas), ambos `w-full`, eles se espremiam lado a lado na
+              tela pequena. No computador seguem na mesma linha, como antes. */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+            {/* 09/09/2026 — Pagamento C6 sem sair do Financeiro. Abre já com o período e o
+                tipo que estão filtrados aqui e com a prévia pronta. A permissão é a MESMA
+                de antes (c6payment.view): ninguém ganha acesso que não tinha. */}
+            {hasPermission('c6payment.view') && (
+              <button
+                onClick={() => setShowC6Modal(true)}
+                title="Gera a prévia do pagamento C6 com o período e o tipo filtrados aqui"
+                className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-cyan-50 text-cyan-700 rounded-md hover:bg-cyan-100 transition-colors min-h-[44px] w-full sm:w-auto"
+              >
+                <FileSpreadsheet className="w-4 h-4 flex-shrink-0" />
+                <span>Gerar pagamento C6</span>
+              </button>
+            )}
             {company?.bank_hours_apply_in_payment && (
               <button
                 onClick={() => setShowApplyModal(true)}
@@ -1928,6 +1957,40 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           onClose={() => setShowApplyModal(false)}
           onApplied={() => { setShowApplyModal(false); loadData(); }}
         />
+      )}
+
+      {/* Popup do Pagamento C6 (09/09/2026 — substituiu a aba).
+          Largo de propósito: dentro dele há uma TABELA editável (nome, valor, chave PIX,
+          data, seleção) — num popup estreito ela ficaria espremida e a fluidez que se
+          ganhou em cliques se perderia na leitura. */}
+      {showC6Modal && (
+        <ModalShell
+          icon={<FileSpreadsheet className="w-5 h-5" />}
+          title="Pagamento C6 Bank"
+          subtitle={`Período de ${formatDateBR(filters.startDate)} a ${formatDateBR(filters.endDate)} — já carregado do filtro do Financeiro`}
+          onClose={() => setShowC6Modal(false)}
+          maxWidth="sm:max-w-7xl"
+        >
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-10 text-gray-500 text-sm">
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Abrindo o pagamento C6…
+              </div>
+            }
+          >
+            <C6PaymentTab
+              userId={userId}
+              hasPermission={hasPermission}
+              filtrosIniciais={{
+                startDate: filters.startDate,
+                endDate: filters.endDate,
+                employmentType: filters.employmentType,
+              }}
+              autoImportar
+              embutido
+            />
+          </Suspense>
+        </ModalShell>
       )}
     </div>
   );

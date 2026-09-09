@@ -27,9 +27,30 @@ async function cleanup() {
   await cleanupByPrefix(PREFIX, [SAFE_DATE]);
 }
 
-async function importC6(page: Page, date: string) {
-  await goToTab(page, 'Pagamento C6');
-  const dateInputs = page.locator('input[type="date"]');
+/**
+ * Escopo do popup do Pagamento C6.
+ *
+ * 09/09/2026 — o C6 virou popup DENTRO do Financeiro, e a tela do Financeiro continua no
+ * DOM atrás dele, com uma tabela que lista os MESMOS funcionários. Sem escopar, um
+ * `c6(page).locator('table tr', {hasText: nome}).first()` acha a linha do Financeiro (que não
+ * tem os botões de editar/excluir do C6) e o teste falha sem que o produto esteja errado.
+ */
+const c6 = (page: Page) => page.getByTestId('c6-popup');
+
+/**
+ * Define o período no Financeiro e abre o popup do C6 — que importa sozinho.
+ *
+ * 09/09/2026 — o Pagamento C6 deixou de ser aba: virou botão no Financeiro que abre um
+ * popup com a prévia JÁ MONTADA, herdando o período filtrado ali. Por isso o período
+ * passa a ser definido no Financeiro, e não mais dentro da tela do C6 (onde os inputs só
+ * aparecem quando não veio dado nenhum).
+ *
+ * Separado de `importC6` porque há teste que espera a lista sair VAZIA (todo mundo com
+ * líquido zero) — nesse caso não existe "Total: N pagamento(s)" pra esperar.
+ */
+async function abrirC6(page: Page, date: string) {
+  await goToTab(page, 'Financeiro');
+  const dateInputs = page.locator('input[type="date"]:visible');
   await dateInputs.nth(0).fill(date);
   await dateInputs.nth(0).blur();
   await dateInputs.nth(1).fill(date);
@@ -40,13 +61,18 @@ async function importC6(page: Page, date: string) {
   await expect(dateInputs.nth(0)).toHaveValue(date);
   await expect(dateInputs.nth(1)).toHaveValue(date);
   await page.locator('body').click({ position: { x: 5, y: 5 } });
-  await page.getByRole('button', { name: /Importar Dados/ }).click();
+  // Abre o popup — ele importa sozinho com o período acima.
+  await page.getByRole('button', { name: /^Gerar pagamento C6$/ }).click();
+}
+
+async function importC6(page: Page, date: string) {
+  await abrirC6(page, date);
   // Sub-fase 14.28 (TECH_DEBT 6.1): aguarda estado PERSISTENTE (tfoot Total)
   // em vez do toast `/importado/` (4-5s race). C6PaymentTab L744-748: quando
   // dataImported=true a tabela renderiza tfoot "Total: N pagamento(s)" que
   // persiste enquanto a importação está visível (sem timeout, sem race).
   // .first() porque o texto aparece em desktop tfoot + mobile cards.
-  const total = page.getByText(/^Total:\s*\d+\s*pagamento/).first();
+  const total = c6(page).getByText(/^Total:\s*\d+\s*pagamento/).first();
   try {
     await expect(total).toBeVisible({ timeout: 15_000 });
   } catch {
@@ -75,7 +101,7 @@ test.describe('C6 — completo', () => {
     });
 
     await importC6(page, SAFE_DATE);
-    const row = page.locator('table tr', { hasText: `${PREFIX}Liq` }).first();
+    const row = c6(page).locator('table tr', { hasText: `${PREFIX}Liq` }).first();
     await expect(row).toBeVisible();
     // 03/09/2026: C6 passou a usar moneyBRL (mascaramento) — vírgula agora.
     await expect(row).toContainText(/R\$\s*150,00/);
@@ -91,19 +117,11 @@ test.describe('C6 — completo', () => {
     await insertPaymentRow(empWithPix, SAFE_DATE, { daily_rate: 50 });
     await insertPaymentRow(empSemPix, SAFE_DATE, { daily_rate: 100 });
 
-    await goToTab(page, 'Pagamento C6');
-    const dateInputs = page.locator('input[type="date"]');
-    await dateInputs.nth(0).fill(SAFE_DATE);
-    await dateInputs.nth(0).blur();
-    await dateInputs.nth(1).fill(SAFE_DATE);
-    await dateInputs.nth(1).blur();
-    await page.locator('body').click({ position: { x: 5, y: 5 } });
-
-    await page.getByRole('button', { name: /Importar Dados/ }).click();
+    await abrirC6(page, SAFE_DATE);
     // Toast com aviso "sem chave PIX"
     await expect(page.getByText(/sem chave PIX/i).first()).toBeVisible({ timeout: 10_000 });
     // Tabela tem o ComPix mas NÃO o SemPixComPay
-    const rowSem = page.locator('table tr', { hasText: `${PREFIX}SemPixComPay` });
+    const rowSem = c6(page).locator('table tr', { hasText: `${PREFIX}SemPixComPay` });
     expect(await rowSem.count()).toBe(0);
   });
 
@@ -112,14 +130,7 @@ test.describe('C6 — completo', () => {
     await insertPaymentRow(empId, SAFE_DATE, { daily_rate: 50 });
     await insertErrorValue(empId, SAFE_DATE, 50); // = bruto, líquido=0
 
-    await goToTab(page, 'Pagamento C6');
-    const dateInputs = page.locator('input[type="date"]');
-    await dateInputs.nth(0).fill(SAFE_DATE);
-    await dateInputs.nth(0).blur();
-    await dateInputs.nth(1).fill(SAFE_DATE);
-    await dateInputs.nth(1).blur();
-    await page.locator('body').click({ position: { x: 5, y: 5 } });
-    await page.getByRole('button', { name: /Importar Dados/ }).click();
+    await abrirC6(page, SAFE_DATE);
 
     // Toast com aviso de zero líquido
     await expect(page.getByText(/sem valor a pagar|líquido/i).first()).toBeVisible({ timeout: 10_000 });
@@ -134,7 +145,7 @@ test.describe('C6 — completo', () => {
     });
 
     await importC6(page, SAFE_DATE);
-    const row = page.locator('table tr', { hasText: `${PREFIX}Breakdown` }).first();
+    const row = c6(page).locator('table tr', { hasText: `${PREFIX}Breakdown` }).first();
     await expect(row).toContainText(/225,00/);
     await expect(row).toContainText(/Bruto:\s*R\$\s*300/);
     await expect(row).toContainText(/-R\$\s*50/);
@@ -146,13 +157,13 @@ test.describe('C6 — completo', () => {
     await insertPaymentRow(empId, SAFE_DATE, { daily_rate: 100 });
 
     await importC6(page, SAFE_DATE);
-    const row = page.locator('table tr', { hasText: `${PREFIX}Excluir` }).first();
+    const row = c6(page).locator('table tr', { hasText: `${PREFIX}Excluir` }).first();
     await expect(row).toBeVisible();
     page.once('dialog', d => d.accept());
     await row.getByRole('button', { name: /Excluir|trash/i }).first().click();
     await page.waitForTimeout(500);
 
-    expect(await page.locator('table tr', { hasText: `${PREFIX}Excluir` }).count()).toBe(0);
+    expect(await c6(page).locator('table tr', { hasText: `${PREFIX}Excluir` }).count()).toBe(0);
   });
 
   test('editar linha inline: muda valor e PIX', async ({ page }) => {
@@ -161,7 +172,7 @@ test.describe('C6 — completo', () => {
 
     await importC6(page, SAFE_DATE);
     // Localiza pelo nome (antes do click — texto visível na célula)
-    const initialRow = page.locator('table tr', { hasText: `${PREFIX}EditInline` }).first();
+    const initialRow = c6(page).locator('table tr', { hasText: `${PREFIX}EditInline` }).first();
     await expect(initialRow).toBeVisible();
     const editBtn = initialRow.locator('[data-testid^="c6-edit-row-"]').first();
     await expect(editBtn).toBeVisible({ timeout: 10_000 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FileSpreadsheet, RefreshCw, Download, Calendar, Edit2, Save, X, Trash2, Plus, Check, AlertTriangle, DollarSign, KeyRound, CheckCircle2 } from 'lucide-react';
 import { getAllEmployees, getEmployeeNetPayments, Employee } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
@@ -7,10 +7,23 @@ import { exportC6PaymentSheet } from '../../utils/c6Export';
 import { moneyBRL } from '../../utils/moneyMask';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType } from '../common/EmploymentTypeFilter';
+import { linhasDoEscopo, ehEscopoAvulso } from '../../utils/c6Escopo';
 
 interface C6PaymentTabProps {
   userId: string;
   hasPermission: (permission: string) => boolean;
+  /**
+   * 09/09/2026 — a tela deixou de ser aba e passou a abrir num popup DENTRO do Financeiro
+   * (pedido do Victor: "sem precisar de uma nova aba pra isso... vamos otimizar esse
+   * processo"). Estas props são o que o Financeiro entrega ao abrir; sem elas o
+   * componente se comporta exatamente como a aba antiga.
+   */
+  /** Período e tipo que já estavam filtrados no Financeiro — evita redigitar a data. */
+  filtrosIniciais?: { startDate: string; endDate: string; employmentType: EmploymentType };
+  /** Já busca a prévia ao abrir, sem esperar clique (é o "gera direto" que ele pediu). */
+  autoImportar?: boolean;
+  /** Modo popup: esconde o título próprio, porque o popup já tem cabeçalho. */
+  embutido?: boolean;
 }
 
 interface PaymentRow {
@@ -25,7 +38,13 @@ interface PaymentRow {
   description: string;
 }
 
-export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermission }) => {
+export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
+  userId,
+  hasPermission,
+  filtrosIniciais,
+  autoImportar = false,
+  embutido = false,
+}) => {
   const { company } = useCompany();
   // 03/09/2026: esconde valor em R$ nesta tela pra quem não tem c6payment.viewValues.
   // CORREÇÃO do plano original (o valor agora é mascarado no BANCO, não só na tela):
@@ -42,9 +61,9 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
   const [dataImported, setDataImported] = useState(false);
 
   const [filters, setFilters] = useState({
-    startDate: getBrazilDate(),
-    endDate: getBrazilDate(),
-    employmentType: 'all' as EmploymentType
+    startDate: filtrosIniciais?.startDate ?? getBrazilDate(),
+    endDate: filtrosIniciais?.endDate ?? getBrazilDate(),
+    employmentType: filtrosIniciais?.employmentType ?? ('all' as EmploymentType)
   });
 
   const [isEditingDate, setIsEditingDate] = useState({
@@ -202,6 +221,27 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
     }
   };
 
+  /**
+   * Aberto de dentro do Financeiro: já traz a prévia montada, sem esperar clique — é o
+   * "clico e já gera" que o Victor pediu. Roda UMA vez por abertura: `jaAutoImportou`
+   * é ref (não estado) de propósito, senão o efeito re-dispararia a cada render e a
+   * tela ficaria reimportando sozinha.
+   */
+  const jaAutoImportou = useRef(false);
+  useEffect(() => {
+    if (!autoImportar || jaAutoImportou.current) return;
+    if (!company?.id) return; // sem empresa a busca nem sai
+    // 🔴 ESPERA a lista de funcionários. `importFinancialData` monta cada linha com
+    // `employees.find(...)`: disparando antes de `loadEmployees` terminar, a busca traz os
+    // pagamentos mas NENHUM funcionário é encontrado — a prévia sairia vazia com um
+    // "nenhum funcionário com PIX e valor positivo", como se não houvesse pagamento no
+    // período. Pego pelo E2E do C6 (6 testes falhando) antes de ir pro ar.
+    if (employees.length === 0) return;
+    jaAutoImportou.current = true;
+    void importFinancialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- de propósito: só na abertura
+  }, [autoImportar, company?.id, employees.length]);
+
   const handleEditRow = (row: PaymentRow) => {
     if (!hasPermission('c6payment.edit')) {
       toast.error('Você não tem permissão para editar linhas de pagamento');
@@ -355,18 +395,29 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
     toast.success('Dados limpos');
   };
 
+  /**
+   * O que vai pro arquivo do banco.
+   *
+   * 09/09/2026 (escopo AVULSO, pedido do Victor): com linhas marcadas, o arquivo sai só
+   * com elas — dá pra pagar "1 de um e outro de outro", misturando diarista e carteira
+   * assinada. Sem marcar nada, sai a lista inteira, exatamente como era antes.
+   * (Só "tudo / só CLT / só diarista" continua saindo pelo filtro de tipo, que já existia.)
+   */
+  const linhasParaExportar = (): PaymentRow[] => linhasDoEscopo(paymentRows, selectedRows);
+
   const handleExportSpreadsheet = () => {
     if (!hasPermission('c6payment.export')) {
       toast.error('Você não tem permissão para exportar planilhas C6');
       return;
     }
 
-    if (paymentRows.length === 0) {
+    const alvo = linhasParaExportar();
+    if (alvo.length === 0) {
       toast.error('Nenhum dado para exportar');
       return;
     }
 
-    const hasInvalid = paymentRows.some(
+    const hasInvalid = alvo.some(
       row => !row.pixKey.trim() || row.amount <= 0
     );
 
@@ -382,7 +433,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
 
   const confirmExport = async () => {
     try {
-      await exportC6PaymentSheet(paymentRows, filters.startDate, filters.endDate);
+      await exportC6PaymentSheet(linhasParaExportar(), filters.startDate, filters.endDate);
       setShowConfirmModal(false);
       toast.success('Planilha gerada com sucesso!');
     } catch (error) {
@@ -392,7 +443,9 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
   };
 
   // ── Validation modal helpers ─────────────────────────────────────────────
-  const invalidIssues = paymentRows
+  // Olha só o que VAI ser exportado: com escopo avulso, um problema numa linha que ficou
+  // de fora não pode travar (nem sujar) a geração das que foram marcadas.
+  const invalidIssues = linhasParaExportar()
     .map(row => {
       const reasons: Array<'zero' | 'pix'> = [];
       if (row.amount <= 0) reasons.push('zero');
@@ -440,7 +493,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
   };
 
   const handleGenerateAnyway = async () => {
-    const validRows = paymentRows.filter(r => r.amount > 0 && r.pixKey.trim());
+    const validRows = linhasParaExportar().filter(r => r.amount > 0 && r.pixKey.trim());
     if (validRows.length === 0) {
       toast.error('Nenhum funcionário válido para exportar');
       return;
@@ -457,7 +510,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
 
   const handleGenerateClean = async () => {
     try {
-      await exportC6PaymentSheet(paymentRows, filters.startDate, filters.endDate);
+      await exportC6PaymentSheet(linhasParaExportar(), filters.startDate, filters.endDate);
       setShowValidationModal(false);
       toast.success('Planilha gerada com sucesso!');
     } catch (error) {
@@ -467,21 +520,42 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
   };
 
   const totalAmount = paymentRows.reduce((sum, row) => sum + row.amount, 0);
+  /** Quantas linhas e quanto dinheiro vão de fato pro arquivo (respeita o escopo avulso). */
+  const linhasAlvo = linhasParaExportar();
+  const totalAlvo = linhasAlvo.reduce((sum, row) => sum + row.amount, 0);
+  const escopoAvulso = ehEscopoAvulso(selectedRows);
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="bg-white p-4 sm:p-6 rounded-lg shadow overflow-hidden">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg sm:text-xl font-semibold flex items-center">
-            <FileSpreadsheet className="w-5 h-5 mr-2 text-blue-600 flex-shrink-0" />
-            <span className="break-words">Pagamento C6 Bank</span>
-          </h2>
-        </div>
+    <div className="space-y-4 sm:space-y-6" data-testid={embutido ? 'c6-popup' : 'c6-tela'}>
+      {/* No popup do Financeiro a casca some (o popup já tem cabeçalho e fundo próprios) —
+          sem isso ficariam dois títulos e uma caixa branca dentro da outra.
+          O `data-testid` acima existe porque, com o popup aberto, a tela do Financeiro
+          CONTINUA no DOM atrás dele — e ela também tem tabela com os mesmos nomes de
+          funcionário. Sem um escopo, um `page.locator('table tr')` pega a linha errada. */}
+      <div className={embutido ? '' : 'bg-white p-4 sm:p-6 rounded-lg shadow overflow-hidden'}>
+        {!embutido && (
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg sm:text-xl font-semibold flex items-center">
+              <FileSpreadsheet className="w-5 h-5 mr-2 text-blue-600 flex-shrink-0" />
+              <span className="break-words">Pagamento C6 Bank</span>
+            </h2>
+          </div>
+        )}
 
         <div className="bg-blue-50 border border-blue-200 rounded-md p-3 sm:p-4 mb-4">
           <p className="text-sm text-blue-800 break-words">
-            <strong>Como usar:</strong> Selecione o período dos pagamentos já configurados na aba Financeiro,
-            importe os dados, revise e edite conforme necessário, e baixe a planilha formatada para o Banco C6.
+            {embutido ? (
+              <>
+                <strong>Como usar:</strong> o período já veio do filtro do Financeiro e a prévia
+                foi montada sozinha. Revise, corrija o que precisar e baixe a planilha do Banco C6.
+                Marcando linhas na tabela, <strong>só as marcadas</strong> vão pro arquivo.
+              </>
+            ) : (
+              <>
+                <strong>Como usar:</strong> Selecione o período dos pagamentos já configurados no Financeiro,
+                importe os dados, revise e edite conforme necessário, e baixe a planilha formatada para o Banco C6.
+              </>
+            )}
           </p>
         </div>
 
@@ -927,7 +1001,15 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
               </div>
             </div>
 
-            <div className="flex justify-stretch sm:justify-end">
+            {/* Escopo avulso bem visível: quem marcou linhas precisa ENXERGAR que o arquivo
+                vai sair só com elas — senão paga menos gente do que pensava. */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2">
+              {escopoAvulso && (
+                <span className="text-sm text-cyan-800 bg-cyan-50 border border-cyan-200 rounded-md px-3 py-2 text-center sm:text-left">
+                  Só os <strong>{linhasAlvo.length}</strong> selecionados vão pro arquivo
+                  <span className="text-cyan-600"> (de {paymentRows.length})</span>
+                </span>
+              )}
               <button
                 onClick={handleExportSpreadsheet}
                 disabled={!hasPermission('c6payment.export')}
@@ -935,7 +1017,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                 className="w-full sm:w-auto px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-base sm:text-lg font-medium disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
               >
                 <Download className="w-5 h-5" />
-                <span>Baixar Planilha C6</span>
+                <span>Baixar Planilha C6{escopoAvulso ? ` (${linhasAlvo.length})` : ''}</span>
               </button>
             </div>
           </div>
@@ -1029,8 +1111,8 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({ userId, hasPermissio
                   <strong>Resumo da Exportação:</strong>
                 </p>
                 <ul className="text-sm text-green-800 space-y-1">
-                  <li>• Pagamentos: {paymentRows.length}</li>
-                  <li>• Valor Total: {moneyBRL(totalAmount, canViewValues)}</li>
+                  <li>• Pagamentos: {linhasAlvo.length}{escopoAvulso ? ` (de ${paymentRows.length} — só os selecionados)` : ''}</li>
+                  <li>• Valor Total: {moneyBRL(totalAlvo, canViewValues)}</li>
                   <li>• Período: {formatDateBR(filters.startDate)} a {formatDateBR(filters.endDate)}</li>
                 </ul>
               </div>

@@ -8,7 +8,6 @@ import {
   UserCog,
   DollarSign,
   AlertTriangle,
-  FileSpreadsheet,
   Truck,
   Database,
   BookOpen,
@@ -72,7 +71,10 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
     { id: 'employees' as TabType, name: t('tab.employees'), icon: Users, permission: 'employees.view' },
     { id: 'reports' as TabType, name: t('tab.reports'), icon: BarChart3, permission: 'reports.view' },
     { id: 'financial' as TabType, name: t('tab.financial'), icon: DollarSign, permission: 'financial.view' },
-    { id: 'c6payment' as TabType, name: t('tab.c6payment'), icon: FileSpreadsheet, permission: 'c6payment.view' },
+    // 09/09/2026 — "Pagamento C6" saiu do menu: virou botão DENTRO do Financeiro, que abre
+    // a mesma tela num popup já com o período filtrado e a prévia pronta (pedido do Victor:
+    // "sem precisar de uma nova aba pra isso"). Nenhuma funcionalidade foi removida, e a
+    // permissão `c6payment.view` continua sendo o que libera o botão lá.
     { id: 'driverpay' as TabType, name: t('tab.driverpay'), icon: Truck, permission: 'driverpay.view' },
     { id: 'errors' as TabType, name: t('tab.errors'), icon: AlertTriangle, permission: 'errors.view' },
     { id: 'settings' as TabType, name: t('tab.settings'), icon: Settings, permission: 'settings.view' },

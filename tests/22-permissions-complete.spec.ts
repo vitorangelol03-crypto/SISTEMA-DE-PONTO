@@ -30,7 +30,8 @@ test.describe('Permissions — Admin (9999) acesso total', () => {
     await expect(page.getByRole('button', { name: /^Ponto$/ }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /^Funcionários$/ }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /^Financeiro$/ }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Pagamento C6$/ }).first()).toBeVisible();
+    // 09/09/2026: "Pagamento C6" não é mais ABA — virou botão dentro do Financeiro.
+    await expect(page.getByRole('button', { name: /^Pagamento C6$/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Erros$/ }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /^Relatórios$/ }).first()).toBeVisible();
   });

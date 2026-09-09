@@ -162,7 +162,8 @@ test.describe('System walkthrough exaustivo (sub-fase 14.4.10)', () => {
     const capture = attachConsoleCapture(page);
     await loginAs(page, ADMIN);
 
-    const tabs = ['Ponto', 'Funcionários', 'Financeiro', 'Relatórios', 'Erros', 'Pagamento C6', 'Usuários', 'Gerenciamento', 'Ajuda'];
+    // 09/09/2026: 'Pagamento C6' saiu — nao e mais aba (virou botao dentro do Financeiro).
+    const tabs = ['Ponto', 'Funcionários', 'Financeiro', 'Relatórios', 'Erros', 'Usuários', 'Gerenciamento', 'Ajuda'];
 
     for (const tab of tabs) {
       // goToTab abre o menu "Mais" quando a aba está escondida nele (barra que cabe, 06/08/2026)

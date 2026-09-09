@@ -57,3 +57,6 @@ prints-grade/
 
 # Cache incremental do tsc (artefato de build, nao fonte)
 *.tsbuildinfo
+
+# Marcador temporario criado pelo cleanup dos testes E2E (tests/cleanup.ts)
+tests/.suite-start.tmp

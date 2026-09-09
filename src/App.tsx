@@ -35,7 +35,6 @@ const SettingsTab = lazy(() => import('./components/settings/SettingsTab').then(
 const UsersTab = lazy(() => import('./components/users/UsersTab').then(m => ({ default: m.UsersTab })));
 const FinancialTab = lazy(() => import('./components/financial/FinancialTab').then(m => ({ default: m.FinancialTab })));
 const ErrorsTab = lazy(() => import('./components/errors/ErrorsTab').then(m => ({ default: m.ErrorsTab })));
-const C6PaymentTab = lazy(() => import('./components/c6payment/C6PaymentTab').then(m => ({ default: m.C6PaymentTab })));
 const DriverPayTab = lazy(() => import('./components/driverpay/DriverPayTab').then(m => ({ default: m.DriverPayTab })));
 const DataManagementTab = lazy(() => import('./components/datamanagement/DataManagementTab').then(m => ({ default: m.DataManagementTab })));
 const TutorialTab = lazy(() => import('./components/tutorial/TutorialTab').then(m => ({ default: m.TutorialTab })));
@@ -219,8 +218,12 @@ function App() {
           return hasPermission('reports.view') ? <ReportsTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'financial':
           return hasPermission('financial.view') ? <FinancialTab userId={user.id} hasPermission={hasPermission} /> : null;
+        // 09/09/2026 — 'c6payment' nao e mais uma aba: virou botao dentro do Financeiro,
+        // que abre a mesma tela num popup. O caso continua existindo (o tipo segue valido
+        // em cor/log/permissao) mas cai no Financeiro, pra ninguem ficar em tela branca
+        // caso reste algum atalho antigo apontando pra ca.
         case 'c6payment':
-          return hasPermission('c6payment.view') ? <C6PaymentTab userId={user.id} hasPermission={hasPermission} /> : null;
+          return hasPermission('financial.view') ? <FinancialTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'driverpay':
           return hasPermission('driverpay.view') ? <DriverPayTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'errors':

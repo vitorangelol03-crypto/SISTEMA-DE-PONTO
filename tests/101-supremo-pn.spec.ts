@@ -568,7 +568,9 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
       await loginAs(page, ADMIN);
       await switchToPN(page);
 
-      const tabs = ['Ponto', 'Funcionários', 'Relatórios', 'Financeiro', 'Pagamento C6', 'Erros', 'Configurações', 'Usuários', 'Gerenciamento', 'Ajuda'];
+      // 09/09/2026: 'Pagamento C6' saiu da lista — deixou de ser aba e virou botão dentro
+      // do Financeiro (o popup dele é coberto por tests/20-c6-complete).
+      const tabs = ['Ponto', 'Funcionários', 'Relatórios', 'Financeiro', 'Erros', 'Configurações', 'Usuários', 'Gerenciamento', 'Ajuda'];
       for (const tab of tabs) {
         // goToTab abre o menu "Mais" quando a aba está escondida nele (barra que cabe, 06/08/2026)
         await goToTab(page, tab);

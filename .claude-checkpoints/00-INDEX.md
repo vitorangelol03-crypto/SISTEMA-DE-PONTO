@@ -2,7 +2,25 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-08 (7ª leva)** — **✅ §2.4 e §2.5 FECHADOS** (`864eaf9`,
+> Última atualização: **2026-09-09** — **🟡 PAGAMENTO C6 VIROU BOTÃO DENTRO DO FINANCEIRO —
+> PRONTO E VALIDADO, MAS *NÃO* NO AR.** Etapa 1 do `PLANO_FINANCEIRO_2026-09.md` (plano
+> ditado pelo Victor em 08–09/09). **O Victor pediu pra NÃO subir**: "deixa pronto, eu
+> confiro de manhã" — a mudança mexe na tela que ele usa todo dia e tira uma aba do menu.
+> Está commitado; **falta só o `git push`**. O botão abre um **popup flutuante** com a
+> prévia já montada, herdando o período e o tipo filtrados no Financeiro (os filtros são os
+> mesmos que o C6 pedia — não se redigita data). **Nada se perdeu** (editar valor/PIX, data
+> em lote, tirar do lote, avisos de validação, trava de não gerar sem ver valor) e a
+> permissão continua a mesma (`c6payment.view`). **Novo:** escopo **avulso** — marcando
+> linhas, só elas vão pro arquivo ("1 de um e outro de outro"), o que não existia.
+> 🔴 **Bug real pego pelo E2E antes de ir pro ar:** o auto-carregamento disparava antes da
+> lista de funcionários chegar e a prévia saía **vazia**, como se não houvesse pagamento no
+> período (6 testes vermelhos). ⚠️ **Armadilha registrada:** com o popup aberto, a tela do
+> Financeiro **continua no DOM atrás** e lista os mesmos funcionários — `page.locator('table
+> tr')` pega a linha errada; por isso o popup tem `data-testid="c6-popup"`. Validação:
+> typecheck 0 · lint 0 · build limpo · **1393 unitários** · **E2E 8/8** no C6 e **24/24** em
+> Financeiro/permissões/integridade. Detalhe em `CHECKPOINT_SESSAO_2026-09-09.md`.
+>
+> Atualização anterior — **2026-09-08 (7ª leva)** — **✅ §2.4 e §2.5 FECHADOS** (`864eaf9`,
 > `b9c54b9`). **Import:** reclicar depois de falha no meio duplicava os entregadores novos
 > (`createdByRaw` é cache local da chamada; os criados ficavam no banco e o modal mantinha
 > "criar novo" — e cada duplicado ainda poluía a grade de todas as quinzenas abertas via

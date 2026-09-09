@@ -143,7 +143,7 @@ test.describe('SPEC 99 — Teste Supremo: fluxo completo Caratinga', () => {
       'Funcionários',
       'Relatórios',
       'Financeiro',
-      'Pagamento C6',
+      // 09/09/2026: 'Pagamento C6' nao e mais aba — virou botao dentro do Financeiro.
       'Erros',
       'Configurações',
       'Usuários',
@@ -314,9 +314,9 @@ test.describe('SPEC 99 — Teste Supremo: fluxo completo Caratinga', () => {
   });
 
   // ==========================================================================
-  // TEST 7: Pagamento C6 export — navegação aba + UI renderiza
+  // TEST 7: Pagamento C6 export — abre pelo botao do Financeiro + UI renderiza
   // ==========================================================================
-  test('7. Pagamento C6: aba renderiza com payments do mês atual sem erros', async ({ page }) => {
+  test('7. Pagamento C6: popup do Financeiro renderiza com payments do mês atual sem erros', async ({ page }) => {
     const capture = attachConsoleCapture(page);
     await loginAs(page, ADMIN);
     await goToTab(page, 'Pagamento C6');

@@ -86,6 +86,29 @@ export async function logout(page: Page) {
  * aba, no mesmo clique que uma pessoa daria.
  */
 export async function goToTab(page: Page, tabName: string) {
+  // 09/09/2026 — "Pagamento C6" deixou de ser aba: virou botão dentro do Financeiro, que
+  // abre a mesma tela num popup já com a prévia pronta. O desvio fica AQUI de propósito:
+  // os ~20 usos espalhados pelos specs continuam dizendo "vá pro Pagamento C6" e o helper
+  // sabe como chegar lá agora. Quem testa a ausência da ABA faz isso explicitamente.
+  if (/^Pagamento C6$/.test(tabName)) {
+    await goToTab(page, 'Financeiro');
+    const abrir = page.getByRole('button', { name: /^Gerar pagamento C6$/ }).first();
+    await abrir.waitFor({ state: 'visible', timeout: 10_000 });
+    await abrir.click();
+    // O popup carrega a prévia sozinho; espera o título dele aparecer.
+    await page.getByRole('heading', { name: /Pagamento C6 Bank/ }).first()
+      .waitFor({ state: 'visible', timeout: 15_000 });
+    return;
+  }
+
+  // Um popup aberto (ex.: o do Pagamento C6) cobre a barra de abas com o overlay — o
+  // clique na próxima aba iria parar nele. Fecha antes de navegar.
+  const fecharPopup = page.getByRole('button', { name: /^Fechar$/ }).first();
+  if (await fecharPopup.isVisible().catch(() => false)) {
+    await fecharPopup.click().catch(() => undefined);
+    await fecharPopup.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => undefined);
+  }
+
   const aba = page.getByRole('button', { name: new RegExp(`^${tabName}$`) }).first();
   if (await aba.isVisible().catch(() => false)) {
     await aba.click();
