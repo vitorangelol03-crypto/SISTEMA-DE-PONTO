@@ -31,7 +31,8 @@
 > baixando os 13 PDFs do bucket e lendo o texto de dentro: **13/13 com o aviso** (a 1ª
 > tentativa deu 0/13 e foi o que revelou o buraco 2). ⏳ **Falta o Victor decidir** o que
 > fazer com as 16 notas marcadas como atrasadas. Detalhe em
-> `CHECKPOINT_SESSAO_2026-09-09.md` §8-§12.
+> `CHECKPOINT_SESSAO_2026-09-09.md` §8-§12. ✅ **DECIDIDO:** as 16 notas **ficam**
+> marcadas como atrasadas (*"mantém e esquece isso"*) — assunto encerrado.
 >
 > Atualização anterior do mesmo dia (1ª leva) — **🟡 PAGAMENTO C6 VIROU BOTÃO DENTRO DO FINANCEIRO —
 > PRONTO E VALIDADO, MAS *NÃO* NO AR.** Etapa 1 do `PLANO_FINANCEIRO_2026-09.md` (plano

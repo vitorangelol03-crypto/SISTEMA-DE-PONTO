@@ -143,8 +143,10 @@ Os espelhos da 1ª quinzena de agosto foram publicados **sem prazo nenhum**, e *
 foram marcadas como atrasadas** contra um horário que o entregador nunca leu. O prazo
 estava certo no banco (`nf_due_at` = 04/09 17:00) — só não chegava ao papel.
 
-⏳ **Pendente de decisão do Victor:** o que fazer com essas 16 notas marcadas como
-atrasadas.
+✅ **DECIDIDO pelo Victor (09/09/2026): as 16 ficam marcadas como atrasadas.** Palavras
+dele: *"mantém e esquece isso"*. **Assunto encerrado — não reabrir, não perguntar de novo.**
+O atraso é real (medido contra `nf_due_at`); o que faltou foi o aviso no papel, e isso já
+foi corrigido na origem (§8) e nos espelhos republicados (§10).
 
 ## 10. Republicação dos 13 (feita, em produção)
 
