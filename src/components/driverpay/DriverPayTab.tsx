@@ -146,6 +146,7 @@ import { DriverImportModal } from './DriverImportModal';
 import { PlatformImportModal } from './PlatformImportModal';
 import { DriverImportLinksModal } from './DriverImportLinksModal';
 import { DriverMirrorPreviewDialog, type MirrorRequest } from './DriverMirrorPreviewDialog';
+import type { MirrorCutoffLine } from '../../utils/driverMirrorGenerator';
 
 interface DriverPayTabProps {
   userId: string;
@@ -1229,7 +1230,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   // automatica da NF passa a LER esse total em vez de recalcular por formula (com abate
   // parcial a formula esperaria o abate cheio e recusaria a nota certa).
   const onPublish = useCallback(
-    async (allowed: string[] | null, modo: ModoDesconto, nfDueAt: string | null) => {
+    async (allowed: string[] | null, modo: ModoDesconto, nfDueAt: string | null, cutoff: MirrorCutoffLine | null) => {
       if (!company || !selectedPeriod) return;
       const targets = publishRows;
       if (targets.length === 0) {
@@ -1253,10 +1254,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           return;
         }
         try {
-          const data = buildGroupMirrorData(
+          const data = { ...buildGroupMirrorData(
             info.groupName, targets, platformsRef.current, company, selectedPeriod, allowedSet,
             includeDeductions, abate,
-          );
+          ), cutoff };
           const blob = await generateDriverGroupMirrorPdf(data, { compact: false });
           await publishDriverMirror({
             companyId: company.id, periodId: selectedPeriod.id, driverId: info.leaderId,
@@ -1284,10 +1285,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
       for (const g of plano.grupos) {
         try {
-          const data = buildGroupMirrorData(
+          const data = { ...buildGroupMirrorData(
             g.groupName, g.membros, platformsRef.current, company, selectedPeriod, allowedSet,
             includeDeductions, abate,
-          );
+          ), cutoff };
           const blob = await generateDriverGroupMirrorPdf(data, { compact: false });
           await publishDriverMirror({
             companyId: company.id, periodId: selectedPeriod.id, driverId: g.leaderId,
@@ -1305,10 +1306,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
       for (const row of plano.avulsos) {
         try {
-          const data = buildDriverMirrorData(
+          const data = { ...buildDriverMirrorData(
             row, platformsRef.current, company, selectedPeriod, allowedSet, includeDeductions,
             abate.get(row.driverId),
-          );
+          ), cutoff };
           const blob = await generateDriverMirrorPdf(data);
           await publishDriverMirror({
             companyId: company.id,

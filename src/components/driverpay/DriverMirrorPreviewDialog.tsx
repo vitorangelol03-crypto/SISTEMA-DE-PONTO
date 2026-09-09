@@ -65,7 +65,13 @@ interface DriverMirrorPreviewDialogProps {
    * Publicar no app do entregador (1 PDF por driver). `allowed`=plataformas incluídas
    * (null=todas); `modo`=como abater vale/perda (07/08/2026: pessoa a pessoa por padrão).
    */
-  onPublish?: (allowed: string[] | null, modo: ModoDesconto, nfDueAt: string | null) => Promise<void>;
+  /**
+   * 🔴 09/09/2026 — `cutoff` passou a viajar até aqui. O caminho de PUBLICAR montava o PDF
+   * sem ele (a palavra `cutoff` nao existia no DriverPayTab): so o "Baixar PDF" levava o
+   * aviso. Resultado: NENHUM espelho publicado no app jamais teve a faixa do prazo, mesmo
+   * com o nf_due_at gravado no banco e usado depois pra marcar atraso.
+   */
+  onPublish?: (allowed: string[] | null, modo: ModoDesconto, nfDueAt: string | null, cutoff: MirrorCutoffLine | null) => Promise<void>;
   /**
    * O que a PUBLICAÇÃO vai fazer de verdade — mostrado ANTES do clique (04/08/2026).
    * Existe porque a prévia mostrava o espelho do grupo e a publicação mandava individual:
@@ -661,7 +667,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     setPublishing(true);
     try {
       await salvarPrazoComoPadrao();
-      await onPublish(allowed, modoDesconto, nfDueAt);
+      await onPublish(allowed, modoDesconto, nfDueAt, cutoff);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao publicar no app');
     } finally {
