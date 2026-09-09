@@ -181,3 +181,43 @@ publica na Vercel; o Victor pediu pra conferir o C6 acordado antes.
 
 > ⚠️ Os 13 espelhos **já estão corrigidos no app** — a republicação roda no banco/storage
 > de produção, não depende de deploy.
+
+## 13. A hora na tela de anexar nota (pedido do Victor, mesma tarde)
+
+Saiu do caso da JESSICA: ela enviou às **20:34 de 04/09** com o corte às **17:00 do mesmo
+dia** e sustentou que tinha mandado de manhã. Três fontes independentes derrubaram isso —
+e a terceira é a mais forte:
+
+| Fonte | Quando | Quem carimba |
+|---|---|---|
+| `CreationDate` **dentro do PDF da nota** | 04/09 **20:33:07 −03:00** | o sistema que **emitiu a nota** |
+| `storage.objects.created_at` | 04/09 20:34:33 | o **Supabase** |
+| `driverpay_nota_fiscal_files.uploaded_at` | 04/09 20:34:33 | nosso sistema |
+
+A nota foi **gerada 86 segundos antes de subir**. De manhã o arquivo não existia. O fuso
+também está provado: o `-03'00'` está dentro do próprio PDF, e a nota do Claudiomar do mesmo
+dia tem o horário do celular dele no nome do arquivo (`..._260904_211513.pdf`) batendo em 1
+minuto com nosso carimbo. Conferidos os **50 envios daquele dia**, de todo mundo: nenhum
+arquivo dela pela manhã, nem no login do Kayque (parceiro de grupo).
+
+**Mas ela tinha um motivo pra achar que estava certa:** a lista "Notas enviadas" do app
+mostrava **só a data** (`04/09/2026`). Agora mostra `04/09/2026, 20:34`, via
+`formatDateTimeBR` — função que **já existia** em `dateUtils` e **já prende o fuso** em
+`America/Sao_Paulo`. O fuso preso é de propósito: o prazo é em horário de Brasília, exibir
+no fuso do aparelho reabriria a discussão.
+
+- `src/components/driver-app/DriverApp.tsx` — a linha da lista + o comentário do porquê.
+- `tests/unit/dateUtils.spec.ts` — caso 13 trava `23:34 UTC → 04/09/2026, 20:34`.
+- `tests/107-driver-app-nota-dividida.spec.ts` — o teste D passou a exigir data **e** hora
+  nas 2 notas enviadas (roda no navegador de verdade).
+
+Validação: typecheck 0 · lint 0 · build limpo · dateUtils **16/16** · E2E 107 **5/5**.
+
+⚠️ **Vizinhança, avisada e NÃO mexida:** o `fmtDate` local do `DriverApp.tsx` (usado no
+"Enviado em" do card de espelho, linha ~1053) continua sem fuso preso — usa o do aparelho.
+Pra um celular no Brasil dá no mesmo; só viraria problema com o fuso do aparelho errado.
+
+## 14. Situação do push (atualizada)
+
+Cinco commits prontos e **não empurrados**: `c993e8c`, `13f38d0`, `2683f28`, `76e85a2`,
+`27c9f3a`. O `main` publica na Vercel e o Victor pediu pra conferir o C6 acordado antes.

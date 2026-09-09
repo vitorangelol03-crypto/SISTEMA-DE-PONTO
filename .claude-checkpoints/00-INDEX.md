@@ -2,7 +2,21 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-09 (2ª leva)** — **🔴→✅ O ESPELHO SAÍA SEM O PRAZO DA NOTA —
+> Última atualização: **2026-09-09 (3ª leva)** — **✅ A HORA APARECE NA TELA DE ANEXAR
+> NOTA** (`27c9f3a`). Saiu do caso da JESSICA: enviou às **20:34 de 04/09** com corte às
+> **17:00 do mesmo dia** e sustentou que mandara de manhã. Derrubado por três fontes, a
+> mais forte dentro do próprio arquivo: o `CreationDate` do PDF diz **04/09 20:33:07
+> −03:00** — a nota foi **gerada 86s antes de subir**, de manhã não existia. (Fuso provado
+> pelo `-03'00'` do próprio PDF + a nota do Claudiomar, cujo nome carrega o horário do
+> celular dele e bate em 1 min.) **Mas ela tinha razão de se confundir:** a lista "Notas
+> enviadas" mostrava **só a data**. Agora mostra `04/09/2026, 20:34`, usando
+> `formatDateTimeBR` — que **já existia** e **já prende o fuso** em `America/Sao_Paulo` (de
+> propósito: o prazo é em horário de Brasília). Travado por unitário (`23:34 UTC →
+> 04/09/2026, 20:34`) e por asserção no **E2E 107**, que roda no navegador. ⚠️ Avisado e
+> **não mexido**: o `fmtDate` local do `DriverApp.tsx` (card "Enviado em") segue sem fuso
+> preso. Detalhe em `CHECKPOINT_SESSAO_2026-09-09.md` §13.
+>
+> Atualização anterior do mesmo dia (2ª leva) — **🔴→✅ O ESPELHO SAÍA SEM O PRAZO DA NOTA —
 > CORRIGIDO E OS 13 ESPELHOS REPUBLICADOS EM PRODUÇÃO** (`13f38d0`, `2683f28`). Investigando
 > o espelho do Claudiomar a pedido do Victor, achei que o aviso amarelo ("as notas deverão
 > ser enviadas até as 17:00H do dia 04/09") **não estava em nenhum espelho publicado** — e
