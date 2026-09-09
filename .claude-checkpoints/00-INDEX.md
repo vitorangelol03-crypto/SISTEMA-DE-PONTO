@@ -2,6 +2,15 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
+> **📌 SESSÃO 09/09 ENCERRADA.** Estado completo, pendências, decisões fechadas e as
+> armadilhas da máquina estão em **`CHECKPOINT_SESSAO_2026-09-09.md` §15** — ao retomar,
+> leia este topo e depois o §15, nessa ordem.
+>
+> **Em uma linha:** os 13 espelhos estão corrigidos **no ar**; há **7 commits prontos e NÃO
+> empurrados** (o `main` publica na Vercel e o Victor quer conferir o C6 acordado antes —
+> **não empurrar sem ele falar**); a suíte cheia de unitários **não fechou** nesta máquina
+> por limitação do WSL, não por teste vermelho — rodar com a máquina livre antes do push.
+>
 > Última atualização: **2026-09-09 (3ª leva)** — **✅ A HORA APARECE NA TELA DE ANEXAR
 > NOTA** (`27c9f3a`). Saiu do caso da JESSICA: enviou às **20:34 de 04/09** com corte às
 > **17:00 do mesmo dia** e sustentou que mandara de manhã. Derrubado por três fontes, a

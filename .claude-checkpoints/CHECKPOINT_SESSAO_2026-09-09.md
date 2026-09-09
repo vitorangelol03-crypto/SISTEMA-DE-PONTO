@@ -178,11 +178,10 @@ corte seu pagamento vai ocorrer dia 14/09"*.
 
 ## 12. Situação do push
 
-Três commits **prontos e não empurrados** (`c993e8c`, `13f38d0`, `2683f28`). O `main`
-publica na Vercel; o Victor pediu pra conferir o C6 acordado antes.
-
 > ⚠️ Os 13 espelhos **já estão corrigidos no app** — a republicação roda no banco/storage
-> de produção, não depende de deploy.
+> de produção, **não depende de deploy**.
+
+Contagem e lista dos commits pendentes: ver **§15**, que é a fonte única.
 
 ## 13. A hora na tela de anexar nota (pedido do Victor, mesma tarde)
 
@@ -221,5 +220,87 @@ Pra um celular no Brasil dá no mesmo; só viraria problema com o fuso do aparel
 
 ## 14. Situação do push (atualizada)
 
-Cinco commits prontos e **não empurrados**: `c993e8c`, `13f38d0`, `2683f28`, `76e85a2`,
-`27c9f3a`. O `main` publica na Vercel e o Victor pediu pra conferir o C6 acordado antes.
+Ver **§15** — fonte única da lista de commits pendentes.
+
+---
+
+# 15. FECHAMENTO DA SESSÃO — leia isto ao retomar
+
+## 15.1 No ar em produção (não depende de deploy)
+
+- **13 espelhos republicados com o aviso de prazo.** Provado baixando os 13 PDFs do bucket
+  e lendo o texto de dentro: 13/13 com *"17:00H do dia 04/09"*. O Victor confirmou vendo o
+  espelho da Jessica no celular.
+- Fora da republicação, por decisão dele: **Claudiomar**, **Gessiley** e quem já foi pago.
+- **Nada foi tocado nas notas fiscais** — ninguém precisou reenviar nota.
+
+## 15.2 Pronto no código, **NÃO empurrado** (7 commits)
+
+| Commit | O quê |
+|---|---|
+| `c993e8c` | Pagamento C6 virou botão + popup dentro do Financeiro (Etapa 1) |
+| `13f38d0` | Prazo da nota vira obrigatório pra publicar |
+| `2683f28` | O `cutoff` passa a chegar no PDF no caminho de publicar |
+| `27c9f3a` | Data **e hora** na lista "Notas enviadas" do app do entregador |
+| `76e85a2`, `af35cb0`, `50816ca` | checkpoints |
+
+**Por que não subiu:** o `main` publica na Vercel e o Victor pediu pra conferir o C6
+acordado antes (*"deixa pronto, eu confiro de manhã"*). **Não empurrar sem ele falar.**
+
+Validação do que está commitado: typecheck **0** · lint **0** · build **limpo** ·
+dateUtils **16/16** · E2E **107 5/5** · E2E **20-c6 8/8** · E2E Financeiro/permissões
+**24/24**.
+
+⚠️ **Ressalva honesta:** a suíte **completa** de unitários **não fechou** nesta máquina.
+Não é teste vermelho — o vitest não consegue subir os workers no `/mnt/c` do WSL
+(`Timeout waiting for worker to respond`) com load average 10–20; dos ~94 arquivos, 55 nem
+iniciaram e mesmo assim o vitest **saiu com código 0**. Nenhum teste falhou no que rodou.
+**Rodar a suíte cheia com a máquina livre antes do push.**
+
+## 15.3 Decisões fechadas hoje (não perguntar de novo)
+
+- **As 16 notas marcadas como atrasadas FICAM.** *"mantém e esquece isso"* (§9).
+- Republicar só os atrasados, sem Claudiomar/Gessiley, sem mexer em nota (§10).
+- Prazo (data + hora) **obrigatório** pra publicar espelho (§8).
+- Mostrar **hora** junto da data na tela de anexar nota, com fuso preso em Brasília (§13).
+
+## 15.4 O que continua aberto
+
+**Do plano** (`PLANO_FINANCEIRO_2026-09.md`):
+- **Etapa 2** — histórico de pagamentos no Financeiro: diarista **semanal** × CLT
+  **mensal**, ambos configuráveis, juntos na tela mas separados no visual. Metade do
+  caminho já existe: `payment_periods` guarda as semanas desde julho.
+- **Etapa 3** — espelho de folha CLT (INSS/FGTS/IRRF). **Bloqueado por cadastro:**
+  PIS/CBO/CTPS/salário das 16 pessoas CLT — hoje **0 de 98** têm PIS.
+- **3 decisões que são do Victor:** permissão depois da fusão das abas; quem entra na
+  primeira folha; como conferir em paralelo com a contabilidade.
+
+**Solto de sessões anteriores:**
+- Nota do FERNANDO MARTINS (R$ 13,20).
+- Avisar o Gessiley da regra dos dois CNPJs.
+- Conferir se o E2E do `main` está vermelho desde 07/09.
+- 3 PRs do Dependabot, todos major, esperando decisão (#18 typescript 7, #8 react 19,
+  #5 visualizer 7).
+
+**Avisado e de propósito NÃO mexido:** o `fmtDate` local do `DriverApp.tsx` (card
+"Enviado em", ~linha 1053) segue sem fuso preso — usa o do aparelho. Só quebraria com o
+fuso do celular errado.
+
+## 15.5 Armadilhas desta máquina (custaram tempo hoje)
+
+- O **servidor de dev cai sozinho** no meio das rodadas de E2E → `page.goto: Timeout`. Não
+  é código: subir `npm run dev` à parte e repetir.
+- **vitest não sobe worker** com a máquina carregada, e **sai com código 0 mesmo assim**.
+  Sempre conferir a linha `Test Files N passed (N)` — se N for muito menor que ~94, a
+  rodada **não vale**.
+- `npx tsc --noEmit` na raiz checa **zero** arquivos. Usar `npm run typecheck`.
+- Locator de escudo (`svg.lucide-shield`) pega a **aba Admin** também — ancorar pelo
+  `title="Gerenciar Permissões"`.
+- Com o popup do C6 aberto, a tabela do Financeiro **continua no DOM atrás** com os mesmos
+  nomes — usar `data-testid="c6-popup"` pra escopar.
+
+## 15.6 Se for retomar do zero
+
+1. Ler `00-INDEX.md` (topo) + este arquivo, §15.
+2. Perguntar ao Victor se pode **empurrar os 7 commits** (ele queria ver o C6 acordado).
+3. Antes do push: rodar a suíte cheia de unitários com a máquina livre (§15.2).
