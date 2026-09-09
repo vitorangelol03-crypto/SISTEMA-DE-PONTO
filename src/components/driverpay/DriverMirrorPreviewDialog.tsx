@@ -18,6 +18,8 @@ import {
   separatedPlatformTotals,
   separatedAmount,
   areDeductionsApplied,
+  montarAvisoDeCorte,
+  prazoDeNotaIncompleto,
   type SeparatedPlatformTotal,
 } from '../../utils/driverMirrorGenerator';
 import { ModalShell } from './ModalShell';
@@ -99,10 +101,12 @@ const CutoffBandPreview: React.FC<{ cutoff: MirrorCutoffLine }> = ({ cutoff }) =
       <span className="text-red-700 text-[15px]">{cutoff.time}H do dia {cutoff.date}</span>
       , fiquem atentos para que não ocorra atrasos no pagamento!
     </p>
-    <p className="text-[11px] text-gray-800">
-      Caso exceda o horário de corte seu pagamento vai ocorrer dia{' '}
-      <span className="font-bold text-red-700">{cutoff.lateDate}</span>
-    </p>
+    {cutoff.lateDate?.trim() && (
+      <p className="text-[11px] text-gray-800">
+        Caso exceda o horário de corte seu pagamento vai ocorrer dia{' '}
+        <span className="font-bold text-red-700">{cutoff.lateDate}</span>
+      </p>
+    )}
   </div>
 );
 
@@ -505,9 +509,20 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     return ano && mes && dia ? `${dia}/${mes}` : iso;
   };
 
+  /**
+   * 🔴 CONSERTO (09/09/2026) — a faixa do prazo sumia em silêncio.
+   *
+   * Antes exigia os TRÊS campos preenchidos, e `lateDate` (a data do pagamento tardio,
+   * que é só informativa e NÃO mede nada) nascia vazio. Quem publicava preenchia hora e
+   * data — o `nf_due_at` era gravado no banco — mas a faixa NÃO era impressa. Foi o que
+   * aconteceu na 1ª quinzena de agosto: todos os espelhos saíram sem prazo escrito e 16
+   * notas foram marcadas como atrasadas contra um prazo que o entregador nunca viu.
+   *
+   * Agora hora + data bastam. `lateDate` vazio só omite a 2ª linha da faixa.
+   */
   const cutoff: MirrorCutoffLine | null =
-    cutoffTime.trim() && cutoffDate.trim() && lateDate.trim()
-      ? { time: cutoffTime.trim(), date: dataCurta(cutoffDate.trim()), lateDate: lateDate.trim() }
+    cutoffTime.trim() && cutoffDate.trim()
+      ? montarAvisoDeCorte(cutoffTime, dataCurta(cutoffDate.trim()), lateDate)
       : null;
 
   /** O prazo como INSTANTE, pra gravar na publicacao e medir atraso da nota. */
@@ -538,9 +553,23 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   const groupHasZapex =
     activeRequest.mode === 'group' && activeRequest.data.drivers.some((d) => zapexValueOf(d) > 0);
 
+  /**
+   * 🔒 TRAVA (09/09/2026, pedido do Victor): não sai espelho sem a data limite da nota.
+   *
+   * "coloque a trava obrigatória agora pra tudo que for publicado não passar sem colocar
+   * a data limite pra anexar nota". Antes, publicar sem prazo era possível e SILENCIOSO —
+   * o espelho saía sem faixa e o sistema continuava medindo atraso pelo `nf_due_at`,
+   * cobrando um prazo que o entregador nunca viu.
+   */
+  const prazoIncompleto = prazoDeNotaIncompleto(cutoffTime, cutoffDate);
+
   const handleGenerate = async () => {
     if (!canGenerate) {
       toast.error('Você não tem permissão para gerar espelhos');
+      return;
+    }
+    if (prazoIncompleto) {
+      toast.error('Preencha a DATA e a HORA limite para anexar a nota fiscal antes de gerar o espelho.');
       return;
     }
     setGenerating(true);
@@ -613,6 +642,13 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
 
   const handlePublish = async () => {
     if (!onPublish) return;
+    // 🔒 TRAVA (09/09/2026): nada vai pro app do entregador sem a data/hora limite da nota.
+    // É aqui que mais importa: o espelho publicado é o que ele vê, e o `nf_due_at` que vai
+    // junto é o que o sistema usa depois pra dizer quem atrasou.
+    if (prazoIncompleto) {
+      toast.error('Preencha a DATA e a HORA limite para anexar a nota fiscal antes de publicar no app.');
+      return;
+    }
     // Todas marcadas => null (todas); subconjunto => só as marcadas (D3 filtra linhas E total).
     const allowed =
       selectedPlatforms.size >= availablePlatforms.length
@@ -685,7 +721,8 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
           <button
             type="button"
             onClick={handleGenerate}
-            disabled={generating || !canGenerate}
+            title={prazoIncompleto ? 'Preencha a data e a hora limite da nota fiscal' : undefined}
+            disabled={generating || !canGenerate || prazoIncompleto}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium inline-flex items-center gap-2 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
@@ -696,12 +733,14 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
               type="button"
               onClick={handlePublish}
               title={
-                publishPlan
+                prazoIncompleto
+                  ? 'Preencha a data e a hora limite da nota fiscal'
+                  : publishPlan
                   ? `Vai publicar ${publishPlan.grupos + publishPlan.avulsos} PDF(s): ` +
                     `${publishPlan.grupos} de grupo (só pro líder) e ${publishPlan.avulsos} individual(is).`
                   : undefined
               }
-              disabled={publishing || generating || unpublishing || !canGenerate}
+              disabled={publishing || generating || unpublishing || !canGenerate || prazoIncompleto}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium inline-flex items-center gap-2 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -887,11 +926,20 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
         )}
 
         {/* ── Aviso de corte das notas (sai em TODOS os espelhos; salva ao gerar) ── */}
-        <div className="border border-yellow-300 bg-yellow-50 rounded-md p-3">
+        <div className={`border rounded-md p-3 ${prazoIncompleto ? 'border-red-300 bg-red-50' : 'border-yellow-300 bg-yellow-50'}`}>
           <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5 mb-2">
-            <AlarmClock className="w-4 h-4 text-yellow-600" />
+            <AlarmClock className={`w-4 h-4 ${prazoIncompleto ? 'text-red-600' : 'text-yellow-600'}`} />
             Aviso de corte das notas — sai em todos os espelhos (a data usada fica salva até você alterar)
           </p>
+          {/* 09/09/2026: obrigatório. Antes dava pra publicar sem, e o espelho ia pro app
+              SEM prazo escrito enquanto o sistema continuava medindo atraso por ele. */}
+          {prazoIncompleto && (
+            <p className="text-[12px] font-semibold text-red-700 bg-white border border-red-200 rounded px-2 py-1.5 mb-2">
+              Preencha a DATA e a HORA limite para anexar a nota fiscal. Sem isso não dá pra
+              gerar nem publicar — o entregador receberia o espelho sem prazo nenhum e ainda
+              assim seria cobrado por atraso.
+            </p>
+          )}
           <p className="text-[11px] text-gray-600 mb-2">
             É este prazo que o sistema usa pra dizer quem mandou a nota <strong>atrasada</strong> —
             ele fica gravado <strong>em cada espelho publicado</strong>, então mudar aqui depois não

@@ -265,16 +265,20 @@ export const PERMISSION_LABELS = {
     applyDiscount: 'Aplicar desconto financeiro',
     viewHistory: 'Visualizar histórico financeiro'
   },
+  // 09/09/2026: o Pagamento C6 deixou de ser aba e virou um botão DENTRO do Financeiro,
+  // que abre a tela num popup já com a prévia pronta. Os textos abaixo foram atualizados
+  // porque diziam "Ver aba" — quem fosse configurar procuraria no menu uma aba que não
+  // existe mais. As permissões em si não mudaram: são as mesmas de antes.
   c6payment: {
-    title: 'Pagamento C6',
-    view: 'Ver aba',
+    title: 'Pagamento C6 (dentro do Financeiro)',
+    view: 'Ver o botão "Gerar pagamento C6" no Financeiro',
     generate: 'Gerar arquivo',
     export: 'Exportar',
     import: 'Importar dados financeiros',
     edit: 'Editar linhas de pagamento',
     bulkEdit: 'Editar datas em lote',
     delete: 'Excluir linhas de pagamento',
-    viewValues: 'Ver valores em R$ (desligar esconde os números em toda a aba)'
+    viewValues: 'Ver valores em R$ (desligar esconde os números na tela do C6)'
   },
   driverpay: {
     title: 'Pagamentos Driver',

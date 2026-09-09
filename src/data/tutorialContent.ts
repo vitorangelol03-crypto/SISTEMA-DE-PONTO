@@ -468,21 +468,27 @@ export const tutorialsContent: Tutorial[] = [
     icon: 'FileSpreadsheet',
     requiredPermission: 'c6payment.view',
     steps: [
+      // 09/09/2026: deixou de ser aba — virou botão dentro do Financeiro, que abre um
+      // popup com a prévia já montada a partir do período filtrado ali.
       {
-        title: 'Acessar aba Pagamento C6',
-        description: 'Clique na aba "Pagamento C6" no menu principal.',
+        title: 'Abrir o Financeiro e escolher o período',
+        description: 'Vá na aba "Financeiro" e defina o período (ou escolha um período de pagamento). É daqui que o C6 herda as datas.',
       },
       {
-        title: 'Selecionar período',
-        description: 'Use os seletores de data para definir o período dos pagamentos a serem exportados.',
+        title: 'Clicar em "Gerar pagamento C6"',
+        description: 'O botão fica no topo do Financeiro. Ele abre uma janela já com a prévia montada — não precisa digitar as datas de novo.',
       },
       {
         title: 'Revisar lista',
-        description: 'Verifique a lista de funcionários e valores antes de gerar o arquivo. Confirme que todas as chaves PIX estão corretas.',
+        description: 'Verifique a lista de funcionários e valores antes de gerar o arquivo. Confirme que todas as chaves PIX estão corretas. Dá para corrigir valor, chave PIX e data ali mesmo, e tirar alguém do lote.',
+      },
+      {
+        title: 'Pagar só algumas pessoas (opcional)',
+        description: 'Marcando linhas na lista, SÓ as marcadas entram no arquivo — dá para misturar diarista e carteira assinada. Sem marcar nada, vai a lista inteira.',
       },
       {
         title: 'Gerar arquivo',
-        description: 'Clique em "Gerar Arquivo C6" para criar o arquivo Excel formatado para importação no sistema do C6 Bank.',
+        description: 'Clique em "Baixar Planilha C6" para criar o arquivo Excel formatado para importação no sistema do C6 Bank.',
       },
       {
         title: 'Fazer upload no C6',

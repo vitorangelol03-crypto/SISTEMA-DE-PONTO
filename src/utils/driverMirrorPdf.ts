@@ -267,7 +267,10 @@ function fitSegments(doc: jsPDF, segments: MirrorSegment[], maxWidth: number): M
  * Auto-ajusta a fonte para o texto NUNCA vazar da faixa (simetria garantida).
  */
 function drawCutoffBand(doc: jsPDF, cutoff: MirrorCutoffLine, y: number): number {
-  const h = 42;
+  // 09/09/2026: a 2ª linha (pagamento tardio) virou opcional. Sem ela a faixa encolhe,
+  // mas o AVISO PRINCIPAL — a data/hora limite pra mandar a nota — sai sempre.
+  const temLinhaTardia = !!cutoff.lateDate?.trim();
+  const h = temLinhaTardia ? 42 : 28;
   const usable = CONTENT_W - 24;
   doc.setFillColor(...COLOR_NOTICE_BG);
   doc.rect(X_LEFT, y, CONTENT_W, h, 'F');
@@ -285,17 +288,19 @@ function drawCutoffBand(doc: jsPDF, cutoff: MirrorCutoffLine, y: number): number
     ],
     usable,
   );
-  drawSegmentsCentered(doc, line1, y + 17);
+  drawSegmentsCentered(doc, line1, temLinhaTardia ? y + 17 : y + 18);
 
-  const line2 = fitSegments(
-    doc,
-    [
-      { text: 'Caso exceda o horário de corte seu pagamento vai ocorrer dia', size: 8.5 },
-      { text: cutoff.lateDate, bold: true, color: COLOR_DANGER, size: 9.5, padLeft: 4 },
-    ],
-    usable,
-  );
-  drawSegmentsCentered(doc, line2, y + 33);
+  if (temLinhaTardia) {
+    const line2 = fitSegments(
+      doc,
+      [
+        { text: 'Caso exceda o horário de corte seu pagamento vai ocorrer dia', size: 8.5 },
+        { text: cutoff.lateDate as string, bold: true, color: COLOR_DANGER, size: 9.5, padLeft: 4 },
+      ],
+      usable,
+    );
+    drawSegmentsCentered(doc, line2, y + 33);
+  }
   return y + h + 10;
 }
 

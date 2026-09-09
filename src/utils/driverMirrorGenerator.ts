@@ -138,7 +138,49 @@ export interface DriverMirrorPeriod {
 export interface MirrorCutoffLine {
   time: string;
   date: string;
-  lateDate: string;
+  /**
+   * Data do pagamento tardio — **informativa e OPCIONAL** (09/09/2026).
+   *
+   * 🔴 Era obrigatória de fato, sem nunca ter sido pedida: o diálogo só montava o
+   * `cutoff` quando os TRÊS campos estavam preenchidos, e este nascia VAZIO. Resultado
+   * real: os espelhos da 1ª quinzena de agosto saíram SEM NENHUM prazo escrito, embora
+   * o prazo (`nf_due_at`) tivesse sido gravado no banco — 16 notas foram marcadas como
+   * atrasadas contra um prazo que o entregador nunca viu no documento.
+   * Vazia agora só omite a 2ª linha da faixa; o aviso principal sai sempre.
+   */
+  lateDate?: string;
+}
+
+/**
+ * O prazo da nota está completo o bastante pra gerar/publicar um espelho?
+ *
+ * 🔒 09/09/2026 — pedido do Victor: "coloque a trava obrigatória agora pra tudo que for
+ * publicado não passar sem colocar a data limite pra anexar nota". Só DATA e HORA são
+ * exigidas: são elas que viram o `nf_due_at` e, portanto, o que o sistema usa depois pra
+ * dizer quem atrasou.
+ */
+export function prazoDeNotaIncompleto(time: string, date: string): boolean {
+  return !time.trim() || !date.trim();
+}
+
+/**
+ * Monta o aviso de corte que é impresso no espelho.
+ *
+ * 🔴 O BUG QUE ISTO CORRIGE (09/09/2026): antes o aviso só era montado com os TRÊS campos
+ * preenchidos, e a data do pagamento tardio — que é só informativa e não mede nada —
+ * nascia VAZIA. Quem publicava preenchia data e hora, o `nf_due_at` era gravado no banco,
+ * mas a faixa NÃO era impressa. Aconteceu de verdade na 1ª quinzena de agosto: todos os
+ * espelhos foram pro app sem prazo escrito e 16 notas foram marcadas como atrasadas
+ * contra um prazo que o entregador nunca viu.
+ */
+export function montarAvisoDeCorte(
+  time: string,
+  dateCurta: string,
+  lateDate: string,
+): MirrorCutoffLine | null {
+  if (prazoDeNotaIncompleto(time, dateCurta)) return null;
+  const late = lateDate.trim();
+  return { time: time.trim(), date: dateCurta.trim(), lateDate: late || undefined };
 }
 
 export interface DriverMirrorData {
