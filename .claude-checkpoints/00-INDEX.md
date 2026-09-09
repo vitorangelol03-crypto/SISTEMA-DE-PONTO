@@ -2,7 +2,24 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> Última atualização: **2026-09-09** — **🟡 PAGAMENTO C6 VIROU BOTÃO DENTRO DO FINANCEIRO —
+> Última atualização: **2026-09-09 (2ª leva)** — **🔴→✅ O ESPELHO SAÍA SEM O PRAZO DA NOTA —
+> CORRIGIDO E OS 13 ESPELHOS REPUBLICADOS EM PRODUÇÃO** (`13f38d0`, `2683f28`). Investigando
+> o espelho do Claudiomar a pedido do Victor, achei que o aviso amarelo ("as notas deverão
+> ser enviadas até as 17:00H do dia 04/09") **não estava em nenhum espelho publicado** — e
+> eram **dois** buracos: (1) o aviso só era montado com os **três** campos preenchidos, e o
+> terceiro (data de pagamento tardio, decorativa) nascia vazio; (2) **o pior** — no caminho
+> de **PUBLICAR NO APP** o `cutoff` nunca era passado pro gerador de PDF (a palavra sequer
+> existia em `DriverPayTab.tsx`); só o "Baixar PDF" levava a faixa. **Consequência medida:**
+> 16 notas marcadas como atrasadas contra um horário que ninguém viu (o prazo estava certo
+> no banco: `nf_due_at` = 04/09 17:00). Agora **data + hora bastam e são obrigatórias pra
+> publicar** (botão travado + aviso vermelho). **Republicação:** os 13 líderes atrasados
+> (fora Claudiomar, Gessiley e quem já foi pago), sem tocar em nada das notas — provado
+> baixando os 13 PDFs do bucket e lendo o texto de dentro: **13/13 com o aviso** (a 1ª
+> tentativa deu 0/13 e foi o que revelou o buraco 2). ⏳ **Falta o Victor decidir** o que
+> fazer com as 16 notas marcadas como atrasadas. Detalhe em
+> `CHECKPOINT_SESSAO_2026-09-09.md` §8-§12.
+>
+> Atualização anterior do mesmo dia (1ª leva) — **🟡 PAGAMENTO C6 VIROU BOTÃO DENTRO DO FINANCEIRO —
 > PRONTO E VALIDADO, MAS *NÃO* NO AR.** Etapa 1 do `PLANO_FINANCEIRO_2026-09.md` (plano
 > ditado pelo Victor em 08–09/09). **O Victor pediu pra NÃO subir**: "deixa pronto, eu
 > confiro de manhã" — a mudança mexe na tela que ele usa todo dia e tira uma aba do menu.

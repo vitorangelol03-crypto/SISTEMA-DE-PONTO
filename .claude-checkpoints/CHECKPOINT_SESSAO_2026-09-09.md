@@ -111,3 +111,73 @@ resolveu.
   das 16 pessoas CLT — hoje **0 de 98** têm PIS.
 - 3 decisões em aberto no plano (permissão, quem entra na primeira folha, modo de
   conferência com a contabilidade).
+
+---
+
+# 2ª LEVA — 09/09, tarde: o espelho que saiu sem prazo
+
+> Investigação pedida pelo Victor ("verifica o espelho do Claudiomar, vê se está com o
+> aviso de até sexta às 17 horas"). Resultado: **não estava** — e não era só o dele.
+
+## 8. O buraco (dois, na verdade)
+
+**Buraco 1 — um campo decorativo derrubava o aviso.** `montarAvisoDeCorte` só montava a
+faixa quando os **três** campos estavam preenchidos, e o terceiro (a data do pagamento
+tardio, puramente informativa) nascia vazio. Corrigido: **data + hora bastam**, e agora
+são **obrigatórias pra publicar** (`prazoDeNotaIncompleto` trava o botão e mostra o aviso
+vermelho). O campo de pagamento tardio virou opcional e só acrescenta a 2ª linha.
+
+**Buraco 2 — o pior, achado só depois de republicar.** Republiquei os 13 espelhos, baixei
+os PDFs do storage e o aviso **continuava faltando**. A causa real: no caminho de
+**PUBLICAR NO APP** o `cutoff` nunca era passado pro gerador de PDF — a palavra `cutoff`
+não existia em `DriverPayTab.tsx`. Só o "Baixar PDF" levava o aviso. Corrigido: o diálogo
+devolve o `cutoff` no `onPublish` e os **3** pontos que montam espelho (grupo direto,
+grupos do plano, avulsos) espalham ele no `data` antes de gerar o PDF.
+
+> **Lição:** o teste unitário do `montarAvisoDeCorte` passava e o "Baixar PDF" mostrava a
+> faixa. Nada disso provava o caminho que o entregador vê. Só abrir o PDF publicado provou.
+
+## 9. Consequência medida em produção
+
+Os espelhos da 1ª quinzena de agosto foram publicados **sem prazo nenhum**, e **16 notas
+foram marcadas como atrasadas** contra um horário que o entregador nunca leu. O prazo
+estava certo no banco (`nf_due_at` = 04/09 17:00) — só não chegava ao papel.
+
+⏳ **Pendente de decisão do Victor:** o que fazer com essas 16 notas marcadas como
+atrasadas.
+
+## 10. Republicação dos 13 (feita, em produção)
+
+A pedido do Victor: republicar **só quem está atrasado**, **fora Claudiomar e Gessiley** e
+fora quem já foi pago, **sem tocar em nada das notas fiscais**, usando **o prazo que já
+está registrado** (04/09 17:00). Feito via "Espelhos da seleção" (1 diálogo só, 13 grupos).
+
+Verificação — não bastou o "publicou com sucesso": baixei os 13 PDFs do bucket
+`driverpay-mirrors` e li o texto de dentro.
+
+| Rodada | Resultado |
+|---|---|
+| 1ª (só com o buraco 1 corrigido) | ❌ **0 com aviso / 13 sem** |
+| 2ª (com o buraco 2 corrigido) | ✅ **13 com aviso / 0 sem** |
+
+Texto conferido dentro do PDF: *"As notas deverão ser enviadas até as **17:00H do dia
+04/09**, fiquem atentos para que não ocorra atrasos no pagamento! Caso exceda o horário de
+corte seu pagamento vai ocorrer dia 14/09"*.
+
+## 11. Arquivos
+
+- `src/utils/driverMirrorGenerator.ts` — `montarAvisoDeCorte` + `prazoDeNotaIncompleto`;
+  `MirrorCutoffLine.lateDate` virou opcional.
+- `src/utils/driverMirrorPdf.ts` — a faixa encolhe (42→28) quando não tem 2ª linha.
+- `src/components/driverpay/DriverMirrorPreviewDialog.tsx` — trava de publicar + aviso
+  vermelho + `cutoff` no `onPublish`.
+- `src/components/driverpay/DriverPayTab.tsx` — o `cutoff` chega nos 3 pontos de montagem.
+- `tests/unit/espelhoPrazoNota.spec.ts` — 11 casos, incluindo o que quebrou.
+
+## 12. Situação do push
+
+Três commits **prontos e não empurrados** (`c993e8c`, `13f38d0`, `2683f28`). O `main`
+publica na Vercel; o Victor pediu pra conferir o C6 acordado antes.
+
+> ⚠️ Os 13 espelhos **já estão corrigidos no app** — a republicação roda no banco/storage
+> de produção, não depende de deploy.
