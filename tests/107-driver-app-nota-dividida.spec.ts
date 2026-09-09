@@ -330,5 +330,12 @@ test.describe('Nota dividida — portal do entregador (05/09/2026)', () => {
     expect(notas!.map((n) => Number(n.read_value))).toEqual([FATIA, FATIA]);
     expect(new Set(notas!.map((n) => n.nota_emitter_id)).size, 'CNPJs diferentes').toBe(2);
     expect(notas!.map((n) => n.split_part)).toEqual([1, 2]);
+
+    // 09/09/2026 — a lista "Notas enviadas" mostra data E HORA. Antes saía só a data:
+    // uma entregadora enviou às 20:34 com o corte às 17:00 do mesmo dia, leu "04/09/2026"
+    // na tela e ficou convencida de que estava no prazo. A hora tem que aparecer.
+    const comHora = page.getByText(/\d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}/);
+    await expect(comHora.first()).toBeVisible({ timeout: 30_000 });
+    expect(await comHora.count(), 'as 2 notas enviadas mostram data e hora').toBeGreaterThanOrEqual(2);
   });
 });

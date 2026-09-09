@@ -17,6 +17,7 @@ import {
 } from '../../services/driverApp';
 import { estadoBotaoNota } from '../../utils/notaBotao';
 import { formatCnpj } from '../../utils/mirrorGenerator';
+import { formatDateTimeBR } from '../../utils/dateUtils';
 
 type Screen = 'login' | 'change' | 'mirrors' | 'nf' | 'proof';
 
@@ -955,10 +956,15 @@ export function DriverApp() {
 
           {nfFiles.length > 0 && (
             <div className="pt-2">
+              {/* 09/09/2026 — aqui saia SO a data. Uma entregadora enviou as 20:34 do dia
+                  04/09 com o corte as 17:00 do MESMO dia, viu "04/09/2026" na tela e ficou
+                  convencida de que tinha mandado no prazo — o app nao tinha como desmentir.
+                  `formatDateTimeBR` prende o fuso em America/Sao_Paulo de proposito: o prazo
+                  e em horario de Brasilia, mostrar no fuso do celular reabriria a discussao. */}
               <div className="text-xs font-semibold text-gray-500 mb-1">Notas enviadas</div>
               {nfFiles.map((f) => (
                 <div key={f.id} className="text-xs text-gray-600 flex items-center gap-1.5 py-0.5">
-                  <CheckCircle2 size={12} className="text-green-600" /> {f.emitterLabel} · {fmtDate(f.uploadedAt)}
+                  <CheckCircle2 size={12} className="text-green-600" /> {f.emitterLabel} · {formatDateTimeBR(f.uploadedAt)}
                 </div>
               ))}
             </div>

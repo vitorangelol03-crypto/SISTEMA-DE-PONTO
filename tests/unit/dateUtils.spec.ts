@@ -93,6 +93,19 @@ describe('formatDateTimeBR', () => {
   it('12. ISO UTC com segundos: HH:MM trunca segundos no output', () => {
     expect(formatDateTimeBR('2026-05-11T15:30:45Z')).toBe('11/05/2026, 12:30');
   });
+
+  /**
+   * 🔴 CASO REAL (04/09/2026) — a lista "Notas enviadas" do app do entregador mostrava
+   * SÓ a data. Uma entregadora subiu a nota às 20:34 de 04/09, com o corte às 17:00 do
+   * MESMO dia; lendo "04/09/2026" na tela, ficou convencida de que estava no prazo.
+   *
+   * Desde 09/09/2026 a tela usa `formatDateTimeBR`. O que este teste protege é o FUSO:
+   * o prazo é em horário de Brasília, então a hora exibida tem que ser de Brasília
+   * independentemente do fuso do celular — senão a discussão volta.
+   */
+  it('13. o caso da nota das 20:34: 23:34 UTC vira 20:34 de Brasília, não a hora do aparelho', () => {
+    expect(formatDateTimeBR('2026-09-04T23:34:33.876822Z')).toBe('04/09/2026, 20:34');
+  });
 });
 
 describe('getCurrentBrazilTime', () => {
