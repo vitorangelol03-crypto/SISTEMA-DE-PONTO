@@ -48,6 +48,12 @@
 --   4. `alter table public.payments drop column employment_type_snapshot;`
 --   ⚠️ o dado do carimbo se perde pra sempre: depois que alguém trocar de
 --   vínculo na ficha, não há como reconstruir o que era antes.
+-- ✅ APLICADA EM 11/09/2026 (versão 20260911045400, a mesma do nome do arquivo).
+--    Provado depois de aplicar: 3.605 pagamentos carimbados, 0 sem vínculo
+--    (1.577 Diarista + 2.028 Carteira Assinada); o trigger testado com INSERT que
+--    se desfaz sozinho — ficha CLT carimbou "Carteira Assinada", ficha Diarista
+--    carimbou "Diarista", e valor passado de propósito NÃO foi sobrescrito; a ACL
+--    da RPC voltou idêntica ({postgres, authenticated, service_role}).
 -- ════════════════════════════════════════════════════════════════════════════
 
 begin;

@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
--- RECIBO DE PAGAMENTO PUBLICADO PRO FUNCIONÁRIO
+-- RECIBO DE PAGAMENTO PUBLICADO PRO FUNCIONÁRIO — 1/3: A TABELA
 --
 -- Pedido do Victor (10/09/2026): *"coloca também pra esse espelho, esses PDF,
 -- ele aparecer na aba de erros do funcionário, pra gente poder publicar lá pra
@@ -10,17 +10,14 @@
 -- meses — tabela de publicação + bucket PRIVADO + link assinado pela edge fn.
 -- Copiado o padrão de propósito: rota paralela nova seria a gambiarra.
 --
--- ESTADO EM 11/09/2026:
---   ✅ tabela `payment_receipt_publications` — APLICADA
---   ✅ bucket privado `payment-receipts` — APLICADO
---   🔴 policy do bucket em `storage.objects` — FALTA (ver o bloco no fim; o modo
---      automático barra mexer nessa tabela, é você quem roda)
---
 -- ROLLBACK:
 --   DROP POLICY IF EXISTS payment_receipts_company_all ON storage.objects;
 --   DELETE FROM storage.buckets WHERE id = 'payment-receipts';  -- esvaziar antes
 --   DROP TABLE IF EXISTS public.payment_receipt_publications CASCADE;
 -- ════════════════════════════════════════════════════════════════════════════
+
+-- ✅ APLICADA em 11/09/2026 (versão 20260911050814). As outras duas partes:
+--    20260911050821 (o bucket) e 20260911051000 (a policy — PENDENTE).
 
 begin;
 
@@ -66,69 +63,5 @@ comment on table public.payment_receipt_publications is
   'Recibo de pagamento publicado pro FUNCIONARIO ver na aba de erros dele. '
   'PDF no bucket privado payment-receipts; o funcionario recebe link assinado pela '
   'edge fn employee-public-api (ele nao tem JWT). Decisao do Victor, 10/09/2026.';
-
--- ---------- Bucket PRIVADO ----------
--- Documento com dinheiro de gente real: privado, como o dos espelhos. O
--- funcionario NUNCA le o bucket direto — so por URL assinada de curta duracao.
-insert into storage.buckets (id, name, public)
-values ('payment-receipts', 'payment-receipts', false)
-on conflict (id) do nothing;
-
--- O caminho é `{company_id}/{inicio}_{fim}/{employee_id}.pdf`, então a 1ª pasta
--- é o company_id.
---
--- ⚠️ PADRÃO CONFERIDO EM PRODUÇÃO (11/09/2026): as policies dos 4 buckets do
--- driverpay NÃO são "empresa e pronto" — elas checam a PERMISSÃO do módulo:
---   bucket_id = X AND ( acesso_total() OR ( tem_aba() AND a pasta é da empresa ) )
--- Aqui vale o mesmo, com o módulo `financial`: quem não pode ver pagamento não
--- pode escrever um recibo de pagamento. Só a empresa bater seria mais frouxo que
--- o resto da casa.
---
--- 🔴 ESTE BLOCO PRECISA SER APLICADO À MÃO (Victor, 11/09/2026): o modo
--- automático barra criar policy em `storage.objects` — é uma tabela compartilhada
--- do Supabase. A TABELA e o BUCKET já estão aplicados; falta SÓ isto. Sem ele
--- ninguém consegue subir o PDF e o botão "Publicar" dá erro de permissão.
--- Cole no SQL Editor do Supabase e rode:
-
-create or replace function public.financeiro_acesso_total()
-returns boolean language sql stable security definer set search_path to '' as $$
-  select case
-    when nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role' = 'service_role' then true
-    when nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub' = '2626' then true
-    when nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub' = '9999'
-     and public.user_has_module_permission('9999', 'financial', 'viewPayments') then true
-    else false
-  end;
-$$;
-
-create or replace function public.financeiro_ve_pagamento()
-returns boolean language sql stable security definer set search_path to '' as $$
-  select coalesce(
-    public.user_has_module_permission(
-      nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub',
-      'financial', 'viewPayments'),
-    false);
-$$;
-
-revoke all on function public.financeiro_acesso_total() from public;
-revoke all on function public.financeiro_ve_pagamento() from public;
-grant execute on function public.financeiro_acesso_total() to authenticated;
-grant execute on function public.financeiro_ve_pagamento() to authenticated;
-
-drop policy if exists payment_receipts_company_all on storage.objects;
-create policy payment_receipts_company_all on storage.objects
-  for all to authenticated
-  using (
-    bucket_id = 'payment-receipts'
-    and ( (select public.financeiro_acesso_total())
-          or ( (select public.financeiro_ve_pagamento())
-               and split_part(name, '/', 1) = coalesce((select auth.jwt() ->> 'company_id'), '') ) )
-  )
-  with check (
-    bucket_id = 'payment-receipts'
-    and ( (select public.financeiro_acesso_total())
-          or ( (select public.financeiro_ve_pagamento())
-               and split_part(name, '/', 1) = coalesce((select auth.jwt() ->> 'company_id'), '') ) )
-  );
 
 commit;

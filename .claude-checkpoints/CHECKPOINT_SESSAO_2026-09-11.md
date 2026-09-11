@@ -114,11 +114,15 @@ npx vitest run --maxWorkers=3      # 96/96, 1.467 testes, ~24 min
 ### 5.1 Uma policy de bucket (2 minutos)
 O modo automático **barra criar policy em `storage.objects`** — é tabela
 compartilhada do Supabase, e eu não contorno isso. A tabela e o bucket já estão
-aplicados; falta **só** o bloco no fim de:
+aplicados; falta **só** este arquivo:
 
-`supabase/migrations/20260911050000_payment_receipt_publications.sql`
+`supabase/migrations/20260911051000_payment_receipts_storage_policy.sql`
 
-Cole no SQL Editor do Supabase e rode. **Sem ele o botão "Publicar" dá erro de
+Cole no SQL Editor do Supabase e rode (ou `supabase db push`).
+
+> Os arquivos de migration foram **renomeados pra bater com as versões que o banco
+> registrou** — senão um `supabase db push` tentaria rodar tudo de novo. Hoje só
+> este 3/3 aparece como pendente, que é a verdade. **Sem ele o botão "Publicar" dá erro de
 permissão** (o aviso na tela diz exatamente isso e onde está o remédio).
 
 Segue o padrão que os 4 buckets do driverpay já usam em produção: checa a
