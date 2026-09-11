@@ -5593,13 +5593,19 @@ export interface MeuRecibo {
 /**
  * Os recibos publicados pra este funcionário. Vai pela edge fn porque ele não tem
  * JWT — mesmo caminho de `getEmployeeErrorPeriods`, que já entrega os erros dele.
+ *
+ * ⚠️ O **PIN é obrigatório** e conferido no SERVIDOR. A chave anon está no bundle
+ * público e `lookup-employee` devolve o id de qualquer um a partir do CPF — sem o
+ * PIN, quem soubesse um CPF baixava o holerite da pessoa. É o mesmo PIN que ela
+ * já digitou pra entrar; não há passo novo pra ela. (Auditoria de 11/09/2026.)
  */
 export const getMeusRecibos = async (
   employeeId: string,
   companyId: string,
+  pin: string,
 ): Promise<MeuRecibo[]> => {
   const data = await callEmployeePublicApi<{ receipts: MeuRecibo[] }>(
-    'employee-receipts', { employeeId, companyId },
+    'employee-receipts', { employeeId, companyId, pin },
   );
   return data.receipts ?? [];
 };

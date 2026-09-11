@@ -12,6 +12,13 @@ import { useCompany } from '../../contexts/useCompany';
 
 interface EmployeeErrorsViewProps {
   employeeId: string;
+  /**
+   * O PIN que a pessoa acabou de digitar pra entrar. Vai junto no pedido dos
+   * RECIBOS porque o servidor confere de novo: sem ele, quem soubesse o CPF
+   * baixaria o holerite alheio (auditoria de 11/09/2026). Os ERROS continuam
+   * como antes — mudar aquilo é outra conversa.
+   */
+  pin: string;
 }
 
 function formatDateBR(d: string): string {
@@ -27,7 +34,7 @@ interface PeriodDetail {
   total_triage: number;
 }
 
-export const EmployeeErrorsView: React.FC<EmployeeErrorsViewProps> = ({ employeeId }) => {
+export const EmployeeErrorsView: React.FC<EmployeeErrorsViewProps> = ({ employeeId, pin }) => {
   const { company } = useCompany();
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState<PeriodDetail[]>([]);
@@ -61,13 +68,13 @@ export const EmployeeErrorsView: React.FC<EmployeeErrorsViewProps> = ({ employee
   // Busca PRÓPRIA, não junto com os erros: um recibo que não carrega não pode
   // esconder os erros, nem o contrário — são duas informações independentes.
   useEffect(() => {
-    if (!company?.id) return;
+    if (!company?.id || !pin) return;
     let cancelled = false;
-    getMeusRecibos(employeeId, company.id)
+    getMeusRecibos(employeeId, company.id, pin)
       .then((rs) => { if (!cancelled) setRecibos(rs); })
       .catch((err) => console.error('Erro ao carregar os recibos:', err));
     return () => { cancelled = true; };
-  }, [employeeId, company?.id]);
+  }, [employeeId, company?.id, pin]);
 
   if (loading) {
     return (

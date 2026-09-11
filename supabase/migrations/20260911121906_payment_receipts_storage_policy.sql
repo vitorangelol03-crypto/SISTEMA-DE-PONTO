@@ -1,17 +1,17 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- RECIBO DE PAGAMENTO — 3/3: A POLICY DO BUCKET
 --
--- 🔴 ESTA É A ÚNICA PARTE QUE FALTA APLICAR (Victor, 11/09/2026).
+-- ✅ APLICADA em 11/09/2026 (versão 20260911121906, a mesma do nome do arquivo).
+--    Na madrugada o modo automático barrou (é tabela compartilhada do Supabase);
+--    passou quando o Victor pediu explicitamente.
 --
--- O modo automático **barra criar policy em `storage.objects`** — é tabela
--- compartilhada do Supabase, e eu não contorno isso. A tabela (1/3) e o bucket
--- (2/3) já estão no ar.
+-- ⚠️ ESTA VERSÃO FOI SUBSTITUÍDA no mesmo dia por `20260911124322`: a policy
+--    nascia `for all`, o que dava DELETE a quem só tem `financial.viewPayments`
+--    (permissão de LEITURA). Uma auditoria adversarial pegou. O arquivo fica
+--    aqui porque é o histórico do que rodou; o estado atual é o da 124322.
 --
--- **Sem este arquivo o botão "Publicar" dá erro de permissão** — e o aviso na
--- tela diz exatamente isso e aponta pra cá.
---
--- Como aplicar: cole no SQL Editor do Supabase e rode. (Ou `supabase db push`,
--- que também marca como aplicada.)
+-- As duas funções-porteiro abaixo continuam valendo — são elas que a policy nova
+-- usa.
 -- ════════════════════════════════════════════════════════════════════════════
 
 begin;

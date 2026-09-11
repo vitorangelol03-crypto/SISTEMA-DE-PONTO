@@ -580,12 +580,44 @@ async function employeeErrorsByPeriod(body: Body): Promise<Response> {
 // `payment-receipts` e PRIVADO e o funcionario nao tem JWT — por isso o link vem
 // ASSINADO daqui, com validade curta, e nunca do bucket direto.
 //
-// Mesmo nivel de confianca de `employee-errors-by-period`, que ja devolve o valor
-// descontado dele: filtro ESTRITO por employee_id + company_id, e so.
+// 🔴 EXIGE O PIN (11/09/2026). A rota nasceu so com employeeId + companyId, no
+// mesmo nivel das outras daqui — e uma auditoria mostrou que isso e FRACO DEMAIS
+// pra este conteudo: a chave anon esta no bundle publico do site, e
+// `lookup-employee` devolve o id de qualquer um a partir do CPF. Ou seja, quem
+// soubesse um CPF baixava o RECIBO DE PAGAMENTO da pessoa, com o salario dela,
+// sem senha nenhuma. Contagem de erro ja era discutivel; holerite nao da.
+//
+// O PIN e o mesmo que a pessoa digita pra entrar na tela — nao ha passo novo pra
+// ela. A conferencia acontece AQUI, no servidor, com bcrypt, e nao na tela.
 async function employeeReceipts(body: Body): Promise<Response> {
   const employeeId = String(body.employeeId ?? '').trim();
   const companyId = String(body.companyId ?? '').trim();
+  const pin = String(body.pin ?? '');
   if (!employeeId || !companyId) return json({ error: 'Invalid employeeId or companyId' }, 400);
+  if (!pin) return json({ error: 'PIN obrigatorio' }, 401);
+
+  const { data: dono, error: donoErr } = await supabase
+    .from('employees')
+    .select('pin, pin_hash')
+    .eq('id', employeeId)
+    .eq('company_id', companyId)
+    .maybeSingle();
+  if (donoErr) return json({ error: 'Database error (pin)', details: donoErr.message }, 500);
+  if (!dono) return json({ error: 'Funcionario nao encontrado' }, 404);
+
+  let pinOk = false;
+  if (dono.pin_hash) {
+    try {
+      pinOk = await bcryptjs.compare(pin, dono.pin_hash);
+    } catch (err) {
+      console.error('[employee-public-api] bcrypt compare error:', err);
+      pinOk = false;
+    }
+  } else {
+    pinOk = Boolean(dono.pin && dono.pin === pin);
+  }
+  // Mensagem generica de proposito: nao diz se foi o PIN ou o id que nao bate.
+  if (!pinOk) return json({ error: 'PIN invalido' }, 401);
 
   const { data: rows, error } = await supabase
     .from('payment_receipt_publications')

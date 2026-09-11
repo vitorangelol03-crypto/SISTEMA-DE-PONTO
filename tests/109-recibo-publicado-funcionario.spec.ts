@@ -89,6 +89,11 @@ async function entrarComoFuncionario(page: Page, cpf: string) {
 }
 
 test.describe('Recibo publicado na tela do funcionário', () => {
+  // Esta máquina roda o robô da Shopee junto (6 Chromes, ~5 GB) e a primeira
+  // navegação passa dos 15s do config. Mesmo remédio do spec 107 e do 110:
+  // esperar pela CONDIÇÃO (a página carregou), não por um tempo fixo.
+  test.use({ navigationTimeout: 120_000, actionTimeout: 30_000 });
+
   test.beforeAll(() => cleanupByPrefix(PREFIX));
   test.afterAll(() => cleanupByPrefix(PREFIX));
 
@@ -101,6 +106,9 @@ test.describe('Recibo publicado na tela do funcionário', () => {
       await publicarRecibos(empId);
       await entrarComoFuncionario(page, cpf);
 
+      // 🎯 O PIN e obrigatorio no SERVIDOR (auditoria de 11/09): sem ele, quem
+      // soubesse o CPF baixava o holerite alheio. A pessoa ja digitou o PIN pra
+      // entrar, entao a tela so repassa — se isso quebrar, a lista vem vazia.
       // O bloco dos recibos, com a contagem.
       await expect(page.getByText(/Meus recibos de pagamento/)).toBeVisible({ timeout: 30_000 });
       await expect(page.getByText('(2)')).toBeVisible();

@@ -152,7 +152,7 @@ export const EmployeeErrorsPage: React.FC = () => {
         </div>
 
         <div className="max-w-2xl mx-auto">
-          <EmployeeErrorsView employeeId={employee.id} />
+          <EmployeeErrorsView employeeId={employee.id} pin={pin} />
         </div>
       </div>
     );
