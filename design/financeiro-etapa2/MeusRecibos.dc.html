@@ -1,0 +1,166 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, Arial, sans-serif; }
+    a { color: #ea580c; } a:hover { color: #c2410c; }
+    .cartao:active { transform: scale(0.985); }
+  </style>
+</helmet>
+
+<!-- A tela que o funcionário abre no celular. Mesmo vocabulário da "Meus Erros"
+     que já existe: fundo cinza, cartão branco arredondado, cabeçalho laranja. -->
+<div style="background: #f9fafb; min-height: 100%; padding: 16px 12px 28px 12px; box-sizing: border-box; display: flex; justify-content: center">
+  <div style="width: 100%; max-width: 420px; background: #ffffff; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); overflow: hidden">
+
+    <div style="background: #ea580c; padding: 20px 24px; color: #ffffff; text-align: center">
+      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 6px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+      <div style="font-size: 19px; font-weight: 700">Meus Recibos e Erros</div>
+      <div style="font-size: 13px; color: #fed7aa; margin-top: 3px">{{nome}}</div>
+    </div>
+
+    <!-- As duas coisas no mesmo lugar, uma escolha só -->
+    <div style="display: flex; border-bottom: 1px solid #e5e7eb">
+      <sc-for list="{{abas}}" as="a" hint-placeholder-count="2">
+        <div onClick="{{a.escolher}}" style="flex-grow: 1; text-align: center; padding: 13px 8px; font-size: 14px; font-weight: 600; cursor: pointer; {{a.estilo}}">
+          {{a.nome}}
+          <sc-if value="{{a.temNovo}}" hint-placeholder-val="{{true}}">
+            <span style="margin-left: 6px; padding: 1px 7px; border-radius: 9999px; font-size: 10px; font-weight: 700; background: #dc2626; color: #ffffff">{{a.novos}}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="padding: 16px">
+
+      <!-- ══ RECIBOS PUBLICADOS PELA CD ══ -->
+      <sc-if value="{{verRecibos}}" hint-placeholder-val="{{true}}">
+        <div>
+          <div style="font-size: 12px; color: #6b7280; margin-bottom: 12px; line-height: 1.5">
+            Os recibos que a CD publicou pra você. Toque para abrir ou baixar.
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <sc-for list="{{recibos}}" as="r" hint-placeholder-count="3">
+              <div class="cartao" style="border: 2px solid #e5e7eb; border-radius: 12px; padding: 14px; {{r.destaque}}">
+                <div style="display: flex; align-items: flex-start; gap: 10px">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                  <div style="flex-grow: 1; min-width: 0">
+                    <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px">
+                      <span style="font-size: 15px; font-weight: 700; color: #1f2937">{{r.periodo}}</span>
+                      <sc-if value="{{r.novo}}" hint-placeholder-val="{{true}}">
+                        <span style="padding: 1px 7px; border-radius: 9999px; font-size: 10px; font-weight: 700; background: #dc2626; color: #ffffff">NOVO</span>
+                      </sc-if>
+                    </div>
+                    <div style="font-size: 12px; color: #6b7280">{{r.tipo}} · publicado em {{r.publicado}}</div>
+                    <div style="font-size: 17px; font-weight: 700; color: #16a34a; margin-top: 6px">{{r.liquido}}</div>
+                    <sc-if value="{{r.temDesconto}}" hint-placeholder-val="{{true}}">
+                      <div style="font-size: 12px; color: #ea580c; margin-top: 2px">{{r.desconto}}</div>
+                    </sc-if>
+                  </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-top: 12px">
+                  <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px; min-height: 44px; box-sizing: border-box; border-radius: 8px; background: #ea580c; color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    Abrir
+                  </div>
+                  <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px; min-height: 44px; box-sizing: border-box; border-radius: 8px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; font-size: 13px; font-weight: 600; cursor: pointer">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    Baixar
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ══ OS ERROS, COMO JÁ EXISTE HOJE ══ -->
+      <sc-if value="{{verErros}}" hint-placeholder-val="{{false}}">
+        <div>
+          <div style="font-size: 12px; color: #6b7280; margin-bottom: 12px; line-height: 1.5">
+            Seus erros por período de pagamento.
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <sc-for list="{{erros}}" as="e" hint-placeholder-count="2">
+              <div style="border: 1px solid #fecaca; background: #fef2f2; border-radius: 12px; padding: 14px">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px">
+                  <span style="font-size: 14px; font-weight: 700; color: #b91c1c">{{e.data}}</span>
+                  <div style="flex-grow: 1"></div>
+                  <span style="font-size: 13px; font-weight: 700; color: #dc2626">{{e.qtd}}</span>
+                </div>
+                <div style="font-size: 12px; color: #7f1d1d; line-height: 1.5">{{e.descricao}}</div>
+                <div style="font-size: 12px; color: #ea580c; margin-top: 6px; font-weight: 600">{{e.desconto}}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":420,"height":880}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { aba: 'recibos' };
+  }
+
+  renderVals() {
+    const aba = this.state.aba;
+    const ativa = 'color: #ea580c; border-bottom: 2px solid #ea580c; background: #fff7ed';
+    const inativa = 'color: #6b7280; border-bottom: 2px solid transparent';
+
+    const abas = [
+      { id: 'recibos', nome: 'Recibos', novos: 1, temNovo: true },
+      { id: 'erros', nome: 'Erros', novos: 0, temNovo: false },
+    ].map((a) => ({
+      nome: a.nome, novos: a.novos, temNovo: a.temNovo,
+      estilo: a.id === aba ? ativa : inativa,
+      escolher: () => this.setState({ aba: a.id }),
+    }));
+
+    return {
+      nome: 'LETICIA GOMES DA SILVA',
+      abas,
+      verRecibos: aba === 'recibos',
+      verErros: aba === 'erros',
+      recibos: [
+        {
+          periodo: 'Semana 2 — 08 a 14/09', tipo: 'Diarista', publicado: '15/09, 09:12',
+          liquido: 'R$ 245,00', novo: true,
+          destaque: 'border-color: #fed7aa; background: #fffbf7',
+          temDesconto: true, desconto: 'Com R$ 25,00 de desconto por erro',
+        },
+        {
+          periodo: 'Semana 1 — 01 a 07/09', tipo: 'Diarista', publicado: '08/09, 10:40',
+          liquido: 'R$ 300,00', novo: false, destaque: '',
+          temDesconto: false, desconto: '',
+        },
+        {
+          periodo: 'Semana 4 — 25 a 31/08', tipo: 'Diarista', publicado: '01/09, 09:05',
+          liquido: 'R$ 280,00', novo: false, destaque: '',
+          temDesconto: true, desconto: 'Com R$ 20,00 de desconto por erro',
+        },
+      ],
+      erros: [
+        { data: '05/09', qtd: '5 pacotes', descricao: '3 fora de rota e 2 não bipados, bipado na rota de Inhapim', desconto: 'Descontado R$ 25,00' },
+        { data: '22/08', qtd: '4 pacotes', descricao: '4 fora de rota, bipado na rota de Ubaporanga', desconto: 'Descontado R$ 20,00' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

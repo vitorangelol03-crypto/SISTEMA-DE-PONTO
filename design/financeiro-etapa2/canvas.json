@@ -1,0 +1,114 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "Financeiro — computador",
+      "is_interactive": true
+    },
+    {
+      "file": "Celular.dc.html",
+      "x": 1600,
+      "y": 0,
+      "w": 390,
+      "h": 900,
+      "title": "Financeiro — celular",
+      "is_interactive": true
+    },
+    {
+      "file": "ArquivoPagamento.dc.html",
+      "x": 0,
+      "y": 1080,
+      "w": 1280,
+      "h": 1080,
+      "title": "Arquivo de pagamento — escolher mês e semana",
+      "is_interactive": true
+    },
+    {
+      "file": "PopupPDF.dc.html",
+      "x": 1400,
+      "y": 1080,
+      "w": 1000,
+      "h": 880,
+      "title": "Escolher quem entra no PDF",
+      "is_interactive": true
+    },
+    {
+      "file": "ReciboCLT.dc.html",
+      "x": 0,
+      "y": 2320,
+      "w": 794,
+      "h": 1123,
+      "title": "PDF — Carteira assinada",
+      "print": "fixed"
+    },
+    {
+      "file": "ReciboDiarista.dc.html",
+      "x": 954,
+      "y": 2320,
+      "w": 794,
+      "h": 1123,
+      "title": "PDF — Diarista",
+      "print": "fixed"
+    },
+    {
+      "file": "MeusRecibos.dc.html",
+      "x": 2600,
+      "y": 1080,
+      "w": 420,
+      "h": 880,
+      "title": "O que o funcionário vê",
+      "is_interactive": true
+    }
+  ],
+  "annotations": [
+    {
+      "id": "como-usar",
+      "x": 0,
+      "y": -150,
+      "w": 620,
+      "text": "PASSE O MOUSE nas tags vermelhas de erro: mostra quem errou, a equipe, se é diarista ou carteira assinada, e o erro escrito.\nCLIQUE na tag: abre a lista completa — na semana, os daquela semana; no mês, os de todas as semanas — sempre separada por vínculo.\nA aba já abre no período aberto. Dados de exemplo."
+    },
+    {
+      "id": "celular-nota",
+      "x": 1600,
+      "y": -150,
+      "w": 390,
+      "text": "No celular os mesmos números empilham em 2x2 — nenhum se perde, só muda de arranjo."
+    },
+    {
+      "id": "c6-nota",
+      "x": 0,
+      "y": 930,
+      "w": 620,
+      "text": "O popup também abre no período aberto: Setembro + a Semana 2 (a que está aberta), sem clicar em nada.\nTrocando o mês, a semana desmarca e você escolhe dentro dele — 2 cliques.\n\"Mês inteiro\" é a opção do carteira assinada.\nO filtro Todos / Só diaristas / Só carteira assinada CORTA a tabela de verdade."
+    },
+    {
+      "id": "pdf-nota",
+      "x": 0,
+      "y": 2170,
+      "w": 880,
+      "text": "O botão PDF do mês/semana gera ESTES dois recibos, duas vias cada, e no sistema abre em outra aba e baixa sozinho.\nOs campos entre [colchetes] são os que HOJE não existem no cadastro: PIS, CBO, CTPS, admissão e endereço. Sem eles o recibo do carteira assinada não sai completo."
+    },
+    {
+      "id": "pdf-escolha",
+      "x": 1400,
+      "y": 930,
+      "w": 620,
+      "text": "Clicando em PDF (no mês ou na semana) abre ESTA lista.\nFiltre por vínculo OU marque pessoa por pessoa — dá pra misturar alguns diaristas com alguns de carteira assinada.\nO resumo azul conta o que vai sair."
+    },
+    {
+      "id": "funcionario-nota",
+      "x": 2600,
+      "y": 930,
+      "w": 420,
+      "text": "O recibo publicado cai aqui, na mesma tela onde ele já vê os erros.\nAbrir ou baixar, e o mais novo vem marcado como NOVO."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

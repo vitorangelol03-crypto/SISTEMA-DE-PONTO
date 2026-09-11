@@ -1,0 +1,197 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    /* Documento de papel: Arial é a letra dos holerites, e o que a contabilidade usa. */
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #ffffff; }
+    a { color: #1d4ed8; } a:hover { color: #1e3a8a; }
+    .cx { border: 1px solid #000000; }
+    td, th { padding: 3px 5px; }
+  </style>
+</helmet>
+
+<!-- A4 a 96 px/pol = 794 x 1123. Duas vias na mesma página, como o modelo. -->
+<div style="width: 794px; padding: 28px 30px; box-sizing: border-box; color: #000000">
+
+  <sc-for list="{{vias}}" as="via" hint-placeholder-count="2">
+    <div style="margin-bottom: 22px">
+
+      <!-- Cabeçalho: empresa + mês -->
+      <table class="cx" style="width: 100%; border-collapse: collapse; font-size: 10px">
+        <tr>
+          <td style="border-right: 1px solid #000; width: 62%">
+            <div style="font-size: 11px; font-weight: bold">{{empresa.nome}}</div>
+            <div>{{empresa.endereco}}</div>
+            <div>CNPJ: {{empresa.cnpj}}</div>
+          </td>
+          <td style="text-align: center">
+            <div style="font-size: 11px; font-weight: bold">RECIBO DE PAGAMENTO DE SALÁRIO</div>
+            <div style="margin-top: 3px">Referente ao mês de <b>{{competencia}}</b></div>
+            <div style="margin-top: 2px; font-size: 9px; color: #333">{{via.rotulo}}</div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Dados do funcionário -->
+      <table class="cx" style="width: 100%; border-collapse: collapse; border-top: none; font-size: 10px">
+        <tr>
+          <td style="border-right: 1px solid #000; width: 8%"><div style="font-size: 8px; color: #444">CÓDIGO</div><div>{{f.codigo}}</div></td>
+          <td style="border-right: 1px solid #000; width: 38%"><div style="font-size: 8px; color: #444">NOME DO FUNCIONÁRIO</div><div><b>{{f.nome}}</b></div></td>
+          <td style="border-right: 1px solid #000; width: 18%"><div style="font-size: 8px; color: #444">CBO</div><div>{{f.cbo}}</div></td>
+          <td style="border-right: 1px solid #000; width: 18%"><div style="font-size: 8px; color: #444">ADMISSÃO</div><div>{{f.admissao}}</div></td>
+          <td><div style="font-size: 8px; color: #444">FUNÇÃO</div><div>{{f.funcao}}</div></td>
+        </tr>
+        <tr style="border-top: 1px solid #000">
+          <td style="border-right: 1px solid #000" colspan="2"><div style="font-size: 8px; color: #444">CPF</div><div>{{f.cpf}}</div></td>
+          <td style="border-right: 1px solid #000"><div style="font-size: 8px; color: #444">PIS</div><div>{{f.pis}}</div></td>
+          <td style="border-right: 1px solid #000"><div style="font-size: 8px; color: #444">CTPS / SÉRIE</div><div>{{f.ctps}}</div></td>
+          <td><div style="font-size: 8px; color: #444">DEPENDENTES</div><div>{{f.dependentes}}</div></td>
+        </tr>
+      </table>
+
+      <!-- Eventos: vencimentos e descontos -->
+      <table class="cx" style="width: 100%; border-collapse: collapse; border-top: none; font-size: 10px">
+        <tr style="background: #e8e8e8; font-size: 9px">
+          <th style="border-right: 1px solid #000; width: 8%; text-align: left">CÓD.</th>
+          <th style="border-right: 1px solid #000; width: 46%; text-align: left">DESCRIÇÃO</th>
+          <th style="border-right: 1px solid #000; width: 14%; text-align: right">REFERÊNCIA</th>
+          <th style="border-right: 1px solid #000; width: 16%; text-align: right">VENCIMENTOS</th>
+          <th style="width: 16%; text-align: right">DESCONTOS</th>
+        </tr>
+        <sc-for list="{{eventos}}" as="e" hint-placeholder-count="7">
+          <tr>
+            <td style="border-right: 1px solid #000">{{e.cod}}</td>
+            <td style="border-right: 1px solid #000">{{e.descricao}}</td>
+            <td style="border-right: 1px solid #000; text-align: right">{{e.referencia}}</td>
+            <td style="border-right: 1px solid #000; text-align: right">{{e.vencimento}}</td>
+            <td style="text-align: right">{{e.desconto}}</td>
+          </tr>
+        </sc-for>
+        <tr><td style="height: 14px" colspan="5"></td></tr>
+        <tr style="border-top: 1px solid #000; font-weight: bold">
+          <td style="border-right: 1px solid #000" colspan="3" style="text-align: right">TOTAIS</td>
+          <td style="border-right: 1px solid #000; text-align: right">{{totais.vencimentos}}</td>
+          <td style="text-align: right">{{totais.descontos}}</td>
+        </tr>
+        <tr style="border-top: 1px solid #000">
+          <td colspan="3" style="border-right: 1px solid #000; text-align: right; font-weight: bold">LÍQUIDO A RECEBER</td>
+          <td colspan="2" style="text-align: right; font-size: 12px; font-weight: bold">{{totais.liquido}}</td>
+        </tr>
+      </table>
+
+      <!-- Bases: o rodapé de todo holerite -->
+      <table class="cx" style="width: 100%; border-collapse: collapse; border-top: none; font-size: 9px; text-align: center">
+        <tr style="background: #f2f2f2">
+          <th style="border-right: 1px solid #000">SALÁRIO BASE</th>
+          <th style="border-right: 1px solid #000">BASE INSS</th>
+          <th style="border-right: 1px solid #000">BASE FGTS</th>
+          <th style="border-right: 1px solid #000">FGTS DO MÊS</th>
+          <th style="border-right: 1px solid #000">BASE IRRF</th>
+          <th>FAIXA IRRF</th>
+        </tr>
+        <tr>
+          <td style="border-right: 1px solid #000">{{bases.salario}}</td>
+          <td style="border-right: 1px solid #000">{{bases.inss}}</td>
+          <td style="border-right: 1px solid #000">{{bases.fgtsBase}}</td>
+          <td style="border-right: 1px solid #000">{{bases.fgtsMes}}</td>
+          <td style="border-right: 1px solid #000">{{bases.irrfBase}}</td>
+          <td>{{bases.irrfFaixa}}</td>
+        </tr>
+      </table>
+
+      <!-- Assinatura -->
+      <table class="cx" style="width: 100%; border-collapse: collapse; border-top: none; font-size: 9px">
+        <tr>
+          <td style="padding: 8px 6px; line-height: 1.5">
+            Declaro ter recebido a importância líquida discriminada neste recibo.
+            <div style="margin-top: 26px; display: flex; gap: 30px; align-items: flex-end">
+              <div style="flex-grow: 1; border-top: 1px solid #000; padding-top: 3px">Data</div>
+              <div style="flex-grow: 2; border-top: 1px solid #000; padding-top: 3px">Assinatura do funcionário</div>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":794,"height":1123}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const brl = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Números de exemplo, mas com as CONTAS certas do modelo:
+    // INSS por faixa, FGTS 8%, IRRF sobre a base depois do INSS e dos dependentes.
+    const salario = 1620.0;
+    const adicNoturno = 143.55;
+    const salFamilia = 65.0;
+    const bruto = salario + adicNoturno + salFamilia;
+
+    const baseInss = salario + adicNoturno;      // salário-família não entra na base
+    const inss = Math.round(baseInss * 0.075 * 100) / 100;
+    const baseFgts = baseInss;
+    const fgts = Math.round(baseFgts * 0.08 * 100) / 100;
+    const valeTransporte = Math.round(salario * 0.06 * 100) / 100;
+    const descontoErro = 42.0;
+
+    const baseIrrf = baseInss - inss - 189.59;   // 1 dependente
+    const descontos = inss + valeTransporte + descontoErro;
+    const liquido = bruto - descontos;
+
+    return {
+      empresa: {
+        nome: 'CD LOGISTICA LTDA',
+        endereco: '[ENDEREÇO DA EMPRESA] — Caratinga/MG',
+        cnpj: '53.824.315/0001-10',
+      },
+      competencia: 'AGOSTO / 2026',
+      f: {
+        codigo: '0042',
+        nome: 'ALEXSANDRO LOMBARDO ALVES',
+        cbo: '[CBO]',
+        admissao: '[ADMISSÃO]',
+        funcao: 'Triagem - Shopee',
+        cpf: '958.098.726-20',
+        pis: '[PIS]',
+        ctps: '[CTPS / SÉRIE]',
+        dependentes: '1',
+      },
+      eventos: [
+        { cod: '001', descricao: 'Salário mensalista', referencia: '30,00 dias', vencimento: brl(salario), desconto: '' },
+        { cod: '015', descricao: 'Adicional noturno', referencia: '18,50 h', vencimento: brl(adicNoturno), desconto: '' },
+        { cod: '028', descricao: 'Salário família', referencia: '1', vencimento: brl(salFamilia), desconto: '' },
+        { cod: '901', descricao: 'INSS sobre salário', referencia: '7,50 %', vencimento: '', desconto: brl(inss) },
+        { cod: '912', descricao: 'Vale transporte', referencia: '6,00 %', vencimento: '', desconto: brl(valeTransporte) },
+        { cod: '940', descricao: 'Desconto por erro (4 pacotes)', referencia: '11/09', vencimento: '', desconto: brl(descontoErro) },
+      ],
+      totais: {
+        vencimentos: brl(bruto),
+        descontos: brl(descontos),
+        liquido: 'R$ ' + brl(liquido),
+      },
+      bases: {
+        salario: brl(salario),
+        inss: brl(baseInss),
+        fgtsBase: brl(baseFgts),
+        fgtsMes: brl(fgts),
+        irrfBase: brl(baseIrrf > 0 ? baseIrrf : 0),
+        irrfFaixa: 'ISENTO',
+      },
+      vias: [
+        { rotulo: '1ª VIA — EMPRESA' },
+        { rotulo: '2ª VIA — FUNCIONÁRIO' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

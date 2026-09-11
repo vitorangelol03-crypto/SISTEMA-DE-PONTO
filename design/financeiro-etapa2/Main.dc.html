@@ -1,0 +1,487 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, Arial, sans-serif; }
+    a { color: #2563eb; } a:hover { color: #1d4ed8; }
+    .gaveta-mes { cursor: pointer; }
+    .gaveta-mes:hover { background: #f9fafb; }
+    .linha-semana:hover { background: #f9fafb; }
+    /* O balãozinho dos erros: some por padrão, aparece ao passar o mouse na tag. */
+    .tag-erro { position: relative; }
+    .tag-erro .balao { display: none; }
+    .tag-erro:hover .balao { display: block; }
+  </style>
+</helmet>
+
+<div style="background: #f3f4f6; min-height: 100%; padding: 24px 24px 40px 24px; box-sizing: border-box">
+
+  <!-- Cabeçalho da seção, no mesmo tom do resto do Financeiro -->
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+      <span style="font-size: 20px; font-weight: 700; color: #1f2937">Histórico de Pagamentos</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px">
+      <button style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; min-height: 44px; border-radius: 6px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1e40af; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+        Gerar arquivo de pagamento
+      </button>
+    </div>
+  </div>
+
+  <!-- AS GAVETAS -->
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <sc-for list="{{meses}}" as="mes" hint-placeholder-count="3">
+
+      <div style="background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1); overflow: hidden">
+
+        <!-- LINHA FECHADA DO MÊS: tudo que importa aparece aqui, sem abrir -->
+        <div class="gaveta-mes" onClick="{{mes.alternar}}" style="display: flex; align-items: center; gap: 16px; padding: 16px 20px">
+
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="{{mes.giro}}; flex-shrink: 0; transition: transform .15s ease">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+
+          <div style="display: flex; align-items: baseline; gap: 10px; min-width: 210px">
+            <span style="font-size: 16px; font-weight: 700; color: #1f2937; letter-spacing: .01em">{{mes.nome}}</span>
+            <span style="font-size: 13px; font-weight: 500; color: #9ca3af">{{mes.ano}}</span>
+          </div>
+
+          <sc-if value="{{mes.emAndamento}}" hint-placeholder-val="{{true}}">
+            <span style="padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 600; background: #fef3c7; color: #92400e; white-space: nowrap">EM ANDAMENTO</span>
+          </sc-if>
+
+          <div style="flex-grow: 1"></div>
+
+          <!-- Os números da gaveta fechada -->
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; background: #f0fdf4; border: 1px solid #bbf7d0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+              <span style="font-size: 15px; font-weight: 700; color: #16a34a; white-space: nowrap">{{mes.valor}}</span>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path></svg>
+              <span style="font-size: 14px; font-weight: 700; color: #2563eb; white-space: nowrap">{{mes.pagos}} pagos</span>
+              <span style="font-size: 12px; font-weight: 500; color: #6b7280; white-space: nowrap">{{mes.divisao}}</span>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; background: #fff7ed; border: 1px solid #fed7aa">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span style="font-size: 14px; font-weight: 700; color: #ea580c; white-space: nowrap">{{mes.descontados}}</span>
+              <span style="font-size: 12px; font-weight: 500; color: #9a3412; white-space: nowrap">descontados</span>
+            </div>
+
+            <div class="tag-erro" onClick="{{mes.abrirErros}}" style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; cursor: pointer; {{mes.estiloErros}}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="{{mes.corErros}}"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+              <span style="font-size: 14px; font-weight: 700; {{mes.corErros}}; white-space: nowrap">{{mes.erros}}</span>
+              <span style="font-size: 12px; font-weight: 500; {{mes.corErrosFraca}}; white-space: nowrap">{{mes.rotuloErros}}</span>
+              <span style="font-size: 12px; font-weight: 500; color: #6b7280; white-space: nowrap">{{mes.divisaoErros}}</span>
+
+              <!-- Passou o mouse: quem errou, de qual equipe, se é diarista ou CLT -->
+              <sc-if value="{{mes.temErro}}" hint-placeholder-val="{{true}}">
+                <div class="balao" style="position: absolute; top: calc(100% + 8px); right: 0; z-index: 50; width: 420px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.12), 0 4px 6px -4px rgba(0,0,0,0.1); overflow: hidden; text-align: left; cursor: default">
+                  <div style="padding: 10px 14px; background: #fef2f2; border-bottom: 1px solid #fecaca; font-size: 12px; font-weight: 600; color: #b91c1c">{{mes.tituloBalao}}</div>
+                  <sc-for list="{{mes.errosTop}}" as="e" hint-placeholder-count="3">
+                    <div style="padding: 10px 14px; border-bottom: 1px solid #f3f4f6">
+                      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 3px">
+                        <span style="font-size: 13px; font-weight: 600; color: #1f2937">{{e.nome}}</span>
+                        <span style="padding: 1px 7px; border-radius: 9999px; font-size: 10px; font-weight: 600; white-space: nowrap; {{e.estiloTipo}}">{{e.tipo}}</span>
+                      </div>
+                      <div style="font-size: 11px; color: #6b7280; margin-bottom: 3px">{{e.equipe}} · {{e.data}}</div>
+                      <div style="font-size: 12px; color: #374151; line-height: 1.4">{{e.descricao}}</div>
+                    </div>
+                  </sc-for>
+                  <div style="padding: 9px 14px; font-size: 11px; font-weight: 600; color: #2563eb; background: #f9fafb">{{mes.rodapeBalao}}</div>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+            <div onClick="{{mes.gerarPdf}}" style="display: flex; align-items: center; gap: 6px; padding: 8px 14px; min-height: 40px; box-sizing: border-box; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+              PDF do mês
+            </div>
+        </div>
+
+        <!-- GAVETA ABERTA: as semanas por dentro -->
+        <sc-if value="{{mes.aberto}}" hint-placeholder-val="{{true}}">
+          <div style="border-top: 1px solid #e5e7eb; background: #f9fafb; padding: 8px 20px 16px 20px">
+
+            <div style="font-size: 11px; font-weight: 600; color: #6b7280; letter-spacing: .06em; text-transform: uppercase; padding: 12px 0 8px 30px">Por semana</div>
+
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <sc-for list="{{mes.semanas}}" as="sem" hint-placeholder-count="4">
+                <div class="linha-semana" style="display: flex; align-items: center; gap: 14px; padding: 12px 14px 12px 30px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; cursor: pointer">
+                  <div style="display: flex; flex-direction: column; gap: 1px; min-width: 132px">
+                    <span style="font-size: 14px; font-weight: 600; color: #1f2937; white-space: nowrap">{{sem.numero}}</span>
+                    <span style="font-size: 12px; font-weight: 500; color: #6b7280; white-space: nowrap">{{sem.periodo}}</span>
+                  </div>
+                  <span style="padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; white-space: nowrap; {{sem.estiloSituacao}}">{{sem.situacao}}</span>
+
+                  <div style="flex-grow: 1"></div>
+
+                  <div style="display: flex; align-items: center; gap: 18px">
+                    <span style="font-size: 14px; font-weight: 700; color: #16a34a; min-width: 92px; text-align: right; white-space: nowrap">{{sem.valor}}</span>
+                    <span style="font-size: 13px; color: #374151; min-width: 122px; text-align: right; white-space: nowrap"><b style="color:#2563eb">{{sem.pagos}}</b> pagos <span style="color:#9ca3af">{{sem.divisao}}</span></span>
+                    <span style="font-size: 13px; min-width: 116px; text-align: right; white-space: nowrap; {{sem.corDescontados}}">{{sem.descontados}} descontados</span>
+                    <span class="tag-erro" onClick="{{sem.abrirErros}}" style="font-size: 13px; min-width: 132px; text-align: right; white-space: nowrap; cursor: pointer; {{sem.corErros}}">{{sem.erros}} <span style="color: #9ca3af; font-size: 12px">{{sem.divisaoErros}}</span>
+                      <sc-if value="{{sem.temErro}}" hint-placeholder-val="{{true}}">
+                        <div class="balao" style="position: absolute; top: calc(100% + 8px); right: 0; z-index: 50; width: 420px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.12), 0 4px 6px -4px rgba(0,0,0,0.1); overflow: hidden; text-align: left; white-space: normal; cursor: default">
+                          <div style="padding: 10px 14px; background: #fef2f2; border-bottom: 1px solid #fecaca; font-size: 12px; font-weight: 600; color: #b91c1c">{{sem.tituloBalao}}</div>
+                          <sc-for list="{{sem.errosTop}}" as="e" hint-placeholder-count="2">
+                            <div style="padding: 10px 14px; border-bottom: 1px solid #f3f4f6">
+                              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 3px">
+                                <span style="font-size: 13px; font-weight: 600; color: #1f2937">{{e.nome}}</span>
+                                <span style="padding: 1px 7px; border-radius: 9999px; font-size: 10px; font-weight: 600; white-space: nowrap; {{e.estiloTipo}}">{{e.tipo}}</span>
+                              </div>
+                              <div style="font-size: 11px; color: #6b7280; margin-bottom: 3px">{{e.equipe}} · {{e.data}}</div>
+                              <div style="font-size: 12px; color: #374151; line-height: 1.4">{{e.descricao}}</div>
+                            </div>
+                          </sc-for>
+                          <div style="padding: 9px 14px; font-size: 11px; font-weight: 600; color: #2563eb; background: #f9fafb">{{sem.rodapeBalao}}</div>
+                        </div>
+                      </sc-if>
+                    </span>
+                    <div onClick="{{sem.gerarPdf}}" style="display: flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 6px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                      PDF
+                    </div>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+
+            <!-- O carteira assinada é MENSAL: bloco próprio, no pé da gaveta -->
+            <div style="margin-top: 16px; padding-top: 14px; border-top: 1px dashed #d1d5db">
+              <div style="display: flex; align-items: center; gap: 14px; padding: 14px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 6px">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9333ea" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                <div style="display: flex; flex-direction: column; gap: 2px">
+                  <span style="font-size: 14px; font-weight: 600; color: #6b21a8">Carteira assinada — mês fechado</span>
+                  <span style="font-size: 12px; color: #7e22ce">Ciclo mensal, sem divisão por semana</span>
+                </div>
+                <span style="padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; white-space: nowrap; {{mes.clt.estiloSituacao}}">{{mes.clt.situacao}}</span>
+
+                <div style="flex-grow: 1"></div>
+
+                <div style="display: flex; align-items: center; gap: 18px">
+                  <span style="font-size: 14px; font-weight: 700; color: #16a34a; min-width: 92px; text-align: right; white-space: nowrap">{{mes.clt.valor}}</span>
+                  <span style="font-size: 13px; color: #374151; min-width: 122px; text-align: right; white-space: nowrap"><b style="color:#9333ea">{{mes.clt.pessoas}}</b> pessoas</span>
+                  <span style="font-size: 13px; min-width: 116px; text-align: right; white-space: nowrap; {{mes.clt.corDescontados}}">{{mes.clt.descontados}} descontados</span>
+                  <span style="font-size: 13px; min-width: 74px; text-align: right; white-space: nowrap; {{mes.clt.corErros}}">{{mes.clt.erros}}</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="margin-top: 14px; font-size: 12px; color: #9ca3af; padding-left: 4px; line-height: 1.6">
+    Semana que atravessa o mês entra na gaveta do mês em que foi paga.<br>
+    Quem muda de diarista para carteira assinada mantém o histórico: cada pagamento guarda o
+    vínculo do dia em que foi feito, e a mudança vale daí em diante.
+  </div>
+
+  <!-- Confirmação do PDF: no sistema de verdade ele abre em outra aba E baixa sozinho. -->
+  <sc-if value="{{pdf.aberto}}" hint-placeholder-val="{{true}}">
+    <div onClick="{{fecharPdf}}" style="position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 120; display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-radius: 10px; background: #1f2937; color: #ffffff; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); cursor: pointer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 13px; font-weight: 600">{{pdf.titulo}}</span>
+        <span style="font-size: 12px; color: #d1d5db">{{pdf.sub}} · marque quem entra e o PDF abre em outra aba e baixa</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ══ POPUP DOS ERROS — abre clicando em qualquer tag vermelha ══
+       Do MÊS: todos os erros de todos os períodos que caem naquele mês.
+       Da SEMANA: só os daquela semana. Nos dois casos separado por vínculo. -->
+  <sc-if value="{{popup.aberto}}" hint-placeholder-val="{{true}}">
+    <div onClick="{{fecharPopup}}" style="position: fixed; inset: 0; background: rgba(17, 24, 39, 0.55); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 40px 24px">
+      <div onClick="{{engolirClique}}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15); width: 100%; max-width: 940px; max-height: 100%; overflow: auto">
+
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 18px 22px; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; background: #ffffff">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          <div style="display: flex; flex-direction: column; gap: 3px">
+            <span style="font-size: 17px; font-weight: 700; color: #1f2937">{{popup.titulo}}</span>
+            <span style="font-size: 13px; color: #6b7280">{{popup.subtitulo}}</span>
+          </div>
+          <div style="flex-grow: 1"></div>
+          <svg onClick="{{fecharPopup}}" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; flex-shrink: 0"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </div>
+
+        <div style="padding: 18px 22px 22px 22px">
+          <sc-for list="{{popup.blocos}}" as="b" hint-placeholder-count="2">
+            <div style="margin-bottom: 20px">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px">
+                <span style="padding: 3px 10px; border-radius: 9999px; font-size: 12px; font-weight: 700; {{b.estiloTipo}}">{{b.tipo}}</span>
+                <span style="font-size: 13px; font-weight: 600; color: #374151">{{b.resumo}}</span>
+              </div>
+
+              <sc-if value="{{b.vazio}}" hint-placeholder-val="{{false}}">
+                <div style="padding: 14px; border: 1px dashed #e5e7eb; border-radius: 6px; font-size: 13px; color: #9ca3af">Nenhum erro deste tipo no período.</div>
+              </sc-if>
+
+              <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden">
+                <sc-for list="{{b.itens}}" as="e" hint-placeholder-count="3">
+                  <div style="display: grid; grid-template-columns: 1.5fr 1.2fr 90px 2.4fr 96px; gap: 12px; align-items: center; padding: 12px 14px; border-bottom: 1px solid #f3f4f6">
+                    <span style="font-size: 13px; font-weight: 600; color: #1f2937">{{e.nome}}</span>
+                    <span style="font-size: 12px; color: #6b7280">{{e.equipe}}</span>
+                    <span style="font-size: 12px; color: #374151">{{e.data}}</span>
+                    <span style="font-size: 12px; color: #374151; line-height: 1.4">{{e.descricao}}</span>
+                    <span style="font-size: 13px; font-weight: 700; color: #dc2626; text-align: right">{{e.qtd}}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: #f9fafb; border-radius: 8px">
+            <span style="font-size: 13px; font-weight: 600; color: #374151">{{popup.totalTexto}}</span>
+            <span style="font-size: 15px; font-weight: 700; color: #dc2626">{{popup.totalPacotes}}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    // 10/09/2026, pedido do Victor: a aba abre JÁ no período que está aberto.
+    // `null` aqui significa "ainda não mexi" — o renderVals escolhe o mês em
+    // andamento sozinho, e a partir do 1º clique vale o que a pessoa escolheu.
+    this.state = { aberto: undefined, popup: null, pdf: null };
+  }
+
+  renderVals() {
+    const brl = (v) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Formato REAL do sistema (error_records): quem, equipe (function_role),
+    // vínculo (contract_type), dia, e o erro escrito na observação.
+    const erro = (nome, equipe, tipo, data, qtd, descricao) => ({
+      nome, equipe, tipo, data, qtd: qtd + (qtd === 1 ? ' pacote' : ' pacotes'), descricao,
+      estiloTipo: tipo === 'CLT'
+        ? 'background: #faf5ff; color: #6b21a8'
+        : 'background: #eff6ff; color: #1e40af',
+      qtdNum: qtd,
+    });
+    const semZero = (n) => n > 0;
+
+    // Cores no vocabulário do painel: verde dinheiro, azul pessoas, laranja desconto,
+    // vermelho erro — e cinza quando o número é zero (nada pra olhar).
+    const corErro = (n) => (semZero(n) ? 'color: #dc2626' : 'color: #9ca3af');
+    const corErroFraca = (n) => (semZero(n) ? 'color: #b91c1c' : 'color: #9ca3af');
+    const estiloErro = (n) => (semZero(n)
+      ? 'background: #fef2f2; border: 1px solid #fecaca'
+      : 'background: #f9fafb; border: 1px solid #e5e7eb');
+    const corDesc = (n) => (semZero(n) ? 'color: #ea580c' : 'color: #9ca3af');
+
+    const sit = (s) => {
+      if (s === 'paga') return 'background: #dcfce7; color: #166534';
+      if (s === 'ABERTA') return 'background: #fef3c7; color: #92400e';
+      return 'background: #f3f4f6; color: #6b7280';
+    };
+
+    // 10/09/2026, pedido do Victor: os erros da SEMANA também vêm separados por tipo,
+    // igual aos do mês — erro de diarista e de carteira assinada não se resolvem no
+    // mesmo lugar, então o número só faz sentido dividido.
+    const semana = (n, periodo, situacao, valor, d, c, desc, errosD, errosC, lista) => {
+      const erros = errosD + errosC;
+      const itens = lista || [];
+      return {
+        lista: itens,
+        temErro: erros > 0,
+        errosTop: itens.slice(0, 2),
+        tituloBalao: erros === 1 ? '1 erro nesta semana' : erros + ' erros nesta semana',
+        rodapeBalao: itens.length > 2
+          ? 'Clique para ver os ' + itens.length + ' erros'
+          : 'Clique para ver tudo, separado por vínculo',
+        numero: 'Semana ' + n,
+        periodo, situacao, estiloSituacao: sit(situacao),
+        valor: brl(valor),
+        pagos: d + c, divisao: '(' + d + ' D · ' + c + ' C)',
+        descontados: desc, corDescontados: corDesc(desc),
+        erros: erros === 0 ? 'sem erro' : (erros === 1 ? '1 erro' : erros + ' erros'),
+        divisaoErros: erros === 0 ? '' : '(' + errosD + ' D · ' + errosC + ' C)',
+        corErros: corErro(erros),
+      };
+    };
+
+    const dados = [
+      {
+        id: 'set', nome: 'SETEMBRO', ano: '2026', emAndamento: true,
+        valor: 12480, pagos: 38, d: 32, c: 6, descontados: 9, errosD: 3, errosC: 1,
+        semanas: [
+          semana(1, '01 – 07/09', 'paga', 7722.0, 18, 3, 2, 1, 0, [
+            erro('Leticia G. da Silva', 'Triagem - Shopee', 'Diarista', '05/09', 5, '3 fora de rota e 2 não bipados, bipado na rota de Inhapim'),
+          ]),
+          semana(2, '08 – 14/09', 'ABERTA', 4758.0, 19, 3, 5, 2, 1, [
+            erro('Jordismar A. de Souza', 'Triagem - Shopee', 'Diarista', '09/09', 2, '1 fora de rota e 1 não bipado, bipado na rota de Imbé'),
+            erro('Estevão da Silva', 'Triagem - Shopee', 'Diarista', '10/09', 2, '2 fora de rota, bipado na rota de Raul Soares'),
+            erro('Alexsandro L. Alves', 'Triagem - Shopee', 'CLT', '11/09', 4, '4 fora de rota, bipado na rota de Inhapim'),
+          ]),
+          semana(3, '15 – 21/09', 'a pagar', 0, 0, 0, 0, 0, 0, []),
+        ],
+        clt: { situacao: 'aberto', valor: 8400, pessoas: 16, descontados: 2, erros: 0 },
+      },
+      {
+        id: 'ago', nome: 'AGOSTO', ano: '2026', emAndamento: false,
+        valor: 45210, pagos: 37, d: 31, c: 6, descontados: 6, errosD: 3, errosC: 0,
+        semanas: [
+          semana(1, '28/07 – 03/08', 'paga', 3140.0, 18, 3, 2, 1, 0, [
+            erro('Alexandre F. Leite', 'Triagem - Shopee', 'Diarista', '30/07', 2, '2 fora de rota, bipado na rota de Ubaporanga'),
+          ]),
+          semana(2, '04 – 10/08', 'paga', 2890.0, 16, 3, 3, 2, 0, [
+            erro('Sabrina E. de Seixa Lana', 'Triagem - Shopee', 'Diarista', '05/08', 1, '1 fora de rota, bipado na rota de São Sebastião do Anta'),
+            erro('Erick H. Correa Gomes', 'Triagem - Shopee', 'Diarista', '07/08', 3, '1 fora de rota e 2 não bipados, bipado na rota de Piedade'),
+          ]),
+          semana(3, '11 – 17/08', 'paga', 3260.0, 19, 3, 1, 0, 0, []),
+          semana(4, '18 – 24/08', 'paga', 3180.0, 17, 3, 0, 0, 0, []),
+        ],
+        clt: { situacao: 'paga', valor: 8400, pessoas: 16, descontados: 0, erros: 0 },
+      },
+      {
+        id: 'jul', nome: 'JULHO', ano: '2026', emAndamento: false,
+        valor: 43980, pagos: 35, d: 29, c: 6, descontados: 4, errosD: 0, errosC: 0,
+        semanas: [
+          semana(1, '30/06 – 06/07', 'paga', 3010.0, 17, 3, 1, 0, 0, []),
+          semana(2, '07 – 13/07', 'paga', 3220.0, 18, 3, 2, 0, 0, []),
+          semana(3, '14 – 20/07', 'paga', 2980.0, 16, 3, 1, 0, 0, []),
+          semana(4, '21 – 27/07', 'paga', 3300.0, 18, 3, 0, 0, 0, []),
+        ],
+        clt: { situacao: 'paga', valor: 8400, pessoas: 16, descontados: 0, erros: 0 },
+      },
+    ];
+
+    // Qual gaveta abre sem ninguém clicar: a do período ABERTO (o mês em andamento).
+    const mesEmAndamento = (dados.find((m) => m.emAndamento) || dados[0]).id;
+    const escolhido = this.state.aberto === undefined ? mesEmAndamento : this.state.aberto;
+
+    const meses = dados.map((m) => {
+      const aberto = escolhido === m.id;
+      const erros = m.errosD + m.errosC;
+      // O mês mostra os erros de TODOS os períodos que caem nele — as semanas todas.
+      const errosDoMes = m.semanas.reduce((acc, sm) => acc.concat(sm.lista || []), []);
+      return {
+        nome: m.nome, ano: m.ano, emAndamento: m.emAndamento,
+        aberto,
+        giro: aberto ? 'transform: rotate(90deg)' : 'transform: rotate(0deg)',
+        alternar: () => this.setState({ aberto: aberto ? null : m.id }),
+        valor: brl(m.valor),
+        pagos: m.pagos, divisao: '(' + m.d + ' diaristas · ' + m.c + ' CLT)',
+        descontados: m.descontados,
+        erros,
+        rotuloErros: erros === 1 ? 'erro' : 'erros',
+        // Separado por tipo (10/09, pedido do Victor): erro de diarista e de carteira
+        // assinada não se resolvem no mesmo lugar, então não podem virar um número só.
+        divisaoErros: erros === 0 ? '' : '(' + m.errosD + ' D · ' + m.errosC + ' C)',
+        corErros: corErro(erros), corErrosFraca: corErroFraca(erros),
+        estiloErros: estiloErro(erros),
+        temErro: erros > 0,
+        errosTop: errosDoMes.slice(0, 3),
+        tituloBalao: erros === 1
+          ? '1 erro em ' + m.nome
+          : erros + ' erros em ' + m.nome + ' (todas as semanas)',
+        rodapeBalao: errosDoMes.length > 3
+          ? 'Clique para ver os ' + errosDoMes.length + ' erros do mês'
+          : 'Clique para ver tudo, separado por vínculo',
+        gerarPdf: (ev) => {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          this.setState({
+            pdf: {
+              titulo: 'Escolher quem entra nos recibos de ' + m.nome + '/' + m.ano,
+              sub: 'abre a lista com ' + m.pagos + ' pessoas — ' + m.d + ' diaristas e ' + m.c + ' carteira assinada',
+            },
+          });
+        },
+        abrirErros: (ev) => {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          this.setState({
+            popup: { titulo: 'Erros de ' + m.nome + '/' + m.ano, sub: 'Mês inteiro — todas as semanas', itens: errosDoMes },
+          });
+        },
+        semanas: m.semanas.map((sm) => ({
+          ...sm,
+          gerarPdf: (ev) => {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            this.setState({
+              pdf: {
+                titulo: 'Escolher quem entra nos recibos da ' + sm.numero,
+                sub: 'abre a lista com ' + sm.pagos + ' pessoas · ' + sm.periodo,
+              },
+            });
+          },
+          abrirErros: (ev) => {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            this.setState({
+              popup: { titulo: 'Erros da ' + sm.numero, sub: m.nome + '/' + m.ano + ' · ' + sm.periodo, itens: sm.lista || [] },
+            });
+          },
+        })),
+        clt: {
+          situacao: m.clt.situacao, estiloSituacao: sit(m.clt.situacao),
+          valor: brl(m.clt.valor), pessoas: m.clt.pessoas,
+          descontados: m.clt.descontados, corDescontados: corDesc(m.clt.descontados),
+          erros: m.clt.erros === 0 ? 'sem erro' : (m.clt.erros === 1 ? '1 erro' : m.clt.erros + ' erros'),
+          corErros: corErro(m.clt.erros),
+        },
+      };
+    });
+
+    // ── O popup: mesma lista, separada por vínculo (Diarista × Carteira assinada) ──
+    const p = this.state.popup;
+    const bloco = (tipo, rotulo, estilo) => {
+      const itens = p ? p.itens.filter((e) => e.tipo === tipo) : [];
+      const pacotes = itens.reduce((acc, e) => acc + e.qtdNum, 0);
+      return {
+        tipo: rotulo, estiloTipo: estilo, itens,
+        vazio: itens.length === 0,
+        resumo: itens.length === 0
+          ? 'nenhum erro'
+          : itens.length + (itens.length === 1 ? ' erro' : ' erros') + ' · ' + pacotes + ' pacotes',
+      };
+    };
+    const totalPacotes = p ? p.itens.reduce((acc, e) => acc + e.qtdNum, 0) : 0;
+    const popup = {
+      aberto: Boolean(p),
+      titulo: p ? p.titulo : '',
+      subtitulo: p ? p.sub : '',
+      blocos: p ? [
+        bloco('Diarista', 'Diaristas', 'background: #eff6ff; color: #1e40af'),
+        bloco('CLT', 'Carteira assinada', 'background: #faf5ff; color: #6b21a8'),
+      ] : [],
+      totalTexto: p ? (p.itens.length + (p.itens.length === 1 ? ' erro no total' : ' erros no total')) : '',
+      totalPacotes: totalPacotes + (totalPacotes === 1 ? ' pacote' : ' pacotes'),
+    };
+
+    const av = this.state.pdf;
+    return {
+      meses, popup,
+      pdf: { aberto: Boolean(av), titulo: av ? av.titulo : '', sub: av ? av.sub : '' },
+      fecharPdf: () => this.setState({ pdf: null }),
+      fecharPopup: () => this.setState({ popup: null }),
+      // Clicar DENTRO do popup não fecha — só no fundo escuro.
+      engolirClique: (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); },
+    };
+  }
+}
+</script>
+</body>
+</html>

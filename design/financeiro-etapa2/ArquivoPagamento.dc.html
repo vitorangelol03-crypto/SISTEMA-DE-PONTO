@@ -1,0 +1,293 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, Arial, sans-serif; }
+    a { color: #2563eb; } a:hover { color: #1d4ed8; }
+    .chip:hover { filter: brightness(0.97); }
+  </style>
+</helmet>
+
+<!-- Fundo escurecido do popup, como o real -->
+<div style="background: rgba(17, 24, 39, 0.55); min-height: 100%; padding: 28px; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: center">
+
+  <div style="background: #ffffff; border-radius: 8px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15), 0 8px 10px -6px rgba(0,0,0,0.1); width: 100%; max-width: 1180px; overflow: hidden">
+
+    <!-- Cabeçalho -->
+    <div style="display: flex; align-items: flex-start; gap: 12px; padding: 20px 24px; border-bottom: 1px solid #e5e7eb">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+      <div style="display: flex; flex-direction: column; gap: 3px">
+        <span style="font-size: 18px; font-weight: 700; color: #1f2937">Arquivo de Pagamento</span>
+        <span style="font-size: 13px; color: #6b7280">{{legenda}}</span>
+      </div>
+      <div style="flex-grow: 1"></div>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; flex-shrink: 0"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </div>
+
+    <div style="padding: 20px 24px 24px 24px">
+
+      <!-- ══ 1º CLIQUE: O MÊS ══ -->
+      <div style="font-size: 12px; font-weight: 600; color: #6b7280; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 8px">1. Escolha o mês</div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px">
+        <sc-for list="{{meses}}" as="m" hint-placeholder-count="3">
+          <div class="chip" onClick="{{m.escolher}}" style="display: flex; align-items: center; gap: 8px; padding: 10px 16px; min-height: 44px; box-sizing: border-box; border-radius: 8px; cursor: pointer; {{m.estilo}}">
+            <span style="font-size: 14px; font-weight: 600; white-space: nowrap">{{m.nome}}</span>
+            <span style="font-size: 12px; font-weight: 500; opacity: .65; white-space: nowrap">{{m.ano}}</span>
+            <sc-if value="{{m.emAndamento}}" hint-placeholder-val="{{true}}">
+              <span style="padding: 1px 7px; border-radius: 9999px; font-size: 10px; font-weight: 600; background: #fef3c7; color: #92400e; white-space: nowrap">EM ANDAMENTO</span>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- ══ 2º CLIQUE: A SEMANA ══ -->
+      <div style="font-size: 12px; font-weight: 600; color: #6b7280; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 8px">2. Escolha a semana</div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 20px">
+        <sc-for list="{{semanas}}" as="s" hint-placeholder-count="5">
+          <div class="chip" onClick="{{s.escolher}}" style="display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; min-height: 44px; box-sizing: border-box; border-radius: 8px; cursor: pointer; {{s.estilo}}">
+            <div style="display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 14px; font-weight: 700; white-space: nowrap">{{s.numero}}</span>
+              <sc-if value="{{s.marcada}}" hint-placeholder-val="{{true}}">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </sc-if>
+            </div>
+            <span style="font-size: 12px; font-weight: 500; opacity: .7; white-space: nowrap">{{s.periodo}}</span>
+            <span style="font-size: 12px; font-weight: 600; margin-top: 2px; white-space: nowrap">{{s.valor}} · {{s.pagos}} pagos</span>
+          </div>
+        </sc-for>
+
+        <!-- O carteira assinada é mensal: entra como opção ao lado das semanas -->
+        <div class="chip" onClick="{{escolherMes}}" style="display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; min-height: 44px; box-sizing: border-box; border-radius: 8px; cursor: pointer; {{estiloMesInteiro}}">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+            <span style="font-size: 14px; font-weight: 700; white-space: nowrap">Mês inteiro</span>
+          </div>
+          <span style="font-size: 12px; font-weight: 500; opacity: .7; white-space: nowrap">Carteira assinada</span>
+          <span style="font-size: 12px; font-weight: 600; margin-top: 2px; white-space: nowrap">{{valorMes}} · 16 pessoas</span>
+        </div>
+      </div>
+
+      <!-- ══ QUEM ENTRA: filtro de tipo (10/09, pedido do Victor) ══ -->
+      <div style="font-size: 12px; font-weight: 600; color: #6b7280; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 8px">3. Quem entra no arquivo</div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px">
+        <sc-for list="{{tipos}}" as="t" hint-placeholder-count="3">
+          <div class="chip" onClick="{{t.escolher}}" style="display: flex; align-items: center; gap: 8px; padding: 10px 16px; min-height: 44px; box-sizing: border-box; border-radius: 8px; cursor: pointer; {{t.estilo}}">
+            <span style="font-size: 14px; font-weight: 600; white-space: nowrap">{{t.nome}}</span>
+            <span style="font-size: 12px; font-weight: 500; opacity: .65; white-space: nowrap">{{t.quantos}}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- Confirmação do que vai ser gerado -->
+      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; margin-bottom: 20px">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        <span style="font-size: 13px; color: #1e40af; line-height: 1.5">
+          Vai pro arquivo de pagamento: <b>{{resumo}}</b>. Marcando linhas na tabela, <b>só as marcadas</b> vão.
+        </span>
+      </div>
+
+      <!-- A prévia, igual à de hoje -->
+      <div style="font-size: 16px; font-weight: 700; color: #1f2937; margin-bottom: 12px">Revisar e editar pagamentos</div>
+
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px">
+        <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; min-height: 44px; box-sizing: border-box; border-radius: 6px; background: #fff7ed; color: #ea580c; font-size: 14px; font-weight: 500; cursor: pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          Alterar Datas
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; min-height: 44px; box-sizing: border-box; border-radius: 6px; background: #f0fdf4; color: #16a34a; font-size: 14px; font-weight: 500; cursor: pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          Adicionar
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; min-height: 44px; box-sizing: border-box; border-radius: 6px; background: #fef2f2; color: #dc2626; font-size: 14px; font-weight: 500; cursor: pointer">
+          Limpar Dados
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; min-height: 44px; box-sizing: border-box; border-radius: 6px; background: #f9fafb; color: #374151; font-size: 14px; font-weight: 500; cursor: pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+          Reimportar
+        </div>
+      </div>
+
+      <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden">
+        <div style="display: grid; grid-template-columns: 40px 2fr 2fr 1fr 1.2fr 70px; gap: 0; background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 12px 16px">
+          <span style="font-size: 11px; font-weight: 600; color: #6b7280; letter-spacing: .04em"></span>
+          <span style="font-size: 11px; font-weight: 600; color: #6b7280; letter-spacing: .04em; text-transform: uppercase">Nome do funcionário</span>
+          <span style="font-size: 11px; font-weight: 600; color: #6b7280; letter-spacing: .04em; text-transform: uppercase">Chave PIX</span>
+          <span style="font-size: 11px; font-weight: 600; color: #6b7280; letter-spacing: .04em; text-transform: uppercase; text-align: right">Valor (R$)</span>
+          <span style="font-size: 11px; font-weight: 600; color: #6b7280; letter-spacing: .04em; text-transform: uppercase; text-align: right">Data pagamento</span>
+          <span style="font-size: 11px; font-weight: 600; color: #6b7280; letter-spacing: .04em; text-transform: uppercase; text-align: right">Ações</span>
+        </div>
+        <sc-for list="{{linhas}}" as="l" hint-placeholder-count="4">
+          <div style="display: grid; grid-template-columns: 40px 2fr 2fr 1fr 1.2fr 70px; gap: 0; align-items: center; padding: 14px 16px; border-bottom: 1px solid #f3f4f6">
+            <div style="width: 16px; height: 16px; border: 1px solid #d1d5db; border-radius: 3px; background: #ffffff"></div>
+            <div style="display: flex; align-items: center; gap: 8px; min-width: 0">
+              <span style="font-size: 14px; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{l.nome}}</span>
+              <span style="padding: 1px 7px; border-radius: 9999px; font-size: 10px; font-weight: 600; white-space: nowrap; flex-shrink: 0; {{l.estiloTipo}}">{{l.rotulo}}</span>
+            </div>
+            <span style="font-size: 14px; color: #6b7280">{{l.pix}}</span>
+            <span style="font-size: 14px; font-weight: 700; color: #16a34a; text-align: right">{{l.valor}}</span>
+            <span style="font-size: 14px; color: #374151; text-align: right">{{l.data}}</span>
+            <div style="display: flex; gap: 10px; justify-content: flex-end">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </div>
+          </div>
+        </sc-for>
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #f9fafb">
+          <span style="font-size: 13px; font-weight: 600; color: #374151">Total: {{qtd}} pagamento(s)</span>
+          <span style="font-size: 15px; font-weight: 700; color: #16a34a">{{total}}</span>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px">
+        <div style="padding: 10px 18px; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; border-radius: 6px; background: #f3f4f6; color: #374151; font-size: 14px; font-weight: 500; cursor: pointer">Cancelar</div>
+        <div style="padding: 10px 20px; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; border-radius: 6px; background: #2563eb; color: #ffffff; font-size: 14px; font-weight: 600; cursor: pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          Gerar arquivo de pagamento
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":1280,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    // 10/09/2026, pedido do Victor: o popup abre JÁ no período que está aberto —
+    // o mês em andamento e a semana ABERTA dele, sem ninguém clicar. `undefined`
+    // = ainda não mexeram; do 1º clique em diante vale a escolha da pessoa.
+    this.state = { mes: undefined, semana: undefined, tipo: 'todos' };
+  }
+
+  renderVals() {
+    const brl = (v) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const MESES = [
+      { id: 'set', nome: 'Setembro', ano: '2026', emAndamento: true, valorClt: 8400,
+        semanas: [
+          { n: 1, periodo: '01 – 07/09', valor: 7722.0, pagos: 21 },
+          { n: 2, periodo: '08 – 14/09', valor: 4758.0, pagos: 22, aberta: true },
+          { n: 3, periodo: '15 – 21/09', valor: 0, pagos: 0 },
+        ] },
+      { id: 'ago', nome: 'Agosto', ano: '2026', emAndamento: false, valorClt: 8400,
+        semanas: [
+          { n: 1, periodo: '28/07 – 03/08', valor: 3140.0, pagos: 21 },
+          { n: 2, periodo: '04 – 10/08', valor: 2890.0, pagos: 19 },
+          { n: 3, periodo: '11 – 17/08', valor: 3260.0, pagos: 22 },
+          { n: 4, periodo: '18 – 24/08', valor: 3180.0, pagos: 20 },
+        ] },
+      { id: 'jul', nome: 'Julho', ano: '2026', emAndamento: false, valorClt: 8400,
+        semanas: [
+          { n: 1, periodo: '30/06 – 06/07', valor: 3010.0, pagos: 20 },
+          { n: 2, periodo: '07 – 13/07', valor: 3220.0, pagos: 21 },
+          { n: 3, periodo: '14 – 20/07', valor: 2980.0, pagos: 19 },
+          { n: 4, periodo: '21 – 27/07', valor: 3300.0, pagos: 21 },
+        ] },
+    ];
+
+    // Azul = escolhido (a cor de ação do painel); cinza claro = disponível.
+    const escolhido = 'background: #2563eb; color: #ffffff; border: 1px solid #2563eb';
+    const disponivel = 'background: #f9fafb; color: #374151; border: 1px solid #e5e7eb';
+
+    // O período ABERTO é o padrão: mês em andamento + a semana marcada como aberta.
+    const mesAberto = MESES.find((m) => m.emAndamento) || MESES[0];
+    const idMes = this.state.mes === undefined ? mesAberto.id : this.state.mes;
+    const mesAtual = MESES.find((m) => m.id === idMes) || MESES[0];
+    const semanaPadrao = this.state.mes === undefined && this.state.semana === undefined
+      ? (mesAtual.semanas.find((s) => s.aberta) || {}).n
+      : this.state.semana;
+
+    const meses = MESES.map((m) => ({
+      nome: m.nome, ano: m.ano, emAndamento: m.emAndamento,
+      estilo: m.id === this.state.mes ? escolhido : disponivel,
+      // 1º clique: escolher o mês zera a semana — a pessoa escolhe de novo, dentro dele.
+      escolher: () => this.setState({ mes: m.id, semana: null }),
+    }));
+
+    const semanas = mesAtual.semanas.map((s) => ({
+      numero: 'Semana ' + s.n,
+      periodo: s.periodo,
+      valor: brl(s.valor),
+      pagos: s.pagos,
+      marcada: semanaPadrao === s.n,
+      estilo: semanaPadrao === s.n ? escolhido : disponivel,
+      escolher: () => this.setState({ semana: s.n }),   // 2º clique
+    }));
+
+    const semanaAtual = mesAtual.semanas.find((s) => s.n === semanaPadrao);
+    const mesInteiro = semanaPadrao === 'mes';
+
+    const TODAS = [
+      { nome: 'Alexsandro lombardo alves', pix: '95809872620', valor: 150, tipo: 'clt' },
+      { nome: 'bruno moreira', pix: 'brunomoreiradasilv@hotmail.com', valor: 150, tipo: 'clt' },
+      { nome: 'Ariel Ferreira Elias', pix: '16414712639', valor: 50, tipo: 'diarista' },
+      { nome: 'Cristiano Medeiros de Araujo', pix: '75855941604', valor: 50, tipo: 'diarista' },
+      { nome: 'Euber Luiz Machado', pix: '09660846673', valor: 50, tipo: 'diarista' },
+    ];
+    const filtroTipo = this.state.tipo || 'todos';
+    // O filtro corta a lista DE VERDADE — o que está na tela é o que vai pro arquivo.
+    const linhasBase = filtroTipo === 'todos' ? TODAS : TODAS.filter((l) => l.tipo === filtroTipo);
+    const dataPag = mesInteiro ? '05/10/2026' : '11/09/2026';
+    const selo = (t) => (t === 'clt'
+      ? 'background: #faf5ff; color: #6b21a8'
+      : 'background: #eff6ff; color: #1e40af');
+    const linhas = linhasBase.map((l) => ({
+      ...l, valor: brl(l.valor), data: dataPag,
+      rotulo: l.tipo === 'clt' ? 'CLT' : 'Diarista',
+      estiloTipo: selo(l.tipo),
+    }));
+    const total = linhasBase.reduce((acc, l) => acc + l.valor, 0);
+
+    let resumo;
+    let legenda;
+    if (mesInteiro) {
+      resumo = 'Carteira assinada — ' + mesAtual.nome + ' inteiro';
+      legenda = mesAtual.nome + '/' + mesAtual.ano + ' — mês inteiro (carteira assinada)';
+    } else if (semanaAtual) {
+      resumo = 'Semana ' + semanaAtual.n + ' de ' + mesAtual.nome + ' (' + semanaAtual.periodo + ')';
+      legenda = mesAtual.nome + '/' + mesAtual.ano + ' — Semana ' + semanaAtual.n + ', ' + semanaAtual.periodo;
+    } else {
+      resumo = 'escolha a semana acima';
+      legenda = mesAtual.nome + '/' + mesAtual.ano + ' — escolha a semana';
+    }
+
+    const nDiarista = TODAS.filter((l) => l.tipo === 'diarista').length;
+    const nClt = TODAS.filter((l) => l.tipo === 'clt').length;
+    const TIPOS = [
+      { id: 'todos', nome: 'Todos', quantos: TODAS.length + ' pessoas' },
+      { id: 'diarista', nome: 'Só diaristas', quantos: nDiarista + ' pessoas' },
+      { id: 'clt', nome: 'Só carteira assinada', quantos: nClt + ' pessoas' },
+    ];
+    const tipoAtual = filtroTipo;
+    const tipos = TIPOS.map((t) => ({
+      nome: t.nome, quantos: t.quantos,
+      estilo: t.id === tipoAtual ? escolhido : disponivel,
+      escolher: () => this.setState({ tipo: t.id }),
+    }));
+    const rotuloTipo = tipoAtual === 'diarista' ? ' · só diaristas'
+      : (tipoAtual === 'clt' ? ' · só carteira assinada' : ' · todos');
+
+    return {
+      meses, semanas, linhas, tipos,
+      resumo: resumo + rotuloTipo,
+      legenda,
+      qtd: linhasBase.length,
+      total: brl(total),
+      valorMes: brl(mesAtual.valorClt),
+      estiloMesInteiro: mesInteiro ? escolhido : disponivel,
+      escolherMes: () => this.setState({ semana: 'mes' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

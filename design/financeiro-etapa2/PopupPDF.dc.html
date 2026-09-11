@@ -1,0 +1,215 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, Arial, sans-serif; }
+    a { color: #2563eb; } a:hover { color: #1d4ed8; }
+    .chip:hover { filter: brightness(0.97); }
+    .linha:hover { background: #f9fafb; }
+  </style>
+</helmet>
+
+<div style="background: rgba(17, 24, 39, 0.55); min-height: 100%; padding: 28px; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: center">
+  <div style="background: #ffffff; border-radius: 8px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15); width: 100%; max-width: 900px; overflow: hidden">
+
+    <div style="display: flex; align-items: flex-start; gap: 12px; padding: 20px 24px; border-bottom: 1px solid #e5e7eb">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+      <div style="display: flex; flex-direction: column; gap: 3px">
+        <span style="font-size: 18px; font-weight: 700; color: #1f2937">Gerar recibos em PDF</span>
+        <span style="font-size: 13px; color: #6b7280">Semana 2 — 08 a 14/09/2026 · escolha quem entra</span>
+      </div>
+      <div style="flex-grow: 1"></div>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; flex-shrink: 0"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </div>
+
+    <div style="padding: 18px 24px 22px 24px">
+
+      <!-- Filtro de vínculo: muda QUEM APARECE na lista, sem perder quem já foi marcado -->
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px">
+        <sc-for list="{{tipos}}" as="t" hint-placeholder-count="3">
+          <div class="chip" onClick="{{t.escolher}}" style="display: flex; align-items: center; gap: 7px; padding: 9px 15px; min-height: 44px; box-sizing: border-box; border-radius: 8px; cursor: pointer; {{t.estilo}}">
+            <span style="font-size: 14px; font-weight: 600; white-space: nowrap">{{t.nome}}</span>
+            <span style="font-size: 12px; font-weight: 500; opacity: .65; white-space: nowrap">{{t.quantos}}</span>
+          </div>
+        </sc-for>
+
+        <div style="flex-grow: 1"></div>
+
+        <div class="chip" onClick="{{marcarTodos}}" style="padding: 9px 14px; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; border-radius: 8px; background: #f9fafb; border: 1px solid #e5e7eb; color: #374151; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap">{{rotuloMarcarTodos}}</div>
+      </div>
+
+      <!-- Avulso: dá pra misturar alguns diaristas com alguns de carteira assinada -->
+      <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; margin-bottom: 16px">
+        <div style="display: grid; grid-template-columns: 44px 2.2fr 1.4fr 1fr 1fr; gap: 0; background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 11px 16px">
+          <span></span>
+          <span style="font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: .04em">Funcionário</span>
+          <span style="font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: .04em">Equipe</span>
+          <span style="font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; text-align: right">Líquido</span>
+          <span style="font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; text-align: right">Situação</span>
+        </div>
+
+        <div style="max-height: 420px; overflow: auto">
+          <sc-for list="{{pessoas}}" as="p" hint-placeholder-count="8">
+            <div class="linha" onClick="{{p.alternar}}" style="display: grid; grid-template-columns: 44px 2.2fr 1.4fr 1fr 1fr; gap: 0; align-items: center; padding: 12px 16px; border-bottom: 1px solid #f3f4f6; cursor: pointer; {{p.fundo}}">
+              <div style="width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; {{p.caixa}}">
+                <sc-if value="{{p.marcado}}" hint-placeholder-val="{{true}}">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </sc-if>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px; min-width: 0">
+                <span style="font-size: 14px; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{p.nome}}</span>
+                <span style="padding: 1px 7px; border-radius: 9999px; font-size: 10px; font-weight: 600; white-space: nowrap; flex-shrink: 0; {{p.estiloTipo}}">{{p.rotuloTipo}}</span>
+                <sc-if value="{{p.mudou}}" hint-placeholder-val="{{false}}">
+                  <span style="padding: 1px 7px; border-radius: 9999px; font-size: 10px; font-weight: 500; white-space: nowrap; flex-shrink: 0; background: #f3f4f6; color: #6b7280; border: 1px dashed #d1d5db">{{p.mudou}}</span>
+                </sc-if>
+              </div>
+              <span style="font-size: 12px; color: #6b7280">{{p.equipe}}</span>
+              <span style="font-size: 14px; font-weight: 700; color: #16a34a; text-align: right">{{p.valor}}</span>
+              <span style="font-size: 12px; text-align: right; {{p.corSituacao}}">{{p.situacao}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- Resumo do que vai sair -->
+      <div style="display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; margin-bottom: 18px">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        <span style="font-size: 13px; color: #1e40af; line-height: 1.5">{{resumo}}</span>
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px">
+        <div style="padding: 11px 18px; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; border-radius: 6px; background: #f3f4f6; color: #374151; font-size: 14px; font-weight: 500; cursor: pointer">Cancelar</div>
+        <div style="padding: 11px 20px; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; {{estiloBotao}}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          {{rotuloBotao}}
+        </div>
+        <!-- Publicar: o mesmo PDF vai pra tela "Meus Recibos" do funcionário
+             (10/09, pedido do Victor) — igual ao espelho do entregador. -->
+        <div style="padding: 11px 20px; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; {{estiloPublicar}}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+          {{rotuloPublicar}}
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":1000,"height":880}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    // Começa com todo mundo marcado: o caso comum é gerar de todos, e desmarcar
+    // é mais rápido do que marcar 22 pessoas uma a uma.
+    this.state = { tipo: 'todos', desmarcados: {} };
+  }
+
+  renderVals() {
+    const brl = (v) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const TODOS = [
+      { id: 1, nome: 'Alexsandro Lombardo Alves', tipo: 'clt', equipe: 'Triagem - Shopee', valor: 1557.08, situacao: 'pago' },
+      { id: 2, nome: 'Bruno Moreira', tipo: 'clt', equipe: 'Triagem - Shopee', valor: 1612.40, situacao: 'pago' },
+      { id: 3, nome: 'Diendrel Souza', tipo: 'clt', equipe: 'Auxiliar Administrativo', valor: 1890.00, situacao: 'pago',
+        mudou: 'era Diarista até 31/07' },
+      { id: 4, nome: 'Leticia Gomes da Silva', tipo: 'diarista', equipe: 'Triagem - Shopee', valor: 245.00, situacao: 'pago' },
+      { id: 5, nome: 'Jordismar A. de Souza Filho', tipo: 'diarista', equipe: 'Triagem - Shopee', valor: 280.00, situacao: 'pago' },
+      { id: 6, nome: 'Estevão da Silva', tipo: 'diarista', equipe: 'Triagem - Shopee', valor: 260.00, situacao: 'pago' },
+      { id: 7, nome: 'Ariel Ferreira Elias', tipo: 'diarista', equipe: 'Triagem - Shopee', valor: 300.00, situacao: 'pago' },
+      { id: 8, nome: 'Cristiano Medeiros de Araujo', tipo: 'diarista', equipe: 'Triagem - Shopee', valor: 250.00, situacao: 'pago' },
+      { id: 9, nome: 'Euber Luiz Machado', tipo: 'diarista', equipe: 'Triagem - Shopee', valor: 250.00, situacao: 'pago' },
+      { id: 10, nome: 'Sabrina E. de Seixa Lana', tipo: 'diarista', equipe: 'Triagem - Shopee', valor: 200.00, situacao: 'a pagar' },
+      { id: 11, nome: 'Alexandre Farias Leite', tipo: 'diarista', equipe: 'Triagem - Shopee', valor: 240.00, situacao: 'a pagar' },
+    ];
+
+    const marcado = (p) => !this.state.desmarcados[p.id];
+    const filtro = this.state.tipo;
+    const visiveis = filtro === 'todos' ? TODOS : TODOS.filter((p) => p.tipo === filtro);
+
+    const escolhido = 'background: #2563eb; color: #ffffff; border: 1px solid #2563eb';
+    const disponivel = 'background: #f9fafb; color: #374151; border: 1px solid #e5e7eb';
+
+    const nD = TODOS.filter((p) => p.tipo === 'diarista').length;
+    const nC = TODOS.filter((p) => p.tipo === 'clt').length;
+    const tipos = [
+      { id: 'todos', nome: 'Todos', quantos: TODOS.length },
+      { id: 'diarista', nome: 'Só diaristas', quantos: nD },
+      { id: 'clt', nome: 'Só carteira assinada', quantos: nC },
+    ].map((t) => ({
+      nome: t.nome, quantos: t.quantos + ' pessoas',
+      estilo: t.id === filtro ? escolhido : disponivel,
+      escolher: () => this.setState({ tipo: t.id }),
+    }));
+
+    const pessoas = visiveis.map((p) => {
+      const on = marcado(p);
+      return {
+        nome: p.nome, equipe: p.equipe, valor: brl(p.valor),
+        situacao: p.situacao,
+        corSituacao: p.situacao === 'pago' ? 'color: #16a34a; font-weight: 600' : 'color: #92400e; font-weight: 600',
+        marcado: on,
+        rotuloTipo: p.tipo === 'clt' ? 'CLT' : 'Diarista',
+        // Mudou de vínculo (10/09, regra do Victor): o histórico antigo NÃO se reescreve —
+        // o pagamento carrega o vínculo do dia em que foi feito. O selo evita que a
+        // contagem pareça erro pra quem lembra dele como diarista.
+        mudou: p.mudou || '',
+        estiloTipo: p.tipo === 'clt'
+          ? 'background: #faf5ff; color: #6b21a8'
+          : 'background: #eff6ff; color: #1e40af',
+        caixa: on
+          ? 'background: #2563eb; border: 1px solid #2563eb'
+          : 'background: #ffffff; border: 1px solid #d1d5db',
+        fundo: on ? 'background: #ffffff' : 'background: #fafafa; opacity: .55',
+        alternar: () => {
+          const d = { ...this.state.desmarcados };
+          if (d[p.id]) delete d[p.id]; else d[p.id] = true;
+          this.setState({ desmarcados: d });
+        },
+      };
+    });
+
+    // O que vai sair conta TODO MUNDO marcado, mesmo quem não está na lista agora —
+    // é isso que deixa misturar alguns diaristas com alguns de carteira assinada.
+    const marcados = TODOS.filter(marcado);
+    const mD = marcados.filter((p) => p.tipo === 'diarista').length;
+    const mC = marcados.filter((p) => p.tipo === 'clt').length;
+    const soma = marcados.reduce((acc, p) => acc + p.valor, 0);
+
+    const todosVisiveisMarcados = visiveis.every(marcado);
+    const nenhum = marcados.length === 0;
+
+    return {
+      tipos, pessoas,
+      rotuloMarcarTodos: todosVisiveisMarcados ? 'Desmarcar os da lista' : 'Marcar os da lista',
+      marcarTodos: () => {
+        const d = { ...this.state.desmarcados };
+        visiveis.forEach((p) => { if (todosVisiveisMarcados) d[p.id] = true; else delete d[p.id]; });
+        this.setState({ desmarcados: d });
+      },
+      resumo: nenhum
+        ? 'Nenhum funcionário marcado — marque pelo menos um para gerar.'
+        : marcados.length + ' recibos: ' + mD + ' de diarista e ' + mC
+          + ' de carteira assinada, somando ' + brl(soma)
+          + '. Baixar abre em outra aba e salva; publicar manda pra tela "Meus Recibos" de cada um.',
+      rotuloBotao: nenhum ? 'Gerar PDF' : 'Baixar ' + marcados.length + ' recibos',
+      estiloBotao: nenhum
+        ? 'background: #e5e7eb; color: #9ca3af; cursor: not-allowed'
+        : 'background: #f3f4f6; color: #374151; border: 1px solid #d1d5db',
+      rotuloPublicar: nenhum ? 'Publicar' : 'Publicar pros ' + marcados.length + ' funcionários',
+      estiloPublicar: nenhum
+        ? 'background: #e5e7eb; color: #9ca3af; cursor: not-allowed'
+        : 'background: #ea580c; color: #ffffff',
+    };
+  }
+}
+</script>
+</body>
+</html>

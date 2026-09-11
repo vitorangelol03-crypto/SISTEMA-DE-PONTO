@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
   getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance,
@@ -19,6 +19,13 @@ import { getBonusValueForType } from '../../utils/bonusHelpers';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import { moneyBRL, HIDDEN_VALUE } from '../../utils/moneyMask';
+import { HistoricoPagamentos } from './HistoricoPagamentos';
+import type {
+  PeriodoDePagamento as HistPeriodo,
+  PagamentoDoHistorico as HistPagamento,
+  ErroDoHistorico as HistErro,
+  Vinculo,
+} from '../../utils/historicoPagamentos';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 import FunctionRoleFilter, { FUNCTION_ROLE_ALL, FUNCTION_ROLE_NONE } from '../common/FunctionRoleFilter';
@@ -100,7 +107,18 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [financialData, setFinancialData] = useState<EmployeeFinancialData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<'financial' | 'history'>('financial');
+  const [activeView, setActiveView] = useState<'financial' | 'history' | 'payments-history'>('financial');
+  /**
+   * Histórico de Pagamentos em gavetas (Etapa 2, 11/09/2026).
+   *
+   * Carrega SEPARADO do resto da aba de propósito: o `payments` de cima é
+   * filtrado pelo período escolhido nos filtros, e o histórico precisa enxergar
+   * vários meses pra montar as gavetas. Só busca quando a aba é aberta.
+   */
+  const [histPeriodos, setHistPeriodos] = useState<HistPeriodo[]>([]);
+  const [histPagamentos, setHistPagamentos] = useState<HistPagamento[]>([]);
+  const [histErros, setHistErros] = useState<HistErro[]>([]);
+  const [histLoading, setHistLoading] = useState(false);
   /** Popup do Pagamento C6 (09/09/2026 — a aba virou botão daqui). */
   const [showC6Modal, setShowC6Modal] = useState(false);
 
@@ -267,6 +285,94 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       loadData();
     }
   }, [filters, isEditingDate, loadData]);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // HISTÓRICO DE PAGAMENTOS (Etapa 2, 11/09/2026) — carga própria.
+  //
+  // Separada do `loadData` de propósito: aquele busca só o período dos filtros, e
+  // as gavetas precisam de vários meses. Roda só quando a aba é aberta, pra não
+  // pesar quem nunca entra nela.
+  // ══════════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (activeView !== 'payments-history' || !company?.id) return;
+    let cancelled = false;
+    setHistLoading(true);
+
+    (async () => {
+      try {
+        const todosPeriodos = await getPaymentPeriods(company.id);
+        if (cancelled) return;
+
+        // ⚠️ UMA BUSCA POR PERÍODO, NÃO UMA SÓ PELA JANELA INTEIRA.
+        //
+        // O Supabase corta a resposta em 1.000 linhas por padrão, e a janela
+        // completa tem 1.643 pagamentos — sem ordem garantida, os que ficavam de
+        // fora eram os MAIS RECENTES. Pego na primeira conferência na tela:
+        // setembro aparecia com "R$ 0,00 · 0 pagos" enquanto junho vinha cheio.
+        // Cada período sozinho cabe folgado no limite.
+        const porPeriodo = await Promise.all(
+          todosPeriodos.map(async (p) => {
+            const [pg, er] = await Promise.all([
+              getPayments(p.start_date, p.end_date, undefined, undefined, company.id),
+              getErrorRecords(p.start_date, p.end_date, undefined, undefined, company.id),
+            ]);
+            return { pg, er };
+          }),
+        );
+        if (cancelled) return;
+
+        // Semanas SOBREPOSTAS existem em produção (31/08–06/09 e 01–07/09), então
+        // o mesmo pagamento/erro volta em mais de uma busca: dedupe por id.
+        const pgs = [...new Map(porPeriodo.flatMap((x) => x.pg).map((p) => [p.id, p])).values()];
+        const errs = [...new Map(porPeriodo.flatMap((x) => x.er).map((e) => [e.id, e])).values()];
+
+        setHistPeriodos(todosPeriodos.map((p) => ({
+          id: p.id, label: p.label, startDate: p.start_date, endDate: p.end_date,
+          paymentDate: p.payment_date, status: p.status,
+        })));
+
+        // O vínculo vem do CARIMBO do pagamento quando existe
+        // (`employment_type_snapshot`, migration 20260911020000). Enquanto a
+        // migration não for aplicada, cai no vínculo da ficha — que é o
+        // comportamento de hoje. Assim a tela funciona nos dois mundos, e a regra
+        // do histórico passa a valer sozinha assim que a coluna existir.
+        const vinculoDe = (raw: unknown): Vinculo => {
+          const p = raw as { employment_type_snapshot?: string | null; employees?: { employment_type?: string | null } };
+          const v = p.employment_type_snapshot ?? p.employees?.employment_type;
+          return v === 'Carteira Assinada' ? 'Carteira Assinada' : 'Diarista';
+        };
+
+        setHistPagamentos(pgs.map((p) => ({
+          id: p.id,
+          employeeId: p.employee_id,
+          date: p.date,
+          total: Number(p.total ?? 0),
+          vinculo: vinculoDe(p),
+        })));
+
+        setHistErros(errs.map((e) => {
+          const emp = e.employees;
+          return {
+            id: e.id,
+            employeeId: e.employee_id,
+            nome: emp?.name ?? '(sem nome)',
+            equipe: emp?.function_role ?? '',
+            vinculo: emp?.employment_type === 'Carteira Assinada' ? 'Carteira Assinada' as const : 'Diarista' as const,
+            date: e.date,
+            quantidade: Number(e.error_count ?? 0),
+            valor: Number(e.error_value ?? 0),
+            descricao: e.observations ?? '',
+          };
+        }));
+      } catch (err) {
+        console.error('Erro ao carregar o histórico de pagamentos:', err);
+      } finally {
+        if (!cancelled) setHistLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [activeView, company?.id]);
 
   // Carrega tipos de bonificação da empresa atual.
   // Substitui o fallback (B/C1/C2) só se o banco retornar tipos. Se vier vazio, mantém fallback.
@@ -767,6 +873,20 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           >
             <History className="w-4 h-4" />
             <span>Histórico de Remoções</span>
+          </button>
+          <button
+            onClick={() => setActiveView('payments-history')}
+            disabled={!hasPermission('financial.viewPayments')}
+            title={!hasPermission('financial.viewPayments') ? 'Você não tem permissão para visualizar pagamentos' : ''}
+            data-testid="payments-history-btn"
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] whitespace-nowrap ${
+              activeView === 'payments-history'
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <CalendarRange className="w-4 h-4" />
+            <span>Histórico de Pagamentos</span>
           </button>
         </div>
 
@@ -1652,6 +1772,26 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           </div>
         )}
       </div>
+      )}
+
+      {/* ══ HISTÓRICO DE PAGAMENTOS EM GAVETAS (Etapa 2, 11/09/2026) ══
+          Uma gaveta por mês, as semanas dentro, e na linha fechada tudo que
+          importa — sem precisar abrir. Ver `HistoricoPagamentos.tsx`. */}
+      {activeView === 'payments-history' && (
+        histLoading ? (
+          <div className="bg-white rounded-lg shadow p-8 text-center">
+            <RefreshCw className="w-8 h-8 mx-auto text-gray-400 animate-spin mb-3" />
+            <p className="text-sm text-gray-500">Montando o histórico…</p>
+          </div>
+        ) : (
+          <HistoricoPagamentos
+            periodos={histPeriodos}
+            pagamentos={histPagamentos}
+            erros={histErros}
+            mesCorrente={getBrazilDate().slice(0, 7)}
+            podeVerValores={canViewValues}
+          />
+        )
       )}
 
       {/* Histórico de Remoções de Bonificação */}

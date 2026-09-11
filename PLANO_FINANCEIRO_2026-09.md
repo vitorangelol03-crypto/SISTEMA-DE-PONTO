@@ -24,7 +24,12 @@ Em qualquer um dos dois, dá pra escolher quem entra:
 
 ---
 
-## ETAPA 1 — Pagamento C6 entra no Financeiro
+> ✅ **NOME (decisão do Victor, 10/09/2026): "Arquivo de pagamento", sem citar banco.**
+> Saiu o "C6" de tudo — botão, título e texto. O arquivo é um formato de remessa e
+> **serve pra qualquer banco**; amarrar o nome a um deles fecha a porta pro dia em que
+> a empresa trocar. Vale pro código também, quando a Etapa 1 for renomeada.
+
+## ETAPA 1 — Arquivo de pagamento entra no Financeiro
 
 **Como saber que funcionou:** estando no Financeiro com um período filtrado, em **2 cliques**
 sai o arquivo do banco — sem trocar de aba e sem redigitar data nenhuma. E tudo que a aba
@@ -70,20 +75,99 @@ chegar nos detalhes de qualquer um com **um clique**.
   **mensal** — e **os dois configuráveis**, não chumbados no código
 - Dentro do mesmo lugar, os dados **separados** por tipo — sem aba própria pra cada um
 
-**Como fica na tela**
+**Como fica na tela — GAVETAS (design fechado pelo Victor em 10/09/2026)**
+
+Uma **gaveta por mês**; dentro dela, as **semanas**. O mês fechado já mostra tudo que
+importa — *"sem precisar abrir as gavetas"* (palavras dele). Abrir só serve pra ver as
+semanas por dentro.
 
 ```
-FINANCEIRO ›  ‹ Ago    SETEMBRO/2026    Out ›
+FINANCEIRO
 
-DIARISTAS (semanal)                    CARTEIRA ASSINADA (mensal)
-┌────────────────────────────┐         ┌────────────────────────────┐
-│ 01–07/09   paga   R$ ..... │         │ Setembro   aberto  R$ .....│
-│ 08–14/09   ABERTA R$ ..... │         │ 16 pessoas                 │
-│ 15–21/09          R$ ..... │         └────────────────────────────┘
-└────────────────────────────┘
+▶ SETEMBRO / 2026    R$ 48.900,00   38 pagos (32 diaristas · 6 CLT)   9 descontados   4 erros
+
+▼ AGOSTO / 2026      R$ 45.200,00   37 pagos (31 diaristas · 6 CLT)   6 descontados   3 erros
+    ├ 01–07/08   paga     R$ 3.100,00   21 pagos (18 D · 3 CLT)   2 descontados   1 erro
+    ├ 08–14/08   paga     R$ 2.890,00   19 pagos (16 D · 3 CLT)   3 descontados   2 erros
+    ├ 15–21/08   ABERTA   R$ 3.200,00   22 pagos (19 D · 3 CLT)   1 descontado    0 erros
+    └ 22–28/08            R$ 3.260,00   20 pagos (17 D · 3 CLT)   0 descontados   0 erros
+    ─────────────────────────────────────────────────────────────
+    Carteira assinada (mês)   aberto   R$ 8.400,00 · 16 pessoas
 ```
 
-**Banco:** os períodos passam a saber a que tipo de contrato se aplicam e qual o ciclo.
+**Os números que aparecem SEM abrir** (no mês E em cada semana):
+- **valor total** do período
+- **quantos funcionários foram pagos**
+- **a divisão**: quantos diaristas e quantos carteira assinada
+- **quantos foram descontados**
+- **quantos erros**
+
+✅ **DECIDIDO (Victor, 10/09/2026): a semana tem os DOIS vínculos.** Por isso o título é
+só **"Por semana"**, sem a palavra "Diaristas" — carteira assinada também aparece ali
+(adiantamento, extra), e é o que faz existir erro de CLT dentro de uma semana. O bloco
+roxo no pé da gaveta continua sendo o **pagamento mensal** do carteira assinada, que é
+outra coisa. Um clique na semana leva pro detalhe dela.
+
+**Erros (decisão de 10/09):** aparecem **separados por vínculo** no mês E na semana
+(`4 erros (3 D · 1 C)`). Passando o mouse na tag, um balão mostra **quem errou, a equipe
+(function_role), o vínculo, a data e o erro escrito** (a observação do registro).
+Clicando, abre a lista completa — na semana, só a dela; no mês, **todas as semanas
+daquele mês** — sempre separada em Diaristas e Carteira assinada, com o total de pacotes.
+
+✅ **DECIDIDO (Victor, 10/09/2026): a semana cai no mês em que foi PAGA.** Palavras dele:
+*"ela cai no mês que foi paga"*. Então a semana 29/09–05/10, paga em outubro, aparece na
+gaveta de **outubro** — é como o caixa fecha. A data que manda é a do pagamento, não a
+do início nem a do fim da semana. Não perguntar de novo.
+
+### Recibo em PDF — gerar e publicar (decisões do Victor, 10/09/2026)
+
+- **Botão de PDF na gaveta do mês E na de cada semana.** Clicando, abre a lista de quem
+  entra: filtro por vínculo (todos / só diarista / só carteira assinada) **e** seleção
+  pessoa a pessoa, podendo **misturar** alguns diaristas com alguns de carteira assinada.
+  O filtro muda só quem APARECE; quem já foi marcado continua marcado.
+- ✅ **Baixar e publicar são ações SEPARADAS** (*"pode deixar separado mesmo"*): dá pra
+  gerar o PDF, conferir, e só então publicar. Publicar antes de conferir é o caminho pra
+  o funcionário receber um recibo errado.
+- **Baixar** abre em outra aba e salva. **Publicar** manda o mesmo PDF pra tela do
+  funcionário.
+- **Onde o funcionário vê:** na tela "Meus Erros" que já existe (`EmployeeErrorsPage`,
+  por período de pagamento), agora com duas abas — **Recibos** e **Erros**. Recibo novo
+  vem com selo NOVO e contador na aba, igual ao espelho do entregador no driverpay.
+  Quando houve desconto, a linha diz o porquê ("Com R$ 25,00 de desconto por erro").
+- **Dois modelos de recibo**, ambos com 2 vias: carteira assinada (salário, adicional
+  noturno, salário família, INSS, bases de FGTS e IRRF) e diarista (diárias, dias
+  listados, descontos, e a linha dizendo que não há retenção pela empresa).
+- **Isolamento por período (confirmado com o Victor):** cada semana é um período fechado.
+  Abrir Janeiro/Semana 2 mostra só o que foi pago e descontado naquela semana; outro mês,
+  outra semana, outros dados. Vale pra tela, pro arquivo de pagamento e pro PDF.
+
+### ⚠️ REGRA: quem MUDA de diarista para carteira assinada (Victor, 10/09/2026)
+
+*"Começa como diarista, futuramente muda pra CLT — o sistema não exclui o histórico dele.
+Mantém o histórico de diarista, e os próximos como carteira assinada."*
+
+**O problema é real e foi medido (10/09):** o vínculo vive SÓ na ficha
+(`employees.contract_type`); a tabela `payments` **não tem coluna nenhuma de vínculo**.
+Então trocar a ficha de uma pessoa reescreve o passado dela: os pagamentos de julho e
+agosto passam a contar como CLT sem ninguém ter mexido neles, e o "38 pagos (32 diaristas
+· 6 CLT)" das gavetas antigas muda sozinho. Hoje são 33 CLT, 37 diaristas e **22 sem
+vínculo definido** em Caratinga.
+
+**A regra:**
+- O pagamento guarda o vínculo **do dia em que foi feito** — um carimbo, não um espelho da
+  ficha. É o mesmo padrão que o driverpay já usa (`driver_name_snapshot`, `rate_snapshot`).
+- Mudar a ficha vale **daquele dia em diante**. O que já foi pago não se mexe.
+- O histórico continua inteiro: a mesma pessoa aparece como **diarista** nas semanas antigas
+  e como **carteira assinada** nas novas, e as duas coisas são verdade.
+- O recibo em PDF segue o carimbo do pagamento — recibo antigo continua saindo no modelo de
+  diarista, mesmo depois de a pessoa virar CLT.
+- Na tela, quem mudou no período leva um selo do tipo **"era Diarista até 31/07"**, pra
+  ninguém achar que é erro de contagem.
+
+**Banco:** `payments` ganha o vínculo carimbado (migration aditiva; o que já existe é
+preenchido com o vínculo atual da ficha, que é a melhor verdade disponível pro passado —
+e daí em diante nunca mais muda sozinho). Os períodos passam a saber a que tipo de
+contrato se aplicam e qual o ciclo.
 Migration aditiva — o que já está gravado continua valendo como "semanal / diarista".
 **Testes:** unitários do cálculo dos ciclos (semana que atravessa o mês, mês fechado) +
 E2E navegando pelo histórico.
