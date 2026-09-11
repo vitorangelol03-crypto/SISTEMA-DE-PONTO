@@ -15,6 +15,8 @@
 | ✅ Migration do carimbo do vínculo | **APLICADA e provada** (3.605 pagamentos) |
 | ✅ Edge fn `employee-public-api` v15 | **no ar**, rotas antigas sondadas e OK |
 | ✅ Recibo em lote + publicar pro funcionário | **feito** |
+| ✅ E2E da tela nova | **6/6**, com dado real de produção |
+| ✅ Nome do banco fora da tela | tinha ficado só no mockup (§3.5) |
 | 🔴 **FALTA VOCÊ** | 1 policy de bucket (§5.1) e 1 decisão (§5.2) |
 
 ---
@@ -59,6 +61,25 @@ duplicata do mês e deixava as semanas duplicando entre si. E um teste meu
 
 ---
 
+## 2.1 🔴 O BUG QUE SÓ O E2E PEGARIA
+
+A linha do mês era um `role="button"` que **envolvia** a tag de erros e o botão
+"PDF do mês" — botão dentro de botão. Medido no navegador:
+
+```
+>>> SEMANAS VISIVEIS AO ABRIR A ABA: 3      ← a gaveta abre sozinha, certo
+>>> POPUP DO PDF APARECEU? 0                ← o clique não chegou no botão
+>>> SEMANAS DEPOIS DO CLIQUE: 0             ← fechou a gaveta
+```
+
+**Clicar em "PDF do mês" fechava a gaveta em vez de abrir o PDF**, porque o nome
+acessível da linha inteira incluía o texto do botão. E o leitor de tela anunciava
+a linha toda como um botão só. Agora quem é botão é o de abrir/fechar, pequeno, à
+esquerda, com `aria-expanded` — e o clique na linha segue valendo como atalho de
+mouse.
+
+---
+
 ## 3. O que ficou pronto nesta leva
 
 ### 3.1 Recibos EM LOTE com a lista de quem entra
@@ -78,6 +99,17 @@ Aparece na aba de erros dele, com o valor e um botão "Abrir". Bucket **privado*
 o "visto". Publica um a um: se o 30º falhar, os 29 que foram mantêm o selo.
 
 **Baixar e publicar são botões separados** — decisão sua: conferir antes de mandar.
+
+### 3.5 O nome do banco saiu de TUDO
+*"Tire completamente o nome do Banco C6 — o arquivo pode ser usado para qualquer
+banco, não somente C6."* Isso tinha sido feito **só no mockup**; o código de
+verdade ainda dizia "Gerar pagamento C6", "Pagamento C6 Bank", "Baixar Planilha
+C6". Agora saiu de: botão, título do popup, permissões, auditoria, i18n, tutorial
+e **de dentro da planilha** (título das 3 abas, instruções e o nome do arquivo,
+que virou `Pagamento_em_lote_AAAAMMDD_HHMMSS.xlsx`).
+
+A chave de permissão `c6payment` **continua** — é identificador no banco, não
+texto de tela; trocar exigiria migration e não muda nada pra quem usa.
 
 ### 3.3 Carimbo do vínculo — a regra do histórico agora vale de verdade
 *"Quem começa diarista e vira CLT mantém o histórico."* Cada pagamento guarda o

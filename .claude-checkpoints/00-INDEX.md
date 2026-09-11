@@ -24,6 +24,16 @@
 > Edge fn `employee-public-api` **v15**, rota `employee-receipts` (mudança só aditiva,
 > rotas antigas sondadas depois do deploy).
 >
+> **🔴 O BUG QUE SÓ O E2E PEGARIA:** a linha do mês era um `role="button"` que
+> ENVOLVIA a tag de erros e o botão de PDF — botão dentro de botão. Clicar em
+> "PDF do mês" **fechava a gaveta** em vez de abrir o PDF (o nome acessível da
+> linha inteira incluía o texto do botão), e o leitor de tela anunciava a linha
+> toda como um botão só. **E2E da tela nova: 6/6.**
+>
+> **O nome do banco saiu de TUDO** (botão, popup, permissões, auditoria, i18n,
+> tutorial e de dentro da planilha, que virou `Pagamento_em_lote_*.xlsx`) — o
+> pedido de 10/09 tinha sido feito só no MOCKUP, não no código.
+>
 > **PRONTO nesta leva:** recibos **em lote** com a lista de quem entra (filtro de
 > vínculo que *não* desmarca ninguém, então dá pra misturar; 1 = PDF, vários = 1 .zip);
 > **publicar o recibo** pro funcionário ver no celular (bucket privado + link assinado
