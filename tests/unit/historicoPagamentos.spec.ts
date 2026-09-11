@@ -425,3 +425,65 @@ describe('foraDasGavetas: o que sumia calado', () => {
     expect(fora.pagamentos).toHaveLength(0);
   });
 });
+
+/**
+ * 🎯 A SEMANA GÊMEA — a mesma semana cadastrada DUAS VEZES (11/09/2026).
+ *
+ * Produção tem 10 pares assim em Caratinga ("Semana 31/08 a 06/09" e "Semana
+ * 01/09 a 07/09", e por aí vai). Com o dono único, a que começa antes leva os
+ * dias e a outra aparece zerada — o que fazia a tela mentir: dizia "R$ 0,00 · 0
+ * pagos" e, clicando, a lista vinha CHEIA (ela filtra por data).
+ *
+ * ⚠️ O primeiro critério que tentei foi "ficou com ZERO dias" e não pegava nada:
+ * a gêmea fica com 1 dia solto na ponta (o 07/09, que a de 31/08–06/09 não
+ * alcança). O certo é "perdeu a MAIORIA dos dias".
+ */
+describe('semana gêmea: a mesma semana cadastrada duas vezes', () => {
+  const gemeas = [
+    per('a', 'Semana 31/08 a 06/09', '2026-08-31', '2026-09-06', '2026-09-06'),
+    per('b', 'Semana 01/09 a 07/09', '2026-09-01', '2026-09-07', '2026-09-07'),
+    per('c', 'Semana 07/09 a 13/09', '2026-09-07', '2026-09-13', '2026-09-13'),
+  ];
+
+  it('🎯 a que perdeu a maioria dos dias é marcada como gêmea', () => {
+    const h = montarHistorico(gemeas, [], [], '2026-09');
+    const porNome = new Map(h[0].semanas.map((s) => [s.label, s]));
+
+    const a = porNome.get('Semana 31/08 a 06/09')!;
+    const b = porNome.get('Semana 01/09 a 07/09')!;
+    const c = porNome.get('Semana 07/09 a 13/09')!;
+
+    expect(a.gemeaDe, 'a que começa antes fica com tudo').toBeNull();
+    expect(b.gemeaDe, 'a do meio perdeu 6 de 7 dias').not.toBeNull();
+    expect(b.gemeaDe).toContain('31/08');
+    expect(c.gemeaDe, 'perdeu só 1 dia — NÃO é gêmea').toBeNull();
+  });
+
+  it('a gêmea fica com 1 dia, não com zero (o critério errado que tentei antes)', () => {
+    const h = montarHistorico(gemeas, [], [], '2026-09');
+    const b = h[0].semanas.find((s) => s.label === 'Semana 01/09 a 07/09')!;
+    expect(b.diasProprios, 'o 07/09 sobra pra ela').toBe(1);
+    expect(b.diasNoTotal).toBe(7);
+  });
+
+  it('🎯 o dinheiro continua contando UMA vez, na semana que ficou com os dias', () => {
+    const pagamentos = [pag('d1', '2026-09-02', 500), pag('d2', '2026-09-04', 300)];
+    const h = montarHistorico(gemeas, pagamentos, [], '2026-09');
+    const a = h[0].semanas.find((s) => s.label === 'Semana 31/08 a 06/09')!;
+    const b = h[0].semanas.find((s) => s.label === 'Semana 01/09 a 07/09')!;
+
+    expect(a.valor).toBe(800);
+    expect(b.valor, 'a gêmea não repete o dinheiro').toBe(0);
+    expect(h[0].valor, 'e o mês continua sendo a soma das semanas').toBe(800);
+  });
+
+  it('sem sobreposição, ninguém é marcado', () => {
+    const normais = [
+      per('x', 'Semana 1', '2026-09-01', '2026-09-07', '2026-09-07'),
+      per('y', 'Semana 2', '2026-09-08', '2026-09-14', '2026-09-14'),
+    ];
+    const h = montarHistorico(normais, [], [], '2026-09');
+    expect(h[0].semanas.every((s) => s.gemeaDe === null)).toBe(true);
+    expect(h[0].semanas.every((s) => s.diasProprios === 7)).toBe(true);
+  });
+});

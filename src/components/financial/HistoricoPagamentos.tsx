@@ -30,6 +30,16 @@ interface Props {
   podeVerValores: boolean;
   /** Abre a tela de gerar recibo daquele período. */
   onGerarPdf?: (escopo: { titulo: string; inicio: string; fim: string }) => void;
+  /**
+   * Abrir a SEMANA leva pro Financeiro já filtrado nela — é o fluxo que o Victor
+   * pediu em 11/09/2026: *"entra primeiro na aba do financeiro, vai ter lá
+   * semanas, meses… clicando dentro dela, a gente abre diretamente dentro da aba
+   * do financeiro referente àquela semana"*. O histórico virou a porta de
+   * entrada; a lista de pagamentos é o que está DENTRO dela.
+   */
+  onAbrirSemana?: (escopo: { periodoId: string; inicio: string; fim: string; titulo: string }) => void;
+  /** O mês inteiro, da primeira à última semana (decisão dele na mesma conversa). */
+  onAbrirMes?: (escopo: { inicio: string; fim: string; titulo: string }) => void;
 }
 
 const brl = (v: number, pode: boolean) =>
@@ -44,6 +54,7 @@ interface PopupErros {
 
 export const HistoricoPagamentos: React.FC<Props> = ({
   periodos, pagamentos, erros, mesCorrente, podeVerValores, onGerarPdf,
+  onAbrirSemana, onAbrirMes,
 }) => {
   // `undefined` = ninguém clicou ainda; aí vale o mês em andamento (pedido do
   // Victor: a aba já abre no período que está aberto).
@@ -153,6 +164,24 @@ export const HistoricoPagamentos: React.FC<Props> = ({
                 />
               </div>
 
+              {onAbrirMes && mes.semanas.length > 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAbrirMes({
+                      titulo: `${mes.nome}/${mes.ano}`,
+                      inicio: mes.semanas.reduce((a, x) => (x.startDate < a ? x.startDate : a), mes.semanas[0].startDate),
+                      fim: mes.semanas.reduce((a, x) => (x.endDate > a ? x.endDate : a), mes.semanas[0].endDate),
+                    });
+                  }}
+                  title="Abre a lista de pagamentos do mês inteiro"
+                  className="flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm font-semibold hover:bg-green-100 whitespace-nowrap flex-shrink-0"
+                >
+                  <DollarSign size={15} /> Ver o mês
+                </button>
+              )}
+
               {onGerarPdf && mes.semanas.length > 0 && (
                 <button
                   type="button"
@@ -187,6 +216,12 @@ export const HistoricoPagamentos: React.FC<Props> = ({
                       key={sem.periodoId}
                       semana={sem}
                       mesNome={`${mes.nome}/${mes.ano}`}
+                      onAbrir={onAbrirSemana && (() => onAbrirSemana({
+                        periodoId: sem.periodoId,
+                        inicio: sem.startDate,
+                        fim: sem.endDate,
+                        titulo: `${sem.numero} (${sem.intervalo}) — ${mes.nome}/${mes.ano}`,
+                      }))}
                       podeVerValores={podeVerValores}
                       onGerarPdf={onGerarPdf}
                       onAbrirErros={() => setPopup({
@@ -353,25 +388,65 @@ const LinhaSemana: React.FC<{
   podeVerValores: boolean;
   onGerarPdf?: Props['onGerarPdf'];
   onAbrirErros: () => void;
-}> = ({ semana, mesNome, podeVerValores, onGerarPdf, onAbrirErros }) => {
+  /** Leva pro Financeiro filtrado nesta semana. */
+  onAbrir?: () => void;
+}> = ({ semana, mesNome, podeVerValores, onGerarPdf, onAbrirErros, onAbrir }) => {
   const situacao = semana.status === 'open' ? 'ABERTA' : 'paga';
+  // GÊMEA: a mesma semana cadastrada duas vezes (10 pares em produção). Ela não
+  // ficou com dia nenhum, então mostraria "R$ 0,00 · 0 pagos" — e abrir a lista
+  // mostraria tudo cheio, porque a lista filtra por DATA. Em vez de deixar a
+  // tela se contradizer, ela diz o que é e não abre.
+  const gemea = semana.gemeaDe !== null;
+  const abrir = gemea ? undefined : onAbrir;
   return (
+    /* ⚠️ A LINHA NÃO É UM BOTÃO — mesmo cuidado do cabeçalho do mês. Ela contém
+       a tag de erros e o botão de PDF, e botão dentro de botão faz o clique cair
+       no lugar errado (aconteceu de verdade em 11/09: clicar em "PDF do mês"
+       fechava a gaveta). Quem é botão de verdade é o da esquerda; o clique na
+       linha é só atalho de mouse. */
     <div
       data-testid="semana-do-historico"
-      className="flex flex-wrap items-center gap-3 px-3 sm:px-4 py-3 sm:pl-7 bg-white border border-gray-200 rounded-md hover:bg-gray-50"
+      onClick={abrir}
+      className={`flex flex-wrap items-center gap-3 px-3 sm:px-4 py-3 sm:pl-7 border rounded-md ${
+        gemea
+          ? 'bg-gray-50 border-dashed border-gray-300 text-gray-400'
+          : `bg-white border-gray-200 hover:bg-gray-50 ${abrir ? 'cursor-pointer' : ''}`
+      }`}
     >
-      <div className="flex flex-col min-w-[120px]">
-        <span className="text-sm font-semibold text-gray-800">{semana.numero}</span>
-        <span className="text-xs font-medium text-gray-500">{semana.intervalo}</span>
-      </div>
-      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${
-        situacao === 'ABERTA' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
-      }`}>
-        {situacao}
-      </span>
+      {abrir ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); abrir(); }}
+          title="Abre os pagamentos desta semana"
+          className="flex flex-col items-start min-w-[120px] text-left rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <span className="text-sm font-semibold text-blue-700 hover:underline">{semana.numero}</span>
+          <span className="text-xs font-medium text-gray-500">{semana.intervalo}</span>
+        </button>
+      ) : (
+        <div className="flex flex-col min-w-[120px]">
+          <span className="text-sm font-semibold text-gray-800">{semana.numero}</span>
+          <span className="text-xs font-medium text-gray-500">{semana.intervalo}</span>
+        </div>
+      )}
+      {gemea ? (
+        <span
+          className="px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap bg-gray-200 text-gray-600"
+          title="Esta semana está cadastrada duas vezes, com um dia de diferença. Os pagamentos contam na outra, pra não entrar em dobro."
+        >
+          repetida — conta na {semana.gemeaDe}
+        </span>
+      ) : (
+        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${
+          situacao === 'ABERTA' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
+        }`}>
+          {situacao}
+        </span>
+      )}
 
       <div className="flex-grow" />
 
+      {gemea ? null : (
       <div className="flex items-center gap-3 sm:gap-4 flex-wrap justify-end">
         <span className="text-sm font-bold text-green-600">{brl(semana.valor, podeVerValores)}</span>
         <span className="text-[13px] text-gray-700 whitespace-nowrap">
@@ -401,7 +476,12 @@ const LinhaSemana: React.FC<{
             <FileText size={13} /> PDF
           </button>
         )}
+        {abrir && (
+          /* Só a seta: quem clica é a linha inteira ou o botão da esquerda. */
+          <ChevronRight size={16} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
+        )}
       </div>
+      )}
     </div>
   );
 };

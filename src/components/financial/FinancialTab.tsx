@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
   getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance,
@@ -159,7 +159,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [financialData, setFinancialData] = useState<EmployeeFinancialData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<'financial' | 'history' | 'payments-history'>('financial');
+  /**
+   * A aba do Financeiro abre no HISTÓRICO (as gavetas), não na lista de
+   * pagamentos — pedido do Victor (11/09/2026): *"entra primeiro na aba do
+   * financeiro, vai ter lá semanas, meses… aquela vai ser a principal; clicando
+   * dentro dela, abre o financeiro referente àquela semana"*.
+   *
+   * O histórico é a porta de entrada; a lista de pagamentos é o que está DENTRO
+   * de uma semana. Quem quiser a lista solta continua tendo o botão "Pagamentos".
+   */
+  const [activeView, setActiveView] = useState<'financial' | 'history' | 'payments-history'>('payments-history');
+  /**
+   * Preenchido quando a pessoa entrou na lista VINDO de uma semana/mês do
+   * histórico — é o que permite voltar pra onde ela estava. `null` quando ela
+   * abriu a lista direto pelo botão.
+   */
+  const [veioDoHistorico, setVeioDoHistorico] = useState<string | null>(null);
   /**
    * Histórico de Pagamentos em gavetas (Etapa 2, 11/09/2026).
    *
@@ -1095,7 +1110,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         {/* Navegação entre visualizações */}
         <div className="flex flex-col sm:flex-row gap-2 mb-4 overflow-x-auto">
           <button
-            onClick={() => setActiveView('financial')}
+            onClick={() => { setActiveView('financial'); setVeioDoHistorico(null); }}
             className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md transition-colors min-h-[44px] whitespace-nowrap ${
               activeView === 'financial'
                 ? 'bg-blue-600 text-white'
@@ -1134,6 +1149,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             <span>Histórico de Pagamentos</span>
           </button>
         </div>
+
+        {/* A volta pro histórico. Sem isto o fluxo era de mão única: a pessoa
+            entrava na semana e não tinha como voltar pras gavetas. */}
+        {activeView === 'financial' && veioDoHistorico && (
+          <button
+            type="button"
+            onClick={() => { setActiveView('payments-history'); setVeioDoHistorico(null); }}
+            className="flex items-center gap-2 mb-4 px-3 py-2 min-h-[44px] rounded-lg bg-green-50 border border-green-200 text-green-900 text-sm hover:bg-green-100 w-full sm:w-auto"
+          >
+            <ChevronLeft className="w-4 h-4 flex-shrink-0" />
+            <span>
+              Voltar para o histórico
+              <span className="hidden sm:inline text-green-700"> — vendo <b>{veioDoHistorico}</b></span>
+            </span>
+          </button>
+        )}
 
         {/* Filtros - Pagamentos */}
         {activeView === 'financial' && (
@@ -2027,6 +2058,23 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                Mudar os filtros dispara o `loadData`, que é quem monta o
                `financialData` daquele período — o mesmo caminho do "Holerite PDF"
                de uma pessoa só, sem rota paralela. */
+            /* Clicar na SEMANA abre a lista já filtrada nela. Basta escolher o
+               período: o efeito que existe desde sempre deriva as datas dele, e
+               os campos de data ficam travados — que é o "só aquela semana". */
+            onAbrirSemana={({ periodoId, titulo }) => {
+              setSelectedPeriodId(periodoId);
+              setFilters((f) => ({ ...f, employeeId: '' }));
+              setVeioDoHistorico(titulo);
+              setActiveView('financial');
+            }}
+            /* O mês inteiro não é UM período (são várias semanas), então aqui as
+               datas vão na mão e o combo fica vazio. */
+            onAbrirMes={({ inicio, fim, titulo }) => {
+              setSelectedPeriodId('');
+              setFilters((f) => ({ ...f, startDate: inicio, endDate: fim, employeeId: '' }));
+              setVeioDoHistorico(titulo);
+              setActiveView('financial');
+            }}
             onGerarPdf={({ inicio, fim, titulo }) => {
               setSelectedPeriodId('');
               setFilters((f) => ({

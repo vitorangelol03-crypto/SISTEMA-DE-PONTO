@@ -112,6 +112,7 @@ export async function goToTab(page: Page, tabName: string) {
   const aba = page.getByRole('button', { name: new RegExp(`^${tabName}$`) }).first();
   if (await aba.isVisible().catch(() => false)) {
     await aba.click();
+    await depoisDeAbrirAAba(page, tabName);
     return;
   }
   const mais = page.getByTestId('abas-mais');
@@ -120,6 +121,33 @@ export async function goToTab(page: Page, tabName: string) {
     await aba.waitFor({ state: 'visible', timeout: 5_000 });
   }
   await aba.click();
+  await depoisDeAbrirAAba(page, tabName);
+}
+
+/**
+ * 11/09/2026 — o Financeiro deixou de abrir na LISTA DE PAGAMENTOS e passou a
+ * abrir no HISTÓRICO (as gavetas de mês/semana), que virou a porta de entrada
+ * por pedido do Victor. Os ~10 specs que dizem `goToTab('Financeiro')` querem
+ * dizer "vá pra lista de pagamentos" — o desvio fica AQUI, como já acontece com
+ * o "Pagamento C6", em vez de espalhar um clique a mais por todos eles.
+ *
+ * ⚠️ Precisa ser chamado nos DOIS caminhos de saída do `goToTab` (a aba visível
+ * volta cedo). Na primeira tentativa isto ficou só no fim do arquivo e nunca
+ * rodava — os 5 testes do spec 07 quebraram apontando pra isso.
+ *
+ * Quem testa a porta de entrada NOVA (spec 112) não usa este helper.
+ */
+async function depoisDeAbrirAAba(page: Page, tabName: string): Promise<void> {
+  if (!/^Financeiro$/.test(tabName)) return;
+  const listaDePagamentos = page.getByRole('button', { name: /^Pagamentos$/ }).first();
+  // ESPERAR, não perguntar: a aba carrega os dados antes de desenhar os botões.
+  await listaDePagamentos.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined);
+  if (await listaDePagamentos.isVisible().catch(() => false)) {
+    await listaDePagamentos.click();
+    // Só volta quando a lista está de fato na tela (os filtros de data são dela).
+    await page.locator('input[type="date"]').first()
+      .waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined);
+  }
 }
 
 /**

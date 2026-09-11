@@ -108,6 +108,25 @@ export interface SemanaDoHistorico extends ResumoDoPeriodo {
   status: string | null;
   /** Os erros daquela semana, pro balão e pro popup. */
   listaErros: ErroDoHistorico[];
+  /**
+   * Quantos dos 7 dias desta semana pertencem A ELA (ver a regra do dono único).
+   *
+   * Perder a MAIORIA dos dias significa que a semana é GÊMEA de outra — a mesma
+   * semana cadastrada duas vezes, deslocada em um dia. Em produção há 10 pares
+   * assim, e é a raiz do erro de R$ 82.980 de 11/09/2026.
+   *
+   * ⚠️ NÃO é "zero dias": a gêmea costuma ficar com 1 dia solto na ponta (a
+   * "Semana 01–07/09" fica com o 07/09, que a "31/08–06/09" não alcança). Foi o
+   * primeiro critério que tentei e ele não pegava nada.
+   *
+   * Sem este campo a gêmea aparecia como "R$ 0,00 · 0 pagos" e quem clicasse
+   * nela via a lista CHEIA — a tela dizendo uma coisa e a lista outra.
+   */
+  diasProprios: number;
+  /** Quantos dias a semana tem no total (normalmente 7). */
+  diasNoTotal: number;
+  /** O nome da semana que levou a maior parte dos dias — só quando é gêmea. */
+  gemeaDe: string | null;
 }
 
 export interface MesDoHistorico extends ResumoDoPeriodo {
@@ -274,6 +293,18 @@ export function montarHistorico(
   for (const [chave, doMes] of porMes) {
     const ordenados = [...doMes].sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
 
+    /** Os dias de um período, e de quem cada um é. */
+    const diasDoPeriodo = (per: PeriodoDePagamento): { dia: string; dono: string | null }[] => {
+      const out: { dia: string; dono: string | null }[] = [];
+      for (let d = new Date(`${per.startDate}T00:00:00Z`);
+           d.toISOString().slice(0, 10) <= per.endDate;
+           d.setUTCDate(d.getUTCDate() + 1)) {
+        const dia = d.toISOString().slice(0, 10);
+        out.push({ dia, dono: donoDoDia(dia) });
+      }
+      return out;
+    };
+
     const semanas: SemanaDoHistorico[] = ordenados.map((per, i) => {
       // `donoPagamento`/`donoErro`: cada lançamento cai em UMA semana só (ver o
       // bloco no topo). Sem isso, semanas sobrepostas contavam o mesmo dinheiro
@@ -290,9 +321,29 @@ export function montarHistorico(
         paymentDate: per.paymentDate,
         status: per.status,
         listaErros: errs,
+        diasProprios: diasDoPeriodo(per).filter((d) => d.dono === per.id).length,
+        diasNoTotal: diasDoPeriodo(per).length,
+        gemeaDe: null,   // preenchido logo abaixo, quando as outras já existem
         ...resumir(pgs, errs),
       };
     });
+
+    // GÊMEA = perdeu a MAIORIA dos próprios dias pra outra semana. O nome que
+    // aparece é o de quem levou mais dias dela, não de uma sobreposta qualquer.
+    for (const sem of semanas) {
+      if (sem.diasProprios * 2 >= sem.diasNoTotal) continue;
+      const per = ordenados.find((p) => p.id === sem.periodoId);
+      if (!per) continue;
+      const quantosLevou = new Map<string, number>();
+      for (const { dono } of diasDoPeriodo(per)) {
+        if (dono && dono !== sem.periodoId) quantosLevou.set(dono, (quantosLevou.get(dono) ?? 0) + 1);
+      }
+      let donaId: string | null = null;
+      let maior = 0;
+      for (const [id, n] of quantosLevou) if (n > maior) { maior = n; donaId = id; }
+      const dona = semanas.find((o) => o.periodoId === donaId);
+      sem.gemeaDe = dona ? `${dona.numero} (${dona.intervalo})` : 'outra semana';
+    }
 
     // O mês é LITERALMENTE a soma das semanas dele — a gaveta fechada não pode
     // dizer um número e a aberta outro. Como cada lançamento já tem um dono

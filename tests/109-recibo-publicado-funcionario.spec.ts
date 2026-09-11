@@ -89,10 +89,9 @@ async function entrarComoFuncionario(page: Page, cpf: string) {
 }
 
 test.describe('Recibo publicado na tela do funcionário', () => {
-  // Esta máquina roda o robô da Shopee junto (6 Chromes, ~5 GB) e a primeira
-  // navegação passa dos 15s do config. Mesmo remédio do spec 107 e do 110:
-  // esperar pela CONDIÇÃO (a página carregou), não por um tempo fixo.
-  test.use({ navigationTimeout: 120_000, actionTimeout: 30_000 });
+  // A máquina roda o robô da Shopee junto; o `actionTimeout` do config (10s) é
+  // apertado pra ela. A navegação já está coberta pelo config (60s).
+  test.use({ actionTimeout: 30_000 });
 
   test.beforeAll(() => cleanupByPrefix(PREFIX));
   test.afterAll(() => cleanupByPrefix(PREFIX));

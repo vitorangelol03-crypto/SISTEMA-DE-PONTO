@@ -39,7 +39,12 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     actionTimeout: 10_000,
-    navigationTimeout: 15_000,
+    /* 11/09/2026 — de 15s pra 60s. Nesta máquina o robô da Shopee roda junto (6
+       Chromes, ~5 GB de 12) e a PRIMEIRA navegação de cada spec passava dos 15s,
+       derrubando testes que não tinham nada a ver com o que estava sendo mexido.
+       Isso é espera por CONDIÇÃO (a página carregou), não por tempo fixo: uma
+       página de verdade quebrada continua falhando, só que um pouco depois. */
+    navigationTimeout: 60_000,
   },
 
   projects: [
