@@ -8,6 +8,7 @@ import {
   getPaymentPeriods, PaymentPeriod,
   applyBankHoursToPayment, previewBankHoursForPeriod, createBankHoursOverride,
   type BankHoursPreviewItem,
+  publicarReciboDePagamento, listarRecibosPublicados,
 } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import {
@@ -20,6 +21,7 @@ import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import { moneyBRL, HIDDEN_VALUE } from '../../utils/moneyMask';
 import { HistoricoPagamentos } from './HistoricoPagamentos';
+import { SelecaoParaPdf, type PessoaDoPdf } from './SelecaoParaPdf';
 import type {
   PeriodoDePagamento as HistPeriodo,
   PagamentoDoHistorico as HistPagamento,
@@ -79,6 +81,56 @@ interface EmployeeFinancialData {
   totalBonusC2: number;
 }
 
+/**
+ * Os dados que o recibo imprime, montados de um jeito SÓ.
+ *
+ * Baixar e publicar têm que gerar o MESMO papel — se cada um montasse o seu, um
+ * dia divergiriam e o funcionário receberia um recibo diferente do que foi
+ * conferido. É a mesma conta do "Holerite PDF" de uma pessoa.
+ */
+function montarDadosDoRecibo(
+  d: EmployeeFinancialData,
+  inicio: string,
+  fim: string,
+  company: { display_name?: string | null; legal_name?: string | null; cnpj?: string | null } | null,
+) {
+  return {
+    company: {
+      name: company?.display_name || company?.legal_name || 'Empresa',
+      cnpj: company?.cnpj || undefined,
+    },
+    employee: {
+      name: d.employee.name,
+      cpf: d.employee.cpf,
+      employmentType: d.employee.employment_type || undefined,
+      functionRole: d.employee.function_role || undefined,
+      hireDate: d.employee.hire_date || undefined,
+    },
+    period: { start: inicio, end: fim },
+    payments: d.payments.map((p) => ({
+      date: p.date,
+      dailyRate: p.daily_rate || 0,
+      bonusB: p.bonus_b || 0,
+      bonusC1: p.bonus_c1 || 0,
+      bonusC2: p.bonus_c2 || 0,
+    })),
+    errorDiscount: d.totalErrorValue || 0,
+    triageDiscount: d.totalTriageDiscount || 0,
+    // Erro de QUANTIDADE já foi abatido do `payments.total` lá atrás: é a
+    // diferença entre o que foi listado e o total.
+    quantityErrorDiscount: Math.max(
+      0,
+      (d.totalDailyRate + d.totalBonusB + d.totalBonusC1 + d.totalBonusC2) - d.totalEarnedGross,
+    ),
+    totalDailyRate: d.totalDailyRate || 0,
+    totalBonusB: d.totalBonusB || 0,
+    totalBonusC1: d.totalBonusC1 || 0,
+    totalBonusC2: d.totalBonusC2 || 0,
+    totalGross: d.totalEarnedGross || 0,
+    totalNet: d.totalEarned || 0,
+  };
+}
+
 const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
   { id: 'fallback-B',  company_id: '', code: 'B',  name: 'Bônus B',  default_value: 0, order_index: 1, active: true, created_at: '', updated_at: '' },
   { id: 'fallback-C1', company_id: '', code: 'C1', name: 'Bônus C1', default_value: 0, order_index: 2, active: true, created_at: '', updated_at: '' },
@@ -118,7 +170,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const [histPeriodos, setHistPeriodos] = useState<HistPeriodo[]>([]);
   const [histPagamentos, setHistPagamentos] = useState<HistPagamento[]>([]);
   const [histErros, setHistErros] = useState<HistErro[]>([]);
-  const [histLoading, setHistLoading] = useState(false);
+  const [histErro, setHistErro] = useState<string | null>(null);
+  /** Sobe de 1 quando o usuário pede "tentar de novo" — refaz a carga. */
+  const [histRecarga, setHistRecarga] = useState(0);
+  /**
+   * O período escolhido na gaveta pra gerar recibos EM LOTE (pedido do Victor,
+   * 10/09/2026). Guarda as datas pra saber se o `financialData` na mão já é
+   * DESTE período — senão o popup listaria a folha anterior enquanto recarrega.
+   */
+  const [pdfLote, setPdfLote] = useState<{ inicio: string; fim: string; titulo: string } | null>(null);
+  const [pdfGerando, setPdfGerando] = useState<string | null>(null);
+  /** Quem, do período aberto no popup, já recebeu o recibo no app. */
+  const [jaPublicados, setJaPublicados] = useState<Set<string>>(new Set());
+  // Começa CARREGANDO, não vazio: o render acontece antes do `useEffect`, e com
+  // `false` a gaveta piscava "Nenhum período de pagamento cadastrado" — um susto
+  // de meio segundo dizendo que não existe nada. (Achado em revisão, 11/09.)
+  const [histLoading, setHistLoading] = useState(true);
   /** Popup do Pagamento C6 (09/09/2026 — a aba virou botão daqui). */
   const [showC6Modal, setShowC6Modal] = useState(false);
 
@@ -185,6 +252,150 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     if (!q) return bonusRemovals;
     return bonusRemovals.filter(r => (r.employees?.name ?? '').toLowerCase().includes(q));
   }, [bonusRemovals, historyEmployeeSearch]);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // RECIBOS EM LOTE (Etapa 2, 11/09/2026)
+  //
+  // Quem entra na lista: quem foi pago no período. O `financialData` já é a folha
+  // daquele período — o MESMO dado do "Holerite PDF" de uma pessoa, então o papel
+  // sai idêntico, gerado ou um ou quarenta.
+  // ══════════════════════════════════════════════════════════════════════════
+  /** A folha na mão já é a do período pedido? (senão, ainda é a anterior) */
+  const loteNoPeriodoCerto = pdfLote !== null
+    && filters.startDate === pdfLote.inicio
+    && filters.endDate === pdfLote.fim;
+
+  const pessoasDoLote: PessoaDoPdf[] = React.useMemo(() => {
+    if (!loteNoPeriodoCerto) return [];
+    return financialData
+      .filter((d) => d.payments.length > 0)
+      .map((d) => ({
+        id: d.employee.id,
+        nome: d.employee.name,
+        vinculo: d.employee.employment_type === 'Carteira Assinada'
+          ? 'Carteira Assinada' as const : 'Diarista' as const,
+        valor: d.totalEarned || 0,
+        equipe: d.employee.function_role || '',
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [financialData, loteNoPeriodoCerto]);
+
+  const gerarRecibosEmLote = async (ids: string[]) => {
+    if (!pdfLote) return;
+    // O recibo é um documento REAL que vai pra mão do funcionário: sem ver o valor
+    // de verdade, sairia zerado. Mesma trava do holerite individual (03/09/2026).
+    if (!canViewValues) {
+      toast.error('Você precisa da permissão de ver valores em R$ pra gerar os recibos (o PDF sai com o valor de verdade).');
+      return;
+    }
+    const escolhidos = financialData.filter((d) => ids.includes(d.employee.id));
+    if (escolhidos.length === 0) return;
+
+    try {
+      const { generateHoleritePdf, downloadHoleritePdf } = await import('../../utils/holeritePdf');
+      const dadosDoRecibo = (d: EmployeeFinancialData) =>
+        montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company);
+
+      if (escolhidos.length === 1) {
+        setPdfGerando('Gerando…');
+        await downloadHoleritePdf(dadosDoRecibo(escolhidos[0]));
+      } else {
+        // UM .zip, não N downloads: o navegador BLOQUEIA downloads em sequência
+        // depois do segundo, e a pessoa receberia 2 de 40 sem aviso nenhum.
+        const JSZip = (await import('jszip')).default;
+        const zip = new JSZip();
+        const usados = new Set<string>();
+        for (let i = 0; i < escolhidos.length; i++) {
+          const d = escolhidos[i];
+          setPdfGerando(`Gerando ${i + 1} de ${escolhidos.length}…`);
+          const blob = await generateHoleritePdf(dadosDoRecibo(d));
+          // Homônimo não pode sobrescrever o recibo do outro dentro do zip.
+          let nome = `${d.employee.name.replace(/[\\/:*?"<>|]/g, '-').trim()}.pdf`;
+          let n = 2;
+          while (usados.has(nome)) nome = `${d.employee.name.replace(/[\\/:*?"<>|]/g, '-').trim()} (${n++}).pdf`;
+          usados.add(nome);
+          zip.file(nome, blob);
+        }
+        setPdfGerando('Montando o arquivo…');
+        const conteudo = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(conteudo);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `recibos_${pdfLote.titulo.replace(/[^\w-]+/g, '_')}_${pdfLote.inicio}_a_${pdfLote.fim}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+      toast.success(escolhidos.length === 1
+        ? 'Recibo gerado.'
+        : `${escolhidos.length} recibos num arquivo .zip.`);
+      setPdfLote(null);
+    } catch (err) {
+      console.error('Erro ao gerar os recibos:', err);
+      toast.error('Não consegui gerar os recibos. Tente de novo.');
+    } finally {
+      setPdfGerando(null);
+    }
+  };
+
+  const publicarRecibos = async (ids: string[]) => {
+    if (!pdfLote) return;
+    if (!canViewValues) {
+      toast.error('Você precisa da permissão de ver valores em R$ pra publicar os recibos (o funcionário recebe o valor de verdade).');
+      return;
+    }
+    const escolhidos = financialData.filter((d) => ids.includes(d.employee.id));
+    if (escolhidos.length === 0 || !company?.id) return;
+
+    let enviados = 0;
+    try {
+      const { generateHoleritePdf } = await import('../../utils/holeritePdf');
+      for (let i = 0; i < escolhidos.length; i++) {
+        const d = escolhidos[i];
+        setPdfGerando(`Publicando ${i + 1} de ${escolhidos.length}…`);
+        const pdf = await generateHoleritePdf(
+          montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company),
+        );
+        await publicarReciboDePagamento({
+          companyId: company.id,
+          employeeId: d.employee.id,
+          periodStart: pdfLote.inicio,
+          periodEnd: pdfLote.fim,
+          titulo: pdfLote.titulo,
+          totalNet: d.totalEarned || 0,
+          pdf,
+          userId,
+        });
+        enviados++;
+        // Marca um a um: se o 30º falhar, os 29 que já foram continuam com o
+        // selo certo — em vez da tela dizer que ninguém recebeu.
+        setJaPublicados((s) => new Set(s).add(d.employee.id));
+      }
+      toast.success(enviados === 1
+        ? 'Recibo publicado — já aparece pro funcionário.'
+        : `${enviados} recibos publicados — já aparecem pros funcionários.`);
+    } catch (err) {
+      console.error('Erro ao publicar os recibos:', err);
+      toast.error(
+        `${enviados > 0 ? `${enviados} publicados e parou aí. ` : ''}${err instanceof Error ? err.message : 'Falha ao publicar.'}`,
+        { duration: 10000 },
+      );
+    } finally {
+      setPdfGerando(null);
+    }
+  };
+
+  // Quem DESTE período já recebeu: o selo "no app" na lista. Falhar aqui não
+  // impede publicar — só deixa a tela sem o selo, e é isso que o catch faz.
+  useEffect(() => {
+    if (!pdfLote || !company?.id) { setJaPublicados(new Set()); return; }
+    let cancelled = false;
+    listarRecibosPublicados(company.id, pdfLote.inicio, pdfLote.fim)
+      .then((rs) => { if (!cancelled) setJaPublicados(new Set(rs.map((r) => r.employeeId))); })
+      .catch((err) => console.error('Não consegui ver quem já recebeu o recibo:', err));
+    return () => { cancelled = true; };
+  }, [pdfLote, company?.id]);
 
   const loadData = React.useCallback(async () => {
     if (!company?.id) return;
@@ -297,6 +508,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     if (activeView !== 'payments-history' || !company?.id) return;
     let cancelled = false;
     setHistLoading(true);
+    setHistErro(null);
 
     (async () => {
       try {
@@ -310,16 +522,26 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         // fora eram os MAIS RECENTES. Pego na primeira conferência na tela:
         // setembro aparecia com "R$ 0,00 · 0 pagos" enquanto junho vinha cheio.
         // Cada período sozinho cabe folgado no limite.
-        const porPeriodo = await Promise.all(
-          todosPeriodos.map(async (p) => {
-            const [pg, er] = await Promise.all([
-              getPayments(p.start_date, p.end_date, undefined, undefined, company.id),
-              getErrorRecords(p.start_date, p.end_date, undefined, undefined, company.id),
-            ]);
-            return { pg, er };
-          }),
-        );
-        if (cancelled) return;
+        //
+        // E DE SEIS EM SEIS, não todas de uma vez: são 56 períodos × 2 RPCs =
+        // 112 chamadas simultâneas. O navegador enfileira (6 por domínio) e o
+        // Postgres leva a rajada inteira, o que já derrubou a carga em máquina
+        // carregada. Em lotes o tempo total é o mesmo e nada estoura.
+        const LOTE = 6;
+        const porPeriodo: { pg: Awaited<ReturnType<typeof getPayments>>; er: Awaited<ReturnType<typeof getErrorRecords>> }[] = [];
+        for (let i = 0; i < todosPeriodos.length; i += LOTE) {
+          const fatia = await Promise.all(
+            todosPeriodos.slice(i, i + LOTE).map(async (p) => {
+              const [pg, er] = await Promise.all([
+                getPayments(p.start_date, p.end_date, undefined, undefined, company.id),
+                getErrorRecords(p.start_date, p.end_date, undefined, undefined, company.id),
+              ]);
+              return { pg, er };
+            }),
+          );
+          if (cancelled) return;
+          porPeriodo.push(...fatia);
+        }
 
         // Semanas SOBREPOSTAS existem em produção (31/08–06/09 e 01–07/09), então
         // o mesmo pagamento/erro volta em mais de uma busca: dedupe por id.
@@ -346,7 +568,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           id: p.id,
           employeeId: p.employee_id,
           date: p.date,
-          total: Number(p.total ?? 0),
+          // `null` = MASCARADO (sem permissão de ver dinheiro), e tem que
+          // CONTINUAR null: virar 0 fazia a gaveta dizer "0 pagos", como se
+          // ninguém tivesse recebido. Só o valor é escondido, não a pessoa.
+          total: p.total === null || p.total === undefined ? null : Number(p.total),
           vinculo: vinculoDe(p),
         })));
 
@@ -360,19 +585,28 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             vinculo: emp?.employment_type === 'Carteira Assinada' ? 'Carteira Assinada' as const : 'Diarista' as const,
             date: e.date,
             quantidade: Number(e.error_count ?? 0),
-            valor: Number(e.error_value ?? 0),
+            valor: e.error_value === null || e.error_value === undefined ? null : Number(e.error_value),
             descricao: e.observations ?? '',
           };
         }));
       } catch (err) {
+        // Limpar é obrigatório: sem isso a tela segue mostrando as gavetas da
+        // empresa/consulta ANTERIOR como se fossem desta — e o usuário não tem
+        // como saber que está lendo número velho. Vazio + aviso é honesto.
         console.error('Erro ao carregar o histórico de pagamentos:', err);
+        if (!cancelled) {
+          setHistPeriodos([]);
+          setHistPagamentos([]);
+          setHistErros([]);
+          setHistErro(err instanceof Error ? err.message : 'Falha ao carregar o histórico.');
+        }
       } finally {
         if (!cancelled) setHistLoading(false);
       }
     })();
 
     return () => { cancelled = true; };
-  }, [activeView, company?.id]);
+  }, [activeView, company?.id, histRecarga]);
 
   // Carrega tipos de bonificação da empresa atual.
   // Substitui o fallback (B/C1/C2) só se o banco retornar tipos. Se vier vazio, mantém fallback.
@@ -1783,6 +2017,18 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             <RefreshCw className="w-8 h-8 mx-auto text-gray-400 animate-spin mb-3" />
             <p className="text-sm text-gray-500">Montando o histórico…</p>
           </div>
+        ) : histErro ? (
+          <div className="bg-white rounded-lg shadow p-8 text-center">
+            <AlertTriangle className="w-8 h-8 mx-auto text-red-500 mb-3" />
+            <p className="text-sm font-medium text-gray-900">Não consegui carregar o histórico.</p>
+            <p className="text-xs text-gray-500 mt-1">{histErro}</p>
+            <button
+              onClick={() => setHistRecarga((n) => n + 1)}
+              className="mt-4 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Tentar de novo
+            </button>
+          </div>
         ) : (
           <HistoricoPagamentos
             periodos={histPeriodos}
@@ -1790,8 +2036,46 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             erros={histErros}
             mesCorrente={getBrazilDate().slice(0, 7)}
             podeVerValores={canViewValues}
+            /* O botão de PDF abre a LISTA de quem entra (pedido do Victor,
+               10/09/2026): filtra por vínculo ou tira alguns, misturando os dois.
+               Mudar os filtros dispara o `loadData`, que é quem monta o
+               `financialData` daquele período — o mesmo caminho do "Holerite PDF"
+               de uma pessoa só, sem rota paralela. */
+            onGerarPdf={({ inicio, fim, titulo }) => {
+              setSelectedPeriodId('');
+              setFilters((f) => ({
+                ...f,
+                startDate: inicio,
+                endDate: fim,
+                employeeId: '',
+                // 'all' porque quem filtra agora é o popup: se a aba estivesse
+                // filtrada em "Diarista", a lista nasceria sem os CLT e o Victor
+                // não teria como misturar os dois, que é o pedido dele.
+                employmentType: 'all' as EmploymentType,
+              }));
+              setPdfLote({ inicio, fim, titulo });
+            }}
           />
         )
+      )}
+
+      {/* ══ QUEM ENTRA NO PDF (Etapa 2, 11/09/2026) ══
+          Abre sobre a gaveta. Enquanto o `financialData` do período pedido não
+          chegou, mostra "buscando" em vez da folha anterior — listar a folha
+          velha faria a pessoa gerar recibo de quem nem trabalhou naquela semana. */}
+      {pdfLote && (
+        <SelecaoParaPdf
+          titulo={`Recibos de ${pdfLote.titulo}`}
+          subtitulo={`${pdfLote.inicio.split('-').reverse().join('/')} a ${pdfLote.fim.split('-').reverse().join('/')} · marque quem entra`}
+          pessoas={pessoasDoLote}
+          carregando={loading || !loteNoPeriodoCerto}
+          podeVerValores={canViewValues}
+          gerando={pdfGerando}
+          jaPublicados={jaPublicados}
+          onFechar={() => { if (!pdfGerando) setPdfLote(null); }}
+          onGerar={gerarRecibosEmLote}
+          onPublicar={publicarRecibos}
+        />
       )}
 
       {/* Histórico de Remoções de Bonificação */}
