@@ -199,15 +199,24 @@ as $function$
     AND (p_employee_id IS NULL OR p.employee_id = p_employee_id);
 $function$;
 
--- O DROP acima levou a ACL junto: sem estas 3 linhas a função nasceria aberta
--- pro PUBLIC. São as mesmas de 20260903201150_get_payments_masked_security_definer_test.sql.
+-- O DROP acima levou a ACL junto: sem estas linhas a função nasceria aberta pro
+-- PUBLIC. São as de 20260903201150_get_payments_masked_security_definer_test.sql
+-- MAIS o `service_role`, conferido na ACL de produção em 11/09/2026:
+--   {postgres=X, authenticated=X, service_role=X}
+-- O service_role viria de graça pelo default privilege do schema public, mas
+-- depender de default silencioso pra não derrubar o backend é frágil — aqui é
+-- explícito, e o resultado bate byte a byte com o que existe hoje.
 grant execute on function public.get_payments_masked(uuid, date, date, uuid) to authenticated;
+grant execute on function public.get_payments_masked(uuid, date, date, uuid) to service_role;
 revoke all on function public.get_payments_masked(uuid, date, date, uuid) from public;
 revoke all on function public.get_payments_masked(uuid, date, date, uuid) from anon;
 
 -- A tabela teve o SELECT revogado e recebe grant por LISTA de colunas
--- (20260903204857 e 20260903220447). A coluna nova entra na lista pelo mesmo
--- padrão da casa: não é dinheiro, então acompanha as outras não mascaradas.
+-- (20260903204857 e 20260903220447). Conferido em 11/09/2026: o `authenticated`
+-- tem SELECT em 9 colunas (as não-dinheiro) e NENHUMA das de R$ — o dinheiro só
+-- sai pela RPC mascarada. `postgres`/`service_role`/`anon` têm SELECT no nível
+-- da TABELA, então já alcançam a coluna nova sozinhos; só o `authenticated`
+-- precisa ser nomeado. O vínculo não é dinheiro: entra na lista das liberadas.
 grant select (employment_type_snapshot) on public.payments to authenticated;
 
 commit;

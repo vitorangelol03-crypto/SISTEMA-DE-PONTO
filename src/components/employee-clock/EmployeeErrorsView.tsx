@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Loader2, CheckCircle, AlertTriangle, FileText, ExternalLink } from 'lucide-react';
 import {
   getEmployeeErrorPeriods,
   getEmployeeErrorsByPeriod,
+  getMeusRecibos,
   PaymentPeriod,
   ErrorType,
+  type MeuRecibo,
 } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 
@@ -29,6 +31,8 @@ export const EmployeeErrorsView: React.FC<EmployeeErrorsViewProps> = ({ employee
   const { company } = useCompany();
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState<PeriodDetail[]>([]);
+  // Os recibos que a CD publicou pra esta pessoa (pedido do Victor, 10/09/2026).
+  const [recibos, setRecibos] = useState<MeuRecibo[]>([]);
 
   useEffect(() => {
     if (!company?.id) return;
@@ -54,6 +58,17 @@ export const EmployeeErrorsView: React.FC<EmployeeErrorsViewProps> = ({ employee
     return () => { cancelled = true; };
   }, [employeeId, company?.id]);
 
+  // Busca PRÓPRIA, não junto com os erros: um recibo que não carrega não pode
+  // esconder os erros, nem o contrário — são duas informações independentes.
+  useEffect(() => {
+    if (!company?.id) return;
+    let cancelled = false;
+    getMeusRecibos(employeeId, company.id)
+      .then((rs) => { if (!cancelled) setRecibos(rs); })
+      .catch((err) => console.error('Erro ao carregar os recibos:', err));
+    return () => { cancelled = true; };
+  }, [employeeId, company?.id]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -64,16 +79,22 @@ export const EmployeeErrorsView: React.FC<EmployeeErrorsViewProps> = ({ employee
 
   if (details.length === 0) {
     return (
-      <div className="mx-4 my-6 p-6 bg-green-50 border-2 border-green-200 rounded-xl text-center">
-        <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2" />
-        <p className="font-semibold text-green-800 text-lg">Nenhum erro registrado</p>
-        <p className="text-sm text-green-700 mt-1">Continue assim!</p>
+      <div className="px-4 py-4 space-y-4">
+        <div className="p-6 bg-green-50 border-2 border-green-200 rounded-xl text-center">
+          <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2" />
+          <p className="font-semibold text-green-800 text-lg">Nenhum erro registrado</p>
+          <p className="text-sm text-green-700 mt-1">Continue assim!</p>
+        </div>
+        {/* Quem nunca errou também recebe recibo — por isso o bloco vem aqui
+            TAMBÉM, e não só embaixo da lista de erros. */}
+        <ListaDeRecibos recibos={recibos} />
       </div>
     );
   }
 
   return (
     <div className="px-4 py-4 space-y-4">
+      <ListaDeRecibos recibos={recibos} />
       {details.map(detail => {
         const total = detail.total_individual + detail.total_triage;
         const isOpen = detail.period.status === 'open';
@@ -165,6 +186,61 @@ export const EmployeeErrorsView: React.FC<EmployeeErrorsViewProps> = ({ employee
         <AlertTriangle className="w-3 h-3" />
         Os valores de desconto serão informados no pagamento.
       </p>
+    </div>
+  );
+};
+
+/**
+ * OS RECIBOS DE PAGAMENTO QUE A CD PUBLICOU PRA ESTA PESSOA.
+ *
+ * Pedido do Victor (10/09/2026): *"coloca também pra esse espelho, esses PDF, ele
+ * aparecer na aba de erros do funcionário, pra gente poder publicar lá pra eles"*.
+ *
+ * O link é ASSINADO e de curta duração (vem da edge fn, o arquivo fica num bucket
+ * privado). Por isso abre em aba nova na hora, e não é um endereço pra guardar.
+ */
+const ListaDeRecibos: React.FC<{ recibos: MeuRecibo[] }> = ({ recibos }) => {
+  if (recibos.length === 0) return null;
+  return (
+    <div className="border-2 border-green-200 rounded-xl bg-white overflow-hidden">
+      <div className="bg-green-50 px-4 py-3 border-b border-green-200 flex items-center gap-2">
+        <FileText className="w-5 h-5 text-green-700 flex-shrink-0" />
+        <p className="font-semibold text-gray-900">
+          Meus recibos de pagamento
+          <span className="ml-1.5 text-xs font-normal text-gray-600">({recibos.length})</span>
+        </p>
+      </div>
+      <div className="divide-y divide-gray-100">
+        {recibos.map((r) => (
+          <div key={r.id} className="px-4 py-3 flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-gray-900 text-sm">{r.titulo}</p>
+              <p className="text-xs text-gray-500">
+                {formatDateBR(r.periodStart)} a {formatDateBR(r.periodEnd)}
+                {r.totalNet !== null && (
+                  <> · <b className="text-green-700">
+                    {r.totalNet.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </b></>
+                )}
+              </p>
+            </div>
+            {r.url ? (
+              <a
+                href={r.url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700 whitespace-nowrap flex-shrink-0"
+              >
+                <ExternalLink size={15} /> Abrir
+              </a>
+            ) : (
+              /* O arquivo sumiu do bucket: dizer isso é melhor que um botão que
+                 abre uma página de erro sem explicação. */
+              <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+                indisponível
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

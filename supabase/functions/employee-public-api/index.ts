@@ -574,6 +574,65 @@ async function employeeErrorsByPeriod(body: Body): Promise<Response> {
   });
 }
 
+// ─── Recibos de pagamento publicados pro funcionario (11/09/2026) ────────────
+//
+// Pedido do Victor: o PDF do recibo aparece na aba de erros dele. O bucket
+// `payment-receipts` e PRIVADO e o funcionario nao tem JWT — por isso o link vem
+// ASSINADO daqui, com validade curta, e nunca do bucket direto.
+//
+// Mesmo nivel de confianca de `employee-errors-by-period`, que ja devolve o valor
+// descontado dele: filtro ESTRITO por employee_id + company_id, e so.
+async function employeeReceipts(body: Body): Promise<Response> {
+  const employeeId = String(body.employeeId ?? '').trim();
+  const companyId = String(body.companyId ?? '').trim();
+  if (!employeeId || !companyId) return json({ error: 'Invalid employeeId or companyId' }, 400);
+
+  const { data: rows, error } = await supabase
+    .from('payment_receipt_publications')
+    .select('id, titulo, period_start, period_end, total_net, delivered_at, pdf_path')
+    .eq('employee_id', employeeId)
+    .eq('company_id', companyId)
+    .order('period_end', { ascending: false });
+  if (error) return json({ error: 'Database error (receipts)', details: error.message }, 500);
+  if (!rows || rows.length === 0) return json({ receipts: [] });
+
+  type Row = {
+    id: string; titulo: string; period_start: string; period_end: string;
+    total_net: number | null; delivered_at: string; pdf_path: string;
+  };
+
+  const receipts = await Promise.all((rows as Row[]).map(async (r) => {
+    // 10 minutos: tempo de abrir e baixar, sem virar link que circula por ai.
+    const { data: signed } = await supabase.storage
+      .from('payment-receipts')
+      .createSignedUrl(r.pdf_path, 600);
+    return {
+      id: r.id,
+      titulo: r.titulo,
+      periodStart: r.period_start,
+      periodEnd: r.period_end,
+      totalNet: r.total_net === null ? null : Number(r.total_net),
+      deliveredAt: r.delivered_at,
+      // `null` quando o arquivo sumiu do bucket: a tela mostra o recibo como
+      // indisponivel em vez de um link quebrado.
+      url: signed?.signedUrl ?? null,
+    };
+  }));
+
+  // Marca como visto na PRIMEIRA abertura — e so nela, pra guardar a data real
+  // em que o funcionario viu o papel.
+  const naoVistos = (rows as Row[]).map((r) => r.id);
+  if (naoVistos.length > 0) {
+    await supabase
+      .from('payment_receipt_publications')
+      .update({ viewed_at: new Date().toISOString() })
+      .in('id', naoVistos)
+      .is('viewed_at', null);
+  }
+
+  return json({ receipts });
+}
+
 async function employeeErrorPeriods(body: Body): Promise<Response> {
   const employeeId = String(body.employeeId ?? '').trim();
   const companyId = String(body.companyId ?? '').trim();
@@ -649,6 +708,7 @@ Deno.serve(async (req) => {
       case 'log-face-attempt': return await logFaceAttempt(body);
       case 'employee-errors-by-period': return await employeeErrorsByPeriod(body);
       case 'employee-error-periods': return await employeeErrorPeriods(body);
+      case 'employee-receipts': return await employeeReceipts(body);
       default: return json({ error: `Unknown action: ${body.action}` }, 400);
     }
   } catch (err) {

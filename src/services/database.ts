@@ -5473,3 +5473,133 @@ function _toPreviewItem(
     appliedAt: preview.appliedAt,
   };
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// RECIBO DE PAGAMENTO PUBLICADO PRO FUNCIONÁRIO (Etapa 2, 11/09/2026)
+//
+// Pedido do Victor (10/09/2026): o PDF do recibo aparece na aba de erros do
+// funcionário, pra "lançar pra eles". E BAIXAR ≠ PUBLICAR — *"pode deixar
+// separado mesmo"*: dá pra conferir o papel antes de mandar.
+//
+// Molde: o espelho publicado do driverpay (`publishDriverMirror`) — bucket
+// PRIVADO + tabela de publicação + link assinado. O funcionário não tem JWT, por
+// isso o link vem pela edge fn `employee-public-api`, nunca do bucket direto.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Bucket PRIVADO dos recibos (migration 20260911050000). */
+const PAYMENT_RECEIPTS_BUCKET = 'payment-receipts';
+
+export interface PublicarReciboInput {
+  companyId: string;
+  employeeId: string;
+  /** ISO `YYYY-MM-DD` */
+  periodStart: string;
+  periodEnd: string;
+  /** "SETEMBRO/2026", "Semana 2 (08 – 14/09)" — como o funcionário vê na lista. */
+  titulo: string;
+  /** O líquido impresso no papel, pra conferência depois. */
+  totalNet: number;
+  pdf: Blob;
+  /** Quem publicou (id do usuário do painel). */
+  userId: string;
+}
+
+/**
+ * Sobe o PDF e registra a publicação. Republicar o MESMO período da MESMA pessoa
+ * SUBSTITUI (o `upsert` bate na unique): corrigir um valor não pode virar dois
+ * recibos diferentes na tela dela sem saber qual vale.
+ */
+export const publicarReciboDePagamento = async (i: PublicarReciboInput): Promise<void> => {
+  const path = `${i.companyId}/${i.periodStart}_${i.periodEnd}/${i.employeeId}.pdf`;
+
+  const { error: upErr } = await supabase.storage
+    .from(PAYMENT_RECEIPTS_BUCKET)
+    .upload(path, i.pdf, { contentType: 'application/pdf', upsert: true });
+  if (upErr) {
+    // A mensagem crua do storage ("new row violates row-level security policy")
+    // não diz o que fazer. Se a policy do bucket ainda não foi aplicada, é ISSO
+    // que está faltando — e quem lê o toast precisa saber onde está o remédio.
+    const cru = upErr.message || '';
+    throw new Error(
+      /policy|permission|unauthorized/i.test(cru)
+        ? 'Sem permissão pra subir o recibo. Se é a primeira vez, falta aplicar a policy do bucket "payment-receipts" (está no fim de supabase/migrations/20260911050000_payment_receipt_publications.sql).'
+        : `Falha ao subir o PDF do recibo: ${cru}`,
+    );
+  }
+
+  const { error } = await supabase
+    .from('payment_receipt_publications')
+    .upsert([{
+      company_id: i.companyId,
+      employee_id: i.employeeId,
+      period_start: i.periodStart,
+      period_end: i.periodEnd,
+      titulo: i.titulo,
+      pdf_path: path,
+      total_net: Math.round(i.totalNet * 100) / 100,
+      delivered_at: new Date().toISOString(),
+      delivered_by: i.userId,
+      // Republicado = recibo novo: a pessoa precisa ver de novo, não ficar com o
+      // "já visto" de um papel que mudou.
+      viewed_at: null,
+    }], { onConflict: 'company_id,employee_id,period_start,period_end' });
+  if (error) throw new Error(`Falha ao registrar o recibo publicado: ${error.message}`);
+};
+
+/** Um recibo já publicado, como o painel precisa ver (selo "no app"). */
+export interface ReciboPublicado {
+  employeeId: string;
+  periodStart: string;
+  periodEnd: string;
+  titulo: string;
+  deliveredAt: string;
+  viewedAt: string | null;
+}
+
+/** Quem, DESTE período, já recebeu o recibo — pro painel mostrar o selo. */
+export const listarRecibosPublicados = async (
+  companyId: string,
+  periodStart: string,
+  periodEnd: string,
+): Promise<ReciboPublicado[]> => {
+  const { data, error } = await supabase
+    .from('payment_receipt_publications')
+    .select('employee_id, period_start, period_end, titulo, delivered_at, viewed_at')
+    .eq('company_id', companyId)
+    .eq('period_start', periodStart)
+    .eq('period_end', periodEnd);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => ({
+    employeeId: r.employee_id as string,
+    periodStart: r.period_start as string,
+    periodEnd: r.period_end as string,
+    titulo: r.titulo as string,
+    deliveredAt: r.delivered_at as string,
+    viewedAt: (r.viewed_at as string | null) ?? null,
+  }));
+};
+
+/** O recibo como o FUNCIONÁRIO recebe: com link assinado, pronto pra abrir. */
+export interface MeuRecibo {
+  id: string;
+  titulo: string;
+  periodStart: string;
+  periodEnd: string;
+  totalNet: number | null;
+  deliveredAt: string;
+  /** URL assinada, de curta duração. `null` quando o arquivo sumiu do bucket. */
+  url: string | null;
+}
+
+/**
+ * Os recibos publicados pra este funcionário. Vai pela edge fn porque ele não tem
+ * JWT — mesmo caminho de `getEmployeeErrorPeriods`, que já entrega os erros dele.
+ */
+export const getMeusRecibos = async (
+  employeeId: string,
+  companyId: string,
+): Promise<MeuRecibo[]> => {
+  const data = await callEmployeePublicApi<{ receipts: MeuRecibo[] }>(
+    'employee-receipts', { employeeId, companyId },
+  );
+  return data.receipts ?? [];
+};
