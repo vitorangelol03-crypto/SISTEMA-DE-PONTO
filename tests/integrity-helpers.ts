@@ -25,7 +25,8 @@ function uniqueCpf(): string {
 export interface CreateEmployeeOpts {
   name: string;
   withPix?: boolean;
-  employmentType?: 'CLT' | 'PJ' | 'Diarista' | 'Carteira Assinada';
+  /** Só os dois que o sistema entende de verdade (ver o default abaixo). */
+  employmentType?: 'Diarista' | 'Carteira Assinada';
   pin?: string;
   /**
    * 04/09/2026: `require_facial_clock` (trava dura de rosto+geo em toda
@@ -47,7 +48,10 @@ export async function createTestEmployee(opts: CreateEmployeeOpts): Promise<stri
   const row: Record<string, unknown> = {
     name: opts.name,
     cpf,
-    employment_type: opts.employmentType ?? 'CLT',
+    // 11/09/2026: era 'CLT', valor que o CHECK do banco aceita mas o sistema
+    // NÃO entende (os filtros e as gavetas só conhecem 'Diarista' e 'Carteira
+    // Assinada'). Fixtures assim poluíam a contagem de vínculo em produção.
+    employment_type: opts.employmentType ?? 'Diarista',
     created_by: '9999',
   };
   if (opts.withPix !== false) {

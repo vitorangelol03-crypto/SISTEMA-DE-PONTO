@@ -122,16 +122,32 @@ describe('parseDate', () => {
 // ─── normalizeEmploymentType ──────────────────────────────────────────────
 
 describe('normalizeEmploymentType', () => {
-  it('15. "clt" → "CLT" (case-insensitive)', () => {
-    expect(normalizeEmploymentType('clt')).toBe('CLT');
+  // 🔴 11/09/2026 — estes três exigiam que 'CLT' e 'PJ' fossem GRAVADOS como
+  // 'CLT' e 'PJ'. O CHECK do banco aceita, mas o resto do sistema não entende
+  // esses dois valores: os filtros, as gavetas e o carimbo do pagamento só
+  // conhecem 'Diarista' e 'Carteira Assinada'. Quem entrava assim ficava
+  // INVISÍVEL — aconteceu com 22 pessoas da Ponte Nova. Agora a planilha aceita
+  // as quatro palavras, mas o que é gravado são só as duas de verdade.
+  // A tradução é do Victor: "PJ é diarista também".
+  it('15. "clt" → "Carteira Assinada" (case-insensitive)', () => {
+    expect(normalizeEmploymentType('clt')).toBe('Carteira Assinada');
   });
 
-  it('16. "CLT" → "CLT"', () => {
-    expect(normalizeEmploymentType('CLT')).toBe('CLT');
+  it('16. 🎯 "CLT" da planilha vira "Carteira Assinada"', () => {
+    expect(normalizeEmploymentType('CLT')).toBe('Carteira Assinada');
   });
 
-  it('17. "PJ" → "PJ"', () => {
-    expect(normalizeEmploymentType('PJ')).toBe('PJ');
+  it('17. 🎯 "PJ" da planilha vira "Diarista" (regra do Victor)', () => {
+    expect(normalizeEmploymentType('PJ')).toBe('Diarista');
+  });
+
+  it('17b. o que é gravado NUNCA é um valor que o sistema não entende', () => {
+    for (const entrada of ['CLT', 'clt', 'PJ', 'pj', 'Diarista', 'diarista',
+                           'Carteira Assinada', 'carteira assinada']) {
+      const saida = normalizeEmploymentType(entrada);
+      expect(['Diarista', 'Carteira Assinada'], `"${entrada}" virou "${saida}"`)
+        .toContain(saida);
+    }
   });
 
   it('18. "freelancer" → null (não bate enum do banco)', () => {
@@ -305,10 +321,10 @@ describe('validateImportRow - warnings', () => {
     expect(r.warnings.some((w) => w.code === 'function_empty')).toBe(true);
   });
 
-  it('45. employment_type "freelancer" → warning + parsed.employment_type = CLT (default)', () => {
+  it('45. 🎯 tipo desconhecido → aviso + "Diarista" (o padrão era CLT, que sumia dos filtros)', () => {
     const r = validateImportRow(validRow({ employment_type: 'freelancer' }), 2, defaultContext());
     expect(r.warnings.some((w) => w.code === 'employment_type_invalid')).toBe(true);
-    expect(r.parsed.employment_type).toBe('CLT');
+    expect(r.parsed.employment_type).toBe('Diarista');
   });
 
   it('46. schedule_type "Plantão Especial" → warning, mas mantém valor', () => {

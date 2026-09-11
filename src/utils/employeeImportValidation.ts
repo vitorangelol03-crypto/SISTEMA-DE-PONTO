@@ -10,7 +10,9 @@
  * - WARNING não bloqueia (linha entra, mas com aviso pra revisão humana)
  *
  * Enums espelham os CHECK constraints REAIS do Postgres:
- * - employment_type: 'CLT' | 'PJ' | 'Diarista' | 'Carteira Assinada' (case-sensitive)
+ * - employment_type: a planilha aceita 'CLT', 'PJ', 'Diarista' ou 'Carteira
+ *   Assinada' (sem ligar pra maiúscula), mas o que é GRAVADO são só os dois que
+ *   o sistema entende: CLT → Carteira Assinada, PJ → Diarista.
  * - pix_type:        'CPF' | 'Email' | 'Telefone' | 'Aleatória'      (case-sensitive, COM acento)
  * - marking_count:   2 | 4
  *
@@ -40,7 +42,8 @@ export interface ParsedEmployee {
   cpf: string;
   pix_key?: string;
   pix_type?: 'CPF' | 'Email' | 'Telefone' | 'Aleatória';
-  employment_type?: 'CLT' | 'PJ' | 'Diarista' | 'Carteira Assinada';
+  /** Só os dois que o sistema entende. 'CLT' e 'PJ' da planilha são traduzidos. */
+  employment_type?: 'Diarista' | 'Carteira Assinada';
   address?: string;
   neighborhood?: string;
   city?: string;
@@ -175,17 +178,29 @@ export function parseDate(input: string | Date | number | null | undefined): str
 }
 
 /**
- * Match estrito com os 4 valores do CHECK constraint do Postgres.
- * Aceita case insensitive na entrada e capitaliza pra forma canônica.
+ * O vínculo da planilha vira um dos DOIS valores que o sistema entende.
+ *
+ * 🔴 POR QUE ISTO MUDOU (11/09/2026): o CHECK do Postgres aceita QUATRO valores
+ * ('CLT', 'PJ', 'Diarista', 'Carteira Assinada'), mas o resto do sistema só
+ * conhece dois — 'Diarista' e 'Carteira Assinada'. São eles que a ficha oferece
+ * no menu, que os filtros procuram, que as gavetas do Financeiro contam e que o
+ * pagamento carimba.
+ *
+ * Resultado: quem entrava como 'CLT' ou 'PJ' ficava INVISÍVEL — não aparecia em
+ * nenhum dos dois filtros, e nas gavetas caía como diarista por descuido do
+ * código. Aconteceu de verdade com 22 funcionários da Ponte Nova.
+ *
+ * A tradução vem do Victor (11/09/2026): **"PJ é diarista também"**, e CLT é
+ * carteira assinada — que é como os 17 CLT de Caratinga já estavam gravados.
  */
 export function normalizeEmploymentType(
   input: string,
-): 'CLT' | 'PJ' | 'Diarista' | 'Carteira Assinada' | null {
+): 'Diarista' | 'Carteira Assinada' | null {
   if (!input) return null;
   const trimmed = input.trim();
   const upper = trimmed.toUpperCase();
-  if (upper === 'CLT') return 'CLT';
-  if (upper === 'PJ') return 'PJ';
+  if (upper === 'CLT') return 'Carteira Assinada';
+  if (upper === 'PJ') return 'Diarista';
   const lower = trimmed.toLowerCase();
   if (lower === 'diarista') return 'Diarista';
   if (lower === 'carteira assinada') return 'Carteira Assinada';
@@ -360,12 +375,15 @@ export function validateImportRow(
     if (norm) {
       parsed.employment_type = norm;
     } else {
+      // ⚠️ O padrão era 'CLT' — justo o valor que SOME de todos os filtros.
+      // Agora é 'Diarista', que é o vínculo da esmagadora maioria e o mesmo que
+      // o cadastro público já aplica. (11/09/2026.)
       warnings.push({
         field: 'employment_type',
         code: 'employment_type_invalid',
-        message: `Tipo desconhecido: "${empTypeRaw}". Default 'CLT' aplicado. Aceitos: CLT, PJ, Diarista, Carteira Assinada`,
+        message: `Tipo desconhecido: "${empTypeRaw}". Aplicado 'Diarista'. Aceitos: Diarista, Carteira Assinada (CLT vira Carteira Assinada, PJ vira Diarista)`,
       });
-      parsed.employment_type = 'CLT';
+      parsed.employment_type = 'Diarista';
     }
   }
 
