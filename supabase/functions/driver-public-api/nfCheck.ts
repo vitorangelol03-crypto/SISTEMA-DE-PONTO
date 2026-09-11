@@ -396,3 +396,114 @@ export function nfSplitSlices(total: number, _form: NfSplitForm = '50'): [number
   const first = Math.round(cents / 2);
   return [first / 100, (cents - first) / 100];
 }
+
+/**
+ * Reparte o LÍQUIDO entre os CNPJs tomadores — decisão do Victor (10/09/2026):
+ * **desconta no que tem o maior valor**.
+ *
+ * ⚠️ Esta conta existe nos DOIS lados (aqui, pro valor que a nota tem que ter, e em
+ * `src/utils/nfSplit.ts`, pro valor que o relatório paga) e `tests/unit/nfSplit.spec.ts`
+ * roda as duas LADO A LADO. Se divergirem, o entregador emite um valor e recebe outro —
+ * foi exatamente o buraco achado em 10/09: o app tirava o vale de CADA CNPJ e o
+ * relatório tirava só do maior, e a diferença ficava sem nota nenhuma.
+ *
+ * O tomador de maior bruto absorve sozinho tudo que não é de um CNPJ específico (o
+ * vale/perda). Não cabendo nele, transborda pro próximo — nunca deixa bloco negativo
+ * enquanto houver de onde tirar. A soma das partes é SEMPRE o líquido.
+ */
+export function repartirLiquidoPorTomador(
+  brutos: ReadonlyArray<{ emitterId: string; bruto: number }>,
+  liquidoDaUnidade: number,
+): Array<{ emitterId: string; total: number }> {
+  if (brutos.length === 0) return [];
+  const ordenados = [...brutos].sort(
+    (a, b) => b.bruto - a.bruto || (a.emitterId < b.emitterId ? -1 : a.emitterId > b.emitterId ? 1 : 0),
+  );
+  const cents = ordenados.map((t) => ({ emitterId: t.emitterId, c: Math.round(t.bruto * 100) }));
+  const somaBrutos = cents.reduce((s, t) => s + t.c, 0);
+  let ajuste = Math.round(liquidoDaUnidade * 100) - somaBrutos;
+
+  if (ajuste >= 0) {
+    cents[0].c += ajuste;
+  } else {
+    for (const t of cents) {
+      if (ajuste === 0) break;
+      const cabe = Math.min(t.c, -ajuste);
+      t.c -= cabe;
+      ajuste += cabe;
+    }
+    if (ajuste !== 0) cents[0].c += ajuste;
+  }
+  return cents.map((t) => ({ emitterId: t.emitterId, total: t.c / 100 }));
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * O TOTAL DAQUELE CNPJ, PRA DIVIDIR EM DUAS NOTAS  (10/09/2026, Victor)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * A divisão passou a ser DENTRO de um CNPJ tomador ("a Shopee não pode misturar
+ * com a nota que vai no CNPJ da iMile"). Então a fatia é metade do total DAQUELE
+ * CNPJ — nunca mais metade do total combinado, que era o que gerava a mistura.
+ *
+ * Qual dos candidatos é "o total daquele CNPJ"? Na ordem:
+ *  1. o espelho DAQUELE slot — é o papel que o entregador tem na mão;
+ *  2. o espelho, quando só existe um valor de espelho possível;
+ *  3. a soma daquele CNPJ com vale/perda abatido;
+ *  4. a soma daquele CNPJ sem abate;
+ *  5. o líquido (só existe quando a pessoa não tem outro CNPJ na quinzena).
+ *
+ * Devolve null quando não há base nenhuma — e aí o app NÃO oferece dividir, em vez
+ * de oferecer um número chutado (a regra do Victor: nunca aceitar valor errado
+ * começa por nunca MOSTRAR valor errado).
+ */
+export function escolherTotalDoCnpj(
+  cands: Record<string, number>,
+  porEspelho: Record<string, number>,
+  mirrorKey: string | null,
+): number | null {
+  const valido = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
+
+  // 1. o espelho deste slot
+  if (mirrorKey !== null && valido(porEspelho[mirrorKey])) return porEspelho[mirrorKey];
+
+  // 2. espelho único
+  const doEspelho = Object.entries(cands)
+    .filter(([k, v]) => k.startsWith('espelho_') && valido(v))
+    .map(([, v]) => v);
+  const distintos = [...new Set(doEspelho)];
+  if (distintos.length === 1) return distintos[0];
+
+  // 3-5. os fallbacks, na ordem de confiança
+  for (const chave of [
+    'somaCnpj_grupo_abatido', 'somaCnpj_individual_abatido',
+    'somaCnpj_grupo', 'somaCnpj_individual',
+    'liquido_grupo', 'liquido_individual',
+  ]) {
+    if (valido(cands[chave])) return cands[chave];
+  }
+  return null;
+}
+
+/**
+ * Os valores que a PARTE 1 da dupla pode ter: metade de cada total legítimo
+ * daquele CNPJ (10/09/2026).
+ *
+ * Aceitar a fatia de QUALQUER candidato do CNPJ é o mesmo grau de tolerância que a
+ * nota inteira já tem hoje (espelho baixado antes do desconto entrar, etc.) — o que
+ * mudou é que nenhum desses candidatos mistura CNPJ. Devolve, junto de cada fatia,
+ * o total de onde ela saiu: é ele que a parte 2 usa pra cobrar o que falta.
+ */
+export function fatiasDaParte1(
+  cands: Record<string, number>,
+  slices: (total: number) => [number, number],
+): { candidatos: Record<string, number>; totalPorCandidato: Record<string, number> } {
+  const candidatos: Record<string, number> = {};
+  const totalPorCandidato: Record<string, number> = {};
+  for (const [label, total] of Object.entries(cands)) {
+    if (typeof total !== 'number' || !Number.isFinite(total) || total <= 0) continue;
+    const chave = `${label}_parte1`;
+    candidatos[chave] = slices(total)[0];
+    totalPorCandidato[chave] = total;
+  }
+  return { candidatos, totalPorCandidato };
+}

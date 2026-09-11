@@ -11,6 +11,9 @@ import {
   normText,
   runNfCheck,
   ehNossoEspelho,
+  escolherTotalDoCnpj,
+  fatiasDaParte1,
+  nfSplitSlices,
 } from '../../supabase/functions/driver-public-api/nfCheck';
 
 const CNPJ_CD = '11802464000138';
@@ -462,5 +465,77 @@ describe('runNfCheck — quem EMITE a nota: nome + CNPJ cadastrados (05/09/2026)
     });
     expect(r.status).toBe('ok');
     expect(r.matchedNames).toEqual(['WILLKERSON MOISES DORNELAS BATISTA']);
+  });
+});
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * O TOTAL PRA DIVIDIR É O DAQUELE CNPJ  (10/09/2026, decisão do Victor)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * A regra que veio da Shopee/iMile: "não pode misturar". O que o sistema fazia até
+ * 09/09 era somar os dois CNPJs e cortar no meio — e é exatamente isso que estes
+ * testes impedem de voltar.
+ */
+describe('escolherTotalDoCnpj — de onde sai a fatia', () => {
+  it('o espelho DAQUELE slot manda (é o papel que o entregador tem na mão)', () => {
+    const total = escolherTotalDoCnpj(
+      { somaCnpj_grupo: 14476, espelho_group_LOGGI: 316.8 },
+      { LOGGI: 316.8, '': 15980.6 },
+      'LOGGI',
+    );
+    expect(total).toBe(316.8);
+  });
+
+  it('sem espelho do slot, o abatido ganha do bruto (o espelho imprime já abatido)', () => {
+    expect(escolherTotalDoCnpj(
+      { somaCnpj_grupo: 14476, somaCnpj_grupo_abatido: 14376 }, {}, null,
+    )).toBe(14376);
+  });
+
+  it('só a soma do CNPJ: é ela', () => {
+    expect(escolherTotalDoCnpj({ somaCnpj_grupo: 14476 }, {}, null)).toBe(14476);
+  });
+
+  it('espelhos com valores DIFERENTES e nenhum slot: não chuta, cai na soma do CNPJ', () => {
+    expect(escolherTotalDoCnpj(
+      { espelho_group_SHOPEE: 8000, espelho_group_LOGGI: 316.8, somaCnpj_grupo: 8316.8 }, {}, null,
+    )).toBe(8316.8);
+  });
+
+  it('sem base nenhuma: devolve null (o app não oferece dividir em vez de chutar)', () => {
+    expect(escolherTotalDoCnpj({}, {}, null)).toBeNull();
+    expect(escolherTotalDoCnpj({ somaCnpj_grupo: 0 }, {}, null)).toBeNull();
+  });
+
+  it('🎯 nenhum candidato mistura CNPJ: o total combinado do caso Gessiley não existe aqui', () => {
+    // Shopee 14.476,00 e iMile 1.504,60 — cada CNPJ pede o SEU total, e 15.980,60
+    // (a soma, que gerou as notas erradas de 06/09) não é resposta pra nenhum deles.
+    expect(escolherTotalDoCnpj({ somaCnpj_grupo: 14476 }, {}, null)).toBe(14476);
+    expect(escolherTotalDoCnpj({ somaCnpj_grupo: 1504.6 }, {}, null)).toBe(1504.6);
+  });
+});
+
+describe('fatiasDaParte1 — os valores que a 1ª nota pode ter', () => {
+  const slices = (t: number) => nfSplitSlices(t, '50');
+
+  it('cada total legítimo do CNPJ vira uma fatia, e guarda de onde veio', () => {
+    const { candidatos, totalPorCandidato } = fatiasDaParte1(
+      { somaCnpj_grupo: 14476, somaCnpj_grupo_abatido: 14376 }, slices,
+    );
+    expect(candidatos).toEqual({ somaCnpj_grupo_parte1: 7238, somaCnpj_grupo_abatido_parte1: 7188 });
+    expect(totalPorCandidato.somaCnpj_grupo_parte1).toBe(14476);
+    expect(totalPorCandidato.somaCnpj_grupo_abatido_parte1).toBe(14376);
+  });
+
+  it('🔴 a metade do total COMBINADO não é fatia aceita de CNPJ nenhum', () => {
+    const { candidatos } = fatiasDaParte1({ somaCnpj_grupo: 14476 }, slices);
+    expect(Object.values(candidatos)).not.toContain(7990.3); // o que passou errado em 06/09
+  });
+
+  it('total zerado ou inválido não vira candidato (nada de aceitar R$ 0,00)', () => {
+    const { candidatos } = fatiasDaParte1(
+      { somaCnpj_grupo: 0, liquido_grupo: Number.NaN, espelho_group_cheio: 100 }, slices,
+    );
+    expect(Object.keys(candidatos)).toEqual(['espelho_group_cheio_parte1']);
   });
 });

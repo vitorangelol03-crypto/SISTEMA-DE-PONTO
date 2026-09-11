@@ -115,6 +115,10 @@ export interface NfSlot {
   /**
    * Nota dividida (19/08/2026): a PRIMEIRA nota da dupla já chegou e a segunda
    * tem até `expiresAt` pra vir. Ausente/null = nenhuma dupla em andamento.
+   *
+   * 10/09/2026: vem no MESMO cartão onde a 1ª caiu — a dupla acontece dentro de um
+   * CNPJ só (antes o aviso ia pro outro CNPJ, que era a mistura que a Shopee e a
+   * iMile recusam).
    */
   splitOpen?: {
     form: string;
@@ -123,8 +127,25 @@ export interface NfSlot {
     expiresAt: string;
     /** Nome do emissor que assinou a 1ª nota (07/09/2026). Null = nota sem emissor casado. */
     part1Issuer?: string | null;
-    /** CNPJ (só dígitos) da 1ª — a 2ª tem que ser de OUTRO. */
+    /** CNPJ (só dígitos) da 1ª — a 2ª tem que ser de OUTRA pessoa. */
     part1Cnpj?: string | null;
+  } | null;
+  /**
+   * Este cartão está TRAVADO porque há uma dupla em andamento em outro CNPJ
+   * (10/09/2026, decisão do Victor: um CNPJ de cada vez). A tela mostra o porquê em
+   * vez de deixar a pessoa clicar e tomar erro.
+   */
+  splitBlocked?: {
+    /** Em qual CNPJ a dupla começou ("Shopee/Anjun/Loggi"). */
+    emitterLabel: string | null;
+    /** E em qual espelho ("SOMENTE LOGGI"), pra achar o cartão certo quando o mesmo
+     *  CNPJ tem mais de um. */
+    mirrorLabel?: string | null;
+    /** A dupla começou NESTE mesmo CNPJ (só em outro espelho)? Muda o texto. */
+    mesmoCnpj?: boolean;
+    /** Quanto falta na 2ª nota de lá. */
+    remaining: number | null;
+    expiresAt: string;
   } | null;
 }
 export interface NfFile {
@@ -195,9 +216,11 @@ export function driverNfUpload(
  * "cada nota deve ter R$ X e R$ Y" ANTES do driver escolher (exigência do Victor).
  */
 export function driverNfSplitPreview(
-  periodId: string, emitterId: string, token: string,
+  periodId: string, emitterId: string, token: string, mirrorKey?: string | null,
 ): Promise<{ total: number; forms: Record<'50', [number, number]>; windowMinutes: number }> {
-  return callDriverApi('nf-split-preview', { periodId, emitterId }, token);
+  // 10/09/2026: `emitterId` e `mirrorKey` passaram a MANDAR no valor — o total é o
+  // daquele CNPJ (e daquele espelho), não mais a soma de todos os CNPJs.
+  return callDriverApi('nf-split-preview', { periodId, emitterId, mirrorKey }, token);
 }
 
 // ─── Espelho do app da Shopee (print da tela) — 04/08/2026 ───────────────────

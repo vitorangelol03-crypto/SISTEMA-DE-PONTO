@@ -65,7 +65,7 @@ describe('splitRecipientsFromNotes — quem recebe cada metade sai das notas', (
       nota('d1', 'g1', 1, 'Joaerson Antônio de Freitas'),
       nota('d1', 'g1', 2, 'GESSILEY RODRIGUES DE FREITAS'),
     ], CADASTRO);
-    expect(m.get('d1')).toEqual([
+    expect(m.get('d1')?.get('')).toEqual([
       { name: 'Joaerson Antônio de Freitas', pix: 'pix-joaerson' },
       // sem PIX cadastrado → cai no CNPJ dele
       { name: 'GESSILEY RODRIGUES DE FREITAS', pix: '51.046.418/0001-70' },
@@ -102,7 +102,7 @@ describe('splitRecipientsFromNotes — quem recebe cada metade sai das notas', (
       { ...nota('d1', 'g1', 1, 'Joaerson Antônio de Freitas'), matchedCnpj: '55857717000146' },
       { ...nota('d1', 'g1', 2, 'Joaerson Antônio de Freitas'), matchedCnpj: '51046418000170' },
     ], doisCnpjsMesmoNome);
-    expect(m.get('d1')).toEqual([
+    expect(m.get('d1')?.get('')).toEqual([
       { name: 'Joaerson Antônio de Freitas', pix: 'pix-do-primeiro' },
       { name: 'Joaerson Antônio de Freitas', pix: 'pix-do-segundo' },
     ]);
@@ -113,8 +113,8 @@ describe('splitRecipientsFromNotes — quem recebe cada metade sai das notas', (
       { ...nota('d1', 'g1', 1, 'Joaerson Antônio de Freitas'), matchedCnpj: null },
       { ...nota('d1', 'g1', 2, 'GESSILEY RODRIGUES DE FREITAS'), matchedCnpj: null },
     ], CADASTRO);
-    expect(m.get('d1')?.[0].pix).toBe('pix-joaerson');
-    expect(m.get('d1')?.[1].pix).toBe('51.046.418/0001-70');
+    expect(m.get('d1')?.get('')?.[0].pix).toBe('pix-joaerson');
+    expect(m.get('d1')?.get('')?.[1].pix).toBe('51.046.418/0001-70');
   });
 
   it('CNPJ da nota fora do cadastro: cai no nome (não fica sem chave)', () => {
@@ -122,7 +122,7 @@ describe('splitRecipientsFromNotes — quem recebe cada metade sai das notas', (
       { ...nota('d1', 'g1', 1, 'Joaerson Antônio de Freitas'), matchedCnpj: '99999999000199' },
       { ...nota('d1', 'g1', 2, 'GESSILEY RODRIGUES DE FREITAS'), matchedCnpj: null },
     ], CADASTRO);
-    expect(m.get('d1')?.[0].pix).toBe('pix-joaerson');
+    expect(m.get('d1')?.get('')?.[0].pix).toBe('pix-joaerson');
   });
 
   it('nome com acento/caixa diferente ainda acha o PIX no cadastro', () => {
@@ -130,7 +130,7 @@ describe('splitRecipientsFromNotes — quem recebe cada metade sai das notas', (
       nota('d1', 'g1', 1, 'JOAERSON ANTONIO DE FREITAS'),
       nota('d1', 'g1', 2, 'GESSILEY RODRIGUES DE FREITAS'),
     ], CADASTRO);
-    expect(m.get('d1')?.[0].pix).toBe('pix-joaerson');
+    expect(m.get('d1')?.get('')?.[0].pix).toBe('pix-joaerson');
   });
 });
 
@@ -192,5 +192,148 @@ describe('relatório GERAL com nota dividida', () => {
     const comValor = out.filter((r) => r.totalToReceive > 0);
     expect(comValor).toHaveLength(1);
     expect(comValor[0].totalToReceive).toBe(960);
+  });
+});
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * A DIVISÃO É POR CNPJ — E SAEM 4 PAGAMENTOS  (10/09/2026, decisão do Victor)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * "Se dividir os dois CNPJ vai sair quatro pagamentos no relatório simples."
+ * Números REAIS do GESSILEY: Shopee/Anjun/Loggi R$ 14.476,00 + iMile R$ 1.504,60.
+ */
+describe('pagamento dividido POR CNPJ tomador', () => {
+  const EM_SHOPEE = 'em-shopee';
+  const EM_IMILE = 'em-imile';
+  const EMITTER_OF = new Map([['SHOPEE', EM_SHOPEE], ['eMile', EM_IMILE]]);
+  /** Uma unidade com os dois CNPJs, nos valores reais do caso. */
+  const DOIS_CNPJS = [
+    row('p1', 'd1', 'Lider Um', 'G', [
+      rl('Caratinga', { SHOPEE: 1, eMile: 1 }, { SHOPEE: 14476, eMile: 1504.6 }),
+    ]),
+  ];
+  const notaEm = (
+    emitterId: string, splitGroup: string, splitPart: number, matchedName: string,
+  ) => ({ driverId: 'd1', splitGroup, splitPart, matchedName, status: 'validada', emitterId });
+
+  const duplaShopee = [
+    notaEm(EM_SHOPEE, 'gs', 1, 'Joaerson Antônio de Freitas'),
+    notaEm(EM_SHOPEE, 'gs', 2, 'GESSILEY RODRIGUES DE FREITAS'),
+  ];
+  const duplaImile = [
+    notaEm(EM_IMILE, 'gi', 1, 'Joaerson Antônio de Freitas'),
+    notaEm(EM_IMILE, 'gi', 2, 'GESSILEY RODRIGUES DE FREITAS'),
+  ];
+
+  it('as duplas ficam separadas por CNPJ (uma da Shopee, outra da iMile)', () => {
+    const m = splitRecipientsFromNotes([...duplaShopee, ...duplaImile], CADASTRO);
+    expect(m.get('d1')?.size).toBe(2);
+    expect(m.get('d1')?.get(EM_SHOPEE)?.[0].name).toBe('Joaerson Antônio de Freitas');
+    expect(m.get('d1')?.get(EM_IMILE)?.[1].name).toBe('GESSILEY RODRIGUES DE FREITAS');
+  });
+
+  it('🎯 dividiu os DOIS CNPJs: 4 pagamentos, e a soma continua fechando', () => {
+    const split = splitRecipientsFromNotes([...duplaShopee, ...duplaImile], CADASTRO);
+    const out = buildSimpleReportRows(DOIS_CNPJS, LEADER_MAP, {
+      splitRecipientsByLeader: split, platformEmitterOf: EMITTER_OF,
+    });
+    expect(out).toHaveLength(4);
+    expect(out.map((r) => r.total).sort((a, b) => b - a)).toEqual([7238, 7238, 752.3, 752.3]);
+    expect(Math.round(out.reduce((s, r) => s + r.total, 0) * 100) / 100).toBe(15980.6);
+    // 🔴 o valor da mistura de 06/09 não pode aparecer em pagamento nenhum
+    expect(out.map((r) => r.total)).not.toContain(7990.3);
+  });
+
+  it('dividiu SÓ a Shopee: 3 linhas — a iMile inteira continua com o líder', () => {
+    const split = splitRecipientsFromNotes(duplaShopee, CADASTRO);
+    const out = buildSimpleReportRows(DOIS_CNPJS, LEADER_MAP, {
+      splitRecipientsByLeader: split, platformEmitterOf: EMITTER_OF,
+    });
+    expect(out).toHaveLength(3);
+    expect(out[0]).toEqual({ name: 'Lider Um', total: 1504.6, pix: 'pix-do-lider' });
+    expect(out[1].total).toBe(7238);
+    expect(out[2].total).toBe(7238);
+  });
+
+  it('vale/perda sai do CNPJ de MAIOR valor (decisão do Victor)', () => {
+    const comVale = [
+      {
+        ...DOIS_CNPJS[0],
+        vales: [{ id: 'v1', amount: 100, description: null }],
+      } as unknown as DriverRowData,
+    ];
+    const split = splitRecipientsFromNotes([...duplaShopee, ...duplaImile], CADASTRO);
+    const out = buildSimpleReportRows(comVale, LEADER_MAP, {
+      splitRecipientsByLeader: split, platformEmitterOf: EMITTER_OF,
+    });
+    // Shopee 14.476 − 100 = 14.376 → 7.188 + 7.188; iMile intacta → 752,30 + 752,30
+    expect(out.map((r) => r.total).sort((a, b) => b - a)).toEqual([7188, 7188, 752.3, 752.3]);
+    expect(Math.round(out.reduce((s, r) => s + r.total, 0) * 100) / 100).toBe(15880.6);
+  });
+
+  it('sem o mapa de plataformas, nada quebra: cai numa linha só', () => {
+    const split = splitRecipientsFromNotes([...duplaShopee, ...duplaImile], CADASTRO);
+    const out = buildSimpleReportRows(DOIS_CNPJS, LEADER_MAP, { splitRecipientsByLeader: split });
+    expect(out).toHaveLength(1);
+    expect(out[0].total).toBe(15980.6);
+  });
+
+  it('relatório GERAL: as 3 notas extras viram linhas próprias numeradas', () => {
+    const split = splitRecipientsFromNotes([...duplaShopee, ...duplaImile], CADASTRO);
+    const out = buildLeaderReportRows(DOIS_CNPJS, [plat('SHOPEE'), plat('eMile')], LEADER_MAP, {
+      splitRecipientsByLeader: split, platformEmitterOf: EMITTER_OF,
+    });
+    const comValor = out.filter((r) => r.totalToReceive > 0);
+    expect(comValor).toHaveLength(4);
+    expect(comValor.slice(1).map((r) => r.route)).toEqual(['(2ª nota)', '(3ª nota)', '(4ª nota)']);
+    expect(Math.round(comValor.reduce((s, r) => s + r.totalToReceive, 0) * 100) / 100).toBe(15980.6);
+    // as linhas extras não inventam pacote
+    for (const r of comValor.slice(1)) expect(r.totalPackages).toBe(0);
+  });
+});
+
+/**
+ * Achados da revisão adversarial de 10/09/2026 — os casos que quase foram pro ar.
+ */
+describe('bordas achadas na revisão de 10/09', () => {
+  const EM_SHOPEE = 'em-shopee';
+  const EM_IMILE = 'em-imile';
+  const EMITTER_OF = new Map([['SHOPEE', EM_SHOPEE], ['eMile', EM_IMILE]]);
+  const notaEm = (emitterId: string, g: string, part: number, nome: string) =>
+    ({ driverId: 'd1', splitGroup: g, splitPart: part, matchedName: nome, status: 'validada', emitterId });
+
+  it('🔴 bloco zerado pelo vale NÃO vira duas linhas de R$ 0,00 no arquivo do banco', () => {
+    // Shopee 1.000 (dividida) + iMile 200 (inteira), vale de 1.000 → a Shopee zera.
+    const linha = {
+      ...row('p1', 'd1', 'Lider Um', 'G', [
+        rl('Caratinga', { SHOPEE: 1, eMile: 1 }, { SHOPEE: 1000, eMile: 200 }),
+      ]),
+      vales: [{ id: 'v1', amount: 1000, description: null }],
+    } as unknown as DriverRowData;
+    const split = splitRecipientsFromNotes([
+      notaEm(EM_SHOPEE, 'gs', 1, 'Joaerson Antônio de Freitas'),
+      notaEm(EM_SHOPEE, 'gs', 2, 'GESSILEY RODRIGUES DE FREITAS'),
+    ], CADASTRO);
+    const out = buildSimpleReportRows([linha], LEADER_MAP, {
+      splitRecipientsByLeader: split, platformEmitterOf: EMITTER_OF,
+    });
+    // banco recusa linha zerada: sobra só o que tem valor de verdade
+    expect(out.every((r) => r.total > 0), 'nenhuma linha de R$ 0,00').toBe(true);
+    expect(Math.round(out.reduce((s, r) => s + r.total, 0) * 100) / 100).toBe(200);
+  });
+
+  it('dupla do desenho ANTIGO (uma parte em cada CNPJ) não divide pagamento', () => {
+    // Era o desenho de 04–09/09. As partes caem em tomadores diferentes, então nenhum
+    // par fecha — e o pagamento sai numa linha só, no PIX do líder, sem inventar metade.
+    const split = splitRecipientsFromNotes([
+      notaEm(EM_SHOPEE, 'gx', 1, 'Joaerson Antônio de Freitas'),
+      notaEm(EM_IMILE, 'gx', 2, 'GESSILEY RODRIGUES DE FREITAS'),
+    ], CADASTRO);
+    expect(split.get('d1')?.get(EM_SHOPEE)).toBeUndefined();
+    const out = buildSimpleReportRows(GRUPO, LEADER_MAP, {
+      splitRecipientsByLeader: split, platformEmitterOf: EMITTER_OF,
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0].total).toBe(960);
   });
 });

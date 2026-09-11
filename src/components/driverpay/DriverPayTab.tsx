@@ -1453,6 +1453,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       // Nota dividida (05/09/2026): quem emitiu cada metade recebe a metade dela, na
       // chave PIX dele. Só quando a dupla está completa — senão paga numa linha só.
       splitRecipientsByLeader: splitRecipientsFromNotes(nfFiles, notaNames),
+      // 10/09/2026: a divisão é POR CNPJ tomador, então o relatório precisa saber de
+      // qual CNPJ é cada plataforma pra dividir cada bloco separadamente.
+      platformEmitterOf: new Map(platforms.map((p) => [p.name, p.nota_emitter_id])),
     };
     const filterLabel = opts.allowed && opts.allowed.length > 0 ? opts.allowed.join(' + ') : null;
     const scopedPlatformNames = (opts.allowed && opts.allowed.length > 0

@@ -60,3 +60,6 @@ prints-grade/
 
 # Marcador temporario criado pelo cleanup dos testes E2E (tests/cleanup.ts)
 tests/.suite-start.tmp
+
+# Canvas de design gerado (derivado dos .dc.html em design/, ~2.5MB)
+historico-pagamentos-financeiro.html

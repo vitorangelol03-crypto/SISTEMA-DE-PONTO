@@ -2,6 +2,27 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
+> **📌 SESSÃO 10/09 — A NOTA DIVIDIDA VIROU DE LADO (pronta, NÃO no ar).**
+> Ordem do Victor, vinda da Shopee e da iMile: *"a Shopee não pode misturar com a nota
+> que vai no CNPJ da iMile, e vice-versa"*. De 04/09 a 09/09 o sistema fazia exatamente
+> o contrário — somava os dois CNPJs, cortava no meio e mandava **uma metade pra cada
+> tomador**. Medido no caso real (GESSILEY, 06/09, única dupla do banco): Shopee valia
+> **R$ 14.476,00** e iMile **R$ 1.504,60**, e saíram duas notas de **R$ 7.990,30** —
+> **R$ 6.485,70 da Shopee faturados dentro da nota da iMile**. Agora cada CNPJ é um
+> bloco fechado: o valor DELE é que se divide entre as duas pessoas cadastradas, e
+> dividindo os dois saem **4 notas** (7.238 + 7.238 · 752,30 + 752,30). A trava do
+> backend **inverteu** (exigia tomadores diferentes → exige o MESMO tomador e pessoas
+> diferentes) e `buildComboTotal` foi **removida**. Na tela do entregador a escolha
+> "inteira ou dividida" saiu do topo e foi **pra dentro de cada cartão**, com o valor
+> daquele CNPJ na frente; com uma dupla correndo, o outro cartão fica **travado
+> dizendo o porquê** (decisão dele: um CNPJ de cada vez, 30 min cada). Pagamento segue
+> as notas: **4 linhas** no relatório, com vale/perda descontado **no CNPJ de maior
+> valor** (decisão dele). ⏳ **Falta:** deploy da edge fn + push + apagar as 2 notas do
+> Gessiley pra ele refazer — os três esperando o OK. ⚠️ **Armadilha nova:**
+> `--no-isolate` no vitest **faz mock vazar entre arquivos** (49 falhas fantasmas em
+> `mirrorPdf`/`employeeImportRoundtrip`; passam 58/58 sem a flag). Detalhe em
+> **`CHECKPOINT_SESSAO_2026-09-10.md`**.
+>
 > **📌 SESSÃO 09/09 ENCERRADA.** Estado completo, pendências, decisões fechadas e as
 > armadilhas da máquina estão em **`CHECKPOINT_SESSAO_2026-09-09.md` §15** — ao retomar,
 > leia este topo e depois o §15, nessa ordem.

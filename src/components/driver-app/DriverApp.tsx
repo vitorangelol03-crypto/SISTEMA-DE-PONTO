@@ -34,6 +34,14 @@ function fmtDate(iso: string | null): string {
 function fmtBRL(v: number): string {
   return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+/**
+ * A chave de um cartão de nota: espelho + CNPJ. É a MESMA vaga que o robô controla
+ * (`slotKey` na edge fn) — cada cartão é uma nota independente, e desde 10/09/2026
+ * também uma escolha independente de emitir inteira ou dividida.
+ */
+function nfCardKey(s: { mirrorKey: string | null; emitterId: string }): string {
+  return `${s.mirrorKey ?? '*'}|${s.emitterId}`;
+}
 function fmtHora(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -152,15 +160,18 @@ export function DriverApp() {
   // Quem pode emitir nota por este motorista (nome + CNPJ) — a tela mostra a lista
   // pro driver saber ANTES de emitir (pedido do Victor, 05/09/2026).
   const [nfIssuers, setNfIssuers] = useState<NfIssuer[]>([]);
-  // Como ele vai emitir esta quinzena (05/09/2026): a escolha aparece logo ao abrir
-  // a tela, antes de qualquer botão de enviar. `null` = ainda não escolheu.
-  const [nfMode, setNfMode] = useState<'integral' | 'dividir' | null>(null);
-  // Valores exatos da divisão meio a meio, vindos do robô — a MESMA conta que confere.
-  const [splitInfo, setSplitInfo] = useState<{ total: number; slices: [number, number] } | null>(null);
+  // Como ele vai emitir CADA NOTA (10/09/2026 — antes era uma escolha só pra
+  // quinzena inteira). A divisão é dentro de um CNPJ: "a Shopee não pode misturar
+  // com a nota que vai no CNPJ da iMile". Então quem escolhe inteira ou dividida é
+  // cada cartão, separadamente. Chave = a mesma do slot (espelho|CNPJ).
+  const [nfMode, setNfMode] = useState<Record<string, 'integral' | 'dividir'>>({});
+  // Valores exatos da divisão meio a meio de CADA cartão, vindos do robô — a MESMA
+  // conta que confere a nota. Sem valor = a opção de dividir nem aparece naquele cartão.
+  const [splitInfo, setSplitInfo] = useState<Record<string, { total: number; slices: [number, number] }>>({});
   // Emissores que REALMENTE dá pra usar na divisão: a dupla exige um CNPJ em cada
   // nota, então quem está sem CNPJ cadastrado não conta (07/09/2026).
   const cnpjsAutorizados = nfIssuers.filter((i) => (i.cnpj ?? '').replace(/\D/g, '').length === 14);
-  /** O emissor que AINDA falta na dupla — o que não é o CNPJ da 1ª nota. */
+  /** A pessoa que AINDA falta emitir na dupla — a que não assinou a 1ª nota. */
   const outroEmissorQue = (cnpjDaPrimeira: string | null): NfIssuer | null => {
     const um = (cnpjDaPrimeira ?? '').replace(/\D/g, '');
     if (um.length !== 14) return null;
@@ -292,19 +303,24 @@ export function DriverApp() {
       const habilitado = slotsRes.splitEnabled === true;
       setSplitEnabled(habilitado);
       setNfIssuers(slotsRes.issuers ?? []);
-      // Quem não pode dividir não escolhe nada: é sempre nota por CNPJ.
-      setNfMode(habilitado ? null : 'integral');
-      // Busca os valores da divisão já na abertura da tela — a escolha aparece com o
-      // número na frente, sem o driver ter que clicar em nada antes.
+      // A escolha de cada cartão NÃO é zerada aqui de propósito: `loadNf` também roda
+      // depois de cada envio (inclusive depois de uma recusa), e zerar faria a pessoa
+      // reescolher "dividir" pra reenviar a nota. Quem zera é o `openNf`, ao abrir a tela.
+      // Busca o valor de CADA cartão já na abertura — a escolha aparece com o número
+      // na frente, sem o driver ter que clicar em nada antes. Um pedido por CNPJ:
+      // cada nota vale o daquele CNPJ, nunca a soma dos dois.
       if (habilitado && slotsRes.slots.length > 0) {
-        try {
-          const prev = await driverNfSplitPreview(periodId, slotsRes.slots[0].emitterId, token);
-          setSplitInfo({ total: prev.total, slices: prev.forms['50'] });
-        } catch {
-          setSplitInfo(null); // sem valor calculado ainda: some a opção de dividir
-        }
+        const previews = await Promise.all(slotsRes.slots.map(async (sl) => {
+          try {
+            const prev = await driverNfSplitPreview(periodId, sl.emitterId, token, sl.mirrorKey);
+            return [nfCardKey(sl), { total: prev.total, slices: prev.forms['50'] }] as const;
+          } catch {
+            return null; // sem valor calculado ainda: some a opção de dividir NESSE cartão
+          }
+        }));
+        setSplitInfo(Object.fromEntries(previews.filter((x): x is NonNullable<typeof x> => x !== null)));
       } else {
-        setSplitInfo(null);
+        setSplitInfo({});
       }
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
@@ -315,6 +331,7 @@ export function DriverApp() {
   function openNf(m: DriverMirror) {
     setNfCtx({ periodId: m.periodId, periodLabel: m.periodLabel });
     setScreen('nf');
+    setNfMode({}); // abriu a tela: cada cartão começa sem escolha feita
     loadNf(m.periodId);
   }
 
@@ -786,71 +803,43 @@ export function DriverApp() {
             </div>
           )}
 
-          {/* ── COMO VOCÊ VAI EMITIR (05/09/2026, pedido do Victor) ──
-              Aparece já na abertura da tela, antes de qualquer botão de enviar, e só
-              pra quem a CD habilitou a dividir. Junto vão o aviso do CNPJ diferente e
-              QUEM pode emitir (nome + CNPJ cadastrados) — o driver fica ciente antes
-              de emitir, em vez de descobrir na recusa. */}
-          {splitEnabled && nfSlots !== null && nfSlots.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
-              <div className="font-semibold text-gray-800 text-sm">Como você vai emitir as notas desta quinzena?</div>
-              <div className="space-y-2">
-                <button type="button"
-                  onClick={() => setNfMode('integral')}
-                  className={`w-full rounded-lg border-2 px-3 py-2.5 text-left ${nfMode === 'integral' ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-                  <div className="text-sm font-semibold text-gray-800">Notas no valor integral</div>
-                  <div className="text-xs text-gray-600">
-                    Uma nota por CNPJ, cada uma com o valor daquele CNPJ:{' '}
-                    {nfSlots.map((s) => s.label).join(' e ')}.
-                  </div>
-                </button>
-                {splitInfo && (
-                  <button type="button"
-                    onClick={() => setNfMode('dividir')}
-                    className={`w-full rounded-lg border-2 px-3 py-2.5 text-left ${nfMode === 'dividir' ? 'border-amber-500 bg-amber-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-                    <div className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                      <Scissors size={14} /> Dividir em 2 notas (metade cada)
-                    </div>
-                    <div className="text-xs text-gray-600">
-                      Total de {fmtBRL(splitInfo.total)} dividido no meio:{' '}
-                      <b>{fmtBRL(splitInfo.slices[0])}</b> + <b>{fmtBRL(splitInfo.slices[1])}</b>.
-                    </div>
-                  </button>
-                )}
-              </div>
+          {/* ── QUEM PODE EMITIR (05/09/2026 — reescrito em 10/09/2026) ──
+              A escolha "inteira ou dividida" SAIU daqui e foi pra dentro de cada
+              cartão: a divisão passou a ser dentro de um CNPJ, e cada CNPJ tem o
+              seu próprio valor. O que fica aqui é quem pode assinar — isso vale
+              pra todos os cartões. */}
+          {splitEnabled && nfSlots !== null && nfSlots.length > 0 && nfIssuers.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm p-4 space-y-2">
+              <div className="font-semibold text-gray-800 text-sm">Quem pode emitir as suas notas</div>
+              <ul className="text-xs text-gray-700 space-y-0.5">
+                {nfIssuers.map((i) => (
+                  <li key={i.name}>
+                    • <b>{i.name}</b>{i.cnpj ? <> — CNPJ {i.cnpj}</> : <span className="text-red-600"> — sem CNPJ cadastrado, avise a CD</span>}
+                  </li>
+                ))}
+              </ul>
               <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                {/* 07/09/2026: o aviso deixou de ser genérico e passou a NOMEAR os dois
-                    CNPJs. Antes dizia só "tem que ser CNPJ diferente" e o driver emitia
-                    as duas no mesmo — o backend agora recusa, e emitir errado custa
-                    cancelamento na Receita. */}
-                ⚠️ <b>Uma nota em cada CNPJ.</b>{' '}
-                {cnpjsAutorizados.length >= 2 ? (
-                  <>Uma no CNPJ de <b>{cnpjsAutorizados[0].name}</b> e a outra no de{' '}
-                  <b>{cnpjsAutorizados[1].name}</b>. As duas no mesmo CNPJ são recusadas.</>
-                ) : (
-                  <>As duas no mesmo CNPJ são recusadas.</>
-                )}
+                {/* 10/09/2026: dizia "cada CNPJ abaixo", logo depois de listar os CNPJs das
+                    PESSOAS acima — e quem lia entendia "cada pessoa emite a nota dela", que
+                    é justamente a regra velha que a Shopee e a iMile recusam. Agora nomeia
+                    o CARTÃO, que é a coisa que a pessoa vê logo abaixo. */}
+                ⚠️ <b>Cada cartão abaixo é uma nota separada.</b> Cada um tem o CNPJ de
+                destino e o valor dele — o valor de um <b>nunca</b> entra na nota do outro.
+                Se você dividir, as <b>duas notas ficam no mesmo cartão</b>: uma pessoa
+                emite a 1ª e a outra emite a 2ª.
               </div>
-              {nfIssuers.length > 0 && (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                  <div className="text-xs font-semibold text-gray-700 mb-1">A nota tem que ser emitida por:</div>
-                  <ul className="text-xs text-gray-700 space-y-0.5">
-                    {nfIssuers.map((i) => (
-                      <li key={i.name}>
-                        • <b>{i.name}</b>{i.cnpj ? <> — CNPJ {i.cnpj}</> : <span className="text-red-600"> — sem CNPJ cadastrado, avise a CD</span>}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="text-[11px] text-gray-500 mt-1">
-                    Nome ou CNPJ diferente destes = nota recusada.
-                  </div>
-                </div>
-              )}
+              <div className="text-[11px] text-gray-500">Nome ou CNPJ diferente destes = nota recusada.</div>
             </div>
           )}
 
-          {nfSlots?.map((s) => (
-            <div key={`${s.mirrorKey ?? '*'}|${s.emitterId}`} className="bg-white rounded-xl shadow-sm p-4">
+          {nfSlots?.map((s) => {
+            const k = nfCardKey(s);
+            const info = splitInfo[k];
+            const modo = nfMode[k];
+            const podeEscolher = splitEnabled && info !== undefined;
+            const dividindo = modo === 'dividir' && info !== undefined;
+            return (
+            <div key={k} className="bg-white rounded-xl shadow-sm p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   {/* 28/07: com 2 espelhos no mesmo CNPJ, o driver precisa saber
@@ -863,33 +852,40 @@ export function DriverApp() {
                   <div className="font-semibold text-gray-800">{s.label}</div>
                   <div className="text-xs text-gray-500">CNPJ {s.cnpj}</div>
                 </div>
-                {s.sent > 0 && (
+                {s.sent > 0 && !s.splitOpen && (
                   <span className="shrink-0 inline-flex items-center gap-1 text-green-600 text-xs font-medium">
                     <CheckCircle2 size={14} /> {s.sent} enviada{s.sent > 1 ? 's' : ''}
                   </span>
                 )}
               </div>
+
+              {/* 10/09/2026: o valor DESTE CNPJ aparece de cara, antes de qualquer
+                  botão — é o número que a nota tem que ter. */}
+              {info && s.sent === 0 && !s.splitOpen && !s.splitBlocked && (
+                <div className="mt-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-900">
+                  Valor desta nota: <b>{fmtBRL(info.total)}</b>
+                </div>
+              )}
+
               {s.sent === 0 && s.rejected > 0 && (
                 <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                   <b>Nota recusada.</b>{s.rejectReason ? ` Motivo: ${s.rejectReason}.` : ''}
                   {' '}Envie outra.
                 </div>
               )}
+
               {/* UMA NOTA POR VAGA (05/08 → revisto 04/09/2026). Só nota ENVIADA
-                  (recebida/validada) segura o lugar e esconde o botão — a edge fn
-                  recusa o reenvio com 409 nesse caso. Nota RECUSADA não segura mais:
-                  o botão de enviar continua aparecendo (banner acima já mostra o
-                  motivo). NOTA DIVIDIDA (19/08 → cross-CNPJ desde 04/09): dupla em
-                  andamento aparece aqui, no CNPJ que AINDA falta — o CNPJ onde a 1ª
-                  já caiu mostra só "Nota enviada" (mais abaixo). */}
+                  (recebida/validada) segura o lugar e esconde o botão. Nota RECUSADA
+                  não segura: o botão continua aparecendo (o banner acima diz o motivo).
+                  NOTA DIVIDIDA (10/09/2026): a dupla acontece DENTRO deste cartão —
+                  a 1ª já conta em `sent`, e por isso o aviso da 2ª vem ANTES do
+                  "Nota enviada", senão o cartão diria que acabou faltando metade. */}
               {s.splitOpen ? (
                 <>
                   <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    <b>1ª nota recebida{s.splitOpen.part1Issuer ? ` — emitida por ${s.splitOpen.part1Issuer}` : ' (outro CNPJ)'}{s.splitOpen.part1Value !== null ? `, de ${fmtBRL(s.splitOpen.part1Value)}` : ''}.</b>
-                    {' '}Envie a 2ª AQUI{s.splitOpen.remaining !== null ? <>, de <b>{fmtBRL(s.splitOpen.remaining)}</b>,</> : ''} até{' '}
-                    <b>{fmtHora(s.splitOpen.expiresAt)}</b>. Passou da hora, as duas caem e você reenvia a dupla.
-                    {/* 07/09/2026: diz QUAL CNPJ falta em vez de "tem que ser outro" — a
-                        2ª no mesmo CNPJ da 1ª é recusada pelo servidor. */}
+                    <b>1ª nota recebida{s.splitOpen.part1Issuer ? ` — emitida por ${s.splitOpen.part1Issuer}` : ''}{s.splitOpen.part1Value !== null ? `, de ${fmtBRL(s.splitOpen.part1Value)}` : ''}.</b>
+                    {' '}Falta a 2ª{s.splitOpen.remaining !== null ? <>, de <b>{fmtBRL(s.splitOpen.remaining)}</b>,</> : ''} aqui neste
+                    mesmo CNPJ, até <b>{fmtHora(s.splitOpen.expiresAt)}</b>. Passou da hora, as duas caem e você reenvia a dupla.
                     {(() => {
                       const falta = outroEmissorQue(s.splitOpen?.part1Cnpj ?? null);
                       return falta ? (
@@ -900,11 +896,11 @@ export function DriverApp() {
                       ) : null;
                     })()}
                   </div>
-                  <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer'}`}>
-                    {nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}` ? <Spinner /> : <><Upload size={16} /> Enviar 2ª nota{s.splitOpen.remaining !== null ? ` (${fmtBRL(s.splitOpen.remaining)})` : ''}</>}
+                  <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === k ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer'}`}>
+                    {nfUploading === k ? <Spinner /> : <><Upload size={16} /> Enviar 2ª nota{s.splitOpen.remaining !== null ? ` (${fmtBRL(s.splitOpen.remaining)})` : ''}</>}
                     <input
                       type="file" accept="application/pdf" className="hidden"
-                      disabled={nfUploading === `${s.mirrorKey ?? '*'}|${s.emitterId}`}
+                      disabled={nfUploading === k}
                       onChange={(e) => { handleNfFile(s, e.target.files?.[0], { form: '50', part: 2 }); e.currentTarget.value = ''; }}
                     />
                   </label>
@@ -913,46 +909,88 @@ export function DriverApp() {
                 <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs text-gray-600 text-center">
                   <b className="text-green-700">Nota enviada.</b> Precisa trocar? Peça à CD para excluir a atual.
                 </div>
-              ) : (() => {
-                const k = `${s.mirrorKey ?? '*'}|${s.emitterId}`;
-                // Habilitado que ainda não disse COMO vai emitir: nada de botão de
-                // enviar (05/09/2026 — era mandando pelo botão errado que o driver
-                // queimava nota de verdade).
-                if (splitEnabled && nfMode === null) {
-                  return (
-                    <div className="mt-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2.5 text-xs text-gray-600 text-center">
-                      Escolha lá em cima como você vai emitir — inteira ou dividida — pra liberar o envio.
+              ) : s.splitBlocked ? (
+                /* 10/09/2026 (decisão do Victor: um CNPJ de cada vez): tem dupla
+                   correndo em outro cartão. A tela DIZ isso — antes a pessoa clicava
+                   aqui e só descobria pelo erro do servidor. */
+                <div className="mt-3 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-xs text-gray-700">
+                  {/* 10/09: dizia só o nome do CNPJ — e com 2 espelhos no MESMO CNPJ o texto
+                      apontava pro próprio cartão que a pessoa estava olhando. Agora nomeia o
+                      espelho junto, que é o que diferencia os dois cartões. */}
+                  <b>Termine as duas notas do cartão{' '}
+                    {s.splitBlocked.emitterLabel ?? 'do outro CNPJ'}
+                    {s.splitBlocked.mirrorLabel ? ` — ${s.splitBlocked.mirrorLabel}` : ''} primeiro.</b>
+                  {' '}Falta{s.splitBlocked.remaining !== null ? <> a 2ª de <b>{fmtBRL(s.splitBlocked.remaining)}</b></> : ' a 2ª nota'} lá,
+                  até <b>{fmtHora(s.splitBlocked.expiresAt)}</b>. Depois disso este aqui libera.
+                </div>
+              ) : (
+                <>
+                  {/* ── COMO EMITIR ESTA NOTA (10/09/2026) ──
+                      Fica dentro do cartão porque a escolha é por CNPJ: dá pra mandar
+                      a Shopee dividida e a iMile inteira, sem misturar valor nenhum. */}
+                  {podeEscolher && (
+                    <div className="mt-3 space-y-2">
+                      <div className="text-xs font-semibold text-gray-700">Como você vai emitir esta nota?</div>
+                      <button type="button"
+                        onClick={() => setNfMode((m) => ({ ...m, [k]: 'integral' }))}
+                        className={`w-full rounded-lg border-2 px-3 py-2.5 text-left ${modo === 'integral' ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                        <div className="text-sm font-semibold text-gray-800">Uma nota só</div>
+                        <div className="text-xs text-gray-600">No valor cheio: <b>{fmtBRL(info!.total)}</b>.</div>
+                      </button>
+                      <button type="button"
+                        onClick={() => setNfMode((m) => ({ ...m, [k]: 'dividir' }))}
+                        className={`w-full rounded-lg border-2 px-3 py-2.5 text-left ${modo === 'dividir' ? 'border-amber-500 bg-amber-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                        <div className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                          <Scissors size={14} /> Dividir em 2 notas
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          <b>{fmtBRL(info!.slices[0])}</b> + <b>{fmtBRL(info!.slices[1])}</b>, as duas neste mesmo CNPJ.
+                        </div>
+                      </button>
                     </div>
-                  );
-                }
-                const dividindo = nfMode === 'dividir' && splitInfo !== null;
-                return (
-                  <>
-                    {dividindo && (
-                      <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                        Esta nota tem que ser de <b>{fmtBRL(splitInfo!.slices[0])}</b>, emitida contra o CNPJ{' '}
-                        <b>{s.cnpj}</b> ({s.label}). A outra, do mesmo valor, vai no <b>OUTRO CNPJ</b>.
-                        <br /><b>⏰ Você tem 30 minutos</b> para enviar a segunda depois da primeira.
-                      </div>
-                    )}
-                    <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === k ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
-                      {nfUploading === k ? <Spinner /> : (
-                        <><Upload size={16} /> {dividindo ? `Enviar nota de ${fmtBRL(splitInfo!.slices[0])}` : 'Enviar PDF da nota'}</>
+                  )}
+
+                  {podeEscolher && modo === undefined ? (
+                    <div className="mt-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2.5 text-xs text-gray-600 text-center">
+                      Escolha uma das duas opções acima pra liberar o envio.
+                    </div>
+                  ) : (
+                    <>
+                      {dividindo && (
+                        <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          Esta 1ª nota tem que ser de <b>{fmtBRL(info!.slices[0])}</b>, contra o CNPJ{' '}
+                          <b>{s.cnpj}</b> ({s.label}).
+                          {' '}A 2ª, de <b>{fmtBRL(info!.slices[1])}</b>, vai <b>neste mesmo CNPJ</b>.
+                          {/* 10/09: antes dizia "emitida pela OUTRA pessoa (Fulano e Beltrano)",
+                              citando as duas como se fossem uma. Como a 1ª ainda nem foi enviada,
+                              o certo é dizer que cada uma emite uma. */}
+                          {cnpjsAutorizados.length >= 2 && (
+                            <> Uma delas emite a 1ª e a outra emite a 2ª — <b>{cnpjsAutorizados[0].name}</b>
+                            {' '}e <b>{cnpjsAutorizados[1].name}</b>, em qualquer ordem.</>
+                          )}
+                          <br /><b>⏰ Você tem 30 minutos</b> para enviar a segunda depois da primeira.
+                        </div>
                       )}
-                      <input
-                        type="file" accept="application/pdf" className="hidden" disabled={nfUploading === k}
-                        onChange={(e) => {
-                          handleNfFile(s, e.target.files?.[0], dividindo ? { form: '50', part: 1 } : undefined);
-                          e.currentTarget.value = '';
-                        }}
-                      />
-                    </label>
-                    <p className="mt-1.5 text-[11px] text-gray-400 text-center">Somente arquivo PDF — foto não é aceita.</p>
-                  </>
-                );
-              })()}
+                      <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === k ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
+                        {nfUploading === k ? <Spinner /> : (
+                          <><Upload size={16} /> {dividindo ? `Enviar 1ª nota de ${fmtBRL(info!.slices[0])}` : 'Enviar PDF da nota'}</>
+                        )}
+                        <input
+                          type="file" accept="application/pdf" className="hidden" disabled={nfUploading === k}
+                          onChange={(e) => {
+                            handleNfFile(s, e.target.files?.[0], dividindo ? { form: '50', part: 1 } : undefined);
+                            e.currentTarget.value = '';
+                          }}
+                        />
+                      </label>
+                      <p className="mt-1.5 text-[11px] text-gray-400 text-center">Somente arquivo PDF — foto não é aceita.</p>
+                    </>
+                  )}
+                </>
+              )}
             </div>
-          ))}
+            );
+          })}
 
           {nfFiles.length > 0 && (
             <div className="pt-2">

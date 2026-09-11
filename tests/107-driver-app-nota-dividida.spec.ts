@@ -5,14 +5,22 @@ import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
 /**
  * E2E — NOTA DIVIDIDA no portal do entregador, com CLIQUES REAIS e PDFs de verdade.
  *
- * Pedido do Victor em 05/09/2026 ("valida isso de ponta a ponta, não quero ter dor de
- * cabeça com isso mais"), depois de 4 idas e vindas no mesmo assunto no mesmo dia:
+ * 🔴 REESCRITO EM 10/09/2026 — A DIVISÃO VIROU DE LADO.
+ * A Shopee e a iMile não aceitam nota misturada: "a Shopee não pode misturar com a
+ * nota que vai no CNPJ da iMile, e vice-versa". Até 09/09 a dupla era UMA METADE EM
+ * CADA TOMADOR, sobre o total somado — o que jogava dinheiro de um CNPJ na nota do
+ * outro (caso real do GESSILEY em 06/09). Agora a divisão é DENTRO de um CNPJ: o
+ * valor daquele CNPJ, partido entre as DUAS PESSOAS cadastradas.
  *
- *   1. quem está habilitado escolhe, JÁ ao abrir a tela, entre nota integral e dividida
- *   2. a divisão é sempre meio a meio, uma fatia por CNPJ (o 70/30 deixou de existir)
- *   3. a tela avisa que cada nota vai num CNPJ DIFERENTE e mostra QUEM pode emitir
- *   4. a conferência recusa valor errado, nome errado e CNPJ de emitente errado
- *   5. a nota do LÍDER tem que cobrir o GRUPO (a parte só dele não vale)
+ * O que este arquivo prova:
+ *   1. cada CARTÃO (CNPJ) escolhe sozinho entre nota inteira e dividida, com o valor
+ *      DAQUELE CNPJ na frente
+ *   2. a divisão é meio a meio dentro do CNPJ, sempre
+ *   3. 🎯 a metade do total COMBINADO — o valor que o sistema mandava emitir até
+ *      09/09 — passou a ser RECUSADA
+ *   4. a 2ª nota tem que ser do MESMO CNPJ tomador e de OUTRA pessoa
+ *   5. com uma dupla em andamento, o outro CNPJ fica travado (um de cada vez)
+ *   6. a nota do LÍDER tem que cobrir o GRUPO (a parte só dele não vale)
  *
  * ⚠️ Fala com a edge fn `driver-public-api` DEPLOYADA — é o único jeito de provar a
  * conferência de verdade (ela roda lá). PDF com texto de verdade (jsPDF), não fixture.
@@ -20,8 +28,9 @@ import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
  * Cenário (números escolhidos pra dividir redondo):
  *   líder  : eMile 150 × R$ 2,00 = R$ 300,00  ·  SHOPEE 200 × R$ 2,20 = R$ 440,00
  *   membro : SHOPEE 100 × R$ 2,20 = R$ 220,00
- *   → grupo: iMile R$ 300,00 + Shopee/Anjun/Loggi R$ 660,00 = R$ 960,00
- *   → dividido meio a meio: R$ 480,00 em cada CNPJ
+ *   → iMile = R$ 300,00 (dividido: 150 + 150)
+ *   → Shopee/Anjun/Loggi = R$ 660,00 (dividido: 330 + 330)
+ *   → R$ 480,00 (metade do combinado) NÃO é valor válido de nota nenhuma
  */
 
 const RUN = Date.now().toString(36);
@@ -37,8 +46,13 @@ const EMISSOR_A = { nome: `${PREF}Emissor Um ${RUN}`, cnpj: '12.345.678/0001-95'
 const EMISSOR_B = { nome: `${PREF}Emissor Dois ${RUN}`, cnpj: '98.765.432/0001-10' };
 
 const TOTAL_GRUPO = 960.0;
-const FATIA = 480.0;
-const SO_DO_LIDER_SHOPEE = 440.0; // o valor que o sistema aceitava errado até hoje
+const TOTAL_SHOPEE = 660.0;   // 200×2,20 do líder + 100×2,20 do membro
+const TOTAL_IMILE = 300.0;    // 150×2,00 do líder
+const FATIA_SHOPEE = 330.0;
+const FATIA_IMILE = 150.0;
+/** 🔴 A metade do total COMBINADO: o que o sistema mandava emitir até 09/09. */
+const FATIA_MISTURADA = 480.0;
+const SO_DO_LIDER_SHOPEE = 440.0; // o valor que o sistema aceitava errado até 05/09
 
 const SENHA_NOVA = 'pwtest2026';
 const CPF_LIDER = '99922200011';
@@ -73,12 +87,35 @@ function notaPdf(opts: { valor: number; emitenteNome: string; emitenteCnpj: stri
   return Buffer.from(doc.output('arraybuffer'));
 }
 
+/** "660" → "R$ 660,00" — as asserções da tela saem dos MESMOS números do cenário. */
+const brl = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** O cartão daquele CNPJ na tela de anexar nota. */
+function cartao(page: Page, cnpj: string) {
+  return page.locator('div.bg-white.rounded-xl').filter({ hasText: `CNPJ ${cnpj}` }).first();
+}
+
+/**
+ * Escolhe "dividir" NAQUELE cartão (10/09/2026: a escolha deixou de ser uma só pra
+ * quinzena e passou a ser por CNPJ — dá pra dividir a Shopee e mandar a iMile inteira).
+ */
+async function escolherDividir(page: Page, cnpj: string) {
+  await cartao(page, cnpj).getByRole('button', { name: /Dividir em 2 notas/i }).click();
+}
+
 /** Envia o PDF pelo input do cartão daquele CNPJ. */
 async function enviarNota(page: Page, cnpjDoCartao: string, pdf: Buffer) {
-  const cartao = page.locator('div.bg-white.rounded-xl').filter({ hasText: `CNPJ ${cnpjDoCartao}` }).first();
-  await cartao.locator('input[type="file"]').setInputFiles({
+  await cartao(page, cnpjDoCartao).locator('input[type="file"]').setInputFiles({
     name: `nota-${Date.now()}.pdf`, mimeType: 'application/pdf', buffer: pdf,
   });
+}
+
+/** Apaga as notas do líder (os testes seriais precisam começar do zero). */
+async function limparNotas() {
+  const { data } = await db.from('driverpay_nota_fiscal_files')
+    .select('file_path').eq('driver_id', criados.drivers[0]);
+  if (data?.length) await db.storage.from(BUCKET).remove(data.map((n) => n.file_path));
+  await db.from('driverpay_nota_fiscal_files').delete().eq('driver_id', criados.drivers[0]);
 }
 
 async function entrarNoPortal(page: Page, cpf: string) {
@@ -182,48 +219,54 @@ test.describe('Nota dividida — portal do entregador (05/09/2026)', () => {
     for (const id of criados.drivers) await db.from('driverpay_drivers').delete().eq('id', id);
   });
 
-  test('A. a escolha aparece já na abertura, com o aviso do CNPJ e quem pode emitir', async ({ page }) => {
+  test('A. cada CARTÃO escolhe sozinho, com o valor DAQUELE CNPJ na frente', async ({ page }) => {
     test.setTimeout(240_000);
     await entrarNoPortal(page, CPF_LIDER);
     await page.getByRole('button', { name: /Anexar nota|Nota|Enviar/i }).first().click();
 
-    // 1. A pergunta vem antes de qualquer botão de enviar
-    await expect(page.getByText(/Como você vai emitir as notas desta quinzena/i)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole('button', { name: /Notas no valor integral/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Dividir em 2 notas/i })).toBeVisible();
+    const shopee = cartao(page, CNPJ_SHOPEE);
+    const imile = cartao(page, CNPJ_IMILE);
+    await expect(shopee).toBeVisible({ timeout: 30_000 });
 
-    // 2. O valor da divisão sai calculado: 960,00 → 480,00 + 480,00
-    await expect(page.getByText(/R\$ 480,00/).first()).toBeVisible();
+    // 1. Cada cartão mostra o valor DELE — nunca a soma dos dois.
+    await expect(shopee.getByText(/Valor desta nota:/i)).toContainText(brl(TOTAL_SHOPEE));
+    await expect(imile.getByText(/Valor desta nota:/i)).toContainText(brl(TOTAL_IMILE));
 
-    // 3. O aviso do CNPJ diferente — desde 07/09/2026 ele NOMEIA os dois emissores
-    //    (o genérico deixava o driver emitir as duas no mesmo CNPJ sem perceber).
-    await expect(page.getByText(/Uma nota em cada CNPJ/i)).toBeVisible();
-    await expect(page.getByText(/As duas no mesmo CNPJ são recusadas/i)).toBeVisible();
+    // 2. A escolha está DENTRO do cartão, com as fatias daquele CNPJ.
+    await expect(shopee.getByRole('button', { name: /Uma nota só/i })).toBeVisible();
+    await expect(shopee.getByRole('button', { name: /Dividir em 2 notas/i })).toBeVisible();
+    await expect(shopee.getByText(new RegExp(`${brl(FATIA_SHOPEE)}.*\\+.*${brl(FATIA_SHOPEE)}`.replace(/\$/g, '\\$')))).toBeVisible();
+    await expect(imile.getByText(new RegExp(`${brl(FATIA_IMILE)}.*\\+.*${brl(FATIA_IMILE)}`.replace(/\$/g, '\\$')))).toBeVisible();
 
-    // 4. Quem pode emitir, com nome E CNPJ
-    await expect(page.getByText(/A nota tem que ser emitida por/i)).toBeVisible();
-    await expect(page.getByText(EMISSOR_A.nome, { exact: false }).first()).toBeVisible();
+    // 3. 🎯 O valor da mistura (metade do combinado) não aparece em lugar nenhum.
+    await expect(page.getByText(brl(FATIA_MISTURADA))).toHaveCount(0);
+
+    // 4. Quem pode emitir, com nome E CNPJ, e o aviso de que cada CNPJ é separado.
+    await expect(page.getByText(/Quem pode emitir as suas notas/i)).toBeVisible();
+    await expect(page.getByText(/Cada cartão abaixo é uma nota separada/i)).toBeVisible();
     await expect(page.getByText(EMISSOR_A.cnpj, { exact: false }).first()).toBeVisible();
     await expect(page.getByText(EMISSOR_B.cnpj, { exact: false }).first()).toBeVisible();
-    // 07/09/2026: o aviso NOMEIA os dois emissores — é o que evita as duas notas no
-    // mesmo CNPJ. Os dois nomes aparecem 2x na tela (aviso + lista): 2 ocorrências cada.
-    await expect(page.getByText(EMISSOR_A.nome, { exact: false })).toHaveCount(2);
-    await expect(page.getByText(EMISSOR_B.nome, { exact: false })).toHaveCount(2);
 
-    // 5. Sem escolher, não existe botão de enviar (era assim que o driver mandava errado)
-    await expect(page.getByText(/Escolha lá em cima como você vai emitir/i).first()).toBeVisible();
+    // 5. Sem escolher, não existe botão de enviar naquele cartão.
+    await expect(shopee.getByText(/Escolha uma das duas opções/i)).toBeVisible();
     await expect(page.locator('input[type="file"]')).toHaveCount(0);
+
+    // 6. A escolha é POR CARTÃO: dividir a Shopee não mexe na iMile.
+    await escolherDividir(page, CNPJ_SHOPEE);
+    await expect(shopee.locator('input[type="file"]')).toHaveCount(1);
+    await expect(imile.getByText(/Escolha uma das duas opções/i)).toBeVisible();
   });
 
-  test('B. valor errado é RECUSADO — inclusive a parte só do líder', async ({ page }) => {
+  test('B. 🎯 a metade do total COMBINADO (o erro de 06/09) é RECUSADA', async ({ page }) => {
     test.setTimeout(300_000);
     await entrarNoPortal(page, CPF_LIDER);
     await page.getByRole('button', { name: /Anexar nota|Nota|Enviar/i }).first().click();
-    await page.getByRole('button', { name: /Dividir em 2 notas/i }).click();
+    await escolherDividir(page, CNPJ_SHOPEE);
 
-    // R$ 440,00 = SHOPEE só do líder. Era exatamente isso que passava antes de hoje.
+    // R$ 480,00 = (660 + 300) / 2. Era EXATAMENTE o que o sistema mandava emitir até
+    // 09/09 — e é o que jogava dinheiro da Shopee dentro da nota da iMile.
     await enviarNota(page, CNPJ_SHOPEE, notaPdf({
-      valor: SO_DO_LIDER_SHOPEE, emitenteNome: EMISSOR_A.nome,
+      valor: FATIA_MISTURADA, emitenteNome: EMISSOR_A.nome,
       emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_SHOPEE,
     }));
     await expect(page.getByText(/não bate com o valor|nao bate com o valor/i)).toBeVisible({ timeout: 90_000 });
@@ -233,15 +276,33 @@ test.describe('Nota dividida — portal do entregador (05/09/2026)', () => {
     expect(data ?? [], 'nota recusada não pode ficar gravada').toHaveLength(0);
   });
 
+  test('B2. valor errado é RECUSADO — inclusive a parte só do líder', async ({ page }) => {
+    test.setTimeout(300_000);
+    await entrarNoPortal(page, CPF_LIDER);
+    await page.getByRole('button', { name: /Anexar nota|Nota|Enviar/i }).first().click();
+    await escolherDividir(page, CNPJ_SHOPEE);
+
+    // R$ 440,00 = SHOPEE só do líder, sem o membro. O líder responde pelo grupo.
+    await enviarNota(page, CNPJ_SHOPEE, notaPdf({
+      valor: SO_DO_LIDER_SHOPEE, emitenteNome: EMISSOR_A.nome,
+      emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_SHOPEE,
+    }));
+    await expect(page.getByText(/não bate com o valor|nao bate com o valor/i)).toBeVisible({ timeout: 90_000 });
+
+    const { data } = await db.from('driverpay_nota_fiscal_files')
+      .select('id').eq('driver_id', criados.drivers[0]);
+    expect(data ?? []).toHaveLength(0);
+  });
+
   test('C. CNPJ de quem emite fora do cadastro é RECUSADO', async ({ page }) => {
     test.setTimeout(300_000);
     await entrarNoPortal(page, CPF_LIDER);
     await page.getByRole('button', { name: /Anexar nota|Nota|Enviar/i }).first().click();
-    await page.getByRole('button', { name: /Dividir em 2 notas/i }).click();
+    await escolherDividir(page, CNPJ_SHOPEE);
 
     // Valor CERTO, nome CERTO, mas emitida por um CNPJ que não é o cadastrado.
     await enviarNota(page, CNPJ_SHOPEE, notaPdf({
-      valor: FATIA, emitenteNome: EMISSOR_A.nome,
+      valor: FATIA_SHOPEE, emitenteNome: EMISSOR_A.nome,
       emitenteCnpj: '11.111.111/0001-11', tomadorCnpj: CNPJ_SHOPEE,
     }));
     await expect(page.getByText(/não foi emitida pelo CNPJ cadastrado|nao foi emitida pelo CNPJ cadastrado/i))
@@ -253,83 +314,105 @@ test.describe('Nota dividida — portal do entregador (05/09/2026)', () => {
   });
 
   /**
-   * E. A TRAVA DE 07/09/2026 — as 2 notas da dupla têm que ser de CNPJs de EMISSOR
-   * diferentes. Até aqui o sistema só comparava o CNPJ do TOMADOR (iMile x Shopee),
-   * então dava pra emitir as duas pelo MESMO CNPJ — foi o que aconteceu de verdade
-   * com o GESSILEY na 1ª quinzena de agosto (as duas no CNPJ do Joaerson), e o
-   * pagamento saiu com as duas metades no mesmo nome.
+   * E. As 2 notas da dupla têm que ser de PESSOAS diferentes (trava de 07/09/2026).
+   * Caso real: GESSILEY emitiu as duas no CNPJ do Joaerson e o pagamento saiu com as
+   * duas metades no mesmo nome.
    */
-  test('E. a 2ª nota do MESMO emissor da 1ª é RECUSADA (CNPJs de emissor diferentes)', async ({ page }) => {
+  test('E. a 2ª nota do MESMO emissor da 1ª é RECUSADA', async ({ page }) => {
     test.setTimeout(420_000);
     await entrarNoPortal(page, CPF_LIDER);
     await page.getByRole('button', { name: /Anexar nota|Nota|Enviar/i }).first().click();
-    await page.getByRole('button', { name: /Dividir em 2 notas/i }).click();
+    await escolherDividir(page, CNPJ_SHOPEE);
 
-    // 1ª nota: emissor A, tomador iMile — correta, abre a dupla.
-    await enviarNota(page, CNPJ_IMILE, notaPdf({
-      valor: FATIA, emitenteNome: EMISSOR_A.nome,
-      emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_IMILE,
+    // 1ª nota: emissor A, no CNPJ da Shopee — correta, abre a dupla.
+    await enviarNota(page, CNPJ_SHOPEE, notaPdf({
+      valor: FATIA_SHOPEE, emitenteNome: EMISSOR_A.nome,
+      emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_SHOPEE,
     }));
     await expect(page.getByText(/1ª nota recebida/i)).toBeVisible({ timeout: 90_000 });
 
-    // A tela diz QUEM tem que emitir a 2ª (o outro cadastrado), não só "outro CNPJ".
+    // A tela diz QUEM tem que emitir a 2ª.
     await expect(page.getByText(/A 2ª tem que ser emitida por/i)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(EMISSOR_B.nome, { exact: false }).first()).toBeVisible();
 
-    // 2ª nota: TOMADOR diferente (Shopee), mas o MESMO EMISSOR da 1ª → tem que recusar.
+    // 2ª nota: mesmo CNPJ tomador (certo), mas o MESMO EMISSOR da 1ª → recusa.
     await enviarNota(page, CNPJ_SHOPEE, notaPdf({
-      valor: FATIA, emitenteNome: EMISSOR_A.nome,
+      valor: FATIA_SHOPEE, emitenteNome: EMISSOR_A.nome,
       emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_SHOPEE,
     }));
-    await expect(page.getByText(/CNPJ DIFERENTE da primeira/i)).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText(/emitidas por PESSOAS diferentes/i)).toBeVisible({ timeout: 90_000 });
 
-    // No banco: só a parte 1 ficou. A parte 2 recusada não é gravada (nem o PDF sobe).
     const { data: notas } = await db.from('driverpay_nota_fiscal_files')
       .select('split_part, status, matched_cnpj').eq('driver_id', criados.drivers[0]);
-    expect(notas ?? [], 'a 2ª do mesmo CNPJ não pode ser gravada').toHaveLength(1);
+    expect(notas ?? [], 'a 2ª do mesmo emissor não pode ser gravada').toHaveLength(1);
     expect(notas![0].split_part).toBe(1);
-    expect(String(notas![0].matched_cnpj), 'o CNPJ do emissor tem que ficar gravado')
-      .toBe(EMISSOR_A.cnpj.replace(/\D/g, ''));
+    expect(String(notas![0].matched_cnpj)).toBe(EMISSOR_A.cnpj.replace(/\D/g, ''));
 
-    // Limpa a dupla aberta pra o teste D começar do zero (serial).
-    const { data: paraApagar } = await db.from('driverpay_nota_fiscal_files')
-      .select('file_path').eq('driver_id', criados.drivers[0]);
-    if (paraApagar?.length) await db.storage.from(BUCKET).remove(paraApagar.map((n) => n.file_path));
-    await db.from('driverpay_nota_fiscal_files').delete().eq('driver_id', criados.drivers[0]);
+    await limparNotas();
   });
 
-  test('D. a dupla certa passa: R$ 480,00 em cada CNPJ, em nomes cadastrados', async ({ page }) => {
+  /**
+   * F. 🎯 O CORAÇÃO DA MUDANÇA DE 10/09/2026: a 2ª nota NÃO pode ir pro outro CNPJ.
+   * Era assim que o sistema funcionava até 09/09 — e é a mistura que a Shopee e a
+   * iMile recusam. Enquanto a dupla da Shopee não fecha, o cartão da iMile fica
+   * travado na tela (decisão do Victor: um CNPJ de cada vez).
+   */
+  test('F. a 2ª nota no OUTRO CNPJ é recusada, e o outro cartão fica travado', async ({ page }) => {
     test.setTimeout(420_000);
     await entrarNoPortal(page, CPF_LIDER);
     await page.getByRole('button', { name: /Anexar nota|Nota|Enviar/i }).first().click();
-    await page.getByRole('button', { name: /Dividir em 2 notas/i }).click();
+    await escolherDividir(page, CNPJ_SHOPEE);
 
-    // 1ª nota: CNPJ da iMile, emitida pelo emissor A
-    await enviarNota(page, CNPJ_IMILE, notaPdf({
-      valor: FATIA, emitenteNome: EMISSOR_A.nome,
-      emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_IMILE,
+    await enviarNota(page, CNPJ_SHOPEE, notaPdf({
+      valor: FATIA_SHOPEE, emitenteNome: EMISSOR_A.nome,
+      emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_SHOPEE,
     }));
     await expect(page.getByText(/1ª nota recebida/i)).toBeVisible({ timeout: 90_000 });
 
-    // O outro cartão passa a pedir a 2ª, com o valor que falta
-    await expect(page.getByText(/Envie a 2ª AQUI/i)).toBeVisible({ timeout: 30_000 });
+    // A tela TRAVA o outro CNPJ e explica o porquê — antes ela deixava clicar.
+    const imile = cartao(page, CNPJ_IMILE);
+    await expect(imile.getByText(/Termine as duas notas do cartão/i)).toBeVisible({ timeout: 30_000 });
+    await expect(imile.locator('input[type="file"]')).toHaveCount(0);
 
-    // 2ª nota: CNPJ da Shopee, emitida pelo emissor B (nome diferente, CNPJ diferente)
+    // E o aviso da 2ª está no MESMO cartão da 1ª, não no outro.
+    await expect(cartao(page, CNPJ_SHOPEE).getByText(/Falta a 2ª/i)).toBeVisible();
+
+    await limparNotas();
+  });
+
+  test('D. a dupla certa passa: R$ 330,00 + R$ 330,00 no MESMO CNPJ', async ({ page }) => {
+    test.setTimeout(420_000);
+    await entrarNoPortal(page, CPF_LIDER);
+    await page.getByRole('button', { name: /Anexar nota|Nota|Enviar/i }).first().click();
+    await escolherDividir(page, CNPJ_SHOPEE);
+
+    // 1ª nota: CNPJ da Shopee, emitida pelo emissor A
     await enviarNota(page, CNPJ_SHOPEE, notaPdf({
-      valor: FATIA, emitenteNome: EMISSOR_B.nome,
+      valor: FATIA_SHOPEE, emitenteNome: EMISSOR_A.nome,
+      emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_SHOPEE,
+    }));
+    await expect(page.getByText(/1ª nota recebida/i)).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText(/Falta a 2ª/i)).toBeVisible({ timeout: 30_000 });
+
+    // 2ª nota: MESMO CNPJ da Shopee, emitida pelo emissor B
+    await enviarNota(page, CNPJ_SHOPEE, notaPdf({
+      valor: FATIA_SHOPEE, emitenteNome: EMISSOR_B.nome,
       emitenteCnpj: EMISSOR_B.cnpj, tomadorCnpj: CNPJ_SHOPEE,
     }));
     await expect(page.getByText(/Dupla completa/i)).toBeVisible({ timeout: 90_000 });
 
-    // No banco: 2 notas validadas, uma em cada CNPJ, R$ 480,00 cada
+    // No banco: 2 notas validadas, AS DUAS no CNPJ da Shopee, R$ 330,00 cada
     const { data: notas } = await db.from('driverpay_nota_fiscal_files')
       .select('status, read_value, nota_emitter_id, split_part, matched_name')
       .eq('driver_id', criados.drivers[0]).order('uploaded_at');
     expect(notas ?? []).toHaveLength(2);
     expect(notas!.every((n) => n.status === 'validada'), 'as duas têm que validar').toBe(true);
-    expect(notas!.map((n) => Number(n.read_value))).toEqual([FATIA, FATIA]);
-    expect(new Set(notas!.map((n) => n.nota_emitter_id)).size, 'CNPJs diferentes').toBe(2);
+    expect(notas!.map((n) => Number(n.read_value))).toEqual([FATIA_SHOPEE, FATIA_SHOPEE]);
+    // 🎯 O MESMO tomador nas duas — é isso que a Shopee e a iMile exigem.
+    expect(new Set(notas!.map((n) => n.nota_emitter_id)).size, 'as 2 no MESMO CNPJ tomador').toBe(1);
     expect(notas!.map((n) => n.split_part)).toEqual([1, 2]);
+    // E as duas somam o total DAQUELE CNPJ, não o combinado.
+    expect(notas!.reduce((s, n) => s + Number(n.read_value), 0)).toBe(TOTAL_SHOPEE);
 
     // 09/09/2026 — a lista "Notas enviadas" mostra data E HORA. Antes saía só a data:
     // uma entregadora enviou às 20:34 com o corte às 17:00 do mesmo dia, leu "04/09/2026"
@@ -337,5 +420,8 @@ test.describe('Nota dividida — portal do entregador (05/09/2026)', () => {
     const comHora = page.getByText(/\d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}/);
     await expect(comHora.first()).toBeVisible({ timeout: 30_000 });
     expect(await comHora.count(), 'as 2 notas enviadas mostram data e hora').toBeGreaterThanOrEqual(2);
+
+    // A iMile continua livre pra mandar a dela — o bloco dela é independente.
+    await expect(cartao(page, CNPJ_IMILE).getByText(/Valor desta nota:/i)).toContainText(brl(TOTAL_IMILE));
   });
 });

@@ -14,6 +14,7 @@
  * apresentacao. Toda escrita passa pelo servico driverPay.ts (que faz ensurePerm + RLS).
  */
 import { validateCPF } from '../../utils/validation';
+import { repartirLiquidoPorTomador } from '../../utils/nfSplit';
 import type { Company } from '../../services/database';
 import type {
   Driver,
@@ -2273,12 +2274,20 @@ export interface ReportBuildOptions {
   /**
    * NOTA DIVIDIDA (05/09/2026, pedido do Victor: "os relatórios geral e simples devem
    * saber a metade para um CNPJ e outro para outro, de acordo com como foi feito as
-   * notas"). Chave = driverId do LÍDER da unidade; valor = os 2 recebedores que
-   * emitiram a dupla, cada um com a chave PIX dele. Presente = a linha de pagamento
-   * da unidade vira DUAS, meio a meio (o centavo ímpar fica na 1ª, igual à conta das
-   * notas). Ausente = uma linha só, como sempre foi.
+   * notas"). Chave = driverId do LÍDER da unidade → CNPJ TOMADOR → os 2 recebedores
+   * que emitiram a dupla daquele CNPJ, cada um com a chave PIX dele.
+   *
+   * 10/09/2026: ganhou o nível do TOMADOR. A divisão é dentro de um CNPJ, então pode
+   * haver uma dupla na Shopee e outra na iMile ao mesmo tempo — dividindo os dois,
+   * saem QUATRO linhas de pagamento (decisão do Victor). Sem dupla nenhuma, uma linha
+   * só, como sempre foi.
    */
-  splitRecipientsByLeader?: ReadonlyMap<string, ReadonlyArray<{ name: string; pix: string | null }>>;
+  splitRecipientsByLeader?: ReadonlyMap<string, ReadonlyMap<string, ReadonlyArray<{ name: string; pix: string | null }>>>;
+  /**
+   * Plataforma → CNPJ tomador (10/09/2026). É o que deixa o relatório saber quanto
+   * daquele pagamento é de cada CNPJ, pra dividir cada bloco separadamente.
+   */
+  platformEmitterOf?: ReadonlyMap<string, string | null>;
 }
 
 /** As duas metades de um total, com o centavo ímpar na primeira (igual às notas). */
@@ -2293,7 +2302,8 @@ function normalizeReportOptions(opts: ReportBuildOptions): {
   allowed?: ReadonlySet<string>;
   includeDeductions: boolean;
   deductionByDriver?: ReadonlyMap<string, number>;
-  splitRecipientsByLeader?: ReadonlyMap<string, ReadonlyArray<{ name: string; pix: string | null }>>;
+  splitRecipientsByLeader?: ReadonlyMap<string, ReadonlyMap<string, ReadonlyArray<{ name: string; pix: string | null }>>>;
+  platformEmitterOf?: ReadonlyMap<string, string | null>;
 } {
   const allowed =
     opts.allowedPlatformNames && opts.allowedPlatformNames.size > 0 ? opts.allowedPlatformNames : undefined;
@@ -2303,6 +2313,7 @@ function normalizeReportOptions(opts: ReportBuildOptions): {
     opts.splitRecipientsByLeader && opts.splitRecipientsByLeader.size > 0 ? opts.splitRecipientsByLeader : undefined;
   return {
     allowed, includeDeductions: opts.includeDeductions !== false, deductionByDriver, splitRecipientsByLeader,
+    platformEmitterOf: opts.platformEmitterOf && opts.platformEmitterOf.size > 0 ? opts.platformEmitterOf : undefined,
   };
 }
 
@@ -2323,9 +2334,11 @@ export function splitRecipientsFromNotes(
     matchedName: string | null; status: string;
     /** CNPJ do emissor que casou na nota (07/09/2026). Null nas notas antigas. */
     matchedCnpj?: string | null;
+    /** CNPJ TOMADOR da nota (10/09/2026): a dupla é dentro de um tomador só. */
+    emitterId?: string | null;
   }>,
   cadastro: ReadonlyArray<{ driver_id: string; name: string; cnpj: string | null; pix: string | null }>,
-): Map<string, Array<{ name: string; pix: string | null }>> {
+): Map<string, Map<string, Array<{ name: string; pix: string | null }>>> {
   const chaveNome = (n: string) => stripAccents(n).toUpperCase().replace(/\s+/g, ' ').trim();
   const soDigitos = (v: string | null | undefined) => (v ?? '').replace(/\D/g, '');
   /**
@@ -2345,27 +2358,37 @@ export function splitRecipientsFromNotes(
   };
 
   type Emissor = { name: string; cnpj: string | null };
-  const duplas = new Map<string, Map<number, Emissor>>(); // `${driverId}|${splitGroup}` -> parte -> emissor
+  // 10/09/2026: a chave carrega o TOMADOR. Antes era uma dupla por driver e a
+  // primeira mandava; agora pode haver uma dupla POR CNPJ (Shopee dividida e iMile
+  // dividida convivem, cada uma com o seu par) — é isso que faz sair 4 pagamentos.
+  const duplas = new Map<string, Map<number, Emissor>>(); // `${driverId}|${emitterId}|${splitGroup}`
+  const tomadorDoGrupo = new Map<string, string>();
   for (const f of files) {
     if (!f.splitGroup || (f.splitPart !== 1 && f.splitPart !== 2)) continue;
     if (f.status === 'rejeitada' || !f.matchedName) continue;
-    const k = `${f.driverId}|${f.splitGroup}`;
+    // Nota antiga, sem tomador gravado: cai num balde próprio e segue valendo.
+    const tomador = f.emitterId ?? '';
+    const k = `${f.driverId}|${tomador}|${f.splitGroup}`;
     const partes = duplas.get(k) ?? new Map<number, Emissor>();
     partes.set(f.splitPart, { name: f.matchedName, cnpj: f.matchedCnpj ?? null });
     duplas.set(k, partes);
+    tomadorDoGrupo.set(k, tomador);
   }
 
-  const out = new Map<string, Array<{ name: string; pix: string | null }>>();
+  const out = new Map<string, Map<string, Array<{ name: string; pix: string | null }>>>();
   for (const [k, partes] of duplas) {
     const um = partes.get(1);
     const dois = partes.get(2);
     if (!um || !dois) continue; // dupla pela metade não divide pagamento
     const driverId = k.slice(0, k.indexOf('|'));
-    if (out.has(driverId)) continue; // 1ª dupla completa do período manda
-    out.set(driverId, [
+    const tomador = tomadorDoGrupo.get(k) ?? '';
+    const porTomador = out.get(driverId) ?? new Map<string, Array<{ name: string; pix: string | null }>>();
+    if (porTomador.has(tomador)) continue; // 1ª dupla completa DAQUELE CNPJ manda
+    porTomador.set(tomador, [
       { name: um.name, pix: pixDe(driverId, um.name, um.cnpj) },
       { name: dois.name, pix: pixDe(driverId, dois.name, dois.cnpj) },
     ]);
+    out.set(driverId, porTomador);
   }
   return out;
 }
@@ -2376,16 +2399,106 @@ function unitLeaderDriverId(unit: ReportUnit): string | null {
   return leaderRow?.driverId ?? null;
 }
 
-/** Os 2 recebedores da nota dividida desta unidade, se houve dupla. */
+/** As duplas desta unidade, por CNPJ tomador (10/09/2026). Vazio = nenhuma. */
 function unitSplitRecipients(
   unit: ReportUnit,
-  mapa?: ReadonlyMap<string, ReadonlyArray<{ name: string; pix: string | null }>>,
-): ReadonlyArray<{ name: string; pix: string | null }> | null {
+  mapa?: ReadonlyMap<string, ReadonlyMap<string, ReadonlyArray<{ name: string; pix: string | null }>>>,
+): ReadonlyMap<string, ReadonlyArray<{ name: string; pix: string | null }>> | null {
   if (!mapa) return null;
   const leaderId = unitLeaderDriverId(unit);
   if (!leaderId) return null;
-  const rec = mapa.get(leaderId);
-  return rec && rec.length === 2 ? rec : null;
+  const porTomador = mapa.get(leaderId);
+  if (!porTomador || porTomador.size === 0) return null;
+  // Só dupla COMPLETA (2 recebedores) divide pagamento.
+  const completas = new Map<string, ReadonlyArray<{ name: string; pix: string | null }>>();
+  for (const [tomador, rec] of porTomador) if (rec.length === 2) completas.set(tomador, rec);
+  return completas.size > 0 ? completas : null;
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * O PAGAMENTO SEGUE AS NOTAS — E AS NOTAS SÃO POR CNPJ  (10/09/2026, Victor)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * "Se dividir os dois CNPJ vai sair quatro pagamentos no relatório simples."
+ *
+ * Bruto de cada CNPJ tomador dentro da unidade: pacotes × taxa das plataformas
+ * ligadas àquele CNPJ. O que não tem CNPJ vinculado (Zapex, plataforma sem
+ * vínculo) fica de fora daqui de propósito — `repartirLiquidoPorTomador` joga
+ * isso, junto com vale/perda, no CNPJ de MAIOR valor (decisão do Victor).
+ */
+function brutoPorTomadorDaUnidade(
+  unit: ReportUnit,
+  allowed: ReadonlySet<string> | undefined,
+  platformEmitterOf: ReadonlyMap<string, string | null> | undefined,
+): Array<{ emitterId: string; bruto: number }> {
+  if (!platformEmitterOf) return [];
+  const cents = new Map<string, number>();
+  for (const row of unit.rows) {
+    for (const rl of row.routes) {
+      for (const platformName of Object.keys(rl.packages)) {
+        if (allowed && !allowed.has(platformName)) continue;
+        const emitterId = platformEmitterOf.get(platformName);
+        if (!emitterId) continue; // sem CNPJ vinculado: entra no ajuste, não num bloco
+        const pkgs = rl.packages[platformName] ?? 0;
+        const rate = rl.rates[platformName] ?? row.ratesByPlatform[platformName] ?? 0;
+        cents.set(emitterId, (cents.get(emitterId) ?? 0) + Math.round(pkgs * rate * 100));
+      }
+    }
+  }
+  return [...cents].map(([emitterId, c]) => ({ emitterId, bruto: c / 100 }));
+}
+
+/**
+ * As linhas de pagamento de UMA unidade, já respeitando as notas divididas.
+ *
+ * Sem dupla nenhuma: uma linha só, exatamente como sempre foi. Com dupla num CNPJ:
+ * aquele bloco vira duas linhas, meio a meio (centavo ímpar na 1ª, igual à conta das
+ * notas), e o que sobra dos outros CNPJs continua na linha do recebedor. Dividindo os
+ * dois CNPJs: quatro linhas — e a soma continua sendo o mesmo líquido de sempre, que
+ * é o que mantém o rodapé do relatório fechando.
+ */
+export function linhasDePagamentoDaUnidade(
+  brutoPorTomador: ReadonlyArray<{ emitterId: string; bruto: number }>,
+  liquido: number,
+  duplas: ReadonlyMap<string, ReadonlyArray<{ name: string; pix: string | null }>> | null,
+  recebedorPadrao: { name: string; pix: string | null },
+): Array<{ name: string; pix: string | null; total: number }> {
+  const umaLinha = () => [{ name: recebedorPadrao.name, pix: recebedorPadrao.pix, total: liquido }];
+  if (!duplas || duplas.size === 0) return umaLinha();
+
+  // Dupla de nota ANTIGA (antes de 10/09/2026, sem CNPJ tomador gravado): valia pra
+  // unidade inteira. Continua valendo assim — não reescrevemos pagamento já feito.
+  const antiga = duplas.get('');
+  if (antiga) {
+    const [a, b] = metadeAMetade(liquido);
+    return [
+      { name: antiga[0].name, pix: antiga[0].pix, total: a },
+      { name: antiga[1].name, pix: antiga[1].pix, total: b },
+    ];
+  }
+  if (brutoPorTomador.length === 0) return umaLinha();
+
+  const porTomador = repartirLiquidoPorTomador(brutoPorTomador, liquido);
+  const dasDuplas: Array<{ name: string; pix: string | null; total: number }> = [];
+  let restoCents = 0;
+  for (const { emitterId, total } of porTomador) {
+    const rec = duplas.get(emitterId);
+    if (!rec) { restoCents += Math.round(total * 100); continue; }
+    // Bloco que ficou em ZERO (o vale comeu tudo dele) não vira duas linhas de
+    // R$ 0,00: o Relatório Simples é o arquivo que vai pro banco, e banco recusa
+    // linha zerada. O dinheiro está no outro bloco — este só não tem o que pagar.
+    if (Math.round(total * 100) === 0) continue;
+    const [a, b] = metadeAMetade(total);
+    dasDuplas.push({ name: rec[0].name, pix: rec[0].pix, total: a });
+    dasDuplas.push({ name: rec[1].name, pix: rec[1].pix, total: b });
+  }
+  if (dasDuplas.length === 0) return umaLinha();
+  // O que não foi dividido continua indo pro recebedor de sempre, numa linha só.
+  const out = restoCents !== 0
+    ? [{ name: recebedorPadrao.name, pix: recebedorPadrao.pix, total: restoCents / 100 }]
+    : [];
+  out.push(...dasDuplas);
+  return out;
 }
 
 /** A unidade tem movimento nas plataformas do escopo? (pacotes ou itens Zapex). */
@@ -2486,13 +2599,15 @@ export function buildLeaderReportRows(
   leaderNameByGroup: ReadonlyMap<string, string>,
   opts: ReportBuildOptions = {},
 ): DriverReportRow[] {
-  const { allowed, includeDeductions, deductionByDriver, splitRecipientsByLeader } = normalizeReportOptions(opts);
+  const {
+    allowed, includeDeductions, deductionByDriver, splitRecipientsByLeader, platformEmitterOf,
+  } = normalizeReportOptions(opts);
   const scopedPlatforms = allowed ? platforms.filter((pl) => allowed.has(pl.name)) : platforms;
   const out: DriverReportRow[] = [];
   for (const unit of groupReportUnits(rows, leaderNameByGroup)) {
     const recipient = unitRecipientInfo(unit);
-    // Nota dividida: quem recebe cada metade (null = pagamento normal, 1 recebedor).
-    const dupla = unitSplitRecipients(unit, splitRecipientsByLeader);
+    // Nota dividida: as duplas por CNPJ (null = pagamento normal, 1 recebedor só).
+    const duplas = unitSplitRecipients(unit, splitRecipientsByLeader);
     let discount = 0;
     let vale = 0;
     let net = 0;
@@ -2525,6 +2640,11 @@ export function buildLeaderReportRows(
     }
     // Filtrado: unidade sem pacote nas plataformas escolhidas sai fora.
     if (allowed && !unitHasPackages) continue;
+    // O pagamento segue as notas: 1 linha sem divisão, 3 dividindo um CNPJ, 4 dividindo
+    // os dois (10/09/2026). A soma continua sendo o `net` — o rodapé não muda.
+    const pagamentos = linhasDePagamentoDaUnidade(
+      brutoPorTomadorDaUnidade(unit, allowed, platformEmitterOf), net, duplas, recipient,
+    );
     const routesWithPackages = routeOrder.filter((rname) =>
       Object.values(routeMap.get(rname) ?? {}).some((c) => c.packages > 0),
     );
@@ -2546,7 +2666,7 @@ export function buildLeaderReportRows(
       }
       const first = i === 0;
       out.push({
-        name: first ? (dupla ? dupla[0].name : recipient.name) : '',
+        name: first ? pagamentos[0].name : '',
         route: rname,
         // Grupo repetido em todas as rotas do bloco (avulso = '' -> "Sem grupo"); nome só na 1ª.
         group: unit.group,
@@ -2554,26 +2674,28 @@ export function buildLeaderReportRows(
         totalPackages: routeGross,
         discount: first ? discount : 0,
         vale: first ? vale : 0,
-        totalToReceive: first ? (dupla ? metadeAMetade(net)[0] : net) : 0,
-        pixKey: first ? (dupla ? dupla[0].pix : recipient.pix) : null,
+        totalToReceive: first ? pagamentos[0].total : 0,
+        pixKey: first ? pagamentos[0].pix : null,
       });
     });
-    // Nota dividida (05/09/2026): a 2ª metade vira uma linha própria no fim do bloco,
-    // com o nome e a chave PIX do outro recebedor. As duas somadas continuam dando o
-    // total da unidade — o rodapé não muda.
-    if (dupla) {
+    // Nota dividida (05/09/2026; por CNPJ desde 10/09): cada pagamento além do
+    // primeiro vira uma linha própria no fim do bloco, com o nome e a chave PIX de
+    // quem emitiu aquela nota. Somadas, continuam dando o total da unidade.
+    if (pagamentos.length > 1) {
       const vazio: Record<string, { packages: number; value: number }> = {};
       for (const pl of scopedPlatforms) vazio[pl.name] = { packages: 0, value: 0 };
-      out.push({
-        name: dupla[1].name,
-        route: '(2ª nota)',
-        group: unit.group,
-        platforms: vazio,
-        totalPackages: 0,
-        discount: 0,
-        vale: 0,
-        totalToReceive: metadeAMetade(net)[1],
-        pixKey: dupla[1].pix,
+      pagamentos.slice(1).forEach((extra, i) => {
+        out.push({
+          name: extra.name,
+          route: `(${i + 2}ª nota)`,
+          group: unit.group,
+          platforms: vazio,
+          totalPackages: 0,
+          discount: 0,
+          vale: 0,
+          totalToReceive: extra.total,
+          pixKey: extra.pix,
+        });
       });
     }
   }
@@ -2655,7 +2777,9 @@ export function buildSimpleReportRows(
   leaderNameByGroup: ReadonlyMap<string, string>,
   opts: ReportBuildOptions = {},
 ): SimpleReportRow[] {
-  const { allowed, includeDeductions, deductionByDriver, splitRecipientsByLeader } = normalizeReportOptions(opts);
+  const {
+    allowed, includeDeductions, deductionByDriver, splitRecipientsByLeader, platformEmitterOf,
+  } = normalizeReportOptions(opts);
   const out: SimpleReportRow[] = [];
   for (const unit of groupReportUnits(rows, leaderNameByGroup)) {
     const recipient = unitRecipientInfo(unit);
@@ -2667,16 +2791,14 @@ export function buildSimpleReportRows(
       if (hasPackagesInScope(t)) unitHasPackages = true;
     }
     if (allowed && !unitHasPackages) continue;
-    // Nota dividida: o pagamento segue as notas — metade pra cada recebedor, na chave
-    // PIX dele (05/09/2026). Sem dupla, uma linha só, como sempre foi.
-    const dupla = unitSplitRecipients(unit, splitRecipientsByLeader);
-    if (dupla) {
-      const [a, b] = metadeAMetade(total);
-      out.push({ name: stripAccents(dupla[0].name), total: a, pix: dupla[0].pix });
-      out.push({ name: stripAccents(dupla[1].name), total: b, pix: dupla[1].pix });
-      continue;
+    // Nota dividida: o pagamento segue as notas (05/09/2026). Desde 10/09 a divisão é
+    // POR CNPJ — dividiu os dois, saem 4 linhas; dividiu um, saem 3; nenhum, 1 só.
+    const duplas = unitSplitRecipients(unit, splitRecipientsByLeader);
+    for (const linha of linhasDePagamentoDaUnidade(
+      brutoPorTomadorDaUnidade(unit, allowed, platformEmitterOf), total, duplas, recipient,
+    )) {
+      out.push({ name: stripAccents(linha.name), total: linha.total, pix: linha.pix });
     }
-    out.push({ name: stripAccents(recipient.name), total, pix: recipient.pix });
   }
   return out;
 }

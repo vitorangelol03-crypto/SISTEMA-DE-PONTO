@@ -26,7 +26,7 @@ import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
 import { extractText, getDocumentProxy } from 'npm:unpdf@1.8.0';
 import {
   runNfCheck, mirrorExpectedValue, nfTextoIlegivel, notasQueOcupamVaga, nfSplitSlices,
-  formatCnpj,
+  formatCnpj, escolherTotalDoCnpj, fatiasDaParte1, repartirLiquidoPorTomador,
   type NfCheckResult, type NfSplitForm,
 } from './nfCheck.ts';
 import {
@@ -233,6 +233,7 @@ async function myMirrors(req: Request, body: Body): Promise<Response> {
   // cheia de nota repetida começou aí).
   const periodIds = [...new Set((data ?? []).map((m) => m.period_id as string))];
   const vagas = await vagasDeNotaPorPeriodo(claims, periodIds);
+  const duplasAbertas = await duplasAbertasPorSlot(claims.driver_id, periodIds);
 
   const mirrors = (data ?? []).map((m) => {
     const per = Array.isArray(m.driverpay_periods) ? m.driverpay_periods[0] : m.driverpay_periods;
@@ -251,8 +252,18 @@ async function myMirrors(req: Request, body: Body): Promise<Response> {
       viewedAt: m.viewed_at,
       /** Quantas notas este espelho pede (0 = nenhuma; ex.: quinzena sem pacote). */
       nfVagas: doEspelho.length,
-      /** Quantas ja chegaram (recebida/validada). */
-      nfEnviadas: doEspelho.filter((v) => v.sent > 0).length,
+      /**
+       * Quantas ja chegaram (recebida/validada).
+       *
+       * 10/09/2026: dupla pela METADE nao conta como enviada. A parte 1 conta em
+       * `sent` (ela ocupa a vaga de verdade), entao sem esta correcao o card do
+       * espelho ficava VERDE dizendo "Nota enviada" com a segunda ainda faltando —
+       * a pessoa parava por ali e 30 minutos depois perdia as duas. Agora o card
+       * diz "Falta 1 nota", que e a verdade.
+       */
+      nfEnviadas: doEspelho.filter(
+        (v) => v.sent > 0 && !duplasAbertas.has(`${m.period_id}|${v.mirrorKey ?? '*'}|${v.emitterId}`),
+      ).length,
       /** Vagas com nota RECUSADA e nenhuma boa no lugar — o driver precisa da CD. */
       nfRecusadas: doEspelho.filter((v) => v.sent === 0 && v.rejected > 0).length,
     };
@@ -379,7 +390,7 @@ async function vagasDeNotaPorPeriodo(
     .eq('driver_id', claims.driver_id).in('period_id', periodIds)
     .order('uploaded_at', { ascending: true });
   // Dupla EXPIRADA não conta em nada: nem segura vaga, nem aparece como recusada
-  // (a nota estava certa, só o relógio dos 10 minutos venceu — o slot volta livre).
+  // (a nota estava certa, só o relógio da janela venceu — o slot volta livre).
   const files = (filesRaw ?? []).filter(
     (f) => !ehSplitExpirada({ status: f.status as string, check_details: f.check_details }),
   );
@@ -480,29 +491,60 @@ async function nfSlots(req: Request, body: Body): Promise<Response> {
   const porPeriodo = await vagasDeNotaPorPeriodo(claims, [periodId]);
   const slots = porPeriodo.get(periodId) ?? [];
 
-  // Nota dividida (19/08/2026, cross-CNPJ desde 04/09/2026): a parte 1, uma vez
-  // enviada, JÁ ocupa a vaga do CNPJ dela (conta normal em `sent` acima) — quem
-  // precisa avisar "falta a segunda de R$ X" é o OUTRO CNPJ (o par ainda vazio).
+  // ══════════════════════════════════════════════════════════════════════════
+  // 10/09/2026 — A DUPLA ACONTECE DENTRO DE UM CARTÃO SÓ.
+  //
+  // Até 09/09 a parte 1 caía num CNPJ e o aviso "falta a segunda" ia pro OUTRO —
+  // era o desenho que misturava Shopee com iMile. Agora o aviso fica no MESMO
+  // cartão onde a 1ª caiu (é lá que a 2ª tem que ser enviada), e os outros cartões
+  // ficam TRAVADOS enquanto a dupla não fecha: decisão do Victor de fazer um CNPJ
+  // de cada vez ("só quando ela anexar [as duas da Shopee] é que vai contar os
+  // trinta minutos da iMile"). Travar é o que o backend já fazia — o que faltava
+  // era a tela DIZER isso, em vez de deixar a pessoa clicar e tomar erro.
+  // ══════════════════════════════════════════════════════════════════════════
   const abertaGlobal = await parte1AbertaDoSlot(claims.driver_id, periodId);
   if (abertaGlobal) {
+    const total = Number((abertaGlobal.check_details as { splitTotal?: number } | null)?.splitTotal ?? NaN);
+    const veio = Number(abertaGlobal.read_value ?? NaN);
+    const expiresAt = new Date(
+      new Date(abertaGlobal.uploaded_at).getTime() + NF_SPLIT_WINDOW_MS,
+    ).toISOString();
+    const restante = Number.isFinite(total) && Number.isFinite(veio)
+      ? Math.round((total - veio) * 100) / 100 : null;
+    // O cartão EXATO onde a dupla começou (CNPJ + espelho). Achar só pelo CNPJ fazia
+    // o aviso apontar pro próprio cartão quando havia 2 espelhos no mesmo CNPJ.
+    const ondeComecou = (slots as Array<Record<string, unknown>>).find(
+      (s) => s.emitterId === abertaGlobal.nota_emitter_id
+        && (abertaGlobal.mirror_platform_key === null
+          || abertaGlobal.mirror_platform_key === (s.mirrorKey as string | null)),
+    ) ?? (slots as Array<Record<string, unknown>>)
+      .find((s) => s.emitterId === abertaGlobal.nota_emitter_id);
     for (const s of slots as Array<Record<string, unknown>>) {
-      // O CNPJ onde a parte 1 já caiu não precisa de aviso (já mostra "enviada");
-      // e um CNPJ que já tem nota própria (sem relação com esta dupla) não vira
-      // "esperando a segunda" por cima do que já está lá.
-      if (s.emitterId === abertaGlobal.nota_emitter_id || (s.sent as number) > 0) continue;
-      const total = Number((abertaGlobal.check_details as { splitTotal?: number } | null)?.splitTotal ?? NaN);
-      const veio = Number(abertaGlobal.read_value ?? NaN);
-      s.splitOpen = {
-        form: abertaGlobal.split_form,
-        part1Value: Number.isFinite(veio) ? veio : null,
-        // Quem emitiu a 1ª (07/09/2026): a tela precisa dizer qual CNPJ ainda falta,
-        // em vez do aviso genérico "tem que ser outro CNPJ".
-        part1Issuer: abertaGlobal.matched_name,
-        part1Cnpj: abertaGlobal.matched_cnpj,
-        remaining: Number.isFinite(total) && Number.isFinite(veio)
-          ? Math.round((total - veio) * 100) / 100 : null,
-        expiresAt: new Date(new Date(abertaGlobal.uploaded_at).getTime() + NF_SPLIT_WINDOW_MS).toISOString(),
-      };
+      // Espelho: a nota antiga (mirror null) vale pra qualquer espelho daquele CNPJ.
+      const mesmoEspelho = abertaGlobal.mirror_platform_key === null
+        || abertaGlobal.mirror_platform_key === (s.mirrorKey as string | null);
+      if (s.emitterId === abertaGlobal.nota_emitter_id && mesmoEspelho) {
+        s.splitOpen = {
+          form: abertaGlobal.split_form,
+          part1Value: Number.isFinite(veio) ? veio : null,
+          // Quem emitiu a 1ª (07/09/2026): a tela diz QUEM ainda falta emitir.
+          part1Issuer: abertaGlobal.matched_name,
+          part1Cnpj: abertaGlobal.matched_cnpj,
+          remaining: restante,
+          expiresAt,
+        };
+      } else if ((s.sent as number) === 0) {
+        // Cartão de outro CNPJ (ou outro espelho): travado até a dupla fechar.
+        s.splitBlocked = {
+          emitterLabel: (ondeComecou?.label as string | undefined) ?? null,
+          // Qual espelho, pra dar pra achar o cartão certo quando o mesmo CNPJ tem
+          // mais de um (ex.: "SOMENTE LOGGI" e "Quinzena completa").
+          mirrorLabel: (ondeComecou?.mirrorLabel as string | undefined) ?? null,
+          mesmoCnpj: s.emitterId === abertaGlobal.nota_emitter_id,
+          remaining: restante,
+          expiresAt,
+        };
+      }
     }
   }
 
@@ -529,17 +571,32 @@ async function nfSplitPreview(req: Request, body: Body): Promise<Response> {
   const periodId = String(body.periodId ?? '').trim();
   if (!periodId) return json({ error: 'Dados incompletos' }, 400);
 
-  // 04/09/2026 (pedido do Victor, achado real com o driver Gessiley): "dividir em 2
-  // notas" deixou de ser "2 pessoas no mesmo CNPJ" e virou "2 CNPJs diferentes,
-  // cada um levando uma fatia do total combinado" (motivo: teto de valor por nota,
-  // tipo MEI — uma nota só com o total de UM CNPJ pode estourar o limite da
-  // pessoa). O total não depende mais de qual CNPJ o driver abriu a tela.
-  const { total } = await buildComboTotal(claims.driver_id, claims.company_id, periodId);
-  if (total <= 0) {
+  // ══════════════════════════════════════════════════════════════════════════
+  // 10/09/2026 — A DIVISÃO VOLTOU PRA DENTRO DE UM CNPJ SÓ.
+  //
+  // De 04/09 a 09/09 isto aqui dividia o total COMBINADO (Shopee + iMile juntos) e
+  // mandava uma metade pra cada tomador. A Shopee e a iMile não aceitam isso: cada
+  // nota tem que ser só do que é daquele CNPJ. Medido no GESSILEY (06/09): Shopee
+  // R$ 14.476,00 + iMile R$ 1.504,60 viraram duas notas de R$ 7.990,30 — R$ 6.485,70
+  // da Shopee foram faturados dentro da nota da iMile.
+  //
+  // Agora o total é o DAQUELE CNPJ (e daquele espelho, quando o slot tem um), e a
+  // divisão é entre as DUAS PESSOAS cadastradas pra emitir.
+  // ══════════════════════════════════════════════════════════════════════════
+  const emitterId = String(body.emitterId ?? '').trim();
+  if (!emitterId) return json({ error: 'Dados incompletos' }, 400);
+  const mirrorKeyRaw = body.mirrorKey;
+  const mirrorKey = mirrorKeyRaw === undefined || mirrorKeyRaw === null ? null : String(mirrorKeyRaw);
+
+  const { cands, porEspelho } = await buildValueCandidates(
+    claims.driver_id, claims.company_id, periodId, emitterId,
+  );
+  const total = escolherTotalDoCnpj(cands, porEspelho, mirrorKey);
+  if (total === null) {
     return json({ error: 'Ainda não há valor calculado pra dividir — aguarde ou envie a nota única.' }, 409);
   }
   // 05/09/2026 (decisão do Victor): a divisão é SÓ meio a meio — o 70/30 deixou de
-  // existir. Uma fatia por CNPJ, sempre igual.
+  // existir. Uma fatia por pessoa, sempre igual.
   return json({
     total,
     forms: { '50': nfSplitSlices(total, '50') },
@@ -559,7 +616,7 @@ async function nfSplitPreview(req: Request, body: Body): Promise<Response> {
 // A conta mora em `mirrorExpectedValue` (nfCheck.ts, coberta por unit).
 async function buildValueCandidates(
   driverId: string, companyId: string, periodId: string, emitterId: string,
-): Promise<Record<string, number>> {
+): Promise<{ cands: Record<string, number>; porEspelho: Record<string, number> }> {
   const round2 = (v: number) => Math.round(v * 100) / 100;
 
   const { data: ledGroup } = await supabase.from('driverpay_groups')
@@ -694,21 +751,48 @@ async function buildValueCandidates(
   // ANTES do desconto entrar tem um PDF com o valor cheio, e a nota dele nao pode
   // passar a ser recusada. Sem desconto os dois candidatos sao iguais e nada muda.
   // ══════════════════════════════════════════════════════════════════════════
-  if (!lideraGrupo) {
-    const abatidoIndividual = round2(cands.somaCnpj_individual - deductionsSum([driverId]));
-    if (abatidoIndividual !== cands.somaCnpj_individual && abatidoIndividual > 0) {
-      cands.somaCnpj_individual_abatido = abatidoIndividual;
-    }
-  } else {
-    const abatidoGrupo = round2(cands.somaCnpj_grupo - deductionsSum(groupIds));
-    if (abatidoGrupo !== cands.somaCnpj_grupo && abatidoGrupo > 0) {
-      cands.somaCnpj_grupo_abatido = abatidoGrupo;
-    }
+  // ══════════════════════════════════════════════════════════════════════════
+  // 10/09/2026 — O VALE/PERDA SAI DE UM CNPJ SÓ, O DE MAIOR VALOR.
+  //
+  // Até aqui o abatido era "bruto DESTE CNPJ − TODOS os descontos", calculado igual
+  // pros dois CNPJs — ou seja, o mesmo vale saía duas vezes. Enquanto isso era só um
+  // candidato tolerante ninguém viu; quando a tela passou a AFIRMAR o valor de cada
+  // CNPJ (10/09), virou número errado na cara do entregador. Medido no LEANDRO:
+  // Shopee 18.620,03 + iMile 1.672,03 = 20.292,06 contra os 20.454,03 do espelho
+  // dele — R$ 161,97 ficariam sem nota nenhuma.
+  //
+  // Agora usa a MESMA repartição do relatório (`repartirLiquidoPorTomador`, decisão
+  // do Victor: "descontar no que tem o maior valor"), então o que o app manda emitir
+  // e o que o painel paga não podem mais divergir.
+  //
+  // 📌 A Zapex segue fora, como sempre esteve (`somaCnpj_*` nunca a somou): ela não
+  //    tem CNPJ vinculado e por isso não entra em nota nenhuma. Registrado, não mudado.
+  // ══════════════════════════════════════════════════════════════════════════
+  const idsDoEscopo = lideraGrupo ? groupIds : [driverId];
+  const brutoPorEmitter = new Map<string, number>();
+  for (const pk of packs ?? []) {
+    const dId = driverOf.get(pk.payment_id as string);
+    if (!dId || !idsDoEscopo.includes(dId)) continue;
+    const em = emitterByPlatform.get(pk.platform_name as string);
+    if (!em) continue; // plataforma sem CNPJ vinculado: não vira nota (nem aqui, nem no painel)
+    brutoPorEmitter.set(em, (brutoPorEmitter.get(em) ?? 0) + (pk.packages ?? 0) * Number(pk.rate_snapshot ?? 0));
+  }
+  const brutos = [...brutoPorEmitter].map(([id, bruto]) => ({ emitterId: id, bruto: round2(bruto) }));
+  const somaBrutos = round2(brutos.reduce((acc, b) => acc + b.bruto, 0));
+  const abatido = repartirLiquidoPorTomador(brutos, round2(somaBrutos - deductionsSum(idsDoEscopo)))
+    .find((r) => r.emitterId === emitterId)?.total;
+  const chaveAbatido = lideraGrupo ? 'somaCnpj_grupo_abatido' : 'somaCnpj_individual_abatido';
+  const chaveBruta = lideraGrupo ? 'somaCnpj_grupo' : 'somaCnpj_individual';
+  if (typeof abatido === 'number' && abatido !== cands[chaveBruta] && abatido > 0) {
+    cands[chaveAbatido] = abatido;
   }
 
+  // 10/09/2026: `platform_key` entra no SELECT porque a divisao por CNPJ precisa
+  // saber o valor DO ESPELHO DAQUELE SLOT (ver `escolherTotalDoCnpj`).
   const { data: pubs } = await supabase.from('driverpay_mirror_publications')
-    .select('scope, platform_filter, include_deductions, printed_total')
+    .select('scope, platform_key, platform_filter, include_deductions, printed_total')
     .eq('driver_id', driverId).eq('period_id', periodId);
+  const porEspelho: Record<string, number> = {};
   for (const pub of pubs ?? []) {
     const filter = Array.isArray(pub.platform_filter) && pub.platform_filter.length
       ? (pub.platform_filter as string[])
@@ -740,73 +824,27 @@ async function buildValueCandidates(
       includeDeductions ? '' : '_sem_abate'
     }`;
     cands[key] = value;
+    porEspelho[(pub.platform_key as string) ?? ''] = value;
   }
-  return cands;
+  return { cands, porEspelho };
 }
 
 /**
- * Total COMBINADO de todos os CNPJs juntos, pra "dividir em 2 notas entre CNPJs"
- * (04/09/2026, pedido do Victor — achado real com o driver Gessiley: ele precisa
- * dividir por causa de um TETO de valor por nota, tipo limite do MEI — uma nota só
- * com o total de UM CNPJ estoura esse limite). Não filtra por emitterId — soma
- * TODAS as plataformas (todos os CNPJs) do escopo (grupo, se a pessoa lidera um;
- * senão só ela), menos vale/perda pendente — mesmo cálculo do "abatido" que já
- * existe por CNPJ em `buildValueCandidates`, só que sem separar por CNPJ.
+ * 10/09/2026 — `buildComboTotal` (o total de TODOS os CNPJs somados) foi REMOVIDA.
+ *
+ * Ela existia só pra dividir a nota entre dois tomadores, e era exatamente isso que
+ * a Shopee e a iMile recusam: metade do dinheiro de um CNPJ saía faturada no outro.
+ * A divisão passou a ser dentro de um CNPJ só, sobre os candidatos daquele CNPJ que
+ * `buildValueCandidates` já calcula. Não recriar: somar CNPJs pra emitir nota é o bug.
  */
-async function buildComboTotal(
-  driverId: string, companyId: string, periodId: string,
-): Promise<{ total: number; ids: string[] }> {
-  const round2 = (v: number) => Math.round(v * 100) / 100;
 
-  const { data: ledGroup } = await supabase.from('driverpay_groups')
-    .select('id').eq('leader_driver_id', driverId).eq('company_id', companyId).maybeSingle();
-  let ids: string[] = [driverId];
-  if (ledGroup?.id) {
-    const { data: members } = await supabase.from('driverpay_group_members')
-      .select('driver_id').eq('group_id', ledGroup.id);
-    ids = [...new Set([driverId, ...(members ?? []).map((m) => m.driver_id as string)])];
-  }
-
-  const { data: pays } = await supabase.from('driverpay_payments')
-    .select('id, driver_id, zapex_rate').eq('period_id', periodId).in('driver_id', ids);
-  const payList = pays ?? [];
-  const payIds = payList.map((p) => p.id);
-  const driverOf = new Map(payList.map((p) => [p.id as string, p.driver_id as string]));
-
-  const { data: packs } = payIds.length
-    ? await supabase.from('driverpay_payment_packages')
-      .select('payment_id, packages, rate_snapshot').in('payment_id', payIds)
-    : { data: [] as never[] };
-  let bruto = 0;
-  for (const pk of packs ?? []) {
-    if (!driverOf.has(pk.payment_id as string)) continue;
-    bruto += (pk.packages ?? 0) * Number(pk.rate_snapshot ?? 0);
-  }
-
-  const { data: zapexRows } = payIds.length
-    ? await supabase.from('driverpay_zapex').select('payment_id').in('payment_id', payIds)
-    : { data: [] as never[] };
-  const zapexRateOf = new Map(payList.map((p) => [p.id as string, Number(p.zapex_rate ?? 0)]));
-  for (const z of zapexRows ?? []) bruto += zapexRateOf.get(z.payment_id as string) ?? 0;
-
-  const { data: discountRows } = payIds.length
-    ? await supabase.from('driverpay_discounts').select('payment_id, amount').in('payment_id', payIds)
-    : { data: [] as never[] };
-  const { data: valeRows } = payIds.length
-    ? await supabase.from('driverpay_vales').select('payment_id, amount').in('payment_id', payIds)
-    : { data: [] as never[] };
-  let deductions = 0;
-  for (const row of [...(discountRows ?? []), ...(valeRows ?? [])]) {
-    if (driverOf.has(row.payment_id as string)) deductions += Number(row.amount ?? 0);
-  }
-
-  return { total: round2(round2(bruto) - round2(deductions)), ids };
-}
-
-// ─── Nota dividida em 2 CNPJs (19/08/2026, decisão do Victor — redesenhada
-// 04/09/2026: era "2 pessoas/nomes no mesmo CNPJ", virou "2 CNPJs diferentes,
-// cada um levando uma fatia do total combinado" — motivo real: teto de valor
-// por nota, tipo limite do MEI, que uma nota só com o total de UM CNPJ estoura)
+// ─── Nota dividida DENTRO de um CNPJ (19/08/2026 → redesenhada 3 vezes) ───
+// Histórico curto, porque a regra já virou de lado e não pode virar de novo por
+// engano: 19/08 nasceu como "2 pessoas no mesmo CNPJ"; 04/09 virou "2 CNPJs
+// tomadores diferentes, cada um com uma fatia do total combinado"; e 10/09 voltou
+// pro mesmo CNPJ — agora por exigência da Shopee e da iMile, que não aceitam nota
+// com valor do outro. O motivo original continua valendo (teto de valor por nota,
+// tipo MEI): o que se divide é o valor DAQUELE CNPJ, entre as duas pessoas.
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
@@ -816,6 +854,14 @@ async function buildComboTotal(
  * Receita — que é o que ele não pode ficar fazendo.
  */
 const NF_SPLIT_WINDOW_MS = 30 * 60_000;
+/**
+ * Os minutos da janela, EM TEXTO, pra mensagem ao entregador (10/09/2026).
+ *
+ * Achado no caminho: as mensagens diziam "10 minutos" desde que a janela virou 30
+ * (05/09) — número cravado na string enquanto o relógio real vinha da constante.
+ * Quem lia era o entregador, achando que tinha 1/3 do tempo que tem.
+ */
+const NF_SPLIT_WINDOW_MIN_TXT = `${NF_SPLIT_WINDOW_MS / 60_000} minutos`;
 
 /** Quem está cadastrado pra emitir nota por este driver: nome + CNPJ (máx 2). */
 async function emissoresAutorizadosDe(
@@ -832,6 +878,8 @@ type Parte1Aberta = {
   id: string; split_group: string; split_form: string; read_value: number | null;
   split_expected: number | null; matched_name: string | null; uploaded_at: string;
   check_details: Record<string, unknown> | null; nota_emitter_id: string;
+  /** De qual espelho a parte 1 é (10/09/2026) — o aviso tem que cair no slot certo. */
+  mirror_platform_key: string | null;
   /** CNPJ do emissor que casou na parte 1 — a parte 2 tem que vir de outro (07/09/2026). */
   matched_cnpj: string | null;
 };
@@ -839,12 +887,13 @@ type Parte1Aberta = {
 /**
  * A parte 1 ABERTA da dupla deste driver (se houver) — e, de quebra, EXPIRA as
  * vencidas (lazy: roda no upload e no nf-slots; o cron também varre). Aberta =
- * split_part=1, status 'recebida', sem par, dentro dos 10 minutos.
+ * split_part=1, status 'recebida', sem par, dentro da janela (30 minutos).
  *
- * 04/09/2026: NÃO filtra mais por `emitterId` — a dupla agora é entre DOIS CNPJs
- * diferentes (não mais 2 pessoas no mesmo CNPJ), então a parte 1 pode estar em
- * QUALQUER CNPJ deste driver; quem chama decide se o CNPJ atual pode ser o par
- * (tem que ser DIFERENTE do de `nota_emitter_id`, ver `nfUpload`).
+ * Não filtra por `emitterId` DE PROPÓSITO: a parte 1 pode estar em qualquer CNPJ
+ * deste driver, e é justamente isso que faz o "um CNPJ de cada vez" funcionar —
+ * uma dupla aberta em qualquer cartão bloqueia envio nos outros. Quem decide se
+ * este CNPJ pode ser o par é o `nfUpload`, e desde 10/09/2026 a regra é que ele
+ * seja o MESMO da parte 1 (antes era o contrário: tinha que ser diferente).
  *
  * ⚠️ A expiração marca 'rejeitada' com `check_details.splitExpired` — e essa recusa
  * NÃO segura a vaga (exceção à regra de 05/08 "recusada segura o lugar": aquilo
@@ -855,7 +904,7 @@ async function parte1AbertaDoSlot(
   driverId: string, periodId: string,
 ): Promise<Parte1Aberta | null> {
   const { data: partes } = await supabase.from('driverpay_nota_fiscal_files')
-    .select('id, split_group, split_form, split_part, read_value, split_expected, matched_name, matched_cnpj, uploaded_at, status, check_details, nota_emitter_id')
+    .select('id, split_group, split_form, split_part, read_value, split_expected, matched_name, matched_cnpj, uploaded_at, status, check_details, nota_emitter_id, mirror_platform_key')
     .eq('driver_id', driverId).eq('period_id', periodId)
     .not('split_group', 'is', null)
     .order('uploaded_at', { ascending: true });
@@ -868,7 +917,7 @@ async function parte1AbertaDoSlot(
     if (idade > NF_SPLIT_WINDOW_MS) {
       await supabase.from('driverpay_nota_fiscal_files').update({
         status: 'rejeitada',
-        reject_reason: '[automático] A segunda nota da dupla não chegou em 10 minutos. Envie as DUAS de novo.',
+        reject_reason: `[automático] A segunda nota da dupla não chegou em ${NF_SPLIT_WINDOW_MIN_TXT}. Envie as DUAS de novo.`,
         check_details: { ...((f.check_details as Record<string, unknown> | null) ?? {}), splitExpired: true },
       }).eq('id', f.id);
       continue;
@@ -876,6 +925,34 @@ async function parte1AbertaDoSlot(
     aberta = f as unknown as Parte1Aberta;
   }
   return aberta;
+}
+
+/**
+ * Quais SLOTS estão com uma dupla pela metade (10/09/2026) — chave
+ * `periodo|espelho|CNPJ`, a mesma de `slotKey`.
+ *
+ * Existe pro card do espelho não dizer "Nota enviada" com a segunda nota faltando:
+ * a parte 1 conta em `sent` de propósito (ela ocupa a vaga), então quem olha só o
+ * contador vê a vaga cheia. Uma query pra todos os períodos — a lista de espelhos
+ * cresce a cada quinzena e não pode virar uma query por espelho.
+ */
+async function duplasAbertasPorSlot(driverId: string, periodIds: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (periodIds.length === 0) return out;
+  const { data } = await supabase.from('driverpay_nota_fiscal_files')
+    .select('period_id, split_group, split_part, status, uploaded_at, nota_emitter_id, mirror_platform_key')
+    .eq('driver_id', driverId).in('period_id', periodIds)
+    .not('split_group', 'is', null);
+  const lista = data ?? [];
+  const temPar = new Set(lista.filter((f) => f.split_part === 2).map((f) => f.split_group as string));
+  for (const f of lista) {
+    if (f.split_part !== 1 || f.status !== 'recebida') continue;
+    if (temPar.has(f.split_group as string)) continue;          // dupla completa
+    const idade = Date.now() - new Date(f.uploaded_at as string).getTime();
+    if (idade > NF_SPLIT_WINDOW_MS) continue;                    // venceu: a vaga volta livre
+    out.add(`${f.period_id}|${(f.mirror_platform_key as string | null) ?? '*'}|${f.nota_emitter_id}`);
+  }
+  return out;
 }
 
 /** A nota rejeitada é uma dupla que EXPIROU? (não segura a vaga — ver acima.) */
@@ -897,7 +974,7 @@ async function expirarDuplasDoDriver(driverId: string, periodId: string): Promis
     if ((par ?? []).length > 0) continue;
     await supabase.from('driverpay_nota_fiscal_files').update({
       status: 'rejeitada',
-      reject_reason: '[automático] A segunda nota da dupla não chegou em 10 minutos. Envie as DUAS de novo.',
+      reject_reason: `[automático] A segunda nota da dupla não chegou em ${NF_SPLIT_WINDOW_MIN_TXT}. Envie as DUAS de novo.`,
       check_details: { ...((f.check_details as Record<string, unknown> | null) ?? {}), splitExpired: true },
     }).eq('id', f.id).eq('status', 'recebida');
   }
@@ -970,17 +1047,29 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   if (splitPart === 2) {
     if (!parte1) {
       return json({
-        error: 'Não há primeira nota aberta desta dupla (ou os 10 minutos acabaram). Escolha a forma e envie as DUAS de novo.',
+        error: `Não há primeira nota aberta desta dupla (ou os ${NF_SPLIT_WINDOW_MIN_TXT} acabaram). Escolha a forma e envie as DUAS de novo.`,
         splitExpired: true,
       }, 409);
     }
     if (parte1.split_form !== splitForm) {
       return json({ error: 'A forma escolhida mudou no meio — envie as DUAS de novo com a mesma forma.' }, 409);
     }
-    // 04/09/2026: a dupla agora é entre 2 CNPJs diferentes (não mais 2 pessoas no
-    // mesmo CNPJ) — a segunda nota tem que ser de um CNPJ DIFERENTE da primeira.
-    if (parte1.nota_emitter_id === emitterId) {
-      return json({ error: 'A segunda nota precisa ser de um CNPJ DIFERENTE da primeira — envie no outro cartão.' }, 409);
+    // ════════════════════════════════════════════════════════════════════════
+    // 10/09/2026 — AS DUAS NOTAS DA DUPLA SÃO DO MESMO CNPJ TOMADOR.
+    //
+    // A trava era exatamente o contrário até 09/09 (exigia tomadores DIFERENTES) e
+    // era ela que produzia a mistura que a Shopee e a iMile não aceitam: metade do
+    // dinheiro da Shopee saía faturado contra o CNPJ da iMile. Agora Shopee com
+    // Shopee, iMile com iMile — o que muda entre as duas notas é QUEM emite.
+    // ════════════════════════════════════════════════════════════════════════
+    if (parte1.nota_emitter_id !== emitterId) {
+      const { data: emDaParte1 } = await supabase.from('driverpay_nota_emitters')
+        .select('label').eq('id', parte1.nota_emitter_id).maybeSingle();
+      const ondeComecou = emDaParte1?.label ? ` (${emDaParte1.label})` : '';
+      return json({
+        error: `As duas notas da divisão têm que ser do MESMO CNPJ. Você começou a dupla em outro cartão${ondeComecou}`
+          + ` — termine as duas lá antes de mandar nota aqui.`,
+      }, 409);
     }
   }
   {
@@ -993,7 +1082,18 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
       .filter((f) => !ehSplitExpirada({ status: f.status as string, check_details: f.check_details }))
       // 04/09/2026: nota RECUSADA não segura mais o lugar (ver comentário grande
       // acima) — só recebida/validada ocupam a vaga de verdade.
-      .filter((f) => f.status !== 'rejeitada');
+      .filter((f) => f.status !== 'rejeitada')
+      // ══════════════════════════════════════════════════════════════════════
+      // 10/09/2026 — A PARTE 1 NÃO OCUPA A VAGA DA PRÓPRIA PARTE 2.
+      //
+      // As duas são a MESMA nota partida em duas; juntas ocupam UMA vaga. Enquanto
+      // a dupla era entre CNPJs diferentes isso nunca aparecia (a query filtra por
+      // `nota_emitter_id`, e a parte 1 estava no outro CNPJ). Ao trazer a dupla pra
+      // dentro de um CNPJ só, a parte 1 passou a barrar a própria parte 2 com
+      // "você já enviou a nota deste CNPJ" — e a dupla NUNCA fechava.
+      // Pego pelo E2E 107 (caso E) antes de qualquer entregador tentar.
+      // ══════════════════════════════════════════════════════════════════════
+      .filter((f) => !(splitPart === 2 && parte1 !== null && f.id === parte1.id));
     const ocupando = notasQueOcupamVaga(
       consideradas.map((f) => ({
         status: f.status as string,
@@ -1012,7 +1112,7 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     // Dupla aberta bloqueia nota única/nova parte 1: ou completa, ou espera expirar.
     if (splitPart !== 2 && parte1) {
       return json({
-        error: 'Você tem uma dupla de notas em andamento — envie a SEGUNDA nota dela (ou aguarde os 10 minutos expirarem pra recomeçar).',
+        error: `Você tem uma dupla de notas em andamento — envie a SEGUNDA nota dela (ou aguarde os ${NF_SPLIT_WINDOW_MIN_TXT} expirarem pra recomeçar).`,
         splitOpen: true,
       }, 409);
     }
@@ -1030,8 +1130,13 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
   let candidates: Record<string, number> = {};
   /** O mapa que a conferência DE FATO comparou (nota dividida troca por fatias). */
   let candidatosComparados: Record<string, number> = {};
-  /** Total combinado (todos os CNPJs) usado pra fatiar a parte 1 da dupla. */
-  let comboTotalParaSplit: number | null = null;
+  /**
+   * De qual TOTAL saiu cada fatia oferecida à parte 1 (10/09/2026) — é ele que a
+   * parte 2 usa pra cobrar exatamente o que falta.
+   */
+  let totalPorFatia: Record<string, number> = {};
+  /** Valor de cada espelho publicado (chave = platform_key) — pra fatiar só o deste cartão. */
+  let porEspelhoDoUpload: Record<string, number> = {};
   /** A transcricao veio da IA? Vai pro check_details, pra dar pra auditar depois. */
   let lidoPorIa = false;
   /** Emissores cadastrados na ficha (nome + CNPJ) — fora do try: a trava do CNPJ
@@ -1072,25 +1177,55 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     const { data: driver } = await supabase.from('driverpay_drivers')
       .select('name, recebedor_nome').eq('id', claims.driver_id).maybeSingle();
     emissoresAutorizados = await emissoresAutorizadosDe(claims.driver_id);
-    candidates = await buildValueCandidates(claims.driver_id, claims.company_id, periodId, emitterId);
+    ({ cands: candidates, porEspelho: porEspelhoDoUpload } = await buildValueCandidates(
+      claims.driver_id, claims.company_id, periodId, emitterId,
+    ));
 
-    // ── Nota dividida: o valor esperado vira a FATIA (19/08/2026, cross-CNPJ
-    // desde 04/09/2026) ── Parte 1: a fatia 1 do total COMBINADO (todos os CNPJs
-    // juntos — mesma conta que `nfSplitPreview` mostrou no app). Parte 2: em OUTRO
-    // CNPJ, exatamente o que FALTA da dupla (total combinado casado na parte 1 −
-    // o que a parte 1 trouxe) — assim a soma fecha sempre no total combinado.
+    // ── Nota dividida: o valor esperado vira a FATIA ──────────────────────────
+    // 10/09/2026: a fatia sai dos totais DAQUELE CNPJ (os mesmos que já conferem a
+    // nota inteira), nunca mais do total combinado. Parte 2: no MESMO CNPJ, cobrando
+    // exatamente o que FALTA (total casado na parte 1 − o que a parte 1 trouxe) —
+    // assim a dupla sempre fecha no total daquele CNPJ, sem sobrar nem faltar.
     candidatosComparados = candidates;
     if (splitPart === 1 && splitForm) {
-      const combo = await buildComboTotal(claims.driver_id, claims.company_id, periodId);
-      comboTotalParaSplit = combo.total;
-      candidatosComparados = combo.total > 0
-        ? { combo_parte1: nfSplitSlices(combo.total, splitForm)[0] }
-        : {};
+      // 10/09/2026: só os totais DESTE cartão viram fatia. Com dois espelhos no mesmo
+      // CNPJ (ex.: "SOMENTE LOGGI" e "SOMENTE SHOPEE"), aceitar a metade do outro
+      // espelho deixaria a nota cair no cartão errado — e o `splitTotal` levaria o
+      // erro pra segunda nota. A tolerância que importa (espelho baixado antes do
+      // desconto entrar) segue viva: `somaCnpj_*` com e sem abate continuam valendo.
+      const doOutroEspelho = new Set(
+        Object.keys(porEspelhoDoUpload)
+          .filter((k) => k !== (mirrorPlatformKey ?? ''))
+          .map((k) => porEspelhoDoUpload[k]),
+      );
+      const soDesteCartao = Object.fromEntries(
+        Object.entries(candidates).filter(
+          ([k, v]) => !(k.startsWith('espelho_') && doOutroEspelho.has(v)
+            && v !== porEspelhoDoUpload[mirrorPlatformKey ?? '']),
+        ),
+      );
+      const fatias = fatiasDaParte1(soDesteCartao, (t) => nfSplitSlices(t, splitForm));
+      candidatosComparados = fatias.candidatos;
+      totalPorFatia = fatias.totalPorCandidato;
     } else if (splitPart === 2 && parte1) {
       const totalDupla = Number((parte1.check_details as { splitTotal?: number } | null)?.splitTotal ?? NaN);
       const jaVeio = Number(parte1.read_value ?? NaN);
       if (Number.isFinite(totalDupla) && Number.isFinite(jaVeio)) {
         candidatosComparados = { dupla_restante: Math.round((totalDupla - jaVeio) * 100) / 100 };
+      } else {
+        // ════════════════════════════════════════════════════════════════════
+        // 10/09/2026 — A PARTE 2 NUNCA CAI NO VALOR CHEIO.
+        //
+        // A parte 1 fica sem `splitTotal` quando a conferência dela falhou por
+        // dentro (PDF ilegível, OCR fora do ar, query que caiu): ela é gravada como
+        // 'recebida' com `read_value` null, e a dupla abre sem valor nenhum
+        // conferido. Sem esta trava, `candidatosComparados` continuava sendo os
+        // totais INTEIROS daquele CNPJ — e aí a metade certa era recusada e uma
+        // nota do valor CHEIO passava como parte 2, validando junto a parte 1 que
+        // nunca foi conferida. O CNPJ ficaria com ~1,5x faturado, tudo verde.
+        // Zerar é o certo: sem base pra conferir, a nota não valida sozinha.
+        // ════════════════════════════════════════════════════════════════════
+        candidatosComparados = {};
       }
     }
 
@@ -1137,10 +1272,13 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
       return d.length === 14 && d !== matchedCnpj;
     })
     .map((i) => `${i.name} (CNPJ ${formatCnpj((i.cnpj ?? '').replace(/\D/g, ''))})`);
+  // 10/09/2026: a mensagem falava em "CNPJ DIFERENTE" — e a tela, desde que a dupla
+  // passou a ser dentro de um CNPJ só, diz "as duas neste MESMO CNPJ". Pro entregador
+  // eram duas frases opostas. O que muda entre as duas notas é a PESSOA que emite.
   const motivoEmissorRepetido = emissorRepetido
-    ? `A segunda nota da dupla tem que ser emitida por um CNPJ DIFERENTE da primeira. `
-      + `Esta veio do mesmo CNPJ (${formatCnpj(matchedCnpj!)})`
-      + `${parte1!.matched_name ? `, de ${parte1!.matched_name}` : ''}. `
+    ? `As duas notas da divisão têm que ser emitidas por PESSOAS diferentes. `
+      + `Esta veio da mesma que emitiu a primeira`
+      + `${parte1!.matched_name ? ` (${parte1!.matched_name})` : ''}. `
       + (outrosEmissores.length > 0
         ? `Emita a segunda por ${outrosEmissores.join(' ou ')} e envie de novo.`
         : 'Peça pra CD cadastrar o segundo CNPJ antes de dividir a nota.')
@@ -1174,7 +1312,9 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
     const v = candidatosComparados[labelComparado];
     readValue = typeof v === 'number' && Number.isFinite(v) ? v : null;
     if (splitPart === 1) {
-      splitTotal = comboTotalParaSplit;
+      // O total de ONDE a fatia casada saiu (10/09/2026) — a parte 2 cobra o resto dele.
+      const t = totalPorFatia[labelComparado];
+      splitTotal = typeof t === 'number' && Number.isFinite(t) ? t : null;
     } else if (splitPart === 2 && parte1) {
       const t = Number((parte1.check_details as { splitTotal?: number } | null)?.splitTotal ?? NaN);
       splitTotal = Number.isFinite(t) ? t : null;
@@ -2053,7 +2193,7 @@ async function proofProcessQueue(req: Request, body: Body): Promise<Response> {
   return json({ ok: true, processados: total, placar, duplasExpiradas: expiradas });
 }
 
-/** Expira TODAS as partes 1 sem par além dos 10 minutos (qualquer empresa). */
+/** Expira TODAS as partes 1 sem par além da janela de 30 minutos (qualquer empresa). */
 async function expirarDuplasVencidas(): Promise<number> {
   const corte = new Date(Date.now() - NF_SPLIT_WINDOW_MS).toISOString();
   const { data: abertas } = await supabase.from('driverpay_nota_fiscal_files')
@@ -2066,7 +2206,7 @@ async function expirarDuplasVencidas(): Promise<number> {
     if ((par ?? []).length > 0) continue;
     const { error } = await supabase.from('driverpay_nota_fiscal_files').update({
       status: 'rejeitada',
-      reject_reason: '[automático] A segunda nota da dupla não chegou em 10 minutos. Envie as DUAS de novo.',
+      reject_reason: `[automático] A segunda nota da dupla não chegou em ${NF_SPLIT_WINDOW_MIN_TXT}. Envie as DUAS de novo.`,
       check_details: { ...((f.check_details as Record<string, unknown> | null) ?? {}), splitExpired: true },
     }).eq('id', f.id).eq('status', 'recebida');
     if (!error) n++;
