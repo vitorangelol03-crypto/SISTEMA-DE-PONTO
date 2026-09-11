@@ -16,6 +16,7 @@
 | ✅ Edge fn `employee-public-api` v15 | **no ar**, rotas antigas sondadas e OK |
 | ✅ Recibo em lote + publicar pro funcionário | **feito** |
 | ✅ E2E da tela nova | **6/6**, com dado real de produção |
+| ✅ E2E do recibo no celular do funcionário | entra com CPF+PIN e abre o PDF |
 | ✅ Nome do banco fora da tela | tinha ficado só no mockup (§3.5) |
 | 🔴 **FALTA VOCÊ** | 1 policy de bucket (§5.1) e 1 decisão (§5.2) |
 
