@@ -91,6 +91,9 @@ export const HistoricoPagamentos: React.FC<Props> = ({
             <div
               role="button"
               tabIndex={0}
+              /* O E2E usa isto pra ler o valor da linha FECHADA e comparar com a
+                 soma das semanas — a invariante do erro de R$ 82.980. */
+              data-testid="gaveta-mes"
               onClick={() => setAberto(estaAberto ? '' : mes.chave)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setAberto(estaAberto ? '' : mes.chave); }}
               className={`flex flex-wrap items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 cursor-pointer hover:bg-gray-50 min-h-[44px] ${estaAberto ? 'rounded-t-lg' : 'rounded-lg'}`}
@@ -338,7 +341,10 @@ const LinhaSemana: React.FC<{
 }> = ({ semana, mesNome, podeVerValores, onGerarPdf, onAbrirErros }) => {
   const situacao = semana.status === 'open' ? 'ABERTA' : 'paga';
   return (
-    <div className="flex flex-wrap items-center gap-3 px-3 sm:px-4 py-3 sm:pl-7 bg-white border border-gray-200 rounded-md hover:bg-gray-50">
+    <div
+      data-testid="semana-do-historico"
+      className="flex flex-wrap items-center gap-3 px-3 sm:px-4 py-3 sm:pl-7 bg-white border border-gray-200 rounded-md hover:bg-gray-50"
+    >
       <div className="flex flex-col min-w-[120px]">
         <span className="text-sm font-semibold text-gray-800">{semana.numero}</span>
         <span className="text-xs font-medium text-gray-500">{semana.intervalo}</span>
