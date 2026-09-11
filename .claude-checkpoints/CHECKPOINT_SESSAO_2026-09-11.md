@@ -100,6 +100,20 @@ o "visto". Publica um a um: se o 30º falhar, os 29 que foram mantêm o selo.
 
 **Baixar e publicar são botões separados** — decisão sua: conferir antes de mandar.
 
+**Provado ponta a ponta** (com um recibo de mentira, apagado no fim):
+
+| Passo | |
+|---|---|
+| PDF sobe pro bucket privado | ok |
+| Registro da publicação grava | ok |
+| A edge fn devolve o recibo pro funcionário | **sim** |
+| Título e valor chegam certos | `PROVA (apagar)` / `123.45` |
+| O link assinado **baixa um PDF de verdade** | **sim** |
+| `viewed_at` carimba na primeira leitura | **sim** |
+| Sobrou lixo? | **0 registros** |
+
+O único elo que falta é o **upload pelo navegador**, que depende da policy (§5.1).
+
 ### 3.5 O nome do banco saiu de TUDO
 *"Tire completamente o nome do Banco C6 — o arquivo pode ser usado para qualquer
 banco, não somente C6."* Isso tinha sido feito **só no mockup**; o código de
