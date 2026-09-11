@@ -633,6 +633,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         setHistPeriodos(todosPeriodos.map((p) => ({
           id: p.id, label: p.label, startDate: p.start_date, endDate: p.end_date,
           paymentDate: p.payment_date, status: p.status,
+          pagoPor: p.paid_by ?? null, pagoEm: p.paid_at ?? null,
         })));
 
         // O vínculo vem do CARIMBO do pagamento quando existe
@@ -2484,7 +2485,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         <ModalShell
           icon={<FileSpreadsheet className="w-5 h-5" />}
           title="Arquivo de pagamento"
-          subtitle={`Período de ${formatDateBR(filters.startDate)} a ${formatDateBR(filters.endDate)} — já carregado do filtro do Financeiro`}
+          /* O período agora é escolhido DENTRO do popup (seletor mês → semana),
+             então o cabeçalho não anuncia mais uma data — ela mudaria e ficaria
+             mentindo. Quem manda é o seletor. */
+          subtitle="Escolha a semana, revise a prévia e baixe o arquivo"
           onClose={() => setShowC6Modal(false)}
           maxWidth="sm:max-w-7xl"
         >
@@ -2498,11 +2502,17 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             <C6PaymentTab
               userId={userId}
               hasPermission={hasPermission}
-              filtrosIniciais={{
+              /* 🔴 O popup SEGUE A TELA (11/09/2026).
+                 Se você está olhando a LISTA já filtrada num período, o arquivo
+                 tem que ser DAQUELE período — pular pra semana aberta geraria o
+                 arquivo errado em silêncio (7 testes do C6 pegaram isso).
+                 Se você está no HISTÓRICO, não escolheu período nenhum: aí sim o
+                 popup abre sozinho na semana ABERTA, que é o que o Victor pediu. */
+              filtrosIniciais={activeView === 'financial' ? {
                 startDate: filters.startDate,
                 endDate: filters.endDate,
                 employmentType: filters.employmentType,
-              }}
+              } : undefined}
               autoImportar
               embutido
             />

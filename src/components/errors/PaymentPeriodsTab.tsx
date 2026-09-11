@@ -12,6 +12,7 @@ import {
 import { useCompany } from '../../contexts/useCompany';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
+import { situacaoDaSemana, detalheDoPagamento } from '../../utils/situacaoDaSemana';
 
 interface PaymentPeriodsTabProps {
   userId: string;
@@ -93,10 +94,12 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
   };
 
   const handleClose = async (periodId: string) => {
-    if (!confirm('Fechar este período? Status passará a "Pago".')) return;
+    // 11/09/2026: fechar NÃO é mais o mesmo que pagar. Quem diz que pagou é o
+    // botão de confirmar, no arquivo de pagamento.
+    if (!confirm('Encerrar este período? Ele para de receber lançamento e fica AGUARDANDO a confirmação do pagamento.')) return;
     try {
       await closePaymentPeriod(periodId);
-      toast.success('Período fechado');
+      toast.success('Período encerrado — falta confirmar o pagamento');
       load();
     } catch (err) {
       console.error(err);
@@ -111,10 +114,10 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
       toast.error('Não há período aberto para hoje');
       return;
     }
-    if (!confirm(`Fechar o período atual (${formatDateBR(current.start_date)} a ${formatDateBR(current.end_date)})?`)) return;
+    if (!confirm(`Encerrar o período atual (${formatDateBR(current.start_date)} a ${formatDateBR(current.end_date)})? Ele fica aguardando a confirmação do pagamento.`)) return;
     try {
       await closePaymentPeriod(current.id);
-      toast.success('Período atual fechado');
+      toast.success('Período encerrado — falta confirmar o pagamento');
       load();
     } catch (err) {
       console.error(err);
@@ -219,9 +222,9 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
                     <td className="px-4 py-2 text-sm text-gray-600">{formatDateBR(p.payment_date)}</td>
                     <td className="px-4 py-2">
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        p.status === 'open' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
-                      }`}>
-                        {p.status === 'open' ? '🟡 Aberto' : '✅ Pago'}
+                        situacaoDaSemana(p.status, p.paid_by).cor
+                      }`} title={detalheDoPagamento(p.status, p.paid_by, p.paid_at)}>
+                        {situacaoDaSemana(p.status, p.paid_by).texto}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-right">
@@ -229,10 +232,10 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
                         <button
                           onClick={() => handleClose(p.id)}
                           className="text-sm text-orange-600 hover:text-orange-800 flex items-center gap-1 ml-auto"
-                          title="Fechar período"
+                          title="Encerrar o período (não marca como pago)"
                         >
                           <CheckCircle2 className="w-4 h-4" />
-                          Fechar
+                          Encerrar
                         </button>
                       )}
                     </td>

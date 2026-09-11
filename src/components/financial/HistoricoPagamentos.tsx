@@ -14,6 +14,7 @@ import React, { useMemo, useState } from 'react';
 import {
   ChevronRight, DollarSign, Users, Minus, AlertTriangle, Briefcase, FileText, X,
 } from 'lucide-react';
+import { situacaoDaSemana, detalheDoPagamento } from '../../utils/situacaoDaSemana';
 import {
   montarHistorico, foraDasGavetas, textoErros,
   type SemanaDoHistorico, type ErroDoHistorico,
@@ -406,7 +407,9 @@ const LinhaSemana: React.FC<{
   /** Leva pro Financeiro filtrado nesta semana. */
   onAbrir?: () => void;
 }> = ({ semana, mesNome, podeVerValores, onGerarPdf, onAbrirErros, onAbrir }) => {
-  const situacao = semana.status === 'open' ? 'ABERTA' : 'paga';
+  // Três estados agora: ABERTA / A CONFIRMAR / paga. Traduzido num lugar só
+  // (`situacaoDaSemana`), porque 5 telas mostram isso.
+  const situacao = situacaoDaSemana(semana.status, semana.pagoPor);
   // GÊMEA: a mesma semana cadastrada duas vezes (10 pares em produção). Ela não
   // ficou com dia nenhum, então mostraria "R$ 0,00 · 0 pagos" — e abrir a lista
   // mostraria tudo cheio, porque a lista filtra por DATA. Em vez de deixar a
@@ -452,10 +455,11 @@ const LinhaSemana: React.FC<{
           repetida — conta na {semana.gemeaDe}
         </span>
       ) : (
-        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${
-          situacao === 'ABERTA' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
-        }`}>
-          {situacao}
+        <span
+          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${situacao.cor}`}
+          title={detalheDoPagamento(semana.status, semana.pagoPor, semana.pagoEm)}
+        >
+          {situacao.texto}
         </span>
       )}
 

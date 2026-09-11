@@ -84,6 +84,15 @@ async function importC6(page: Page, date: string) {
 }
 
 test.describe('C6 — completo', () => {
+  /**
+   * 11/09/2026 — prazo de 240s. O padrão do config é 30s, e este spec gasta boa
+   * parte disso ANTES de testar qualquer coisa: cada teste cria funcionário,
+   * pagamento, erro e triagem no banco, e só então faz login. Nesta máquina (com
+   * o robô da Shopee junto) o `page.goto` do login estourava o orçamento do
+   * TESTE mesmo tendo 60s de navegação — o teste morria antes de chegar no que
+   * ele prova. Espera por condição, não por tempo fixo.
+   */
+  test.describe.configure({ timeout: 240_000 });
   test.beforeAll(cleanup);
   test.afterAll(cleanup);
 

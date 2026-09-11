@@ -1780,6 +1780,41 @@ export const getErrorRecords = async (
 };
 
 // Vários erros por dia são permitidos (decisão 26/07) — insert puro, sem upsert.
+/**
+ * Recusa o lançamento quando o dia cai numa semana JÁ CONFIRMADA como paga.
+ *
+ * A mensagem diz a semana e desde quando, senão a pessoa não entende por que o
+ * sistema recusou.
+ */
+async function recusarSeASemanaJaFoiPaga(date: string, companyId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('payment_periods')
+    .select('label, start_date, end_date, paid_at')
+    .eq('company_id', companyId)
+    .eq('status', 'paid')
+    .lte('start_date', date)
+    .gte('end_date', date)
+    .limit(1);
+  // Falha de LEITURA não pode barrar o lançamento: seria travar o trabalho por
+  // um problema de rede. A trava é contra semana paga, não contra instabilidade.
+  if (error) {
+    console.error('Não consegui conferir se a semana já foi paga:', error);
+    return;
+  }
+  const paga = data?.[0];
+  if (!paga) return;
+
+  const quando = paga.paid_at
+    ? new Date(paga.paid_at as string).toLocaleDateString('pt-BR')
+    : null;
+  throw new Error(
+    `Não dá pra lançar erro em ${date.split('-').reverse().join('/')}: `
+    + `a semana ${paga.label ?? `${paga.start_date} a ${paga.end_date}`} já foi `
+    + `confirmada como PAGA${quando ? ` em ${quando}` : ''}. `
+    + 'O pagamento dela já saiu — lance o erro na semana aberta.',
+  );
+}
+
 export const insertErrorRecord = async (
   employeeId: string,
   date: string,
@@ -1801,6 +1836,17 @@ export const insertErrorRecord = async (
       throw new Error(valueCheck.error || 'Permissão negada para lançar erro por valor');
     }
   }
+
+  // 🔴 SEMANA JÁ PAGA NÃO ACEITA ERRO (decisão do Victor, 11/09/2026).
+  //
+  // O pagamento daquela semana já saiu; um erro lançado depois mudaria o valor
+  // na tela e ele deixaria de bater com o que foi pro banco. Ele escolheu
+  // BLOQUEAR — sabendo que o erro não fica registrado nem é descontado — pra
+  // forçar a lançar tudo ANTES de confirmar o pagamento.
+  //
+  // Semana `closed` (acabou mas ninguém confirmou) CONTINUA aceitando: é
+  // justamente essa a janela pra lançar o que faltou.
+  await recusarSeASemanaJaFoiPaga(date, companyId);
 
   // Se for tipo 'value', error_count é irrelevante; se for 'quantity', error_value é.
   const { error } = await supabase
@@ -1948,7 +1994,17 @@ export const getErrorStatistics = async (
 
 // ─── Períodos de pagamento ────────────────────────────────────────────────────
 
-export type PaymentPeriodStatus = 'open' | 'paid';
+/**
+ * `open`   — a semana está correndo.
+ * `closed` — acabou, mas NINGUÉM confirmou o pagamento ainda.
+ * `paid`   — alguém confirmou; `paid_by` e `paid_at` dizem quem e quando.
+ *
+ * 🔴 Até 11/09/2026 só existiam `open` e `paid`, e o sistema marcava `paid`
+ * SOZINHO quando a data passava — "pago" só queria dizer "a semana acabou".
+ * As 45 semanas de Caratinga marcadas assim continuam `paid` (decisão do
+ * Victor) e são reconhecíveis por terem `paid_by` nulo.
+ */
+export type PaymentPeriodStatus = 'open' | 'closed' | 'paid';
 
 export interface PaymentPeriod {
   id: string;
@@ -1959,6 +2015,10 @@ export interface PaymentPeriod {
   status: PaymentPeriodStatus;
   created_by: string | null;
   created_at: string;
+  /** Quando o pagamento foi CONFIRMADO. Nulo nas marcadas pelo automático antigo. */
+  paid_at?: string | null;
+  /** Quem confirmou. Nulo nas marcadas pelo automático antigo. */
+  paid_by?: string | null;
 }
 
 export const getPaymentPeriods = async (companyId: string): Promise<PaymentPeriod[]> => {
@@ -1998,10 +2058,40 @@ export const createPaymentPeriod = async (
   return data;
 };
 
+/**
+ * ENCERRA a semana — ela para de receber lançamento, mas NÃO vira "paga".
+ *
+ * Antes isto marcava direto como `paid`, o que fazia o sistema afirmar que o
+ * pagamento saiu sem ninguém ter confirmado. Quem diz que pagou é
+ * `confirmarPagamentoDaSemana`.
+ */
 export const closePaymentPeriod = async (periodId: string): Promise<void> => {
   const { error } = await supabase
     .from('payment_periods')
-    .update({ status: 'paid' })
+    .update({ status: 'closed' })
+    .eq('id', periodId);
+  if (error) throw error;
+};
+
+/**
+ * CONFIRMA que a semana foi paga — e registra quem confirmou e quando.
+ *
+ * É o "botãozinho" do arquivo de pagamento que o Victor pediu (11/09/2026):
+ * *"vai marcar esse botão como pago… aí vai abrir um novo ciclo"*. O ciclo novo
+ * abre sozinho: `autoCreateWeeklyPeriod` cria a semana corrente quando não
+ * existe, e a partir daí é ela que recebe os lançamentos.
+ *
+ * Depois de confirmada, a semana NÃO aceita mais lançamento de erro — decisão
+ * dele na mesma conversa. O pagamento já saiu; mexer no valor depois faria a
+ * tela discordar do que foi pro banco.
+ */
+export const confirmarPagamentoDaSemana = async (
+  periodId: string,
+  confirmadoPor: string,
+): Promise<void> => {
+  const { error } = await supabase
+    .from('payment_periods')
+    .update({ status: 'paid', paid_at: new Date().toISOString(), paid_by: confirmadoPor })
     .eq('id', periodId);
   if (error) throw error;
 };
@@ -2049,10 +2139,15 @@ export const autoCreateWeeklyPeriod = async (companyId: string): Promise<void> =
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
 
-  // Fecha períodos vencidos (end_date < hoje, status 'open')
+  // 🔴 ENCERRA os períodos vencidos — NÃO marca como pago.
+  //
+  // Até 11/09/2026 esta linha marcava `paid`, e era por isso que "pago" não
+  // significava nada: a semana virava paga sozinha só porque a data passou.
+  // Agora ela vira `closed` (acabou, aguardando confirmação) e só a pessoa, no
+  // arquivo de pagamento, diz que pagou.
   await supabase
     .from('payment_periods')
-    .update({ status: 'paid' })
+    .update({ status: 'closed' })
     .eq('status', 'open')
     .lt('end_date', todayStr)
     .eq('company_id', companyId);

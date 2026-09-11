@@ -276,6 +276,100 @@ horas, arquivo de pagamento, erros).
 
 ---
 
+## 3.9 A LEVA DA TARDE — o que o Victor pediu depois
+
+### (a) ✅ "25 de 28 pagos" nas gavetas
+
+*"Às vezes pode faltar pagar e vai ficar 25 pagos, 26 funcionários."*
+
+⚠️ **O denominador certo é quem BATEU PONTO, não o quadro da empresa.** Medi antes
+de escolher: Caratinga tem 92 funcionários, mas na semana 31/08–06/09 só **28
+trabalharam** e **25 receberam**. "25 de 92" seria barulho permanente (diarista
+não trabalha toda semana); **"25 de 28" é o alerta** — e ele já apontou 3 pessoas
+que trabalharam e não receberam.
+
+Na tela o número fica **laranja** quando falta alguém, e o "de N" **some** quando
+todos foram pagos. RPC `quem_trabalhou_por_periodo` (uma chamada só). No MÊS o
+número é o MAIOR das semanas, não a soma — as mesmas pessoas trabalham em várias.
+
+### (b) ✅ Escolher a semana no arquivo de pagamento
+
+*"Quero que apareça ali janeiro, tudo dividido… seleciono o mês e a semana. Já
+vem marcando a semana aberta. E quero TAMBÉM o calendário livre."*
+
+Dois modos, os dois ficam: **Semanas** (abre na semana ABERTA, navega mês a mês,
+a prévia refaz sozinha ao trocar) e **Datas livres** (o calendário, sem respeitar
+a regra da semana). As duas datas soltas que existiam saíram — viraram o segundo
+modo, sem repetir campo.
+
+**Duas armadilhas pagas aqui:**
+1. O modo inicial não pode ser decidido no primeiro render — as semanas chegam
+   depois, e o seletor abria em "Datas livres" mesmo havendo semana aberta.
+2. `useCallback` com dependências vazias **congelou** o `importFinancialData` do
+   primeiro render, quando a lista de funcionários ainda estava vazia: trocar de
+   semana dava "nenhum funcionário com chave PIX". **O teste tinha me enganado**
+   (contou 184 linhas da tabela do Financeiro que fica ATRÁS do popup); foi o
+   print da tela que mostrou a verdade. Agora todo locator do spec 113 é preso ao
+   `c6-popup`.
+
+#### ⚠️ Duas armadilhas de ESPERA que me custaram caro nesta leva
+
+As duas são a mesma família: **esperar por um sinal que nunca chega**.
+
+1. **O popup pulava pra semana aberta mesmo com outro período filtrado.** Se você
+   estivesse olhando a lista filtrada e clicasse em "Gerar arquivo", ele geraria
+   o arquivo da SEMANA ERRADA, calado. **7 testes do C6 pegaram.** A regra agora
+   é: o popup **segue a tela** — lista filtrada → aquele período; histórico →
+   a semana aberta.
+2. **A guarda do auto-importar travava pra sempre.** Eu usei *"tem semana
+   marcada?"* como sinal de "já decidi o período". Mas quando o período vem do
+   Financeiro e é um **intervalo livre**, nunca existe semana marcada — a prévia
+   nunca carregava. **Outros 7 testes.** O sinal virou explícito
+   (`periodoResolvido`), que vale nos dois casos.
+
+#### ⚠️ E um teste que eu ia escrever errado
+
+O spec do ciclo de pagamento ia chamar `insertErrorRecord` direto do `src/`. Não
+funciona: `src/services/database` puxa o cliente do Supabase, que lê
+`import.meta.env` (coisa do Vite) e **não existe no Playwright** — quebraria pelo
+motivo errado. Os outros specs só importam utilitário PURO do `src/`
+(`validateCPF`), e é por isso que funcionam. Reescrito pra clicar na tela de
+Erros, que é o caminho da pessoa.
+
+### (c) ✅ Confirmação de pagamento — "pago" passou a significar algo
+
+🔴 **Achado que reformula o pedido:** *"pago" hoje é automático*. Toda vez que o
+sistema abre, ele marca como `paid` todo período com `end_date < hoje`. **Ninguém
+confirma nada** — por isso as 45 semanas de Caratinga aparecem todas pagas.
+
+**Decisões do Victor (11/09/2026):**
+- As 45 já marcadas **ficam como pagas** (são passado, ele pagou).
+- Erro lançado numa semana **já paga** → **BLOQUEIA o lançamento**, com aviso.
+  ⚠️ Ele escolheu sabendo que isso significa que o erro não fica registrado nem é
+  descontado. Força a lançar antes de fechar.
+- Ordem: total de funcionários → seletor → confirmação.
+
+**O que ficou:**
+
+| status | o que é | na tela |
+|---|---|---|
+| `open` | a semana está correndo | **ABERTA** (âmbar) |
+| `closed` | acabou, ninguém confirmou | **A CONFIRMAR** (laranja) |
+| `paid` | alguém confirmou — com nome e data | **paga** (verde) |
+
+- O fechamento automático por data agora marca **`closed`**, não `paid`.
+- Botão **"Confirmar pagamento"** no arquivo de pagamento, gravando `paid_by` e
+  `paid_at` — registro que **não existia**.
+- Erro em semana `paid` é **recusado**, dizendo qual semana e desde quando.
+  Semana `closed` continua aceitando: é a janela pra lançar o que faltou.
+- A tradução dos 3 estados mora em `src/utils/situacaoDaSemana.ts` — 5 telas
+  liam o status e cada uma tinha o seu `if`.
+- **Decisão minha, registrada:** se a CONSULTA que verifica a semana falhar
+  (rede), o lançamento **passa**. Travar o trabalho da CD por instabilidade seria
+  pior que o risco que a trava evita.
+
+---
+
 ## 4. Como rodar a suíte NESTA máquina (armadilha resolvida)
 
 O problema nunca foi o número de arquivos, era **concorrência**: mesmo em bloco

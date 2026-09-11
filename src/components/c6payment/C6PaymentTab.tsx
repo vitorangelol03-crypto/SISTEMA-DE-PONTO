@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { SeletorDeSemana, type PeriodoEscolhido } from './SeletorDeSemana';
 import { FileSpreadsheet, RefreshCw, Download, Calendar, Edit2, Save, X, Trash2, Plus, Check, AlertTriangle, DollarSign, KeyRound, CheckCircle2 } from 'lucide-react';
-import { getAllEmployees, getEmployeeNetPayments, Employee } from '../../services/database';
+import { getAllEmployees, getEmployeeNetPayments, getPaymentPeriods, confirmarPagamentoDaSemana, Employee, type PaymentPeriod } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { exportC6PaymentSheet } from '../../utils/c6Export';
@@ -8,6 +9,7 @@ import { moneyBRL } from '../../utils/moneyMask';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType } from '../common/EmploymentTypeFilter';
 import { linhasDoEscopo, ehEscopoAvulso } from '../../utils/c6Escopo';
+import { situacaoDaSemana, detalheDoPagamento } from '../../utils/situacaoDaSemana';
 
 interface C6PaymentTabProps {
   userId: string;
@@ -66,11 +68,6 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
     employmentType: filtrosIniciais?.employmentType ?? ('all' as EmploymentType)
   });
 
-  const [isEditingDate, setIsEditingDate] = useState({
-    startDate: false,
-    endDate: false
-  });
-
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<PaymentRow | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -110,17 +107,9 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
     setEditValues(null);
   }, [company?.id]);
 
-  const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
-    setFilters(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleDateFocus = (field: 'startDate' | 'endDate') => {
-    setIsEditingDate(prev => ({ ...prev, [field]: true }));
-  };
-
-  const handleDateBlur = (field: 'startDate' | 'endDate') => {
-    setIsEditingDate(prev => ({ ...prev, [field]: false }));
-  };
+  // 11/09/2026: `handleDateChange/Focus/Blur` saíram junto com os dois campos de
+  // data soltos — quem escolhe o período agora é o `SeletorDeSemana`, e no modo
+  // "Datas livres" ele já entrega as duas datas de uma vez.
 
   const getNextDay = (dateString: string): string => {
     const date = new Date(dateString + 'T00:00:00');
@@ -128,13 +117,21 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
     return date.toISOString().split('T')[0];
   };
 
-  const importFinancialData = async () => {
+  /**
+   * `periodo` explícito existe por causa de uma armadilha real: ao trocar de
+   * semana no seletor, `setFilters` só vale no PRÓXIMO render — importar na hora
+   * usaria a semana ANTERIOR. Quem chama pelo botão não passa nada e continua
+   * lendo do estado, como sempre.
+   */
+  const importFinancialData = async (periodo?: { startDate: string; endDate: string }) => {
     if (!hasPermission('c6payment.import')) {
       toast.error('Você não tem permissão para importar dados financeiros');
       return;
     }
 
-    if (!filters.startDate || !filters.endDate) {
+    const inicio = periodo?.startDate ?? filters.startDate;
+    const fim = periodo?.endDate ?? filters.endDate;
+    if (!inicio || !fim) {
       toast.error('Selecione o período para importação');
       return;
     }
@@ -147,7 +144,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
     try {
       setLoading(true);
       const employmentType = filters.employmentType === 'all' ? undefined : filters.employmentType;
-      const netByEmployee = await getEmployeeNetPayments(filters.startDate, filters.endDate, employmentType, company.id, userId);
+      const netByEmployee = await getEmployeeNetPayments(inicio, fim, employmentType, company.id, userId);
 
       if (netByEmployee.size === 0) {
         toast.error('Nenhum pagamento encontrado no período selecionado');
@@ -180,7 +177,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
           errorValueDiscount: net.errorValueDiscount,
           triageDiscount: net.triageDiscount,
           paymentDate: nextDay,
-          description: `Pagamento ref. ${formatDateBR(filters.startDate)} a ${formatDateBR(filters.endDate)}`
+          description: `Pagamento ref. ${formatDateBR(inicio)} a ${formatDateBR(fim)}`
         });
       });
 
@@ -227,6 +224,126 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
    * é ref (não estado) de propósito, senão o efeito re-dispararia a cada render e a
    * tela ficaria reimportando sozinha.
    */
+  /**
+   * As semanas cadastradas e a que está escolhida — o seletor "mês → semana"
+   * (pedido do Victor, 11/09/2026). Abre sozinho na semana ABERTA; trocar de
+   * semana refaz a prévia sem sair da tela.
+   */
+  const [periodos, setPeriodos] = useState<PaymentPeriod[]>([]);
+  /**
+   * Já decidi qual período usar? (as semanas chegam por busca)
+   *
+   * ⚠️ NÃO dá pra usar "tem `periodId`?" como sinal: quando o período vem do
+   * Financeiro e é um intervalo LIVRE, o `periodId` fica nulo pra sempre — e a
+   * prévia nunca era importada. Foi o que derrubou 7 testes do arquivo de
+   * pagamento.
+   */
+  const [periodoResolvido, setPeriodoResolvido] = useState(false);
+  const [periodoEscolhido, setPeriodoEscolhido] = useState<PeriodoEscolhido>({
+    periodId: null,
+    startDate: filtrosIniciais?.startDate ?? getBrazilDate(),
+    endDate: filtrosIniciais?.endDate ?? getBrazilDate(),
+  });
+
+  useEffect(() => {
+    if (!company?.id) return;
+    let cancelado = false;
+    getPaymentPeriods(company.id)
+      .then((lista) => {
+        if (cancelado) return;
+        setPeriodos(lista);
+        setPeriodoResolvido(true);
+        // ⚠️ Quem manda é o que a pessoa está vendo:
+        //  1. veio um período do Financeiro que BATE com uma semana → marca ELA;
+        //  2. veio um período que NÃO é semana → respeita as datas como estão
+        //     (senão o arquivo sairia de outro período, calado);
+        //  3. não veio período nenhum (a pessoa estava no histórico) → aí sim
+        //     abre na semana ABERTA, que é a que está pra pagar.
+        const daFiltragem = filtrosIniciais && lista.find(
+          (p) => p.start_date === filtrosIniciais.startDate && p.end_date === filtrosIniciais.endDate,
+        );
+        if (daFiltragem) {
+          setPeriodoEscolhido({
+            periodId: daFiltragem.id,
+            startDate: daFiltragem.start_date,
+            endDate: daFiltragem.end_date,
+          });
+          return;
+        }
+        if (filtrosIniciais) return;   // datas livres vindas da tela: não mexe
+
+        const aberta = lista.find((p) => p.status === 'open');
+        if (aberta) {
+          setPeriodoEscolhido({
+            periodId: aberta.id, startDate: aberta.start_date, endDate: aberta.end_date,
+          });
+          setFilters((f) => ({ ...f, startDate: aberta.start_date, endDate: aberta.end_date }));
+        }
+      })
+      .catch((err) => {
+        // Falhar a busca das semanas não pode travar a tela: o período que veio
+        // do Financeiro (ou as datas livres) continua valendo.
+        console.error('Não consegui carregar as semanas:', err);
+        if (!cancelado) setPeriodoResolvido(true);
+      });
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só na abertura
+  }, [company?.id]);
+
+  /**
+   * Trocar de semana (ou mexer no calendário) REFAZ a prévia na hora — é o
+   * "andar pelas semanas" que o Victor pediu. As datas vão explícitas porque o
+   * `setFilters` só valeria no próximo render.
+   */
+  /**
+   * ⚠️ NÃO pode ser `useCallback` com dependências vazias. Isso congela o
+   * `importFinancialData` do PRIMEIRO render — e naquele instante a lista de
+   * funcionários ainda está vazia, então a prévia saía com "nenhum funcionário
+   * com chave PIX e valor líquido positivo" mesmo numa semana cheia. Pego no
+   * print da tela; o teste tinha me enganado porque contou as linhas da tabela
+   * do Financeiro que fica ATRÁS do popup.
+   */
+  const escolherPeriodo = (p: PeriodoEscolhido) => {
+    setPeriodoEscolhido(p);
+    setFilters((f) => ({ ...f, startDate: p.startDate, endDate: p.endDate }));
+    setDataImported(false);
+    if (p.startDate && p.endDate) void importFinancialData(p);
+  };
+
+  /**
+   * CONFIRMAR QUE A SEMANA FOI PAGA — o "botãozinho" que o Victor pediu
+   * (11/09/2026). Até hoje "pago" era automático: o sistema marcava sozinho toda
+   * semana cuja data tinha passado, sem ninguém confirmar nada.
+   *
+   * Depois de confirmada, a semana NÃO aceita mais lançamento de erro (decisão
+   * dele): o pagamento já saiu, e mexer no valor faria a tela discordar do que
+   * foi pro banco.
+   */
+  const [confirmando, setConfirmando] = useState(false);
+  const semanaEscolhida = periodos.find((p) => p.id === periodoEscolhido.periodId) ?? null;
+
+  const confirmarPagamento = async () => {
+    if (!semanaEscolhida) return;
+    const quando = `${formatDateBR(semanaEscolhida.start_date)} a ${formatDateBR(semanaEscolhida.end_date)}`;
+    if (!confirm(
+      `Confirmar que a semana ${quando} foi PAGA?\n\n`
+      + 'Depois disso ela NÃO aceita mais lançamento de erro — o pagamento já saiu.\n'
+      + 'Lance tudo que faltar antes de confirmar.',
+    )) return;
+    try {
+      setConfirmando(true);
+      await confirmarPagamentoDaSemana(semanaEscolhida.id, userId);
+      const lista = await getPaymentPeriods(company!.id);
+      setPeriodos(lista);
+      toast.success(`Semana ${quando} confirmada como paga.`);
+    } catch (err) {
+      console.error('Erro ao confirmar o pagamento:', err);
+      toast.error('Não consegui confirmar o pagamento. Tente de novo.');
+    } finally {
+      setConfirmando(false);
+    }
+  };
+
   const jaAutoImportou = useRef(false);
   useEffect(() => {
     if (!autoImportar || jaAutoImportou.current) return;
@@ -237,10 +354,14 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
     // "nenhum funcionário com PIX e valor positivo", como se não houvesse pagamento no
     // período. Pego pelo E2E do C6 (6 testes falhando) antes de ir pro ar.
     if (employees.length === 0) return;
+    // 🔴 ESPERA o seletor DECIDIR qual período usar. Sem isto o auto-importar
+    // disparava com a data de HOJE (o `filtrosIniciais` do Financeiro) e a tela
+    // abria com "nenhum pagamento encontrado" antes de a semana ser marcada.
+    if (!periodoResolvido) return;
     jaAutoImportou.current = true;
-    void importFinancialData();
+    void importFinancialData(periodoEscolhido);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- de propósito: só na abertura
-  }, [autoImportar, company?.id, employees.length]);
+  }, [autoImportar, company?.id, employees.length, periodoResolvido]);
 
   const handleEditRow = (row: PaymentRow) => {
     if (!hasPermission('c6payment.edit')) {
@@ -546,8 +667,9 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
           <p className="text-sm text-blue-800 break-words">
             {embutido ? (
               <>
-                <strong>Como usar:</strong> o período já veio do filtro do Financeiro e a prévia
-                foi montada sozinha. Revise, corrija o que precisar e baixe a planilha do Banco C6.
+                <strong>Como usar:</strong> já abre na <strong>semana aberta</strong>, com a prévia
+                montada. Pra pagar outra, escolha o mês e a semana aí em cima — a prévia refaz
+                sozinha. Precisa de um período que não é semana? Use <strong>Datas livres</strong>.
                 Marcando linhas na tabela, <strong>só as marcadas</strong> vão pro arquivo.
               </>
             ) : (
@@ -559,39 +681,29 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
           </p>
         </div>
 
+        {/* ── QUAL SEMANA (11/09/2026) ───────────────────────────────────────
+            Fica FORA do `dataImported` de propósito: é assim que dá pra "ir
+            andando pelas semanas e pelos meses" sem sair da tela, que foi o
+            pedido. Trocar refaz a prévia sozinho. */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Qual semana você vai pagar
+          </label>
+          <SeletorDeSemana
+            periodos={periodos}
+            escolhido={periodoEscolhido}
+            onEscolher={escolherPeriodo}
+            ocupado={loading}
+          />
+        </div>
+
         {!dataImported ? (
           <div className="space-y-4">
             <h3 className="text-base sm:text-lg font-medium">1. Importar Dados Financeiros</h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Data Inicial
-                </label>
-                <input
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) => handleDateChange('startDate', e.target.value)}
-                  onFocus={() => handleDateFocus('startDate')}
-                  onBlur={() => handleDateBlur('startDate')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Data Final
-                </label>
-                <input
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) => handleDateChange('endDate', e.target.value)}
-                  onFocus={() => handleDateFocus('endDate')}
-                  onBlur={() => handleDateBlur('endDate')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
-                />
-              </div>
-
+            {/* As duas datas soltas saíram daqui: viraram o modo "Datas livres"
+                do seletor lá em cima, que faz a mesma coisa e não repete campo. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <EmploymentTypeFilter
                 value={filters.employmentType}
                 onChange={(value) => setFilters(prev => ({ ...prev, employmentType: value }))}
@@ -600,8 +712,10 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
 
               <div className="flex items-end">
                 <button
-                  onClick={importFinancialData}
-                  disabled={!hasPermission('c6payment.import') || loading || isEditingDate.startDate || isEditingDate.endDate}
+                  /* Sem o evento do clique: `importFinancialData` aceita um período
+                     e o MouseEvent entraria no lugar dele. */
+                  onClick={() => void importFinancialData()}
+                  disabled={!hasPermission('c6payment.import') || loading}
                   title={!hasPermission('c6payment.import') ? 'Você não tem permissão para importar dados financeiros' : ''}
                   className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 disabled:bg-gray-300 min-h-[44px]"
                 >
@@ -1019,6 +1133,35 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
                 <Download className="w-5 h-5" />
                 <span>Baixar arquivo{escopoAvulso ? ` (${linhasAlvo.length})` : ''}</span>
               </button>
+
+              {/* ── CONFIRMAR QUE PAGOU (11/09/2026) ────────────────────────
+                  Só aparece quando o período é uma SEMANA de verdade: num
+                  intervalo livre não há o que marcar como pago. */}
+              {semanaEscolhida && (
+                situacaoDaSemana(semanaEscolhida.status, semanaEscolhida.paid_by).podeConfirmar ? (
+                  <button
+                    onClick={confirmarPagamento}
+                    disabled={confirmando}
+                    data-testid="confirmar-pagamento"
+                    title="Marca a semana como paga e trava o lançamento de erro nela"
+                    className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-base sm:text-lg font-medium disabled:bg-gray-300 min-h-[48px]"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span>{confirmando ? 'Confirmando…' : 'Confirmar pagamento'}</span>
+                  </button>
+                ) : (
+                  <span
+                    data-testid="semana-ja-paga"
+                    className="w-full sm:w-auto px-4 py-3 bg-green-50 border border-green-200 text-green-800 rounded-md flex items-center justify-center gap-2 text-sm font-medium"
+                    title={detalheDoPagamento(
+                      semanaEscolhida.status, semanaEscolhida.paid_by, semanaEscolhida.paid_at,
+                    )}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Semana já confirmada como paga
+                  </span>
+                )
+              )}
             </div>
           </div>
         )}

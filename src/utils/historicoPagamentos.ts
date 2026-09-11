@@ -88,6 +88,10 @@ export interface PeriodoDePagamento {
    */
   paymentDate: string;
   status: string | null;
+  /** Quem confirmou o pagamento — nulo nas marcadas pelo automático antigo. */
+  pagoPor?: string | null;
+  /** Quando foi confirmado. */
+  pagoEm?: string | null;
 }
 
 /** Os números que aparecem na linha fechada, sem abrir nada. */
@@ -130,6 +134,8 @@ export interface SemanaDoHistorico extends ResumoDoPeriodo {
   endDate: string;
   paymentDate: string;
   status: string | null;
+  pagoPor: string | null;
+  pagoEm: string | null;
   /** Os erros daquela semana, pro balão e pro popup. */
   listaErros: ErroDoHistorico[];
   /**
@@ -354,6 +360,8 @@ export function montarHistorico(
         endDate: per.endDate,
         paymentDate: per.paymentDate,
         status: per.status,
+        pagoPor: per.pagoPor ?? null,
+        pagoEm: per.pagoEm ?? null,
         listaErros: errs,
         diasProprios: diasDoPeriodo(per).filter((d) => d.dono === per.id).length,
         diasNoTotal: diasDoPeriodo(per).length,
