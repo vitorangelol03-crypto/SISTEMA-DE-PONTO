@@ -2,32 +2,44 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
-> **📌 SESSÃO 10→11/09 (madrugada) — NOTA DIVIDIDA NO AR + ETAPA 2 DO FINANCEIRO
-> FUNCIONANDO.** Detalhe em **`CHECKPOINT_SESSAO_2026-09-11.md`**.
+> **📌 SESSÃO 10→11/09 (madrugada) — ETAPA 2 DO FINANCEIRO COMPLETA + NOTA
+> DIVIDIDA NO AR.** Detalhe em **`CHECKPOINT_SESSAO_2026-09-11.md`**.
 >
-> **Nota dividida:** edge fn **v46 no ar** (conferida byte a byte), as 2 notas
-> misturadas do Gessiley apagadas com backup, commit `3bd2e00`. A **revisão
-> adversarial com 3 revisores pegou 4 bugs graves** antes do ar — o pior: a parte 1
-> ocupava a vaga da própria parte 2 e **a dupla nunca fecharia** (foi o que derrubou
-> o E2E, e eu tinha suspeitado de lentidão). Também: o vale era descontado dos DOIS
-> CNPJs (R$ 161,97 ficariam sem nota no LEANDRO) — hoje `repartirLiquidoPorTomador` é
-> UMA função só, importada pelo robô e pelo relatório.
+> **Suíte: 96/96 arquivos, 1.467 testes, ZERO falha.** tsc · lint · build limpos.
+> ⚠️ **Nesta máquina `npm test` puro NÃO VALE** — dá 57 "Failed to start forks
+> worker" e roda só 38 de 96. É concorrência, não volume: use
+> **`npx vitest run --maxWorkers=3`** (~24 min).
 >
-> **Etapa 2 (gavetas) — commit `bf8f65f`, JÁ NA TELA:** aba "Histórico de Pagamentos"
-> no Financeiro, uma gaveta por mês com as semanas dentro e, na linha fechada, valor /
-> pagos (D × C) / descontados / erros separados por vínculo. Conferido no navegador com
-> dado real: `SETEMBRO · R$ 8.472,00 · 25 pagos (14 D · 11 CLT) · 54 erros (33 D · 21 C)`.
-> **Dois bugs que só a tela pegou:** o Supabase corta em 1.000 linhas e a janela tem
-> 1.643 pagamentos (setembro aparecia R$ 0,00) → busca período a período; e as semanas
-> SOBREPOSTAS de produção (31/08–06/09 e 01–07/09) faziam o mês contar erro em dobro
-> (dizia 106, eram 54+52 do mesmo conjunto) → dedupe por id.
+> **🔴 O ERRO DE R$ 82.980 QUE A REVISÃO PEGOU.** A gaveta aberta somava R$ 16.194 e
+> a fechada dizia R$ 8.472; os R$ 1.748 do dia 27/07 apareciam em julho **E** em
+> agosto. Causa: produção tem **semanas sobrepostas** e o mesmo lançamento caía em
+> todas que o continham. O primeiro conserto (dedupe só no mês) estava **pela
+> metade** — e um teste meu **carimbava a duplicação como certa**. Regra nova, **dono
+> único**: a semana que começa antes fica com o dia. Provado com o banco: caixa real
+> **R$ 319.467,00** = soma das gavetas agora; antes dava R$ 402.447,00.
 >
-> ⏳ **PENDENTE DE VOCÊ:** (1) a **migration do carimbo do vínculo** está escrita mas
-> foi **bloqueada pelo harness** (DDL) — o código funciona sem ela e passa a valer a
-> regra assim que entrar; (2) 🔴 **dois campos de vínculo discordam em 21 pessoas**
-> (`employment_type`, o operacional, × `contract_type`, cadastro) — corrigi 1
-> incoerência que eu criei (Matheus Linhares); (3) 3 pessoas de Ponte Nova sem vínculo;
-> (4) PDF **em lote** e publicar recibo pro funcionário ficaram pra próxima leva.
+> **NO AR e PROVADO:** migration do **carimbo do vínculo** aplicada (3.605 pagamentos,
+> 0 sem vínculo; trigger testado com INSERT que se desfaz sozinho; ACL da RPC idêntica)
+> — a regra *"quem vira CLT mantém o histórico de diarista"* passa a valer de verdade.
+> Edge fn `employee-public-api` **v15**, rota `employee-receipts` (mudança só aditiva,
+> rotas antigas sondadas depois do deploy).
+>
+> **PRONTO nesta leva:** recibos **em lote** com a lista de quem entra (filtro de
+> vínculo que *não* desmarca ninguém, então dá pra misturar; 1 = PDF, vários = 1 .zip);
+> **publicar o recibo** pro funcionário ver no celular (bucket privado + link assinado
+> de 10 min; republicar substitui e zera o "visto"); e 9 outras correções da revisão
+> (valor mascarado virava zero, 15 erros sumiam calados, 112 RPCs de uma vez…).
+>
+> **✅ Os 3 de Ponte Nova NÃO estavam sem vínculo** — faltava só o campo de cadastro, e
+> o **Euder é CARTEIRA ASSINADA** (189 pagamentos): marcá-los "todos diaristas" teria
+> posto ele errado na folha. Espelhei o campo já preenchido.
+>
+> 🔴 **PENDENTE DE VOCÊ:** (1) **uma policy de bucket** — o modo automático barra mexer
+> em `storage.objects`; está no fim de
+> `supabase/migrations/20260911050000_payment_receipt_publications.sql`, é colar e
+> rodar. Sem ela o botão "Publicar" dá erro de permissão. (2) 🔴 **21 pessoas com os
+> dois campos de vínculo DISCORDANDO** (19 "CLT×Diarista", 2 o contrário) — quem manda
+> hoje é o operacional; lista em `backups/2026-09-11-vinculo-ponte-nova/README.md`.
 >
 > **📌 SESSÃO 10/09 — A NOTA DIVIDIDA VIROU DE LADO (pronta, NÃO no ar).**
 > Ordem do Victor, vinda da Shopee e da iMile: *"a Shopee não pode misturar com a nota
