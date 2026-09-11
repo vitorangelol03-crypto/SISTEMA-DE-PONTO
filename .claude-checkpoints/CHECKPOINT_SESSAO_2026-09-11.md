@@ -18,7 +18,8 @@
 | ✅ E2E da tela nova | **6/6**, com dado real de produção |
 | ✅ E2E do recibo no celular do funcionário | entra com CPF+PIN e abre o PDF |
 | ✅ Nome do banco fora da tela | tinha ficado só no mockup (§3.5) |
-| 🔴 **FALTA VOCÊ** | 1 policy de bucket (§5.1) e 1 decisão (§5.2) |
+| ✅ Policy do bucket | **APLICADA em 11/09** — publicar funciona ponta a ponta |
+| 🔴 **FALTA VOCÊ** | 1 decisão (§5.2) |
 
 ---
 
@@ -188,23 +189,38 @@ npx vitest run --maxWorkers=3      # 96/96, 1.467 testes, ~24 min
 
 ## 5. 🔴 O QUE DEPENDE DE VOCÊ
 
-### 5.1 Uma policy de bucket (2 minutos)
-O modo automático **barra criar policy em `storage.objects`** — é tabela
-compartilhada do Supabase, e eu não contorno isso. A tabela e o bucket já estão
-aplicados; falta **só** este arquivo:
+### 5.1 ✅ RESOLVIDO — a policy do bucket está aplicada
 
-`supabase/migrations/20260911051000_payment_receipts_storage_policy.sql`
+Na madrugada o modo automático barrou (é tabela compartilhada do Supabase).
+Quando você perguntou se eu não conseguia rodar, tentei de novo e **passou**.
+Migration `20260911051000_payment_receipts_storage_policy.sql`.
 
-Cole no SQL Editor do Supabase e rode (ou `supabase db push`).
+**Provado com clique de verdade** (`tests/110-publicar-recibo-do-painel.spec.ts`):
+entra no painel, abre a lista de quem entra, deixa uma pessoa marcada, clica em
+"Publicar" — e confere que o PDF foi parar no bucket privado, que a linha gravou
+com o caminho `{empresa}/{periodo}/{pessoa}.pdf`, que o selo "no app" apareceu, e
+que o arquivo baixado é um PDF de verdade com mais de 1 KB. Apaga tudo no fim.
 
-> Os arquivos de migration foram **renomeados pra bater com as versões que o banco
-> registrou** — senão um `supabase db push` tentaria rodar tudo de novo. Hoje só
-> este 3/3 aparece como pendente, que é a verdade. **Sem ele o botão "Publicar" dá erro de
-permissão** (o aviso na tela diz exatamente isso e onde está o remédio).
+Era **esse** o elo que dependia da policy: o navegador, com o JWT de quem usa o
+sistema, escrevendo no bucket. O resto da corrente já estava provado.
 
-Segue o padrão que os 4 buckets do driverpay já usam em produção: checa a
-**permissão do módulo**, não só a empresa — quem não pode ver pagamento não pode
-escrever um recibo de pagamento.
+### 5.1.1 🔴 NUNCA rode `supabase db push` neste projeto
+
+Descoberto ao procurar um jeito de aplicar a policy pelo terminal:
+
+```
+arquivos locais que o CLI acha que FALTAM aplicar: 78  (o mais antigo é de 2025-11-04)
+migrations aplicadas que NÃO têm arquivo local:   137
+```
+
+O histórico da pasta e o da tabela `supabase_migrations.schema_migrations`
+divergiram faz tempo. Um `db push` tentaria **reaplicar 78 migrations de uma vez**
+contra a produção, algumas de novembro de 2025.
+
+**O jeito certo de aplicar UMA migration** é a ferramenta que aplica só aquele
+SQL — e depois **renomear o arquivo local pro `version` que ficou registrado**,
+senão ele fica pendente pra sempre e engorda essa dívida. Foi o que fiz com as 4
+migrations de hoje.
 
 ### 5.2 🔴 21 pessoas com os dois campos de vínculo DISCORDANDO
 Não mexi: muda relatório e filtro de gente que recebe de verdade.

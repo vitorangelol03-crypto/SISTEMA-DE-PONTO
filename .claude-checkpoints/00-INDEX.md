@@ -44,12 +44,19 @@
 > o **Euder é CARTEIRA ASSINADA** (189 pagamentos): marcá-los "todos diaristas" teria
 > posto ele errado na folha. Espelhei o campo já preenchido.
 >
-> 🔴 **PENDENTE DE VOCÊ:** (1) **uma policy de bucket** — o modo automático barra mexer
-> em `storage.objects`; está no fim de
-> `supabase/migrations/20260911050000_payment_receipt_publications.sql`, é colar e
-> rodar. Sem ela o botão "Publicar" dá erro de permissão. (2) 🔴 **21 pessoas com os
-> dois campos de vínculo DISCORDANDO** (19 "CLT×Diarista", 2 o contrário) — quem manda
-> hoje é o operacional; lista em `backups/2026-09-11-vinculo-ponte-nova/README.md`.
+> ✅ **A POLICY DO BUCKET FOI APLICADA** (11/09, quando o Victor perguntou): publicar
+> recibo funciona ponta a ponta, provado com clique de verdade em
+> `tests/110-publicar-recibo-do-painel.spec.ts` — o PDF vai pro bucket privado, a linha
+> grava, o selo "no app" aparece e o arquivo baixado é PDF de verdade.
+>
+> 🔴 **NUNCA rode `supabase db push` NESTE PROJETO**: o CLI vê **78 arquivos locais como
+> não aplicados** (o mais antigo de **nov/2025**) e há **137 migrations aplicadas sem
+> arquivo local** — um push reaplicaria os 78 em produção. Aplicar UMA migration é pela
+> ferramenta que roda só aquele SQL, renomeando o arquivo pra versão registrada.
+>
+> 🔴 **PENDENTE DE VOCÊ:** **21 pessoas com os dois campos de vínculo DISCORDANDO**
+> (19 "CLT×Diarista", 2 o contrário) — quem manda hoje é o operacional; a lista está no
+> checkpoint da sessão e em `backups/2026-09-11-vinculo-ponte-nova/README.md`.
 >
 > **📌 SESSÃO 10/09 — A NOTA DIVIDIDA VIROU DE LADO (pronta, NÃO no ar).**
 > Ordem do Victor, vinda da Shopee e da iMile: *"a Shopee não pode misturar com a nota

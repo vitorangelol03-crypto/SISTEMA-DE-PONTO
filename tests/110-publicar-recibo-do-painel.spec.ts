@@ -1,0 +1,101 @@
+import { test, expect } from '@playwright/test';
+import { ADMIN, loginAs, goToTab } from './helpers';
+import { getClient } from './cleanup';
+
+/**
+ * E2E — PUBLICAR O RECIBO A PARTIR DO PAINEL, COM CLIQUE DE VERDADE (11/09/2026).
+ *
+ * 🎯 POR QUE ESTE ARQUIVO EXISTE: o upload pro bucket `payment-receipts` depende
+ * de uma POLICY em `storage.objects` (migration 20260911051000). Tudo o mais já
+ * estava provado — o PDF sobe pelo service_role, a edge fn assina o link, o
+ * funcionário abre. O que faltava provar era justamente o elo que depende da
+ * policy: **o navegador, com o JWT de quem usa o sistema, consegue publicar?**
+ *
+ * Sem a policy, o Supabase recusa com "row-level security policy" e a tela mostra
+ * o aviso apontando pra migration. Este teste falha nesse caso — que é o certo.
+ *
+ * Não cria funcionário nem pagamento: usa o período que já está aberto e publica
+ * pra UMA pessoa só, escolhida na lista. Apaga o que publicou no `finally`.
+ */
+
+const CARATINGA = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
+
+test.describe('Publicar recibo pelo painel', () => {
+  test('🎯 o clique em "Publicar" sobe o PDF e marca a pessoa como "no app"', async ({ page }) => {
+    test.setTimeout(240_000);
+    const db = getClient();
+
+    // Nada de recibo de teste antes de começar (o teste é sobre o que ELE cria).
+    const { data: antes } = await db
+      .from('payment_receipt_publications')
+      .select('id')
+      .eq('company_id', CARATINGA);
+    const idsAntes = new Set((antes ?? []).map((r) => (r as { id: string }).id));
+
+    let publicados: string[] = [];
+    try {
+      await loginAs(page, ADMIN);
+      await goToTab(page, 'Financeiro');
+      await page.getByTestId('payments-history-btn').click();
+      await expect(page.getByText(/Montando o histórico…/)).toBeHidden({ timeout: 120_000 });
+
+      // Abre a lista de quem entra, pelo botão do mês em andamento.
+      await page.getByRole('button', { name: /^PDF do mês$/ }).first().click();
+      await expect(page.getByText(/marque quem entra/)).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(/Buscando quem foi pago nesse período…/)).toBeHidden({ timeout: 120_000 });
+
+      // Deixa UMA pessoa marcada: desmarca todo mundo e marca a primeira.
+      await page.getByRole('button', { name: /^Desmarcar$/ }).click();
+      await expect(page.getByText(/^0 escolhidos/)).toBeVisible();
+      await page.locator('label').filter({ hasText: /Diarista|Carteira assinada/ }).first().click();
+      await expect(page.getByText(/^1 escolhidos/)).toBeVisible();
+
+      // 🎯 O clique que depende da policy.
+      await page.getByRole('button', { name: /^Publicar pro funcionário$/ }).click();
+
+      // Deu certo? O toast diz. Se a policy faltasse, viria o aviso apontando a migration.
+      await expect(
+        page.getByText(/Recibo publicado — já aparece pro funcionário/),
+        'se falhar aqui, leia o toast: provavelmente falta a policy do bucket',
+      ).toBeVisible({ timeout: 60_000 });
+
+      // E o selo "no app" aparece na linha da pessoa.
+      await expect(page.getByText('no app').first()).toBeVisible({ timeout: 15_000 });
+
+      // No BANCO: a publicação existe, com caminho e valor.
+      const { data: depois } = await db
+        .from('payment_receipt_publications')
+        .select('id, employee_id, titulo, pdf_path, total_net, period_start, period_end')
+        .eq('company_id', CARATINGA);
+      const novos = (depois ?? []).filter((r) => !idsAntes.has((r as { id: string }).id));
+      publicados = novos.map((r) => (r as { id: string }).id);
+
+      expect(novos, 'uma publicação nova no banco').toHaveLength(1);
+      const nova = novos[0] as {
+        pdf_path: string; titulo: string; total_net: number | null;
+        period_start: string; period_end: string; employee_id: string;
+      };
+      expect(nova.titulo, 'o título é o do mês').toMatch(/\/20\d{2}$/);
+      expect(nova.pdf_path, 'o caminho começa pela empresa').toMatch(
+        new RegExp(`^${CARATINGA}/${nova.period_start}_${nova.period_end}/${nova.employee_id}\\.pdf$`),
+      );
+
+      // 🎯 E o arquivo está MESMO no bucket, e é um PDF.
+      const { data: baixado, error } = await db.storage
+        .from('payment-receipts')
+        .download(nova.pdf_path);
+      expect(error, 'o PDF tem que estar no bucket').toBeNull();
+      const bytes = Buffer.from(await baixado!.arrayBuffer());
+      expect(bytes.subarray(0, 4).toString(), 'e ser um PDF de verdade').toBe('%PDF');
+      expect(bytes.length, 'com conteúdo, não vazio').toBeGreaterThan(1000);
+    } finally {
+      for (const id of publicados) {
+        const { data } = await db
+          .from('payment_receipt_publications').select('pdf_path').eq('id', id).maybeSingle();
+        const p = (data as { pdf_path: string } | null)?.pdf_path;
+        if (p) await db.storage.from('payment-receipts').remove([p]);
+        await db.from('payment_receipt_publications').delete().eq('id', id);
+      }
+    }
+  });
+});
