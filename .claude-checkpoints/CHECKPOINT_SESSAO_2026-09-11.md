@@ -144,6 +144,36 @@ errado na folha. Espelhei o campo que já estava preenchido. Registro em
 
 ---
 
+## 3.6 🔴 O DEPLOY QUEBROU — e por que a validação local não pegou
+
+O push subiu, a Vercel tentou publicar e **falhou em 16 segundos**:
+
+```
+Could not resolve "../../supabase/functions/driver-public-api/nfCheck"
+  from "src/utils/nfSplit.ts"
+```
+
+O que estava no ar **não mudou** — o deploy quebrado nem chegou a substituir o
+anterior, então ninguém viu nada.
+
+**Por que passa aqui e quebra lá:** o `.vercelignore` ignorava a pasta `supabase`
+INTEIRA, e o `src/utils/nfSplit.ts` reexporta a conta do desconto de dentro dela
+(de propósito — é a mesma função do robô e do relatório, que em 10/09 divergiram
+e deixaram dinheiro sem nota). Aqui o arquivo existe; lá, a Vercel nunca o
+recebeu. `npm run build` local **nunca ia pegar isso**.
+
+**Corrigido:** o `.vercelignore` agora ignora `supabase/migrations`,
+`supabase/.temp` e `supabase/.branches` — não a pasta toda.
+
+**E travado:** `tests/unit/vercelignore.spec.ts` percorre TODOS os imports
+relativos de `src/` e reprova qualquer um que caia numa pasta ignorada. Provei
+que ele pega, voltando o arquivo ao estado quebrado:
+
+> `src/utils/nfSplit.ts importa "../../supabase/.../nfCheck" → que está em`
+> `"supabase" no .vercelignore. O build da Vercel não vai achar.`
+
+---
+
 ## 4. Como rodar a suíte NESTA máquina (armadilha resolvida)
 
 O problema nunca foi o número de arquivos, era **concorrência**: mesmo em bloco

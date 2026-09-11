@@ -6,7 +6,16 @@ playwright-report
 .env
 .env.local
 .env.*.local
-supabase
+# ⚠️ NÃO ignorar `supabase` inteiro: `src/utils/nfSplit.ts` REEXPORTA
+# `repartirLiquidoPorTomador` de `supabase/functions/driver-public-api/nfCheck.ts`
+# — de propósito, pra o robô e o relatório usarem a MESMA conta (em 10/09/2026
+# elas divergiram e sobrou dinheiro sem nota). Ignorando a pasta, o build da
+# Vercel não achava o arquivo e quebrava com "Could not resolve", enquanto o
+# build local passava. Aconteceu em 11/09/2026. O teste
+# `tests/unit/vercelignore.spec.ts` trava isso.
+supabase/migrations
+supabase/.temp
+supabase/.branches
 tests
 docs
 scripts
