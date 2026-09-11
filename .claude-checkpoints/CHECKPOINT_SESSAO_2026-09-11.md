@@ -280,39 +280,39 @@ SQL — e depois **renomear o arquivo local pro `version` que ficou registrado**
 senão ele fica pendente pra sempre e engorda essa dívida. Foi o que fiz com as 4
 migrations de hoje.
 
-### 5.2 🔴 21 pessoas com os dois campos de vínculo DISCORDANDO
-Não mexi: muda relatório e filtro de gente que recebe de verdade.
+### 5.2 ✅ DECIDIDO — os 19 eram diaristas, o cadastro é que mentia
 
-- **19** com cadastro "CLT" e operacional "Diarista" (Caratinga) — inclui gente
-  com 171, 157 e 138 pagamentos.
-- **2** com cadastro "Diarista" e operacional "Carteira Assinada".
+> *"esses 19 são diaristas mesmo, o cadastro que tá errado"* (Victor, 11/09/2026)
 
-**Quem manda hoje é o operacional (`employment_type`)** — é ele que filtra a
-lista, o filtro "Tipo de Vínculo" e o carimbo do pagamento.
+Corrigido só o `contract_type` (de 'CLT' pra 'Diarista') nas 19 fichas. O campo
+OPERACIONAL não foi tocado, e por isso os pagamentos ficaram **idênticos**:
+3.605 no total, 1.577 carimbados diarista, 2.028 carteira assinada, 0 sem carimbo.
 
-<details><summary>A lista completa (quantos pagamentos cada um tem)</summary>
+Conferido ANTES de mexer: `contract_type` não é lido por nenhuma função, trigger,
+view, policy, índice ou constraint do banco — e no código só aparece na ficha e na
+importação. Registro em `backups/2026-09-11-cadastro-19-diaristas/`.
 
-**Cadastro "CLT", operacional "Diarista" — 19, todos de Caratinga:**
-Alexsandro lombardo alves (171) · Gerson Antonio Reginaldo (157) · Roger Dias
-Monteiro dos Santos (138) · Eduardo da Silva Junior (86) · Ian Willian Gomes da
-Silva Santos (78) · Bruno Eduardo Silva (53) · Jose Geraldo (52) · Erick de
-Paula Matias (31) · Lucas Manaces de Almeida (19) · Matheus Henrique Gomes
-Ferreira (15) · Milleny Zeli (15) · Hendrews Dutra (13) · Maria Clara Vieira (3)
-· Tiago Marinho da Silva (2) · Henrique Goncalves (1) · Jose Adelmo dos Santos
-Junior (1) · Willian Weslley Santos da Silva (1) · DayaneAzevedo (0) · Kayque
-Belmiro jones (0).
+**De 21 divergências sobraram 2.**
 
-**Cadastro "Diarista", operacional "Carteira Assinada" — 2:**
-Marcos Gabriel Caetano das Gracas (39) · Marcos Antonio Pires das gracas (22).
+### 5.3 🔴 PENDENTE — as 2 do caso contrário
 
-</details>
+Cadastro "Diarista", operacional "Carteira Assinada":
+**Marcos Gabriel Caetano das Gracas** (39 pagamentos) e **Marcos Antonio Pires
+das gracas** (22).
 
-(O mesmo em `backups/2026-09-11-vinculo-ponte-nova/README.md`, que fica só na sua
-máquina — `backups/` é ignorado pelo git.)
+São o espelho do caso já resolvido, e o Victor não decidiu sobre elas. A escolha
+muda o trabalho:
+- **Se são carteira assinada de verdade** → é o cadastro que está errado, corrijo
+  igual aos 19 e acabou.
+- **Se são diaristas** → é o OPERACIONAL que está errado, e aí os **carimbos dos
+  61 pagamentos delas precisam ser refeitos**, porque o carimbo copiou o campo
+  errado.
 
-**A pergunta:** esses 19 são diaristas (e o cadastro está errado) ou CLT (e os
-carimbos precisam ser refeitos pra eles)? Quanto antes, melhor — Ponte Nova
-entra este mês.
+### 5.4 🟡 A raiz continua aberta
+
+Existem dois campos que podem divergir, e a importação por planilha preenche o
+`contract_type` a partir de uma coluna. Sem amarrar um ao outro — ou sem eliminar
+um deles — a divergência volta sozinha. Não mexi: é decisão de produto.
 
 ### 5.3 🟡 Registrado, não corrigido
 - O filtro "Tipo de Vínculo" do `getPayments` (`database.ts:1082`) olha a FICHA,
