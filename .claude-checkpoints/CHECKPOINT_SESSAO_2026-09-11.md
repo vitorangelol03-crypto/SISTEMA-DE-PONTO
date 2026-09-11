@@ -10,7 +10,7 @@
 
 | | |
 |---|---|
-| ✅ Suíte completa | **96/96 arquivos, 1.467 testes, ZERO falha** (rodada 2× ) |
+| ✅ Suíte completa | **97/97 arquivos, 1.473 testes, ZERO falha** (rodada 3×) |
 | ✅ tsc · lint · build | limpos |
 | ✅ Migration do carimbo do vínculo | **APLICADA e provada** (3.605 pagamentos) |
 | ✅ Edge fn `employee-public-api` v15 | **no ar**, rotas antigas sondadas e OK |
@@ -230,6 +230,49 @@ deploy, 7/7:
 | Criar usuário DENTRO de outra empresa | conseguia | 403 |
 | Admin na PRÓPRIA empresa | ✓ | ✓ continua |
 | Mestre nas duas empresas | ✓ | ✓ continua |
+
+---
+
+## 3.8 O FINANCEIRO PASSOU A ENTRAR PELO HISTÓRICO (tarde de 11/09)
+
+> *"entra primeiro na aba do financeiro, vai ter lá semanas, meses — aquela vai
+> ser a principal; clicando dentro dela, a gente abre diretamente dentro da aba
+> do financeiro referente àquela semana"*
+
+- A aba abre nas **gavetas**, não na lista.
+- **Clicar na semana** abre a lista filtrada nela (escolhe o período; as datas
+  vêm dele e ficam travadas — o "só aquela semana").
+- **"Ver o mês"** abre o mês inteiro (escolha dele quando perguntei).
+- **Voltar** pro histórico. Sem isso o fluxo era de mão única.
+- O botão "Pagamentos" continua abrindo a lista direto.
+
+A linha da semana **não** virou `role="button"` — ela contém a tag de erros e o
+botão de PDF, e botão dentro de botão foi o bug de manhã (§2.1).
+
+### 🔴 E a tela deixou de mentir: 10 pares de SEMANAS GÊMEAS
+
+Produção tem a **mesma semana cadastrada duas vezes**, deslocada em 1 dia:
+
+```
+Semana 31/08 a 06/09  ⇄  Semana 01/09 a 07/09
+Semana 27/07 a 02/08  ⇄  Semana 28/07 a 03/08
+Semana 03/08 a 09/08  ⇄  Semana 04/08 a 10/08      … e mais 7 pares
+```
+
+É a **mesma raiz** do erro de R$ 82.980 (§1). Com o dono único, a que começa
+antes leva os dias e a gêmea aparece zerada — mas a lista filtra por DATA e
+mostraria **R$ 7.722 numa semana que a gaveta diz ser R$ 0,00**.
+
+Agora a gêmea aparece cinza, dizendo *"repetida — conta na Semana 1 (31/08 –
+06/09)"*, e **não abre**.
+
+⚠️ O primeiro critério que usei (*"ficou com ZERO dias"*) **não pegava nada**: a
+gêmea fica com 1 dia solto na ponta (o 07/09). O certo é *"perdeu a MAIORIA dos
+dias"*. 4 testes travam isso.
+
+**🔴 PENDENTE DE VOCÊ:** apagar os cadastros duplicados de semana? Antes de
+apagar qualquer coisa é preciso levantar o que depende desses períodos (banco de
+horas, arquivo de pagamento, erros).
 
 ---
 
