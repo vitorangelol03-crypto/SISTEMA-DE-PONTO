@@ -38,7 +38,15 @@ interface Props {
   /** Quem DESTE período já recebeu o recibo no app (selo "no app"). */
   jaPublicados: Set<string>;
   onFechar: () => void;
+  /** Baixa um arquivo por pessoa (1 = PDF; vários = .zip). */
   onGerar: (ids: string[]) => void;
+  /**
+   * UM PDF só, com uma folha por pessoa — pedido do Victor (11/09/2026):
+   * *"ter a opção de baixar também um único PDF, com várias folhas, e estar as
+   * folhas lá os PDF certinhos de cada um"*. É pra imprimir a folha inteira de
+   * uma vez, em vez de abrir 40 arquivos.
+   */
+  onGerarCaderno: (ids: string[]) => void;
   /**
    * Publicar é AÇÃO SEPARADA de baixar — decisão do Victor (10/09/2026):
    * *"pode deixar separado mesmo"*, pra conferir o papel antes de mandar.
@@ -53,7 +61,7 @@ const brl = (v: number, pode: boolean) =>
 
 export const SelecaoParaPdf: React.FC<Props> = ({
   titulo, subtitulo, pessoas, carregando, podeVerValores, gerando, jaPublicados,
-  onFechar, onGerar, onPublicar,
+  onFechar, onGerar, onGerarCaderno, onPublicar,
 }) => {
   const [filtro, setFiltro] = useState<FiltroVinculo>('todos');
   const [busca, setBusca] = useState('');
@@ -209,14 +217,41 @@ export const SelecaoParaPdf: React.FC<Props> = ({
                 className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg">
                 Cancelar
               </button>
-              <button
-                type="button"
-                disabled={escolhidos.length === 0 || gerando !== null}
-                onClick={() => onGerar(escolhidos.map((p) => p.id))}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed"
-              >
-                {escolhidos.length === 1 ? 'Baixar 1 recibo' : `Baixar ${escolhidos.length} (.zip)`}
-              </button>
+              {/* Duas formas de baixar, porque servem a coisas diferentes: o
+                  CADERNO é pra imprimir tudo de uma vez; os SEPARADOS são pra
+                  mandar o de cada um pra pessoa certa. Com uma pessoa só as duas
+                  dariam no mesmo, então aparece um botão só. */}
+              {escolhidos.length === 1 ? (
+                <button
+                  type="button"
+                  disabled={gerando !== null}
+                  onClick={() => onGerar(escolhidos.map((p) => p.id))}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed"
+                >
+                  Baixar 1 recibo
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={escolhidos.length === 0 || gerando !== null}
+                    onClick={() => onGerarCaderno(escolhidos.map((p) => p.id))}
+                    title="Um PDF só, com uma folha para cada pessoa — pronto pra imprimir"
+                    className="px-4 py-2 text-sm font-medium text-blue-800 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:text-gray-300 disabled:bg-white disabled:border-gray-200 disabled:cursor-not-allowed"
+                  >
+                    1 PDF com os {escolhidos.length}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={escolhidos.length === 0 || gerando !== null}
+                    onClick={() => onGerar(escolhidos.map((p) => p.id))}
+                    title="Um arquivo separado para cada pessoa, dentro de um .zip"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed"
+                  >
+                    Separados (.zip)
+                  </button>
+                </>
+              )}
               {/* Publicar é o OUTRO botão de propósito: baixar é pra conferir,
                   publicar é o que a pessoa passa a ver no celular dela. */}
               <button

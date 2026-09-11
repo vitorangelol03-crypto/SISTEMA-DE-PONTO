@@ -197,10 +197,31 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const [pdfGerando, setPdfGerando] = useState<string | null>(null);
   /** Quem, do período aberto no popup, já recebeu o recibo no app. */
   const [jaPublicados, setJaPublicados] = useState<Set<string>>(new Set());
-  /** O link do último .zip baixado — solto no próximo, nunca na hora (ver abaixo). */
+  /** O link do último arquivo baixado — solto no próximo, nunca na hora. */
   const urlDoZipAnterior = React.useRef<string | null>(null);
   useEffect(() => () => {
     if (urlDoZipAnterior.current) URL.revokeObjectURL(urlDoZipAnterior.current);
+  }, []);
+
+  /**
+   * Entrega um arquivo pro navegador baixar.
+   *
+   * ⚠️ NÃO solta o link na hora: no Firefox e no Safari o download ainda não
+   * começou quando o `click()` retorna, e revogar ali MATA o arquivo — a pessoa
+   * clica e não recebe nada, sem erro nenhum. Esperar um tempinho seria chute;
+   * então guardo e solto no PRÓXIMO download (ou ao sair da tela), que é
+   * determinístico.
+   */
+  const baixarArquivo = React.useCallback((conteudo: Blob, nome: string) => {
+    const url = URL.createObjectURL(conteudo);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nome;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    if (urlDoZipAnterior.current) URL.revokeObjectURL(urlDoZipAnterior.current);
+    urlDoZipAnterior.current = url;
   }, []);
   // Começa CARREGANDO, não vazio: o render acontece antes do `useEffect`, e com
   // `false` a gaveta piscava "Nenhum período de pagamento cadastrado" — um susto
@@ -338,20 +359,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         }
         setPdfGerando('Montando o arquivo…');
         const conteudo = await zip.generateAsync({ type: 'blob' });
-        const url = URL.createObjectURL(conteudo);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `recibos_${pdfLote.titulo.replace(/[^\w-]+/g, '_')}_${pdfLote.inicio}_a_${pdfLote.fim}.zip`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        // ⚠️ NÃO dá pra soltar o link aqui: no Firefox e no Safari o download
-        // ainda não começou quando o `click()` retorna, e revogar na hora MATA o
-        // arquivo — a pessoa clica e não recebe nada, sem erro nenhum. Soltar
-        // depois de esperar um tempinho seria chute; então guardo e solto no
-        // PRÓXIMO download (ou ao sair da tela), que é determinístico.
-        if (urlDoZipAnterior.current) URL.revokeObjectURL(urlDoZipAnterior.current);
-        urlDoZipAnterior.current = url;
+        baixarArquivo(
+          conteudo,
+          `recibos_${pdfLote.titulo.replace(/[^\w-]+/g, '_')}_${pdfLote.inicio}_a_${pdfLote.fim}.zip`,
+        );
       }
       toast.success(escolhidos.length === 1
         ? 'Recibo gerado.'
@@ -360,6 +371,40 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     } catch (err) {
       console.error('Erro ao gerar os recibos:', err);
       toast.error('Não consegui gerar os recibos. Tente de novo.');
+    } finally {
+      setPdfGerando(null);
+    }
+  };
+
+  /**
+   * UM PDF só, uma folha por pessoa — o "caderno" (pedido do Victor, 11/09/2026).
+   * Usa `montarDadosDoRecibo`, o MESMO montador do recibo avulso e do publicado:
+   * o papel é idêntico, muda só o empacotamento.
+   */
+  const gerarCadernoDeRecibos = async (ids: string[]) => {
+    if (!pdfLote) return;
+    if (!canViewValues) {
+      toast.error('Você precisa da permissão de ver valores em R$ pra gerar os recibos (o PDF sai com o valor de verdade).');
+      return;
+    }
+    const escolhidos = financialData.filter((d) => ids.includes(d.employee.id));
+    if (escolhidos.length === 0) return;
+
+    try {
+      setPdfGerando(`Montando ${escolhidos.length} folhas…`);
+      const { generateLoteHoleritePdf } = await import('../../utils/holeritePdf');
+      const pdf = await generateLoteHoleritePdf(
+        escolhidos.map((d) => montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company)),
+      );
+      baixarArquivo(
+        pdf,
+        `recibos_${pdfLote.titulo.replace(/[^\w-]+/g, '_')}_${pdfLote.inicio}_a_${pdfLote.fim}.pdf`,
+      );
+      toast.success(`1 PDF com ${escolhidos.length} folhas — uma para cada pessoa.`);
+      setPdfLote(null);
+    } catch (err) {
+      console.error('Erro ao montar o caderno de recibos:', err);
+      toast.error('Não consegui montar o PDF. Tente de novo.');
     } finally {
       setPdfGerando(null);
     }
@@ -2108,6 +2153,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           jaPublicados={jaPublicados}
           onFechar={() => { if (!pdfGerando) setPdfLote(null); }}
           onGerar={gerarRecibosEmLote}
+          onGerarCaderno={gerarCadernoDeRecibos}
           onPublicar={publicarRecibos}
         />
       )}

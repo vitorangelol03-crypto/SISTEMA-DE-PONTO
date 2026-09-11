@@ -89,9 +89,20 @@ function bonusInstancesFromPayments(payments: HoleritePaymentLine[]): { b: numbe
   };
 }
 
-function buildPdf(data: HoleriteData): jsPDF {
-  const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+/** Uma folha A4 em branco, do jeito que o recibo espera. */
+function novaFolha(): jsPDF {
+  return new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+}
 
+/**
+ * Desenha UM recibo na folha atual do documento.
+ *
+ * Recebe o `doc` de fora — e não cria o seu — porque é isso que permite juntar
+ * vários recibos num PDF só, uma folha por pessoa (pedido do Victor,
+ * 11/09/2026). O desenho é exatamente o mesmo do recibo avulso: quem baixa um
+ * PDF por pessoa e quem baixa o caderno recebem o MESMO papel.
+ */
+function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
   // ═══ Header empresa ═══
   doc.setFont('helvetica', 'bold').setFontSize(18);
   doc.setTextColor(COLOR_PRIMARY[0], COLOR_PRIMARY[1], COLOR_PRIMARY[2]);
@@ -257,7 +268,11 @@ function buildPdf(data: HoleriteData): jsPDF {
 
   doc.line(X_RIGHT - 220, yFooter, X_RIGHT, yFooter);
   doc.text('Assinatura do empregador', X_RIGHT - 110, yFooter + 14, { align: 'center' });
+}
 
+function buildPdf(data: HoleriteData): jsPDF {
+  const doc = novaFolha();
+  desenharRecibo(doc, data);
   return doc;
 }
 
@@ -270,4 +285,27 @@ export async function downloadHoleritePdf(data: HoleriteData, filename?: string)
   const doc = buildPdf(data);
   const fname = filename || `holerite_${data.employee.name.replace(/\s+/g, '_')}_${data.period.start}_${data.period.end}.pdf`;
   doc.save(fname);
+}
+
+/**
+ * UM PDF SÓ, com uma folha por pessoa — o "caderno" de recibos.
+ *
+ * Pedido do Victor (11/09/2026): *"ter a opção de baixar também um único PDF,
+ * com várias folhas, e estar as folhas lá os PDF certinhos de cada um"*. É pra
+ * imprimir a folha inteira de uma vez, em vez de abrir 40 arquivos.
+ *
+ * Cada pessoa começa numa folha NOVA (`addPage`), então recibo nenhum divide
+ * página com outro — mesmo que o de alguém passe de uma folha (muitas diárias
+ * listadas), o próximo começa limpo.
+ *
+ * A ordem é a que chega. Quem chama ordena por nome antes.
+ */
+export async function generateLoteHoleritePdf(lote: readonly HoleriteData[]): Promise<Blob> {
+  if (lote.length === 0) throw new Error('Nada pra gerar: a lista veio vazia.');
+  const doc = novaFolha();
+  lote.forEach((data, i) => {
+    if (i > 0) doc.addPage();
+    desenharRecibo(doc, data);
+  });
+  return doc.output('blob');
 }

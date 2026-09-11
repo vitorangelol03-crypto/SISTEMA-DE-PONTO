@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { ADMIN, loginAs } from './helpers';
+import { readFile } from 'node:fs/promises';
 
 /**
  * E2E — O FINANCEIRO ENTRA PELO HISTÓRICO (11/09/2026).
@@ -120,6 +121,41 @@ test.describe('O Financeiro abre no histórico, e a semana leva pra lista', () =
     // e as datas ficam editáveis.
     await expect(page.locator('select').first()).toHaveValue('');
     await expect(page.locator('input[type="date"]').nth(0)).not.toHaveAttribute('readonly', '');
+  });
+
+
+  test('🎯 "1 PDF com todos" baixa UM arquivo, com uma folha por pessoa', async ({ page }) => {
+    await abrirAbaFinanceiro(page);
+    await expect(page.getByText(/Montando o histórico…/)).toBeHidden({ timeout: 120_000 });
+
+    await page.getByRole('button', { name: /^PDF do mês$/ }).first().click();
+    await expect(page.getByText(/marque quem entra/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Buscando quem foi pago nesse período…/)).toBeHidden({ timeout: 120_000 });
+
+    const escolhidos = await page.getByText(/\d+ escolhidos/).innerText();
+    const quantos = Number(escolhidos.match(/(\d+)/)![1]);
+    test.skip(quantos < 2, 'precisa de 2+ pessoas pagas pra ter o botão do caderno');
+
+    // 🎯 O botão só existe quando há mais de uma pessoa — com uma só, baixar
+    // "o caderno" e "o separado" dariam no mesmo.
+    const caderno = page.getByRole('button', { name: new RegExp(`^1 PDF com os ${quantos}$`) });
+    await expect(caderno).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Separados \(\.zip\)$/ })).toBeVisible();
+
+    const baixando = page.waitForEvent('download', { timeout: 120_000 });
+    await caderno.click();
+    const arquivo = await baixando;
+
+    expect(arquivo.suggestedFilename(), 'é um .pdf, não um .zip').toMatch(/\.pdf$/);
+
+    const caminho = await arquivo.path();
+    const bytes = await readFile(caminho);
+    expect(bytes.subarray(0, 4).toString(), 'PDF de verdade').toBe('%PDF');
+
+    // Uma folha por pessoa.
+    const texto = bytes.toString('latin1');
+    const folhas = Number(texto.match(/\/Count\s+(\d+)/)?.[1] ?? 0);
+    expect(folhas, `${quantos} pessoas escolhidas`).toBe(quantos);
   });
 
   test('o botão "Pagamentos" continua abrindo a lista direto, sem a volta', async ({ page }) => {
