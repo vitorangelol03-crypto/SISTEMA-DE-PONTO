@@ -65,6 +65,14 @@ export interface ErroDoHistorico {
   descricao: string;
 }
 
+/** Quem bateu ponto num período — o denominador do "25 pagos de 28". */
+export interface QuemTrabalhou {
+  periodoId: string;
+  total: number;
+  diarista: number;
+  clt: number;
+}
+
 /** Um período de pagamento cadastrado (as semanas que já existem desde julho). */
 export interface PeriodoDePagamento {
   id: string;
@@ -89,6 +97,22 @@ export interface ResumoDoPeriodo {
   pagos: number;
   pagosDiarista: number;
   pagosClt: number;
+  /**
+   * Quantas pessoas BATERAM PONTO no período — o "de quantos" do "25 pagos de
+   * 28". Pedido do Victor (11/09/2026): *"às vezes pode faltar pagar e vai
+   * ficar 25 pagos, 26 funcionários"*.
+   *
+   * ⚠️ NÃO é o quadro inteiro da empresa, e a diferença é enorme: Caratinga tem
+   * 92 funcionários, mas na semana 31/08–06/09 só 28 bateram ponto e 25
+   * receberam. "25 de 92" seria barulho — o alerta que ele quer é "25 de 28",
+   * que aponta 3 pessoas que trabalharam e podem estar sem pagamento.
+   *
+   * Diarista não trabalha toda semana; por isso o denominador é quem trabalhou,
+   * não quem existe.
+   */
+  totalFuncionarios: number;
+  totalDiarista: number;
+  totalClt: number;
   descontados: number;
   erros: number;
   errosDiarista: number;
@@ -151,6 +175,11 @@ const MESES = [
 ];
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/** Traduz a contagem de quem trabalhou pros campos do resumo. */
+function doQuadro(q: { total: number; diarista: number; clt: number }) {
+  return { totalFuncionarios: q.total, totalDiarista: q.diarista, totalClt: q.clt };
+}
 
 /** `YYYY-MM-DD` → `YYYY-MM`, sem passar por Date (fuso não muda a gaveta). */
 export function mesDaData(iso: string): string {
@@ -246,7 +275,12 @@ export function montarHistorico(
   pagamentos: readonly PagamentoDoHistorico[],
   erros: readonly ErroDoHistorico[],
   mesCorrente: string,
+  /** Quem bateu ponto em cada período — o "de quantos". Vem da RPC
+   *  `quem_trabalhou_por_periodo`, uma chamada só pra todos os períodos. */
+  trabalharam: readonly QuemTrabalhou[] = [],
 ): MesDoHistorico[] {
+  const porPeriodo = new Map(trabalharam.map((t) => [t.periodoId, t]));
+  const zerado: Omit<QuemTrabalhou, 'periodoId'> = { total: 0, diarista: 0, clt: 0 };
   // ══════════════════════════════════════════════════════════════════════════
   // CADA PAGAMENTO PERTENCE A UMA SEMANA SÓ.
   //
@@ -325,6 +359,7 @@ export function montarHistorico(
         diasNoTotal: diasDoPeriodo(per).length,
         gemeaDe: null,   // preenchido logo abaixo, quando as outras já existem
         ...resumir(pgs, errs),
+        ...doQuadro(porPeriodo.get(per.id) ?? zerado),
       };
     });
 
@@ -378,6 +413,14 @@ export function montarHistorico(
         erros: errosCltMes.length,
       },
       ...resumir(pgsDoMes, errosDoMes),
+      // No MÊS: quem trabalhou em QUALQUER semana dele, sem contar duas vezes.
+      // Como a RPC devolve contagem por período, o máximo é a melhor
+      // aproximação honesta — somar contaria a mesma pessoa em cada semana.
+      ...doQuadro({
+        total: Math.max(0, ...semanas.map((x) => x.totalFuncionarios)),
+        diarista: Math.max(0, ...semanas.map((x) => x.totalDiarista)),
+        clt: Math.max(0, ...semanas.map((x) => x.totalClt)),
+      }),
     });
   }
 
@@ -405,6 +448,11 @@ function resumir(
     pagos: pessoas.size,
     pagosDiarista: pessoasD.size,
     pagosClt: pessoasC.size,
+    // O quadro vem de fora (`montarHistorico` sobrescreve) — aqui é só o zero
+    // pra manter o tipo inteiro.
+    totalFuncionarios: 0,
+    totalDiarista: 0,
+    totalClt: 0,
     descontados: descontados.size,
     erros: erros.length,
     errosDiarista: erros.filter((e) => e.vinculo === 'Diarista').length,

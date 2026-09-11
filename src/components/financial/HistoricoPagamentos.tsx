@@ -17,7 +17,7 @@ import {
 import {
   montarHistorico, foraDasGavetas, textoErros,
   type SemanaDoHistorico, type ErroDoHistorico,
-  type PagamentoDoHistorico, type PeriodoDePagamento,
+  type PagamentoDoHistorico, type PeriodoDePagamento, type QuemTrabalhou,
 } from '../../utils/historicoPagamentos';
 
 interface Props {
@@ -40,10 +40,17 @@ interface Props {
   onAbrirSemana?: (escopo: { periodoId: string; inicio: string; fim: string; titulo: string }) => void;
   /** O mês inteiro, da primeira à última semana (decisão dele na mesma conversa). */
   onAbrirMes?: (escopo: { inicio: string; fim: string; titulo: string }) => void;
+  /** Quem bateu ponto em cada período — o "de quantos" do "25 pagos de 28". */
+  trabalharam?: QuemTrabalhou[];
 }
 
 const brl = (v: number, pode: boolean) =>
   pode ? `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ ••••';
+
+/** "16" quando todos foram pagos, "16 de 17" quando falta alguém. */
+function contagem(pagos: number, total: number): string {
+  return total > 0 && pagos < total ? `${pagos} de ${total}` : String(pagos);
+}
 
 /** O que o popup de erros está mostrando. */
 interface PopupErros {
@@ -54,7 +61,7 @@ interface PopupErros {
 
 export const HistoricoPagamentos: React.FC<Props> = ({
   periodos, pagamentos, erros, mesCorrente, podeVerValores, onGerarPdf,
-  onAbrirSemana, onAbrirMes,
+  onAbrirSemana, onAbrirMes, trabalharam = [],
 }) => {
   // `undefined` = ninguém clicou ainda; aí vale o mês em andamento (pedido do
   // Victor: a aba já abre no período que está aberto).
@@ -62,8 +69,8 @@ export const HistoricoPagamentos: React.FC<Props> = ({
   const [popup, setPopup] = useState<PopupErros | null>(null);
 
   const meses = useMemo(
-    () => montarHistorico(periodos, pagamentos, erros, mesCorrente),
-    [periodos, pagamentos, erros, mesCorrente],
+    () => montarHistorico(periodos, pagamentos, erros, mesCorrente, trabalharam),
+    [periodos, pagamentos, erros, mesCorrente, trabalharam],
   );
 
   // O que não coube em gaveta nenhuma (dia sem período cadastrado, ou período
@@ -144,10 +151,18 @@ export const HistoricoPagamentos: React.FC<Props> = ({
                 <Pilula cor="green" icone={<DollarSign size={14} />}>
                   <b>{brl(mes.valor, podeVerValores)}</b>
                 </Pilula>
+                {/* "25 pagos de 26" — dá pra ver na hora que falta pagar alguém
+                    (pedido do Victor, 11/09/2026). Quando bate, some o "de N"
+                    pra não poluir: todo mundo pago é o normal. */}
                 <Pilula cor="blue" icone={<Users size={14} />}>
-                  <b>{mes.pagos} pagos</b>
+                  <b>
+                    {mes.pagos}
+                    {mes.totalFuncionarios > 0 && mes.pagos < mes.totalFuncionarios
+                      ? ` de ${mes.totalFuncionarios}` : ''} pagos
+                  </b>
                   <span className="text-gray-500 font-medium">
-                    ({mes.pagosDiarista} diaristas · {mes.pagosClt} CLT)
+                    ({contagem(mes.pagosDiarista, mes.totalDiarista)} D
+                    {' · '}{contagem(mes.pagosClt, mes.totalClt)} C)
                   </span>
                 </Pilula>
                 <Pilula cor="orange" icone={<Minus size={14} />}>
@@ -450,8 +465,16 @@ const LinhaSemana: React.FC<{
       <div className="flex items-center gap-3 sm:gap-4 flex-wrap justify-end">
         <span className="text-sm font-bold text-green-600">{brl(semana.valor, podeVerValores)}</span>
         <span className="text-[13px] text-gray-700 whitespace-nowrap">
-          <b className="text-blue-600">{semana.pagos}</b> pagos{' '}
-          <span className="text-gray-400">({semana.pagosDiarista} D · {semana.pagosClt} C)</span>
+          <b className={semana.totalFuncionarios > 0 && semana.pagos < semana.totalFuncionarios
+            ? 'text-orange-600' : 'text-blue-600'}>
+            {semana.pagos}
+            {semana.totalFuncionarios > 0 && semana.pagos < semana.totalFuncionarios
+              ? ` de ${semana.totalFuncionarios}` : ''}
+          </b> pagos{' '}
+          <span className="text-gray-400">
+            ({contagem(semana.pagosDiarista, semana.totalDiarista)} D
+            {' · '}{contagem(semana.pagosClt, semana.totalClt)} C)
+          </span>
         </span>
         <span className={`text-[13px] whitespace-nowrap ${semana.descontados > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
           {semana.descontados} descontados

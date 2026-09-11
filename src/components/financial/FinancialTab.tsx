@@ -8,7 +8,7 @@ import {
   getPaymentPeriods, PaymentPeriod,
   applyBankHoursToPayment, previewBankHoursForPeriod, createBankHoursOverride,
   type BankHoursPreviewItem,
-  publicarReciboDePagamento, listarRecibosPublicados,
+  publicarReciboDePagamento, listarRecibosPublicados, getQuemTrabalhouPorPeriodo,
 } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import {
@@ -25,6 +25,7 @@ import { SelecaoParaPdf, type PessoaDoPdf } from './SelecaoParaPdf';
 import type {
   PeriodoDePagamento as HistPeriodo,
   PagamentoDoHistorico as HistPagamento,
+  QuemTrabalhou,
   ErroDoHistorico as HistErro,
   Vinculo,
 } from '../../utils/historicoPagamentos';
@@ -185,6 +186,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const [histPeriodos, setHistPeriodos] = useState<HistPeriodo[]>([]);
   const [histPagamentos, setHistPagamentos] = useState<HistPagamento[]>([]);
   const [histErros, setHistErros] = useState<HistErro[]>([]);
+  /** Quem bateu ponto em cada semana — o "de quantos" do "25 pagos de 28". */
+  const [histTrabalharam, setHistTrabalharam] = useState<QuemTrabalhou[]>([]);
   const [histErro, setHistErro] = useState<string | null>(null);
   /** Sobe de 1 quando o usuário pede "tentar de novo" — refaz a carga. */
   const [histRecarga, setHistRecarga] = useState(0);
@@ -586,6 +589,14 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         const todosPeriodos = await getPaymentPeriods(company.id);
         if (cancelled) return;
 
+        // O "de quantos": quem BATEU PONTO em cada semana — não o quadro
+        // inteiro. Caratinga tem 92 funcionários mas só 28 trabalharam na
+        // semana; "25 de 92" seria barulho, "25 de 28" é o alerta. Uma chamada
+        // só pra todos os períodos (a RPC agrupa no banco).
+        const trabalharam = await getQuemTrabalhouPorPeriodo(company.id);
+        if (cancelled) return;
+        setHistTrabalharam(trabalharam);
+
         // ⚠️ UMA BUSCA POR PERÍODO, NÃO UMA SÓ PELA JANELA INTEIRA.
         //
         // O Supabase corta a resposta em 1.000 linhas por padrão, e a janela
@@ -669,6 +680,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           setHistPeriodos([]);
           setHistPagamentos([]);
           setHistErros([]);
+          setHistTrabalharam([]);
           setHistErro(err instanceof Error ? err.message : 'Falha ao carregar o histórico.');
         }
       } finally {
@@ -2096,6 +2108,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             periodos={histPeriodos}
             pagamentos={histPagamentos}
             erros={histErros}
+            trabalharam={histTrabalharam}
             mesCorrente={getBrazilDate().slice(0, 7)}
             podeVerValores={canViewValues}
             /* O botão de PDF abre a LISTA de quem entra (pedido do Victor,

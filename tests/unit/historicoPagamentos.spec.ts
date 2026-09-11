@@ -487,3 +487,65 @@ describe('semana gêmea: a mesma semana cadastrada duas vezes', () => {
     expect(h[0].semanas.every((s) => s.diasProprios === 7)).toBe(true);
   });
 });
+
+/**
+ * 🎯 "25 PAGOS DE 28" — pra ver na hora que falta pagar alguém (11/09/2026).
+ *
+ * Pedido do Victor: *"às vezes pode faltar pagar e vai ficar 25 pagos, 26
+ * funcionários"*, com a divisão diarista × carteira assinada do mesmo jeito.
+ *
+ * ⚠️ O "de quantos" é quem BATEU PONTO, não o quadro da empresa. Medido em
+ * produção: Caratinga tem 92 funcionários, mas na semana 31/08–06/09 só 28
+ * trabalharam e 25 receberam. "25 de 92" seria barulho; "25 de 28" aponta as 3
+ * pessoas que podem estar sem pagamento.
+ */
+describe('quantos trabalharam, ao lado de quantos foram pagos', () => {
+  const semana = [per('p1', 'Semana 1', '2026-09-01', '2026-09-07', '2026-09-07')];
+  const trabalharam = [{ periodoId: 'p1', total: 4, diarista: 3, clt: 1 }];
+
+  it('🎯 pagou 2 de 4 que trabalharam, separado por vínculo', () => {
+    const h = montarHistorico(
+      semana,
+      [pag('d1', '2026-09-02', 100), pag('c1', '2026-09-02', 200, 'Carteira Assinada')],
+      [], '2026-09', trabalharam,
+    );
+    const s = h[0].semanas[0];
+    expect(s.pagos).toBe(2);
+    expect(s.totalFuncionarios, 'quantos trabalharam').toBe(4);
+    expect([s.pagosDiarista, s.totalDiarista], 'diaristas: 1 de 3').toEqual([1, 3]);
+    expect([s.pagosClt, s.totalClt], 'CLT: 1 de 1').toEqual([1, 1]);
+  });
+
+  it('semana sem ninguém na lista da RPC fica com zero, e os pagos seguem certos', () => {
+    const h = montarHistorico(semana, [pag('d1', '2026-09-02', 100)], [], '2026-09', []);
+    expect(h[0].semanas[0].totalFuncionarios).toBe(0);
+    expect(h[0].semanas[0].pagos).toBe(1);
+  });
+
+  it('🎯 o MÊS não soma as semanas — seria contar a mesma pessoa duas vezes', () => {
+    const duas = [
+      per('a', 'Semana 1', '2026-09-01', '2026-09-07', '2026-09-07'),
+      per('b', 'Semana 2', '2026-09-08', '2026-09-14', '2026-09-14'),
+    ];
+    const h = montarHistorico(duas, [], [], '2026-09', [
+      { periodoId: 'a', total: 28, diarista: 16, clt: 12 },
+      { periodoId: 'b', total: 22, diarista: 10, clt: 12 },
+    ]);
+    // As mesmas pessoas trabalham nas duas semanas: 28 + 22 = 50 seria mentira.
+    expect(h[0].totalFuncionarios, 'o maior, não a soma').toBe(28);
+    expect(h[0].totalDiarista).toBe(16);
+    expect(h[0].totalClt).toBe(12);
+  });
+
+  it('cada semana usa o número DELA, não o da vizinha', () => {
+    const duas = [
+      per('a', 'Semana 1', '2026-09-01', '2026-09-07', '2026-09-07'),
+      per('b', 'Semana 2', '2026-09-08', '2026-09-14', '2026-09-14'),
+    ];
+    const h = montarHistorico(duas, [], [], '2026-09', [
+      { periodoId: 'a', total: 28, diarista: 16, clt: 12 },
+      { periodoId: 'b', total: 22, diarista: 10, clt: 12 },
+    ]);
+    expect(h[0].semanas.map((x) => x.totalFuncionarios)).toEqual([28, 22]);
+  });
+});

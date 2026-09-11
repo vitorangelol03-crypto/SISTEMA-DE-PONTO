@@ -5609,3 +5609,28 @@ export const getMeusRecibos = async (
   );
   return data.receipts ?? [];
 };
+
+/**
+ * Quantas pessoas BATERAM PONTO em cada período de pagamento, por vínculo.
+ *
+ * É o "de quantos" do "25 pagos de 28" nas gavetas do Financeiro. Uma chamada só
+ * pra todos os períodos: o banco agrupa (RPC `quem_trabalhou_por_periodo`).
+ * Buscar do frontend período a período seriam 46 chamadas a mais, e buscar tudo
+ * de uma vez esbarraria no corte de 1.000 linhas do Supabase.
+ */
+export const getQuemTrabalhouPorPeriodo = async (
+  companyId: string,
+): Promise<Array<{ periodoId: string; total: number; diarista: number; clt: number }>> => {
+  const { data, error } = await supabase
+    .rpc('quem_trabalhou_por_periodo', { p_company_id: companyId });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r: {
+    period_id: string; trabalharam: number;
+    trabalharam_diarista: number; trabalharam_clt: number;
+  }) => ({
+    periodoId: r.period_id,
+    total: Number(r.trabalharam) || 0,
+    diarista: Number(r.trabalharam_diarista) || 0,
+    clt: Number(r.trabalharam_clt) || 0,
+  }));
+};
