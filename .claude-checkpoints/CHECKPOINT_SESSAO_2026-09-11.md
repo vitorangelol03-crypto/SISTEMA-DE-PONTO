@@ -133,8 +133,27 @@ Não mexi: muda relatório e filtro de gente que recebe de verdade.
 - **2** com cadastro "Diarista" e operacional "Carteira Assinada".
 
 **Quem manda hoje é o operacional (`employment_type`)** — é ele que filtra a
-lista, o filtro "Tipo de Vínculo" e o carimbo do pagamento. Lista completa em
-`backups/2026-09-11-vinculo-ponte-nova/README.md`.
+lista, o filtro "Tipo de Vínculo" e o carimbo do pagamento.
+
+<details><summary>A lista completa (quantos pagamentos cada um tem)</summary>
+
+**Cadastro "CLT", operacional "Diarista" — 19, todos de Caratinga:**
+Alexsandro lombardo alves (171) · Gerson Antonio Reginaldo (157) · Roger Dias
+Monteiro dos Santos (138) · Eduardo da Silva Junior (86) · Ian Willian Gomes da
+Silva Santos (78) · Bruno Eduardo Silva (53) · Jose Geraldo (52) · Erick de
+Paula Matias (31) · Lucas Manaces de Almeida (19) · Matheus Henrique Gomes
+Ferreira (15) · Milleny Zeli (15) · Hendrews Dutra (13) · Maria Clara Vieira (3)
+· Tiago Marinho da Silva (2) · Henrique Goncalves (1) · Jose Adelmo dos Santos
+Junior (1) · Willian Weslley Santos da Silva (1) · DayaneAzevedo (0) · Kayque
+Belmiro jones (0).
+
+**Cadastro "Diarista", operacional "Carteira Assinada" — 2:**
+Marcos Gabriel Caetano das Gracas (39) · Marcos Antonio Pires das gracas (22).
+
+</details>
+
+(O mesmo em `backups/2026-09-11-vinculo-ponte-nova/README.md`, que fica só na sua
+máquina — `backups/` é ignorado pelo git.)
 
 **A pergunta:** esses 19 são diaristas (e o cadastro está errado) ou CLT (e os
 carimbos precisam ser refeitos pra eles)? Quanto antes, melhor — Ponte Nova
