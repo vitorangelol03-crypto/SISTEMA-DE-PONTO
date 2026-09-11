@@ -619,8 +619,10 @@ async function employeeReceipts(body: Body): Promise<Response> {
     };
   }));
 
-  // Marca como visto na PRIMEIRA abertura — e so nela, pra guardar a data real
-  // em que o funcionario viu o papel.
+  // `viewed_at` = quando o recibo APARECEU na tela dele (a lista carregou), NAO
+  // quando ele abriu o PDF — daqui nao da pra saber se ele clicou em "Abrir".
+  // O `.is('viewed_at', null)` garante que so a PRIMEIRA vez grava, entao a data
+  // nao fica se atualizando toda vez que ele entra na aba.
   const naoVistos = (rows as Row[]).map((r) => r.id);
   if (naoVistos.length > 0) {
     await supabase
