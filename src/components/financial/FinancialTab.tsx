@@ -182,6 +182,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const [pdfGerando, setPdfGerando] = useState<string | null>(null);
   /** Quem, do período aberto no popup, já recebeu o recibo no app. */
   const [jaPublicados, setJaPublicados] = useState<Set<string>>(new Set());
+  /** O link do último .zip baixado — solto no próximo, nunca na hora (ver abaixo). */
+  const urlDoZipAnterior = React.useRef<string | null>(null);
+  useEffect(() => () => {
+    if (urlDoZipAnterior.current) URL.revokeObjectURL(urlDoZipAnterior.current);
+  }, []);
   // Começa CARREGANDO, não vazio: o render acontece antes do `useEffect`, e com
   // `false` a gaveta piscava "Nenhum período de pagamento cadastrado" — um susto
   // de meio segundo dizendo que não existe nada. (Achado em revisão, 11/09.)
@@ -325,7 +330,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         document.body.appendChild(a);
         a.click();
         a.remove();
-        URL.revokeObjectURL(url);
+        // ⚠️ NÃO dá pra soltar o link aqui: no Firefox e no Safari o download
+        // ainda não começou quando o `click()` retorna, e revogar na hora MATA o
+        // arquivo — a pessoa clica e não recebe nada, sem erro nenhum. Soltar
+        // depois de esperar um tempinho seria chute; então guardo e solto no
+        // PRÓXIMO download (ou ao sair da tela), que é determinístico.
+        if (urlDoZipAnterior.current) URL.revokeObjectURL(urlDoZipAnterior.current);
+        urlDoZipAnterior.current = url;
       }
       toast.success(escolhidos.length === 1
         ? 'Recibo gerado.'

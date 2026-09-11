@@ -90,7 +90,16 @@ function notaPdf(opts: { valor: number; emitenteNome: string; emitenteCnpj: stri
 /** "660" → "R$ 660,00" — as asserções da tela saem dos MESMOS números do cenário. */
 const brl = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/** O cartão daquele CNPJ na tela de anexar nota. */
+/**
+ * O cartão daquele CNPJ na tela de anexar nota.
+ *
+ * Usar isto em vez de `page.getByText` é REGRA nos avisos
+ * da dupla: o TOAST e o AVISO DO CARTÃO dizem a mesma coisa ("1ª nota recebida…",
+ * "falta a 2ª…"), e o cartão do outro CNPJ escreve o seu próprio aviso de
+ * travado. Procurar na página inteira acha dois ou três — todos certos — e o
+ * Playwright recusa por strict mode. No desktop o toast às vezes já sumiu; no
+ * mobile não, e o teste quebrava só lá. (11/09/2026.)
+ */
 function cartao(page: Page, cnpj: string) {
   return page.locator('div.bg-white.rounded-xl').filter({ hasText: `CNPJ ${cnpj}` }).first();
 }
@@ -329,7 +338,7 @@ test.describe('Nota dividida — portal do entregador (05/09/2026)', () => {
       valor: FATIA_SHOPEE, emitenteNome: EMISSOR_A.nome,
       emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_SHOPEE,
     }));
-    await expect(page.getByText(/1ª nota recebida/i)).toBeVisible({ timeout: 90_000 });
+    await expect(cartao(page, CNPJ_SHOPEE).getByText(/1ª nota recebida/i)).toBeVisible({ timeout: 90_000 });
 
     // A tela diz QUEM tem que emitir a 2ª.
     await expect(page.getByText(/A 2ª tem que ser emitida por/i)).toBeVisible({ timeout: 30_000 });
@@ -367,7 +376,7 @@ test.describe('Nota dividida — portal do entregador (05/09/2026)', () => {
       valor: FATIA_SHOPEE, emitenteNome: EMISSOR_A.nome,
       emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_SHOPEE,
     }));
-    await expect(page.getByText(/1ª nota recebida/i)).toBeVisible({ timeout: 90_000 });
+    await expect(cartao(page, CNPJ_SHOPEE).getByText(/1ª nota recebida/i)).toBeVisible({ timeout: 90_000 });
 
     // A tela TRAVA o outro CNPJ e explica o porquê — antes ela deixava clicar.
     const imile = cartao(page, CNPJ_IMILE);
@@ -391,7 +400,7 @@ test.describe('Nota dividida — portal do entregador (05/09/2026)', () => {
       valor: FATIA_SHOPEE, emitenteNome: EMISSOR_A.nome,
       emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_SHOPEE,
     }));
-    await expect(page.getByText(/1ª nota recebida/i)).toBeVisible({ timeout: 90_000 });
+    await expect(cartao(page, CNPJ_SHOPEE).getByText(/1ª nota recebida/i)).toBeVisible({ timeout: 90_000 });
     // NO CARTÃO DA SHOPEE, não na página: com a dupla aberta, o cartão da iMile
     // também escreve "Falta a 2ª" (ele é o que fica travado — é o que o caso F
     // prova). Procurar na página inteira achava os dois e o Playwright recusava

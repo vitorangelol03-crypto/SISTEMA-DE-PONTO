@@ -121,6 +121,14 @@ do início nem a do fim da semana. Não perguntar de novo.
 
 ### Recibo em PDF — gerar e publicar (decisões do Victor, 10/09/2026)
 
+> ✅ **FEITO em 11/09/2026**, com duas diferenças do que estava escrito aqui, ambas
+> por motivo prático descoberto na hora:
+> - **Vários recibos vêm num .zip**, não em vários downloads: o navegador **bloqueia**
+>   downloads em sequência depois do segundo, e a pessoa receberia 2 de 40 sem aviso.
+> - **Os recibos aparecem em um bloco no topo da tela de erros**, não numa aba separada
+>   — quem nunca errou também recebe recibo, e uma aba "Erros" vazia ao lado de uma aba
+>   "Recibos" cheia seria confuso. O selo NOVO e o contador ficam pra depois.
+
 - **Botão de PDF na gaveta do mês E na de cada semana.** Clicando, abre a lista de quem
   entra: filtro por vínculo (todos / só diarista / só carteira assinada) **e** seleção
   pessoa a pessoa, podendo **misturar** alguns diaristas com alguns de carteira assinada.
@@ -145,6 +153,16 @@ do início nem a do fim da semana. Não perguntar de novo.
 
 *"Começa como diarista, futuramente muda pra CLT — o sistema não exclui o histórico dele.
 Mantém o histórico de diarista, e os próximos como carteira assinada."*
+
+> ✅ **NO AR desde 11/09/2026** — migration `20260911020000` aplicada: 3.605 pagamentos
+> carimbados, 0 sem vínculo, e um **trigger** carimba todo pagamento novo lendo a ficha
+> na hora. Provado com INSERT que se desfaz sozinho. ⚠️ **Correção do que está escrito
+> abaixo:** o campo que vale é **`employees.employment_type`** (o operacional, que filtra
+> a lista e o relatório), **não** `contract_type` (que é só cadastro). Os dois existem e
+> **discordam em 21 pessoas** — decisão pendente do Victor.
+>
+> 🟡 **O selo "era Diarista até 31/07" ainda NÃO foi feito.** O carimbo já existe no
+> banco e a gaveta já conta certo; falta só o aviso na tela.
 
 **O problema é real e foi medido (10/09):** o vínculo vive SÓ na ficha
 (`employees.contract_type`); a tabela `payments` **não tem coluna nenhuma de vínculo**.
