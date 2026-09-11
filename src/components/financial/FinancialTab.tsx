@@ -1621,40 +1621,15 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                             return;
                           }
                           // Sub-fase 17.2: gera holerite PDF MVP do funcionário no período atual
+                          // O MESMO montador do lote (`montarDadosDoRecibo`): um
+                          // recibo baixado aqui e um publicado pelo lote têm que
+                          // ser o mesmo papel. Antes eram dois blocos iguais lado
+                          // a lado — um dia divergiriam e a pessoa receberia um
+                          // recibo diferente do que foi conferido. (11/09/2026.)
                           const { downloadHoleritePdf } = await import('../../utils/holeritePdf');
-                          await downloadHoleritePdf({
-                            company: { name: company?.display_name || company?.legal_name || 'Empresa', cnpj: company?.cnpj || undefined },
-                            employee: {
-                              name: data.employee.name,
-                              cpf: data.employee.cpf,
-                              employmentType: data.employee.employment_type || undefined,
-                              functionRole: data.employee.function_role || undefined,
-                              hireDate: data.employee.hire_date || undefined,
-                            },
-                            period: { start: filters.startDate, end: filters.endDate },
-                            payments: data.payments.map((p) => ({
-                              date: p.date,
-                              dailyRate: p.daily_rate || 0,
-                              bonusB: p.bonus_b || 0,
-                              bonusC1: p.bonus_c1 || 0,
-                              bonusC2: p.bonus_c2 || 0,
-                            })),
-                            errorDiscount: data.totalErrorValue || 0,
-                            triageDiscount: data.totalTriageDiscount || 0,
-                            // Erros de QUANTIDADE ja foram abatidos do `payments.total`
-                            // la atras: e a diferenca entre o que foi listado e o total.
-                            quantityErrorDiscount: Math.max(
-                              0,
-                              (data.totalDailyRate + data.totalBonusB + data.totalBonusC1 + data.totalBonusC2)
-                                - data.totalEarnedGross,
-                            ),
-                            totalDailyRate: data.totalDailyRate || 0,
-                            totalBonusB: data.totalBonusB || 0,
-                            totalBonusC1: data.totalBonusC1 || 0,
-                            totalBonusC2: data.totalBonusC2 || 0,
-                            totalGross: data.totalEarnedGross || 0,
-                            totalNet: data.totalEarned || 0,
-                          });
+                          await downloadHoleritePdf(
+                            montarDadosDoRecibo(data, filters.startDate, filters.endDate, company),
+                          );
                           toast.success('Holerite PDF gerado');
                         }}
                         className="text-green-600 hover:text-green-900"
