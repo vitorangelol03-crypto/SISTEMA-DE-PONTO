@@ -16,27 +16,50 @@
 -- ficha. Mesmo padrão que o driverpay já usa há meses
 -- (`driverpay_payments.driver_name_snapshot`, `rate_snapshot`).
 --
--- ⚠️ QUAL DOS DOIS CAMPOS DE VÍNCULO (achado em 11/09/2026): a ficha tem DOIS,
--- e eles discordam em 21 pessoas. Carimbamos o `employment_type`
--- ('Diarista' / 'Carteira Assinada') porque é o OPERACIONAL: é por ele que
--- `getAllEmployees` e `getPayments` filtram (database.ts:608 e :634) e é ele que
--- alimenta o filtro "Tipo de Vínculo" da tela. O `contract_type`
--- ('CLT' / 'Diarista') é campo de cadastro — não filtra nada.
+-- ⚠️ QUAL DOS DOIS CAMPOS (achado em 11/09/2026): a ficha tem DOIS e eles
+-- discordam em 21 pessoas. Carimbamos `employment_type` ('Diarista' /
+-- 'Carteira Assinada'), o OPERACIONAL — é por ele que `getAllEmployees` e
+-- `getPayments` filtram (database.ts:608, :634) e é ele no filtro "Tipo de
+-- Vínculo". O `contract_type` ('CLT'/'Diarista') é cadastro e não filtra nada.
 --
--- ADITIVA E REVERSÍVEL: só acrescenta coluna e preenche o histórico; nada é
--- apagado nem tem valor alterado. Pra desfazer, basta
--- `alter table public.payments drop column employment_type_snapshot;` e
--- recriar a RPC sem a coluna.
+-- 🔴 DUAS CORREÇÕES DE UMA REVISÃO ADVERSARIAL, ANTES DE APLICAR (11/09/2026):
+--
+--  1. `CREATE OR REPLACE` **não aceita** acrescentar coluna ao RETURNS TABLE —
+--     o Postgres recusa com "cannot change return type of existing function".
+--     A migration falharia SEMPRE. Por isso o DROP explícito abaixo — e, com
+--     ele, os GRANTs precisam voltar: o DROP leva a ACL embora e a função nova
+--     nasceria com EXECUTE pro PUBLIC, contra a regra da casa (31/08/2026).
+--
+--  2. O `default 'Diarista'` sozinho **estragaria o futuro**: os dois únicos
+--     caminhos de INSERT (`upsert_payment_rate_masked` e
+--     `upsert_payment_bonus_masked`) não preenchem a coluna, então todo
+--     pagamento novo — inclusive de carteira assinada — nasceria carimbado
+--     "Diarista", calado. Arrumaria o passado e quebraria o amanhã. Trocado por
+--     um TRIGGER que lê a ficha no momento do INSERT; o default some.
+--
+-- TUDO EM UMA TRANSAÇÃO: se qualquer passo falhar, nada fica pela metade — e
+-- ninguém pega a RPC inexistente no meio do caminho.
+--
+-- REVERSÃO (tem ORDEM obrigatória, não basta dropar a coluna: a RPC referencia
+-- ela, e dropar sozinho derruba a aba Financeira inteira):
+--   1. recriar `get_payments_masked` sem a coluna (DROP + CREATE + os 3 grants);
+--   2. `drop trigger payments_carimba_vinculo_trg on public.payments;`
+--   3. `drop function public.payments_carimba_vinculo();`
+--   4. `alter table public.payments drop column employment_type_snapshot;`
+--   ⚠️ o dado do carimbo se perde pra sempre: depois que alguém trocar de
+--   vínculo na ficha, não há como reconstruir o que era antes.
 -- ════════════════════════════════════════════════════════════════════════════
+
+begin;
 
 alter table public.payments
   add column if not exists employment_type_snapshot text;
 
 comment on column public.payments.employment_type_snapshot is
-  'Vínculo (Diarista / Carteira Assinada) do dia em que ESTE pagamento foi feito. '
-  'Carimbo, não espelho da ficha: mudar employees.employment_type NÃO mexe aqui, e '
-  'é isso que mantém inteiro o histórico de quem muda de diarista para carteira '
-  'assinada. Decisão do Victor, 10/09/2026.';
+  'Vinculo (Diarista / Carteira Assinada) do dia em que ESTE pagamento foi feito. '
+  'Carimbo, nao espelho da ficha: mudar employees.employment_type NAO mexe aqui, e '
+  'e isso que mantem inteiro o historico de quem muda de vinculo. Preenchido pelo '
+  'trigger payments_carimba_vinculo_trg. Decisao do Victor, 10/09/2026.';
 
 -- O que já está gravado recebe o vínculo ATUAL da ficha — a melhor verdade
 -- disponível pro passado. Daí em diante nunca mais muda sozinho.
@@ -52,24 +75,64 @@ update public.payments
    set employment_type_snapshot = 'Diarista'
  where employment_type_snapshot is null;
 
-alter table public.payments alter column employment_type_snapshot set default 'Diarista';
+-- ────────────────────────────────────────────────────────────────────────────
+-- O CARIMBO DE TODO PAGAMENTO NOVO
+--
+-- Trigger em vez de default, e em vez de mexer nos dois upserts: o default
+-- carimbaria "Diarista" em todo mundo (nem os upserts nem o REST passam a
+-- coluna), e alterar as funções de upsert é risco maior do que vale — elas
+-- são o caminho de gravação de dinheiro. O trigger lê a ficha na hora, que é
+-- exatamente a definição de "o vínculo do dia em que o pagamento foi feito".
+--
+-- Respeita valor passado explicitamente (só preenche quando vem NULL), então
+-- uma importação que já saiba o vínculo continua mandando no que gravou.
+-- ────────────────────────────────────────────────────────────────────────────
+create or replace function public.payments_carimba_vinculo()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+begin
+  if new.employment_type_snapshot is null then
+    select e.employment_type
+      into new.employment_type_snapshot
+      from public.employees e
+     where e.id = new.employee_id;
 
--- Filtrar por vínculo dentro de um período é a consulta central das gavetas.
-create index if not exists payments_company_date_vinculo_idx
-  on public.payments (company_id, date, employment_type_snapshot);
+    if new.employment_type_snapshot is null then
+      new.employment_type_snapshot := 'Diarista';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+comment on function public.payments_carimba_vinculo() is
+  'Carimba employment_type_snapshot no INSERT, lendo a ficha naquele momento. '
+  'Sem ele, pagamento novo nasceria sem vinculo (os upserts nao passam a coluna).';
+
+drop trigger if exists payments_carimba_vinculo_trg on public.payments;
+create trigger payments_carimba_vinculo_trg
+  before insert on public.payments
+  for each row
+  execute function public.payments_carimba_vinculo();
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- A RPC PRECISA DEVOLVER A COLUNA NOVA
 --
 -- `getPayments` não lê a tabela: vai por `get_payments_masked`, que declara as
 -- colunas uma a uma no RETURNS TABLE. Sem mexer aqui, a coluna existiria no
--- banco e NUNCA chegaria na tela — o carimbo seria inútil.
+-- banco e NUNCA chegaria na tela.
 --
--- Reescrita byte a byte igual à que está em produção, com DUAS mudanças: a
--- coluna nova no RETURNS TABLE e no SELECT. O vínculo NÃO é mascarado: não é
--- valor em R$, e quem não pode ver dinheiro ainda precisa saber quem é diarista.
+-- Byte a byte igual à de produção (20260903201150), com UMA mudança: a coluna
+-- nova na penúltima posição, no RETURNS e no SELECT, na mesma ordem. O vínculo
+-- NÃO é mascarado: não é valor em R$, e a função já devolve
+-- `employees.employment_type` sem máscara no jsonb — seria incoerente esconder.
 -- ────────────────────────────────────────────────────────────────────────────
-create or replace function public.get_payments_masked(
+drop function if exists public.get_payments_masked(uuid, date, date, uuid);
+
+create function public.get_payments_masked(
   p_company_id uuid,
   p_start_date date default null::date,
   p_end_date date default null::date,
@@ -135,3 +198,21 @@ as $function$
     AND (p_end_date IS NULL OR p.date <= p_end_date)
     AND (p_employee_id IS NULL OR p.employee_id = p_employee_id);
 $function$;
+
+-- O DROP acima levou a ACL junto: sem estas 3 linhas a função nasceria aberta
+-- pro PUBLIC. São as mesmas de 20260903201150_get_payments_masked_security_definer_test.sql.
+grant execute on function public.get_payments_masked(uuid, date, date, uuid) to authenticated;
+revoke all on function public.get_payments_masked(uuid, date, date, uuid) from public;
+revoke all on function public.get_payments_masked(uuid, date, date, uuid) from anon;
+
+-- A tabela teve o SELECT revogado e recebe grant por LISTA de colunas
+-- (20260903204857 e 20260903220447). A coluna nova entra na lista pelo mesmo
+-- padrão da casa: não é dinheiro, então acompanha as outras não mascaradas.
+grant select (employment_type_snapshot) on public.payments to authenticated;
+
+commit;
+
+-- 📌 NÃO foi criado índice em `employment_type_snapshot`: a RPC filtra por
+-- company_id + date e NUNCA por vínculo (o filtro de tipo é feito em JS). Um
+-- índice que ninguém usa é peso morto — criar quando (e se) o filtro descer
+-- pro banco.

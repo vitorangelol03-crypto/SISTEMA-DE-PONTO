@@ -72,9 +72,32 @@ Contornado sem gambiarra: **o código lê o carimbo quando existir e cai no vín
 ficha enquanto não existir**. A tela funciona hoje; a regra do histórico passa a valer
 sozinha assim que a migration entrar.
 
-A migration faz 3 coisas: acrescenta `payments.employment_type_snapshot`, preenche o
-histórico com o vínculo atual da ficha, e **recria `get_payments_masked` incluindo a
-coluna** — sem isso o dado existiria no banco e nunca chegaria na tela.
+A migration faz 4 coisas: acrescenta `payments.employment_type_snapshot`, preenche o
+histórico com o vínculo atual da ficha, cria um **trigger** que carimba todo pagamento
+novo, e **recria `get_payments_masked` incluindo a coluna** — sem isso o dado existiria
+no banco e nunca chegaria na tela. Tudo dentro de uma transação.
+
+**🔴 Uma revisão adversarial da migration pegou 2 problemas graves ANTES de aplicar:**
+
+1. **Ela não rodaria.** `CREATE OR REPLACE` não aceita acrescentar coluna ao
+   `RETURNS TABLE` — o Postgres recusa com *"cannot change return type of existing
+   function"*. Sempre, não é caso de borda. Agora tem `DROP FUNCTION` explícito — e,
+   com ele, os **3 GRANTs voltaram**: o DROP leva a ACL embora e a função nasceria
+   aberta pro `PUBLIC`, contra a regra da casa de 31/08.
+2. **O `default 'Diarista'` estragaria o futuro.** Os dois únicos caminhos de INSERT
+   (`upsert_payment_rate_masked` e `upsert_payment_bonus_masked`) não passam a coluna,
+   então **todo pagamento novo — inclusive de carteira assinada — nasceria carimbado
+   "Diarista", calado**. Arrumaria o passado e quebraria o amanhã. Trocado por um
+   **trigger** que lê a ficha no INSERT; o default foi removido. Trigger em vez de
+   mexer nos upserts porque eles são o caminho de gravação de dinheiro.
+
+Também saiu o índice que eu tinha criado: a RPC nunca filtra por vínculo (o filtro é
+feito em JS), então era peso morto.
+
+**🟡 Fica registrado, não corrigido:** o filtro "Tipo de Vínculo" do `getPayments`
+(`database.ts:1082`) olha a FICHA, enquanto o histórico exibe o CARIMBO. Depois da
+migration, para quem mudou de vínculo a mesma linha pode aparecer rotulada "Diarista"
+e sumir do filtro "Diarista". Não quebra nada hoje, mas o par não fecha.
 
 ### 4.2 🔴 DOIS CAMPOS DE VÍNCULO QUE DISCORDAM (achado em 11/09)
 A ficha tem **dois** campos e eles discordam em **21 pessoas**:
