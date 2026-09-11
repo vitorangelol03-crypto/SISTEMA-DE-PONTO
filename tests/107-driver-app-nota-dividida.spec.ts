@@ -392,7 +392,11 @@ test.describe('Nota dividida — portal do entregador (05/09/2026)', () => {
       emitenteCnpj: EMISSOR_A.cnpj, tomadorCnpj: CNPJ_SHOPEE,
     }));
     await expect(page.getByText(/1ª nota recebida/i)).toBeVisible({ timeout: 90_000 });
-    await expect(page.getByText(/Falta a 2ª/i)).toBeVisible({ timeout: 30_000 });
+    // NO CARTÃO DA SHOPEE, não na página: com a dupla aberta, o cartão da iMile
+    // também escreve "Falta a 2ª" (ele é o que fica travado — é o que o caso F
+    // prova). Procurar na página inteira achava os dois e o Playwright recusava
+    // por strict mode. Os dois textos estão certos; a busca é que era ampla.
+    await expect(cartao(page, CNPJ_SHOPEE).getByText(/Falta a 2ª/i)).toBeVisible({ timeout: 30_000 });
 
     // 2ª nota: MESMO CNPJ da Shopee, emitida pelo emissor B
     await enviarNota(page, CNPJ_SHOPEE, notaPdf({
