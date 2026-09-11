@@ -15,7 +15,7 @@ import {
   ChevronRight, DollarSign, Users, Minus, AlertTriangle, Briefcase, FileText, X,
 } from 'lucide-react';
 import {
-  montarHistorico, textoErros,
+  montarHistorico, foraDasGavetas, textoErros,
   type SemanaDoHistorico, type ErroDoHistorico,
   type PagamentoDoHistorico, type PeriodoDePagamento,
 } from '../../utils/historicoPagamentos';
@@ -55,6 +55,15 @@ export const HistoricoPagamentos: React.FC<Props> = ({
     [periodos, pagamentos, erros, mesCorrente],
   );
 
+  // O que não coube em gaveta nenhuma (dia sem período cadastrado, ou período
+  // sem data de pagamento). Antes sumia calado — dinheiro e erro reais fora de
+  // toda soma. Agora aparece em aviso. (Achado em revisão, 11/09/2026.)
+  const orfaos = useMemo(
+    () => foraDasGavetas(periodos, pagamentos, erros),
+    [periodos, pagamentos, erros],
+  );
+  const temOrfao = orfaos.pagamentos.length > 0 || orfaos.erros.length > 0;
+
   const mesEmAndamento = meses.find((m) => m.emAndamento)?.chave ?? meses[0]?.chave;
   const escolhido = aberto === undefined ? mesEmAndamento : aberto;
 
@@ -73,14 +82,18 @@ export const HistoricoPagamentos: React.FC<Props> = ({
       {meses.map((mes) => {
         const estaAberto = escolhido === mes.chave;
         return (
-          <div key={mes.chave} className="bg-white rounded-lg shadow overflow-hidden">
+          // SEM `overflow-hidden`: ele existia só pra arredondar os cantos, e de
+          // quebra CORTAVA o balão do hover dos erros, que desce pra fora da
+          // linha — com a gaveta fechada não dava pra ver nada. O arredondamento
+          // agora vem das pontas. (Achado em revisão, 11/09/2026.)
+          <div key={mes.chave} className="bg-white rounded-lg shadow">
             {/* ── LINHA FECHADA DO MÊS ─────────────────────────────────────── */}
             <div
               role="button"
               tabIndex={0}
               onClick={() => setAberto(estaAberto ? '' : mes.chave)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setAberto(estaAberto ? '' : mes.chave); }}
-              className="flex flex-wrap items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 cursor-pointer hover:bg-gray-50 min-h-[44px]"
+              className={`flex flex-wrap items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 cursor-pointer hover:bg-gray-50 min-h-[44px] ${estaAberto ? 'rounded-t-lg' : 'rounded-lg'}`}
             >
               <ChevronRight
                 size={18}
@@ -128,10 +141,13 @@ export const HistoricoPagamentos: React.FC<Props> = ({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    // MENOR início e MAIOR fim, não o primeiro e o último da
+                    // lista: com semanas sobrepostas a última a começar pode
+                    // terminar ANTES de outra, e o mês sairia cortado.
                     onGerarPdf({
                       titulo: `${mes.nome}/${mes.ano}`,
-                      inicio: mes.semanas[0].startDate,
-                      fim: mes.semanas[mes.semanas.length - 1].endDate,
+                      inicio: mes.semanas.reduce((a, s) => (s.startDate < a ? s.startDate : a), mes.semanas[0].startDate),
+                      fim: mes.semanas.reduce((a, s) => (s.endDate > a ? s.endDate : a), mes.semanas[0].endDate),
                     });
                   }}
                   className="flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm font-semibold hover:bg-blue-100 whitespace-nowrap flex-shrink-0"
@@ -165,13 +181,18 @@ export const HistoricoPagamentos: React.FC<Props> = ({
                   ))}
                 </div>
 
-                {/* O carteira assinada é MENSAL: bloco próprio no pé da gaveta */}
+                {/* ⚠️ RECORTE, NÃO PARCELA. Os pagamentos de carteira assinada
+                    estão DENTRO das semanas acima (o Victor pediu assim: "a semana
+                    tem os dois"). Este bloco só repete a fatia deles, separada.
+                    O texto tem que dizer isso — antes dizia "sem divisão por
+                    semana", e quem somasse bloco + semanas contava R$ 3.879 duas
+                    vezes. (Achado em revisão, 11/09/2026.) */}
                 <div className="mt-4 pt-3 border-t border-dashed border-gray-300">
                   <div className="flex flex-wrap items-center gap-3 p-3 bg-purple-50 border border-purple-200 rounded-md">
                     <Briefcase size={18} className="text-purple-600 flex-shrink-0" />
                     <div className="flex flex-col">
-                      <span className="text-sm font-semibold text-purple-900">Carteira assinada — mês</span>
-                      <span className="text-xs text-purple-700">Ciclo mensal, sem divisão por semana</span>
+                      <span className="text-sm font-semibold text-purple-900">Carteira assinada — no mês</span>
+                      <span className="text-xs text-purple-700">Já contado nas semanas acima — aqui é só a parte deles</span>
                     </div>
                     <div className="flex-grow" />
                     <div className="flex items-center gap-4 sm:gap-5 flex-wrap justify-end">
@@ -196,6 +217,28 @@ export const HistoricoPagamentos: React.FC<Props> = ({
           </div>
         );
       })}
+
+      {temOrfao && (
+        <div className="flex items-start gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-lg">
+          <AlertTriangle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-900 leading-relaxed">
+            <b>Fora das gavetas:</b>{' '}
+            {orfaos.pagamentos.length > 0 && (
+              <>
+                {orfaos.pagamentos.length === 1 ? '1 pagamento' : `${orfaos.pagamentos.length} pagamentos`}
+                {podeVerValores ? ` (${brl(
+                  orfaos.pagamentos.reduce((t, p) => t + (p.total ?? 0), 0), true,
+                )})` : ''}
+                {orfaos.erros.length > 0 ? ' e ' : ''}
+              </>
+            )}
+            {orfaos.erros.length > 0 && (orfaos.erros.length === 1 ? '1 erro' : `${orfaos.erros.length} erros`)}
+            {' '}caíram em dias que nenhum período de pagamento cobre — ou num período sem data de
+            pagamento. Eles <b>não entram</b> em nenhuma soma acima. Para aparecerem, cadastre o
+            período que falta (ou preencha a data de pagamento dele).
+          </div>
+        </div>
+      )}
 
       <p className="text-xs text-gray-400 px-1 leading-relaxed">
         Semana que atravessa o mês entra na gaveta do mês em que foi paga.<br />
@@ -232,14 +275,22 @@ const TagErros: React.FC<{
   itens: ErroDoHistorico[]; onAbrir: () => void;
 }> = ({ total, diarista, clt, itens, onAbrir }) => {
   const tem = total > 0;
+  // Sem erro, a tag NÃO é botão: clicar abria um popup vazio ("Nenhum erro deste
+  // tipo"), o que parece defeito. Sem erro é notícia boa e não tem o que abrir.
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={(e) => { e.stopPropagation(); onAbrir(); }}
-      onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onAbrir(); } }}
-      className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm whitespace-nowrap cursor-pointer ${
-        tem ? 'bg-red-50 border-red-200 text-red-600' : 'bg-gray-50 border-gray-200 text-gray-400'
+      {...(tem
+        ? {
+            role: 'button' as const,
+            tabIndex: 0,
+            onClick: (e: React.MouseEvent) => { e.stopPropagation(); onAbrir(); },
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); onAbrir(); }
+            },
+          }
+        : {})}
+      className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm whitespace-nowrap ${
+        tem ? 'bg-red-50 border-red-200 text-red-600 cursor-pointer' : 'bg-gray-50 border-gray-200 text-gray-400 cursor-default'
       }`}
       title={tem ? 'Clique para ver os erros' : 'Sem erro no período'}
     >

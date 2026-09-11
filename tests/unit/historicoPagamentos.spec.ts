@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   montarHistorico,
+  foraDasGavetas,
   intervaloDaSemana,
   mesDaData,
   textoErros,
@@ -208,41 +209,89 @@ describe('bordas', () => {
   });
 
   it('semanas sobrepostas (as duas séries que existem no banco) não quebram a conta', () => {
-    // 17/08–23/08 e 18/08–24/08 existem as duas em produção
+    // 17/08–23/08 e 18/08–24/08 existem as duas em produção, e 19/08 cabe nas duas.
+    //
+    // ⚠️ Este teste EXIGIA que o pagamento aparecesse nas DUAS semanas. Era a
+    // duplicação carimbada como se fosse o certo — a gaveta aberta somava o
+    // dobro da fechada. Quem estava errado era a expectativa: um dia pertence a
+    // UMA semana só (a que começa antes). Reescrito em 11/09/2026.
     const sobrepostas = [
       per('a', 'Semana 17/08 a 23/08', '2026-08-17', '2026-08-23', '2026-08-23'),
       per('b', 'Semana 18/08 a 24/08', '2026-08-18', '2026-08-24', '2026-08-24'),
     ];
     const h = montarHistorico(sobrepostas, [pag('d1', '2026-08-19', 50)], [], '2026-09');
-    // o pagamento aparece nas duas semanas (ele cabe nas duas), mas o MÊS conta a pessoa uma vez
-    expect(h[0].semanas[0].pagos).toBe(1);
-    expect(h[0].semanas[1].pagos).toBe(1);
+    expect(h[0].semanas.filter((s) => s.pagos > 0), 'em UMA semana só').toHaveLength(1);
+    expect(h[0].semanas.reduce((t, s) => t + s.valor, 0), 'soma das semanas = mês').toBe(h[0].valor);
     expect(h[0].pagos).toBe(1);
+    expect(h[0].valor).toBe(50);
   });
 });
 
 /**
- * 🔴 O BUG QUE A PRIMEIRA CONFERÊNCIA NA TELA PEGOU (11/09/2026)
+ * 🔴 O BUG QUE AS CONFERÊNCIAS NA TELA PEGARAM (11/09/2026), EM DOIS ATOS
  *
  * Em produção existem semanas SOBREPOSTAS — 31/08–06/09 e 01–07/09 convivem, de
- * quando o dia de início da semana mudou. O mês somava as listas das semanas e
- * contava o mesmo erro duas vezes: setembro apareceu com "106 erros", que eram
- * 54 + 52 do MESMO conjunto.
+ * quando o dia de início da semana mudou.
+ *
+ * 1º ato: o mês somava as listas das semanas e contava o mesmo erro duas vezes —
+ *   setembro apareceu com "106 erros", que eram 54 + 52 do MESMO conjunto.
+ * 2º ato (o fix era pela metade): tirar a duplicata SÓ no mês deixou as semanas
+ *   ainda duplicando entre si. A gaveta ABERTA somava R$ 16.194 enquanto a linha
+ *   FECHADA dizia R$ 8.472, e R$ 1.748 do dia 27/07 apareciam em julho E em
+ *   agosto — porque 21–27/07 é paga em julho e 27/07–02/08 em agosto.
+ *
+ * A regra agora é DONO ÚNICO: cada lançamento pertence a UMA semana. Estes
+ * testes provam a invariante, não o comportamento de um fix específico — se
+ * alguém voltar a duplicar, eles quebram.
  */
-describe('semanas sobrepostas não duplicam o total do mês', () => {
+describe('dono único: nada é contado em duas gavetas', () => {
   const sobrepostas = [
     per('s1', 'Semana 31/08 a 06/09', '2026-08-31', '2026-09-06', '2026-09-06'),
     per('s2', 'Semana 01/09 a 07/09', '2026-09-01', '2026-09-07', '2026-09-07'),
   ];
 
-  it('🎯 um erro que cai nas DUAS semanas conta UMA vez no mês', () => {
-    // 02/09 está dentro das duas
-    const erros = [err('d1', '2026-09-02', 3, 15)];
-    const h = montarHistorico(sobrepostas, [], erros, '2026-09');
-    expect(h[0].semanas[0].erros).toBe(1);
-    expect(h[0].semanas[1].erros).toBe(1);
-    expect(h[0].erros).toBe(1);              // ← era 2 antes do fix
+  it('🎯 um dia que cai nas DUAS semanas pertence a EXATAMENTE UMA', () => {
+    // 02/09 está dentro das duas.
+    const h = montarHistorico(sobrepostas, [], [err('d1', '2026-09-02', 3, 15)], '2026-09');
+    const quantasSemanasContaram = h[0].semanas.filter((s) => s.erros > 0).length;
+    expect(quantasSemanasContaram, 'o erro tem que aparecer em UMA semana só').toBe(1);
+    expect(h[0].erros).toBe(1);
     expect(h[0].listaErros).toHaveLength(1);
+  });
+
+  it('🎯 a gaveta ABERTA fecha com a FECHADA: soma das semanas = mês', () => {
+    const pagamentos = [
+      pag('d1', '2026-09-02', 120),   // nas duas semanas
+      pag('d2', '2026-09-05', 80),    // nas duas semanas
+      pag('d3', '2026-08-31', 50),    // só na s1
+      pag('d4', '2026-09-07', 90),    // só na s2
+    ];
+    const erros = [
+      err('d1', '2026-09-02', 3, 15),
+      err('c1', '2026-09-03', 2, 10, 'Carteira Assinada'),
+      err('d4', '2026-09-07', 1, 5),
+    ];
+    const h = montarHistorico(sobrepostas, pagamentos, erros, '2026-09');
+    const mes = h[0];
+
+    const somaSemanas = (campo: 'valor' | 'erros' | 'errosDiarista' | 'errosClt') =>
+      mes.semanas.reduce((t, s) => t + s[campo], 0);
+
+    expect(somaSemanas('valor'), 'valor').toBe(mes.valor);
+    expect(somaSemanas('erros'), 'erros').toBe(mes.erros);
+    expect(somaSemanas('errosDiarista'), 'erros diarista').toBe(mes.errosDiarista);
+    expect(somaSemanas('errosClt'), 'erros CLT').toBe(mes.errosClt);
+    // E o valor é o do caixa, sem nada em dobro.
+    expect(mes.valor).toBe(120 + 80 + 50 + 90);
+  });
+
+  it('🎯 nenhum lançamento aparece na lista de duas semanas', () => {
+    const pagamentos = [pag('d1', '2026-09-02', 120), pag('d2', '2026-09-05', 80)];
+    const erros = [err('d1', '2026-09-02', 3, 15), err('d2', '2026-09-05', 1, 5)];
+    const h = montarHistorico(sobrepostas, pagamentos, erros, '2026-09');
+    const idsPorSemana = h[0].semanas.map((s) => s.listaErros.map((e) => e.id));
+    const todos = idsPorSemana.flat();
+    expect(new Set(todos).size, 'nenhum id repetido entre as semanas').toBe(todos.length);
   });
 
   it('a divisão por vínculo do mês também não duplica', () => {
@@ -258,5 +307,121 @@ describe('semanas sobrepostas não duplicam o total do mês', () => {
     const h = montarHistorico(sobrepostas, [pag('d1', '2026-09-02', 50)], [], '2026-09');
     expect(h[0].pagos).toBe(1);
     expect(h[0].valor).toBe(50);
+  });
+});
+
+/**
+ * 🎯 O CASO REAL DO 27/07 — o dinheiro que aparecia em DOIS MESES.
+ *
+ * "Semana 21/07 a 27/07" é paga em JULHO e "Semana 27/07 a 02/08" em AGOSTO.
+ * O dia 27/07 está nas duas, então R$ 1.748 entravam na gaveta de julho E na de
+ * agosto, inflando o ano. Com dono único, entra em uma só.
+ */
+describe('semana que atravessa o mês não conta o dia nos dois meses', () => {
+  const atravessa = [
+    per('j', 'Semana 21/07 a 27/07', '2026-07-21', '2026-07-27', '2026-07-27'),
+    per('a', 'Semana 27/07 a 02/08', '2026-07-27', '2026-08-02', '2026-08-02'),
+  ];
+
+  it('🎯 o pagamento do 27/07 entra em UM mês só', () => {
+    const h = montarHistorico(atravessa, [pag('d1', '2026-07-27', 1748)], [], '2026-08');
+    const mesesComValor = h.filter((m) => m.valor > 0);
+    expect(mesesComValor, 'um mês só recebe o dinheiro').toHaveLength(1);
+    expect(mesesComValor[0].valor).toBe(1748);
+    // E o total do período inteiro é o do caixa, não o dobro.
+    expect(h.reduce((t, m) => t + m.valor, 0)).toBe(1748);
+  });
+
+  it('quem começa antes leva o dia — a semana de julho', () => {
+    const h = montarHistorico(atravessa, [pag('d1', '2026-07-27', 1748)], [], '2026-08');
+    const julho = h.find((m) => m.chave === '2026-07');
+    expect(julho?.valor).toBe(1748);
+    expect(h.find((m) => m.chave === '2026-08')?.valor).toBe(0);
+  });
+});
+
+/**
+ * 🔴 VALOR MASCARADO NÃO É ZERO (achado em revisão, 11/09/2026).
+ *
+ * Quem não tem permissão de ver dinheiro recebe `total = null` da RPC. Tratar
+ * isso como 0 fazia a gaveta dizer "0 pagos (0 diaristas · 0 CLT)" — como se
+ * ninguém tivesse recebido. A pessoa foi paga; o valor é que está escondido.
+ */
+describe('valor mascarado conta a pessoa, esconde o dinheiro', () => {
+  const semana = [per('p1', 'Semana 1', '2026-09-01', '2026-09-07', '2026-09-07')];
+
+  it('🎯 pagamento mascarado continua sendo "1 pago"', () => {
+    const h = montarHistorico(
+      semana,
+      [{ id: 'x', employeeId: 'd1', date: '2026-09-02', total: null, vinculo: 'Diarista' }],
+      [], '2026-09',
+    );
+    expect(h[0].pagos, 'a pessoa existe mesmo sem ver o valor').toBe(1);
+    expect(h[0].pagosDiarista).toBe(1);
+    expect(h[0].valor, 'o valor some, a pessoa não').toBe(0);
+  });
+
+  it('pagamento de R$ 0,00 de verdade NÃO conta como pago', () => {
+    const h = montarHistorico(semana, [pag('d1', '2026-09-02', 0)], [], '2026-09');
+    expect(h[0].pagos).toBe(0);
+  });
+
+  it('erro com desconto mascarado conta como descontado', () => {
+    const h = montarHistorico(
+      semana, [pag('d1', '2026-09-02', 100)],
+      [{
+        id: 'e1', employeeId: 'd1', nome: 'D1', equipe: 'Triagem', vinculo: 'Diarista',
+        date: '2026-09-02', quantidade: 2, valor: null, descricao: '',
+      }],
+      '2026-09',
+    );
+    expect(h[0].descontados).toBe(1);
+  });
+
+  it('erro só de quantidade (R$ 0) não conta como descontado', () => {
+    const h = montarHistorico(semana, [pag('d1', '2026-09-02', 100)],
+      [err('d1', '2026-09-02', 2, 0)], '2026-09');
+    expect(h[0].erros).toBe(1);
+    expect(h[0].descontados).toBe(0);
+  });
+});
+
+/**
+ * 🔴 O QUE NÃO CABE EM GAVETA NENHUMA (achado em revisão, 11/09/2026).
+ *
+ * Em produção há 15 erros em dias que nenhum período cobre. Eles sumiam calados:
+ * dinheiro e erro reais fora de toda soma, sem uma linha dizendo isso.
+ */
+describe('foraDasGavetas: o que sumia calado', () => {
+  const semana = [per('p1', 'Semana 1', '2026-09-01', '2026-09-07', '2026-09-07')];
+
+  it('🎯 dia que nenhum período cobre volta na lista de órfãos', () => {
+    const fora = foraDasGavetas(
+      semana,
+      [pag('d1', '2026-09-20', 300)],
+      [err('d1', '2026-09-20', 2, 10)],
+    );
+    expect(fora.pagamentos).toHaveLength(1);
+    expect(fora.erros).toHaveLength(1);
+  });
+
+  it('o que está dentro de um período NÃO é órfão', () => {
+    const fora = foraDasGavetas(semana, [pag('d1', '2026-09-02', 300)], [err('d1', '2026-09-02', 2, 10)]);
+    expect(fora.pagamentos).toHaveLength(0);
+    expect(fora.erros).toHaveLength(0);
+  });
+
+  it('🎯 período SEM data de pagamento também deixa órfão — a gaveta é pela data de pagamento', () => {
+    const semData = [per('p1', 'Semana 1', '2026-09-01', '2026-09-07', '')];
+    const fora = foraDasGavetas(semData, [pag('d1', '2026-09-02', 300)], []);
+    expect(fora.pagamentos, 'sem data de pagamento não há mês pra cair').toHaveLength(1);
+    // E confirma que ele realmente não aparece em gaveta nenhuma.
+    const h = montarHistorico(semData, [pag('d1', '2026-09-02', 300)], [], '2026-09');
+    expect(h).toHaveLength(0);
+  });
+
+  it('pagamento de R$ 0,00 órfão não polui o aviso', () => {
+    const fora = foraDasGavetas(semana, [pag('d1', '2026-09-20', 0)], []);
+    expect(fora.pagamentos).toHaveLength(0);
   });
 });
