@@ -75,6 +75,50 @@ function decodeJWTPayload(token: string): Record<string, unknown> | null {
 // Replica validatePermission do frontend (database.ts) + checkPermission de
 // permissions.ts. Mestres '9999'/'2626' sempre OK. Demais: lê
 // user_permissions.permissions jsonb e checa `users.<action> === true`.
+/**
+ * 🔴 A EMPRESA DE QUEM CHAMA TEM QUE SER A DO ALVO (11/09/2026).
+ *
+ * Achado por auditoria: NENHUMA ação aqui comparava as duas empresas. Como este
+ * arquivo escreve com `service_role` (passa por cima do RLS da tabela `users`) e
+ * `callerHasUsersPermission` libera qualquer `role === 'admin'`, o administrador
+ * de uma unidade alcançava os usuários de TODAS as outras — redefinia a senha,
+ * renomeava e excluía.
+ *
+ * O caso pior era o reset: `handleDelete` já bloqueava mestre, mas
+ * `handleResetPassword` não. Então dava pra zerar a senha do 9999/2626, entrar
+ * com a senha padrão e virar mestre — acesso a todas as empresas.
+ *
+ * Mestres (9999/2626) são cross-empresa POR DESENHO e continuam passando; é o
+ * que mantém o caminho de recuperação (um mestre destrava o outro).
+ *
+ * Devolve `null` quando pode seguir, ou a Response de recusa.
+ */
+async function recusaPorEmpresa(callerId: string, alvoId: string): Promise<Response | null> {
+  if (MASTER_IDS.includes(callerId)) return null;
+
+  // Mestre só é alcançado por mestre — nem pra redefinir senha. Sem isto, quem
+  // é admin de qualquer unidade vira mestre em dois passos.
+  if (MASTER_IDS.includes(alvoId)) {
+    return json({ error: 'Forbidden — só o administrador principal alcança outro administrador principal' }, 403);
+  }
+
+  const { data: caller, error: errCaller } = await supabase
+    .from('users').select('company_id').eq('id', callerId).maybeSingle();
+  if (errCaller) return json({ error: 'Database error', details: errCaller.message }, 500);
+  if (!caller) return json({ error: 'Forbidden' }, 403);
+
+  const { data: alvo, error: errAlvo } = await supabase
+    .from('users').select('company_id').eq('id', alvoId).maybeSingle();
+  if (errAlvo) return json({ error: 'Database error', details: errAlvo.message }, 500);
+  if (!alvo) return json({ error: 'Usuário não encontrado' }, 404);
+
+  // Empresa nula dos dois lados NÃO vale como "mesma empresa": seria um coringa.
+  if (!caller.company_id || !alvo.company_id || caller.company_id !== alvo.company_id) {
+    return json({ error: 'Forbidden — esse usuário é de outra empresa' }, 403);
+  }
+  return null;
+}
+
 async function callerHasUsersPermission(callerId: string, action: string): Promise<boolean> {
   if (MASTER_IDS.includes(callerId)) return true;
 
@@ -110,6 +154,18 @@ async function handleCreate(callerId: string, body: Record<string, unknown>) {
     return json({ error: 'Invalid role — only supervisor can be created' }, 400);
   }
   if (!companyId) return json({ error: 'Invalid companyId' }, 400);
+
+  // Criar DENTRO de outra empresa também era possível: o `companyId` vinha do
+  // body e ninguém conferia. Um supervisor plantado na outra unidade é um login
+  // válido lá dentro. Mestre segue cross-empresa. (11/09/2026.)
+  if (!MASTER_IDS.includes(callerId)) {
+    const { data: caller, error: errCaller } = await supabase
+      .from('users').select('company_id').eq('id', callerId).maybeSingle();
+    if (errCaller) return json({ error: 'Database error', details: errCaller.message }, 500);
+    if (!caller?.company_id || caller.company_id !== companyId) {
+      return json({ error: 'Forbidden — só dá pra criar usuário na sua própria empresa' }, 403);
+    }
+  }
 
   let passwordHash: string;
   try {
@@ -270,15 +326,22 @@ Deno.serve(async (req) => {
       return json({ error: `Forbidden — sem permissão users.${action}` }, 403);
     }
 
+    if (action === 'create') return await handleCreate(callerId, body);
+
+    // As outras três recebem um `id` do BODY — é por aí que se alcançava usuário
+    // de outra empresa. O porteiro roda antes de qualquer escrita.
+    const alvoId = typeof body.id === 'string' ? body.id.trim() : '';
+    if (!alvoId) return json({ error: 'Invalid id' }, 400);
+    const recusa = await recusaPorEmpresa(callerId, alvoId);
+    if (recusa) return recusa;
+
     switch (action) {
-      case 'create':
-        return await handleCreate(callerId, body);
       case 'update':
         return await handleUpdate(body);
       case 'resetPassword':
-        return await handleResetPassword(typeof body.id === 'string' ? body.id.trim() : '');
+        return await handleResetPassword(alvoId);
       case 'delete':
-        return await handleDelete(callerId, typeof body.id === 'string' ? body.id.trim() : '');
+        return await handleDelete(callerId, alvoId);
     }
   } catch (err) {
     console.error('[create-user] unhandled:', err);

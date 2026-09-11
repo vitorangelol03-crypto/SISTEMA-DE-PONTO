@@ -175,6 +175,64 @@ que ele pega, voltando o arquivo ao estado quebrado:
 
 ---
 
+## 3.7 🔴 A AUDITORIA DA POLICY ACHOU TRÊS BURACOS — DOIS ERAM MEUS
+
+Pedi a três auditores que tentassem furar a policy do bucket por ângulos
+diferentes, e cada achado grave passou por refutadores independentes.
+
+**A policy passou**: um usuário da empresa A é mesmo barrado nos recibos da B.
+Mas eles seguiram a linha e acharam o resto.
+
+### (a) 🔴 Qualquer um baixava o recibo sabendo só o CPF — ERA MEU
+
+A rota `employee-receipts` nasceu só com `employeeId + companyId`, no mesmo nível
+das outras daqui. Confirmei contra a produção:
+
+```
+Passo 1 — só o CPF:    lookup-employee devolveu o id (e nome, CPF, PIX, telefone)
+Passo 2 — com esse id: employee-receipts respondeu. Sem senha. Sem PIN.
+```
+
+A chave anon está no bundle público do site. Era o holerite da pessoa, com o
+salário, ao alcance de quem soubesse o CPF. Para contagem de erro já era
+discutível; para holerite não dá.
+
+**Corrigido e provado depois do deploy:** a rota exige o PIN e confere no
+SERVIDOR, com bcrypt — o mesmo PIN que a pessoa já digita pra entrar.
+`sem pin → PIN obrigatorio` · `pin errado → PIN invalido` · `pin certo → entrega`.
+
+### (b) 🔴 Quem só podia VER pagamento podia APAGAR recibo — ERA MEU
+
+A policy nasceu `for all`, e `for all` inclui DELETE. Três supervisores tinham
+esse poder sem querer. Agora são 3 policies — **ler / publicar / republicar** — e
+**nenhuma de apagar**. O UPDATE fica porque republicar o mesmo período SUBSTITUI
+o recibo, que é como se corrige um valor errado. Migration `20260911124322`.
+
+### (c) 🔴 O `create-user` não olhava empresa — JÁ EXISTIA, e foi corrigido
+
+Nenhuma ação comparava a empresa de quem chama com a do alvo. Como a função
+escreve com `service_role` e o porteiro liberava qualquer `role === 'admin'`, o
+administrador de UMA unidade alcançava os usuários de TODAS. E o
+`handleResetPassword` — ao contrário do `handleDelete` — **não protegia os
+mestres**: dava pra zerar a senha do 9999/2626, entrar com a senha padrão e virar
+mestre.
+
+**Provado com o ataque de verdade** (`tests/111-create-user-empresa.spec.ts`):
+rodado contra a versão que estava no ar, deu `Expected 403, Received 200` — o
+admin da Ponte Nova redefiniu mesmo a senha de um usuário da Caratinga. Depois do
+deploy, 7/7:
+
+| Tentativa | Antes | Agora |
+|---|---|---|
+| Redefinir senha de outra empresa | conseguia | 403 |
+| Redefinir senha do MESTRE | conseguia | 403 |
+| Excluir / renomear de outra empresa | conseguia | 403 |
+| Criar usuário DENTRO de outra empresa | conseguia | 403 |
+| Admin na PRÓPRIA empresa | ✓ | ✓ continua |
+| Mestre nas duas empresas | ✓ | ✓ continua |
+
+---
+
 ## 4. Como rodar a suíte NESTA máquina (armadilha resolvida)
 
 O problema nunca foi o número de arquivos, era **concorrência**: mesmo em bloco
