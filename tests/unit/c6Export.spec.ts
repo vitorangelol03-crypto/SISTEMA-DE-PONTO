@@ -174,9 +174,9 @@ describe('exportC6PaymentSheet — estrutura do workbook REAL', () => {
     expect(writeFileCalls[0].opts).toMatchObject({ bookType: 'xlsx', cellStyles: true });
   });
 
-  it('15. filename segue padrão Pagamento_C6_YYYYMMDD_HHMMSS.xlsx', async () => {
+  it('15. filename segue padrão Pagamento_em_lote_YYYYMMDD_HHMMSS.xlsx', async () => {
     await exportC6PaymentSheet([makeRow()]);
-    expect(writeFileCalls[0].filename).toMatch(/^Pagamento_C6_\d{8}_\d{6}\.xlsx$/);
+    expect(writeFileCalls[0].filename).toMatch(/^Pagamento_em_lote_\d{8}_\d{6}\.xlsx$/);
   });
 
   it('16. todas as 3 sheets têm !ref válido (workbook bem-formado)', async () => {
@@ -369,7 +369,9 @@ describe('createSummarySheet — dados reais', () => {
 describe('createInstructionsSheet', () => {
   it('38. título principal na linha 1', async () => {
     await exportC6PaymentSheet([makeRow()]);
-    expect(cellVal(getSheet('Instruções'), 'A1')).toBe('INSTRUÇÕES DE USO - PLANILHA DE PAGAMENTOS C6 BANK');
+    // 11/09/2026: o nome do banco saiu de toda a tela e do arquivo — decisão do
+    // Victor, "o arquivo pode ser usado para qualquer banco, não somente C6".
+    expect(cellVal(getSheet('Instruções'), 'A1')).toBe('INSTRUÇÕES DE USO - PLANILHA DE PAGAMENTOS EM LOTE');
   });
 
   it('39. menciona 5 tipos de chave PIX (CPF/CNPJ/email/phone/UUID)', async () => {

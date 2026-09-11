@@ -51,7 +51,7 @@ const MODULE_LABELS: Record<string, string> = {
   reports: 'Relatórios',
   settings: 'Configurações',
   auth: 'Autenticação',
-  c6payment: 'Pagamento C6',
+  c6payment: 'Arquivo de pagamento',
   datamanagement: 'Gerenciamento de Dados',
 };
 

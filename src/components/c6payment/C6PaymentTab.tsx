@@ -407,7 +407,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
 
   const handleExportSpreadsheet = () => {
     if (!hasPermission('c6payment.export')) {
-      toast.error('Você não tem permissão para exportar planilhas C6');
+      toast.error('Você não tem permissão para exportar o arquivo de pagamento');
       return;
     }
 
@@ -537,7 +537,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg sm:text-xl font-semibold flex items-center">
               <FileSpreadsheet className="w-5 h-5 mr-2 text-blue-600 flex-shrink-0" />
-              <span className="break-words">Pagamento C6 Bank</span>
+              <span className="break-words">Arquivo de pagamento</span>
             </h2>
           </div>
         )}
@@ -1013,11 +1013,11 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
               <button
                 onClick={handleExportSpreadsheet}
                 disabled={!hasPermission('c6payment.export')}
-                title={!hasPermission('c6payment.export') ? 'Você não tem permissão para exportar planilhas C6' : ''}
+                title={!hasPermission('c6payment.export') ? 'Você não tem permissão para exportar o arquivo de pagamento' : ''}
                 className="w-full sm:w-auto px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-base sm:text-lg font-medium disabled:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
               >
                 <Download className="w-5 h-5" />
-                <span>Baixar Planilha C6{escopoAvulso ? ` (${linhasAlvo.length})` : ''}</span>
+                <span>Baixar arquivo{escopoAvulso ? ` (${linhasAlvo.length})` : ''}</span>
               </button>
             </div>
           </div>

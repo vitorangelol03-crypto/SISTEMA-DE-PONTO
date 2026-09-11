@@ -1062,11 +1062,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             {hasPermission('c6payment.view') && (
               <button
                 onClick={() => setShowC6Modal(true)}
-                title="Gera a prévia do pagamento C6 com o período e o tipo filtrados aqui"
+                title="Gera a prévia do arquivo de pagamento com o período e o tipo filtrados aqui"
                 className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-cyan-50 text-cyan-700 rounded-md hover:bg-cyan-100 transition-colors min-h-[44px] w-full sm:w-auto"
               >
                 <FileSpreadsheet className="w-4 h-4 flex-shrink-0" />
-                <span>Gerar pagamento C6</span>
+                <span>Gerar arquivo de pagamento</span>
               </button>
             )}
             {company?.bank_hours_apply_in_payment && (
@@ -2376,7 +2376,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       {showC6Modal && (
         <ModalShell
           icon={<FileSpreadsheet className="w-5 h-5" />}
-          title="Pagamento C6 Bank"
+          title="Arquivo de pagamento"
           subtitle={`Período de ${formatDateBR(filters.startDate)} a ${formatDateBR(filters.endDate)} — já carregado do filtro do Financeiro`}
           onClose={() => setShowC6Modal(false)}
           maxWidth="sm:max-w-7xl"
@@ -2384,7 +2384,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           <Suspense
             fallback={
               <div className="flex items-center justify-center py-10 text-gray-500 text-sm">
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Abrindo o pagamento C6…
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Abrindo o arquivo de pagamento…
               </div>
             }
           >

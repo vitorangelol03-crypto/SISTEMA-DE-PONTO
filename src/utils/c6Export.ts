@@ -80,7 +80,7 @@ export const exportC6PaymentSheet = async (
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
     const timeStr = today.toTimeString().split(' ')[0].replace(/:/g, '');
-    const filename = `Pagamento_C6_${dateStr}_${timeStr}.xlsx`;
+    const filename = `Pagamento_em_lote_${dateStr}_${timeStr}.xlsx`;
 
     XLSX.writeFile(workbook, filename, {
       bookType: 'xlsx',
@@ -99,7 +99,7 @@ const createPaymentSheet = (
   metadata: ExportMetadata
 ) => {
   const worksheetData: any[][] = [
-    ['PLANILHA DE PAGAMENTOS - BANCO C6', '', '', '', '', ''],
+    ['PLANILHA DE PAGAMENTOS EM LOTE', '', '', '', '', ''],
     [`Gerado em: ${metadata.generatedAt}`, '', `Total: R$ ${metadata.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, '', '', ''],
     [],
     ['ATENÇÃO: Não altere o cabeçalho desta planilha'],
@@ -318,7 +318,7 @@ const createSummarySheet = (
   const invalidPayments = paymentRows.length - validPayments.length;
 
   const summaryData: any[][] = [
-    ['RESUMO EXECUTIVO - PAGAMENTOS C6 BANK'],
+    ['RESUMO EXECUTIVO - PAGAMENTOS EM LOTE'],
     [],
     ['Informações Gerais'],
     ['Data de Geração:', metadata.generatedAt],
@@ -420,14 +420,14 @@ const createSummarySheet = (
 
 const createInstructionsSheet = (workbook: XLSX.WorkBook) => {
   const instructionsData: any[][] = [
-    ['INSTRUÇÕES DE USO - PLANILHA DE PAGAMENTOS C6 BANK'],
+    ['INSTRUÇÕES DE USO - PLANILHA DE PAGAMENTOS EM LOTE'],
     [],
     ['1. SOBRE ESTA PLANILHA'],
     ['Esta planilha foi gerada automaticamente pelo Sistema de Gestão de Pagamentos'],
-    ['e está formatada para importação direta no sistema do Banco C6.'],
+    ['e está no formato de pagamento PIX em lote por planilha.'],
     [],
     ['2. COMO UTILIZAR'],
-    ['• Acesse o portal do Banco C6 (https://www.c6bank.com.br)'],
+    ['• Acesse o internet banking do seu banco'],
     ['• Navegue até a seção de Pagamentos PIX em lote'],
     ['• Faça o upload desta planilha na aba "Pagamentos PIX"'],
     ['• Verifique os dados e confirme o processamento'],

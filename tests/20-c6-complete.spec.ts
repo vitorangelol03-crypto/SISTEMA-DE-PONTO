@@ -62,7 +62,7 @@ async function abrirC6(page: Page, date: string) {
   await expect(dateInputs.nth(1)).toHaveValue(date);
   await page.locator('body').click({ position: { x: 5, y: 5 } });
   // Abre o popup — ele importa sozinho com o período acima.
-  await page.getByRole('button', { name: /^Gerar pagamento C6$/ }).click();
+  await page.getByRole('button', { name: /^Gerar arquivo de pagamento$/ }).click();
 }
 
 async function importC6(page: Page, date: string) {
@@ -205,7 +205,7 @@ test.describe('C6 — completo', () => {
 
     await importC6(page, SAFE_DATE);
     const downloadPromise = page.waitForEvent('download', { timeout: 15_000 });
-    await page.getByRole('button', { name: /Baixar Planilha C6/ }).click();
+    await page.getByRole('button', { name: /Baixar arquivo/ }).click();
     // Modal de confirmação OU validação
     const confirmBtn = page.getByRole('button', { name: /Confirmar e Baixar|Gerar Planilha/i }).first();
     if (await confirmBtn.isVisible().catch(() => false)) {
@@ -230,7 +230,7 @@ test.describe('C6 — completo', () => {
       await cancelBtn.click();
     }
 
-    await page.getByRole('button', { name: /Baixar Planilha C6/ }).click();
+    await page.getByRole('button', { name: /Baixar arquivo/ }).click();
     // Modal de validação (Atenção) sempre aparece — teste cria linha inválida acima.
     const generateAnyway = page.getByRole('button', { name: /Gerar mesmo assim/ });
     await expect(generateAnyway).toBeVisible({ timeout: 3_000 });

@@ -53,6 +53,22 @@ test.describe('Histórico de pagamentos em gavetas', () => {
     await expect(page.getByText('EM ANDAMENTO').first()).toBeVisible({ timeout: 30_000 });
   });
 
+  test('o mês em andamento já vem ABERTO, e o botão fecha e abre', async ({ page }) => {
+    await abrirHistorico(page);
+
+    const semanas = page.getByTestId('semana-do-historico');
+    await expect(semanas.first(), 'abre sozinho no período corrente').toBeVisible({ timeout: 30_000 });
+    const quantas = await semanas.count();
+    expect(quantas).toBeGreaterThan(0);
+
+    // O botão de abrir/fechar é o PEQUENO, à esquerda — não a linha inteira.
+    const botaoDaGaveta = page.getByRole('button', { name: /^(Abrir|Fechar) \w+ de \d{4}$/ }).first();
+    await botaoDaGaveta.click();
+    await expect(semanas).toHaveCount(0);
+    await botaoDaGaveta.click();
+    await expect(semanas).toHaveCount(quantas);
+  });
+
   test('🎯 a gaveta ABERTA fecha com a linha FECHADA (o erro de R$ 82.980)', async ({ page }) => {
     await abrirHistorico(page);
 
@@ -62,8 +78,8 @@ test.describe('Histórico de pagamentos em gavetas', () => {
     const totalFechado = paraNumero(await mes.innerText());
     expect(totalFechado, 'o mês em andamento tem valor').toBeGreaterThan(0);
 
-    await mes.click();
-
+    // NÃO clicar: o mês em andamento JÁ abre sozinho (pedido do Victor). Clicar
+    // aqui fechava a gaveta e o teste não achava semana nenhuma.
     const semanas = page.getByTestId('semana-do-historico');
     await expect(semanas.first()).toBeVisible({ timeout: 30_000 });
 
@@ -82,24 +98,29 @@ test.describe('Histórico de pagamentos em gavetas', () => {
   test('o balão dos erros aparece no hover e o popup abre no clique', async ({ page }) => {
     await abrirHistorico(page);
 
-    const tagComErro = page.locator('div[role="button"]').filter({ hasText: /\d+ erros? \(\d+ D · \d+ C\)/ }).first();
+    // Pelo testid da PRÓPRIA tag: filtrar por texto pegava a LINHA do mês, que
+    // contém o texto da tag — e passar o mouse na linha não abre balão nenhum.
+    const tagComErro = page.getByTestId('tag-erros').filter({ hasText: /\d+ erros?/ }).first();
     if (await tagComErro.count() === 0) {
       test.skip(true, 'nenhum mês com erro no banco agora');
     }
 
+    // DENTRO da tag que recebeu o mouse, não na página: há um balão por mês, e
+    // `page.getByText(...).first()` conferia o de OUTRO mês, que continua oculto.
     await tagComErro.hover();
-    await expect(page.getByText(/erros? no período/).first()).toBeVisible({ timeout: 10_000 });
+    await expect(tagComErro.getByText(/erros? no período/)).toBeVisible({ timeout: 10_000 });
 
     await tagComErro.click();
     // O popup separa por vínculo — foi o pedido do Victor.
-    await expect(page.getByText(/Diaristas?/).first()).toBeVisible({ timeout: 10_000 });
+    const popup = page.getByRole('dialog').or(page.locator('.fixed.inset-0').last());
+    await expect(popup.getByText(/Diaristas/).first()).toBeVisible({ timeout: 10_000 });
     await page.keyboard.press('Escape');
   });
 
   test('"sem erro" NÃO abre popup vazio', async ({ page }) => {
     await abrirHistorico(page);
 
-    const semErro = page.locator('div').filter({ hasText: /^sem erro$/ }).first();
+    const semErro = page.getByTestId('tag-erros').filter({ hasText: /^sem erro$/ }).first();
     if (await semErro.count() === 0) test.skip(true, 'todos os meses têm erro agora');
 
     await semErro.click({ force: true });
@@ -110,7 +131,9 @@ test.describe('Histórico de pagamentos em gavetas', () => {
   test('o botão de PDF abre a lista de quem entra, com filtro por vínculo', async ({ page }) => {
     await abrirHistorico(page);
 
-    await page.getByRole('button', { name: /PDF do mês/ }).first().click();
+    // Pelo BOTÃO, não pela linha: a linha do mês contém o texto "PDF do mês" e,
+    // enquanto ela era `role="button"`, o clique caía nela e fechava a gaveta.
+    await page.getByRole('button', { name: /^PDF do mês$/ }).first().click();
     await expect(page.getByText(/marque quem entra/)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/Buscando quem foi pago nesse período…/)).toBeHidden({ timeout: 120_000 });
 

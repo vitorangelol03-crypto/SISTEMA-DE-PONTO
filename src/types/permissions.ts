@@ -270,15 +270,15 @@ export const PERMISSION_LABELS = {
   // porque diziam "Ver aba" — quem fosse configurar procuraria no menu uma aba que não
   // existe mais. As permissões em si não mudaram: são as mesmas de antes.
   c6payment: {
-    title: 'Pagamento C6 (dentro do Financeiro)',
-    view: 'Ver o botão "Gerar pagamento C6" no Financeiro',
+    title: 'Arquivo de pagamento (dentro do Financeiro)',
+    view: 'Ver o botão "Gerar arquivo de pagamento" no Financeiro',
     generate: 'Gerar arquivo',
     export: 'Exportar',
     import: 'Importar dados financeiros',
     edit: 'Editar linhas de pagamento',
     bulkEdit: 'Editar datas em lote',
     delete: 'Excluir linhas de pagamento',
-    viewValues: 'Ver valores em R$ (desligar esconde os números na tela do C6)'
+    viewValues: 'Ver valores em R$ (desligar esconde os números na tela do arquivo de pagamento)'
   },
   driverpay: {
     title: 'Pagamentos Driver',

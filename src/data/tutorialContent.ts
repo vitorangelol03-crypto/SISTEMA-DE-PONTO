@@ -274,7 +274,7 @@ export const tutorialsContent: Tutorial[] = [
       {
         title: 'Adicionar novo funcionário',
         description: 'Clique no botão "Adicionar Funcionário" e preencha o formulário com nome, CPF e chave PIX.',
-        tips: ['O CPF deve ser válido e único no sistema', 'A chave PIX é usada para pagamentos via C6 Bank']
+        tips: ['O CPF deve ser válido e único no sistema', 'A chave PIX é usada no arquivo de pagamento em lote']
       },
       {
         title: 'Editar informações',
@@ -463,8 +463,8 @@ export const tutorialsContent: Tutorial[] = [
   {
     id: 'c6payment-export',
     category: 'c6payment',
-    title: 'Pagamento via C6 Bank',
-    description: 'Como gerar arquivos de pagamento para o Banco C6',
+    title: 'Arquivo de pagamento',
+    description: 'Como gerar o arquivo de pagamento em lote pro seu banco',
     icon: 'FileSpreadsheet',
     requiredPermission: 'c6payment.view',
     steps: [
@@ -472,10 +472,10 @@ export const tutorialsContent: Tutorial[] = [
       // popup com a prévia já montada a partir do período filtrado ali.
       {
         title: 'Abrir o Financeiro e escolher o período',
-        description: 'Vá na aba "Financeiro" e defina o período (ou escolha um período de pagamento). É daqui que o C6 herda as datas.',
+        description: 'Vá na aba "Financeiro" e defina o período (ou escolha um período de pagamento). É daqui que o arquivo herda as datas.',
       },
       {
-        title: 'Clicar em "Gerar pagamento C6"',
+        title: 'Clicar em "Gerar arquivo de pagamento"',
         description: 'O botão fica no topo do Financeiro. Ele abre uma janela já com a prévia montada — não precisa digitar as datas de novo.',
       },
       {
@@ -488,17 +488,17 @@ export const tutorialsContent: Tutorial[] = [
       },
       {
         title: 'Gerar arquivo',
-        description: 'Clique em "Baixar Planilha C6" para criar o arquivo Excel formatado para importação no sistema do C6 Bank.',
+        description: 'Clique em "Baixar arquivo" para criar a planilha Excel de pagamento em lote.',
       },
       {
-        title: 'Fazer upload no C6',
-        description: 'Acesse o internet banking do C6, vá até a área de pagamentos em lote e faça upload do arquivo gerado.',
+        title: 'Fazer upload no banco',
+        description: 'Acesse o internet banking do seu banco, vá até a área de pagamentos em lote e faça upload do arquivo gerado.',
       }
     ],
     useCases: [
       {
         title: 'Pagamento mensal',
-        description: 'Ao final do mês, gere o arquivo com todos os pagamentos para processar via C6.',
+        description: 'Ao final do mês, gere o arquivo com todos os pagamentos para processar no banco.',
         example: 'Exemplo: Dia 30 de cada mês, gere o arquivo com período de 01 a 30 e processe os pagamentos.'
       },
       {
@@ -511,7 +511,7 @@ export const tutorialsContent: Tutorial[] = [
       'Sempre verifique as chaves PIX antes de gerar o arquivo',
       'Mantenha backup dos arquivos gerados',
       'Confira os totais antes de processar no banco',
-      'O arquivo gerado segue o padrão específico do C6 Bank'
+      'O arquivo serve pra qualquer banco que aceite pagamento em lote por planilha'
     ]
   },
   {
@@ -755,7 +755,7 @@ export const tutorialsContent: Tutorial[] = [
       {
         title: 'Fechamento financeiro por empresa',
         description: 'Cada empresa tem seu próprio período de pagamento, taxa e bonificações. Alterne para fechar cada uma.',
-        example: 'Exemplo: Termine o C6 de Caratinga, troque para Ponte Nova e gere o C6 dessa unidade.'
+        example: 'Exemplo: Termine o arquivo de pagamento de Caratinga, troque para Ponte Nova e gere o dessa unidade.'
       },
       {
         title: 'Comparar erros entre filiais',
@@ -881,7 +881,7 @@ export const tutorialsContent: Tutorial[] = [
       {
         title: 'Conferência pré-pagamento',
         description: 'Antes do dia do pagamento, o funcionário entra em /erros para conferir descontos já lançados.',
-        example: 'Exemplo: Sexta antes do C6, abre /erros e vê R$ 25,00 em triagem na quarta. Pode questionar o supervisor antes do fechamento.'
+        example: 'Exemplo: Sexta antes do pagamento, abre /erros e vê R$ 25,00 em triagem na quarta. Pode questionar o supervisor antes do fechamento.'
       },
       {
         title: 'Contestação rápida',
@@ -1074,7 +1074,7 @@ export const tutorialsContent: Tutorial[] = [
       {
         title: 'Compensação de horas extras',
         description: 'Funcionário fez 10h extras no mês. Empresa converte em valor no pagamento.',
-        example: 'Exemplo: 8h diurnas × R$ 15 + 2h noturnas × R$ 18 = R$ 156,00 somados ao pagamento do C6.'
+        example: 'Exemplo: 8h diurnas × R$ 15 + 2h noturnas × R$ 18 = R$ 156,00 somados ao arquivo de pagamento.'
       },
       {
         title: 'Desconto de horas faltadas',
@@ -1511,7 +1511,7 @@ export const tutorialsContent: Tutorial[] = [
       },
       {
         title: 'Navegar pelas categorias',
-        description: 'As categorias são: Ponto, Funcionários, Relatórios, Financeiro, Pagamento C6, Erros, Configurações, Usuários, Gerenciamento de Dados. Cada uma tem várias permissões.',
+        description: 'As categorias são: Ponto, Funcionários, Relatórios, Financeiro, Arquivo de pagamento, Erros, Configurações, Usuários, Gerenciamento de Dados. Cada uma tem várias permissões.',
         tips: ['Ative apenas o necessário — princípio do menor privilégio', 'Use os presets DEFAULT_SUPERVISOR ou DEFAULT_READONLY como ponto de partida']
       },
       {
@@ -1579,7 +1579,7 @@ export const tutorialsContent: Tutorial[] = [
       {
         title: 'Modo automático (ON)',
         description: 'Com toggle ligado, todo início de semana o sistema gera um payment_period com janela seg-dom. Pagamentos, bônus e erros caem automaticamente nele.',
-        tips: ['Não precisa fazer nada — o cron interno cuida', 'O período anterior fica fechado e pronto para C6']
+        tips: ['Não precisa fazer nada — o cron interno cuida', 'O período anterior fica fechado e pronto pro arquivo de pagamento']
       },
       {
         title: 'Modo manual (OFF)',
@@ -1621,7 +1621,7 @@ export const tutorialsContent: Tutorial[] = [
       'Toggle é por empresa — uma pode ser automática e outra manual',
       'Nunca mude o toggle no meio de um período aberto sem fechar antes',
       'Período fechado fica imutável — toda nova movimentação cai no próximo',
-      'O C6 só gera com período fechado',
+      'O arquivo de pagamento só gera com período fechado',
       'Documente a cadência da empresa em algum lugar interno'
     ]
   },
@@ -1672,7 +1672,7 @@ export const tutorialsContent: Tutorial[] = [
       {
         title: 'Desligamento de supervisor',
         description: 'Após desligar, admin invalida senha e zera permissões no mesmo dia.',
-        example: 'Exemplo: Carla saiu — admin reseta senha, desmarca todas permissões e remove acesso ao C6.'
+        example: 'Exemplo: Carla saiu — admin reseta senha, desmarca todas permissões e remove acesso ao arquivo de pagamento.'
       },
       {
         title: 'Resposta a incidente',

@@ -433,7 +433,7 @@ async function ensureCanViewPaymentValues(userId: string): Promise<PermissionChe
   if (!ok) {
     return {
       allowed: false,
-      error: 'Esta ação recalcula o valor do pagamento — precisa das permissões "Ver pagamentos" (Financeiro) e "Ver valores em R$" (C6) juntas.',
+      error: 'Esta ação recalcula o valor do pagamento — precisa das permissões "Ver pagamentos" (Financeiro) e "Ver valores em R$" (Arquivo de pagamento) juntas.',
     };
   }
   return { allowed: true };

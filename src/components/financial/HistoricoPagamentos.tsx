@@ -87,25 +87,39 @@ export const HistoricoPagamentos: React.FC<Props> = ({
           // linha — com a gaveta fechada não dava pra ver nada. O arredondamento
           // agora vem das pontas. (Achado em revisão, 11/09/2026.)
           <div key={mes.chave} className="bg-white rounded-lg shadow">
-            {/* ── LINHA FECHADA DO MÊS ─────────────────────────────────────── */}
+            {/* ── LINHA FECHADA DO MÊS ───────────────────────────────────────
+                ⚠️ A LINHA NÃO É UM BOTÃO, e isso é de propósito.
+                Ela era `role="button"` e ENVOLVIA os outros botões (a tag de erros
+                e o "PDF do mês") — botão dentro de botão. Duas consequências
+                reais, medidas em 11/09/2026: o leitor de tela anunciava a linha
+                inteira como UM botão só, e o nome acessível dela incluía "PDF do
+                mês", então o clique caía na linha e FECHAVA a gaveta em vez de
+                abrir o PDF. Agora quem é botão de verdade é o de abrir/fechar,
+                pequeno, à esquerda; o clique na linha continua funcionando como
+                atalho de mouse. */}
             <div
-              role="button"
-              tabIndex={0}
               /* O E2E usa isto pra ler o valor da linha FECHADA e comparar com a
                  soma das semanas — a invariante do erro de R$ 82.980. */
               data-testid="gaveta-mes"
               onClick={() => setAberto(estaAberto ? '' : mes.chave)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setAberto(estaAberto ? '' : mes.chave); }}
               className={`flex flex-wrap items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 cursor-pointer hover:bg-gray-50 min-h-[44px] ${estaAberto ? 'rounded-t-lg' : 'rounded-lg'}`}
             >
-              <ChevronRight
-                size={18}
-                className={`text-gray-500 flex-shrink-0 transition-transform ${estaAberto ? 'rotate-90' : ''}`}
-              />
-              <div className="flex items-baseline gap-2 min-w-[150px]">
-                <span className="text-base font-bold text-gray-800">{mes.nome}</span>
-                <span className="text-sm font-medium text-gray-400">{mes.ano}</span>
-              </div>
+              <button
+                type="button"
+                aria-expanded={estaAberto}
+                aria-label={`${estaAberto ? 'Fechar' : 'Abrir'} ${mes.nome} de ${mes.ano}`}
+                onClick={(e) => { e.stopPropagation(); setAberto(estaAberto ? '' : mes.chave); }}
+                className="flex items-center gap-3 sm:gap-4 text-left rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <ChevronRight
+                  size={18}
+                  className={`text-gray-500 flex-shrink-0 transition-transform ${estaAberto ? 'rotate-90' : ''}`}
+                />
+                <div className="flex items-baseline gap-2 min-w-[150px]">
+                  <span className="text-base font-bold text-gray-800">{mes.nome}</span>
+                  <span className="text-sm font-medium text-gray-400">{mes.ano}</span>
+                </div>
+              </button>
               {mes.emAndamento && (
                 <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 whitespace-nowrap">
                   EM ANDAMENTO
@@ -292,6 +306,7 @@ const TagErros: React.FC<{
             },
           }
         : {})}
+      data-testid="tag-erros"
       className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm whitespace-nowrap ${
         tem ? 'bg-red-50 border-red-200 text-red-600 cursor-pointer' : 'bg-gray-50 border-gray-200 text-gray-400 cursor-default'
       }`}

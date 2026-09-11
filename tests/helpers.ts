@@ -92,11 +92,11 @@ export async function goToTab(page: Page, tabName: string) {
   // sabe como chegar lá agora. Quem testa a ausência da ABA faz isso explicitamente.
   if (/^Pagamento C6$/.test(tabName)) {
     await goToTab(page, 'Financeiro');
-    const abrir = page.getByRole('button', { name: /^Gerar pagamento C6$/ }).first();
+    const abrir = page.getByRole('button', { name: /^Gerar arquivo de pagamento$/ }).first();
     await abrir.waitFor({ state: 'visible', timeout: 10_000 });
     await abrir.click();
     // O popup carrega a prévia sozinho; espera o título dele aparecer.
-    await page.getByRole('heading', { name: /Pagamento C6 Bank/ }).first()
+    await page.getByRole('heading', { name: /Arquivo de pagamento/ }).first()
       .waitFor({ state: 'visible', timeout: 15_000 });
     return;
   }
