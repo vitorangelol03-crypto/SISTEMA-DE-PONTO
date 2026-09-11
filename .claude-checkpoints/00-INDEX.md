@@ -2,6 +2,33 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
+> **📌 SESSÃO 10→11/09 (madrugada) — NOTA DIVIDIDA NO AR + ETAPA 2 DO FINANCEIRO
+> FUNCIONANDO.** Detalhe em **`CHECKPOINT_SESSAO_2026-09-11.md`**.
+>
+> **Nota dividida:** edge fn **v46 no ar** (conferida byte a byte), as 2 notas
+> misturadas do Gessiley apagadas com backup, commit `3bd2e00`. A **revisão
+> adversarial com 3 revisores pegou 4 bugs graves** antes do ar — o pior: a parte 1
+> ocupava a vaga da própria parte 2 e **a dupla nunca fecharia** (foi o que derrubou
+> o E2E, e eu tinha suspeitado de lentidão). Também: o vale era descontado dos DOIS
+> CNPJs (R$ 161,97 ficariam sem nota no LEANDRO) — hoje `repartirLiquidoPorTomador` é
+> UMA função só, importada pelo robô e pelo relatório.
+>
+> **Etapa 2 (gavetas) — commit `bf8f65f`, JÁ NA TELA:** aba "Histórico de Pagamentos"
+> no Financeiro, uma gaveta por mês com as semanas dentro e, na linha fechada, valor /
+> pagos (D × C) / descontados / erros separados por vínculo. Conferido no navegador com
+> dado real: `SETEMBRO · R$ 8.472,00 · 25 pagos (14 D · 11 CLT) · 54 erros (33 D · 21 C)`.
+> **Dois bugs que só a tela pegou:** o Supabase corta em 1.000 linhas e a janela tem
+> 1.643 pagamentos (setembro aparecia R$ 0,00) → busca período a período; e as semanas
+> SOBREPOSTAS de produção (31/08–06/09 e 01–07/09) faziam o mês contar erro em dobro
+> (dizia 106, eram 54+52 do mesmo conjunto) → dedupe por id.
+>
+> ⏳ **PENDENTE DE VOCÊ:** (1) a **migration do carimbo do vínculo** está escrita mas
+> foi **bloqueada pelo harness** (DDL) — o código funciona sem ela e passa a valer a
+> regra assim que entrar; (2) 🔴 **dois campos de vínculo discordam em 21 pessoas**
+> (`employment_type`, o operacional, × `contract_type`, cadastro) — corrigi 1
+> incoerência que eu criei (Matheus Linhares); (3) 3 pessoas de Ponte Nova sem vínculo;
+> (4) PDF **em lote** e publicar recibo pro funcionário ficaram pra próxima leva.
+>
 > **📌 SESSÃO 10/09 — A NOTA DIVIDIDA VIROU DE LADO (pronta, NÃO no ar).**
 > Ordem do Victor, vinda da Shopee e da iMile: *"a Shopee não pode misturar com a nota
 > que vai no CNPJ da iMile, e vice-versa"*. De 04/09 a 09/09 o sistema fazia exatamente
