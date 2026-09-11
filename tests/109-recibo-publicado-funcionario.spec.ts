@@ -121,7 +121,8 @@ test.describe('Recibo publicado na tela do funcionário', () => {
       expect(resp.status(), 'o link assinado responde').toBe(200);
       expect((await resp.body()).subarray(0, 4).toString(), 'e o que vem é um PDF').toBe('%PDF');
 
-      await page.screenshot({ path: 'print-recibo-funcionario.png', fullPage: true });
+      // O print vai pra test-results (artefato de teste), nunca pra raiz do projeto.
+      await page.screenshot({ path: 'test-results/recibo-do-funcionario.png', fullPage: true });
     } finally {
       await limparRecibos(empId);
     }

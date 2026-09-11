@@ -80,14 +80,14 @@ export const EmployeeErrorsView: React.FC<EmployeeErrorsViewProps> = ({ employee
   if (details.length === 0) {
     return (
       <div className="px-4 py-4 space-y-4">
+        {/* Recibos em CIMA, igual ao caso com erro: quem nunca errou também
+            recebe recibo, e é ele que a pessoa entra pra ver. */}
+        <ListaDeRecibos recibos={recibos} />
         <div className="p-6 bg-green-50 border-2 border-green-200 rounded-xl text-center">
           <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2" />
           <p className="font-semibold text-green-800 text-lg">Nenhum erro registrado</p>
           <p className="text-sm text-green-700 mt-1">Continue assim!</p>
         </div>
-        {/* Quem nunca errou também recebe recibo — por isso o bloco vem aqui
-            TAMBÉM, e não só embaixo da lista de erros. */}
-        <ListaDeRecibos recibos={recibos} />
       </div>
     );
   }
