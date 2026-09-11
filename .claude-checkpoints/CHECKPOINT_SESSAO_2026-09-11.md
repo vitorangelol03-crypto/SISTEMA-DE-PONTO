@@ -10,7 +10,7 @@
 
 | | |
 |---|---|
-| ✅ Suíte completa | **96/96 arquivos, 1.467 testes, ZERO falha** |
+| ✅ Suíte completa | **96/96 arquivos, 1.467 testes, ZERO falha** (rodada 2× ) |
 | ✅ tsc · lint · build | limpos |
 | ✅ Migration do carimbo do vínculo | **APLICADA e provada** (3.605 pagamentos) |
 | ✅ Edge fn `employee-public-api` v15 | **no ar**, rotas antigas sondadas e OK |
