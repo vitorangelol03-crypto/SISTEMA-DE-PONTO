@@ -5,10 +5,27 @@
 > **📌 SESSÃO 10→11/09 (madrugada) — ETAPA 2 DO FINANCEIRO COMPLETA + NOTA
 > DIVIDIDA NO AR.** Detalhe em **`CHECKPOINT_SESSAO_2026-09-11.md`**.
 >
-> **Suíte: 96/96 arquivos, 1.467 testes, ZERO falha.** tsc · lint · build limpos.
-> ⚠️ **Nesta máquina `npm test` puro NÃO VALE** — dá 57 "Failed to start forks
-> worker" e roda só 38 de 96. É concorrência, não volume: use
-> **`npx vitest run --maxWorkers=3`** (~24 min).
+> **📌 ÚLTIMA LEVA (11→12/09) — ARQUIVO DE PAGAMENTO.** Commit `7354aeb`:
+> **painel de meses** (clica no nome do mês e escolhe direto, sem setinha),
+> **filtro por função**, e um **bug real consertado** — o popup abria em
+> "hoje a hoje" e montava o arquivo de UM DIA, calado, porque o Financeiro
+> mandava as datas dele mesmo quando ninguém tinha escolhido período. Agora só
+> manda depois de alguém escolher (`periodoFoiEscolhidoNaTela`). Descoberto no
+> mesmo dia: os filtros de vínculo/função ficavam **invisíveis** assim que a
+> prévia carregava. Detalhe no §7 do checkpoint de 11/09.
+>
+> **Suíte: 99/99 arquivos, 1.492 testes, ZERO falha.** tsc · lint · build limpos.
+> ⚠️ **A SUÍTE INTEIRA NÃO CABE NUMA RODADA SÓ NESTA MÁQUINA (12/09/2026).** Com
+> 99 arquivos, `npx vitest run --maxWorkers=3` foi **morto por falta de memória**;
+> numa tentativa anterior sobrou com **19 workers mortos rodando 80 de 99** — e
+> sem nenhum teste vermelho. O que pesa é o jsdom, um por arquivo.
+> **Rodar em LOTES de 12 arquivos com `--maxWorkers=2`** (script em
+> `scratchpad/lotes.sh`), e conferir **três sinais** antes de chamar de verde:
+> 1. o código de saída do vitest — e ele tem que vir do vitest, **não de um pipe**
+>    (`npx vitest run | tail` reporta o código do `tail`, sempre 0);
+> 2. a **contagem** de arquivos (o `include` dá 99 hoje);
+> 3. zero `"Failed to start forks worker"` no log.
+> (`pkill -f vitest` mata o próprio shell que ia rodar — saída 144.)
 >
 > **🔴 O ERRO DE R$ 82.980 QUE A REVISÃO PEGOU.** A gaveta aberta somava R$ 16.194 e
 > a fechada dizia R$ 8.472; os R$ 1.748 do dia 27/07 apareciam em julho **E** em
