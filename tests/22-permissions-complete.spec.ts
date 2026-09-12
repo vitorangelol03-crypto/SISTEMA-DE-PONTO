@@ -91,9 +91,15 @@ test.describe('Permissions — Supervisor 04 restrito', () => {
     await expect(page.getByRole('button', { name: /^Triagem$/ })).toHaveCount(0);
   });
 
-  test('sup04 VÊ Aprovações Pendentes (tem permissão approve)', async ({ page }) => {
+  test('🎯 "Aprovações Pendentes" NÃO existe mais para ninguém', async ({ page }) => {
+    // 12/09/2026 — este teste provava que o sup04 VIA a sub-aba (ele tinha a
+    // permissão `approve`). O Victor removeu a aprovação de ponto do sistema
+    // — *"ela não tem mais utilidade"* — e agora o teste guarda a AUSÊNCIA, pra
+    // ninguém trazer de volta sem querer. Quem precisa descartar uma batida
+    // errada usa o mestre 2626, que edita e exclui direto na aba Ponto.
     await loginAs(page, SUP04);
-    await expect(page.getByText(/Aprovações Pendentes/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /Controle de Ponto/ })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/Aprovações Pendentes/i)).toHaveCount(0);
   });
 
   test('sup04 NÃO tem aba Usuários', async ({ page }) => {
@@ -136,13 +142,12 @@ test.describe('Permissions — Catálogo no modal de Permissões', () => {
     await row.getByRole('button', { name: /Permiss/i }).click();
     const modal = page.locator('[class*="max-w-4xl"]');
     await modal.getByRole('button', { name: /^Ponto/ }).click();
-    for (const txt of [
-      'Aprovar ponto pendente',
-      'Rejeitar ponto pendente',
-      'Aprovar ponto em lote',
-      'Inserir horário manual',
-    ]) {
-      await expect(modal.getByText(new RegExp(txt))).toBeVisible();
+    // As três de aprovação saíram do catálogo em 12/09/2026, junto com a função.
+    for (const txt of ['Aprovar ponto pendente', 'Rejeitar ponto pendente', 'Aprovar ponto em lote']) {
+      await expect(modal.getByText(new RegExp(txt))).toHaveCount(0);
+    }
+    for (const txt of ['Inserir horário manual', 'Marcar presença', 'Gerar espelhos de ponto em massa']) {
+      await expect(modal.getByText(new RegExp(txt)).first()).toBeVisible();
     }
   });
 
