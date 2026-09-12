@@ -543,3 +543,117 @@ E a causa dos workers mortos foi rodar **Playwright junto**. Um de cada vez.
 
 Bônus: `pkill -f "vitest"` **mata o próprio shell** que ia rodar o vitest (a
 linha de comando dele contém a palavra). Saída 144.
+
+
+---
+
+## 8. Semanas da Ponte Nova (12/09) — e o bug que isso desenterrou
+
+> *"cadastra as semanas da ponte nova"* (Victor, 12/09/2026)
+
+### 8.1 O que foi feito
+
+45 semanas de segunda a domingo, de **03/11/2025** a **13/09/2026**, no padrão da
+Caratinga (`payment_date` = fim, rótulo `Semana DD/MM a DD/MM`, `created_by`
+9999). 44 passadas como `paid` com `paid_by`/`paid_at` NULOS de propósito — é
+assim que o sistema reconhece "marcada pelo sistema, sem quem confirmou". 1
+aberta. E `auto_weekly` religado.
+
+**Provado depois de gravar:** 0 sobreposição, 0 buraco entre semanas, 0 pagamento
+órfão, 624 pagamentos cobertos, R$ 58.872 batendo. Caratinga intocada.
+
+Detalhes e rollback em `backups/2026-09-12-semanas-ponte-nova/README.md`.
+
+### 8.2 Decisões do Victor
+
+1. **Semanal**, e não mensal — a marca de "mensal" que existia estava errada.
+2. As passadas entram **pagas** (mesma decisão das 45 antigas de Caratinga).
+   ⚠️ Semana paga não aceita erro: não dá pra lançar retroativo na PN.
+3. **Desde o primeiro pagamento** (03/11/2025), pra não sobrar órfão.
+
+### 8.3 🔴 O BUG: a semana nascia um dia deslocada
+
+`autoCreateWeeklyPeriod` montava as datas com `toISOString()`, que fala UTC. No
+Brasil (UTC−3), **das 21h em diante o dia em UTC já é o seguinte** — a segunda
+07/09 saía gravada como "08/09", criando uma semana SOBREPOSTA à que já existia.
+
+Aconteceu duas vezes esta noite, em produção: na Ponte Nova (23h18) e na
+Caratinga (23h41). As duas apagadas à mão (0 pagamentos em ambas).
+
+É a mesma doença por trás do **erro de R$ 82.980**.
+
+**Conserto:** `semanaDaData()` novo em `dateUtils.ts` (conta inteira em UTC sobre
+uma data que JÁ é a do Brasil), usado por `autoCreateWeeklyPeriod` junto com
+`getBrazilDate()`. E a checagem de "já existe" virou **por sobreposição** — antes
+comparava data exata, então a semana deslocada não batia com nada e era criada
+por cima. Travado em `tests/unit/semanaDaData.spec.ts` (9 testes, inclusive 400
+dias seguidos provando que nenhum dia tem duas donas).
+
+**Provado:** rodei uma bateria E2E inteira depois do conserto e nenhuma semana
+torta voltou.
+
+### 8.4 ⚠️ ARMADILHA NOVA: o Vite não vê mudança de arquivo aqui
+
+Consertei o `database.ts` às 02:25 UTC e a semana torta da Caratinga nasceu às
+02:41 — **16 minutos depois**, com o servidor de dev ainda servindo o módulo
+VELHO. O projeto vive em `/mnt/c` (NTFS no WSL) e o watcher do Vite não recebe os
+eventos; somado a `reuseExistingServer: true`, o E2E testa código antigo sem
+avisar.
+
+**Matar o vite antes de rodar E2E depois de mexer em código do app.**
+(`pkill -f vite` mata o próprio shell — matar por PID.)
+
+### 8.5 Regressão minha, de 11/09
+
+A migration `20260911180202_employment_type_so_os_dois_reais` apertou o CHECK e eu
+**não rastreei os consumidores**. Quebrou `scripts/seed-pn-fake.mjs` e **20
+asserções/inserts em 8 arquivos de teste** — nenhum tinha rodado desde então.
+Todos traduzidos (CLT → Carteira Assinada, PJ → Diarista). As linhas de PLANILHA
+continuam 'CLT' de propósito: ali é entrada pro tradutor.
+
+### 8.6 Testes desatualizados (o produto estava certo)
+
+- **`26` teste 5 APAGAVA os períodos da PN** pra provar que ela estava vazia. Ia
+  destruir as 45 semanas a cada rodada. Reescrito: compara a contagem que cada
+  empresa mostra com a do banco (se vazasse, mostraria a soma das duas).
+- **`101` D1/D2 e `79`** esperavam o campo de CPF de cara no `/clock`. Desde
+  `cad2c39` (04/09) a tela abre na câmera, com o CPF atrás do botão "Prefere
+  digitar CPF e senha?". Virou o helper `irAoCampoDeCpfDoPonto`.
+- **`14` teste 2** pegava `input[type="date"]` da página inteira e funcionava por
+  acidente (os campos existiam só enquanto as semanas carregavam, e sumiam
+  depois). Agora escolhe "Datas livres" de propósito, como uma pessoa faria.
+
+### 8.7 O flake do "Vite frio", morto
+
+O primeiro `page.goto` de cada arquivo estourava e derrubava um teste diferente a
+cada rodada. O `webServer.url` só espera o Vite RESPONDER; quem demora é a
+compilação do grafo de módulos, que acontecia dentro do primeiro teste. Agora o
+`global-setup` faz essa primeira navegação FORA de qualquer teste. E o
+`timeout` do teste subiu de 30s pra 90s — com 30s, a licença de 60s da navegação
+não valia nada, e a mensagem escondia a causa.
+
+`switchCompany` também ficou robusto: trocar de empresa RECARREGA a página, o
+botão some junto, e o helper desistia em 10s achando que ele tinha sumido do
+produto.
+
+### 8.8 🔴 PENDENTE — vermelho que NÃO é meu
+
+`79-employee-pin-bcrypt`: 1 teste vermelho. Já estava quebrado desde a migration
+de 11/09 (o insert violava o CHECK). Com o conserto ele passa do CPF e do PIN, e
+agora para em **"Erro no cadastro facial: não foi possível acessar a câmera"** —
+o Chromium headless não tem câmera.
+
+Dá pra resolver com câmera falsa (`--use-fake-device-for-media-stream`), mas isso
+muda como TODOS os testes de facial rodam e pode fazer um fluxo "passar" sem
+provar nada. **Decisão do Victor, não minha.**
+
+Mesma situação, não tocados (não foi pedido): `02`, `08`, `38`, `48`, `78`, `80`,
+`99`, `100` também digitam CPF no `/clock` e podem ter a mesma defasagem. O
+helper `irAoCampoDeCpfDoPonto` já existe pra quando for a hora.
+
+### 8.9 🟡 Registrado, não corrigido
+
+Caratinga tem **28 semanas que começam na QUINTA** (09/10/2025 a 22/04/2026,
+criadas num lote só em 21/04/2026) — outra convenção, que por isso se sobrepõe
+às segunda-a-domingo criadas depois. A regra do "dono único" já protege o
+cálculo. É histórico e não foi pedido.
