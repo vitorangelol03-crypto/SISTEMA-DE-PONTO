@@ -2,6 +2,43 @@
 
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
+>
+> **📌 SESSÃO 12/09 (manhã) — A APROVAÇÃO DE PONTO SAIU E ESTÁ NO AR.** Push
+> `0b3f8ae..7f2e2df` com 2 commits. Detalhe em **`CHECKPOINT_SESSAO_2026-09-12.md`**.
+>
+> 🔴 **O ESTADO PERIGOSO QUE ESTA LEVA DESFEZ.** A madrugada aplicou a migration
+> (colunas de aprovação fora do banco) e subiu a edge fn v15, mas **o código do
+> site ficou sem commit**. Das 03:43 às 09:10 o site no ar ainda mandava
+> `approval_status` no upsert — **corrigir horário à mão dava erro** pra qualquer
+> supervisor. Sonda: `select=id,approval_status` → **400 (42703)**; `select=id` →
+> 200. **Bater ponto nunca foi afetado** (passa pela edge fn): 12 pessoas reais
+> bateram entre 04:04 e 07:40 nas duas empresas. **Lição: migration que tira
+> coluna e código que para de usá-la são UMA COISA SÓ** — aplicar uma e deixar a
+> outra no computador é produção quebrada com cara de "está tudo certo".
+>
+> **Deploy provado do jeito certo:** o bundle que o site serve é **byte a byte
+> igual** ao compilado aqui (sha `a8ee5e6f…`) — não por status HTTP, que o SPA
+> falseia. Depois do deploy, 3 batidas novas (35 no dia, última 09:52).
+>
+> ⚠️ **O ROBÔ DA SHOPEE IMPEDE A SUÍTE NESTA MÁQUINA.** Com ele rodando (19-23
+> Chrome, 7,7 GB de 12, carga 10-12), o vitest **desiste de esperar o worker em
+> 60s** — tempo **fixo dentro do vitest** (`START_TIMEOUT = 6e4`), sem flag nem
+> config; forks e threads morrem igual. **Engana:** a rodada termina
+> `Test Files 2 passed` com um `Failed to start forks worker` no meio. Os 3
+> arquivos afetados passaram, provados **pela contagem** (19 = 10+9; 74 = 65+9),
+> nunca na mesma rodada. **E2E dos 5 specs mexidos continua pendente.**
+>
+> ⚠️ **`public-api-v1` segue publicada na v5 pedindo `approved_by`** (coluna que
+> não existe). `api_keys` está **vazia** e a rota morre em 401 antes da consulta —
+> ninguém sente, mas **republicar antes de existir qualquer chave**.
+>
+> 🔴 **REGRA DO VICTOR AINDA NÃO FEITA** (só existia na conversa, quase se perdeu):
+> *"quem já está com 30+ dias sem bater ponto entra desativado de cara, não só
+> daqui pra frente"*.
+>
+> 🎯 **PRÓXIMO:** Relatórios pra dentro do Financeiro (mês em PDF ou planilha;
+> filtro de semana, funcionário, função e vínculo). Levantado: **ninguém perde
+> acesso** — os 5 com `reports.view` (02, 03, 04, 8888, 9999) já têm `financial.view`.
 > **📌 SESSÃO 10→11/09 (madrugada) — ETAPA 2 DO FINANCEIRO COMPLETA + NOTA
 > DIVIDIDA NO AR.** Detalhe em **`CHECKPOINT_SESSAO_2026-09-11.md`**.
 >
