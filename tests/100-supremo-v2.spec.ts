@@ -42,6 +42,7 @@ import {
   goToTab,
   switchCompany,
   logout,
+  irAoCampoDeCpfDoPonto,
 } from './helpers';
 import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
 import {
@@ -968,9 +969,16 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
 
       const modal = page.locator('[class*="max-w-4xl"]');
       await modal.getByRole('button', { name: /^Ponto/ }).click();
-      await expect(modal.getByText('Aprovar ponto pendente')).toBeVisible();
-      await expect(modal.getByText('Rejeitar ponto pendente')).toBeVisible();
-      await expect(modal.getByText('Aprovar ponto em lote')).toBeVisible();
+      // 12/09/2026 — "Aprovar ponto pendente" saiu do catálogo junto com a função.
+      // O teste passa a exigir um rótulo que EXISTE, senão não prova que o modal
+      // carregou as permissões de Ponto.
+      await expect(modal.getByText('Marcar presença')).toBeVisible();
+      await expect(modal.getByText(/Inserir horário manual/)).toBeVisible();
+      await expect(modal.getByText('Gerar espelhos de ponto em massa')).toBeVisible();
+      // E as três da aprovação NÃO podem estar mais lá.
+      await expect(modal.getByText('Aprovar ponto pendente')).toHaveCount(0);
+      await expect(modal.getByText('Rejeitar ponto pendente')).toHaveCount(0);
+      await expect(modal.getByText('Aprovar ponto em lote')).toHaveCount(0);
 
       await modal.getByRole('button', { name: /^Financeiro/ }).click();
       await expect(modal.getByText('Aplicar bonificação tipo B')).toBeVisible();
@@ -1059,10 +1067,13 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
   // SEÇÃO K — Fluxo público /clock + /erros (4 tests)
   // ==========================================================================
   test.describe('K. Fluxo público', () => {
-    test('K1. /clock renderiza com input CPF + botão Continuar', async ({ page }) => {
+    test('K1. /clock abre e chega no campo de CPF', async ({ page }) => {
+      // ⚠️ Desde 04/09/2026 (cad2c39) a tela NÃO abre mais no CPF: abre na câmera,
+      // com o CPF atrás do botão "Prefere digitar CPF e senha?". O helper faz esse
+      // caminho — é o mesmo que a pessoa faz.
       const capture = attachConsoleCapture(page);
       await page.goto('/clock');
-      await expect(page.locator('input[placeholder="000.000.000-00"]')).toBeVisible({ timeout: 10_000 });
+      await irAoCampoDeCpfDoPonto(page);
       await expect(page.getByRole('button', { name: /Continuar/ })).toBeVisible();
       assertCleanConsole(capture, 'K1');
     });
@@ -1076,7 +1087,7 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
 
     test('K3. /clock CPF inexistente → "não encontrado"', async ({ page }) => {
       await page.goto('/clock');
-      const input = page.locator('input[placeholder="000.000.000-00"]');
+      const input = await irAoCampoDeCpfDoPonto(page);
       await input.fill('99988877766');
       await page.getByRole('button', { name: /Continuar/ }).click();
       await expect(page.getByText(/não encontrado/i)).toBeVisible({ timeout: 10_000 });

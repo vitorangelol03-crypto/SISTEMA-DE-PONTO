@@ -1,5 +1,5 @@
 import { test, expect, Page, ConsoleMessage } from '@playwright/test';
-import { ADMIN, loginAs, goToTab, logout } from './helpers';
+import { ADMIN, loginAs, goToTab, logout, irAoCampoDeCpfDoPonto } from './helpers';
 import { getClient } from './cleanup';
 
 /**
@@ -212,8 +212,9 @@ test.describe('System walkthrough exaustivo (sub-fase 14.4.10)', () => {
     const capture = attachConsoleCapture(page);
 
     await page.goto('/clock');
-    const cpfInput = page.locator('input[placeholder="000.000.000-00"]');
-    await expect(cpfInput).toBeVisible({ timeout: 10_000 });
+    // ⚠️ Desde 04/09/2026 a tela abre na câmera, com o CPF atrás do botão
+    // "Prefere digitar CPF e senha?" — o helper faz o caminho da pessoa.
+    const cpfInput = await irAoCampoDeCpfDoPonto(page);
 
     // CPF inválido sintético — esperado: "Funcionário não encontrado"
     await cpfInput.fill('99988877766');
