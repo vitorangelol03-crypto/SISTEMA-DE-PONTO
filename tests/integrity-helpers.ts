@@ -147,8 +147,6 @@ export async function insertAttendance(
     hours_worked: number;
     night_hours: number;
     night_additional: number;
-    approval_status: 'pending' | 'approved' | 'rejected' | 'manual';
-    rejection_reason: string;
   }> = {}
 ): Promise<string> {
   const s = getClient();
@@ -163,8 +161,6 @@ export async function insertAttendance(
   if (fields.hours_worked !== undefined) row.hours_worked = fields.hours_worked;
   if (fields.night_hours !== undefined) row.night_hours = fields.night_hours;
   if (fields.night_additional !== undefined) row.night_additional = fields.night_additional;
-  if (fields.approval_status !== undefined) row.approval_status = fields.approval_status;
-  if (fields.rejection_reason !== undefined) row.rejection_reason = fields.rejection_reason;
 
   const { data, error } = await s.from('attendance').insert([row]).select('id').single();
   if (error) throw error;

@@ -515,7 +515,8 @@ Deno.serve(async (req: Request) => {
             entry_accuracy: accuracy,
             geo_valid: false,
             geo_distance_meters: distance,
-            approval_status: "pending",
+            // 12/09/2026: `approval_status` saiu — a aprovação de ponto foi
+            // removida do sistema e a coluna não existe mais.
             clock_source: "employee_self",
           };
           // Cliente novo (marking_position=1) também escreve no campo posicional.
@@ -658,7 +659,6 @@ Deno.serve(async (req: Request) => {
         status: "present",
         entry_time: now,
         clock_source: "employee_self",
-        approval_status: "pending",
       };
       // Cliente novo na posição 1 também escreve no campo posicional.
       if (markingPosition === 1) record.entry_1_time = now;

@@ -132,83 +132,10 @@ test.describe('Attendance — fluxos completos', () => {
     expect(Number(data?.night_hours)).toBe(7);
   });
 
-  test('aprovação individual: pending → approved', async ({ page }) => {
-    const empId = await createTestEmployee({ name: `${PREFIX}AprIndiv` });
-    await insertAttendance(empId, todayBR(), {
-      status: 'present',
-      approval_status: 'pending',
-      entry_time: `${todayBR()}T11:00:00.000Z`,
-      exit_time_full: `${todayBR()}T20:00:00.000Z`,
-      hours_worked: 9,
-    });
-
-    await gotoPontoFresh(page);
-    // Subaba "Aprovações Pendentes"
-    await page.getByRole('button', { name: /Aprovações/i }).first().click();
-
-    const row = page.locator('tr', { hasText: `${PREFIX}AprIndiv` }).first();
-    await expect(row).toBeVisible({ timeout: 10_000 });
-    await row.getByRole('button', { name: /Aprovar/i }).first().click();
-
-    await expect(page.getByText(/aprovad/i).first()).toBeVisible({ timeout: 10_000 });
-
-    const s = getClient();
-    const { data } = await s.from('attendance').select('*').eq('employee_id', empId).single();
-    expect(data?.approval_status).toBe('approved');
-  });
-
-  test('rejeição direto via DB: status=rejected + rejection_reason gravados corretamente', async () => {
-    const empId = await createTestEmployee({ name: `${PREFIX}Reject` });
-    const attId = await insertAttendance(empId, todayBR(), {
-      status: 'present',
-      approval_status: 'pending',
-      hours_worked: 0,
-    });
-
-    const s = getClient();
-    await s.from('attendance').update({
-      approval_status: 'rejected',
-      rejection_reason: 'Motivo de teste PW',
-      approved_by: '9999',
-      approved_at: new Date().toISOString(),
-    }).eq('id', attId);
-
-    const { data } = await s.from('attendance').select('*').eq('id', attId).single();
-    expect(data?.approval_status).toBe('rejected');
-    expect(data?.rejection_reason).toContain('teste');
-  });
-
-  test('aprovação em lote: 2 funcionários pending → todos approved', async ({ page }) => {
-    const empA = await createTestEmployee({ name: `${PREFIX}Bulk A` });
-    const empB = await createTestEmployee({ name: `${PREFIX}Bulk B` });
-    await insertAttendance(empA, todayBR(), { status: 'present', approval_status: 'pending', hours_worked: 8 });
-    await insertAttendance(empB, todayBR(), { status: 'present', approval_status: 'pending', hours_worked: 8 });
-
-    await gotoPontoFresh(page);
-    await page.getByRole('button', { name: /Aprovações/i }).first().click();
-
-    // Marca os dois checkboxes (linhas têm checkbox)
-    const rowA = page.locator('tr', { hasText: `${PREFIX}Bulk A` }).first();
-    const rowB = page.locator('tr', { hasText: `${PREFIX}Bulk B` }).first();
-    await expect(rowA).toBeVisible({ timeout: 10_000 });
-    await rowA.locator('input[type="checkbox"]').first().check();
-    await rowB.locator('input[type="checkbox"]').first().check();
-
-    const bulkBtn = page.getByTestId('bulk-approve-button');
-    await expect(bulkBtn).toBeVisible({ timeout: 10_000 });
-    await bulkBtn.click();
-
-    await expect(page.getByText(/aprovad/i).first()).toBeVisible({ timeout: 10_000 });
-
-    const s = getClient();
-    const { data } = await s.from('attendance').select('*').in('employee_id', [empA, empB]);
-    expect(data?.length).toBe(2);
-    for (const r of data ?? []) {
-      expect(r.approval_status).toBe('approved');
-    }
-  });
-
-  test.skip('reset de ponto via UI: requer dialog confirm — flaky', async () => {});
+  /* 🔴 Os três testes de aprovação (individual, rejeição e em lote) saíram em
+     12/09/2026: o Victor removeu a função do sistema. Aprovar nunca mudou
+     cálculo nenhum; rejeitar era o único com efeito real (a batida saía do
+     relatório de horas) e nunca foi usado — ZERO rejeitadas em produção. */
 
   test('funcionário sem attendance hoje aparece "não marcado"', async ({ page }) => {
     await createTestEmployee({ name: `${PREFIX}SemPonto` });
@@ -218,19 +145,6 @@ test.describe('Attendance — fluxos completos', () => {
     await expect(row).toBeVisible({ timeout: 15_000 });
     // Linha deve ter botões "Presente" e "Falta" ativos (status=null)
     await expect(row.getByRole('button', { name: 'Presente', exact: true })).toBeVisible();
-  });
-
-  test('status manual: setManualTime cria approval_status=manual (não passa por approval queue)', async () => {
-    const empId = await createTestEmployee({ name: `${PREFIX}ManualSt` });
-    await insertAttendance(empId, todayBR(), {
-      status: 'present',
-      approval_status: 'manual',
-      hours_worked: 9,
-    });
-
-    const s = getClient();
-    const { data } = await s.from('attendance').select('approval_status').eq('employee_id', empId).single();
-    expect(data?.approval_status).toBe('manual');
   });
 
   test.skip('polling de 30s atualiza dados em segundo plano', async () => {

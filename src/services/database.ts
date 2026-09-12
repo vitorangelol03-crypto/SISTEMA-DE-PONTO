@@ -113,10 +113,6 @@ export interface Attendance {
   hours_worked: number | null;
   night_hours: number | null;
   night_additional: number | null;
-  approval_status: 'pending' | 'approved' | 'rejected' | 'manual' | null;
-  approved_by: string | null;
-  approved_at: string | null;
-  rejection_reason: string | null;
   clock_source: 'manual' | 'employee_self' | null;
   marked_by: string;
   created_at: string;
@@ -3339,7 +3335,7 @@ const FALLBACK_SCHEDULE: ExpectedSchedule = [0, 480, 480, 480, 480, 480, 240];
  * Idempotente. Não throw — falhas são logadas via console.error e o attendance
  * permanece com os valores anteriores intactos (não derrubar aprovação por bug aqui).
  *
- * Chamado após markAttendance, setManualTime, approveAttendance, bulkApproveAttendance.
+ * Chamado após markAttendance e setManualTime.
  * NÃO chamado em fluxos self-clock (clockIn/clockOut/edge function).
  */
 async function recalcAttendance(attendanceId: string): Promise<void> {
@@ -3526,7 +3522,6 @@ export const clockIn = async (
     status: 'present',
     entry_time: now,
     clock_source: 'employee_self',
-    approval_status: 'pending',
     company_id: companyId,
   };
 
@@ -3638,7 +3633,6 @@ export const setManualTime = async (
       hours_worked: hoursWorked,
       night_hours: nightHours,
       clock_source: 'manual',
-      approval_status: 'manual',
       company_id: companyId,
     }], { onConflict: 'employee_id,date' })
     .select()
@@ -3694,7 +3688,6 @@ export const setManualTimeFourMarkings = async (
     date,
     status: 'present',
     clock_source: 'manual',
-    approval_status: 'manual',
     company_id: companyId,
   };
   // Campos legados (entry_time/exit_time_full) espelham posição 1/4 — é o
@@ -3741,103 +3734,22 @@ export const setManualTimeFourMarkings = async (
   return finalData;
 };
 
-/** Busca registros pendentes de aprovação, opcionalmente filtrados por data. */
-export const getPendingApprovals = async (date: string | undefined, companyId: string): Promise<Attendance[]> => {
-  let query = supabase
-    .from('attendance')
-    .select(`
-      *,
-      employees (
-        id,
-        name,
-        cpf,
-        employment_type
-      )
-    `)
-    .eq('approval_status', 'pending')
-    .eq('company_id', companyId);
+/* 🔴 APROVAÇÃO DE PONTO REMOVIDA (12/09/2026).
+ *
+ * Saíram daqui `getPendingApprovals`, `approveAttendance`, `rejectAttendance` e
+ * `bulkApproveAttendance`, a pedido do Victor: *"vamos remover a função de
+ * aprovar ponto, ela não tem mais utilidade no sistema"*.
+ *
+ * Aprovar NUNCA mudou cálculo nenhum — era um carimbo. Quem tinha efeito real
+ * era REJEITAR: a batida saía do relatório de horas. E rejeitar nunca foi usado
+ * (ZERO rejeitadas nas duas empresas, conferido antes de remover), então a
+ * remoção não muda nenhum número de relatório, histórico ou pagamento.
+ *
+ * Quem precisar descartar uma batida errada usa o mestre 2626, que edita e
+ * exclui direto na aba Ponto. Backup dos 5.650 registros da coluna em
+ * `backups/2026-09-12-remove-aprovacao-ponto/`.
+ */
 
-  if (date) {
-    query = query.eq('date', date);
-  }
-
-  const { data, error } = await query.order('date', { ascending: false });
-  if (error) throw error;
-  return data || [];
-};
-
-/** Aprova um registro de attendance. */
-export const approveAttendance = async (attendanceId: string, supervisorId: string): Promise<void> => {
-  const permissionCheck = await validatePermission(supervisorId, 'attendance.approve');
-  if (!permissionCheck.allowed) {
-    throw new Error(permissionCheck.error || 'Permissão negada');
-  }
-
-  const { error } = await supabase
-    .from('attendance')
-    .update({
-      approval_status: 'approved',
-      approved_by: supervisorId,
-      approved_at: new Date().toISOString(),
-    })
-    .eq('id', attendanceId);
-
-  if (error) throw error;
-  await recalcAttendance(attendanceId);
-};
-
-/** Rejeita um registro de attendance com motivo. */
-export const rejectAttendance = async (
-  attendanceId: string,
-  supervisorId: string,
-  reason: string
-): Promise<void> => {
-  const permissionCheck = await validatePermission(supervisorId, 'attendance.reject');
-  if (!permissionCheck.allowed) {
-    throw new Error(permissionCheck.error || 'Permissão negada');
-  }
-
-  const { error } = await supabase
-    .from('attendance')
-    .update({
-      approval_status: 'rejected',
-      approved_by: supervisorId,
-      approved_at: new Date().toISOString(),
-      rejection_reason: reason,
-    })
-    .eq('id', attendanceId);
-
-  if (error) throw error;
-};
-
-/** Aprova em lote uma lista de IDs de attendance, processando em chunks de 50. */
-export const bulkApproveAttendance = async (ids: string[], supervisorId: string): Promise<void> => {
-  const permissionCheck = await validatePermission(supervisorId, 'attendance.bulkApprove');
-  if (!permissionCheck.allowed) {
-    throw new Error(permissionCheck.error || 'Permissão negada');
-  }
-
-  const chunkSize = 50;
-  const approvedAt = new Date().toISOString();
-
-  for (let i = 0; i < ids.length; i += chunkSize) {
-    const chunk = ids.slice(i, i + chunkSize);
-    const { error } = await supabase
-      .from('attendance')
-      .update({
-        approval_status: 'approved',
-        approved_by: supervisorId,
-        approved_at: approvedAt,
-      })
-      .in('id', chunk);
-
-    if (error) throw error;
-
-    for (const id of chunk) {
-      await recalcAttendance(id);
-    }
-  }
-};
 
 // ─── PIN functions ─────────────────────────────────────────────────────────────
 
@@ -4062,7 +3974,6 @@ export const saveFlaggedGeoAttempt = async (
         entry_accuracy: accuracy,
         geo_valid: false,
         geo_distance_meters: distanceMeters,
-        approval_status: 'pending',
         clock_source: 'employee_self',
         company_id: companyId,
       }], { onConflict: 'employee_id,date' });

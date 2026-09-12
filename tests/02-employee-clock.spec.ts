@@ -1,9 +1,19 @@
 import { test, expect } from '@playwright/test';
-import { TEST_EMPLOYEE_CPF, TEST_EMPLOYEE_CPF_MASKED } from './helpers';
+import { TEST_EMPLOYEE_CPF, TEST_EMPLOYEE_CPF_MASKED, irAoCampoDeCpfDoPonto } from './helpers';
 
 test.describe('Tela do Funcionário (/clock)', () => {
+  /**
+   * 🔴 O /clock não abre mais no CPF (12/09/2026).
+   *
+   * Desde `cad2c39` (04/09, facial 1:N direto na câmera), a tela abre em
+   * "Preparando reconhecimento… Carregando câmera" e o CPF ficou atrás do botão
+   * "Prefere digitar CPF e senha?". Os 9 testes daqui procuravam o campo de cara
+   * e morriam em `locator.fill: Timeout` — o produto estava certo, os testes é
+   * que ficaram pra trás.
+   */
   test.beforeEach(async ({ page }) => {
     await page.goto('/clock');
+    await irAoCampoDeCpfDoPonto(page);
     await expect(page.getByText('Registro de Ponto')).toBeVisible();
   });
 

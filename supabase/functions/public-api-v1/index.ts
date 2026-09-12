@@ -124,7 +124,12 @@ Deno.serve(async (req) => {
 
     let query = supabase
       .from('attendance')
-      .select('id, employee_id, date, status, entry_time, exit_time, exit_time_full, marked_by, approved_by, created_at', { count: 'exact' })
+      // 12/09/2026: `approved_by` saiu da lista — a aprovação de ponto foi removida
+      // e a coluna não existe mais. Pedir por ela devolve 400 (42703). Esta função
+      // segue publicada na v5, que AINDA pede: hoje não há nenhuma chave de API
+      // cadastrada (a rota morre em 401 antes da consulta), então ninguém sente —
+      // mas ela precisa ser republicada antes de qualquer chave existir.
+      .select('id, employee_id, date, status, entry_time, exit_time, exit_time_full, marked_by, created_at', { count: 'exact' })
       .eq('company_id', matchedKey.company_id)
       .order('date', { ascending: false })
       .order('id', { ascending: true });

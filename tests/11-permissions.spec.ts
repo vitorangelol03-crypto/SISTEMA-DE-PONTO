@@ -6,8 +6,6 @@ import { loginAs, goToTab } from './helpers';
  *
  * Sup 04 config atual:
  *   attendance.reset = false
- *   attendance.approve = true
- *   attendance.bulkApprove = false
  *   attendance.manualTime = false
  *   errors.viewTriage = false
  *   financial.applyBonusB/C1/C2 = false
@@ -24,9 +22,14 @@ test.describe('Permissões — Supervisor 04 restrito', () => {
     await expect(page.getByRole('button', { name: /^Reset Geral$/ })).toHaveCount(0);
   });
 
-  test('sup 04 CONSEGUE ver Aprovações Pendentes', async ({ page }) => {
+  test('🎯 a sub-aba "Aprovações Pendentes" NÃO existe mais', async ({ page }) => {
+    // 🔴 Este teste era o contrário: provava que o sup 04 CONSEGUIA ver a
+    // sub-aba. Em 12/09/2026 o Victor removeu a aprovação de ponto do sistema
+    // — *"ela não tem mais utilidade"* — e agora o teste guarda a AUSÊNCIA,
+    // pra ninguém trazer de volta sem querer.
     await loginAs(page, SUP04);
-    await expect(page.getByText(/Aprovações Pendentes/).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /Controle de Ponto/ })).toBeVisible();
+    await expect(page.getByText(/Aprovações Pendentes/)).toHaveCount(0);
   });
 
   test('sup 04 NÃO vê sub-aba Triagem em Erros', async ({ page }) => {
@@ -54,7 +57,7 @@ test.describe('Permissões — Admin 9999 completo', () => {
     await expect(page.locator('[data-testid="user-row"]:visible').first()).toBeVisible();
   });
 
-  test('modal de permissões lista as novas permissões (approve, reject, bulkApprove, manualTime, applyBonusB/C1/C2, removeBonusByType, createByValue, viewTriage)', async ({ page }) => {
+  test('modal de permissões lista as novas permissões (manualTime, applyBonusB/C1/C2, removeBonusByType, createByValue, viewTriage)', async ({ page }) => {
     await loginAs(page, ADMIN9999);
     await goToTab(page, 'Usuários');
 
@@ -73,9 +76,9 @@ test.describe('Permissões — Admin 9999 completo', () => {
     const modal = page.locator('[class*="max-w-4xl"]');
 
     await modal.getByRole('button', { name: /^Ponto/ }).click();
-    await expect(modal.getByText('Aprovar ponto pendente')).toBeVisible();
-    await expect(modal.getByText('Rejeitar ponto pendente')).toBeVisible();
-    await expect(modal.getByText('Aprovar ponto em lote')).toBeVisible();
+    // As três de aprovação saíram do catálogo em 12/09/2026, junto com a função.
+    await expect(modal.getByText('Aprovar ponto pendente')).toHaveCount(0);
+    await expect(modal.getByText('Aprovar ponto em lote')).toHaveCount(0);
     await expect(modal.getByText(/Inserir horário manual/)).toBeVisible();
 
     await modal.getByRole('button', { name: /^Financeiro/ }).click();

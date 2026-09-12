@@ -38,7 +38,7 @@ test.describe('Supervisor com users.create perm (sub-fase 16.3)', () => {
     // Estrutura espelha UserPermissions (src/types/permissions.ts). Outros perms
     // default false pra escopar o teste em users.create exclusivamente.
     const perms = {
-      attendance: { view: true, mark: false, edit: false, delete: false, generateMassMirror: false, viewHistory: false, approve: false, reject: false, bulkApprove: false },
+      attendance: { view: true, mark: false, edit: false, delete: false, generateMassMirror: false, viewHistory: false },
       employees: { view: false, create: false, edit: false, delete: false, import: false },
       reports: { view: false, exportExcel: false, exportPDF: false },
       financial: { view: false, editRate: false, delete: false, clear: false, applyDiscount: false, viewHistory: false, removeBonusByType: false },

@@ -46,7 +46,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   const [filteredAttendances, setFilteredAttendances] = useState<Attendance[]>([]);
   const [displayedAttendances, setDisplayedAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showRejected, setShowRejected] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     startDate: '',
@@ -54,7 +53,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
     employeeId: '',
     status: '' as '' | 'present' | 'absent',
     employmentType: 'all' as EmploymentType,
-    approvalStatus: '' as '' | 'pending' | 'approved' | 'rejected' | 'manual'
   });
 
   const loadData = async () => {
@@ -115,16 +113,13 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       filtered = filtered.filter(att => att.status === filters.status);
     }
 
-    if (filters.approvalStatus) {
-      filtered = filtered.filter(att => (att.approval_status ?? null) === filters.approvalStatus);
-    }
-
-    if (!showRejected) {
-      filtered = filtered.filter(att => att.approval_status !== 'rejected');
-    }
-
+    /* 🔴 Saíram daqui o filtro por situação de aprovação e o "mostrar
+       rejeitadas" (12/09/2026). A aprovação de ponto foi removida do sistema a
+       pedido do Victor. Rejeitar era o único estado com efeito de verdade — a
+       batida sumia deste relatório — e nunca foi usado: ZERO rejeitadas nas duas
+       empresas, conferido antes de remover. Então nenhum número muda. */
     setFilteredAttendances(filtered);
-  }, [filters, attendances, showRejected]);
+  }, [filters, attendances]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -183,7 +178,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
   }
 
   const periodSummary = React.useMemo((): EmployeeSummary[] => {
-    const rows = displayedAttendances.filter(att => att.approval_status !== 'rejected');
+    const rows = displayedAttendances;
     const map = new Map<string, EmployeeSummary>();
 
     const emptyByType = (): Record<string, { count: number; total: number }> => {
@@ -227,7 +222,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       return;
     }
 
-    const rows = displayedAttendances.filter(att => att.approval_status !== 'rejected');
+    const rows = displayedAttendances;
     if (rows.length === 0) {
       toast.error('Nenhum registro para exportar');
       return;
@@ -241,10 +236,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       const mins = Math.round((h - hrs) * 60);
       return `${hrs}h ${mins.toString().padStart(2, '0')}min`;
     };
-    const approvalLabel: Record<string, string> = {
-      pending: 'Pendente', approved: 'Aprovado', manual: 'Manual',
-    };
-
     const formatMoney = (v: number) => v > 0 ? `R$ ${v.toFixed(2)}` : '-';
 
     const bonusHeadersHtml = bonusTypes.map(bt => `<th>Bon. ${bt.code}</th>`).join('');
@@ -265,7 +256,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
         <td>${formatH(att.hours_worked)}</td>
         <td>${formatH(att.night_hours)}</td>
         ${bonusCellsHtml}
-        <td>${att.approval_status ? (approvalLabel[att.approval_status] ?? att.approval_status) : '-'}</td>
       </tr>`;
     }).join('');
 
@@ -308,7 +298,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       <tr>
         <th>Data</th><th>Funcionário</th><th>Status</th>
         <th>Entrada</th><th>Saída</th><th>Intervalo</th><th>Horas</th>
-        <th>Hs Noturnas</th>${bonusHeadersHtml}<th>Aprovação</th>
+        <th>Hs Noturnas</th>${bonusHeadersHtml}
       </tr>
     </thead>
     <tbody>${tableRows}</tbody>
@@ -355,24 +345,15 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
         if (!iso) return '-';
         return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       };
-      const approvalLabel: Record<string, string> = {
-        pending: 'Pendente', approved: 'Aprovado', manual: 'Manual'
-      };
-
-      // Excluir rejected do export
-      const exportRows = displayedAttendances.filter(att => att.approval_status !== 'rejected');
+      const exportRows = displayedAttendances;
 
       const bonusHeaders = bonusTypes.map(bt => `Bon. ${bt.code}`);
       const headers = [
         'Data', 'Funcionário', 'CPF', 'Status', 'Entrada', 'Saída', 'Intervalo',
         'Horas Trabalhadas', 'Horas Noturnas', 'Adicional Noturno',
         ...bonusHeaders,
-        'Aprovação',
         'Horário Saída (legado)', 'Marcado por'
       ];
-
-      // Índice da coluna "Aprovação" (0-based)
-      const approvalColIdx = headers.indexOf('Aprovação');
 
       const wb = XLSX.utils.book_new();
       const ws: XLSX.WorkSheet = {};
@@ -394,10 +375,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
         ws[cell] = { v: h, t: 's', s: headerStyle };
       });
 
-      // Escreve dados com estilos condicionais na coluna Aprovação
+      // Escreve os dados
       exportRows.forEach((att, rowIdx) => {
         const r = rowIdx + 1;
-        const approvalStatus = att.approval_status ?? '';
         const valuesByCode = getBonusForAttendance(att);
         const bonusValues = bonusTypes.map(bt => {
           const v = valuesByCode[bt.code] ?? 0;
@@ -416,7 +396,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
           formatHoursExcel(att.night_hours ?? null),
           att.night_additional != null ? `R$ ${Number(att.night_additional).toFixed(2)}` : '-',
           ...bonusValues,
-          approvalLabel[approvalStatus] ?? (approvalStatus || '-'),
           att.exit_time || '-',
           att.marked_by || '-',
         ];
@@ -430,22 +409,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
             },
           };
 
-          if (c === approvalColIdx) {
-            const approvalFill: Record<string, string> = {
-              pending:  'FFF176',
-              approved: 'C8E6C9',
-              manual:   'F5F5F5',
-            };
-            const bgColor = approvalFill[approvalStatus];
-            ws[cell] = {
-              v: val, t: 's',
-              s: bgColor
-                ? { ...baseStyle, fill: { fgColor: { rgb: bgColor } }, alignment: { horizontal: 'center' as const } }
-                : { ...baseStyle, alignment: { horizontal: 'center' as const } },
-            };
-          } else {
-            ws[cell] = { v: val, t: 's', s: baseStyle };
-          }
+          ws[cell] = { v: val, t: 's', s: baseStyle };
         });
       });
 
@@ -540,7 +504,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
       employeeId: '',
       status: '',
       employmentType: 'all',
-      approvalStatus: ''
     });
   };
 
@@ -678,22 +641,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
             showLabel={true}
           />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Aprovação
-            </label>
-            <select
-              value={filters.approvalStatus}
-              onChange={(e) => setFilters(prev => ({ ...prev, approvalStatus: e.target.value as typeof filters.approvalStatus }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm"
-            >
-              <option value="">Todos</option>
-              <option value="pending">🟡 Pendente</option>
-              <option value="approved">✅ Aprovado</option>
-              <option value="rejected">❌ Rejeitado</option>
-              <option value="manual">📝 Manual</option>
-            </select>
-          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3">
@@ -703,16 +650,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
           >
             Limpar Filtros
           </button>
-
-          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-700 min-h-[44px] px-1">
-            <input
-              type="checkbox"
-              checked={showRejected}
-              onChange={(e) => setShowRejected(e.target.checked)}
-              className="w-5 h-5 accent-red-500"
-            />
-            Mostrar rejeitados
-          </label>
 
           <button
             onClick={exportToExcel}
@@ -772,7 +709,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                 {bonusTypes.map(bt => (
                   <th key={bt.id} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bon. {bt.code}</th>
                 ))}
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aprovação</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200 text-sm">
@@ -784,13 +720,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                   const hrs = Math.floor(h); const mins = Math.round((h - hrs) * 60);
                   return `${hrs}h ${mins.toString().padStart(2, '0')}min`;
                 };
-                const approvalBadge: Record<string, { label: string; cls: string }> = {
-                  pending:  { label: '🟡 Pendente',  cls: 'bg-yellow-100 text-yellow-800' },
-                  approved: { label: '✅ Aprovado',  cls: 'bg-green-100 text-green-800' },
-                  rejected: { label: '❌ Rejeitado', cls: 'bg-red-100 text-red-800' },
-                  manual:   { label: '📝 Manual',    cls: 'bg-gray-100 text-gray-700' },
-                };
-                const ab = attendance.approval_status ? approvalBadge[attendance.approval_status] : null;
                 const valuesByCode = getBonusForAttendance(attendance);
 
                 return (
@@ -832,13 +761,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ hasPermission }) => {
                         </td>
                       );
                     })}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {ab ? (
-                        <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${ab.cls}`}>
-                          {ab.label}
-                        </span>
-                      ) : <span className="text-gray-400 text-xs">-</span>}
-                    </td>
                   </tr>
                 );
               })}

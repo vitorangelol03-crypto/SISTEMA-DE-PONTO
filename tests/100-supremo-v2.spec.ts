@@ -363,112 +363,11 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
       expect(data![0].status).toBe('absent');
     });
 
-    test('B3. Aprovação individual: pending → approved via UI', async ({ page }) => {
-      const empId = TEST_EMPLOYEES[2].id!;
-      const name = TEST_EMPLOYEES[2].name;
-      const today = todayBR();
-      const s = getClient();
-      await s.from('attendance').delete().eq('employee_id', empId).eq('date', today);
-      await insertAttendance(empId, today, {
-        status: 'present',
-        approval_status: 'pending',
-        entry_time: `${today}T11:00:00.000Z`,
-        exit_time_full: `${today}T20:00:00.000Z`,
-        hours_worked: 9,
-      });
+    /* 🔴 B3, B4 e B5 (aprovação de ponto) saíram em 12/09/2026.
+       O Victor removeu a função do sistema: *"ela não tem mais utilidade"*.
+       Aprovar nunca mudou cálculo nenhum, e rejeitar — o único com efeito real —
+       nunca foi usado (ZERO rejeitadas em produção, conferido antes). */
 
-      await loginAs(page, ADMIN);
-      await gotoPontoFresh(page);
-      await page.getByRole('button', { name: /Aprovações/i }).first().click();
-
-      const row = page.locator('tr', { hasText: name }).first();
-      await expect(row).toBeVisible({ timeout: 10_000 });
-      await row.getByRole('button', { name: /Aprovar/i }).first().click();
-      await page.waitForTimeout(2000);
-
-      const { data } = await s
-        .from('attendance')
-        .select('approval_status')
-        .eq('employee_id', empId)
-        .eq('date', today)
-        .single();
-      expect(data?.approval_status).toBe('approved');
-    });
-
-    test('B4. Aprovação em lote via bulk button', async ({ page }) => {
-      const empA = TEST_EMPLOYEES[3].id!;
-      const empB = TEST_EMPLOYEES[4].id!;
-      const today = todayBR();
-      const s = getClient();
-      await s.from('attendance').delete().in('employee_id', [empA, empB]).eq('date', today);
-      await insertAttendance(empA, today, {
-        status: 'present',
-        approval_status: 'pending',
-        hours_worked: 8,
-      });
-      await insertAttendance(empB, today, {
-        status: 'present',
-        approval_status: 'pending',
-        hours_worked: 8,
-      });
-
-      await loginAs(page, ADMIN);
-      await gotoPontoFresh(page);
-      await page.getByRole('button', { name: /Aprovações/i }).first().click();
-
-      const rowA = page.locator('tr', { hasText: TEST_EMPLOYEES[3].name }).first();
-      const rowB = page.locator('tr', { hasText: TEST_EMPLOYEES[4].name }).first();
-      await expect(rowA).toBeVisible({ timeout: 10_000 });
-      await rowA.locator('input[type="checkbox"]').first().check();
-      await rowB.locator('input[type="checkbox"]').first().check();
-
-      const bulkBtn = page.getByTestId('bulk-approve-button');
-      await expect(bulkBtn).toBeVisible({ timeout: 10_000 });
-      await bulkBtn.click();
-
-      // Sub-fase 14.X (CI fix): polling no DB em vez de waitForTimeout fixo.
-      // CI tem ~4x latência local — 2.5s não cobria request UI em flight.
-      // Polling até 15s OU até ambos virarem 'approved'.
-      let approvedCount = 0;
-      const deadline = Date.now() + 15_000;
-      while (Date.now() < deadline) {
-        const { data } = await s
-          .from('attendance')
-          .select('approval_status')
-          .in('employee_id', [empA, empB])
-          .eq('date', today);
-        approvedCount = (data || []).filter(r => r.approval_status === 'approved').length;
-        if (approvedCount === 2) break;
-        await page.waitForTimeout(500);
-      }
-      expect(approvedCount).toBe(2);
-    });
-
-    test('B5. Status manual: setManualTime cria approval_status=manual', async () => {
-      const empId = TEST_EMPLOYEES[5].id!;
-      const today = todayBR();
-      const s = getClient();
-      await s.from('attendance').delete().eq('employee_id', empId).eq('date', today);
-      await insertAttendance(empId, today, {
-        status: 'present',
-        approval_status: 'manual',
-        hours_worked: 9,
-      });
-
-      const { data } = await s
-        .from('attendance')
-        .select('approval_status')
-        .eq('employee_id', empId)
-        .eq('date', today)
-        .single();
-      expect(data?.approval_status).toBe('manual');
-    });
-  });
-
-  // ==========================================================================
-  // SEÇÃO C — Bonificações (B, C1, C2) (5 tests)
-  // ==========================================================================
-  test.describe('C. Bonificações', () => {
     test('C1. Modal Bonificação abre com 3 tipos (B/C1/C2)', async ({ page }) => {
       const capture = attachConsoleCapture(page);
       // Garante 1 emp presente

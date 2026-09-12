@@ -41,12 +41,10 @@ function formatDateBR(d: string): string {
   return `${day}/${m}/${y}`;
 }
 
-const APPROVAL_BADGE: Record<string, { label: string; cls: string }> = {
-  pending:  { label: '🟡 Aguardando aprovação', cls: 'bg-yellow-100 text-yellow-800' },
-  approved: { label: '✅ Aprovado',             cls: 'bg-green-100 text-green-800' },
-  rejected: { label: '❌ Rejeitado',            cls: 'bg-red-100 text-red-800' },
-  manual:   { label: '📝 Manual',               cls: 'bg-gray-100 text-gray-700' },
-};
+/* 🔴 O selo de aprovação saiu da tela do funcionário (12/09/2026).
+   A aprovação de ponto foi removida do sistema a pedido do Victor, e o
+   funcionário via um "🟡 Aguardando aprovação" que não esperava nada: aprovar
+   nunca mudou cálculo nenhum, e rejeitar (o único com efeito) nunca foi usado. */
 
 type Step = 'cpf' | 'company-select' | 'pin' | 'setup-pin' | 'face-register' | 'dashboard' | 'error' | 'face-scan';
 
@@ -965,15 +963,6 @@ export const EmployeeClockIn: React.FC = () => {
                       </div>
                     )}
 
-                    {todayRecord?.approval_status && (
-                      <div className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${APPROVAL_BADGE[todayRecord.approval_status]?.cls ?? ''}`}>
-                        {APPROVAL_BADGE[todayRecord.approval_status]?.label ?? todayRecord.approval_status}
-                        {todayRecord.rejection_reason && (
-                          <p className="font-normal mt-0.5">Motivo: {todayRecord.rejection_reason}</p>
-                        )}
-                      </div>
-                    )}
-
                     {clockMsg && (
                       <div className={`rounded-lg px-3 py-2 text-sm font-medium ${clockMsg.startsWith('✅') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                         {clockMsg}
@@ -1024,16 +1013,6 @@ export const EmployeeClockIn: React.FC = () => {
                             <Moon className="w-3 h-3" />
                             {formatHours(todayRecord.night_hours)} noturnas
                           </p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Status de aprovação */}
-                    {todayRecord?.approval_status && (
-                      <div className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${APPROVAL_BADGE[todayRecord.approval_status]?.cls ?? ''}`}>
-                        {APPROVAL_BADGE[todayRecord.approval_status]?.label ?? todayRecord.approval_status}
-                        {todayRecord.rejection_reason && (
-                          <p className="font-normal mt-0.5">Motivo: {todayRecord.rejection_reason}</p>
                         )}
                       </div>
                     )}
@@ -1119,12 +1098,10 @@ export const EmployeeClockIn: React.FC = () => {
                           <th className="px-3 py-2 text-left text-gray-500 font-medium">Saída</th>
                           <th className="px-3 py-2 text-left text-gray-500 font-medium">Horas</th>
                           <th className="px-3 py-2 text-left text-gray-500 font-medium">Adic. Not.</th>
-                          <th className="px-3 py-2 text-left text-gray-500 font-medium">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {history.map(rec => {
-                          const ab = rec.approval_status ? APPROVAL_BADGE[rec.approval_status] : null;
                           return (
                             <tr key={rec.id} className={`${rec.status === 'absent' ? 'bg-red-50' : ''}`}>
                               <td className="px-3 py-2 font-medium text-gray-800">{formatDateBR(rec.date)}</td>
@@ -1137,13 +1114,6 @@ export const EmployeeClockIn: React.FC = () => {
                                 {rec.night_additional != null && rec.night_additional > 0
                                   ? `R$${Number(rec.night_additional).toFixed(2)}`
                                   : '-'}
-                              </td>
-                              <td className="px-3 py-2">
-                                {ab ? (
-                                  <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-semibold ${ab.cls}`}>
-                                    {ab.label.split(' ')[0]}
-                                  </span>
-                                ) : <span className="text-gray-400">-</span>}
                               </td>
                             </tr>
                           );

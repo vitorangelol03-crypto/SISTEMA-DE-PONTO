@@ -9,9 +9,6 @@ export interface AttendancePermissions extends TabPermissions {
   reset: boolean;
   viewHistory: boolean;
   editHistory: boolean;
-  approve: boolean;
-  reject: boolean;
-  bulkApprove: boolean;
   manualTime: boolean;
   generateMassMirror: boolean;
 }
@@ -142,7 +139,7 @@ export interface UserPermissions {
 }
 
 export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: true, edit: true, search: true, reset: true, viewHistory: true, editHistory: true, approve: true, reject: true, bulkApprove: true, manualTime: true, generateMassMirror: true },
+  attendance: { view: true, mark: true, edit: true, search: true, reset: true, viewHistory: true, editHistory: true, manualTime: true, generateMassMirror: true },
   employees: { view: true, create: true, edit: true, delete: true, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: true, editBonus: true, delete: true, clear: true, applyBonus: true, applyBonusB: true, applyBonusC1: true, applyBonusC2: true, removeBonus: true, removeBonusByType: true, removeBonusBulk: true, applyDiscount: true, viewHistory: true },
@@ -162,7 +159,7 @@ export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
   // que essa trava virou permissão normal, um valor "true" adormecido aqui passaria a
   // valer de verdade — supervisor nasce SEM essas duas (Victor concede explicitamente
   // quem ele quiser depois, "máximo controle").
-  attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false, approve: true, reject: true, bulkApprove: false, manualTime: false, generateMassMirror: true },
+  attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false, manualTime: false, generateMassMirror: true },
   employees: { view: true, create: true, edit: true, delete: false, import: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   // Sub-fase 14.13 (bug #6 audit): supervisor padrão tinha applyBonus=true mas
@@ -184,7 +181,7 @@ export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
 };
 
 export const DEFAULT_READONLY_PERMISSIONS: UserPermissions = {
-  attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false, approve: false, reject: false, bulkApprove: false, manualTime: false, generateMassMirror: false },
+  attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false, manualTime: false, generateMassMirror: false },
   employees: { view: true, create: false, edit: false, delete: false, import: false },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: false, editBonus: false, delete: false, clear: false, applyBonus: false, applyBonusB: false, applyBonusC1: false, applyBonusC2: false, removeBonus: false, removeBonusByType: false, removeBonusBulk: false, applyDiscount: false, viewHistory: false },
@@ -226,9 +223,6 @@ export const PERMISSION_LABELS = {
     reset: 'Resetar registros de ponto',
     viewHistory: 'Visualizar dias anteriores',
     editHistory: 'Editar registros de dias anteriores',
-    approve: 'Aprovar ponto pendente',
-    reject: 'Rejeitar ponto pendente',
-    bulkApprove: 'Aprovar ponto em lote',
     manualTime: 'Inserir horário manual (entrada/saída)',
     generateMassMirror: 'Gerar espelhos de ponto em massa'
   },

@@ -37,7 +37,6 @@ import { supabase } from '../../lib/supabase';
 import { getBrazilDate, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
-import { AttendanceApprovalPanel } from './AttendanceApprovalPanel';
 
 // Lazy-load: MirrorMassDialog importa jspdf (~100KB). Evita engordar o chunk
 // do AttendanceTab e mantém o timing de lazy-load alinhado com o resto da app.
@@ -82,7 +81,6 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   const [showRemoveAllBonusModal, setShowRemoveAllBonusModal] = useState(false);
   const [removeAllBonusObservation, setRemoveAllBonusObservation] = useState('');
   const [removingBonus, setRemovingBonus] = useState(false);
-  const [activeView, setActiveView] = useState<'attendance' | 'approvals'>('attendance');
   const [showMirrorMassDialog, setShowMirrorMassDialog] = useState(false);
   const isViewingToday = selectedDate === getBrazilDate();
 
@@ -747,37 +745,14 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
 
   return (
     <div className="space-y-6">
-      {/* Seletor de sub-aba */}
-      <div className="overflow-x-auto border-b border-gray-200 bg-white rounded-t-lg shadow">
-        <div className="flex min-w-max px-2 sm:px-4">
-          <button
-            onClick={() => setActiveView('attendance')}
-            className={`px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap min-h-[44px] ${
-              activeView === 'attendance'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Controle de Ponto
-          </button>
-          <button
-            onClick={() => setActiveView('approvals')}
-            className={`px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 whitespace-nowrap min-h-[44px] ${
-              activeView === 'approvals'
-                ? 'border-yellow-500 text-yellow-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Aprovações Pendentes
-          </button>
-        </div>
-      </div>
-
-      {activeView === 'approvals' && (
-        <AttendanceApprovalPanel userId={userId} hasPermission={hasPermission} />
-      )}
-
-      <div style={{ display: activeView === 'attendance' ? '' : 'none' }}>
+      {/* 🔴 A sub-aba "Aprovações Pendentes" saiu em 12/09/2026, a pedido do
+          Victor: *"vamos remover a função de aprovar ponto, ela não tem mais
+          utilidade no sistema"*. Com ela foi a barra inteira — sobrou uma aba
+          só, e uma barra de uma aba é enfeite.
+          Aprovar nunca mudou cálculo nenhum; quem tinha efeito era REJEITAR (a
+          batida saía do relatório de horas), e isso nunca foi usado: ZERO
+          rejeitadas nas duas empresas. Quem precisar descartar uma batida errada
+          continua tendo o mestre 2626, que edita e exclui direto aqui. */}
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex flex-col space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1651,7 +1626,6 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
           </div>
         </div>
       )}
-      </div> {/* fim wrapper activeView attendance */}
 
       {/* Modal de Confirmação de Reset */}
       {showResetConfirmModal && (
