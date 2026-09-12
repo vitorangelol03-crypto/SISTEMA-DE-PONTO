@@ -16,8 +16,8 @@ import {
 } from 'lucide-react';
 import { situacaoDaSemana, detalheDoPagamento } from '../../utils/situacaoDaSemana';
 import {
-  montarHistorico, foraDasGavetas, textoErros,
-  type SemanaDoHistorico, type ErroDoHistorico,
+  montarHistorico, foraDasGavetas, textoErros, agruparPorAno, textoDesconto, explicarDesconto,
+  type SemanaDoHistorico, type ErroDoHistorico, type AnoDoHistorico,
   type PagamentoDoHistorico, type PeriodoDePagamento, type QuemTrabalhou,
 } from '../../utils/historicoPagamentos';
 
@@ -86,6 +86,17 @@ export const HistoricoPagamentos: React.FC<Props> = ({
   const mesEmAndamento = meses.find((m) => m.emAndamento)?.chave ?? meses[0]?.chave;
   const escolhido = aberto === undefined ? mesEmAndamento : aberto;
 
+  /* ── A GAVETA DE ANO (12/09/2026, pedido do Victor) ─────────────────────────
+     *"vamos adicionar a gaveta de ano também, aí fica aberta automática a do ano
+     atual"*. A lista de meses cresce sem parar — em setembro/2026 já eram 12
+     linhas, e as de 2025 empurravam 2026 pra fora da tela. */
+  const anoCorrente = mesCorrente.slice(0, 4);
+  const anos = useMemo(() => agruparPorAno(meses, anoCorrente), [meses, anoCorrente]);
+  const [anoAberto, setAnoAberto] = useState<string | undefined>(undefined);
+  const anoEscolhido = anoAberto === undefined
+    ? (anos.find((a) => a.emAndamento)?.ano ?? anos[0]?.ano)
+    : anoAberto;
+
   if (meses.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
@@ -98,7 +109,28 @@ export const HistoricoPagamentos: React.FC<Props> = ({
 
   return (
     <div className="space-y-3">
-      {meses.map((mes) => {
+      {anos.map((ano) => {
+        const anoAberto2 = anoEscolhido === ano.ano;
+        return (
+        <div key={ano.ano} className="space-y-3">
+          <LinhaAno
+            ano={ano}
+            aberto={anoAberto2}
+            podeVerValores={podeVerValores}
+            onAlternar={() => setAnoAberto(anoAberto2 ? '' : ano.ano)}
+            onAbrirErros={() => setPopup({
+              titulo: `Erros de ${ano.ano}`,
+              subtitulo: 'Ano inteiro — todos os meses',
+              itens: ano.listaErros,
+            })}
+            onGerarPdf={onGerarPdf && ano.meses.length > 0
+              ? () => onGerarPdf({ titulo: ano.ano, inicio: ano.inicio, fim: ano.fim })
+              : undefined}
+          />
+
+          {anoAberto2 && (
+          <div className="space-y-3 sm:pl-6">
+      {ano.meses.map((mes) => {
         const estaAberto = escolhido === mes.chave;
         return (
           // SEM `overflow-hidden`: ele existia só pra arredondar os cantos, e de
@@ -166,8 +198,15 @@ export const HistoricoPagamentos: React.FC<Props> = ({
                     {' · '}{contagem(mes.pagosClt, mes.totalClt)} C)
                   </span>
                 </Pilula>
+                {/* 🔴 A etiqueta que confundia (12/09/2026). Ela dizia só
+                    "28 descontados" — PESSOAS — coladinha em "216 erros", que é
+                    LANÇAMENTO. Duas unidades diferentes lado a lado, e o
+                    dinheiro (o que interessa) não aparecia em lugar nenhum.
+                    O Victor: *"tá falando que tem muito e pouca coisa
+                    descontado, está confuso"*. Agora mostra o VALOR, e o balão
+                    explica quantos erros não descontaram nada. */}
                 <Pilula cor="orange" icone={<Minus size={14} />}>
-                  <b>{mes.descontados}</b> <span className="text-orange-800 font-medium">descontados</span>
+                  <span title={explicarDesconto(mes)}>{textoDesconto(mes, podeVerValores)}</span>
                 </Pilula>
                 <TagErros
                   total={mes.erros} diarista={mes.errosDiarista} clt={mes.errosClt}
@@ -285,6 +324,11 @@ export const HistoricoPagamentos: React.FC<Props> = ({
           </div>
         );
       })}
+          </div>
+          )}
+        </div>
+        );
+      })}
 
       {temOrfao && (
         <div className="flex items-start gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-lg">
@@ -318,6 +362,96 @@ export const HistoricoPagamentos: React.FC<Props> = ({
     </div>
   );
 };
+
+/**
+ * A LINHA DO ANO — a gaveta de cima (12/09/2026, pedido do Victor).
+ *
+ * *"vamos adicionar a gaveta de ano também, aí fica aberta automática a do ano
+ * atual"*. A lista de meses crescia sem parar e as de 2025 empurravam 2026 pra
+ * fora da tela.
+ *
+ * ⚠️ O número de pessoas aparece como **"até N"** de propósito. Ele é o MAIOR
+ * mês, não a soma — a mesma pessoa recebe em vários meses, e somar diria "470
+ * pagos" numa empresa de 92. Escrever "até" é a diferença entre uma
+ * aproximação honesta e um número errado.
+ */
+const LinhaAno: React.FC<{
+  ano: AnoDoHistorico;
+  aberto: boolean;
+  podeVerValores: boolean;
+  onAlternar: () => void;
+  onAbrirErros: () => void;
+  onGerarPdf?: () => void;
+}> = ({ ano, aberto, podeVerValores, onAlternar, onAbrirErros, onGerarPdf }) => (
+  <div
+    data-testid="gaveta-ano"
+    onClick={onAlternar}
+    className={`flex flex-wrap items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 cursor-pointer min-h-[44px] rounded-lg border ${
+      aberto ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-gray-200 hover:bg-gray-50'
+    }`}
+  >
+    <button
+      type="button"
+      aria-expanded={aberto}
+      aria-label={`${aberto ? 'Fechar' : 'Abrir'} o ano de ${ano.ano}`}
+      onClick={(e) => { e.stopPropagation(); onAlternar(); }}
+      className="flex items-center gap-3 text-left rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+      <ChevronRight
+        size={20}
+        className={`flex-shrink-0 transition-transform ${aberto ? 'rotate-90 text-white' : 'text-gray-500'}`}
+      />
+      <span className={`text-lg font-bold tracking-wide ${aberto ? 'text-white' : 'text-gray-800'}`}>
+        {ano.ano}
+      </span>
+    </button>
+
+    {ano.emAndamento && (
+      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 whitespace-nowrap">
+        ANO ATUAL
+      </span>
+    )}
+
+    <div className="flex-grow" />
+
+    <div className={`flex items-center gap-3 sm:gap-4 flex-wrap justify-end text-sm ${aberto ? 'text-slate-100' : 'text-gray-700'}`}>
+      <span className="font-bold whitespace-nowrap">{brl(ano.valor, podeVerValores)}</span>
+      <span className="whitespace-nowrap" title="O maior mês do ano — a mesma pessoa recebe em vários meses, então somar diria mais gente do que existe.">
+        até <b>{ano.pagos}</b> pessoas
+      </span>
+      <span
+        title={explicarDesconto(ano)}
+        className={`whitespace-nowrap ${ano.descontados > 0 ? (aberto ? 'text-orange-300' : 'text-orange-600') : 'text-gray-400'}`}
+      >
+        {textoDesconto(ano, podeVerValores)}
+      </span>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onAbrirErros(); }}
+        disabled={ano.erros === 0}
+        className={`whitespace-nowrap rounded-md px-1 disabled:cursor-default ${
+          ano.erros === 0 ? 'text-gray-400' : (aberto ? 'text-red-300 hover:underline' : 'text-red-600 hover:underline')
+        }`}
+      >
+        {textoErros(ano.erros, ano.errosDiarista, ano.errosClt)}
+      </button>
+      {onGerarPdf && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onGerarPdf(); }}
+          title={`Recibos de ${ano.ano} inteiro`}
+          className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] rounded-lg text-sm font-semibold whitespace-nowrap flex-shrink-0 ${
+            aberto
+              ? 'bg-slate-700 border border-slate-600 text-slate-100 hover:bg-slate-600'
+              : 'bg-blue-50 border border-blue-200 text-blue-800 hover:bg-blue-100'
+          }`}
+        >
+          <FileText size={15} /> PDF do ano
+        </button>
+      )}
+    </div>
+  </div>
+);
 
 /** Pílula colorida com o vocabulário do Financeiro (verde dinheiro, azul pessoas…). */
 const Pilula: React.FC<{ cor: 'green' | 'blue' | 'orange'; icone: React.ReactNode; children: React.ReactNode }> =
@@ -480,8 +614,12 @@ const LinhaSemana: React.FC<{
             {' · '}{contagem(semana.pagosClt, semana.totalClt)} C)
           </span>
         </span>
-        <span className={`text-[13px] whitespace-nowrap ${semana.descontados > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
-          {semana.descontados} descontados
+        {/* Mesma troca do mês: o valor, não a contagem de pessoas solta. */}
+        <span
+          title={explicarDesconto(semana)}
+          className={`text-[13px] whitespace-nowrap ${semana.descontados > 0 ? 'text-orange-600' : 'text-gray-400'}`}
+        >
+          {textoDesconto(semana, podeVerValores)}
         </span>
         <TagErros
           total={semana.erros} diarista={semana.errosDiarista} clt={semana.errosClt}

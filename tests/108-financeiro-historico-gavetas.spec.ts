@@ -53,6 +53,50 @@ test.describe('Histórico de pagamentos em gavetas', () => {
     await expect(page.getByText('EM ANDAMENTO').first()).toBeVisible({ timeout: 30_000 });
   });
 
+  test('🎯 a gaveta de ANO existe, e a do ano atual abre sozinha', async ({ page }) => {
+    // Pedido do Victor (12/09/2026): *"vamos adicionar a gaveta de ano também,
+    // aí fica aberta automática a do ano atual"*. A lista de meses crescia sem
+    // parar e as de 2025 empurravam 2026 pra fora da tela.
+    await abrirHistorico(page);
+
+    const anos = page.getByTestId('gaveta-ano');
+    await expect(anos.first()).toBeVisible({ timeout: 30_000 });
+
+    const atual = anos.filter({ hasText: 'ANO ATUAL' });
+    await expect(atual, 'um e só um ano marcado como atual').toHaveCount(1);
+    await expect(atual).toContainText(String(new Date().getFullYear()));
+
+    // Aberto = os meses dele aparecem logo abaixo.
+    await expect(page.getByTestId('gaveta-mes').first()).toBeVisible();
+
+    // 🎯 As pessoas do ano são "até N" — o MAIOR mês, nunca a soma. Sem o "até",
+    // o ano diria mais gente do que a empresa tem (a mesma pessoa recebe em
+    // vários meses).
+    await expect(atual).toContainText(/até\s+\d+\s+pessoas/);
+
+    // Fechar o ano esconde os meses; abrir traz de volta.
+    await atual.click();
+    await expect(page.getByTestId('gaveta-mes')).toHaveCount(0);
+    await atual.click();
+    await expect(page.getByTestId('gaveta-mes').first()).toBeVisible();
+  });
+
+  test('🎯 a etiqueta do desconto mostra o DINHEIRO, não uma contagem solta', async ({ page }) => {
+    /* 🔴 A etiqueta dizia só "28 descontados" (PESSOAS) colada em "216 erros"
+       (LANÇAMENTOS) — duas unidades diferentes lado a lado, e o valor não
+       aparecia. O Victor: *"tá falando que tem muito e pouca coisa descontado,
+       está confuso"*. */
+    await abrirHistorico(page);
+
+    const mes = page.getByTestId('gaveta-mes').first();
+    await expect(mes).toBeVisible({ timeout: 30_000 });
+
+    // Ou mostra o valor descontado, ou diz que não houve desconto nenhum —
+    // nunca mais "N descontados" sozinho.
+    await expect(mes).toContainText(/(−\s*R\$\s*[\d.]+,\d{2}\s+de\s+\d+\s+pessoas?|nada descontado)/);
+    await expect(mes, 'a contagem solta não volta').not.toContainText(/\d+\s+descontados/);
+  });
+
   test('o mês em andamento já vem ABERTO, e o botão fecha e abre', async ({ page }) => {
     await abrirHistorico(page);
 
@@ -150,8 +194,17 @@ test.describe('Histórico de pagamentos em gavetas', () => {
     await soDiaristas.click();
     await expect(page.getByText(/\d+ escolhidos/)).toHaveText(antes);
 
-    // E os dois botões são SEPARADOS (decisão do Victor: conferir antes de mandar).
-    await expect(page.getByRole('button', { name: /Baixar/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Publicar/ })).toBeVisible();
+    /* E BAIXAR é separado de PUBLICAR (decisão do Victor: conferir antes de
+       mandar pro funcionário).
+
+       ⚠️ O botão de baixar muda de nome conforme quantos estão marcados, e o
+       teste precisa acompanhar: com UMA pessoa ele é "Baixar 1 recibo"; com
+       várias viraram DOIS — "1 PDF com os N" (caderno, uma folha por pessoa) e
+       "Separados (.zip)". A versão antiga procurava só /Baixar/ e quebrava em
+       produção, onde o mês tem dezenas de pessoas. */
+    const baixar = page.getByRole('button', { name: /Baixar 1 recibo|1 PDF com os \d+|Separados \(\.zip\)/ });
+    await expect(baixar.first(), 'tem que haver um jeito de BAIXAR').toBeVisible();
+    await expect(page.getByRole('button', { name: /Publicar/ }), 'e publicar é outro botão')
+      .toBeVisible();
   });
 });

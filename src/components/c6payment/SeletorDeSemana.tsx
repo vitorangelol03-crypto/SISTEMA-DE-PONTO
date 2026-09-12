@@ -142,9 +142,16 @@ export const SeletorDeSemana: React.FC<Props> = ({ periodos, escolhido, onEscolh
   }, [painelAberto]);
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden" data-testid="seletor-de-semana">
+    /* ⚠️ SEM `overflow-hidden` aqui (12/09/2026). Ele estava cortando o painel de
+       meses no meio — o Victor mandou o print: *"a janela do filtro está bem
+       bugada e cortada"*, com a fileira JAN/FEV/MAR/ABR serrada na metade. Um
+       pai com `overflow-hidden` recorta QUALQUER filho absoluto que passe da
+       borda, e o painel passa de propósito.
+       O arredondamento que o `overflow-hidden` dava agora vem dos cantos dos
+       filhos (a barra de modos em cima; o `rounded-b-lg` embaixo). */
+    <div className="border border-gray-200 rounded-lg" data-testid="seletor-de-semana">
       {/* ── Os dois modos ─────────────────────────────────────────────────── */}
-      <div className="flex border-b border-gray-200 bg-gray-50">
+      <div className="flex border-b border-gray-200 bg-gray-50 rounded-t-lg overflow-hidden">
         {([
           ['semanas', 'Semanas', <CalendarRange key="a" size={15} />],
           ['livre', 'Datas livres', <CalendarDays key="b" size={15} />],
@@ -165,7 +172,7 @@ export const SeletorDeSemana: React.FC<Props> = ({ periodos, escolhido, onEscolh
       </div>
 
       {modo === 'semanas' ? (
-        <div className="p-3 space-y-3">
+        <div className="p-3 space-y-3 rounded-b-lg">
           {meses.length === 0 ? (
             <p className="text-sm text-gray-500 py-2">
               Nenhuma semana cadastrada ainda. Use <b>Datas livres</b>.
@@ -311,7 +318,7 @@ export const SeletorDeSemana: React.FC<Props> = ({ periodos, escolhido, onEscolh
         </div>
       ) : (
         /* ── O calendário de sempre, sem respeitar a regra da semana ──────── */
-        <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-b-lg">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Data inicial</label>
             <input

@@ -118,6 +118,29 @@ export interface ResumoDoPeriodo {
   totalDiarista: number;
   totalClt: number;
   descontados: number;
+  /**
+   * Quanto saiu do bolso, em R$ — a soma dos erros que descontaram de verdade.
+   *
+   * 🔴 POR QUE ISTO EXISTE (12/09/2026). A tela mostrava "28 descontados" ao lado
+   * de "216 erros" e o Victor reclamou, com razão: *"tá falando que tem muito e
+   * pouca coisa descontado, está confuso"*. Os dois números falavam UNIDADES
+   * diferentes — 216 é LANÇAMENTO, 28 é PESSOA — e o dinheiro, que é o que
+   * interessa, não aparecia em lugar nenhum.
+   *
+   * Em agosto/2026, os números reais: 200 erros lançados, dos quais só 74
+   * descontaram algo; 126 eram só de quantidade e não tiraram nada. Total
+   * descontado: R$ 1.824,99, de 28 pessoas.
+   */
+  valorDescontado: number;
+  /** Quantos LANÇAMENTOS realmente descontaram (o resto é só quantidade). */
+  errosComDesconto: number;
+  /**
+   * Quantos erros estão com o valor MASCARADO (sem permissão de ver R$).
+   *
+   * Quando há algum, `valorDescontado` está incompleto — a tela precisa dizer
+   * isso em vez de mostrar um total que parece exato e não é.
+   */
+  errosMascarados: number;
   erros: number;
   errosDiarista: number;
   errosClt: number;
@@ -451,6 +474,10 @@ function resumir(
   const descontados = new Set(
     erros.filter((e) => e.valor === null || e.valor > 0).map((e) => e.employeeId),
   );
+  // O DINHEIRO: só o que realmente saiu. Mascarado não entra na soma (não dá pra
+  // somar o que não se pode ver) mas é CONTADO, pra tela avisar que o total está
+  // incompleto em vez de mentir um número exato.
+  const comDesconto = erros.filter((e) => e.valor !== null && e.valor > 0);
   return {
     valor: round2(pagamentos.reduce((s, p) => s + (p.total ?? 0), 0)),
     pagos: pessoas.size,
@@ -462,6 +489,9 @@ function resumir(
     totalDiarista: 0,
     totalClt: 0,
     descontados: descontados.size,
+    valorDescontado: round2(comDesconto.reduce((soma, e) => soma + (e.valor ?? 0), 0)),
+    errosComDesconto: comDesconto.length,
+    errosMascarados: erros.filter((e) => e.valor === null).length,
     erros: erros.length,
     errosDiarista: erros.filter((e) => e.vinculo === 'Diarista').length,
     errosClt: erros.filter((e) => e.vinculo === 'Carteira Assinada').length,
@@ -473,4 +503,130 @@ export function textoErros(total: number, diarista: number, clt: number): string
   if (total === 0) return 'sem erro';
   const plural = total === 1 ? '1 erro' : `${total} erros`;
   return `${plural} (${diarista} D · ${clt} C)`;
+}
+
+/**
+ * UMA GAVETA POR ANO, com os meses dentro (pedido do Victor, 12/09/2026).
+ *
+ * A lista de meses cresce sem parar — em setembro/2026 já eram 12 linhas, e as
+ * de 2025 empurravam as de 2026 pra fora da tela. O ano vira a primeira gaveta;
+ * o ano corrente abre sozinho, do mesmo jeito que o mês corrente já abria.
+ */
+export interface AnoDoHistorico extends ResumoDoPeriodo {
+  /** "2026" */
+  ano: string;
+  /** É o ano corrente? (a gaveta que abre sozinha) */
+  emAndamento: boolean;
+  meses: MesDoHistorico[];
+  /** Todos os erros do ano — a soma dos meses. */
+  listaErros: ErroDoHistorico[];
+  /** Primeiro e último dia COBERTOS pelos meses do ano (pro PDF do ano). */
+  inicio: string;
+  fim: string;
+}
+
+export function agruparPorAno(
+  meses: readonly MesDoHistorico[],
+  anoCorrente: string,
+): AnoDoHistorico[] {
+  const porAno = new Map<string, MesDoHistorico[]>();
+  for (const m of meses) {
+    porAno.set(m.ano, [...(porAno.get(m.ano) ?? []), m]);
+  }
+
+  const anos: AnoDoHistorico[] = [];
+  for (const [ano, lista] of porAno) {
+    // Já vêm do mais novo pro mais antigo; manter.
+    const dosMeses = [...lista].sort((a, b) => (a.chave > b.chave ? -1 : 1));
+    const erros = dosMeses.flatMap((m) => m.listaErros);
+    const semanas = dosMeses.flatMap((m) => m.semanas);
+
+    anos.push({
+      ano,
+      emAndamento: ano === anoCorrente,
+      meses: dosMeses,
+      listaErros: erros,
+
+      // Dinheiro e contagem de LANÇAMENTO somam direto: cada pagamento e cada
+      // erro pertence a um mês só (a regra do dono único já garantiu isso).
+      valor: round2(dosMeses.reduce((s, m) => s + m.valor, 0)),
+      // Soma o número de CADA MÊS, não `listaErros.length`: os dois são a mesma
+      // coisa nos dados reais, mas somar o que o mês já contou mantém o ano
+      // dizendo exatamente o que as gavetas abaixo dele dizem.
+      erros: dosMeses.reduce((s, m) => s + m.erros, 0),
+      errosDiarista: dosMeses.reduce((s, m) => s + m.errosDiarista, 0),
+      errosClt: dosMeses.reduce((s, m) => s + m.errosClt, 0),
+      valorDescontado: round2(dosMeses.reduce((s, m) => s + m.valorDescontado, 0)),
+      errosComDesconto: dosMeses.reduce((s, m) => s + m.errosComDesconto, 0),
+      errosMascarados: dosMeses.reduce((s, m) => s + m.errosMascarados, 0),
+
+      /* ⚠️ PESSOA NÃO SOMA — a mesma pessoa aparece em vários meses, e somar
+         diria "470 pagos" numa empresa de 92. É a mesma armadilha que já existia
+         de semana pra mês, resolvida do mesmo jeito: o MAIOR mês é a
+         aproximação honesta ("até 47 pessoas"), nunca a soma. */
+      pagos: Math.max(0, ...dosMeses.map((m) => m.pagos)),
+      pagosDiarista: Math.max(0, ...dosMeses.map((m) => m.pagosDiarista)),
+      pagosClt: Math.max(0, ...dosMeses.map((m) => m.pagosClt)),
+      descontados: Math.max(0, ...dosMeses.map((m) => m.descontados)),
+      totalFuncionarios: Math.max(0, ...dosMeses.map((m) => m.totalFuncionarios)),
+      totalDiarista: Math.max(0, ...dosMeses.map((m) => m.totalDiarista)),
+      totalClt: Math.max(0, ...dosMeses.map((m) => m.totalClt)),
+
+      inicio: semanas.reduce(
+        (menor, s) => (!menor || s.startDate < menor ? s.startDate : menor),
+        '' as string,
+      ) || `${ano}-01-01`,
+      fim: semanas.reduce(
+        (maior, s) => (s.endDate > maior ? s.endDate : maior),
+        '' as string,
+      ) || `${ano}-12-31`,
+    });
+  }
+
+  return anos.sort((a, b) => (a.ano > b.ano ? -1 : 1));
+}
+
+/**
+ * "− R$ 1.824,99 de 28 pessoas" — a etiqueta laranja do desconto.
+ *
+ * Substituiu o "28 descontados" solto, que ficava ao lado de "216 erros" e
+ * confundia: um contava PESSOA, o outro LANÇAMENTO, e nenhum dizia o valor.
+ */
+export function textoDesconto(
+  r: { valorDescontado: number; descontados: number; errosMascarados: number },
+  /** Sem permissão de ver R$, o valor sai escondido — mesma regra do resto da aba. */
+  podeVerValores = true,
+): string {
+  if (r.descontados === 0) return 'nada descontado';
+  const pessoas = r.descontados === 1 ? '1 pessoa' : `${r.descontados} pessoas`;
+  // Esconde por DOIS motivos diferentes, e os dois importam:
+  //  - sem permissão de ver valores (regra da aba inteira);
+  //  - algum erro veio com o valor mascarado do banco, e aí o total está
+  //    INCOMPLETO — mostrar "R$ 1.200,00" seria mentir um número exato.
+  const cifra = (!podeVerValores || r.errosMascarados > 0)
+    ? 'R$ ••••'
+    : `R$ ${r.valorDescontado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `− ${cifra} de ${pessoas}`;
+}
+
+/** "126 dos 216 erros foram só de quantidade e não descontaram nada." */
+export function explicarDesconto(r: {
+  erros: number;
+  errosComDesconto: number;
+  errosMascarados: number;
+}): string {
+  const so = r.erros - r.errosComDesconto - r.errosMascarados;
+  const partes: string[] = [];
+  if (r.errosComDesconto > 0) {
+    partes.push(`${r.errosComDesconto} de ${r.erros} erros descontaram em dinheiro`);
+  }
+  if (so > 0) {
+    partes.push(
+      `${so} ${so === 1 ? 'foi' : 'foram'} só de quantidade e não ${so === 1 ? 'descontou' : 'descontaram'} nada`,
+    );
+  }
+  if (r.errosMascarados > 0) {
+    partes.push(`${r.errosMascarados} com valor escondido (sem permissão de ver R$)`);
+  }
+  return partes.length > 0 ? `${partes.join('; ')}.` : 'Nenhum erro neste período.';
 }
