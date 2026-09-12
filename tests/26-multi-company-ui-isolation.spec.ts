@@ -120,7 +120,7 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
    * depende de nenhuma das duas estar vazia, então continua valendo enquanto as duas
    * crescem.
    */
-  test('3. Relatórios: cada empresa lista só os SEUS registros (isolamento real)', async ({ page }) => {
+  test('3. Relatórios: cada empresa lista só a SUA gente (isolamento real)', async ({ page }) => {
     const s = getClient();
     const ctName = 'PW Test Iso Rel CT';
     const pnName = 'PW Test Iso Rel PN';
@@ -142,21 +142,27 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
       await criarPonto(ctId, CARATINGA_ID);
       await criarPonto(pnId, PONTE_NOVA_ID);
 
-      // O nome também existe num <option> HIDDEN do filtro de funcionário, então o
-      // assert é sempre na LINHA da tabela — senão o locator casa com o option e
-      // falha por "hidden" (mesma pegadinha já documentada no teste 13 do 26-extras).
-      const linha = (nome: string) => page.locator('tbody tr', { hasText: nome });
+      // 12/09/2026 — a aba Relatórios virou botão dentro do Financeiro. O que
+      // este teste prova continua o mesmo: cada empresa só enxerga a SUA gente.
+      // Agora a prova é a lista de quem entra no relatório, que é onde os nomes
+      // aparecem — e ela é a fonte de quem vai pro papel.
+      const abrirRelatorios = async () => {
+        await goToTab(page, 'Financeiro');
+        await page.getByTestId('relatorios-btn').click();
+        await expect(page.getByTestId('relatorios-panel')).toBeVisible({ timeout: 30_000 });
+      };
+      const naLista = (nome: string) => page.getByTestId('relatorios-panel').locator('label', { hasText: nome });
 
       // 1. Caratinga: vê o SEU; o de PN não vaza.
-      await goToTab(page, 'Relatórios');
-      await expect(linha(ctName).first()).toBeVisible({ timeout: 15_000 });
-      await expect(linha(pnName)).toHaveCount(0, { timeout: 5_000 });
+      await abrirRelatorios();
+      await expect(naLista(ctName).first()).toBeVisible({ timeout: 20_000 });
+      await expect(naLista(pnName)).toHaveCount(0, { timeout: 5_000 });
 
       // 2. Ponte Nova: o inverso.
       await switchCompany(page, 'Ponte Nova');
-      await goToTab(page, 'Relatórios');
-      await expect(linha(pnName).first()).toBeVisible({ timeout: 15_000 });
-      await expect(linha(ctName)).toHaveCount(0, { timeout: 5_000 });
+      await abrirRelatorios();
+      await expect(naLista(pnName).first()).toBeVisible({ timeout: 20_000 });
+      await expect(naLista(ctName)).toHaveCount(0, { timeout: 5_000 });
     } finally {
       // Limpeza explícita: o cleanup geral PRESERVA registros de hoje, então estes
       // ficariam pra trás se não forem removidos aqui.

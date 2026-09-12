@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Clock,
   Users,
-  BarChart3,
   Settings,
   UserCog,
   DollarSign,
@@ -69,7 +68,15 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
   const allTabs = [
     { id: 'attendance' as TabType, name: t('tab.attendance'), icon: Clock, permission: 'attendance.view' },
     { id: 'employees' as TabType, name: t('tab.employees'), icon: Users, permission: 'employees.view' },
-    { id: 'reports' as TabType, name: t('tab.reports'), icon: BarChart3, permission: 'reports.view' },
+    // 12/09/2026 — "Relatórios" saiu do menu: virou botão DENTRO do Financeiro, a
+    // pedido do Victor (*"a aba do relatórios eu quero que ela some, não vai existir
+    // mais, ela vai ficar dentro da aba do financeiro"*). Lá ela ficou MAIOR: três
+    // relatórios (ponto · financeiro · geral), cada um em PDF e planilha, com recorte
+    // por semana, mês, ano ou datas livres e filtro de funcionário, função e vínculo.
+    // A permissão `reports.view` continua sendo o que libera o botão, e `reports.exportPDF`
+    // / `reports.exportExcel` seguem valendo em cada download.
+    // Conferido antes de tirar: os 5 usuários com `reports.view` (02, 03, 04, 8888 e
+    // 9999) já tinham `financial.view` — ninguém perdeu acesso.
     { id: 'financial' as TabType, name: t('tab.financial'), icon: DollarSign, permission: 'financial.view' },
     // 09/09/2026 — "Pagamento C6" saiu do menu: virou botão DENTRO do Financeiro, que abre
     // a mesma tela num popup já com o período filtrado e a prévia pronta (pedido do Victor:

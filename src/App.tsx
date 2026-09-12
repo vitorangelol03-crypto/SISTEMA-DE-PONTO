@@ -30,7 +30,6 @@ const EmployeePublicRegister = lazy(() =>
 
 const AttendanceTab = lazy(() => import('./components/attendance/AttendanceTab').then(m => ({ default: m.AttendanceTab })));
 const EmployeesTab = lazy(() => import('./components/employees/EmployeesTab').then(m => ({ default: m.EmployeesTab })));
-const ReportsTab = lazy(() => import('./components/reports/ReportsTab').then(m => ({ default: m.ReportsTab })));
 const SettingsTab = lazy(() => import('./components/settings/SettingsTab').then(m => ({ default: m.SettingsTab })));
 const UsersTab = lazy(() => import('./components/users/UsersTab').then(m => ({ default: m.UsersTab })));
 const FinancialTab = lazy(() => import('./components/financial/FinancialTab').then(m => ({ default: m.FinancialTab })));
@@ -214,8 +213,11 @@ function App() {
           return hasPermission('attendance.view') ? <AttendanceTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'employees':
           return hasPermission('employees.view') ? <EmployeesTab userId={user.id} hasPermission={hasPermission} /> : null;
+        // 12/09/2026 — 'reports' não é mais uma aba: virou botão dentro do Financeiro.
+        // O caso continua existindo (o tipo segue válido em cor/log/permissão) mas cai no
+        // Financeiro, pra ninguém ficar em tela branca se sobrar algum atalho antigo.
         case 'reports':
-          return hasPermission('reports.view') ? <ReportsTab userId={user.id} hasPermission={hasPermission} /> : null;
+          return hasPermission('financial.view') ? <FinancialTab userId={user.id} hasPermission={hasPermission} /> : null;
         case 'financial':
           return hasPermission('financial.view') ? <FinancialTab userId={user.id} hasPermission={hasPermission} /> : null;
         // 09/09/2026 — 'c6payment' nao e mais uma aba: virou botao dentro do Financeiro,

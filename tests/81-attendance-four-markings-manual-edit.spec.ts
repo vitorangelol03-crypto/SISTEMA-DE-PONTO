@@ -73,7 +73,8 @@ test.describe('AttendanceTab — correção manual de 4 marcações', () => {
     expect(att?.exit_1_time).not.toBeNull();
     expect(att?.entry_2_time).not.toBeNull();
     expect(att?.exit_2_time).not.toBeNull();
-    // Campos legados espelhados (posição 1 e 4) — é o que Aprovação/Financeiro/Relatórios leem.
+    // Campos legados espelhados (posição 1 e 4) — é o que Financeiro e relatórios leem.
+    // (A Aprovação de ponto, citada aqui antes, foi removida do sistema em 12/09/2026.)
     expect(att?.entry_time).not.toBeNull();
     expect(att?.exit_time_full).not.toBeNull();
     // 4h manhã + 5h tarde = 9h — NÃO as 10h que entrada→saída direto daria sem descontar o almoço.

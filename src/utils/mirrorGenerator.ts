@@ -244,6 +244,27 @@ interface BuildMirrorDataInput {
   emissionDate?: string;
 }
 
+/**
+ * As horas do dia quando só existe o registro LEGADO (`hours_worked` em horas
+ * decimais, com `night_hours` sendo a parte noturna DENTRO dele).
+ *
+ * Só entram em cena quando o campo em minutos está ausente — ver o comentário
+ * grande em `buildMirrorData`. Ausente vira 0, como era antes.
+ */
+function noturnoDoLegado(att: Attendance): number {
+  const noturnas = Number(att.night_hours ?? 0);
+  return noturnas > 0 ? Math.round(noturnas * 60) : 0;
+}
+
+function diurnoDoLegado(att: Attendance): number {
+  const total = Number(att.hours_worked ?? 0);
+  if (!(total > 0)) return 0;
+  const noturnas = Number(att.night_hours ?? 0);
+  // O diurno nunca pode ficar negativo: se por algum motivo a parte noturna for
+  // maior que o total, o dia foi todo noturno.
+  return Math.max(0, Math.round((total - noturnas) * 60));
+}
+
 export function buildMirrorData(input: BuildMirrorDataInput): MirrorData {
   const { employee, company, period, attendances } = input;
 
@@ -301,8 +322,22 @@ export function buildMirrorData(input: BuildMirrorDataInput): MirrorData {
       ent2,
       sai2,
       expected: att.expected_minutes ?? expectedFromSchedule,
-      daytime: att.daytime_minutes ?? 0,
-      nighttime: att.nighttime_minutes ?? 0,
+      // 🔴 12/09/2026 — O ESPELHO SAÍA COM 0h EM 915 DIAS TRABALHADOS.
+      //
+      // Existem DOIS conjuntos de campos de hora no mesmo registro: os minutos
+      // novos (`daytime_minutes`/`nighttime_minutes`, escritos pelo recálculo) e
+      // as horas legado (`hours_worked`/`night_hours`, escritas por quem bate o
+      // ponto). Medido no banco: de 5.664 dias, só 2.083 têm os minutos novos, e
+      // **915 estão como PRESENTE com hora registrada e sem minuto nenhum**.
+      // Como aqui só se lia o campo novo, esses dias saíam ZERADOS no espelho —
+      // que é o documento de ponto que a empresa entrega.
+      //
+      // Agora, quando o minuto não existe, a hora legado preenche: `hours_worked`
+      // é o total do dia e `night_hours` é a parte dele dentro de 22h–05h (ver
+      // `calcHours`), então diurno = total − noturno. Quando o minuto existe, ele
+      // manda — nada muda para os 2.083 dias já calculados.
+      daytime: att.daytime_minutes ?? diurnoDoLegado(att),
+      nighttime: att.nighttime_minutes ?? noturnoDoLegado(att),
       interval: att.interval_minutes ?? 0,
       bankCredit: att.bank_credit_minutes ?? 0,
       bankDebit: att.bank_debit_minutes ?? 0,

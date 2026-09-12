@@ -33,7 +33,8 @@ test.describe('Permissions — Admin (9999) acesso total', () => {
     // 09/09/2026: "Pagamento C6" não é mais ABA — virou botão dentro do Financeiro.
     await expect(page.getByRole('button', { name: /^Pagamento C6$/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Erros$/ }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Relatórios$/ }).first()).toBeVisible();
+    // 12/09/2026: "Relatórios" não é mais ABA — virou botão dentro do Financeiro.
+    await expect(page.getByRole('button', { name: /^Relatórios$/ })).toHaveCount(0);
   });
 
   // ATUALIZADO 02/09/2026 (pedido do Victor, "máximo controle"): attendance.reset era
@@ -116,9 +117,12 @@ test.describe('Permissions — Supervisor 01 (padrão)', () => {
     await expect(page.getByRole('button', { name: /^Erros$/ }).first()).toBeVisible();
   });
 
-  test('sup01 VÊ aba Relatórios', async ({ page }) => {
+  test('sup01 vê os Relatórios DENTRO do Financeiro (a aba saiu do menu)', async ({ page }) => {
+    // 12/09/2026 — este teste provava que a aba existia. A aba saiu; o direito
+    // (reports.view) continua o mesmo e agora libera o botão no Financeiro.
     await loginAs(page, SUP01);
-    await expect(page.getByRole('button', { name: /^Relatórios$/ }).first()).toBeVisible();
+    await goToTab(page, 'Financeiro');
+    await expect(page.getByTestId('relatorios-btn')).toBeEnabled({ timeout: 20_000 });
   });
 });
 

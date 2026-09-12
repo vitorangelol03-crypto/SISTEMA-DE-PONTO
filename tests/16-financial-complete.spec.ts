@@ -203,6 +203,9 @@ test.describe('Financial — completo', () => {
     await expect(page.locator('body')).toContainText(/PW Test remoção histórica|HistRemove/);
   });
 
-  test.skip('exportar Excel — botão não exposto em FinancialTab (cobertura no ReportsTab)', async () => {});
-  test.skip('exportar PDF — botão não exposto em FinancialTab (cobertura no ReportsTab)', async () => {});
+  // 12/09/2026 — os dois deixaram de ser "skip por não existir aqui": os
+  // relatórios passaram a morar DENTRO do Financeiro, e quem cobre o download de
+  // verdade (PDF e planilha, com assinatura do arquivo) é o spec 06.
+  test.skip('exportar Excel — coberto pelo spec 06 (Relatórios dentro do Financeiro)', async () => {});
+  test.skip('exportar PDF — coberto pelo spec 06 (Relatórios dentro do Financeiro)', async () => {});
 });

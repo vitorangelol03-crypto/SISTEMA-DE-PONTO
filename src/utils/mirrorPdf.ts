@@ -364,6 +364,19 @@ function generatePdfDocBatch(dataList: MirrorData[]): jsPDF {
 // Public API
 // ============================================================================
 
+/**
+ * Desenha UMA folha de espelho num documento já aberto.
+ *
+ * Existe para o relatório GERAL (12/09/2026) intercalar, por pessoa, a folha do
+ * ponto e a do financeiro no mesmo PDF. Sem isto, o relatório teria que redesenhar
+ * o espelho por conta própria — e aí um dia os dois divergiriam.
+ *
+ * Quem chama cuida do `addPage` (o documento tem que estar em A4 paisagem).
+ */
+export function desenharEspelhoNaPagina(doc: jsPDF, data: MirrorData): void {
+  drawSinglePage(doc, data);
+}
+
 export async function generateMirrorPdf(data: MirrorData): Promise<Blob> {
   const doc = generatePdfDoc(data);
   return doc.output('blob');

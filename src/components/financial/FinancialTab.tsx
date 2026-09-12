@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
   getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance,
@@ -21,6 +21,12 @@ import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import { moneyBRL, HIDDEN_VALUE } from '../../utils/moneyMask';
 import { HistoricoPagamentos } from './HistoricoPagamentos';
+
+/* Lazy-load: o painel de relatórios puxa jsPDF e xlsx. Quem nunca abre a aba não
+   paga por eles no carregamento da tela. */
+const RelatoriosPanel = lazy(() =>
+  import('./RelatoriosPanel').then(m => ({ default: m.RelatoriosPanel })),
+);
 import { SelecaoParaPdf, type PessoaDoPdf } from './SelecaoParaPdf';
 import type {
   PeriodoDePagamento as HistPeriodo,
@@ -144,7 +150,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
    * O histórico é a porta de entrada; a lista de pagamentos é o que está DENTRO
    * de uma semana. Quem quiser a lista solta continua tendo o botão "Pagamentos".
    */
-  const [activeView, setActiveView] = useState<'financial' | 'history' | 'payments-history'>('payments-history');
+  const [activeView, setActiveView] = useState<'financial' | 'history' | 'payments-history' | 'relatorios'>('payments-history');
   /**
    * Preenchido quando a pessoa entrou na lista VINDO de uma semana/mês do
    * histórico — é o que permite voltar pra onde ela estava. `null` quando ela
@@ -1157,6 +1163,26 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             <CalendarRange className="w-4 h-4" />
             <span>Histórico de Pagamentos</span>
           </button>
+          {/* 12/09/2026 — a aba "Relatórios" saiu do menu de cima e virou este
+              botão, a pedido do Victor: *"a aba do relatórios eu quero que ela
+              some, não vai existir mais, ela vai ficar dentro da aba do
+              financeiro"*. Conferido antes de tirar: os 5 usuários que enxergam
+              Relatórios (02, 03, 04, 8888 e 9999) já enxergam o Financeiro —
+              ninguém perdeu acesso. */}
+          <button
+            onClick={() => setActiveView('relatorios')}
+            disabled={!hasPermission('reports.view')}
+            title={!hasPermission('reports.view') ? 'Você não tem permissão para gerar relatórios' : ''}
+            data-testid="relatorios-btn"
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] whitespace-nowrap ${
+              activeView === 'relatorios'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Relatórios</span>
+          </button>
         </div>
 
         {/* A volta pro histórico. Sem isto o fluxo era de mão única: a pessoa
@@ -2040,6 +2066,19 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       {/* ══ HISTÓRICO DE PAGAMENTOS EM GAVETAS (Etapa 2, 11/09/2026) ══
           Uma gaveta por mês, as semanas dentro, e na linha fechada tudo que
           importa — sem precisar abrir. Ver `HistoricoPagamentos.tsx`. */}
+      {activeView === 'relatorios' && (
+        <Suspense fallback={
+          <div className="bg-white rounded-lg shadow p-8 text-center">
+            <RefreshCw className="w-8 h-8 mx-auto text-gray-400 animate-spin mb-3" />
+            <p className="text-sm text-gray-500">Abrindo os relatórios…</p>
+          </div>
+        }>
+          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+            <RelatoriosPanel company={company!} canViewValues={canViewValues} hasPermission={hasPermission} />
+          </div>
+        </Suspense>
+      )}
+
       {activeView === 'payments-history' && (
         histLoading ? (
           <div className="bg-white rounded-lg shadow p-8 text-center">

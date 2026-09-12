@@ -292,9 +292,10 @@ test.describe('SPEC 99 — Teste Supremo: fluxo completo Caratinga', () => {
   });
 
   // ==========================================================================
-  // TEST 6: Gerar espelho PDF de 1 PW Test via Relatórios tab
+  // TEST 6: Gerar espelho PDF de 1 PW Test — o botão fica na aba PONTO
+  //         (o título dizia "Relatórios" por engano; a aba nem existe mais)
   // ==========================================================================
-  test('6. Espelho PDF: navegação Relatórios + Gerar espelhos modal abre', async ({ page }) => {
+  test('6. Espelho PDF: botão "Gerar espelhos" na aba Ponto abre o modal', async ({ page }) => {
     const capture = attachConsoleCapture(page);
     await loginAs(page, ADMIN);
     await goToTab(page, 'Ponto');

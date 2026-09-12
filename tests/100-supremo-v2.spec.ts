@@ -239,9 +239,10 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
 
       // Supervisor 01 vai direto pro painel (sem CompanySelector)
       await expect(page.getByRole('button', { name: /^Ponto$/ })).toBeVisible({ timeout: 15_000 });
-      // Tem permission de Erros e Relatórios (padrão supervisor)
+      // Tem permission de Erros (padrão supervisor). "Relatórios" saiu do menu em
+      // 12/09/2026 — virou botão dentro do Financeiro.
       await expect(page.getByRole('button', { name: /^Erros$/ }).first()).toBeVisible();
-      await expect(page.getByRole('button', { name: /^Relatórios$/ }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Relatórios$/ })).toHaveCount(0);
       // Badge "Supervisor" visível no header
       await expect(page.locator('header').getByText(/Supervisor|^Super$/).first()).toBeVisible();
 
@@ -821,15 +822,18 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
   // SEÇÃO G — Relatórios + Espelho em massa (3 tests)
   // ==========================================================================
   test.describe('G. Relatórios + Espelho', () => {
-    test('G1. ReportsTab renderiza com colunas Bon. B/C1/C2', async ({ page }) => {
+    test('G1. Relatórios abre dentro do Financeiro com os três tipos', async ({ page }) => {
+      // 12/09/2026 — era a tabela da aba antiga (colunas Bon. B/C1/C2). A aba saiu;
+      // o que existe agora é a escolha dos três relatórios e o download.
       const capture = attachConsoleCapture(page);
       await loginAs(page, ADMIN);
-      await goToTab(page, 'Relatórios');
-      await expect(page.getByRole('heading', { name: /Relatórios/ }).first()).toBeVisible({ timeout: 15_000 });
+      await goToTab(page, 'Financeiro');
+      await page.getByTestId('relatorios-btn').click();
+      await expect(page.getByTestId('relatorios-panel')).toBeVisible({ timeout: 30_000 });
 
-      await expect(page.getByRole('columnheader', { name: 'Bon. B' })).toBeVisible();
-      await expect(page.getByRole('columnheader', { name: 'Bon. C1' })).toBeVisible();
-      await expect(page.getByRole('columnheader', { name: 'Bon. C2' })).toBeVisible();
+      await expect(page.getByTestId('tipo-ponto')).toBeVisible();
+      await expect(page.getByTestId('tipo-financeiro')).toBeVisible();
+      await expect(page.getByTestId('tipo-geral')).toBeVisible();
 
       assertCleanConsole(capture, 'G1');
     });
@@ -854,17 +858,21 @@ test.describe('SPEC 100 — Teste Supremo V2: cobertura exaustiva', () => {
       assertCleanConsole(capture, 'G2');
     });
 
-    test('G3. Exportar Excel não causa crash JS', async ({ page }) => {
+    test('G3. A planilha do relatório baixa de verdade', async ({ page }) => {
       await loginAs(page, ADMIN);
-      await goToTab(page, 'Relatórios');
-      const downloadPromise = page.waitForEvent('download', { timeout: 15_000 }).catch(() => null);
-      const btn = page.getByRole('button', { name: /Exportar Excel/ });
-      if (await btn.isEnabled().catch(() => false)) {
-        await btn.click();
-        await downloadPromise;
-      }
-      // Página continua estável
-      await expect(page.getByRole('heading', { name: /Relatórios/ }).first()).toBeVisible();
+      await goToTab(page, 'Financeiro');
+      await page.getByTestId('relatorios-btn').click();
+      await expect(page.getByTestId('relatorios-panel')).toBeVisible({ timeout: 30_000 });
+
+      // Janela fixa e curta: o teste prova que o arquivo sai, não o tamanho do mês.
+      await page.getByTestId('modo-livre').click();
+      await page.getByTestId('data-inicio').fill('2026-08-01');
+      await page.getByTestId('data-fim').fill('2026-08-07');
+
+      const download = page.waitForEvent('download', { timeout: 90_000 });
+      await page.getByTestId('baixar-excel').click();
+      const arquivo = await download;
+      expect(arquivo.suggestedFilename()).toMatch(/\.xlsx$/);
     });
   });
 

@@ -592,3 +592,82 @@ describe('buildMirrorData', () => {
     expect(result.employee.function_role).toBe('Auxiliar');
   });
 });
+
+// ─── Horas legado quando o minuto não existe (12/09/2026) ──────────────────
+
+describe('buildMirrorData — o dia trabalhado não pode sair zerado', () => {
+  /**
+   * 🔴 Medido no banco em 12/09/2026: de 5.664 dias de ponto, só 2.083 tinham os
+   * campos em minutos; **915 estavam como PRESENTE, com hora registrada e sem
+   * minuto nenhum** — e saíam com 0h no espelho, que é o documento que a empresa
+   * entrega. A hora legado agora preenche essa lacuna.
+   */
+  it('usa as horas legado quando os minutos não vieram', () => {
+    const data = buildMirrorData({
+      employee: makeEmployee(),
+      company: makeCompany(),
+      period: { start: '2026-05-11', end: '2026-05-11' },
+      attendances: [
+        makeAttendance({
+          date: '2026-05-11',
+          status: 'present',
+          hours_worked: 8,
+          night_hours: 2,
+          daytime_minutes: null,
+          nighttime_minutes: null,
+        }),
+      ],
+    });
+
+    expect(data.rows[0]!.daytime).toBe(360);    // (8 - 2) horas
+    expect(data.rows[0]!.nighttime).toBe(120);  // as 2 noturnas
+    expect(data.totals.daytime).toBe(360);
+  });
+
+  it('o minuto calculado MANDA quando existe — nada muda para quem já tinha', () => {
+    const data = buildMirrorData({
+      employee: makeEmployee(),
+      company: makeCompany(),
+      period: { start: '2026-05-11', end: '2026-05-11' },
+      attendances: [
+        makeAttendance({
+          date: '2026-05-11',
+          status: 'present',
+          hours_worked: 8,
+          night_hours: 2,
+          daytime_minutes: 400,
+          nighttime_minutes: 30,
+        }),
+      ],
+    });
+
+    expect(data.rows[0]!.daytime).toBe(400);
+    expect(data.rows[0]!.nighttime).toBe(30);
+  });
+
+  it('dia sem hora nenhuma continua zerado, como antes', () => {
+    const data = buildMirrorData({
+      employee: makeEmployee(),
+      company: makeCompany(),
+      period: { start: '2026-05-11', end: '2026-05-11' },
+      attendances: [makeAttendance({ date: '2026-05-11', status: 'absent' })],
+    });
+
+    expect(data.rows[0]!.daytime).toBe(0);
+    expect(data.rows[0]!.nighttime).toBe(0);
+  });
+
+  it('parte noturna maior que o total não faz o diurno ficar negativo', () => {
+    const data = buildMirrorData({
+      employee: makeEmployee(),
+      company: makeCompany(),
+      period: { start: '2026-05-11', end: '2026-05-11' },
+      attendances: [
+        makeAttendance({ date: '2026-05-11', status: 'present', hours_worked: 2, night_hours: 5 }),
+      ],
+    });
+
+    expect(data.rows[0]!.daytime).toBe(0);
+    expect(data.rows[0]!.nighttime).toBe(300);
+  });
+});
