@@ -3,6 +3,47 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 SESSÃO 12/09 (tarde) — RELATÓRIOS NO FINANCEIRO + UM ESTRAGO DE TESTE
+> CONSERTADO.** Detalhe em **`CHECKPOINT_SESSAO_2026-09-12.md`** §6-§10.
+>
+> 🔴 **UM TESTE MEU MEXEU EM 23 FUNCIONÁRIOS REAIS.** O spec
+> `42-bank-hours-apply-ui` criava quinzena de teste de **16-31/07/2026 dentro da
+> CARATINGA** (empresa real) e clicava "Aplicar selecionados" — botão que aplica em
+> TODO MUNDO da janela de datas. O regex aceitava qualquer número ("(24)" passou), e
+> a RPC **zerou o banco de horas** dessas pessoas. **13 lotes em 5 madrugadas**
+> (04/05, 18/07, 19/07, 28/07, 12/09), 155 aplicações, todas em quinzenas apagadas.
+> **Dinheiro intacto** (julho pago, totais na diária); o que se perdeu foi saldo de
+> horas. **Consertado nas duas pontas:** specs 29/30/42 movidos pra **2037**
+> (calendário idêntico ao de 2026; produção sem nada de 2029 em diante) + o clique
+> exige **"Aplicar selecionados (1)"**; e a migration `20260912153353` restaurou o
+> saldo pela cópia de 13/08 — **provado**: crédito 2.175 e débito 19.783 iguais à
+> cópia, 0 divergências, 0 carimbos falsos, auditoria preservada.
+> ⏳ Os 4 lotes ANTIGOS não foram recuperados (a cópia é posterior a eles) — decisão
+> do Victor.
+>
+> 🔴 **O ESPELHO SAÍA COM 0h EM 905 DIAS.** Há dois conjuntos de campos de hora na
+> linha de ponto; o espelho só lia os minutos novos, e **de 5.664 dias só 2.083 os
+> têm**. Agora a hora legado preenche quando o minuto falta: **6.168 horas que não
+> apareciam passaram a aparecer** (mostrava 12.873).
+>
+> 🔴 **ADICIONAL NOTURNO NUNCA FOI CALCULADO** — 2.443 dias com hora noturna e
+> R$ 0,00 em todos (o código busca a diária dentro do registro de ponto, onde a
+> coluna não existe). Seriam **R$ 18.369,96** desde março. **Decisão do Victor:
+> deixa quieto por ora**; o relatório mostra as horas e nenhum valor.
+>
+> ✅ **RELATÓRIOS PRONTOS:** três (ponto · financeiro · geral) × dois formatos (PDF e
+> planilha), dentro do Financeiro, com recorte por semana · mês · **ano** · datas
+> livres e filtro de funcionário, função e vínculo. O PDF de ponto **é o espelho**;
+> a folha financeira segue o mesmo desenho; a planilha tem **um bloco por pessoa**.
+> A aba saiu do menu (ninguém perdeu acesso — os 5 com `reports.view` já tinham
+> `financial.view`), `ReportsTab.tsx` foi removido e 8 specs atualizados.
+> **E2E 6/6 com download real** (planilha .xlsx e PDF conferido byte a byte).
+>
+> ⏳ **COMBINADO PRA DEPOIS — folha de pagamento completa**, nesta ordem: vale →
+> ficha de folha → **FGTS (8% configurável, ligado POR PESSOA, custo da empresa)** →
+> salário família (cota e teto configuráveis) → entram como linhas nos relatórios.
+> **INSS e IR ficam pra segunda leva.**
+>
 > **📌 SESSÃO 12/09 (manhã) — A APROVAÇÃO DE PONTO SAIU E ESTÁ NO AR.** Push
 > `0b3f8ae..7f2e2df` com 2 commits. Detalhe em **`CHECKPOINT_SESSAO_2026-09-12.md`**.
 >

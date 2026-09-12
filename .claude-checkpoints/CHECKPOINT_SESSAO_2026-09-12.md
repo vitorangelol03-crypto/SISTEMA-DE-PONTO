@@ -111,3 +111,92 @@ apresentado ao Victor nesta sessão, esperando as 3 decisões dele.
 
 Levantado antes do plano: **ninguém perde acesso** — todos os 5 usuários com
 `reports.view` (02, 03, 04, 8888, 9999) já têm `financial.view`.
+
+---
+
+# SEGUNDA LEVA (tarde) — o estrago do teste, e os relatórios
+
+## 6. 🔴 UM TESTE MEU MEXEU EM 23 FUNCIONÁRIOS REAIS
+
+Investigando dado pro relatório, achei no log de banco de horas **23 aplicações
+em funcionários REAIS da Caratinga**, hoje às 00:42, num período que não existe
+mais.
+
+**A causa:** o spec `42-bank-hours-apply-ui` criava uma quinzena de teste de
+**16 a 31/07/2026 dentro da CARATINGA** — empresa real — e clicava em "Aplicar
+selecionados". Esse botão aplica em **todo mundo que a janela de datas pega**; o
+modal marca todos por padrão, o botão dizia "Aplicar selecionados (24)" e o teste
+procurava por `\([1-9]\d*\)`, que aceita qualquer número. O `afterAll` só apaga o
+funcionário de teste.
+
+**O estrago:** a RPC zera o saldo depois de aplicar.
+
+| | Crédito | Débito |
+|---|---|---|
+| 16 a 31/07 (janela do teste), antes do conserto | 0 | 0 |
+| 01 a 15/07 (fora do alcance) | 8.817 | 22.833 |
+| Cópia de 13/08, mesmas 257 linhas | 2.175 | 19.783 |
+
+**Não foi a primeira vez:** 13 lotes em 5 madrugadas (04/05, 18/07, 19/07, 28/07
+e hoje), 155 aplicações, **todas** em quinzenas que não existem mais.
+
+**O dinheiro não foi afetado** — julho está pago e os totais seguem no valor da
+diária. O que se perdeu foi o saldo de horas.
+
+### 6.1 Consertado, nas duas pontas
+
+**Raiz:** specs 29, 30 e 42 movidos para **2037** (calendário idêntico ao de 2026
+e produção sem nada de 2029 em diante) e o clique passou a exigir o botão dizer
+exatamente **"Aplicar selecionados (1)"**. Se voltar a pegar gente real, o teste
+falha em vez de gravar.
+
+**Dados:** migration `20260912153353` aplicada com OK do Victor e **provada**:
+crédito 2.175 e débito 19.783 iguais à cópia, 0 linhas divergentes, 0 carimbos
+falsos, 23 linhas de auditoria preservadas, 178 pagamentos de julho intactos.
+
+⏳ **Não mexido:** os 4 lotes antigos (04-07/2026). A cópia de 13/08 é posterior a
+eles e não serve de fonte; recuperar exigiria recalcular pelas marcações. Todos em
+períodos fechados e pagos. **Decisão do Victor.**
+
+## 7. 🔴 O ESPELHO SAÍA COM 0h EM 905 DIAS TRABALHADOS
+
+Dois conjuntos de campos de hora na mesma linha: os minutos novos
+(`daytime_minutes`) e as horas legado (`hours_worked`). O espelho só lia o
+primeiro. **De 5.664 dias, só 2.083 têm os minutos; 905 estão PRESENTE com hora e
+sem minuto** — e saíam zerados no documento que a empresa entrega.
+
+Agora a hora legado preenche quando o minuto falta (diurno = total − noturno).
+**6.168 horas que não apareciam passaram a aparecer** (o espelho mostrava 12.873).
+
+## 8. 🔴 O ADICIONAL NOTURNO NUNCA FOI CALCULADO
+
+2.443 dias com hora noturna, **R$ 0,00 em todos**. O código lê `daily_rate` de
+dentro do registro de ponto, e essa coluna não existe lá — a condição nunca passa.
+Seriam **R$ 18.369,96** desde 24/03 pela fórmula que o próprio sistema tentava.
+**Decisão do Victor: "c"** — deixa quieto, ele resolve com o contador. O relatório
+mostra as horas noturnas e nenhum valor.
+
+## 9. ✅ OS RELATÓRIOS (o pedido principal)
+
+Três relatórios — **ponto · financeiro · geral** — cada um em **PDF e planilha**,
+dentro do Financeiro. Recorte por **semana · mês · ano · datas livres**, cruzando
+com funcionário, função e vínculo.
+
+- O PDF de ponto **é o espelho** (mesmo gerador); a folha financeira foi desenhada
+  no mesmo idioma visual pra o geral poder intercalar as duas.
+- Na planilha, **um bloco por pessoa** (nome uma vez) + aba Resumo.
+- As linhas de valor são uma **lista**, não campos fixos: vale, FGTS e salário
+  família entram depois sem mexer no desenho.
+- A aba saiu do menu. **Ninguém perdeu acesso** (os 5 com `reports.view` já tinham
+  `financial.view`). `ReportsTab.tsx` removido; 8 specs atualizados.
+
+**E2E 6/6**, com download real: planilha `.xlsx` e PDF conferido byte a byte
+(assinatura `%PDF`).
+
+## 10. ⏳ O que ficou combinado pra depois
+
+**Folha de pagamento completa**, na ordem que o Victor aprovou:
+vale/adiantamento → ficha de folha (salário base, filhos) → FGTS (8% configurável,
+**ligado por pessoa**, é custo da empresa e não desconto) → salário família (cota e
+teto configuráveis por ano) → e as linhas entram nos relatórios que já existem.
+**INSS e IR ficam para uma segunda leva** (decisão dele).
