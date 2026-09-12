@@ -16,8 +16,8 @@
  * respeita a regra da semana). Trocar de modo não perde o que foi escolhido.
  */
 
-import React, { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, CalendarRange, CalendarDays } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, CalendarRange, CalendarDays, ChevronDown } from 'lucide-react';
 import type { PaymentPeriod } from '../../services/database';
 
 export interface PeriodoEscolhido {
@@ -40,6 +40,9 @@ const MESES = [
   'JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO',
   'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO',
 ];
+
+/** "JAN", "FEV"… — o que cabe no quadradinho do painel. */
+const MESES_CURTOS = MESES.map((m) => m.slice(0, 3));
 
 /** `2026-09-07` → `07/09` */
 function diaMes(iso: string): string {
@@ -97,6 +100,47 @@ export const SeletorDeSemana: React.FC<Props> = ({ periodos, escolhido, onEscolh
   const doMes = meses[iMes]?.semanas ?? [];
   const modo = modoEscolhidoNaMao ?? (periodos.length > 0 ? 'semanas' : 'livre');
 
+  /**
+   * O PAINEL DE MESES — pedido do Victor (11/09/2026): *"coloque tipo uma tabela
+   * de mês pra não precisar ficar toda hora clicando na setinha; abre uma
+   * janelinha flutuante pequena e a pessoa clica direto no mês que ela quer"*.
+   *
+   * As setas continuam, pra quem quer ir de um em um.
+   */
+  const [painelAberto, setPainelAberto] = useState(false);
+  const [anoDoPainel, setAnoDoPainel] = useState('');
+  const caixaDoPainel = useRef<HTMLDivElement>(null);
+
+  /** Os anos que têm semana, do mais novo pro mais antigo. */
+  const anos = useMemo(
+    () => [...new Set(meses.map((m) => m.chave.slice(0, 4)))].sort((a, b) => b.localeCompare(a)),
+    [meses],
+  );
+  const anoNaTela = anos.includes(anoDoPainel) ? anoDoPainel : (mesNaTela.slice(0, 4) || anos[0] || '');
+  /** Quantas semanas cada mês do ano tem — mês sem semana fica apagado. */
+  const semanasPorMes = useMemo(() => {
+    const conta = new Map<string, number>();
+    for (const m of meses) conta.set(m.chave, m.semanas.length);
+    return conta;
+  }, [meses]);
+
+  // Fecha o painel ao clicar fora ou apertar Esc — senão ele fica preso na tela.
+  useEffect(() => {
+    if (!painelAberto) return;
+    const foraDaCaixa = (e: MouseEvent) => {
+      if (caixaDoPainel.current && !caixaDoPainel.current.contains(e.target as Node)) {
+        setPainelAberto(false);
+      }
+    };
+    const aoEscapar = (e: KeyboardEvent) => { if (e.key === 'Escape') setPainelAberto(false); };
+    document.addEventListener('mousedown', foraDaCaixa);
+    document.addEventListener('keydown', aoEscapar);
+    return () => {
+      document.removeEventListener('mousedown', foraDaCaixa);
+      document.removeEventListener('keydown', aoEscapar);
+    };
+  }, [painelAberto]);
+
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden" data-testid="seletor-de-semana">
       {/* ── Os dois modos ─────────────────────────────────────────────────── */}
@@ -139,7 +183,82 @@ export const SeletorDeSemana: React.FC<Props> = ({ periodos, escolhido, onEscolh
                 >
                   <ChevronLeft size={18} />
                 </button>
-                <span className="text-sm font-bold text-gray-800">{rotuloDoMes(mesNaTela)}</span>
+                <div className="relative" ref={caixaDoPainel}>
+                  <button
+                    type="button"
+                    disabled={ocupado}
+                    onClick={() => { setAnoDoPainel(mesNaTela.slice(0, 4)); setPainelAberto((v) => !v); }}
+                    aria-expanded={painelAberto}
+                    data-testid="abrir-painel-de-meses"
+                    title="Escolher o mês direto"
+                    className="flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-md text-sm font-bold text-gray-800 hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    {/* O rótulo fica num <span class="font-bold"> de propósito: é por
+                        ele que os testes 113/114 acham o mês na tela. */}
+                    <span data-testid="mes-na-tela" className="font-bold">{rotuloDoMes(mesNaTela)}</span>
+                    <ChevronDown size={15} className={`text-gray-500 transition-transform ${painelAberto ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {painelAberto && (
+                    <div
+                      data-testid="painel-de-meses"
+                      className="absolute z-50 left-1/2 -translate-x-1/2 mt-1 w-[260px] bg-white border border-gray-200 rounded-lg shadow-lg p-2"
+                    >
+                      {/* O ano, pra alcançar qualquer mês sem sair do painel. */}
+                      <div className="flex items-center justify-between mb-2">
+                        <button
+                          type="button"
+                          disabled={anos.indexOf(anoNaTela) >= anos.length - 1}
+                          onClick={() => setAnoDoPainel(anos[anos.indexOf(anoNaTela) + 1])}
+                          aria-label="Ano anterior"
+                          className="p-1.5 min-h-[36px] min-w-[36px] rounded text-gray-600 hover:bg-gray-100 disabled:text-gray-300 disabled:hover:bg-transparent"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <span className="text-sm font-bold text-gray-700">{anoNaTela}</span>
+                        <button
+                          type="button"
+                          disabled={anos.indexOf(anoNaTela) <= 0}
+                          onClick={() => setAnoDoPainel(anos[anos.indexOf(anoNaTela) - 1])}
+                          aria-label="Ano seguinte"
+                          className="p-1.5 min-h-[36px] min-w-[36px] rounded text-gray-600 hover:bg-gray-100 disabled:text-gray-300 disabled:hover:bg-transparent"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+
+                      {/* Os 12 meses. Mês sem semana fica apagado e não clica —
+                          mostrar todos mantém a grade sempre no mesmo lugar. */}
+                      <div className="grid grid-cols-4 gap-1">
+                        {MESES_CURTOS.map((curto, i) => {
+                          const chave = `${anoNaTela}-${String(i + 1).padStart(2, '0')}`;
+                          const quantas = semanasPorMes.get(chave) ?? 0;
+                          const ehOAtual = chave === mesNaTela;
+                          return (
+                            <button
+                              key={chave}
+                              type="button"
+                              disabled={quantas === 0}
+                              onClick={() => { setMesAberto(chave); setPainelAberto(false); }}
+                              title={quantas === 0
+                                ? 'Sem semana cadastrada neste mês'
+                                : `${quantas} semana${quantas === 1 ? '' : 's'}`}
+                              className={`py-2 min-h-[40px] rounded-md text-xs font-semibold ${
+                                ehOAtual
+                                  ? 'bg-blue-600 text-white'
+                                  : quantas === 0
+                                    ? 'text-gray-300 cursor-not-allowed'
+                                    : 'text-gray-700 hover:bg-blue-50'
+                              }`}
+                            >
+                              {curto}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button
                   type="button"
                   disabled={ocupado || iMes <= 0}

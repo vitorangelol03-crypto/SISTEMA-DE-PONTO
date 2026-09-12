@@ -253,6 +253,20 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   // só fica visível quando company.bank_hours_apply_in_payment=true.
   const [periods, setPeriods] = useState<PaymentPeriod[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
+
+  /**
+   * 🔴 A TELA SÓ MANDA NO POPUP DEPOIS QUE ALGUÉM ESCOLHEU (12/09/2026).
+   *
+   * A aba nasce com "Sem período" e as datas em HOJE a HOJE. Sem esta marca, o
+   * arquivo de pagamento abria naquele intervalo de UM DIA — exatamente o que o
+   * Victor pediu pra não acontecer: *"ao clicar em gerar arquivo de pagamento já
+   * vem marcando a semana atual que está aberta pra pagamento"*.
+   *
+   * Vira `true` quando a pessoa mexe no combo de período, digita uma data, ou
+   * entra por uma gaveta do histórico — e aí sim o popup segue a tela (senão ele
+   * geraria o arquivo de outro período, calado).
+   */
+  const [periodoFoiEscolhidoNaTela, setPeriodoFoiEscolhidoNaTela] = useState(false);
   const [showApplyModal, setShowApplyModal] = useState(false);
 
   const [bulkDailyRate, setBulkDailyRate] = useState<string>('');
@@ -751,6 +765,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
   const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
+    setPeriodoFoiEscolhidoNaTela(true);
   };
 
   const handleDateFocus = (field: 'startDate' | 'endDate') => {
@@ -1237,7 +1252,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                 <div className="flex gap-2">
                   <select
                     value={selectedPeriodId}
-                    onChange={(e) => setSelectedPeriodId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedPeriodId(e.target.value);
+                      setPeriodoFoiEscolhidoNaTela(true);
+                    }}
                     /* 07/08/2026 — `min-w-0`: sem isto o campo ficava do tamanho da MAIOR
                        opção ("01/07/2026 a 15/07/2026 · 1 quinzena de julho") e ESTOURAVA a
                        tela do celular (item flex nasce com min-width:auto). */
@@ -2122,6 +2140,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                os campos de data ficam travados — que é o "só aquela semana". */
             onAbrirSemana={({ periodoId, titulo }) => {
               setSelectedPeriodId(periodoId);
+              setPeriodoFoiEscolhidoNaTela(true);
               setFilters((f) => ({ ...f, employeeId: '' }));
               setVeioDoHistorico(titulo);
               setActiveView('financial');
@@ -2130,6 +2149,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                datas vão na mão e o combo fica vazio. */
             onAbrirMes={({ inicio, fim, titulo }) => {
               setSelectedPeriodId('');
+              setPeriodoFoiEscolhidoNaTela(true);
               setFilters((f) => ({ ...f, startDate: inicio, endDate: fim, employeeId: '' }));
               setVeioDoHistorico(titulo);
               setActiveView('financial');
@@ -2506,9 +2526,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                  Se você está olhando a LISTA já filtrada num período, o arquivo
                  tem que ser DAQUELE período — pular pra semana aberta geraria o
                  arquivo errado em silêncio (7 testes do C6 pegaram isso).
-                 Se você está no HISTÓRICO, não escolheu período nenhum: aí sim o
-                 popup abre sozinho na semana ABERTA, que é o que o Victor pediu. */
-              filtrosIniciais={activeView === 'financial' ? {
+                 Se ninguém escolheu período (acabou de abrir a aba, ou veio do
+                 HISTÓRICO), aí sim o popup abre sozinho na semana ABERTA, que é o
+                 que o Victor pediu. Ver `periodoFoiEscolhidoNaTela` lá em cima:
+                 sem ela, a aba recém-aberta empurrava "hoje a hoje" pro popup. */
+              filtrosIniciais={activeView === 'financial' && periodoFoiEscolhidoNaTela ? {
                 startDate: filters.startDate,
                 endDate: filters.endDate,
                 employmentType: filters.employmentType,

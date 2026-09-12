@@ -8,6 +8,7 @@ import { exportC6PaymentSheet } from '../../utils/c6Export';
 import { moneyBRL } from '../../utils/moneyMask';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType } from '../common/EmploymentTypeFilter';
+import FunctionRoleFilter, { FUNCTION_ROLE_ALL, FUNCTION_ROLE_NONE } from '../common/FunctionRoleFilter';
 import { linhasDoEscopo, ehEscopoAvulso } from '../../utils/c6Escopo';
 import { situacaoDaSemana, detalheDoPagamento } from '../../utils/situacaoDaSemana';
 
@@ -65,7 +66,10 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
   const [filters, setFilters] = useState({
     startDate: filtrosIniciais?.startDate ?? getBrazilDate(),
     endDate: filtrosIniciais?.endDate ?? getBrazilDate(),
-    employmentType: filtrosIniciais?.employmentType ?? ('all' as EmploymentType)
+    employmentType: filtrosIniciais?.employmentType ?? ('all' as EmploymentType),
+    /** Filtro por FUNÇÃO — pedido do Victor (11/09/2026). Mesma regra do
+     *  Financeiro: sentinela pra "todas" e pra "sem função". */
+    functionRole: FUNCTION_ROLE_ALL as string,
   });
 
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -123,7 +127,9 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
    * usaria a semana ANTERIOR. Quem chama pelo botão não passa nada e continua
    * lendo do estado, como sempre.
    */
-  const importFinancialData = async (periodo?: { startDate: string; endDate: string }) => {
+  const importFinancialData = async (
+    periodo?: { startDate: string; endDate: string; employmentType?: EmploymentType; functionRole?: string },
+  ) => {
     if (!hasPermission('c6payment.import')) {
       toast.error('Você não tem permissão para importar dados financeiros');
       return;
@@ -131,6 +137,10 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
 
     const inicio = periodo?.startDate ?? filters.startDate;
     const fim = periodo?.endDate ?? filters.endDate;
+    // Mesmo motivo das datas: `setFilters` só vale no PRÓXIMO render, então quem
+    // acabou de mudar o filtro passa o valor novo explicitamente.
+    const vinculoAtual = periodo?.employmentType ?? filters.employmentType;
+    const papel = periodo?.functionRole ?? filters.functionRole;
     if (!inicio || !fim) {
       toast.error('Selecione o período para importação');
       return;
@@ -143,7 +153,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
 
     try {
       setLoading(true);
-      const employmentType = filters.employmentType === 'all' ? undefined : filters.employmentType;
+      const employmentType = vinculoAtual === 'all' ? undefined : vinculoAtual;
       const netByEmployee = await getEmployeeNetPayments(inicio, fim, employmentType, company.id, userId);
 
       if (netByEmployee.size === 0) {
@@ -156,9 +166,21 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
       const rows: PaymentRow[] = [];
       const nextDay = getNextDay(getBrazilDate());
 
+      // O filtro por FUNÇÃO é aplicado aqui, sobre o funcionário de cada linha —
+      // a busca do líquido não conhece função. Mesma regra do Financeiro, com as
+      // duas sentinelas (todas / sem função). Quem é filtrado sai do arquivo em
+      // silêncio de propósito: o aviso de "sem PIX" e "líquido zero" é sobre
+      // problema, e função escolhida não é problema.
+      const passaNaFuncao = (e: Employee): boolean => {
+        if (papel === FUNCTION_ROLE_ALL) return true;
+        if (papel === FUNCTION_ROLE_NONE) return !e.function_role || !e.function_role.trim();
+        return e.function_role === papel;
+      };
+
       netByEmployee.forEach((net, employeeId) => {
         const employee = employees.find(e => e.id === employeeId);
         if (!employee) return;
+        if (!passaNaFuncao(employee)) return;
         if (!employee.pix_key) {
           missingPixKeys.push(employee.name);
           return;
@@ -697,19 +719,39 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
           />
         </div>
 
+        {/* ── QUEM ENTRA (11/09/2026) ─────────────────────────────────────────
+            Fica FORA do `dataImported`, junto do seletor. Antes vivia dentro do
+            "1. Importar", que some assim que a prévia carrega — ou seja: no caso
+            normal (semana com pagamento) esses filtros ficavam INVISÍVEIS.
+            Mudar qualquer um refaz a prévia na hora, igual trocar de semana. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
+          <EmploymentTypeFilter
+            value={filters.employmentType}
+            onChange={(value) => {
+              setFilters((f) => ({ ...f, employmentType: value }));
+              void importFinancialData({ ...periodoEscolhido, employmentType: value });
+            }}
+            showLabel={true}
+          />
+          <FunctionRoleFilter
+            value={filters.functionRole}
+            onChange={(value) => {
+              setFilters((f) => ({ ...f, functionRole: value }));
+              void importFinancialData({ ...periodoEscolhido, functionRole: value });
+            }}
+            companyId={company?.id}
+            showLabel={true}
+          />
+        </div>
+
         {!dataImported ? (
           <div className="space-y-4">
             <h3 className="text-base sm:text-lg font-medium">1. Importar Dados Financeiros</h3>
 
             {/* As duas datas soltas saíram daqui: viraram o modo "Datas livres"
                 do seletor lá em cima, que faz a mesma coisa e não repete campo. */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <EmploymentTypeFilter
-                value={filters.employmentType}
-                onChange={(value) => setFilters(prev => ({ ...prev, employmentType: value }))}
-                showLabel={true}
-              />
-
+            {/* Os filtros subiram pra junto do seletor (sempre visíveis). */}
+            <div className="grid grid-cols-1">
               <div className="flex items-end">
                 <button
                   /* Sem o evento do clique: `importFinancialData` aceita um período

@@ -62,6 +62,96 @@ test.describe('Arquivo de pagamento: escolher a semana em dois cliques', () => {
     await expect(sel.locator('span.font-bold').first()).toHaveText(mesAgora);
   });
 
+  test('🎯 o PAINEL DE MESES: clica no nome do mês e escolhe direto, sem setinha', async ({ page }) => {
+    // Pedido do Victor: *"coloque tipo uma tabela de mês pra não precisar ficar
+    // toda hora clicando na setinha; abre uma janelinha flutuante pequena e a
+    // pessoa clica direto no mês que ela quer"*.
+    const popup = await abrirArquivoDePagamento(page);
+    const sel = popup.getByTestId('seletor-de-semana');
+    const rotulo = sel.getByTestId('mes-na-tela');
+
+    const mesAgora = await rotulo.innerText();
+    await expect(sel.getByTestId('painel-de-meses'), 'nasce fechado').toHaveCount(0);
+
+    await sel.getByTestId('abrir-painel-de-meses').click();
+    const painel = sel.getByTestId('painel-de-meses');
+    await expect(painel).toBeVisible();
+
+    // Os 12 meses aparecem SEMPRE — o que não tem semana fica apagado, pra
+    // grade não dançar de um ano pro outro.
+    const quadrados = painel.locator('div.grid button');
+    await expect(quadrados, 'os 12 meses do ano').toHaveCount(12);
+
+    // O mês que está na tela vem marcado de azul, pra pessoa se achar.
+    const marcado = painel.locator('div.grid button.bg-blue-600');
+    await expect(marcado, 'o mês de agora vem marcado').toHaveCount(1);
+    expect(mesAgora, 'e o marcado é mesmo o da tela')
+      .toContain(await marcado.innerText());
+
+    // Todo mês desligado explica o porquê — senão parece defeito.
+    const desligados = painel.locator('div.grid button:disabled');
+    for (let i = 0; i < await desligados.count(); i++) {
+      await expect(desligados.nth(i)).toHaveAttribute('title', /Sem semana cadastrada/);
+    }
+
+    // Clica num mês que TEM semana e não é o de agora: a tela anda de uma vez.
+    // Se este ano só tem um mês com semana, o painel também anda de ano — é a
+    // mesma janelinha, e o teste tem que chegar num mês diferente de verdade.
+    const outroMes = async () => {
+      const livres = painel.locator('div.grid button:not([disabled])');
+      for (let i = 0; i < await livres.count(); i++) {
+        if (!mesAgora.startsWith(await livres.nth(i).innerText())) return livres.nth(i);
+      }
+      return null;
+    };
+    let escolhido = await outroMes();
+    if (!escolhido) {
+      await painel.getByRole('button', { name: 'Ano anterior' }).click();
+      escolhido = await outroMes();
+    }
+    expect(escolhido, 'tem que existir outro mês pra escolher').not.toBeNull();
+    await escolhido!.click();
+    await expect(painel, 'escolher fecha a janelinha').toHaveCount(0);
+    await expect(rotulo, 'o mês na tela mudou').not.toHaveText(mesAgora);
+
+    // E clicar fora fecha sem escolher nada.
+    await sel.getByTestId('abrir-painel-de-meses').click();
+    await expect(sel.getByTestId('painel-de-meses')).toBeVisible();
+    const depois = await rotulo.innerText();
+    await popup.getByText('Qual semana você vai pagar').click();
+    await expect(sel.getByTestId('painel-de-meses'), 'clicar fora fecha').toHaveCount(0);
+    await expect(rotulo, 'e não troca o mês').toHaveText(depois);
+  });
+
+  test('🎯 os filtros de VÍNCULO e FUNÇÃO ficam à vista, mesmo com a prévia carregada', async ({ page }) => {
+    // 🔴 Eles viviam dentro do bloco que só existe ANTES de importar: assim que
+    // a prévia carregava, sumiam da tela — ninguém conseguia filtrar de novo.
+    const popup = await abrirArquivoDePagamento(page);
+
+    // ⚠️ Pelo TESTID, não pelo texto: `getByText('Função')` casa com o rótulo E
+    // com a opção "Sem função" lá dentro do próprio combo (strict mode reclama).
+    const vinculo = popup.getByTestId('employment-type-filter');
+    const funcao = popup.getByTestId('function-role-filter');
+    await expect(vinculo).toBeVisible();
+    await expect(funcao).toBeVisible();
+
+    // Carrega uma prévia DE VERDADE. Tem que ser a Semana 1 (31/08–06/09), que
+    // é a que tem pagamento: a semana ABERTA, onde o popup nasce, ainda não tem
+    // — ninguém pagou a semana que está correndo, e prévia vazia não prova nada.
+    await popup.getByTestId('seletor-de-semana')
+      .getByRole('button', { name: /Semana 1/ }).click();
+    await expect(async () => {
+      expect(await popup.locator('table tbody tr').count()).toBeGreaterThan(0);
+    }).toPass({ timeout: 60_000 });
+
+    await expect(vinculo, 'vínculo não some').toBeVisible();
+    await expect(funcao, 'função não some').toBeVisible();
+
+    // E o filtro de função tem as funções da empresa, não só "Todas".
+    expect(await funcao.locator('option').count(), 'as funções da empresa')
+      .toBeGreaterThan(2);
+  });
+
   test('🎯 clicar numa semana REFAZ a prévia com os pagamentos dela', async ({ page }) => {
     const popup = await abrirArquivoDePagamento(page);
     const sel = popup.getByTestId('seletor-de-semana');

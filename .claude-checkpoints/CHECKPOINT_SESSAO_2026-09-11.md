@@ -468,3 +468,78 @@ um deles — a divergência volta sozinha. Não mexi: é decisão de produto.
   a máquina carregada. Um de cada vez.
 - `getByText` do Playwright procura na PÁGINA inteira: com dois cartões dizendo
   a mesma coisa (e os dois certos), dá strict mode violation. Prender ao cartão.
+
+
+---
+
+## 7. Última leva (11–12/09) — painel de meses, filtro de função, e 2 bugs reais
+
+### 7.1 O painel de meses (pedido do Victor)
+
+> *"coloque tipo uma tabela de mês pra não precisar ficar toda hora clicando na
+> setinha, onde abre uma janelinha flutuante pequena e a pessoa já clica direto
+> no mês que ela quer"*
+
+`SeletorDeSemana.tsx`: o nome do mês virou botão. Clicando, abre um popover com
+o ano (com setas) e os **12 meses**. Mês sem semana cadastrada fica apagado e
+não clica — e o `title` explica o porquê, senão parece defeito. O mês que está
+na tela vem marcado de azul. Fecha com clique fora ou Esc. **As setas
+continuaram**, pra quem prefere ir de um em um.
+
+⚠️ O rótulo ficou dentro de um `<span class="font-bold">` DE PROPÓSITO: os
+testes 113/114 acham o mês por esse seletor. Sem o span, `innerText()` não
+encontra nada e os dois quebram.
+
+### 7.2 Filtro de FUNÇÃO no arquivo de pagamento
+
+`C6PaymentTab.tsx` ganhou `functionRole` nos filtros + `passaNaFuncao()`.
+Quem é filtrado fora sai **calado**: o aviso "sem PIX"/"líquido zero" é sobre
+PROBLEMA, e filtro escolhido não é problema.
+
+**Achado no caminho:** os dois filtros (vínculo e função) viviam dentro do bloco
+`!dataImported` — ou seja, **sumiam da tela assim que a prévia carregava**.
+Ninguém conseguia refiltrar. Saíram pra fora, ao lado do seletor de semana, e
+cada um reimporta sozinho ao mudar.
+
+### 7.3 🔴 BUG REAL consertado: o popup abria em "hoje a hoje"
+
+O `filtrosIniciais` era mandado sempre que a aba estava na view `financial` — e
+a aba **nasce** com "Sem período" e as datas em HOJE a HOJE. Resultado: clicar em
+"Gerar arquivo de pagamento" logo ao abrir o Financeiro montava o arquivo de um
+intervalo de **UM DIA**, calado. É exatamente o oposto do que o Victor pediu
+(*"já vem marcando a semana atual que está aberta pra pagamento"*).
+
+Raiz: faltava distinguir "a tela tem datas" de "alguém ESCOLHEU essas datas".
+Agora existe `periodoFoiEscolhidoNaTela` no `FinancialTab`, que só vira `true`
+quando a pessoa mexe no combo de período, digita uma data, ou entra por uma
+gaveta do histórico. Só então o popup segue a tela — senão abre na semana ABERTA.
+
+Isso preserva a regra dos 7 testes do C6 (popup segue a tela quando ela está
+filtrada) E atende o pedido do Victor (abre na semana aberta quando não está).
+
+### 7.4 Erros MEUS, nos testes, que valem registrar
+
+- `expect(locator).toBeTruthy()` **passa sempre** — não testa nada. Eu tinha
+  escrito isso pra "provar" que mês sem semana fica desligado. Trocado por
+  asserção de verdade (o mês marcado é o da tela + todo desligado tem `title`).
+- `getByText('Função')` casa com o rótulo **e** com a opção "Sem função" dentro
+  do próprio `<select>` → strict mode violation. Usar `data-testid`.
+- Teste que espera prévia na semana ABERTA falha **com razão**: a semana que
+  está correndo ainda não tem pagamento. A prévia real é a Semana 1 (31/08–06/09).
+
+### 7.5 ⚠️ ARMADILHA NOVA: `| tail` engole o código de saída do vitest
+
+Rodei `npx vitest run --maxWorkers=3 | tail -18` e o terminal disse "exited with
+code 0". **O código era do `tail`, não do vitest.** A rodada tinha 19 workers
+mortos ("Failed to start forks worker") e rodou só **80 de 99 arquivos**.
+
+Duas regras que saem daí:
+1. Redirecionar pra arquivo (`> log 2>&1`) e ler `$?` — nunca canalizar.
+2. Conferir a CONTAGEM: o `include` do `vitest.config.ts` pega
+   `tests/unit/**/*.spec.{ts,tsx}` + `src/**/*.{test,spec}.{ts,tsx}` = **99
+   arquivos** hoje. Menos que isso, a rodada não vale.
+
+E a causa dos workers mortos foi rodar **Playwright junto**. Um de cada vez.
+
+Bônus: `pkill -f "vitest"` **mata o próprio shell** que ia rodar o vitest (a
+linha de comando dele contém a palavra). Saída 144.
