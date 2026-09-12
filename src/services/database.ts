@@ -1,4 +1,5 @@
 import { supabase, setAuthToken, getAuthToken } from '../lib/supabase';
+import { getBrazilDate, semanaDaData } from '../utils/dateUtils';
 import { getUserPermissions, hasPermission as checkPermission } from './permissions';
 import { isMaster, PONTO_EDITOR_ID } from '../config/masters';
 import {
@@ -2136,8 +2137,10 @@ export const autoCreateWeeklyPeriod = async (companyId: string): Promise<void> =
 
   const config = await getPaymentPeriodConfig(companyId);
 
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
+  // ⚠️ A data tem que ser a do BRASIL, não a do UTC. Com `new Date()` cru, tudo
+  // que roda a partir das 21h daqui já está no dia seguinte em UTC — e era assim
+  // que nasciam semanas deslocadas e sobrepostas (ver `semanaDaData`).
+  const todayStr = getBrazilDate();
 
   // 🔴 ENCERRA os períodos vencidos — NÃO marca como pago.
   //
@@ -2154,26 +2157,26 @@ export const autoCreateWeeklyPeriod = async (companyId: string): Promise<void> =
 
   if (!config.auto_weekly) return;
 
-  // Segunda a domingo da semana atual
-  const dayOfWeek = today.getDay(); // 0=dom, 1=seg...
-  const offsetToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + offsetToMonday);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
+  // Segunda a domingo da semana atual, em dias de calendário do Brasil.
+  const { segunda: mondayStr, domingo: sundayStr } = semanaDaData(todayStr);
 
-  const mondayStr = monday.toISOString().slice(0, 10);
-  const sundayStr = sunday.toISOString().slice(0, 10);
-
+  // 🔴 A busca é por SOBREPOSIÇÃO, não por igualdade (12/09/2026).
+  //
+  // Antes comparava `start_date = X AND end_date = Y`: uma semana deslocada um
+  // dia (08/09–14/09 em cima de 07/09–13/09) não batia com nada, passava reto, e
+  // o sistema criava a segunda por cima da primeira. Dia com dois donos é o que
+  // produziu o erro de R$ 82.980 em Caratinga.
+  //
+  // Agora: se JÁ EXISTE qualquer semana que encoste neste intervalo, não cria.
   const { data: existing } = await supabase
     .from('payment_periods')
     .select('id')
-    .eq('start_date', mondayStr)
-    .eq('end_date', sundayStr)
     .eq('company_id', companyId)
-    .maybeSingle();
+    .lte('start_date', sundayStr)
+    .gte('end_date', mondayStr)
+    .limit(1);
 
-  if (existing) return;
+  if (existing && existing.length > 0) return;
 
   const label = `Semana ${mondayStr.slice(8, 10)}/${mondayStr.slice(5, 7)} a ${sundayStr.slice(8, 10)}/${sundayStr.slice(5, 7)}`;
 

@@ -49,3 +49,43 @@ export const formatTimestampForExcel = (timestamp: string): string => {
     second: '2-digit'
   });
 };
+/**
+ * A SEMANA (segunda a domingo) que contém uma data — só com contas de calendário.
+ *
+ * 🔴 POR QUE ISTO EXISTE (12/09/2026). A criação automática de semanas fazia:
+ *
+ *     const monday = new Date(today);
+ *     monday.setDate(today.getDate() + offsetToMonday);
+ *     const mondayStr = monday.toISOString().slice(0, 10);   // ⬅ o erro
+ *
+ * `toISOString()` converte pra **UTC**. No Brasil (UTC−3), toda hora local a
+ * partir das 21h já é o dia SEGUINTE em UTC — então a segunda-feira 07/09 saía
+ * gravada como "08/09". O resultado é uma semana deslocada um dia, **sobreposta**
+ * à que já existia, e dia com dois donos.
+ *
+ * Isso não é teoria: em 12/09/2026, às 23h18, a criação automática gerou
+ * "Semana 08/09 a 14/09" na Ponte Nova em cima da "Semana 07/09 a 13/09". E é a
+ * mesma doença por trás do erro de R$ 82.980 em Caratinga, onde semanas
+ * sobrepostas faziam o mesmo lançamento contar em dois meses.
+ *
+ * A conta aqui é feita inteira em UTC, sobre uma data que JÁ é a do Brasil, e
+ * por isso não tem fuso pra atrapalhar: entra "YYYY-MM-DD", sai "YYYY-MM-DD".
+ */
+export const semanaDaData = (dataISO: string): { segunda: string; domingo: string } => {
+  const d = new Date(`${dataISO}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error(`semanaDaData: data inválida "${dataISO}"`);
+  }
+  const diaDaSemana = d.getUTCDay(); // 0=domingo, 1=segunda…
+  const paraSegunda = diaDaSemana === 0 ? -6 : 1 - diaDaSemana;
+
+  const segunda = new Date(d);
+  segunda.setUTCDate(d.getUTCDate() + paraSegunda);
+  const domingo = new Date(segunda);
+  domingo.setUTCDate(segunda.getUTCDate() + 6);
+
+  return {
+    segunda: segunda.toISOString().slice(0, 10),
+    domingo: domingo.toISOString().slice(0, 10),
+  };
+};
