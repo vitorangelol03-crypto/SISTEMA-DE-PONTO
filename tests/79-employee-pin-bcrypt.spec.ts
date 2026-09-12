@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
 import { validateCPF } from '../src/utils/validation';
+import { irAoCampoDeCpfDoPonto, mockFacialFlagsOff } from './helpers';
 
 /**
  * E2E — PIN do funcionário sobrevive a uma sessão nova (26/08, fix de incidente):
@@ -68,7 +69,7 @@ test.describe('PIN do funcionário — bcrypt sobrevive a sessão nova', () => {
         .insert([{
           name: NOME,
           cpf: CPF,
-          employment_type: 'CLT',
+          employment_type: 'Carteira Assinada',
           created_by: '9999',
           company_id: CARATINGA_ID,
           // Caratinga tem reconhecimento facial ligado globalmente; desliga só
@@ -82,8 +83,22 @@ test.describe('PIN do funcionário — bcrypt sobrevive a sessão nova', () => {
       employeeId = (emp as { id: string }).id;
 
       // ── 1) Primeiro acesso: cria o PIN ──
+      /* 🔴 Desliga a facial SÓ NESTE NAVEGADOR (12/09/2026).
+
+         Este teste é sobre o PIN em bcrypt — facial não tem nada a ver com ele.
+         Mas Caratinga tem reconhecimento facial ligado, e desde `cad2c39`
+         (04/09) o `/clock` entra no cadastro de rosto depois do PIN. Com a
+         câmera FALSA ligada (12/09) o stream existe — "stream: ativo, 640x480" —
+         mas o que ela transmite é um padrão colorido, não um rosto: a tela fica
+         eternamente em "🔍 Procurando rosto...".
+
+         `mockFacialFlagsOff` intercepta a resposta da tabela `companies` só
+         nesta aba (é `page.route`, não banco): a empresa de verdade não muda.
+         Mesma técnica que os specs 62 e 107 já usam.
+      */
+      await mockFacialFlagsOff(page, [CARATINGA_ID]);
       await page.goto('/clock');
-      await page.locator('input[placeholder="000.000.000-00"]').fill(CPF);
+      await (await irAoCampoDeCpfDoPonto(page)).fill(CPF);
       await page.getByRole('button', { name: 'Continuar' }).click();
       await expect(page.getByText('Criar sua senha de acesso')).toBeVisible({ timeout: 10_000 });
 
@@ -108,8 +123,9 @@ test.describe('PIN do funcionário — bcrypt sobrevive a sessão nova', () => {
       expect(afterSetup?.pin_configured).toBe(true);
 
       // ── 2) Sessão NOVA (reload real) — PIN ERRADO é recusado ──
+      await mockFacialFlagsOff(page, [CARATINGA_ID]);
       await page.goto('/clock');
-      await page.locator('input[placeholder="000.000.000-00"]').fill(CPF);
+      await (await irAoCampoDeCpfDoPonto(page)).fill(CPF);
       await page.getByRole('button', { name: 'Continuar' }).click();
       await expect(page.getByText('Digite seu PIN para continuar')).toBeVisible({ timeout: 10_000 });
       await digitarPin(page, PIN_ERRADO);
@@ -117,8 +133,9 @@ test.describe('PIN do funcionário — bcrypt sobrevive a sessão nova', () => {
       await expect(page.getByText(/PIN incorreto/i)).toBeVisible({ timeout: 180_000 });
 
       // ── 3) Sessão NOVA de novo — o MESMO PIN certo é aceito (prova o fix) ──
+      await mockFacialFlagsOff(page, [CARATINGA_ID]);
       await page.goto('/clock');
-      await page.locator('input[placeholder="000.000.000-00"]').fill(CPF);
+      await (await irAoCampoDeCpfDoPonto(page)).fill(CPF);
       await page.getByRole('button', { name: 'Continuar' }).click();
       await expect(page.getByText('Digite seu PIN para continuar')).toBeVisible({ timeout: 10_000 });
       await digitarPin(page, PIN_CERTO);

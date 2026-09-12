@@ -84,7 +84,7 @@ async function createEmployeeForCompany(
     .insert([{
       name: `${PREFIX}${suffix}`,
       cpf,
-      employment_type: 'CLT',
+      employment_type: 'Carteira Assinada',
       created_by: '9999',
       company_id: companyId,
     }])

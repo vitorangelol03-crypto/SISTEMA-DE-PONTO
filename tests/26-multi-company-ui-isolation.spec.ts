@@ -6,6 +6,15 @@ const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 const PONTE_NOVA_ID = '2b2abc4b-084c-4cf0-b5f1-02792513241d';
 
 test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
+  /**
+   * Os 30s padrão não cobrem estes testes nesta máquina: cada um faz login e
+   * troca de empresa (com reload), e o Vite frio sozinho já come os 30s no
+   * primeiro `page.goto`. E o orçamento tem que ser do BLOCO, não do corpo do
+   * teste — quem estourava era o `beforeEach` do login, que roda ANTES de um
+   * `test.setTimeout()` escrito lá dentro. É espera por condição, não sleep.
+   */
+  test.describe.configure({ timeout: 180_000 });
+
   test.beforeEach(async ({ page }) => {
     await loginAs(page, ADMIN);
     // Após loginAs, admin está em Caratinga (default — selecionado no
@@ -201,87 +210,65 @@ test.describe('Sub-fase 3.4 — Isolamento UI multi-empresa', () => {
     ).toHaveCount(ponteNovaCount! + 1, { timeout: 10_000 });
   });
 
-  test('5. Erros (Períodos) em Ponte Nova mostra "Nenhum período criado"; Caratinga lista períodos', async ({ page }) => {
+  test('5. Erros (Períodos): cada empresa lista as SUAS semanas, e não as da outra', async ({ page }) => {
     // Componente: PaymentPeriodsTab (sub-aba 'periods' do ErrorsTab).
     // Sem filtro temporal — getPaymentPeriods(company.id) busca todos.
-    // Caratinga: 28 períodos persistentes (out/2025 → abr/2026).
-    // Ponte Nova: 0 períodos.
     //
-    // ⚠️ SETUP (fix de race): App.tsx tem useEffect global que chama
-    // autoCreateWeeklyPeriod(company.id) ao entrar em qualquer empresa
-    // (App.tsx:69). Como Ponte Nova não tem row em payment_period_config,
-    // o default é auto_weekly=true (database.ts:1848) → ao trocar pra
-    // Ponte Nova, o useEffect cria um período semanal automaticamente,
-    // quebrando a asserção "Nenhum período criado".
+    // 🔴 ESTE TESTE APAGAVA DADO DE PRODUÇÃO (consertado em 12/09/2026).
     //
-    // O test 1 (linha 26) já dispara switchCompany→PN, então quando
-    // test 5 chega, PN já tem 1 período auto-criado. Fix: limpar
-    // qualquer período de PN ANTES de trocar de empresa E desativar
-    // auto_weekly de PN pela duração do teste (restaurar no finally).
+    // A versão anterior provava o isolamento assumindo que a Ponte Nova era
+    // eternamente VAZIA: ela desligava o `auto_weekly` da PN, dava
+    // `delete from payment_periods where company_id = PN`, conferia o texto
+    // "Nenhum período criado", e apagava TUDO de novo no finally.
+    //
+    // Em 12/09/2026 a Ponte Nova ganhou 45 semanas de verdade (retroativas,
+    // cobrindo R$ 58.872 em 624 pagamentos). A partir daí este teste destruía
+    // essas semanas a cada rodada — e ainda deixava a empresa com a criação
+    // automática desligada.
+    //
+    // O que o teste PRECISA provar é isolamento: cada empresa vê as suas. Isso
+    // não depende de nenhuma das duas estar vazia. É o mesmo caminho que o
+    // teste 6 deste arquivo já tinha adotado quando bateu no mesmo problema:
+    // ler a contagem REAL do banco em vez de fixar um número.
     const s = getClient();
-    const { data: pnCfgBefore } = await s
-      .from('payment_period_config')
-      .select('auto_weekly')
-      .eq('company_id', PONTE_NOVA_ID)
-      .maybeSingle();
-    const pnCfgExisted = !!pnCfgBefore;
-    const pnAutoWeeklyOriginal = pnCfgBefore?.auto_weekly ?? true;
 
-    await s.from('payment_period_config').upsert([{
-      auto_weekly: false,
-      updated_by: 'test_26_5',
-      updated_at: new Date().toISOString(),
-      company_id: PONTE_NOVA_ID,
-    }], { onConflict: 'company_id' });
-    await s.from('payment_periods').delete().eq('company_id', PONTE_NOVA_ID);
+    const contar = async (companyId: string) => {
+      const { count } = await s
+        .from('payment_periods')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyId);
+      return count ?? 0;
+    };
+    const nCaratinga = await contar(CARATINGA_ID);
+    const nPonteNova = await contar(PONTE_NOVA_ID);
 
-    try {
-      // 1. Caratinga (default): aba Erros, sub-aba 'periods' NÃO é
-      //    default (default é 'individual'). Clicar no botão da
-      //    sub-aba pra ativar PaymentPeriodsTab.
+    // Por que a contagem por empresa JÁ prova o isolamento: se a aba ignorasse
+    // o `company_id`, ela mostraria a soma das duas (91 linhas hoje) nas duas
+    // telas — e as duas asserções abaixo cairiam. Não preciso que as empresas
+    // tenham quantidades diferentes, e não devo depender disso: seria um teste
+    // que quebra sozinho no dia em que as duas empatarem, sem nada ter piorado.
+
+    const abrirPeriodos = async () => {
       await goToTab(page, 'Erros');
-      await page
-        .getByRole('button', { name: /Períodos/i })
-        .first()
-        .click();
+      await page.getByRole('button', { name: /Períodos/i }).first().click();
+    };
 
-      // PaymentPeriodsTab carrega 28 períodos. tbody tr first
-      // attached é suficiente — toBeAttached cobre <tr> dentro de
-      // <table> que pode estar atrás de overflow-x-auto.
-      await expect(
-        page.locator('tbody tr').first()
-      ).toBeAttached({ timeout: 15_000 });
+    const linhas = page.locator('tbody tr');
 
-      // 2. Trocar empresa + re-navegar. Reload reseta activeTab pra
-      //    'attendance' E activeSubTab do ErrorsTab pra 'individual'
-      //    (useState inicial L28). Precisa re-clicar 'Períodos'.
-      await switchCompany(page, 'Ponte Nova');
-      await goToTab(page, 'Erros');
-      await page
-        .getByRole('button', { name: /Períodos/i })
-        .first()
-        .click();
+    // 1. Caratinga (empresa default)
+    await abrirPeriodos();
+    await expect(linhas.first()).toBeAttached({ timeout: 15_000 });
+    await expect(linhas, 'Caratinga mostra as semanas dela')
+      .toHaveCount(nCaratinga, { timeout: 15_000 });
 
-      // 3. Ponte Nova: 0 períodos → texto vazio exclusivo (L184).
-      await expect(
-        page.getByText(/Nenhum período criado/i)
-      ).toBeVisible({ timeout: 10_000 });
-    } finally {
-      // Restaura config: se row não existia, deleta a row que criamos;
-      // senão restaura auto_weekly original. Apaga períodos auto-criados
-      // que possam ter aparecido durante o teste por timing residual.
-      await s.from('payment_periods').delete().eq('company_id', PONTE_NOVA_ID);
-      if (pnCfgExisted) {
-        await s.from('payment_period_config').upsert([{
-          auto_weekly: pnAutoWeeklyOriginal,
-          updated_by: 'test_26_5_cleanup',
-          updated_at: new Date().toISOString(),
-          company_id: PONTE_NOVA_ID,
-        }], { onConflict: 'company_id' });
-      } else {
-        await s.from('payment_period_config').delete().eq('company_id', PONTE_NOVA_ID);
-      }
-    }
+    // 2. Troca de empresa e re-navega. O reload joga a aba de volta pra
+    //    'attendance' e a sub-aba pra 'individual', então re-clica 'Períodos'.
+    await switchCompany(page, 'Ponte Nova');
+    await abrirPeriodos();
+
+    // 3. Ponte Nova mostra as DELA — número diferente do de Caratinga.
+    await expect(linhas, 'Ponte Nova mostra as semanas dela')
+      .toHaveCount(nPonteNova, { timeout: 15_000 });
   });
 
   test('6. Usuários: counts UI batem com counts do DB E são distintos entre empresas (isolamento real)', async ({ page }) => {

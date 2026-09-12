@@ -26,7 +26,7 @@
  */
 import { execSync } from 'node:child_process';
 import { test, expect, Page, ConsoleMessage } from '@playwright/test';
-import { ADMIN, MASTER_2626, loginAs, goToTab, logout } from './helpers';
+import { ADMIN, MASTER_2626, loginAs, goToTab, logout, irAoCampoDeCpfDoPonto } from './helpers';
 import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
 import { cleanupByPrefix } from './integrity-helpers';
 
@@ -207,13 +207,21 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
         .like('name', 'Demo PN%');
       expect(data?.length).toBe(30);
 
-      // Distribuição correta
-      const clt = (data ?? []).filter((e) => e.employment_type === 'CLT').length;
+      // Distribuição correta.
+      //
+      // 🔴 Era "20 CLT + 8 Diarista + 2 PJ" até 11/09/2026. A migration
+      // `20260911180202_employment_type_so_os_dois_reais` apertou o CHECK pros
+      // DOIS valores que o sistema entende de verdade — 'CLT' e 'PJ' passavam no
+      // banco e sumiam de todos os filtros da tela. O seed traduz igual à
+      // importação por planilha (CLT → Carteira Assinada, PJ → Diarista).
+      const carteira = (data ?? []).filter((e) => e.employment_type === 'Carteira Assinada').length;
       const diarista = (data ?? []).filter((e) => e.employment_type === 'Diarista').length;
-      const pj = (data ?? []).filter((e) => e.employment_type === 'PJ').length;
-      expect(clt).toBe(20);
+      const foraDosDois = (data ?? []).filter(
+        (e) => e.employment_type !== 'Carteira Assinada' && e.employment_type !== 'Diarista',
+      );
+      expect(carteira).toBe(22);
       expect(diarista).toBe(8);
-      expect(pj).toBe(2);
+      expect(foraDosDois, 'só existem dois vínculos').toEqual([]);
 
       // UI mostra pelo menos 1 Demo PN
       await expect(page.getByText(/Demo PN/, { exact: false }).first()).toBeVisible({ timeout: 10_000 });
@@ -345,8 +353,7 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
       if (!emp) throw new Error('Nenhum Demo PN');
 
       await page.goto('/clock');
-      const cpfInput = page.locator('input[placeholder="000.000.000-00"]');
-      await expect(cpfInput).toBeVisible({ timeout: 10_000 });
+      const cpfInput = await irAoCampoDeCpfDoPonto(page);
       await cpfInput.fill(emp.cpf);
       await page.getByRole('button', { name: /Continuar/ }).click();
 
@@ -360,7 +367,7 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
 
     test('D2. /clock CPF inexistente → toast erro', async ({ page }) => {
       await page.goto('/clock');
-      const cpfInput = page.locator('input[placeholder="000.000.000-00"]');
+      const cpfInput = await irAoCampoDeCpfDoPonto(page);
       await cpfInput.fill('99988877766');
       await page.getByRole('button', { name: /Continuar/ }).click();
 
@@ -548,14 +555,59 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
       expect(codes).toEqual(['B', 'C1', 'C2']);
     });
 
-    test('F3. payment_period_config PN: mensal (auto_weekly=false)', async () => {
+    test('F3. payment_period_config PN: SEMANAL (auto_weekly=true)', async () => {
+      // 🔴 Mudou em 12/09/2026, por decisão do Victor.
+      //
+      // Até aqui este teste travava `auto_weekly=false` com o rótulo "mensal" —
+      // e era por isso que a Ponte Nova tinha ZERO semana cadastrada, com 624
+      // pagamentos (R$ 58.872) aparecendo como órfãos no histórico, e a aba de
+      // arquivo de pagamento sem semana nenhuma pra oferecer.
+      //
+      // O Victor confirmou que a marca de "mensal" estava errada: a Ponte Nova
+      // é semanal, igual Caratinga. As 45 semanas retroativas foram criadas e a
+      // criação automática foi religada (backups/2026-09-12-semanas-ponte-nova).
       const s = getClient();
       const { data } = await s
         .from('payment_period_config')
         .select('auto_weekly')
         .eq('company_id', PN_ID)
         .single();
-      expect(data?.auto_weekly).toBe(false);
+      expect(data?.auto_weekly).toBe(true);
+    });
+
+    test('F4. PN tem as semanas cadastradas, sem buraco e sem pagamento órfão', async () => {
+      // Guarda a correção de 12/09/2026: se alguém apagar as semanas da PN (foi
+      // o que o teste 26.5 fazia até esse dia), os pagamentos voltam a ficar
+      // órfãos e este teste avisa.
+      const s = getClient();
+      const { data: semanas } = await s
+        .from('payment_periods')
+        .select('start_date, end_date')
+        .eq('company_id', PN_ID)
+        .order('start_date');
+
+      expect(semanas?.length ?? 0, 'PN tem que ter semana cadastrada')
+        .toBeGreaterThan(0);
+
+      // Sem buraco entre uma semana e a seguinte: o fim de uma emenda no
+      // começo da próxima. Buraco = dia sem dono = pagamento órfão.
+      const lista = semanas ?? [];
+      for (let i = 1; i < lista.length; i++) {
+        const fimAnterior = new Date(`${lista[i - 1].end_date}T00:00:00`);
+        const comeco = new Date(`${lista[i].start_date}T00:00:00`);
+        const diff = (comeco.getTime() - fimAnterior.getTime()) / 86_400_000;
+        expect(diff, `buraco entre ${lista[i - 1].end_date} e ${lista[i].start_date}`).toBe(1);
+      }
+
+      // E todo pagamento da PN cai dentro de alguma semana.
+      const { data: pgtos } = await s
+        .from('payments')
+        .select('date')
+        .eq('company_id', PN_ID);
+      const orfaos = (pgtos ?? []).filter(
+        (p) => !lista.some((w) => p.date >= w.start_date && p.date <= w.end_date),
+      );
+      expect(orfaos.length, 'pagamento sem semana dona').toBe(0);
     });
   });
 

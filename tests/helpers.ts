@@ -159,9 +159,56 @@ async function depoisDeAbrirAAba(page: Page, tabName: string): Promise<void> {
  */
 export async function switchCompany(page: Page, targetName: 'Caratinga' | 'Ponte Nova'): Promise<void> {
   const trigger = page.locator('button[aria-haspopup="listbox"]').first();
+  await expect(trigger, 'o trocador de empresa tem que estar na tela')
+    .toBeVisible({ timeout: 30_000 });
   await trigger.click();
   const listbox = page.locator('[role="listbox"]');
-  await expect(listbox).toBeVisible({ timeout: 5_000 });
+  await expect(listbox).toBeVisible({ timeout: 15_000 });
   await listbox.locator('button').filter({ hasText: targetName }).first().click();
-  await expect(trigger).toContainText(new RegExp(targetName, 'i'), { timeout: 10_000 });
+
+  /* 🔴 Trocar de empresa RECARREGA a página (12/09/2026).
+     O botão some junto com a tela velha e só volta quando a nova monta. Com 10s
+     o helper desistia no meio da recarga e o erro saía como "element(s) not
+     found" — parecia que o trocador tinha sumido do produto, quando era só a
+     página voltando. Derrubou os testes 3 e 9 do spec 26 com a máquina
+     carregada (o robô da Shopee roda junto).
+     Espera o botão VOLTAR e só então confere o nome: continua sendo espera por
+     condição, e se a empresa não trocasse de verdade o texto não bateria. */
+  await expect(trigger, 'a tela tem que voltar depois da recarga')
+    .toBeVisible({ timeout: 60_000 });
+  await expect(trigger).toContainText(new RegExp(targetName, 'i'), { timeout: 30_000 });
+}
+
+/**
+ * Leva a tela pública do ponto até o campo de CPF, e devolve ele.
+ *
+ * 🔴 POR QUE PRECISA DISTO (12/09/2026). Desde `cad2c39` (04/09, "ponto sem CPF —
+ * reconhecimento facial 1:N direto na câmera"), o `/clock` NÃO abre mais no CPF:
+ * abre em "Preparando reconhecimento… Carregando câmera", e o CPF fica atrás do
+ * botão **"Prefere digitar CPF e senha?"**.
+ *
+ * Os testes que iam direto ao `input[placeholder="000.000.000-00"]` falhavam de
+ * dois jeitos, os dois confusos: `locator.fill: Timeout` (o campo nem existia) ou
+ * "element was detached from the DOM" (o campo existia por um instante e a tela
+ * trocava pra facial embaixo do teste). O produto está certo — o teste é que
+ * ficou pra trás.
+ *
+ * O clique é CONDICIONAL de propósito: a facial só aparece quando a empresa tem
+ * `face_identify_default` ligado. Onde não tem, a tela já abre no CPF e este
+ * helper não faz nada além de esperar o campo.
+ */
+export async function irAoCampoDeCpfDoPonto(page: Page) {
+  const cpf = page.locator('input[placeholder="000.000.000-00"]');
+  const atalho = page.getByRole('button', { name: /Prefere digitar CPF e senha/i });
+
+  // Espera a tela decidir o que é: ou já veio o CPF, ou veio a facial.
+  await expect(cpf.or(atalho).first(), 'a tela do ponto tem que carregar')
+    .toBeVisible({ timeout: 30_000 });
+  if (await atalho.isVisible().catch(() => false)) await atalho.click();
+
+  // E espera o campo ficar ESTÁVEL: sem isto o `fill` pega o campo no meio da
+  // troca de tela e morre com "element was detached from the DOM".
+  await expect(cpf).toBeVisible({ timeout: 15_000 });
+  await expect(cpf).toBeEditable({ timeout: 15_000 });
+  return cpf;
 }

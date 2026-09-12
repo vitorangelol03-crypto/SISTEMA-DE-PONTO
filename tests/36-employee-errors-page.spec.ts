@@ -47,7 +47,7 @@ async function createEmpWithCpf(opts: { name: string; cpf: string; companyId: st
     name: opts.name,
     cpf: opts.cpf,
     company_id: opts.companyId,
-    employment_type: 'CLT',
+    employment_type: 'Carteira Assinada',
     created_by: '9999',
     pix_key: `${opts.cpf}@pwtest.com`,
     pix_type: 'Email',

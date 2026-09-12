@@ -17,6 +17,17 @@ import { cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from './integrity-helpers'
 
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}EmpCompl `;
 
+/**
+ * ⚠️ `employment_type` só aceita DOIS valores: 'Diarista' e 'Carteira Assinada'.
+ *
+ * A migration `20260911180202_employment_type_so_os_dois_reais` (11/09/2026)
+ * apertou o CHECK. Antes o banco aceitava 'CLT' e 'PJ' também — valores que
+ * gravavam bem e depois sumiam de TODOS os filtros da tela, porque o app só
+ * conhece os dois. Quem insere funcionário direto no banco (como os testes
+ * daqui) tem que usar os dois reais; quem vem de planilha passa pelo
+ * `normalizeEmploymentType`, que traduz CLT → Carteira Assinada e PJ → Diarista.
+ */
+
 // CPFs de teste com dígitos verificadores válidos (gerados manualmente)
 // Algoritmo: CPF[10] = first DV, CPF[11] = second DV
 function generateValidCpf(): string {
@@ -59,11 +70,11 @@ test.describe('Employees — completo', () => {
     const name = `${PREFIX}Novo${Date.now() % 1000}`;
     const s = getClient();
     await s.from('employees').insert([{
-      name, cpf, employment_type: 'CLT', created_by: '9999',
+      name, cpf, employment_type: 'Carteira Assinada', created_by: '9999',
     }]);
     const { data } = await s.from('employees').select('*').eq('cpf', cpf).single();
     expect(data?.name).toBe(name);
-    expect(data?.employment_type).toBe('CLT');
+    expect(data?.employment_type).toBe('Carteira Assinada');
   });
 
   test.skip('CPF inválido via UI: validação varia por placeholder/selector', async () => {});
@@ -72,11 +83,11 @@ test.describe('Employees — completo', () => {
     const cpf = generateValidCpf();
     const s = getClient();
     await s.from('employees').insert([{
-      name: `${PREFIX}DupOriginal`, cpf, employment_type: 'CLT', created_by: '9999',
+      name: `${PREFIX}DupOriginal`, cpf, employment_type: 'Carteira Assinada', created_by: '9999',
     }]);
     // Segundo insert com mesmo CPF deve falhar
     const { error } = await s.from('employees').insert([{
-      name: `${PREFIX}DupAttempt`, cpf, employment_type: 'CLT', created_by: '9999',
+      name: `${PREFIX}DupAttempt`, cpf, employment_type: 'Carteira Assinada', created_by: '9999',
     }]);
     expect(error).toBeTruthy();
   });
@@ -87,7 +98,7 @@ test.describe('Employees — completo', () => {
     const newName = `${PREFIX}NewName`;
     const s = getClient();
     await s.from('employees').insert([{
-      name: oldName, cpf, employment_type: 'CLT', created_by: '9999',
+      name: oldName, cpf, employment_type: 'Carteira Assinada', created_by: '9999',
     }]);
     await s.from('employees').update({ name: newName }).eq('cpf', cpf);
     const { data } = await s.from('employees').select('name').eq('cpf', cpf).single();
@@ -98,7 +109,7 @@ test.describe('Employees — completo', () => {
     const cpf = generateValidCpf();
     const s = getClient();
     await s.from('employees').insert([{
-      name: `${PREFIX}Excluir`, cpf, employment_type: 'CLT', created_by: '9999',
+      name: `${PREFIX}Excluir`, cpf, employment_type: 'Carteira Assinada', created_by: '9999',
     }]);
     await s.from('employees').delete().eq('cpf', cpf);
     const { data } = await s.from('employees').select('*').eq('cpf', cpf);
@@ -110,7 +121,7 @@ test.describe('Employees — completo', () => {
     const name = `${PREFIX}PinSet`;
     const s = getClient();
     await s.from('employees').insert([{
-      name, cpf, employment_type: 'CLT', created_by: '9999',
+      name, cpf, employment_type: 'Carteira Assinada', created_by: '9999',
       pin: '1234', pin_configured: true,
     }]);
     const { data } = await s.from('employees').select('pin, pin_configured').eq('cpf', cpf).single();
@@ -122,7 +133,7 @@ test.describe('Employees — completo', () => {
     const cpf = generateValidCpf();
     const s = getClient();
     await s.from('employees').insert([{
-      name: `${PREFIX}PinReset`, cpf, employment_type: 'CLT', created_by: '9999',
+      name: `${PREFIX}PinReset`, cpf, employment_type: 'Carteira Assinada', created_by: '9999',
       pin: '5678', pin_configured: true,
     }]);
     await s.from('employees').update({ pin: null, pin_configured: false }).eq('cpf', cpf);
@@ -133,8 +144,8 @@ test.describe('Employees — completo', () => {
 
   test('busca por nome filtra lista', async ({ page }) => {
     await getClient().from('employees').insert([
-      { name: `${PREFIX}BuscaA`, cpf: generateValidCpf(), employment_type: 'CLT', created_by: '9999' },
-      { name: `${PREFIX}DiferenteB`, cpf: generateValidCpf(), employment_type: 'CLT', created_by: '9999' },
+      { name: `${PREFIX}BuscaA`, cpf: generateValidCpf(), employment_type: 'Carteira Assinada', created_by: '9999' },
+      { name: `${PREFIX}DiferenteB`, cpf: generateValidCpf(), employment_type: 'Carteira Assinada', created_by: '9999' },
     ]);
 
     await loginAs(page, ADMIN);

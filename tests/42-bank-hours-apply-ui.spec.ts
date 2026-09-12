@@ -119,7 +119,7 @@ test.describe('Módulo 42 — Fluxos UI de aplicar banco de horas', () => {
         cpf: testEmployeeCpf,
         company_id: CARATINGA_ID,
         created_by: '9999',
-        employment_type: 'CLT',
+        employment_type: 'Carteira Assinada',
         expected_schedule: [0, 480, 480, 480, 480, 480, 240],
       })
       .select('id')

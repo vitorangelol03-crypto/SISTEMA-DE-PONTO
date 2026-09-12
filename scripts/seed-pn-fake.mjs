@@ -96,11 +96,20 @@ function genEmployee(idx) {
   const lastName = LAST_NAMES[idx % LAST_NAMES.length];
   const name = `Demo PN ${firstName} ${lastName}`;
 
-  // Mix: 20 CLT + 8 Diarista + 2 PJ
+  // Mix: 22 Carteira Assinada + 8 Diarista.
+  //
+  // 🔴 Era "20 CLT + 8 Diarista + 2 PJ" e parou de funcionar em 11/09/2026: a
+  // migration `20260911180202_employment_type_so_os_dois_reais` apertou o CHECK
+  // de `employment_type` pros DOIS valores que o sistema realmente entende
+  // ('Diarista' e 'Carteira Assinada'). 'CLT' e 'PJ' eram valores que passavam
+  // no banco e sumiam de todos os filtros da tela.
+  //
+  // A tradução é a mesma que a importação por planilha faz
+  // (`normalizeEmploymentType`): CLT → Carteira Assinada, PJ → Diarista.
   let employment_type, tipo_contrato;
-  if (idx < 20) { employment_type = 'CLT'; tipo_contrato = 'CLT'; }
+  if (idx < 20) { employment_type = 'Carteira Assinada'; tipo_contrato = 'Carteira Assinada'; }
   else if (idx < 28) { employment_type = 'Diarista'; tipo_contrato = 'Diarista'; }
-  else { employment_type = 'PJ'; tipo_contrato = 'PJ'; }
+  else { employment_type = 'Carteira Assinada'; tipo_contrato = 'Carteira Assinada'; }
 
   // PIN: 4 dígitos derivados do índice (1234 a 3030)
   const pinPlain = String(1234 + idx * 7).padStart(4, '0').slice(0, 4);

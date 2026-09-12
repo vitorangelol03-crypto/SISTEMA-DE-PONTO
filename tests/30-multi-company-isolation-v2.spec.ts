@@ -113,7 +113,7 @@ test.describe('Combo I — Isolamento multi-empresa v2', () => {
       cpf: employeeCaratingaCpf,
       company_id: CARATINGA_ID,
       created_by: '9999',
-      employment_type: 'CLT',
+      employment_type: 'Carteira Assinada',
       expected_schedule: [0, 480, 480, 480, 480, 480, 240],
     }).select('id').single();
     if (empCErr) throw empCErr;
@@ -125,7 +125,7 @@ test.describe('Combo I — Isolamento multi-empresa v2', () => {
       cpf: cpfPN,
       company_id: PONTE_NOVA_ID,
       created_by: '9999',
-      employment_type: 'CLT',
+      employment_type: 'Carteira Assinada',
       expected_schedule: [0, 480, 480, 480, 480, 480, 240],
     }).select('id').single();
     if (empPErr) throw empPErr;

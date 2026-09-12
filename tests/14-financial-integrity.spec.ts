@@ -65,7 +65,7 @@ async function createEmployee(name: string, withPix = true): Promise<string> {
   const employee: Record<string, unknown> = {
     name,
     cpf,
-    employment_type: 'CLT',
+    employment_type: 'Carteira Assinada',
     created_by: '9999',
   };
   if (withPix) {
@@ -215,18 +215,42 @@ test.describe('Integridade Financeira (cálculos reais)', () => {
     await insertTriageDistribution(empId, 10);
 
     await goToTab(page, 'Pagamento C6');
-    const dateInputs = page.locator('input[type="date"]');
-    await dateInputs.nth(0).fill(SAFE_DATE);
-    await dateInputs.nth(0).blur();
-    await dateInputs.nth(1).fill(SAFE_DATE);
-    await dateInputs.nth(1).blur();
-    // Garante que isEditingDate ficou false (botão Importar fica disabled enquanto true)
-    await page.locator('body').click({ position: { x: 5, y: 5 } });
-    await page.getByRole('button', { name: /Importar Dados/ }).click();
-    await expect(page.getByText(/importado/)).toBeVisible({ timeout: 10_000 });
+    const popup = page.getByTestId('c6-popup');
+    const seletor = popup.getByTestId('seletor-de-semana');
+    await expect(seletor).toBeVisible({ timeout: 30_000 });
 
-    const row = page.locator('table tr', { hasText: `${PREFIX}LiquidoC6` }).first();
-    await expect(row).toBeVisible();
+    /*
+     * 🔴 ESCOLHE "Datas livres" DE PROPÓSITO (12/09/2026).
+     *
+     * `SAFE_DATE` é 15/06/2030 — de propósito, pra não existir NENHUMA presença
+     * real nela. Não há semana cadastrada em 2030, então esta data só é
+     * alcançável pelo calendário livre. É o que uma pessoa faria.
+     *
+     * Antes o teste pegava `input[type="date"]` da página inteira e preenchia os
+     * dois primeiros. Funcionava por acidente: enquanto a lista de semanas ainda
+     * estava carregando, o seletor mostra o modo livre (dois campos de data) e
+     * depois TROCA pro modo Semanas — os campos sumiam no meio do caminho
+     * ("element was detached from the DOM") e o botão Importar ficava desabilitado
+     * durante a importação automática. Era corrida, não teste.
+     */
+    await seletor.getByRole('button', { name: /^Datas livres$/ }).click();
+    const datas = seletor.locator('input[type="date"]');
+    await expect(datas).toHaveCount(2);
+    await datas.nth(0).fill(SAFE_DATE);
+    await datas.nth(1).fill(SAFE_DATE);
+
+    // Mudar a data já refaz a prévia sozinha — é o mesmo caminho da tela real.
+
+    // ⚠️ NÃO espere pelo toast: a tela do arquivo de pagamento já importa
+    // sozinha ao abrir, então quando este clique acontece pode haver mais de um
+    // aviso na tela — `getByText(/importado/)` dava strict mode violation ("2
+    // elements"). Ficou escondido enquanto o primeiro toast expirava a tempo; o
+    // teste era "flaky". Depois que o `global-setup` passou a esquentar o
+    // servidor, tudo ficou rápido e os dois passaram a conviver.
+    //
+    // O que interessa é a LINHA com o valor certo — e é nela que se espera.
+    const row = popup.locator('table tr', { hasText: `${PREFIX}LiquidoC6` }).first();
+    await expect(row).toBeVisible({ timeout: 30_000 });
     // 03/09/2026: C6 passou a usar moneyBRL (mascaramento) — formato com vírgula agora,
     // igual ao resto do sistema: R$ 70,00.
     await expect(row).toContainText(/R\$\s*70,00/);
