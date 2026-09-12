@@ -200,3 +200,30 @@ vale/adiantamento → ficha de folha (salário base, filhos) → FGTS (8% config
 **ligado por pessoa**, é custo da empresa e não desconto) → salário família (cota e
 teto configuráveis por ano) → e as linhas entram nos relatórios que já existem.
 **INSS e IR ficam para uma segunda leva** (decisão dele).
+
+## 11. ✅ VALIDAÇÃO FINAL (o que foi rodado de verdade)
+
+| | |
+|---|---|
+| Suíte unitária | **101 arquivos · 1.527 testes · zero falha · zero worker morto** (9 lotes) |
+| E2E relatórios (06) | **6/6** — planilha `.xlsx` e PDF conferido byte a byte (`%PDF`) |
+| E2E permissões (11 · 22) + isolamento (26) | **40/40** |
+| E2E supremos (38 · 100) | **51/51** depois dos 4 consertos |
+| E2E espelho em massa (35) | **8/8** — a mudança das horas não quebrou nada |
+| typecheck · lint · build | 0 · 0 · limpo |
+
+### 11.1 Os vermelhos que a validação pegou (3, todos reais)
+
+1. **`publicApiV1` → 500.** A edge fn publicada ainda pedia `approved_by`. Não era
+   teórico: o teste cria chave de API de verdade. **Republicada na v6**, conferida
+   por versão E por sonda (6/6). Ninguém de fora sentiu — `api_keys` está vazia.
+2. **Spec 22 (2 testes)** ainda cobrava a aprovação de ponto — escapou da varredura
+   da manhã. Invertidos, e o do modal passou a conferir rótulos que existem.
+3. **Spec 100 I2 + K1/K3 e spec 38 C2.** A I2 é a mesma história da aprovação. As
+   três do `/clock` são a **defasagem de 04/09** (a tela abre na câmera), já
+   registrada em 11/09 e não tocada na época — agora usam o helper
+   `irAoCampoDeCpfDoPonto`. Não eram bug de produto.
+
+**Lição que se repetiu 3 vezes hoje:** quando uma função sai do sistema, os testes
+que provavam que ela EXISTIA viram testes que provam que ela NÃO existe — e quem
+não faz isso na mesma leva descobre depois, no vermelho, com o produto já no ar.
