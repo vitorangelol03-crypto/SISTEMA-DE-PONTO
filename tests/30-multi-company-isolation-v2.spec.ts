@@ -134,9 +134,9 @@ test.describe('Combo I — Isolamento multi-empresa v2', () => {
     // 5. Criar payment_period em cada empresa (datas idênticas — pra provar que
     // separação é por company_id, não por data)
     const { data: ppC, error: ppCErr } = await s.from('payment_periods').insert({
-      start_date: '2026-04-01',
-      end_date: '2026-04-15',
-      payment_date: '2026-04-20',
+      start_date: '2037-04-01',
+      end_date: '2037-04-15',
+      payment_date: '2037-04-20',
       label: `${NAME_PREFIX}Caratinga Period`,
       company_id: CARATINGA_ID,
       created_by: '9999',
@@ -145,9 +145,9 @@ test.describe('Combo I — Isolamento multi-empresa v2', () => {
     periodCaratingaId = (ppC as { id: string }).id;
 
     const { data: ppP, error: ppPErr } = await s.from('payment_periods').insert({
-      start_date: '2026-04-01',
-      end_date: '2026-04-15',
-      payment_date: '2026-04-20',
+      start_date: '2037-04-01',
+      end_date: '2037-04-15',
+      payment_date: '2037-04-20',
       label: `${NAME_PREFIX}PonteNova Period`,
       company_id: PONTE_NOVA_ID,
       created_by: '9999',
@@ -156,7 +156,7 @@ test.describe('Combo I — Isolamento multi-empresa v2', () => {
     periodPonteNovaId = (ppP as { id: string }).id;
 
     // 6. Attendance + payments em cada empresa (5 dias, bank_credit=24min cada)
-    const dates = ['2026-04-01', '2026-04-02', '2026-04-03', '2026-04-04', '2026-04-05'];
+    const dates = ['2037-04-01', '2037-04-02', '2037-04-03', '2037-04-04', '2037-04-05'];
     for (const date of dates) {
       // Caratinga
       await s.from('attendance').insert({
@@ -297,7 +297,7 @@ test.describe('Combo I — Isolamento multi-empresa v2', () => {
     const employeeRow = modalTable.getByRole('row').filter({ hasText: `${NAME_PREFIX}Caratinga` }).first();
     await expect(employeeRow).toBeVisible({ timeout: 15_000 });
 
-    const submitBtn = page.getByRole('button', { name: /Aplicar selecionados \([1-9]\d*\)/ });
+    const submitBtn = page.getByRole('button', { name: /^Aplicar selecionados \(1\)$/ });
     await expect(submitBtn).toBeEnabled({ timeout: 10_000 });
     await submitBtn.click();
     await expect(modalTable).not.toBeVisible({ timeout: 60_000 });

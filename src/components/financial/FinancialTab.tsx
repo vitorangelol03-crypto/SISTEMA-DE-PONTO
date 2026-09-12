@@ -33,7 +33,11 @@ import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
 import FunctionRoleFilter, { FUNCTION_ROLE_ALL, FUNCTION_ROLE_NONE } from '../common/FunctionRoleFilter';
 import * as XLSX from 'xlsx';
-import { somarTotaisDoHolerite } from '../../utils/holeriteTotals';
+import {
+  agregarFinanceiroPorPessoa,
+  descontoDeQuantidadeEmbutido,
+  type EmployeeFinancialData,
+} from '../../utils/financeiroPorPessoa';
 import { ModalShell } from '../driverpay/ModalShell';
 
 /**
@@ -51,36 +55,9 @@ interface FinancialTabProps {
   hasPermission: (permission: string) => boolean;
 }
 
-interface TriageDiscount {
-  period_start: string;
-  period_end: string;
-  value_deducted: number;
-  errors_share: number;
-}
-
-interface EmployeeFinancialData {
-  employee: Employee;
-  workDays: number;
-  absences: number;
-  customExitDays: number;
-  payments: Payment[];
-  errorRecords: ErrorRecord[];
-  totalErrors: number;
-  totalErrorValue: number;
-  totalTriageDiscount: number;
-  totalEarnedGross: number;
-  totalEarned: number;
-  triageDiscounts: TriageDiscount[];
-  /**
-   * Somas que o HOLERITE imprime na "Composição do Pagamento". Faltavam aqui, mas o
-   * gerador do PDF já as lia — então o papel do funcionário saía com "Diárias R$ 0,00" e
-   * SEM as linhas de bonificação, enquanto o total bruto/líquido saía certo (04/08/2026).
-   */
-  totalDailyRate: number;
-  totalBonusB: number;
-  totalBonusC1: number;
-  totalBonusC2: number;
-}
+/* `EmployeeFinancialData` e a conta que a monta saíram daqui em 12/09/2026:
+   viraram `src/utils/financeiroPorPessoa.ts`, pra tela e relatórios usarem a
+   MESMA conta. Ver o cabeçalho de lá. */
 
 /**
  * Os dados que o recibo imprime, montados de um jeito SÓ.
@@ -118,11 +95,9 @@ function montarDadosDoRecibo(
     errorDiscount: d.totalErrorValue || 0,
     triageDiscount: d.totalTriageDiscount || 0,
     // Erro de QUANTIDADE já foi abatido do `payments.total` lá atrás: é a
-    // diferença entre o que foi listado e o total.
-    quantityErrorDiscount: Math.max(
-      0,
-      (d.totalDailyRate + d.totalBonusB + d.totalBonusC1 + d.totalBonusC2) - d.totalEarnedGross,
-    ),
+    // diferença entre o que foi listado e o total. A conta mora no util, porque
+    // os relatórios precisam do MESMO número (12/09/2026).
+    quantityErrorDiscount: descontoDeQuantidadeEmbutido(d),
     totalDailyRate: d.totalDailyRate || 0,
     totalBonusB: d.totalBonusB || 0,
     totalBonusC1: d.totalBonusC1 || 0,
@@ -519,6 +494,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     }
   }, [filters.startDate, filters.endDate, filters.employeeId, filters.employmentType, company?.id]);
 
+  /**
+   * A conta em si mora em `utils/financeiroPorPessoa.ts` (12/09/2026) — a MESMA
+   * que os relatórios usam, para a tela e o papel nunca divergirem.
+   */
   const processFinancialData = (
     employeesData: Employee[],
     paymentsData: Payment[],
@@ -526,56 +505,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     errorRecordsData: ErrorRecord[],
     triageData: Array<{ employee_id: string; period_start: string; period_end: string; value_deducted: number; errors_share: number }>
   ) => {
-    const data: EmployeeFinancialData[] = employeesData.map(employee => {
-      const employeeAttendances = attendancesData.filter(att => att.employee_id === employee.id);
-      const employeePayments = paymentsData.filter(pay => pay.employee_id === employee.id);
-      const employeeErrors = errorRecordsData.filter(err => err.employee_id === employee.id);
-      const triageDiscounts = triageData
-        .filter(t => t.employee_id === employee.id)
-        .map(t => ({
-          period_start: t.period_start,
-          period_end: t.period_end,
-          value_deducted: t.value_deducted,
-          errors_share: t.errors_share,
-        }));
-
-      const workDays = employeeAttendances.filter(att => att.status === 'present').length;
-      const absences = employeeAttendances.filter(att => att.status === 'absent').length;
-      const customExitDays = employeeAttendances.filter(att => att.status === 'present' && att.exit_time).length;
-      const totalErrors = employeeErrors
-        .filter(e => (e.error_type ?? 'quantity') === 'quantity')
-        .reduce((sum, err) => sum + (err.error_count ?? 0), 0);
-      const totalErrorValue = employeeErrors
-        .filter(e => e.error_type === 'value')
-        .reduce((sum, err) => sum + Number(err.error_value ?? 0), 0);
-      const totalTriageDiscount = triageDiscounts.reduce((s, t) => s + t.value_deducted, 0);
-      // payments.total já reflete desconto manual de erros quantidade aplicados
-      // via botão "Descontar Erros". Erros tipo value e triagem não tocam
-      // payments.total — são deduzidos aqui na exibição.
-      const totalEarnedGross = employeePayments.reduce((sum, pay) => sum + (pay.total || 0), 0);
-      const totalEarned = Math.max(0, totalEarnedGross - totalErrorValue - totalTriageDiscount);
-      // Somas do holerite. Da MESMA lista que vai pro PDF: o gerador conta os dias e a
-      // quantidade de cada bônus a partir dela, então outra origem faria contagem e valor
-      // não baterem no mesmo papel.
-      const totaisHolerite = somarTotaisDoHolerite(employeePayments);
-
-      return {
-        employee,
-        workDays,
-        absences,
-        customExitDays,
-        payments: employeePayments,
-        errorRecords: employeeErrors,
-        totalErrors,
-        totalErrorValue,
-        totalTriageDiscount,
-        totalEarnedGross,
-        totalEarned,
-        triageDiscounts,
-        ...totaisHolerite,
-      };
-    });
-
+    const data = agregarFinanceiroPorPessoa(
+      employeesData,
+      paymentsData,
+      attendancesData,
+      errorRecordsData,
+      triageData,
+    );
     setFinancialData(data);
   };
 

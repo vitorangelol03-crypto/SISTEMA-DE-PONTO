@@ -121,9 +121,9 @@ test.describe('Combo I — Integridade financeira E2E', () => {
     const { data: ppRow, error: ppErr } = await s
       .from('payment_periods')
       .insert({
-        start_date: '2026-04-01',
-        end_date: '2026-04-15',
-        payment_date: '2026-04-20',
+        start_date: '2037-04-01',
+        end_date: '2037-04-15',
+        payment_date: '2037-04-20',
         label: `${NAME_PREFIX}Period1`,
         company_id: CARATINGA_ID,
         created_by: '9999',
@@ -134,7 +134,7 @@ test.describe('Combo I — Integridade financeira E2E', () => {
     testPaymentPeriodId = (ppRow as { id: string }).id;
 
     // 5. Criar 5 attendances (dias 01 a 05) com bank_credit=24min cada (total 120min=2h)
-    const attDates = ['2026-04-01', '2026-04-02', '2026-04-03', '2026-04-04', '2026-04-05'];
+    const attDates = ['2037-04-01', '2037-04-02', '2037-04-03', '2037-04-04', '2037-04-05'];
     for (const date of attDates) {
       await s.from('attendance').insert({
         employee_id: testEmployeeId,
@@ -259,7 +259,7 @@ test.describe('Combo I — Integridade financeira E2E', () => {
 
     // Submit — botão deve mostrar "Aplicar selecionados (N)" com N>=1 (testEmployee marcado por default).
     // Texto "Aplicar selecionados" só existe no modal.
-    const submitBtn = page.getByRole('button', { name: /Aplicar selecionados \([1-9]\d*\)/ });
+    const submitBtn = page.getByRole('button', { name: /^Aplicar selecionados \(1\)$/ });
     await expect(submitBtn).toBeEnabled({ timeout: 10_000 });
     await submitBtn.click();
 
@@ -269,7 +269,7 @@ test.describe('Combo I — Integridade financeira E2E', () => {
 
     // ─── Verificações via Supabase ────────────────────────────────────────
 
-    // a) Payment-âncora (último do período: 2026-04-05) tem aplicação
+    // a) Payment-âncora (último do período: 2037-04-05) tem aplicação
     const { data: anchorPayment } = await s
       .from('payments')
       .select('date, bank_hours_amount, bank_hours_minutes, bank_hours_applied_at, total')
@@ -376,9 +376,9 @@ test.describe('Combo I — Integridade financeira E2E', () => {
     const { data: pp2, error: pp2Err } = await s
       .from('payment_periods')
       .insert({
-        start_date: '2026-04-16',
-        end_date: '2026-04-30',
-        payment_date: '2026-05-05',
+        start_date: '2037-04-16',
+        end_date: '2037-04-30',
+        payment_date: '2037-05-05',
         label: `${NAME_PREFIX}Period2`,
         company_id: CARATINGA_ID,
         created_by: '9999',
@@ -389,7 +389,7 @@ test.describe('Combo I — Integridade financeira E2E', () => {
     period2Id = (pp2 as { id: string }).id;
 
     // Attendance + payments do period2 (5 dias, bank_credit=24min cada)
-    const dates2 = ['2026-04-16', '2026-04-17', '2026-04-18', '2026-04-19', '2026-04-20'];
+    const dates2 = ['2037-04-16', '2037-04-17', '2037-04-18', '2037-04-19', '2037-04-20'];
     for (const date of dates2) {
       await s.from('attendance').insert({
         employee_id: testEmployeeId!,
@@ -468,8 +468,8 @@ test.describe('Combo I — Integridade financeira E2E', () => {
       .from('payments')
       .select('bank_hours_applied_at, total')
       .eq('employee_id', testEmployeeId!)
-      .gte('date', '2026-04-16')
-      .lte('date', '2026-04-30');
+      .gte('date', '2037-04-16')
+      .lte('date', '2037-04-30');
     expect(pmts2?.length).toBe(5);
     for (const p of pmts2 ?? []) {
       expect(p.bank_hours_applied_at).toBeNull();
@@ -488,9 +488,9 @@ test.describe('Combo I — Integridade financeira E2E', () => {
     const { data: pp3, error: pp3Err } = await s
       .from('payment_periods')
       .insert({
-        start_date: '2026-05-01',
-        end_date: '2026-05-15',
-        payment_date: '2026-05-20',
+        start_date: '2037-05-01',
+        end_date: '2037-05-15',
+        payment_date: '2037-05-20',
         label: `${NAME_PREFIX}Period3`,
         company_id: CARATINGA_ID,
         created_by: '9999',
@@ -500,7 +500,7 @@ test.describe('Combo I — Integridade financeira E2E', () => {
     if (pp3Err) throw pp3Err;
     period3Id = (pp3 as { id: string }).id;
 
-    const dates3 = ['2026-05-01', '2026-05-02', '2026-05-03', '2026-05-04', '2026-05-05'];
+    const dates3 = ['2037-05-01', '2037-05-02', '2037-05-03', '2037-05-04', '2037-05-05'];
     for (const date of dates3) {
       await s.from('attendance').insert({
         employee_id: testEmployeeId!,
@@ -574,8 +574,8 @@ test.describe('Combo I — Integridade financeira E2E', () => {
       .from('payments')
       .select('bank_hours_applied_at, total')
       .eq('employee_id', testEmployeeId!)
-      .gte('date', '2026-05-01')
-      .lte('date', '2026-05-15');
+      .gte('date', '2037-05-01')
+      .lte('date', '2037-05-15');
     expect(pmts3?.length).toBe(5);
     for (const p of pmts3 ?? []) {
       expect(p.bank_hours_applied_at).toBeNull();
@@ -627,9 +627,9 @@ test.describe('Combo I — Integridade financeira E2E', () => {
     const { data: pp4, error: pp4Err } = await s
       .from('payment_periods')
       .insert({
-        start_date: '2026-05-16',
-        end_date: '2026-05-31',
-        payment_date: '2026-06-05',
+        start_date: '2037-05-16',
+        end_date: '2037-05-31',
+        payment_date: '2037-06-05',
         label: `${NAME_PREFIX}Period4`,
         company_id: CARATINGA_ID,
         created_by: '9999',
@@ -639,7 +639,7 @@ test.describe('Combo I — Integridade financeira E2E', () => {
     if (pp4Err) throw pp4Err;
     period4Id = (pp4 as { id: string }).id;
 
-    const dates4 = ['2026-05-16', '2026-05-17', '2026-05-18', '2026-05-19', '2026-05-20'];
+    const dates4 = ['2037-05-16', '2037-05-17', '2037-05-18', '2037-05-19', '2037-05-20'];
     const empIds = [testEmployeeId!, testEmployeeId2!, testEmployeeId3!];
     for (const id of empIds) {
       for (const date of dates4) {
@@ -717,13 +717,13 @@ test.describe('Combo I — Integridade financeira E2E', () => {
         .from('payments')
         .select('date, bank_hours_applied_at')
         .eq('employee_id', empId)
-        .gte('date', '2026-05-16')
-        .lte('date', '2026-05-31')
+        .gte('date', '2037-05-16')
+        .lte('date', '2037-05-31')
         .order('date', { ascending: false });
       expect(pmts?.length).toBe(5);
       const applied = pmts!.filter(p => p.bank_hours_applied_at !== null);
       expect(applied.length).toBe(1);
-      expect(applied[0]!.date).toBe('2026-05-20'); // anchor = última data do period4
+      expect(applied[0]!.date).toBe('2037-05-20'); // anchor = última data do period4
     }
 
     // b) ROBUSTEZ EXTRA: log de aplicação criado para period4 (1 por employee marcado)
@@ -741,8 +741,8 @@ test.describe('Combo I — Integridade financeira E2E', () => {
       .from('payments')
       .select('bank_hours_applied_at')
       .eq('employee_id', testEmployeeId3!)
-      .gte('date', '2026-05-16')
-      .lte('date', '2026-05-31');
+      .gte('date', '2037-05-16')
+      .lte('date', '2037-05-31');
     expect(pmts3?.length).toBe(5);
     for (const p of pmts3 ?? []) {
       expect(p.bank_hours_applied_at).toBeNull();

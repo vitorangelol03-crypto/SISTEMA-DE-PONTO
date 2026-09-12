@@ -29,8 +29,15 @@ import { getClient } from './cleanup';
  * attendance+payments isolados em beforeAll, cleanup completo em afterAll
  * com try/catch em cada DELETE (mesmo padrão do spec 29).
  *
- * Período de teste: 2026-07-01 a 2026-07-15 (período distinto dos specs 27/29
+ * Período de teste: 2037-07-01 a 2037-07-15 (período distinto dos specs 27/29
  * pra evitar colisão de dados entre suítes se rodarem juntas).
+ *
+ * 🔴 POR QUE 2037 E NÃO 2026 (12/09/2026): este spec rodava em julho de 2026
+ * dentro da CARATINGA, que é empresa real. O botão "Aplicar selecionados"
+ * aplica em TODO MUNDO que a janela de datas pega — e aplicou em 23
+ * funcionários de verdade, zerando o banco de horas deles. 2037 tem o
+ * calendário idêntico ao de 2026 (mesmos dias da semana) e produção não tem
+ * NENHUM registro de 2029 em diante: o teste fica isolado por construção.
  */
 
 const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
@@ -127,14 +134,14 @@ test.describe('Módulo 42 — Fluxos UI de aplicar banco de horas', () => {
     if (empErr) throw empErr;
     testEmployeeId = (empRow as { id: string }).id;
 
-    // 4. Period 1: 2026-07-01 a 2026-07-15 (testes 1 e 3 — NÃO aplicam,
+    // 4. Period 1: 2037-07-01 a 2037-07-15 (testes 1 e 3 — NÃO aplicam,
     //    inspeção de UI e cancel respectivamente).
     const { data: pp1, error: pp1Err } = await s
       .from('payment_periods')
       .insert({
-        start_date: '2026-07-01',
-        end_date: '2026-07-15',
-        payment_date: '2026-07-20',
+        start_date: '2037-07-01',
+        end_date: '2037-07-15',
+        payment_date: '2037-07-20',
         label: `${NAME_PREFIX}Period1`,
         company_id: CARATINGA_ID,
         created_by: '9999',
@@ -144,13 +151,13 @@ test.describe('Módulo 42 — Fluxos UI de aplicar banco de horas', () => {
     if (pp1Err) throw pp1Err;
     period1Id = (pp1 as { id: string }).id;
 
-    // 5. Period 2: 2026-07-16 a 2026-07-31 (teste 2 — apply real isolado)
+    // 5. Period 2: 2037-07-16 a 2037-07-31 (teste 2 — apply real isolado)
     const { data: pp2, error: pp2Err } = await s
       .from('payment_periods')
       .insert({
-        start_date: '2026-07-16',
-        end_date: '2026-07-31',
-        payment_date: '2026-08-05',
+        start_date: '2037-07-16',
+        end_date: '2037-07-31',
+        payment_date: '2037-08-05',
         label: `${NAME_PREFIX}Period2`,
         company_id: CARATINGA_ID,
         created_by: '9999',
@@ -162,8 +169,8 @@ test.describe('Módulo 42 — Fluxos UI de aplicar banco de horas', () => {
 
     // 6. Attendance + payments — 5 dias por period, bank_credit=24min cada
     //    (total 120min=2h, hora R$ 12.50, valor R$ 25.00, igual spec 29).
-    const datesP1 = ['2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04', '2026-07-07'];
-    const datesP2 = ['2026-07-16', '2026-07-17', '2026-07-20', '2026-07-21', '2026-07-22'];
+    const datesP1 = ['2037-07-01', '2037-07-02', '2037-07-03', '2037-07-04', '2037-07-07'];
+    const datesP2 = ['2037-07-16', '2037-07-17', '2037-07-20', '2037-07-21', '2037-07-22'];
 
     for (const date of [...datesP1, ...datesP2]) {
       await s.from('attendance').insert({
@@ -320,9 +327,22 @@ test.describe('Módulo 42 — Fluxos UI de aplicar banco de horas', () => {
     await expect(page.getByText('Selecionados', { exact: true })).toBeVisible();
 
     // ─── Confirma aplicação ─────────────────────────────────────
-    // Botão "Aplicar selecionados (N)" com N>=1 (testEmployee marcado por default
-    // — status='pending'). Pode haver outros funcionários Caratinga marcados, daí o regex.
-    const submitBtn = page.getByRole('button', { name: /Aplicar selecionados \([1-9]\d*\)/ });
+    // 🔴 12/09/2026 — A TRAVA QUE FALTAVA, E O ESTRAGO QUE ELA EVITA.
+    //
+    // Este teste criava a quinzena de 16 a 31/07/**2026** dentro da CARATINGA, que
+    // é empresa de VERDADE. O modal marca por padrão todo mundo do período, o
+    // botão dizia "Aplicar selecionados (24)", e o regex de antes
+    // (`\([1-9]\d*\)`) aceitava qualquer número — então o clique aplicou banco de
+    // horas em **23 funcionários reais** e zerou o saldo deles. A limpeza do
+    // afterAll só apaga o funcionário de teste; os 23 ficaram com o estrago.
+    //
+    // Duas travas agora: a janela toda mudou para **2037** (calendário idêntico
+    // ao de 2026, e produção não tem nada de 2029 em diante) e o botão precisa
+    // dizer exatamente **(1)** — só o funcionário deste teste. Se algum dia
+    // aparecer gente de verdade na lista, este teste FALHA em vez de gravar.
+    const soUmaPessoa = modalTable.getByRole('row').filter({ hasText: /Pendente/i });
+    await expect(soUmaPessoa).toHaveCount(1);
+    const submitBtn = page.getByRole('button', { name: /^Aplicar selecionados \(1\)$/ });
     await expect(submitBtn).toBeEnabled({ timeout: 10_000 });
     await submitBtn.click();
 
@@ -335,18 +355,18 @@ test.describe('Módulo 42 — Fluxos UI de aplicar banco de horas', () => {
     await expect(page.getByText(/\d+ aplicados/i).first()).toBeVisible({ timeout: 8_000 });
 
     // ─── Verificações Supabase ───────────────────────────────────
-    // a) Payment-âncora (último do period — 2026-07-22) tem aplicação.
+    // a) Payment-âncora (último do period — 2037-07-22) tem aplicação.
     const { data: anchorPayment } = await s
       .from('payments')
       .select('date, bank_hours_amount, bank_hours_minutes, bank_hours_applied_at, total')
       .eq('employee_id', testEmployeeId!)
-      .gte('date', '2026-07-16')
-      .lte('date', '2026-07-31')
+      .gte('date', '2037-07-16')
+      .lte('date', '2037-07-31')
       .order('date', { ascending: false })
       .limit(1)
       .single();
     expect(anchorPayment).toBeTruthy();
-    expect(anchorPayment!.date).toBe('2026-07-22');
+    expect(anchorPayment!.date).toBe('2037-07-22');
     expect(Number(anchorPayment!.bank_hours_amount)).toBe(25);
     expect(anchorPayment!.bank_hours_minutes).toBe(120);
     expect(anchorPayment!.bank_hours_applied_at).not.toBeNull();
@@ -387,8 +407,8 @@ test.describe('Módulo 42 — Fluxos UI de aplicar banco de horas', () => {
       .from('payments')
       .select('id, bank_hours_amount, bank_hours_minutes, bank_hours_applied_at, total')
       .eq('employee_id', testEmployeeId!)
-      .gte('date', '2026-07-01')
-      .lte('date', '2026-07-15');
+      .gte('date', '2037-07-01')
+      .lte('date', '2037-07-15');
     expect(paymentsBefore?.length).toBe(5);
     for (const p of paymentsBefore!) {
       expect(p.bank_hours_applied_at).toBeNull();
@@ -435,8 +455,8 @@ test.describe('Módulo 42 — Fluxos UI de aplicar banco de horas', () => {
       .from('payments')
       .select('id, bank_hours_amount, bank_hours_minutes, bank_hours_applied_at, total')
       .eq('employee_id', testEmployeeId!)
-      .gte('date', '2026-07-01')
-      .lte('date', '2026-07-15');
+      .gte('date', '2037-07-01')
+      .lte('date', '2037-07-15');
     expect(paymentsAfter?.length).toBe(5);
     for (const p of paymentsAfter!) {
       expect(p.bank_hours_applied_at).toBeNull();
@@ -458,8 +478,8 @@ test.describe('Módulo 42 — Fluxos UI de aplicar banco de horas', () => {
       .from('attendance')
       .select('bank_credit_minutes, bank_debit_minutes')
       .eq('employee_id', testEmployeeId!)
-      .gte('date', '2026-07-01')
-      .lte('date', '2026-07-15');
+      .gte('date', '2037-07-01')
+      .lte('date', '2037-07-15');
     expect(attAfter?.length).toBe(5);
     for (const a of attAfter!) {
       expect(a.bank_credit_minutes).toBe(24);
