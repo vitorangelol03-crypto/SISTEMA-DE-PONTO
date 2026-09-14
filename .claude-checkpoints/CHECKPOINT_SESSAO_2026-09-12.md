@@ -227,3 +227,24 @@ teto configuráveis por ano) → e as linhas entram nos relatórios que já exis
 **Lição que se repetiu 3 vezes hoje:** quando uma função sai do sistema, os testes
 que provavam que ela EXISTIA viram testes que provam que ela NÃO existe — e quem
 não faz isso na mesma leva descobre depois, no vermelho, com o produto já no ar.
+
+## 12. ✅ DEPLOY CONFIRMADO (conferido em 14/09/2026)
+
+Os vigias do deploy de 12/09 foram mortos por falta de memória antes de
+confirmar. Conferido depois, por conteúdo — não por status HTTP:
+
+| arquivo servido em produção | comparado com o build local |
+|---|---|
+| `index-FokuLN0y.js` (principal) | **idêntico** |
+| `FinancialTab-X3il88sV.js` | **idêntico** — tem o botão `relatorios-btn` |
+| `RelatoriosPanel-tShYQn26.js` | **idêntico** — tem o painel |
+
+⚠️ **Armadilha:** procurar a feature nova no bundle PRINCIPAL deu **0** — e
+parecia que o deploy não tinha subido. O Financeiro e o painel são carregados sob
+demanda (`lazy`), então moram em arquivos próprios. Conferir sempre o pedaço onde
+a tela mora.
+
+**Ponto do pessoal depois do deploy:** 34 batidas em 12/09, 3 em 13/09 (domingo),
+22 em 14/09 até 07:15 — todas pelo funcionário, nas duas empresas. **Nenhuma
+correção manual foi feita nesses dias**, então esse caminho segue provado pela
+sonda na API (colunas aceitas), não por uso real.
