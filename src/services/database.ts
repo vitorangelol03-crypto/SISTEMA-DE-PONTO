@@ -3691,7 +3691,7 @@ export const setManualTimeFourMarkings = async (
     company_id: companyId,
   };
   // Campos legados (entry_time/exit_time_full) espelham posição 1/4 — é o
-  // que Aprovação, Financeiro e Relatórios leem hoje.
+  // que o Financeiro e os relatórios leem hoje.
   if (entry1) { updateRecord.entry_1_time = entry1.toISOString(); updateRecord.entry_time = entry1.toISOString(); }
   if (exit1) updateRecord.exit_1_time = exit1.toISOString();
   if (entry2) updateRecord.entry_2_time = entry2.toISOString();
@@ -3709,8 +3709,8 @@ export const setManualTimeFourMarkings = async (
   // não tocados) — computa hours_worked/night_hours a partir dele, com
   // desconto do almoço (mesma semântica de calcHoursFourMarkings na edge fn
   // e de getWorkSegments/computeWorkedMinutes). recalcAttendance NÃO faz
-  // isso — só escreve worked_minutes/bank_*, campos que Aprovação/
-  // Financeiro/Relatórios não leem; sem este passo, hours_worked ficaria
+  // isso — só escreve worked_minutes/bank_*, não hours_worked/night_hours,
+  // que é o que o Financeiro lê; sem este passo, hours_worked ficaria
   // travado no valor anterior (achado ao testar: virava 0/null).
   const markings: AttendanceMarkings = {
     entry_1: data.entry_1_time,

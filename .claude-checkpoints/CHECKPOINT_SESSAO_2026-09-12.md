@@ -1,21 +1,24 @@
-# CHECKPOINT — Sessão 12/09/2026 (manhã)
+# CHECKPOINT — Sessão 12/09/2026 (manhã + tarde · deploy conferido em 14/09)
 
 > A sessão da madrugada caiu no meio da última prova. Esta leva retomou daí,
 > terminou a remoção da aprovação de ponto e **empurrou**.
 
 ---
 
-## 0. Em 30 segundos
+## 0. Em 30 segundos — ESTADO FINAL (revisado em 14/09)
 
 | | |
 |---|---|
-| ✅ Push feito | `0b3f8ae..7f2e2df` no `main` — 2 commits (`7a4a219` Financeiro + `7f2e2df` aprovação) |
-| ✅ Deploy no ar e PROVADO | bundle servido é **byte a byte igual** ao compilado aqui (sha `a8ee5e6f…`) |
-| ✅ Ponto do pessoal | 35 batidas hoje, **3 depois do deploy**, última 09:52 |
-| ✅ typecheck · lint · build | 0 · 0 · limpo |
-| 🟡 Unitários dos 3 arquivos afetados | passaram, mas **nunca na mesma rodada** (máquina) |
-| ⏳ E2E | **não rodou** — robô da Shopee ocupando a máquina |
-| 🔴 Próximo | Relatórios pra dentro do Financeiro (plano apresentado, esperando decisão) |
+| ✅ Tudo no ar | último push `9e4baf9`; deploy conferido **byte a byte** em 14/09 (§12) |
+| ✅ Aprovação de ponto removida | coluna fora do banco + código; a correção manual ficou quebrada 03:43–09:10 até o push (§1) |
+| ✅ Relatórios dentro do Financeiro | ponto · financeiro · geral × PDF e planilha; aba Relatórios removida (§9) |
+| ✅ Estrago do spec 42 consertado | 23 funcionários reais: raiz corrigida e saldo restaurado, provado (§6) |
+| ✅ Espelho com 0h em 905 dias | corrigido — +6.168 horas passaram a aparecer (§7) |
+| ✅ `public-api-v1` | republicada na v6 (pedia a coluna removida → 500) (§11.1) |
+| ✅ Suíte unitária | 101 arquivos · 1.527 testes · zero falha (§11) |
+| ✅ E2E dos specs tocados | 06 · 11 · 22 · 26 · 35 · 38 · 100 verdes (§11) |
+| ⏳ E2E ainda não rodados | **02, 15 e 47** (mexidos na remoção da aprovação) |
+| 🔴 Decisões do Victor | adicional noturno (§8) · 4 lotes antigos de banco de horas (§6.1) · 2 "Marcos" · regra dos 30 dias · folha completa (§10) |
 
 ---
 
@@ -57,7 +60,7 @@ cara de "está tudo certo" — o site não avisa, quem sente é quem está traba
 Dois restos varridos junto: fixture do spec 47 com as permissões mortas e o
 `public-api-v1` pedindo `approved_by`.
 
-### 2.1 ⚠️ `public-api-v1` segue publicada na v5, com o campo antigo
+### 2.1 ✅ `public-api-v1` — estava na v5 com o campo antigo; REPUBLICADA na v6 à tarde (§11.1)
 
 O fonte foi corrigido; **a função publicada não**. Hoje não há **nenhuma chave de
 API cadastrada** (`api_keys` vazia) e a rota morre em 401 antes da consulta —
@@ -91,10 +94,11 @@ Os três passaram; só nunca ao mesmo tempo. **Zero teste vermelho.**
 
 ## 4. 🔴 Pendente
 
-- **E2E** dos 5 specs mexidos (02, 11, 15, 47, 100) — rodar com a máquina livre.
-- **Republicar `public-api-v1`** (§2.1) — só antes de existir chave de API.
-- Comentário velho em `setManualTimeFourMarkings` ("é o que Aprovação, Financeiro
-  e Relatórios leem hoje") cita a Aprovação, que não existe mais.
+- ✅ ~~E2E dos 5 specs mexidos (02, 11, 15, 47, 100)~~ — **11 e 100 rodaram verdes à
+  tarde. 02, 15 e 47 AINDA NÃO RODARAM.**
+- ✅ ~~Republicar `public-api-v1`~~ — v6, provada pelo teste (§11.1).
+- ✅ ~~Comentário velho em `setManualTimeFourMarkings` citando a Aprovação~~ —
+  corrigido em 14/09.
 - **Regra nova do Victor, ainda NÃO feita e que só existia na conversa:**
   *"quem já está com 30+ dias sem bater ponto entra desativado de cara, não só
   daqui pra frente"* — anotada aqui pra não se perder de novo.
@@ -108,6 +112,7 @@ Os três passaram; só nunca ao mesmo tempo. **Zero teste vermelho.**
 **Migrar a aba Relatórios pra dentro do Financeiro**, com download do mês em PDF
 ou planilha e filtro por semana, funcionário, função e vínculo. Plano curto
 apresentado ao Victor nesta sessão, esperando as 3 decisões dele.
+**✅ Feito na tarde — ver §9.**
 
 Levantado antes do plano: **ninguém perde acesso** — todos os 5 usuários com
 `reports.view` (02, 03, 04, 8888, 9999) já têm `financial.view`.
