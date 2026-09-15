@@ -8,6 +8,7 @@ import {
 import type { DriverCandidate } from '../../utils/driverNameMatch';
 import { contemSemAcento } from '../../utils/buscaTexto';
 import { ModalShell } from './ModalShell';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface DriverImportLinksModalProps {
   companyId: string;
@@ -43,7 +44,7 @@ export const DriverImportLinksModal: React.FC<DriverImportLinksModalProps> = ({
       setIgnored(r.ignored);
     } catch (e) {
       console.error('Erro ao carregar vínculos de importação:', e);
-      toast.error('Erro ao carregar vínculos de importação');
+      toast.error(mensagemDeErro(e, 'Erro ao carregar vínculos de importação'));
     } finally {
       setLoading(false);
     }
@@ -71,7 +72,7 @@ export const DriverImportLinksModal: React.FC<DriverImportLinksModalProps> = ({
       toast.success(`Vínculo de "${a.aliasRaw}" desfeito — volta a pedir decisão no próximo import.`);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao desfazer vínculo');
+      toast.error(mensagemDeErro(e, 'Erro ao desfazer vínculo'));
     } finally {
       setBusyId(null);
     }
@@ -85,7 +86,7 @@ export const DriverImportLinksModal: React.FC<DriverImportLinksModalProps> = ({
       setEditingId(null);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao editar vínculo');
+      toast.error(mensagemDeErro(e, 'Erro ao editar vínculo'));
     } finally {
       setBusyId(null);
     }
@@ -98,7 +99,7 @@ export const DriverImportLinksModal: React.FC<DriverImportLinksModalProps> = ({
       toast.success(`"${i.aliasRaw}" volta a aparecer como pendente no próximo import.`);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao desfazer "ignorar"');
+      toast.error(mensagemDeErro(e, 'Erro ao desfazer "ignorar"'));
     } finally {
       setBusyId(null);
     }

@@ -8,6 +8,7 @@ import {
 } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import { isMaster } from '../../config/masters';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface SettingsTabProps {
   userId: string;
@@ -45,7 +46,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
         });
       } catch (error) {
         console.error('Erro ao carregar valores padrão de bonificação:', error);
-        toast.error('Erro ao carregar valores padrão de bonificação');
+        toast.error(mensagemDeErro(error, 'Erro ao carregar valores padrão de bonificação'));
       } finally {
         if (!cancelled) setLoadingDefaults(false);
       }
@@ -70,7 +71,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
       setBonusDefaults(prev => ({ ...prev, [type]: parsed.toFixed(2) }));
     } catch (error) {
       console.error('Erro ao salvar valor padrão de bonificação:', error);
-      toast.error((error as Error).message || 'Erro ao salvar valor padrão');
+      toast.error(mensagemDeErro(error, 'Erro ao salvar valor padrão'));
     } finally {
       setSavingType(null);
     }

@@ -7,6 +7,7 @@ import { isKeptProof, type ProofSlot } from '../../utils/discountProofs';
 import { ModalShell } from './ModalShell';
 import { ImageLightbox } from './ImageLightbox';
 import { DriverRowData, formatBRLIf } from './driverPayShared';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface DiscountModalProps {
   row: DriverRowData;
@@ -233,7 +234,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
       await onChanged();
     } catch (e) {
       console.error('Erro ao salvar desconto:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao salvar desconto');
+      toast.error(mensagemDeErro(e, 'Erro ao salvar desconto'));
     } finally {
       setBusy(false);
     }
@@ -247,7 +248,7 @@ export const DiscountModal: React.FC<DiscountModalProps> = ({
       await onChanged();
     } catch (e) {
       console.error('Erro ao remover desconto:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao remover desconto');
+      toast.error(mensagemDeErro(e, 'Erro ao remover desconto'));
     } finally {
       setBusy(false);
     }

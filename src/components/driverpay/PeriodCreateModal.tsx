@@ -3,6 +3,7 @@ import { CalendarPlus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { createPeriod } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface PeriodCreateModalProps {
   companyId: string;
@@ -35,7 +36,7 @@ export const PeriodCreateModal: React.FC<PeriodCreateModalProps> = ({ companyId,
       onClose();
     } catch (e) {
       console.error('Erro ao criar período:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao criar período');
+      toast.error(mensagemDeErro(e, 'Erro ao criar período'));
     } finally {
       setSaving(false);
     }

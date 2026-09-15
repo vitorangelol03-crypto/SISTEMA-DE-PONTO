@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 // Sub-fase 10.3 (resolvida 2026-05-12): exposto sob AdminTab (master only).
 // audit_logs é global (sem company_id) — admin master vê tudo via RLS bypass.
@@ -103,7 +104,7 @@ export function AuditLogsTab() {
       setLogs((logsData ?? []) as AuditLogRow[]);
       setStats(statsData);
     } catch (error) {
-      toast.error('Erro ao carregar logs de auditoria');
+      toast.error(mensagemDeErro(error, 'Erro ao carregar logs de auditoria'));
       console.error(error);
     } finally {
       setLoading(false);

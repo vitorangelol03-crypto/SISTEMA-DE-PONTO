@@ -31,6 +31,7 @@ import {
   AdminCleanupConfig,
   FaceAuthAttempt,
 } from '../../services/database';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface AdminTabProps {
   userId: string;
@@ -227,7 +228,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       setFaceAttempts(attempts);
     } catch (err) {
       console.error('Erro ao carregar tentativas faciais:', err);
-      toast.error('Erro ao carregar histórico facial');
+      toast.error(mensagemDeErro(err, 'Erro ao carregar histórico facial'));
     } finally {
       setFaceAttemptsLoading(false);
     }
@@ -296,8 +297,8 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       toast.success('Bonificação desbloqueada');
       const blocks = await getBonusBlocks(company.id);
       setBonusBlocks(blocks);
-    } catch {
-      toast.error('Erro ao desbloquear');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Erro ao desbloquear'));
     } finally {
       setUnblockingId(null);
     }
@@ -318,8 +319,8 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       toast.success('Senha alterada com sucesso');
       setNewPassword('');
       setConfirmPassword('');
-    } catch {
-      toast.error('Erro ao alterar senha');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Erro ao alterar senha'));
     } finally {
       setSavingPassword(false);
     }
@@ -331,8 +332,8 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
     try {
       const preview = await previewAdminCleanup(cleanupMonths, company.id);
       setCleanupPreview(preview);
-    } catch {
-      toast.error('Erro ao pré-visualizar');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Erro ao pré-visualizar'));
     } finally {
       setPreviewLoading(false);
     }
@@ -353,7 +354,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       loadData();
     } catch (err) {
       console.error('Erro ao executar limpeza:', err);
-      toast.error(`Erro ao executar limpeza: ${err instanceof Error ? err.message : 'desconhecido'}`);
+      toast.error(mensagemDeErro(err, 'Erro ao executar limpeza'));
     } finally {
       setCleanupLoading(false);
     }
@@ -367,8 +368,8 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       await updateAdminCleanupConfig(newEnabled, autoInterval, company.id);
       await loadCleanupConfig();
       toast.success(newEnabled ? 'Limpeza automática ativada' : 'Limpeza automática desativada');
-    } catch {
-      toast.error('Erro ao salvar configuração');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Erro ao salvar configuração'));
     } finally {
       setAutoSaving(false);
     }
@@ -381,8 +382,8 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       await updateAdminCleanupConfig(autoConfig?.enabled ?? false, autoInterval, company.id);
       await loadCleanupConfig();
       toast.success('Intervalo atualizado');
-    } catch {
-      toast.error('Erro ao salvar');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Erro ao salvar'));
     } finally {
       setAutoSaving(false);
     }
@@ -401,8 +402,8 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       await loadCleanupConfig();
       toast.success(`Executado: ${result.deleted} registros processados`);
       loadData();
-    } catch {
-      toast.error('Erro ao executar');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Erro ao executar'));
     } finally {
       setAutoRunning(false);
     }
@@ -423,7 +424,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       toast.success(next ? 'Reconhecimento facial ativado globalmente' : 'Reconhecimento facial desativado');
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao atualizar configuração');
+      toast.error(mensagemDeErro(err, 'Erro ao atualizar configuração'));
     } finally {
       setFaceGlobalSaving(false);
     }
@@ -442,7 +443,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       );
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao salvar thresholds');
+      toast.error(mensagemDeErro(err, 'Erro ao salvar thresholds'));
     } finally {
       setFaceThresholdsSaving(false);
     }
@@ -456,7 +457,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       toast.success(!currentEnabled ? 'Ativado para o funcionário' : 'Desativado para o funcionário');
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao atualizar funcionário');
+      toast.error(mensagemDeErro(err, 'Erro ao atualizar funcionário'));
     } finally {
       setFaceEmpSaving(null);
     }
@@ -478,7 +479,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
       toast.success(`Cadastro facial de ${employeeName} resetado`);
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao resetar cadastro facial');
+      toast.error(mensagemDeErro(err, 'Erro ao resetar cadastro facial'));
     } finally {
       setFaceResetting(null);
     }

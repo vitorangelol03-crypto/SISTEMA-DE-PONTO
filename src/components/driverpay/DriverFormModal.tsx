@@ -16,6 +16,7 @@ import {
   type DriverNotaName,
 } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 /** Uma taxa (por plataforma) que MUDOU no cadastro do driver: valor antigo -> novo. */
 export interface DriverRateChange {
@@ -100,7 +101,7 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
       setNovoNotaPix('');
       toast.success('Nome autorizado cadastrado.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao cadastrar o nome');
+      toast.error(mensagemDeErro(e, 'Erro ao cadastrar o nome'));
     } finally {
       setSalvandoNotaNome(false);
     }
@@ -113,7 +114,7 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
       setNotaNames((prev) => prev.filter((n) => n.id !== id));
       toast.success('Nome removido.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao remover o nome');
+      toast.error(mensagemDeErro(e, 'Erro ao remover o nome'));
     }
   };
   const [rates, setRates] = useState<Record<string, string>>(() => {
@@ -154,7 +155,7 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
       await onArchived();
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao arquivar/reativar');
+      toast.error(mensagemDeErro(e, 'Erro ao arquivar/reativar'));
     } finally {
       setArchiving(false);
     }
@@ -179,7 +180,7 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
         toast.success('Este driver ainda não tinha acessado o app — nada pra resetar: ele já entra com 1234.');
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao resetar a senha');
+      toast.error(mensagemDeErro(e, 'Erro ao resetar a senha'));
     } finally {
       setResetting(false);
     }
@@ -273,7 +274,7 @@ export const DriverFormModal: React.FC<DriverFormModalProps> = ({
       onClose();
     } catch (e) {
       console.error('Erro ao salvar driver:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao salvar driver');
+      toast.error(mensagemDeErro(e, 'Erro ao salvar driver'));
     } finally {
       setSaving(false);
     }

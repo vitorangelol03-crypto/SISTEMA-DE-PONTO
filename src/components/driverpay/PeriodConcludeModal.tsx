@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { DriverPaymentPeriod, concludePeriod, concludePeriodOnly } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
 import { formatBRLIf } from './driverPayShared';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface PeriodConcludeModalProps {
   period: DriverPaymentPeriod;
@@ -58,7 +59,7 @@ export const PeriodConcludeModal: React.FC<PeriodConcludeModalProps> = ({
       onClose();
     } catch (e) {
       console.error('Erro ao concluir período:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao concluir período');
+      toast.error(mensagemDeErro(e, 'Erro ao concluir período'));
     } finally {
       setSaving(false);
     }
@@ -73,7 +74,7 @@ export const PeriodConcludeModal: React.FC<PeriodConcludeModalProps> = ({
       onClose();
     } catch (e) {
       console.error('Erro ao concluir período:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao concluir período');
+      toast.error(mensagemDeErro(e, 'Erro ao concluir período'));
     } finally {
       setSaving(false);
     }

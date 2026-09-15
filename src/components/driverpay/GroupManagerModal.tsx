@@ -15,6 +15,7 @@ import {
   setGroupLeader,
 } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface GroupManagerModalProps {
   companyId: string;
@@ -104,7 +105,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
       await onChanged();
     } catch (e) {
       console.error('Erro ao criar grupo:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao criar grupo');
+      toast.error(mensagemDeErro(e, 'Erro ao criar grupo'));
     } finally {
       setBusy(false);
     }
@@ -124,7 +125,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
       await onChanged();
     } catch (e) {
       console.error('Erro ao renomear grupo:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao renomear grupo');
+      toast.error(mensagemDeErro(e, 'Erro ao renomear grupo'));
     } finally {
       setBusy(false);
     }
@@ -139,7 +140,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
       await onChanged();
     } catch (e) {
       console.error('Erro ao excluir grupo:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao excluir grupo');
+      toast.error(mensagemDeErro(e, 'Erro ao excluir grupo'));
     } finally {
       setBusy(false);
     }
@@ -164,7 +165,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
       await onChanged();
     } catch (e) {
       console.error('Erro ao aplicar valor do grupo:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao aplicar valor do grupo');
+      toast.error(mensagemDeErro(e, 'Erro ao aplicar valor do grupo'));
     } finally {
       setBusy(false);
     }
@@ -176,7 +177,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
       await setGroupLeader(group.id, userId, driverId);
       await onChanged();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não consegui definir o líder');
+      toast.error(mensagemDeErro(e, 'Não consegui definir o líder'));
     } finally {
       setBusy(false);
     }
@@ -198,7 +199,7 @@ export const GroupManagerModal: React.FC<GroupManagerModalProps> = ({
       await onChanged();
     } catch (e) {
       console.error('Erro ao atualizar membros do grupo:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao atualizar membros do grupo');
+      toast.error(mensagemDeErro(e, 'Erro ao atualizar membros do grupo'));
     } finally {
       setBusy(false);
     }

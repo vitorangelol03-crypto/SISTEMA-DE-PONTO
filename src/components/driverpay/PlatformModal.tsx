@@ -12,6 +12,7 @@ import {
   upsertDriverRate,
 } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface PlatformModalProps {
   companyId: string;
@@ -119,7 +120,7 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
       await onSaved();
     } catch (e) {
       console.error('Erro ao adicionar plataforma:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao adicionar plataforma');
+      toast.error(mensagemDeErro(e, 'Erro ao adicionar plataforma'));
     } finally {
       setSaving(false);
     }
@@ -164,7 +165,7 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
       await onSaved();
     } catch (e) {
       console.error('Erro ao editar plataforma:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao editar plataforma');
+      toast.error(mensagemDeErro(e, 'Erro ao editar plataforma'));
     } finally {
       setSaving(false);
     }
@@ -196,7 +197,7 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
       await onSaved();
     } catch (e) {
       console.error('Erro ao arquivar plataformas:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao arquivar plataformas');
+      toast.error(mensagemDeErro(e, 'Erro ao arquivar plataformas'));
     } finally {
       setSaving(false);
     }

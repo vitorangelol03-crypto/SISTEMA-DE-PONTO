@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound, Clock, Briefcase, Calendar, Hash, Save, Copy, CheckCircle2, XCircle, Clock3, ArchiveRestore, UserCheck } from 'lucide-react';
 import { getAllEmployees, getAllEmployeesAcrossAllCompanies, createEmployee, updateEmployee, deleteEmployee, updateEmployeeRegistrationStatus, Employee, bulkCreateEmployees, setEmployeePin, resetEmployeePin, getCompanies } from '../../services/database';
 import { supabase } from '../../lib/supabase';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 const SCHEDULE_DAY_LABELS: ReadonlyArray<{ index: number; short: string; long: string }> = [
   { index: 0, short: 'Dom', long: 'Domingo' },
@@ -63,8 +64,8 @@ const CopyField: React.FC<{ label: string; value: string }> = ({ label, value })
     try {
       await navigator.clipboard.writeText(value);
       toast.success(`${label} copiado`);
-    } catch {
-      toast.error('Não foi possível copiar');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Não foi possível copiar'));
     }
   };
   return (
@@ -159,7 +160,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       setFilteredEmployees(data);
     } catch (error) {
       console.error('Erro ao carregar funcionários:', error);
-      toast.error('Erro ao carregar funcionários');
+      toast.error(mensagemDeErro(error, 'Erro ao carregar funcionários'));
     } finally {
       setLoading(false);
     }
@@ -249,8 +250,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       setRegisterLinkCopied(true);
       toast.success('Link copiado');
       setTimeout(() => setRegisterLinkCopied(false), 2000);
-    } catch {
-      toast.error('Não foi possível copiar o link. Copie manualmente.');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Não foi possível copiar o link. Copie manualmente.'));
     }
   };
 
@@ -276,7 +277,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       toast.success(status === 'approved' ? 'Cadastro aprovado' : 'Cadastro recusado');
       await loadEmployees();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao salvar');
+      toast.error(mensagemDeErro(err, 'Erro ao salvar'));
     } finally {
       setSavingApprovalId(null);
     }
@@ -394,8 +395,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       resetForm();
       loadEmployees();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar funcionário';
-      toast.error(errorMessage);
+      toast.error(mensagemDeErro(error, 'Erro ao salvar funcionário'));
     }
   };
 
@@ -435,7 +435,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       loadEmployees();
     } catch (error) {
       console.error('Erro ao excluir funcionário:', error);
-      toast.error('Erro ao excluir funcionário');
+      toast.error(mensagemDeErro(error, 'Erro ao excluir funcionário'));
     }
   };
 
@@ -455,7 +455,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       toast.success('Template baixado com sucesso!');
     } catch (error) {
       console.error('Erro ao gerar template:', error);
-      toast.error('Erro ao gerar template');
+      toast.error(mensagemDeErro(error, 'Erro ao gerar template'));
     }
   };
 
@@ -548,7 +548,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       }
     } catch (error) {
       console.error('Erro ao processar arquivo:', error);
-      toast.error(error instanceof Error ? error.message : 'Erro ao processar arquivo');
+      toast.error(mensagemDeErro(error, 'Erro ao processar arquivo'));
     } finally {
       setImporting(false);
     }
@@ -634,7 +634,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       toast.success('Relatório de erros baixado!');
     } catch (error) {
       console.error('Erro ao gerar relatório:', error);
-      toast.error('Erro ao gerar relatório de erros');
+      toast.error(mensagemDeErro(error, 'Erro ao gerar relatório de erros'));
     }
   };
 
@@ -668,7 +668,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       }
     } catch (error) {
       console.error('Erro na importação:', error);
-      toast.error('Erro ao importar funcionários');
+      toast.error(mensagemDeErro(error, 'Erro ao importar funcionários'));
     } finally {
       setImporting(false);
     }
@@ -700,8 +700,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       setPinModal(null);
       setPinInput('');
       loadEmployees();
-    } catch {
-      toast.error('Erro ao definir PIN');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Erro ao definir PIN'));
     } finally {
       setPinLoading(false);
     }
@@ -715,8 +715,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       toast.success('PIN resetado com sucesso!');
       setResetModal(null);
       loadEmployees();
-    } catch {
-      toast.error('Erro ao resetar PIN');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Erro ao resetar PIN'));
     } finally {
       setResetLoading(false);
     }
@@ -764,8 +764,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       clearSelection();
       await loadEmployees();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Erro: ${msg}`);
+      toast.error(mensagemDeErro(err, 'Erro ao atualizar as marcações'));
     } finally {
       setBulkSaving(false);
     }

@@ -27,6 +27,7 @@ import {
   valorEsperadoDaNota, formatBRLIf,
 } from './driverPayShared';
 import { ModalShell } from './ModalShell';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface NotasRecebidasModalProps {
   companyId: string;
@@ -155,9 +156,9 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
     try {
       const f = await listNotaFiscalFiles(companyId, periodId);
       setFiles(f);
-    } catch {
+    } catch (err) {
       setFiles([]);
-      toast.error('Não consegui carregar as notas.');
+      toast.error(mensagemDeErro(err, 'Não consegui carregar as notas.'));
     }
   };
 
@@ -165,7 +166,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
     let alive = true;
     listNotaFiscalFiles(companyId, periodId)
       .then((f) => { if (alive) setFiles(f); })
-      .catch(() => { if (alive) { setFiles([]); toast.error('Não consegui carregar as notas.'); } });
+      .catch((err) => { if (alive) { setFiles([]); toast.error(mensagemDeErro(err, 'Não consegui carregar as notas.')); } });
     return () => { alive = false; };
   }, [companyId, periodId]);
 
@@ -189,7 +190,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
         : 'Auto-validação DESLIGADA: o sistema continua conferindo e recusando nota errada, mas você valida as certas na mão.',
         { duration: 7000 });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao mudar a auto-validação.');
+      toast.error(mensagemDeErro(e, 'Erro ao mudar a auto-validação.'));
     } finally { setSavingAuto(false); }
   };
 
@@ -222,7 +223,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       }
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não consegui abrir o espelho');
+      toast.error(mensagemDeErro(e, 'Não consegui abrir o espelho'));
     } finally {
       setAbrindoEspelho(null);
     }
@@ -278,7 +279,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
     try {
       window.open(await notaFiscalFileUrl(row.filePath), '_blank', 'noopener,noreferrer');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não consegui abrir.');
+      toast.error(mensagemDeErro(e, 'Não consegui abrir.'));
     }
   };
 
@@ -287,7 +288,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
     try {
       triggerDownload(await fetchBlob(row.filePath), filename);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não consegui baixar.');
+      toast.error(mensagemDeErro(e, 'Não consegui baixar.'));
     } finally { setDownloading(null); }
   };
 
@@ -299,7 +300,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       onChanged?.();
       toast.success('Nota validada.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao validar.');
+      toast.error(mensagemDeErro(e, 'Erro ao validar.'));
     } finally { setActing(null); }
   };
 
@@ -313,7 +314,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       onChanged?.();
       toast.success('Nota recusada — o driver vai poder enviar outra.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao recusar.');
+      toast.error(mensagemDeErro(e, 'Erro ao recusar.'));
     } finally { setActing(null); }
   };
 
@@ -326,7 +327,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       onChanged?.();
       toast.success('Nota excluída.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao excluir.');
+      toast.error(mensagemDeErro(e, 'Erro ao excluir.'));
     } finally { setActing(null); }
   };
 
@@ -348,7 +349,7 @@ export const NotasRecebidasModal: React.FC<NotasRecebidasModalProps> = ({
       triggerDownload(out, `Notas - ${periodClean}.zip`);
       toast.success(`${allNamed.length} nota(s) no .zip`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não consegui gerar o .zip.');
+      toast.error(mensagemDeErro(e, 'Não consegui gerar o .zip.'));
     } finally { setDownloading(null); }
   };
 

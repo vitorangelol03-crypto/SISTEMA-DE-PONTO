@@ -30,6 +30,7 @@ import {
   type DriverRowData,
 } from './driverPayShared';
 import { ModalShell } from './ModalShell';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface EspelhosRecebidosModalProps {
   companyId: string;
@@ -244,7 +245,7 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
       );
       setUrls(Object.fromEntries(pares.filter((x): x is [string, string] => Boolean(x[1]))));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Nao consegui carregar os espelhos.');
+      toast.error(mensagemDeErro(e, 'Nao consegui carregar os espelhos.'));
     } finally {
       setCarregando(false);
     }
@@ -312,7 +313,7 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
   const agir = async (fn: () => Promise<void>, id: string, ok: string) => {
     setOcupado(id);
     try { await fn(); toast.success(ok); await recarregar(); onChanged(); }
-    catch (e) { toast.error(e instanceof Error ? e.message : 'Nao consegui fazer isso.'); }
+    catch (e) { toast.error(mensagemDeErro(e, 'Nao consegui fazer isso.')); }
     finally { setOcupado(null); }
   };
 
@@ -341,7 +342,7 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
       await recarregar();
       onChanged();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Nao consegui corrigir a contagem.');
+      toast.error(mensagemDeErro(e, 'Nao consegui corrigir a contagem.'));
     } finally {
       setOcupado(null);
     }
@@ -355,9 +356,9 @@ export const EspelhosRecebidosModal: React.FC<EspelhosRecebidosModalProps> = ({
       toast.success(novo
         ? 'Ligado: o espelho fica conferido sozinho quando o print bate.'
         : 'Desligado: a conferencia continua, mas o clique final e seu.');
-    } catch {
+    } catch (err) {
       setAutoConfirm(!novo);
-      toast.error('Nao consegui mudar essa opcao.');
+      toast.error(mensagemDeErro(err, 'Nao consegui mudar essa opcao.'));
     }
   };
 

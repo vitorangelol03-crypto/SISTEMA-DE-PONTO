@@ -16,6 +16,7 @@ import {
 import { buildMirrorData } from '../../utils/mirrorGenerator';
 import { downloadMirrorsBatchPdf } from '../../utils/mirrorPdf';
 import toast from 'react-hot-toast';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface MirrorMassDialogProps {
   open: boolean;
@@ -74,7 +75,7 @@ export const MirrorMassDialog: React.FC<MirrorMassDialogProps> = ({ open, onClos
       })
       .catch(err => {
         console.error('Erro ao carregar funcionários:', err);
-        toast.error('Erro ao carregar funcionários.');
+        toast.error(mensagemDeErro(err, 'Erro ao carregar funcionários.'));
       })
       .finally(() => { if (!cancelled) setLoadingEmployees(false); });
     return () => { cancelled = true; };
@@ -150,7 +151,7 @@ export const MirrorMassDialog: React.FC<MirrorMassDialogProps> = ({ open, onClos
       onClose();
     } catch (err) {
       console.error('Erro ao gerar espelhos:', err);
-      toast.error('Erro ao gerar espelhos.');
+      toast.error(mensagemDeErro(err, 'Erro ao gerar espelhos.'));
     } finally {
       setGenerating(false);
       setProgress({ done: 0, total: 0 });

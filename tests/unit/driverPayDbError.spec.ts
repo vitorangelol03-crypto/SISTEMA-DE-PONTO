@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { throwDbError } from '../../src/services/driverPay';
+import { mensagemDeErro } from '../../src/utils/mensagemDeErro';
 
 /**
  * Regressão do bug de prod 2026-07-18: sessão expirada (JWT vencido → PATCH 401)
@@ -51,5 +52,31 @@ describe('throwDbError — tradutor de erros do PostgREST', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(Error);
     }
+  });
+
+  // 15/09/2026: a tela passou a mostrar a causa real em todas as abas. O erro CRU (em
+  // inglês) sai marcado e com o código, pra tela juntar o contexto; o traduzido segue
+  // saindo sozinho, como sempre.
+  it('erro cru sai marcado com o código, e a tela junta o contexto', () => {
+    let capturado: unknown;
+    try {
+      throwDbError({ code: '42501', message: 'new row violates row-level security policy' });
+    } catch (e) {
+      capturado = e;
+    }
+    expect(capturado).toBeInstanceOf(Error);
+    expect(mensagemDeErro(capturado, 'Erro ao salvar pacotes'))
+      .toBe('Erro ao salvar pacotes: new row violates row-level security policy (código 42501)');
+  });
+
+  it('erro traduzido continua saindo sozinho na tela', () => {
+    let capturado: unknown;
+    try {
+      throwDbError({ code: 'PGRST301', message: 'JWT expired' });
+    } catch (e) {
+      capturado = e;
+    }
+    expect(mensagemDeErro(capturado, 'Erro ao renomear grupo'))
+      .toBe('Sessão expirada — saia e faça login novamente para continuar.');
   });
 });

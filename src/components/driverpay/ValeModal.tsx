@@ -5,6 +5,7 @@ import { addVale, updateVale, removeVale } from '../../services/driverPay';
 import { getBrazilDate, formatDateBR } from '../../utils/dateUtils';
 import { ModalShell } from './ModalShell';
 import { DriverRowData, formatBRLIf } from './driverPayShared';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface ValeModalProps {
   row: DriverRowData;
@@ -69,7 +70,7 @@ export const ValeModal: React.FC<ValeModalProps> = ({ row, companyId, userId, re
       await onChanged();
     } catch (e) {
       console.error('Erro ao salvar vale:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao salvar vale');
+      toast.error(mensagemDeErro(e, 'Erro ao salvar vale'));
     } finally {
       setBusy(false);
     }
@@ -83,7 +84,7 @@ export const ValeModal: React.FC<ValeModalProps> = ({ row, companyId, userId, re
       await onChanged();
     } catch (e) {
       console.error('Erro ao remover vale:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao remover vale');
+      toast.error(mensagemDeErro(e, 'Erro ao remover vale'));
     } finally {
       setBusy(false);
     }

@@ -12,6 +12,7 @@ import {
 //   DriverImportResult = { drivers: DriverSeed[]; warnings: string[]; errors: string[] }
 import { parseDriverSpreadsheet, generateDriverTemplate, type DriverImportResult } from '../../utils/driverImport';
 import { ModalShell } from './ModalShell';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface DriverImportModalProps {
   companyId: string;
@@ -59,7 +60,7 @@ export const DriverImportModal: React.FC<DriverImportModalProps> = ({
       setStep('preview');
     } catch (e) {
       console.error('Erro ao ler planilha:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao ler planilha');
+      toast.error(mensagemDeErro(e, 'Erro ao ler planilha'));
     } finally {
       setBusy(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -76,7 +77,7 @@ export const DriverImportModal: React.FC<DriverImportModalProps> = ({
       await onImported();
     } catch (e) {
       console.error('Erro ao importar drivers:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao importar drivers');
+      toast.error(mensagemDeErro(e, 'Erro ao importar drivers'));
     } finally {
       setBusy(false);
     }
@@ -88,7 +89,7 @@ export const DriverImportModal: React.FC<DriverImportModalProps> = ({
       toast.success('Modelo baixado — preencha 1 linha por driver e importe');
     } catch (e) {
       console.error('Erro ao gerar modelo:', e);
-      toast.error('Erro ao gerar o modelo');
+      toast.error(mensagemDeErro(e, 'Erro ao gerar o modelo'));
     }
   };
 

@@ -37,6 +37,7 @@ import { supabase } from '../../lib/supabase';
 import { getBrazilDate, formatDateBR } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType, EmploymentTypeBadge } from '../common/EmploymentTypeFilter';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 // Lazy-load: MirrorMassDialog importa jspdf (~100KB). Evita engordar o chunk
 // do AttendanceTab e mantém o timing de lazy-load alinhado com o resto da app.
@@ -149,7 +150,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       setManualTimesFour(prev => JSON.stringify(prev) === JSON.stringify(manualTimesFourMap) ? prev : manualTimesFourMap);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
-      if (!silent) toast.error('Erro ao carregar dados');
+      if (!silent) toast.error(mensagemDeErro(error, 'Erro ao carregar dados'));
     } finally {
       if (!silent) setLoading(false);
     }
@@ -348,7 +349,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       toast.success(`Presença marcada como ${status === 'present' ? 'presente' : 'falta'}`);
     } catch (error) {
       console.error('Erro ao marcar presença:', error);
-      toast.error('Erro ao marcar presença');
+      toast.error(mensagemDeErro(error, 'Erro ao marcar presença'));
     }
   };
 
@@ -377,7 +378,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       await loadData(selectedDate);
     } catch (err) {
       console.error('Erro ao salvar horário manual:', err);
-      toast.error(err instanceof Error ? err.message : 'Erro ao salvar horário');
+      toast.error(mensagemDeErro(err, 'Erro ao salvar horário'));
     } finally {
       setSavingManualTime(prev => ({ ...prev, [employeeId]: false }));
     }
@@ -418,7 +419,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       await loadData(selectedDate);
     } catch (err) {
       console.error('Erro ao salvar horário manual (4 marcações):', err);
-      toast.error(err instanceof Error ? err.message : 'Erro ao salvar horário');
+      toast.error(mensagemDeErro(err, 'Erro ao salvar horário'));
     } finally {
       setSavingManualTime(prev => ({ ...prev, [employeeId]: false }));
     }
@@ -521,7 +522,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       await loadData(selectedDate);
     } catch (error) {
       console.error('Erro ao aplicar bonificação:', error);
-      toast.error((error as Error).message || 'Erro ao aplicar bonificação');
+      toast.error(mensagemDeErro(error, 'Erro ao aplicar bonificação'));
     } finally {
       setApplyingBonus(prev => ({ ...prev, [code]: false }));
     }
@@ -571,7 +572,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       await loadData(selectedDate);
     } catch (error) {
       console.error('Erro ao remover bonificação:', error);
-      toast.error((error as Error).message || 'Erro ao remover bonificação');
+      toast.error(mensagemDeErro(error, 'Erro ao remover bonificação'));
     } finally {
       setRemovingBonus(false);
     }
@@ -603,8 +604,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       await loadData(selectedDate);
     } catch (error) {
       console.error('Erro ao remover bonificações:', error);
-      const message = error instanceof Error ? error.message : 'Erro ao remover bonificações';
-      toast.error(message);
+      toast.error(mensagemDeErro(error, 'Erro ao remover bonificações'));
     } finally {
       setRemovingBonus(false);
     }
@@ -668,7 +668,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       await loadData();
     } catch (error) {
       console.error('Erro na marcação em massa:', error);
-      toast.error('Erro na marcação em massa');
+      toast.error(mensagemDeErro(error, 'Erro na marcação em massa'));
     } finally {
       setBulkMarkingLoading(false);
     }
@@ -723,7 +723,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
       await loadData(selectedDate);
     } catch (error) {
       console.error('Erro ao resetar presença:', error);
-      toast.error('Erro ao resetar presença');
+      toast.error(mensagemDeErro(error, 'Erro ao resetar presença'));
     } finally {
       setShowResetConfirmModal(false);
       setEmployeeToReset(null);

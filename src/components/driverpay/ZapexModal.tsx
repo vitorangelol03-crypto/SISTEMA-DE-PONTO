@@ -7,6 +7,7 @@ import { useCompany } from '../../contexts/useCompany';
 import { getBrazilDate } from '../../utils/dateUtils';
 import { ModalShell } from './ModalShell';
 import { DriverRowData, formatBRLIf } from './driverPayShared';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface ZapexModalProps {
   row: DriverRowData;
@@ -53,7 +54,7 @@ const ZapexItemRow: React.FC<{
       await onChanged();
     } catch (e) {
       console.error('Erro ao salvar Zapex:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao salvar Zapex');
+      toast.error(mensagemDeErro(e, 'Erro ao salvar Zapex'));
     } finally {
       setBusy(false);
     }
@@ -66,7 +67,7 @@ const ZapexItemRow: React.FC<{
       await onChanged();
     } catch (e) {
       console.error('Erro ao remover Zapex:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao remover Zapex');
+      toast.error(mensagemDeErro(e, 'Erro ao remover Zapex'));
     } finally {
       setBusy(false);
     }
@@ -151,7 +152,7 @@ export const ZapexModal: React.FC<ZapexModalProps> = ({
       await onChanged();
     } catch (e) {
       console.error('Erro ao lançar Zapex:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao lançar Zapex');
+      toast.error(mensagemDeErro(e, 'Erro ao lançar Zapex'));
     } finally {
       setBusy(false);
     }
@@ -172,7 +173,7 @@ export const ZapexModal: React.FC<ZapexModalProps> = ({
       await onChanged();
     } catch (e) {
       console.error('Erro ao salvar valor unitário do Zapex:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao salvar valor unitário');
+      toast.error(mensagemDeErro(e, 'Erro ao salvar valor unitário'));
     } finally {
       setBusy(false);
     }

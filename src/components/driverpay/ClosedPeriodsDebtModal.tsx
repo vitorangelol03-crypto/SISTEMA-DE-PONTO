@@ -11,6 +11,7 @@ import {
 } from '../../utils/closedPeriodsDebtScope';
 import { ModalShell } from './ModalShell';
 import { formatBRLIf } from './driverPayShared';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface ClosedPeriodsDebtModalProps {
   companyId: string;
@@ -52,7 +53,7 @@ export const ClosedPeriodsDebtModal: React.FC<ClosedPeriodsDebtModalProps> = ({
       setRows(await listClosedPeriodsDebt(companyId, periods));
     } catch (e) {
       console.error('Erro ao apurar saldo devedor de quinzenas fechadas:', e);
-      toast.error('Erro ao apurar saldo devedor');
+      toast.error(mensagemDeErro(e, 'Erro ao apurar saldo devedor'));
     } finally {
       setLoading(false);
     }
@@ -65,7 +66,7 @@ export const ClosedPeriodsDebtModal: React.FC<ClosedPeriodsDebtModalProps> = ({
       .then((res) => { if (active) setRows(res); })
       .catch((e) => {
         console.error('Erro ao apurar saldo devedor de quinzenas fechadas:', e);
-        if (active) toast.error('Erro ao apurar saldo devedor');
+        if (active) toast.error(mensagemDeErro(e, 'Erro ao apurar saldo devedor'));
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -119,7 +120,7 @@ export const ClosedPeriodsDebtModal: React.FC<ClosedPeriodsDebtModalProps> = ({
         ok++;
         setSelecionados((prev) => { const next = new Set(prev); next.delete(chave(r)); return next; });
       } catch (e) {
-        falhas.push(`${r.name}: ${e instanceof Error ? e.message : 'erro'}`);
+        falhas.push(`${r.name}: ${mensagemDeErro(e, 'não migrou')}`);
       }
     }
     const destinoLabel = openPeriods.find((p) => p.id === destinoMassa)?.label ?? destinoMassa;
@@ -150,7 +151,7 @@ export const ClosedPeriodsDebtModal: React.FC<ClosedPeriodsDebtModalProps> = ({
       await onMigrated();
     } catch (e) {
       console.error('Erro ao migrar saldo:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao migrar saldo');
+      toast.error(mensagemDeErro(e, 'Erro ao migrar saldo'));
     } finally {
       setMigrando(null);
     }

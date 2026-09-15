@@ -25,6 +25,7 @@ import {
 } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import { format } from 'date-fns';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface DataManagementTabProps {
   userId: string;
@@ -80,7 +81,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
       setEmployees(emps);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
-      toast.error('Erro ao carregar informações');
+      toast.error(mensagemDeErro(error, 'Erro ao carregar informações'));
     } finally {
       setLoading(false);
     }
@@ -116,7 +117,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
       loadData();
     } catch (error) {
       console.error('Erro ao atualizar:', error);
-      toast.error('Erro ao atualizar configuração');
+      toast.error(mensagemDeErro(error, 'Erro ao atualizar configuração'));
     }
   };
 
@@ -129,7 +130,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
       loadData();
     } catch (error) {
       console.error('Erro ao atualizar:', error);
-      toast.error('Erro ao atualizar configuração');
+      toast.error(mensagemDeErro(error, 'Erro ao atualizar configuração'));
     }
   };
 
@@ -145,7 +146,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
       loadData();
     } catch (error) {
       console.error('Erro ao atualizar:', error);
-      toast.error('Erro ao atualizar configuração');
+      toast.error(mensagemDeErro(error, 'Erro ao atualizar configuração'));
     }
   };
 
@@ -168,7 +169,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
       setShowPreview(true);
     } catch (error) {
       console.error('Erro ao gerar prévia:', error);
-      toast.error('Erro ao gerar prévia');
+      toast.error(mensagemDeErro(error, 'Erro ao gerar prévia'));
     }
   };
 
@@ -273,8 +274,8 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
         try {
           await handleGenerateBackup();
           toast.success('Backup gerado com sucesso');
-        } catch (_error) {
-          toast.error('Erro ao gerar backup');
+        } catch (err) {
+          toast.error(mensagemDeErro(err, 'Erro ao gerar backup'));
           return;
         }
       }
@@ -332,7 +333,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
         loadData();
       } catch (error) {
         console.error('Erro ao executar limpeza:', error);
-        toast.error('Erro ao executar limpeza');
+        toast.error(mensagemDeErro(error, 'Erro ao executar limpeza'));
 
         await createCleanupLog({
           user_id: userId,
@@ -344,7 +345,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
           backup_generated: false,
           backup_filename: null,
           status: 'error',
-          error_message: error instanceof Error ? error.message : 'Erro desconhecido',
+          error_message: mensagemDeErro(error, 'Erro ao executar limpeza'),
           execution_time_ms: null
         });
       } finally {

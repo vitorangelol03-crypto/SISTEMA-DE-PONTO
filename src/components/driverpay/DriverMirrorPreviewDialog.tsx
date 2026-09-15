@@ -24,6 +24,7 @@ import {
 } from '../../utils/driverMirrorGenerator';
 import { ModalShell } from './ModalShell';
 import { formatBRLIf, formatInt, sanitizeFile, type AlreadyDeductedDriver } from './driverPayShared';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 export type MirrorRequest =
   | { mode: 'individual'; data: DriverMirrorData }
@@ -612,7 +613,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       onClose();
     } catch (e) {
       console.error('Erro ao gerar espelho:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao gerar espelho');
+      toast.error(mensagemDeErro(e, 'Erro ao gerar espelho'));
     } finally {
       setGenerating(false);
     }
@@ -669,7 +670,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       await salvarPrazoComoPadrao();
       await onPublish(allowed, modoDesconto, nfDueAt, cutoff);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao publicar no app');
+      toast.error(mensagemDeErro(e, 'Erro ao publicar no app'));
     } finally {
       setPublishing(false);
     }
@@ -682,7 +683,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
     try {
       await onUnpublish();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao despublicar');
+      toast.error(mensagemDeErro(e, 'Erro ao despublicar'));
     } finally {
       setUnpublishing(false);
     }

@@ -27,6 +27,7 @@ import {
   type DriverPlatform,
 } from '../../services/driverPay';
 import { formatInt } from './driverPayShared';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 const PLATFORM_LABEL: Record<string, string> = { imile: 'iMile', shopee: 'Shopee', anjun: 'Anjun', loggi: 'LOGGI' };
 
@@ -101,7 +102,7 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
         setResolutions({});
         if (parsed.warnings.length) parsed.warnings.forEach((w) => toast(w, { icon: '⚠️' }));
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Erro ao ler planilha');
+        toast.error(mensagemDeErro(e, 'Erro ao ler planilha'));
       } finally {
         setParsing(false);
       }
@@ -186,7 +187,7 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
       await onImported();
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao importar planilha');
+      toast.error(mensagemDeErro(e, 'Erro ao importar planilha'));
     } finally {
       setApplying(false);
     }

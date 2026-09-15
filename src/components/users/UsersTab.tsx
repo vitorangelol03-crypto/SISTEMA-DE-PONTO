@@ -8,6 +8,7 @@ import { UserPermissions } from '../../types/permissions';
 import { PermissionsModal } from '../permissions/PermissionsModal';
 import { isMaster, PONTO_EDITOR_ID, isConfigurablePrivileged, canEditPrivilegedUserPermissions } from '../../config/masters';
 import toast from 'react-hot-toast';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface UsersTabProps {
   userId: string;
@@ -44,7 +45,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
       setUsers(data);
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
-      toast.error('Erro ao carregar usuários');
+      toast.error(mensagemDeErro(error, 'Erro ao carregar usuários'));
     } finally {
       setLoading(false);
     }
@@ -118,8 +119,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
       resetForm();
       loadUsers();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro ao criar supervisor';
-      toast.error(errorMessage);
+      toast.error(mensagemDeErro(error, 'Erro ao criar supervisor'));
     }
   };
 
@@ -144,8 +144,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
       loadUsers();
     } catch (error) {
       console.error('Erro ao excluir supervisor:', error);
-      const message = error instanceof Error ? error.message : 'Erro ao excluir supervisor';
-      toast.error(message);
+      toast.error(mensagemDeErro(error, 'Erro ao excluir supervisor'));
     }
   };
 
@@ -179,8 +178,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
       closeEdit();
       loadUsers();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erro ao atualizar usuário';
-      toast.error(message);
+      toast.error(mensagemDeErro(error, 'Erro ao atualizar usuário'));
     } finally {
       setSavingEdit(false);
     }
@@ -204,8 +202,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
         { duration: 10000 },
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erro ao redefinir senha';
-      toast.error(message);
+      toast.error(mensagemDeErro(error, 'Erro ao redefinir senha'));
     } finally {
       setResettingId(null);
     }
@@ -235,7 +232,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
       setShowPermissionsModal(true);
     } catch (error) {
       console.error('Erro ao carregar permissões:', error);
-      toast.error('Erro ao carregar permissões');
+      toast.error(mensagemDeErro(error, 'Erro ao carregar permissões'));
     }
   };
 

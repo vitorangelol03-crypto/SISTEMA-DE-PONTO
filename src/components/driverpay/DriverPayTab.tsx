@@ -147,6 +147,7 @@ import { PlatformImportModal } from './PlatformImportModal';
 import { DriverImportLinksModal } from './DriverImportLinksModal';
 import { DriverMirrorPreviewDialog, type MirrorRequest } from './DriverMirrorPreviewDialog';
 import type { MirrorCutoffLine } from '../../utils/driverMirrorGenerator';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface DriverPayTabProps {
   userId: string;
@@ -391,7 +392,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       }
     } catch (e) {
       console.error('Erro ao carregar Pagamentos Driver:', e);
-      toast.error('Erro ao carregar dados de Pagamentos Driver');
+      toast.error(mensagemDeErro(e, 'Erro ao carregar dados de Pagamentos Driver'));
     } finally {
       setLoading(false);
     }
@@ -577,7 +578,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     } catch (e) {
       // Falha aqui NAO pode estragar a importacao, que ja terminou e deu certo.
       console.error('[reconferencia] falhou depois da importacao:', e);
-      toast.error('A planilha entrou, mas nao consegui reconferir os prints. Abra "Espelhos recebidos".');
+      toast.error(mensagemDeErro(e, 'A planilha entrou, mas nao consegui reconferir os prints. Abra "Espelhos recebidos".'));
     }
   }, [refresh, company?.id, userId, reloadProofs]);
 
@@ -673,7 +674,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         await rebuildFromServer(periodId);
       } catch (e) {
         console.error('Erro ao carregar período:', e);
-        toast.error('Erro ao carregar período');
+        toast.error(mensagemDeErro(e, 'Erro ao carregar período'));
       } finally {
         setLoading(false);
       }
@@ -717,7 +718,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         await upsertPackage(company.id, paymentId, platformName, rl.route, packages, rate, userId);
       } catch (e) {
         console.error('Erro ao salvar pacotes:', e);
-        toast.error('Erro ao salvar pacotes');
+        toast.error(mensagemDeErro(e, 'Erro ao salvar pacotes'));
         reloadPayments();
       }
     },
@@ -761,7 +762,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         await reloadPayments();
       } catch (e) {
         console.error('Erro ao renomear rota:', e);
-        toast.error('Erro ao renomear rota');
+        toast.error(mensagemDeErro(e, 'Erro ao renomear rota'));
         reloadPayments();
       }
     },
@@ -812,7 +813,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         await reloadPayments();
       } catch (e) {
         console.error('Erro ao remover rota:', e);
-        toast.error('Erro ao remover rota');
+        toast.error(mensagemDeErro(e, 'Erro ao remover rota'));
         reloadPayments();
       }
     },
@@ -853,7 +854,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         await upsertPackage(company.id, paymentId, platformName, rl.route, packages, rate, userId);
       } catch (e) {
         console.error('Erro ao salvar taxa da rota:', e);
-        toast.error('Erro ao salvar taxa');
+        toast.error(mensagemDeErro(e, 'Erro ao salvar taxa'));
         reloadPayments();
       }
     },
@@ -870,7 +871,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         await reloadPayments();
       } catch (e) {
         console.error('Erro ao atualizar nota fiscal:', e);
-        toast.error('Erro ao atualizar nota fiscal');
+        toast.error(mensagemDeErro(e, 'Erro ao atualizar nota fiscal'));
         reloadPayments();
       }
     },
@@ -901,7 +902,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         setPaymentMarks(await listPaymentMarks(company.id, selectedPeriod.id));
       } catch (e) {
         console.error('Erro ao desmarcar pagamento:', e);
-        toast.error(e instanceof Error ? e.message : 'Erro ao desmarcar pagamento');
+        toast.error(mensagemDeErro(e, 'Erro ao desmarcar pagamento'));
       }
     },
     [company?.id, selectedPeriod, hasPermission, userId],
@@ -951,7 +952,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         await reloadPayments();
       } catch (e) {
         console.error('Erro ao atualizar espelho conferido:', e);
-        toast.error('Erro ao atualizar espelho conferido');
+        toast.error(mensagemDeErro(e, 'Erro ao atualizar espelho conferido'));
         reloadPayments();
       }
     },
@@ -1127,7 +1128,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               toast.success(`Valor atualizado em ${fora.length} linha(s).`);
             } catch (e) {
               console.error('Erro ao sincronizar o valor por pacote:', e);
-              toast.error('Não consegui atualizar o valor dos pacotes.');
+              toast.error(mensagemDeErro(e, 'Não consegui atualizar o valor dos pacotes.'));
             }
           }
         }
@@ -1270,7 +1271,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           setMirror(null);
         } catch (e) {
           console.error('Falha ao publicar espelho de grupo', e);
-          toast.error('Não consegui publicar o espelho do grupo.');
+          toast.error(mensagemDeErro(e, 'Não consegui publicar o espelho do grupo.'));
         }
         return;
       }
@@ -1385,7 +1386,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       await reloadPublished(selectedPeriod.id);
       toast.success(n > 0 ? `${n} espelho(s) despublicado(s) do app.` : 'Nada estava publicado.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao despublicar todos.');
+      toast.error(mensagemDeErro(e, 'Erro ao despublicar todos.'));
     }
   }, [company, selectedPeriod, userId, reloadPublished]);
 
@@ -1525,14 +1526,14 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         } catch (e) {
           // O arquivo já foi baixado: não posso fingir que a marcação deu certo.
           console.error('[pagamento] falhou ao marcar como pago:', e);
-          toast.error('O relatório saiu, mas NÃO consegui marcar como pago. Gere de novo pra marcar.');
+          toast.error(mensagemDeErro(e, 'O relatório saiu, mas NÃO consegui marcar como pago. Gere de novo pra marcar.'));
         }
       }
       toast.success(kind === 'geral' ? 'Relatório gerado' : 'Relatório simples gerado');
       setReportModal(null);
     } catch (e) {
       console.error('Erro ao gerar relatório:', e);
-      toast.error('Erro ao gerar relatório');
+      toast.error(mensagemDeErro(e, 'Erro ao gerar relatório'));
     }
   };
 
@@ -2027,7 +2028,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
               toast.success('Quinzena reaberta — já pode editar');
               await refresh();
             } catch (e) {
-              toast.error(e instanceof Error ? e.message : 'Erro ao reabrir quinzena');
+              toast.error(mensagemDeErro(e, 'Erro ao reabrir quinzena'));
             }
           }}
           onEditPeriod={() => selectedPeriod && setEditPeriodModal({ period: selectedPeriod, confirmDelete: false })}

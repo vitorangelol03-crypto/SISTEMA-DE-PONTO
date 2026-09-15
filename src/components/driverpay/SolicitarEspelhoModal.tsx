@@ -23,6 +23,7 @@ import {
 import { expectedProofPlatforms, proofForaPorSemGrupo, type DriverRowData, type ProofRequest } from './driverPayShared';
 import { ModalShell } from './ModalShell';
 import { contemSemAcento } from '../../utils/buscaTexto';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface SolicitarEspelhoModalProps {
   companyId: string;
@@ -89,8 +90,8 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
         if (atuais.length === 0 || alvos.includes(null)) setEscopo('todos');
         else if (alvos.length === 1) { setEscopo('driver'); setDriverEscolhido(alvos[0] as string); }
         else setEscopo('manter');
-      } catch {
-        if (vivo) toast.error('Nao consegui carregar o que ja foi solicitado.');
+      } catch (err) {
+        if (vivo) toast.error(mensagemDeErro(err, 'Nao consegui carregar o que ja foi solicitado.'));
       } finally {
         if (vivo) setCarregando(false);
       }
@@ -200,7 +201,7 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
       try { await onChanged(); } catch (err) { console.error('[solicitar-espelho] recarga falhou:', err); }
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Nao consegui cancelar a solicitacao.');
+      toast.error(mensagemDeErro(e, 'Nao consegui cancelar a solicitacao.'));
     } finally {
       setCancelando(false);
     }
@@ -237,7 +238,7 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
       try { await onChanged(); } catch (err) { console.error('[solicitar-espelho] recarga falhou:', err); }
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Nao consegui salvar a solicitacao.');
+      toast.error(mensagemDeErro(e, 'Nao consegui salvar a solicitacao.'));
     } finally {
       setSalvando(false);
     }

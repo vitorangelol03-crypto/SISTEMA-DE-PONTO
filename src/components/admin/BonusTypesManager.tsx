@@ -9,6 +9,7 @@ import {
   deactivateBonusType,
   BonusTypeRecord,
 } from '../../services/database';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 const CODE_REGEX = /^[A-Z0-9]{1,6}$/;
 
@@ -47,7 +48,7 @@ export const BonusTypesManager: React.FC = () => {
       setItems(data);
     } catch (err) {
       console.error('Erro ao carregar tipos de bônus:', err);
-      toast.error('Erro ao carregar tipos de bonificação');
+      toast.error(mensagemDeErro(err, 'Erro ao carregar tipos de bonificação'));
     } finally {
       setLoading(false);
     }
@@ -128,11 +129,13 @@ export const BonusTypesManager: React.FC = () => {
       setEditing(null);
       await reload();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (/duplicate|unique|23505/i.test(msg)) {
+      // 15/09/2026: o erro do Supabase não é Error — antes virava "[object Object]" e o
+      // código repetido nunca era reconhecido.
+      const msg = mensagemDeErro(err, 'Erro ao salvar');
+      if (/duplicate|unique|23505|já existe/i.test(msg)) {
         toast.error(`Código "${code}" já existe nesta empresa`);
       } else {
-        toast.error(`Erro ao salvar: ${msg}`);
+        toast.error(msg);
       }
     } finally {
       setSaving(false);
@@ -157,8 +160,7 @@ export const BonusTypesManager: React.FC = () => {
       }
       await reload();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Erro: ${msg}`);
+      toast.error(mensagemDeErro(err, rec.active ? 'Erro ao desativar o tipo' : 'Erro ao reativar o tipo'));
     } finally {
       setActingId(null);
     }

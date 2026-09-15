@@ -16,6 +16,7 @@ import {
 } from '../../utils/bankHoursCalculator';
 import { parseNumericInput, isInRange } from '../../utils/numericInputHelpers';
 import { isMaster } from '../../config/masters';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 const DAY_LABELS: ReadonlyArray<{ index: number; label: string; short: string }> = [
   { index: 0, label: 'Domingo',  short: 'Dom' },
@@ -186,8 +187,7 @@ export const CompanySettings: React.FC = () => {
       // Recarrega o contexto pra refletir nas demais telas (ex.: schedule editado).
       await setCompany(company.id);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Erro ao salvar: ${msg}`);
+      toast.error(mensagemDeErro(err, 'Erro ao salvar'));
     } finally {
       setSaving(false);
     }

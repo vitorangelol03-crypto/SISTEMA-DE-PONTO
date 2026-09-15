@@ -6,6 +6,7 @@ import { getBonusTypes, BonusTypeRecord } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import { PONTO_EDITOR_ID, isConfigurablePrivileged, canEditPrivilegedUserPermissions } from '../../config/masters';
 import toast from 'react-hot-toast';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
   { id: 'fallback-B',  company_id: '', code: 'B',  name: 'Bônus B',  default_value: 0, order_index: 1, active: true, created_at: '', updated_at: '' },
@@ -97,7 +98,7 @@ export function PermissionsModal({
         toast.error(result.error || 'Erro ao salvar permissões');
       }
     } catch (error) {
-      toast.error('Erro ao salvar permissões');
+      toast.error(mensagemDeErro(error, 'Erro ao salvar permissões'));
       console.error(error);
     } finally {
       setSaving(false);

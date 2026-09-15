@@ -7,6 +7,7 @@ import { ModalShell } from './ModalShell';
 import { ImageLightbox } from './ImageLightbox';
 import { DiscountStatusPill } from './DiscountModal';
 import { formatBRLIf } from './driverPayShared';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface DiscountSearchModalProps {
   companyId: string;
@@ -47,7 +48,7 @@ export const DiscountSearchModal: React.FC<DiscountSearchModalProps> = ({ compan
         if (active) setRows(res);
       } catch (e) {
         console.error('Erro ao buscar descontos:', e);
-        if (active) toast.error('Erro ao buscar descontos');
+        if (active) toast.error(mensagemDeErro(e, 'Erro ao buscar descontos'));
       } finally {
         if (active) setLoading(false);
       }

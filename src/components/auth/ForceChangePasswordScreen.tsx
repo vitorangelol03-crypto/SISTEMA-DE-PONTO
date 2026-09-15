@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { KeyRound, Eye, EyeOff, LogOut } from 'lucide-react';
 import { changeOwnPassword } from '../../services/database';
 import toast from 'react-hot-toast';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface ForceChangePasswordScreenProps {
   userId: string;
@@ -39,7 +40,7 @@ export const ForceChangePasswordScreen: React.FC<ForceChangePasswordScreenProps>
       toast.success('Senha alterada com sucesso!');
       onChanged();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro ao trocar senha';
+      const message = mensagemDeErro(err, 'Erro ao trocar senha');
       setError(message);
       toast.error(message);
     } finally {

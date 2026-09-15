@@ -3,6 +3,7 @@ import { Pencil, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { updatePeriod, deletePeriod, type DriverPaymentPeriod } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface PeriodEditModalProps {
   period: DriverPaymentPeriod;
@@ -48,7 +49,7 @@ export const PeriodEditModal: React.FC<PeriodEditModalProps> = ({
       await onSaved();
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao salvar quinzena');
+      toast.error(mensagemDeErro(e, 'Erro ao salvar quinzena'));
     } finally {
       setSaving(false);
     }
@@ -62,7 +63,7 @@ export const PeriodEditModal: React.FC<PeriodEditModalProps> = ({
       await onDeleted();
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao excluir quinzena');
+      toast.error(mensagemDeErro(e, 'Erro ao excluir quinzena'));
     } finally {
       setDeleting(false);
     }

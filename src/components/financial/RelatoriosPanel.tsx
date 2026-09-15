@@ -38,6 +38,7 @@ import { montarRelatorio, type TipoRelatorio } from '../../utils/relatorios/rela
 import { baixarRelatorioExcel } from '../../utils/relatorios/relatorioExcel';
 import { baixarRelatorioPdf } from '../../utils/relatorios/relatorioPdf';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 type ModoDePeriodo = 'semana' | 'mes' | 'ano' | 'livre';
 
@@ -256,7 +257,7 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({ company, canVi
       );
     } catch (err) {
       console.error('Erro ao gerar o relatório:', err);
-      toast.error(err instanceof Error ? err.message : 'Não consegui gerar o relatório. Tente de novo.');
+      toast.error(mensagemDeErro(err, 'Não consegui gerar o relatório. Tente de novo.'));
     } finally {
       setGerando(null);
     }

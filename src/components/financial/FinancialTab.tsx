@@ -21,6 +21,7 @@ import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
 import { moneyBRL, HIDDEN_VALUE } from '../../utils/moneyMask';
 import { HistoricoPagamentos } from './HistoricoPagamentos';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 /* Lazy-load: o painel de relatórios puxa jsPDF e xlsx. Quem nunca abre a aba não
    paga por eles no carregamento da tela. */
@@ -368,7 +369,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       setPdfLote(null);
     } catch (err) {
       console.error('Erro ao gerar os recibos:', err);
-      toast.error('Não consegui gerar os recibos. Tente de novo.');
+      toast.error(mensagemDeErro(err, 'Não consegui gerar os recibos. Tente de novo.'));
     } finally {
       setPdfGerando(null);
     }
@@ -402,7 +403,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       setPdfLote(null);
     } catch (err) {
       console.error('Erro ao montar o caderno de recibos:', err);
-      toast.error('Não consegui montar o PDF. Tente de novo.');
+      toast.error(mensagemDeErro(err, 'Não consegui montar o PDF. Tente de novo.'));
     } finally {
       setPdfGerando(null);
     }
@@ -447,7 +448,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     } catch (err) {
       console.error('Erro ao publicar os recibos:', err);
       toast.error(
-        `${enviados > 0 ? `${enviados} publicados e parou aí. ` : ''}${err instanceof Error ? err.message : 'Falha ao publicar.'}`,
+        `${enviados > 0 ? `${enviados} publicados e parou aí. ` : ''}${mensagemDeErro(err, 'Falha ao publicar.')}`,
         { duration: 10000 },
       );
     } finally {
@@ -494,7 +495,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       processFinancialData(employeesData, paymentsData, attendancesData, errorRecordsData, triageData);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
-      toast.error('Erro ao carregar dados financeiros');
+      toast.error(mensagemDeErro(error, 'Erro ao carregar dados financeiros'));
     } finally {
       setLoading(false);
     }
@@ -638,7 +639,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           setHistPagamentos([]);
           setHistErros([]);
           setHistTrabalharam([]);
-          setHistErro(err instanceof Error ? err.message : 'Falha ao carregar o histórico.');
+          setHistErro(mensagemDeErro(err, 'Falha ao carregar o histórico.'));
         }
       } finally {
         if (!cancelled) setHistLoading(false);
@@ -766,7 +767,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       loadData();
     } catch (error) {
       console.error('Erro ao aplicar valores:', error);
-      toast.error('Erro ao aplicar valores');
+      toast.error(mensagemDeErro(error, 'Erro ao aplicar valores'));
     }
   };
 
@@ -809,7 +810,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       loadData();
     } catch (error) {
       console.error('Erro ao salvar:', error);
-      toast.error('Erro ao salvar pagamento');
+      toast.error(mensagemDeErro(error, 'Erro ao salvar pagamento'));
     }
   };
 
@@ -827,7 +828,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       loadData();
     } catch (error) {
       console.error('Erro ao excluir:', error);
-      toast.error('Erro ao excluir pagamento');
+      toast.error(mensagemDeErro(error, 'Erro ao excluir pagamento'));
     }
   };
 
@@ -887,7 +888,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       loadData();
     } catch (error) {
       console.error('Erro ao limpar pagamentos:', error);
-      toast.error('Erro ao limpar pagamentos');
+      toast.error(mensagemDeErro(error, 'Erro ao limpar pagamentos'));
     }
   };
 
@@ -1000,7 +1001,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       loadData();
     } catch (error) {
       console.error('Erro ao aplicar desconto:', error);
-      toast.error('Erro ao aplicar desconto por erros');
+      toast.error(mensagemDeErro(error, 'Erro ao aplicar desconto por erros'));
     }
   };
 
@@ -1022,7 +1023,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       setBonusRemovals(history);
     } catch (error) {
       console.error('Erro ao carregar histórico:', error);
-      toast.error('Erro ao carregar histórico de remoções');
+      toast.error(mensagemDeErro(error, 'Erro ao carregar histórico de remoções'));
     } finally {
       setLoadingHistory(false);
     }
@@ -2578,7 +2579,7 @@ const BankHoursApplyModal: React.FC<BankHoursApplyModalProps> = ({
       })
       .catch((err) => {
         if (cancelled) return;
-        setErrorMessage(err instanceof Error ? err.message : String(err));
+        setErrorMessage(mensagemDeErro(err, 'Não consegui prever o banco de horas'));
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };

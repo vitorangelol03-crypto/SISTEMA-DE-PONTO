@@ -11,6 +11,7 @@ import {
   DriverRowData, computeRowTotals, platformPackages, deductionsOf,
   marcasDoRelatorio, formatBRLIf,
 } from './driverPayShared';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface MarkPaidModalProps {
   /** Um driver (linha) ou todos os membros de um grupo — mesma tela pros dois casos. */
@@ -103,7 +104,7 @@ export const MarkPaidModal: React.FC<MarkPaidModalProps> = ({
       onClose();
     } catch (e) {
       console.error('Erro ao marcar pago manualmente:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro ao marcar como pago');
+      toast.error(mensagemDeErro(e, 'Erro ao marcar como pago'));
     } finally {
       setBusy(false);
     }

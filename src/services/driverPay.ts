@@ -20,6 +20,7 @@ import type { ProofRequest, PaymentMark } from '../components/driverpay/driverPa
 import { statusPorQuantidade, taxasDePlataformasQueExistem } from '../components/driverpay/driverPayShared';
 import { orphanProofPaths, proofFileName, isKeptProof, type ProofSlot } from '../utils/discountProofs';
 import { saldoDevedorDoPeriodo, type SaldoQuinzenaFechada } from '../utils/descontoSaldo';
+import { traduzirErroDoBanco, mensagemDeErro } from '../utils/mensagemDeErro';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -201,14 +202,16 @@ const num = (v: unknown): number => Number(v ?? 0);
  * "Erro ao renomear grupo" (bug real em prod, 2026-07-18).
  */
 export const throwDbError = (error: { message?: string; code?: string }): never => {
-  const msg = error.message ?? '';
-  if (error.code === 'PGRST301' || (/jwt/i.test(msg) && /expired|invalid/i.test(msg))) {
-    throw new Error('Sessão expirada — saia e faça login novamente para continuar.');
-  }
-  if (error.code === '23505' || /duplicate key/i.test(msg)) {
-    throw new Error('Já existe um registro com esse nome.');
-  }
-  throw new Error(msg || 'Erro de comunicação com o banco de dados.');
+  // 15/09/2026: as traduções (sessão expirada, nome repetido) passaram pra
+  // utils/mensagemDeErro — as outras telas usam as mesmas frases.
+  const traduzida = traduzirErroDoBanco(error);
+  if (traduzida) throw new Error(traduzida);
+  // O erro cru do banco (em inglês) sai MARCADO e com o código: a tela junta o
+  // contexto ("Erro ao salvar pacotes: …") em vez de mostrar só a frase técnica.
+  throw Object.assign(new Error(error.message || 'Erro de comunicação com o banco de dados.'), {
+    name: 'ErroDoBanco',
+    code: error.code,
+  });
 };
 
 /** Espelha validatePermission (privado no database.ts) com os helpers exportados. */
@@ -2492,7 +2495,7 @@ export const bulkImportDrivers = async (
       }
       created++;
     } catch (e) {
-      errors.push(`${s.name}: ${e instanceof Error ? e.message : String(e)}`);
+      errors.push(`${s.name}: ${mensagemDeErro(e, 'não cadastrou')}`);
     }
   }
   return { driversCreated: created, errors };

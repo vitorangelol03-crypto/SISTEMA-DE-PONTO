@@ -13,6 +13,7 @@ import {
   type ExpectedSchedule,
 } from '../utils/attendanceCalc';
 import { entraNaTriagem, TRIAGE_CONFIG_PADRAO, type TriageConfig } from '../utils/triagemFuncoes';
+import { mensagemDeErro } from '../utils/mensagemDeErro';
 
 // Sub-fase 11.8 — helper pra chamar edge fn employee-public-api (verify_jwt:false).
 // Substitui queries diretas em tabelas core (employees, attendance, face_*,
@@ -918,7 +919,7 @@ export const bulkCreateEmployees = async (
         row: rowNumber,
         name: employee.name,
         cpf: employee.cpf,
-        error: error instanceof Error ? error.message : 'Erro ao inserir funcionário'
+        error: mensagemDeErro(error, 'Erro ao inserir funcionário')
       });
     }
   }

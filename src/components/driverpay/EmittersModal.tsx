@@ -15,6 +15,7 @@ import {
   setPlatformNotaEmitter,
 } from '../../services/driverPay';
 import { ModalShell } from './ModalShell';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface EmittersModalProps {
   companyId: string;
@@ -42,8 +43,8 @@ export const EmittersModal: React.FC<EmittersModalProps> = ({ companyId, userId,
     setLoading(true);
     try {
       setEmitters(await getNotaEmitters(companyId, false)); // inclui inativos (pra reativar)
-    } catch {
-      toast.error('Não consegui carregar os CNPJs.');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Não consegui carregar os CNPJs.'));
     } finally {
       setLoading(false);
     }
@@ -70,7 +71,7 @@ export const EmittersModal: React.FC<EmittersModalProps> = ({ companyId, userId,
       await onSaved();
       toast.success('CNPJ cadastrado.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não consegui cadastrar.');
+      toast.error(mensagemDeErro(e, 'Não consegui cadastrar.'));
     } finally { setBusy(false); }
   };
 
@@ -87,7 +88,7 @@ export const EmittersModal: React.FC<EmittersModalProps> = ({ companyId, userId,
       await onSaved();
       toast.success('CNPJ atualizado.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não consegui salvar.');
+      toast.error(mensagemDeErro(e, 'Não consegui salvar.'));
     } finally { setBusy(false); }
   };
 
@@ -98,7 +99,7 @@ export const EmittersModal: React.FC<EmittersModalProps> = ({ companyId, userId,
       await loadEmitters();
       await onSaved();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Não consegui alterar.');
+      toast.error(mensagemDeErro(err, 'Não consegui alterar.'));
     } finally { setBusy(false); }
   };
 
@@ -108,7 +109,7 @@ export const EmittersModal: React.FC<EmittersModalProps> = ({ companyId, userId,
       await setPlatformNotaEmitter(platformId, userId, emitterId);
       await onSaved();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Não consegui vincular.');
+      toast.error(mensagemDeErro(e, 'Não consegui vincular.'));
       setLinks((prev) => ({ ...prev, [platformId]: platforms.find((p) => p.id === platformId)?.nota_emitter_id ?? null }));
     }
   };
