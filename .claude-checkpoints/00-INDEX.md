@@ -3,6 +3,25 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 SESSÃO 14/09 — A NOTA DIVIDIDA FOI USADA DE VERDADE E PASSOU.** Detalhe em
+> **`CHECKPOINT_SESSAO_2026-09-14.md`**. Nenhum código mudou.
+>
+> ✅ **Gessiley mandou 4 notas em 14/09 (15:12–15:17)**, todas validadas: Shopee
+> 7.238 + 7.238 (Joaerson e Gessiley) e iMile 752,30 + 752,30 (Gessiley e Joaerson).
+> Conferido no banco: tomador certo em cada PDF, emissores diferentes, valor exato,
+> soma = espelho (R$ 15.980,60), 30 min respeitados, PDFs no bucket. ⚠️ Aparecem
+> **atrasadas** (prazo era 04/09 17:00).
+>
+> ⏳ **Antes de pagar:** gerar o relatório simples e o geral e conferir as **4 linhas
+> com o PIX de cada um** — pelo código e pelo teste (21/21) sai certo, mas nunca rodou
+> com dado real.
+>
+> 📄 **Guia pro entregador:** `C:\Users\VICTOR\Desktop\Como-dividir-a-nota.pdf`
+> (7 páginas, formato celular). Imita a tela do app — se a tela mudar, fica defasado.
+>
+> 📌 **Regra do Victor:** "não gasta token atoa" — pergunta de status é resposta
+> direta, sem agentes.
+>
 > **📌 SESSÃO 12/09 (tarde) — RELATÓRIOS NO FINANCEIRO + UM ESTRAGO DE TESTE
 > CONSERTADO.** Detalhe em **`CHECKPOINT_SESSAO_2026-09-12.md`** — o §0 tem o
 > estado final; §6-§10 a tarde; §11 a validação; §12 o deploy conferido em 14/09.
@@ -1920,7 +1939,8 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-09-12.md` | **Mais recente.** Manhã: aprovação de ponto removida (coluna + código; a correção manual de horário ficou quebrada 03:43–09:10 até o push). Tarde: relatórios dentro do Financeiro (ponto · financeiro · geral × PDF e planilha; aba Relatórios removida); spec 42 aplicava banco de horas em 23 funcionários REAIS — raiz corrigida (specs em 2037 + trava de 1 pessoa) e saldo restaurado (migration `20260912153353`); espelho saía 0h em 905 dias (+6.168h); adicional noturno nunca calculado (decisão pendente); `public-api-v1` v6. Suíte 101/1.527 verde; deploy conferido byte a byte em 14/09. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-14.md` | **Mais recente.** Sem código. Nota dividida no primeiro uso real: Gessiley mandou as 4 notas (Shopee 7.238 + 7.238, iMile 752,30 + 752,30), todas validadas e conferidas no banco (tomador, emissores, valor, soma = espelho, 30 min, PDFs no bucket); relatório com 4 PIX conferido no código + unit 21/21, falta gerar com dado real antes de pagar. Guia em PDF pro entregador na Área de Trabalho. Regra "não gasta token atoa". | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-12.md` | Manhã: aprovação de ponto removida (coluna + código; a correção manual de horário ficou quebrada 03:43–09:10 até o push). Tarde: relatórios dentro do Financeiro (ponto · financeiro · geral × PDF e planilha; aba Relatórios removida); spec 42 aplicava banco de horas em 23 funcionários REAIS — raiz corrigida (specs em 2037 + trava de 1 pessoa) e saldo restaurado (migration `20260912153353`); espelho saía 0h em 905 dias (+6.168h); adicional noturno nunca calculado (decisão pendente); `public-api-v1` v6. Suíte 101/1.527 verde; deploy conferido byte a byte em 14/09. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-11.md` | Etapa 2 do Financeiro: erro de R$ 82.980 (semanas sobrepostas → regra do dono único), recibos em lote + publicar pro funcionário (bucket privado), carimbo do vínculo, nome do banco fora de tudo, semanas gêmeas, "pago" que era automático, semana nascendo deslocada depois das 21h. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-10.md` | Nota dividida virou de lado: cada CNPJ é um bloco fechado (Shopee não mistura com iMile); trava do backend invertida; `--no-isolate` faz mock vazar entre arquivos. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-09.md` | Pagamento C6 virou botão dentro do Financeiro; espelho saía sem o prazo da nota (13 republicados); hora na tela de anexar nota (caso JESSICA). §15 = estado de encerramento. | 🟢 ATIVO |
