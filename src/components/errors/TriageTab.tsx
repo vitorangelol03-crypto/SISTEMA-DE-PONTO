@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Plus, Trash2, RefreshCw, Calculator, CheckCircle2, Package, DollarSign } from 'lucide-react';
+import { AlertTriangle, Plus, Trash2, RefreshCw, Calculator, CheckCircle2, Package, DollarSign, Briefcase } from 'lucide-react';
 import {
   getTriageErrors,
   insertTriageError,
@@ -7,6 +7,9 @@ import {
   computeTriageDistribution,
   distributeTriageErrors,
   getEmployeesPresentInPeriod,
+  getTriageConfig,
+  saveTriageConfig,
+  getFunctionRoles,
   TriageError,
   TriageDistributionPreview,
   TriageType,
@@ -15,6 +18,7 @@ import { useCompany } from '../../contexts/useCompany';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { moneyBRL } from '../../utils/moneyMask';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
+import { entraNaTriagem, marcarFuncao, type TriageConfig } from '../../utils/triagemFuncoes';
 import toast from 'react-hot-toast';
 
 interface TriageTabProps {
@@ -41,7 +45,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
     observations: '',
   });
   const [saving, setSaving] = useState(false);
-  const [presentCount, setPresentCount] = useState<number | null>(null);
+  const [presentList, setPresentList] = useState<Array<{ function_role: string | null }> | null>(null);
   // Registros que JÁ existem na data escolhida (aviso informativo — vários
   // registros por dia são permitidos, este lançamento soma, não substitui).
   const [existingDayRecords, setExistingDayRecords] = useState<TriageError[]>([]);
@@ -54,6 +58,18 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
   const [preview, setPreview] = useState<Preview | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [confirming, setConfirming] = useState(false);
+
+  // 15/09/2026: quem entra no desconto é escolhido por função e fica salvo por
+  // empresa. null = ainda carregando.
+  const [triageConfig, setTriageConfig] = useState<TriageConfig | null>(null);
+  const [functionRoles, setFunctionRoles] = useState<string[]>([]);
+  const [configStatus, setConfigStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const podeMudarQuemEntra = hasPermission('errors.distributeTriage');
+
+  // "Será dividido entre N presentes" conta só quem entra no desconto.
+  const presentCount = presentList === null || triageConfig === null
+    ? null
+    : presentList.filter(p => entraNaTriagem(p.function_role, triageConfig)).length;
 
   const loadRecords = React.useCallback(async () => {
     if (!company?.id) return;
@@ -80,16 +96,40 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
 
   useEffect(() => {
     if (!company?.id) {
-      setPresentCount(null);
+      setTriageConfig(null);
+      setFunctionRoles([]);
+      return;
+    }
+    let cancelled = false;
+    setTriageConfig(null);
+    setConfigStatus('idle');
+    Promise.all([getTriageConfig(company.id), getFunctionRoles(company.id)])
+      .then(([config, roles]) => {
+        if (cancelled) return;
+        setTriageConfig(config);
+        setFunctionRoles(roles);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (cancelled) return;
+        setConfigStatus('error');
+        toast.error(mensagemDeErro(err, 'Erro ao carregar quem entra no desconto'));
+      });
+    return () => { cancelled = true; };
+  }, [company?.id]);
+
+  useEffect(() => {
+    if (!company?.id) {
+      setPresentList(null);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
         const list = await getEmployeesPresentInPeriod(formData.date, formData.date, company.id);
-        if (!cancelled) setPresentCount(list.length);
+        if (!cancelled) setPresentList(list);
       } catch {
-        if (!cancelled) setPresentCount(null);
+        if (!cancelled) setPresentList(null);
       }
     })();
     return () => { cancelled = true; };
@@ -181,6 +221,32 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
     }
   };
 
+  // Marcou ou desmarcou: salva na hora. Trava as caixinhas enquanto salva, senão
+  // dois cliques rápidos podiam gravar fora de ordem.
+  const handleToggleFuncao = async (funcao: string | null, entra: boolean) => {
+    if (!triageConfig || !company?.id) return;
+    if (!podeMudarQuemEntra) {
+      toast.error('Sem permissão para mudar quem entra no desconto');
+      return;
+    }
+    const anterior = triageConfig;
+    const nova = funcao === null
+      ? { ...triageConfig, excludeNoFunction: !entra }
+      : marcarFuncao(triageConfig, funcao, entra);
+    setTriageConfig(nova);
+    setPreview(null);
+    setConfigStatus('saving');
+    try {
+      await saveTriageConfig(company.id, nova, userId);
+      setConfigStatus('saved');
+    } catch (err) {
+      console.error(err);
+      setTriageConfig(anterior);
+      setConfigStatus('error');
+      toast.error(mensagemDeErro(err, 'Erro ao salvar quem entra no desconto'));
+    }
+  };
+
   const handleCalculate = async () => {
     if (!hasPermission('errors.distributeTriage')) {
       toast.error('Sem permissão para distribuir erros');
@@ -209,7 +275,9 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
         return;
       }
       if (result.perEmployee.length === 0) {
-        toast.error('Nenhum funcionário presente nos dias com erro');
+        toast.error(result.excludedEmployees.length > 0
+          ? 'Nenhum funcionário das funções marcadas presente nos dias com erro'
+          : 'Nenhum funcionário presente nos dias com erro');
         setPreview(null);
         return;
       }
@@ -505,6 +573,52 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
           </div>
         </div>
 
+        <div className="mt-4 border border-gray-200 rounded-md p-3" data-testid="triagem-quem-entra">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-sm font-medium text-gray-800 flex items-center gap-1">
+              <Briefcase className="w-4 h-4" />
+              Quem entra no desconto
+            </span>
+            <span className="text-xs text-gray-500" aria-live="polite">
+              {configStatus === 'saving' && 'Salvando...'}
+              {configStatus === 'saved' && '✓ Salvo'}
+            </span>
+          </div>
+          {triageConfig === null ? (
+            <p className="text-sm text-gray-500">
+              {configStatus === 'error' ? 'Não foi possível carregar as funções.' : 'Carregando funções...'}
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {functionRoles.map(role => (
+                <label key={role} className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={entraNaTriagem(role, triageConfig)}
+                    onChange={(e) => handleToggleFuncao(role, e.target.checked)}
+                    disabled={!podeMudarQuemEntra || configStatus === 'saving'}
+                    title={podeMudarQuemEntra ? '' : 'Você não tem permissão para mudar quem entra no desconto'}
+                  />
+                  {role}
+                </label>
+              ))}
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={!triageConfig.excludeNoFunction}
+                  onChange={(e) => handleToggleFuncao(null, e.target.checked)}
+                  disabled={!podeMudarQuemEntra || configStatus === 'saving'}
+                  title={podeMudarQuemEntra ? '' : 'Você não tem permissão para mudar quem entra no desconto'}
+                />
+                Sem função
+              </label>
+            </div>
+          )}
+          <p className="mt-2 text-xs text-gray-500">
+            Desmarcado fica fora da divisão. A escolha fica salva pra empresa; função nova entra marcada.
+          </p>
+        </div>
+
         {preview && (
           <div className="mt-6 border-2 border-blue-200 rounded-lg p-4 bg-blue-50">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 text-sm">
@@ -575,6 +689,13 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
                 ))}
               </div>
             </div>
+
+            {preview.excludedEmployees.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4 text-sm text-amber-900" data-testid="triagem-fora-do-desconto">
+                <span className="font-medium">Ficaram de fora do desconto ({preview.excludedEmployees.length}):</span>{' '}
+                {preview.excludedEmployees.map(e => `${e.name} (${e.function_role ?? 'sem função'})`).join(', ')}
+              </div>
+            )}
 
             <div className="flex items-center justify-between">
               <div className="text-sm">

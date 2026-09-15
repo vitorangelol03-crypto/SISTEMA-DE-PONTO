@@ -25,6 +25,7 @@ import {
  *  - Funcionário ausente não recebe triagem
  *  - Confirmar a distribuição grava de verdade (cabeçalho + parte de cada um)
  *  - Erro do banco aparece na tela com a causa real
+ *  - Função desmarcada fica fora do desconto, e a escolha fica salva
  */
 
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}ErrCompl `;
@@ -284,5 +285,87 @@ test.describe('Errors — completo', () => {
     const { data, error } = await getClient().from('triage_errors').select('id').eq('date', SAFE_DATE);
     expect(error).toBeNull();
     expect(data ?? []).toHaveLength(0);
+  });
+
+  // 15/09/2026: o administrativo de Caratinga entrava no desconto da triagem.
+  // Agora quem entra é escolhido por função e fica salvo por empresa. O teste mexe
+  // na configuração REAL da empresa (só com funções que existem no teste) e devolve
+  // a original no fim, aconteça o que acontecer.
+  test('triagem — função desmarcada fica fora do desconto, e a escolha fica salva', async ({ page }) => {
+    const s = getClient();
+    const FUNCAO_ENTRA = 'PW Func Entra';
+    const FUNCAO_FORA = 'PW Func Fora';
+    const empEntra = await createTestEmployee({ name: `${PREFIX}FuncEntra`, withPix: false, functionRole: FUNCAO_ENTRA });
+    const empFora = await createTestEmployee({ name: `${PREFIX}FuncFora`, withPix: false, functionRole: FUNCAO_FORA });
+    const { data: emp, error: empErr } = await s.from('employees').select('company_id').eq('id', empEntra).single();
+    expect(empErr).toBeNull();
+    const companyId: string = emp!.company_id;
+    const { data: original, error: origErr } = await s.from('triage_config').select('*').eq('company_id', companyId).maybeSingle();
+    expect(origErr).toBeNull();
+    const foraAntes: string[] = original?.excluded_function_roles ?? [];
+
+    try {
+      await insertAttendance(empEntra, SAFE_DATE);
+      await insertAttendance(empFora, SAFE_DATE);
+      await upsertTriageError(SAFE_DATE, { triage_type: 'quantity', error_count: 6 });
+
+      await goToTab(page, 'Erros');
+      await page.getByRole('button', { name: /^Triagem$/ }).click();
+      const quemEntra = page.getByTestId('triagem-quem-entra');
+      await quemEntra.getByRole('checkbox', { name: FUNCAO_FORA }).uncheck();
+      await expect(quemEntra.getByText('✓ Salvo')).toBeVisible({ timeout: 10_000 });
+
+      // Ficou salvo de verdade: recarrega a página e a escolha continua lá.
+      await page.reload();
+      await goToTab(page, 'Erros');
+      await page.getByRole('button', { name: /^Triagem$/ }).click();
+      await expect(quemEntra.getByRole('checkbox', { name: FUNCAO_FORA })).not.toBeChecked({ timeout: 10_000 });
+      await expect(quemEntra.getByRole('checkbox', { name: FUNCAO_ENTRA })).toBeChecked();
+
+      const dateInputs = page.locator('input[type="date"]');
+      await dateInputs.nth(1).fill(SAFE_DATE);
+      await dateInputs.nth(2).fill(SAFE_DATE);
+      await page.locator('input[type="number"]').nth(1).fill('1'); // R$ 1 por pacote
+      await page.getByRole('button', { name: /^Calcular$/ }).click();
+
+      // Só quem entra divide os 6 pacotes; quem ficou fora aparece avisado, não some.
+      await expect(page.locator('body')).toContainText(/6\s*pacotes\s*÷\s*1\s*presentes/, { timeout: 10_000 });
+      await expect(page.locator('body')).toContainText(/Total a descontar:\s*R\$\s*6,00/);
+      await expect(page.getByTestId('triagem-fora-do-desconto')).toContainText(`${PREFIX}FuncFora (${FUNCAO_FORA})`);
+
+      page.once('dialog', (dialog) => dialog.accept());
+      await page.getByRole('button', { name: /Confirmar Distribuição/ }).click();
+      await expect(page.getByText(/Distribuição realizada!.*1 funcionários/)).toBeVisible({ timeout: 15_000 });
+
+      const { data: dists, error: distErr } = await s
+        .from('triage_error_distributions')
+        .select('id')
+        .eq('period_start', SAFE_DATE)
+        .eq('period_end', SAFE_DATE);
+      expect(distErr).toBeNull();
+      expect(dists).toHaveLength(1);
+      const { data: rows, error: rowsErr } = await s
+        .from('triage_distribution_employees')
+        .select('employee_id, errors_share, value_deducted')
+        .eq('distribution_id', dists![0].id);
+      expect(rowsErr).toBeNull();
+      expect((rows ?? []).map(r => ({ employee_id: r.employee_id, errors_share: r.errors_share, value_deducted: Number(r.value_deducted) })))
+        .toEqual([{ employee_id: empEntra, errors_share: 6, value_deducted: 6 }]);
+
+      // Desmarcar uma função não apaga as que já estavam fora (ex.: o administrativo).
+      const { data: salvo, error: salvoErr } = await s
+        .from('triage_config')
+        .select('excluded_function_roles')
+        .eq('company_id', companyId)
+        .single();
+      expect(salvoErr).toBeNull();
+      expect([...salvo!.excluded_function_roles].sort()).toEqual([...foraAntes, FUNCAO_FORA].sort());
+    } finally {
+      if (original) {
+        await s.from('triage_config').upsert([original], { onConflict: 'company_id' });
+      } else {
+        await s.from('triage_config').delete().eq('company_id', companyId);
+      }
+    }
   });
 });

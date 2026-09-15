@@ -12,6 +12,7 @@ import {
   type AttendanceMarkings,
   type ExpectedSchedule,
 } from '../utils/attendanceCalc';
+import { entraNaTriagem, TRIAGE_CONFIG_PADRAO, type TriageConfig } from '../utils/triagemFuncoes';
 
 // Sub-fase 11.8 — helper pra chamar edge fn employee-public-api (verify_jwt:false).
 // Substitui queries diretas em tabelas core (employees, attendance, face_*,
@@ -2351,10 +2352,10 @@ export const getEmployeesPresentInPeriod = async (
   startDate: string,
   endDate: string,
   companyId: string
-): Promise<{ employee_id: string; name: string; days_present: number }[]> => {
+): Promise<{ employee_id: string; name: string; function_role: string | null; days_present: number }[]> => {
   const { data, error } = await supabase
     .from('attendance')
-    .select('employee_id, employees(name)')
+    .select('employee_id, employees(name, function_role)')
     .eq('status', 'present')
     .gte('date', startDate)
     .lte('date', endDate)
@@ -2362,19 +2363,60 @@ export const getEmployeesPresentInPeriod = async (
 
   if (error) throw error;
 
-  const map = new Map<string, { employee_id: string; name: string; days_present: number }>();
-  (data || []).forEach((att: { employee_id: string; employees: { name: string } | { name: string }[] | null }) => {
+  const map = new Map<string, { employee_id: string; name: string; function_role: string | null; days_present: number }>();
+  (data || []).forEach((att: { employee_id: string; employees: { name: string; function_role: string | null } | { name: string; function_role: string | null }[] | null }) => {
     const emp = Array.isArray(att.employees) ? att.employees[0] : att.employees;
     const name = emp?.name || '';
     const entry = map.get(att.employee_id);
     if (entry) {
       entry.days_present += 1;
     } else {
-      map.set(att.employee_id, { employee_id: att.employee_id, name, days_present: 1 });
+      map.set(att.employee_id, { employee_id: att.employee_id, name, function_role: emp?.function_role ?? null, days_present: 1 });
     }
   });
 
   return Array.from(map.values()).sort((a, b) => b.days_present - a.days_present);
+};
+
+/**
+ * Quem entra no desconto da triagem, por função, salvo por empresa (15/09/2026).
+ * Sem linha salva = todo mundo entra, como sempre foi.
+ */
+export const getTriageConfig = async (companyId: string): Promise<TriageConfig> => {
+  const { data, error } = await supabase
+    .from('triage_config')
+    .select('excluded_function_roles, exclude_no_function')
+    .eq('company_id', companyId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return TRIAGE_CONFIG_PADRAO;
+  return {
+    excludedFunctionRoles: data.excluded_function_roles ?? [],
+    excludeNoFunction: data.exclude_no_function ?? false,
+  };
+};
+
+/** Mudar quem entra é de quem pode distribuir (decisão do Victor); o banco trava igual. */
+export const saveTriageConfig = async (
+  companyId: string,
+  config: TriageConfig,
+  userId: string
+): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'errors.distributeTriage');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  const { error } = await supabase
+    .from('triage_config')
+    .upsert([{
+      company_id: companyId,
+      excluded_function_roles: config.excludedFunctionRoles,
+      exclude_no_function: config.excludeNoFunction,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    }], { onConflict: 'company_id' });
+  if (error) throw error;
 };
 
 export interface TriageDistributionPreview {
@@ -2400,6 +2442,8 @@ export interface TriageDistributionPreview {
   }>;
   totalEmployees: number;
   totalDeducted: number;
+  /** Presentes no período que ficaram FORA da divisão pela função (15/09/2026). */
+  excludedEmployees: Array<{ employee_id: string; name: string; function_role: string | null }>;
 }
 
 /**
@@ -2426,7 +2470,10 @@ export const computeTriageDistribution = async (
     throw new Error(viewCheck.error || 'Permissão negada');
   }
 
-  const triageErrors = await getTriageErrors(startDate, endDate, companyId);
+  const [triageErrors, config] = await Promise.all([
+    getTriageErrors(startDate, endDate, companyId),
+    getTriageConfig(companyId),
+  ]);
   const daysWithErrors = triageErrors.filter(e => {
     const type = (e.triage_type ?? 'quantity') as TriageType;
     return type === 'value'
@@ -2445,15 +2492,32 @@ export const computeTriageDistribution = async (
 
   const { data: allAttendance, error: attErr } = await supabase
     .from('attendance')
-    .select('employee_id, date, employees(name)')
+    .select('employee_id, date, employees(name, function_role)')
     .eq('status', 'present')
     .gte('date', startDate)
     .lte('date', endDate)
     .eq('company_id', companyId);
   if (attErr) throw attErr;
 
-  type Att = { employee_id: string; date: string; employees: { name: string } | { name: string }[] | null };
-  const attendance = (allAttendance || []) as Att[];
+  type AttEmployee = { name: string; function_role: string | null };
+  type Att = { employee_id: string; date: string; employees: AttEmployee | AttEmployee[] | null };
+  const funcionarioDa = (att: Att) => (Array.isArray(att.employees) ? att.employees[0] : att.employees);
+  const presencas = (allAttendance || []) as Att[];
+
+  // 15/09/2026: só entra na divisão quem é de função marcada na configuração da
+  // triagem (o administrativo de Caratinga entrava no desconto). Quem ficou de fora
+  // volta na prévia, pra ninguém sumir calado.
+  const attendance = presencas.filter(att => entraNaTriagem(funcionarioDa(att)?.function_role, config));
+  const excludedById = new Map<string, TriageDistributionPreview['excludedEmployees'][number]>();
+  presencas.forEach(att => {
+    const emp = funcionarioDa(att);
+    if (entraNaTriagem(emp?.function_role, config) || excludedById.has(att.employee_id)) return;
+    excludedById.set(att.employee_id, {
+      employee_id: att.employee_id,
+      name: emp?.name || '',
+      function_role: emp?.function_role?.trim() || null,
+    });
+  });
 
   const employeeInfo = new Map<string, { name: string; days_present: number }>();
   attendance.forEach(att => {
@@ -2578,6 +2642,8 @@ export const computeTriageDistribution = async (
     perEmployee,
     totalEmployees: perEmployee.length,
     totalDeducted,
+    excludedEmployees: Array.from(excludedById.values())
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
   };
 };
 

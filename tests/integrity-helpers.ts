@@ -36,6 +36,8 @@ export interface CreateEmployeeOpts {
    * ponto; os demais ficam como sempre (sem rosto).
    */
   faceRegistered?: boolean;
+  /** function_role — a triagem decide quem entra no desconto pela função (15/09/2026). */
+  functionRole?: string;
 }
 
 /** Descriptor de 128 números — não precisa ser um rosto de verdade, só passar
@@ -61,6 +63,9 @@ export async function createTestEmployee(opts: CreateEmployeeOpts): Promise<stri
   if (opts.pin) {
     row.pin = opts.pin;
     row.pin_configured = true;
+  }
+  if (opts.functionRole) {
+    row.function_role = opts.functionRole;
   }
   if (opts.faceRegistered) {
     row.face_registered = true;
