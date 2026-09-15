@@ -176,5 +176,50 @@ Push `4319ebe..fdf70f7` (leva 2 `3d4c8eb` + leva 3 `fdf70f7`). **Conferido às 1
 1. Victor: distribuir Caratinga 07–12/09 (conferir "Ficaram de fora (3)") e **aplicar
    "Descontar Erros"** nos erros individuais antes de gerar o arquivo de pagamento.
 2. Semana 31/08–06/09 já está `paid` — triagem dela segue sem distribuir (decisão dele).
-3. Avisados, não mexidos: mensagem genérica nas outras telas (Erros individuais,
-   Períodos, C6); `tests/10` apaga triagem por data sem filtrar empresa.
+3. Avisados, não mexidos: `tests/10` apaga triagem por data sem filtrar empresa.
+
+---
+
+## 9. Leva 4 — mensagem de erro real nas outras telas (pedido do Victor)
+
+Escopo = as três telas citadas a ele, só em `catch` com erro de verdade (validações
+como "Selecione um funcionário" já dizem o motivo e ficaram):
+- **Erros individuais** (`ErrorsTab`): carregar, salvar, excluir (3).
+- **Períodos** (`PaymentPeriodsTab`): carregar, criar, fechar período, fechar, config (5).
+- **Arquivo de pagamento** (`C6PaymentTab`): carregar funcionários, importar, confirmar
+  pagamento (mantém "Tente de novo."), gerar planilha ×3 (6).
+- Silenciosos de propósito, não mexidos: aviso do dia no formulário de erro e a busca
+  das semanas no arquivo (falhar não pode travar a tela).
+- **Fora do escopo:** o mesmo padrão existe em **36 arquivos** de `src/components`
+  (267 `catch`) — avisado, não mexido.
+
+Validação: typecheck 0 · lint 0 · build limpo. E2E novo em `tests/10` com erro REAL do
+banco no formulário de erro individual (quantidade 99999999999 → 22003; conferido antes
+que a semana paga que cobre 29/04/2026 é de Ponte Nova e não interfere) — **vermelho com
+a tela antiga, verde com a nova**. Bateria das 3 telas (`tests/10, 14, 19, 20, 113, 114`):
+**35 verdes, 1 vermelho**.
+
+### 9.1 O vermelho: `tests/19` "fechar período: status open → paid" — teste desatualizado
+- Clicava num botão "Fechar" que não existe mais e esperava `paid`. Desde `aee3cb7`
+  (11/09) o botão é **"Encerrar"** e deixa `closed` (aguardando a confirmação do
+  pagamento). O spec era de 11/05.
+- **Provado que não é da mudança de hoje:** com o `PaymentPeriodsTab` retirado (stash), falha
+  igual.
+- Mostrado ao Victor antes de mexer; **OK dele** ("2 sim") → atualizado (`7310443`): clica em
+  "Encerrar", espera a mensagem (não mais `waitForTimeout`) e confere `closed` sem
+  `paid_at`/`paid_by`. Spec 19: **5/5** — o "criar período" tropeçou 1× no clique da aba com
+  o servidor frio (beforeEach) e passou no retry; na rodada anterior passou de primeira.
+- Commits: `90621c3` (telas) + `7310443` (teste), push `008d602..7310443`.
+- **No ar, conferido às 16:14:** `index-CerzSfAh.js` (sha `d73d8f36f2c9…`), `ErrorsTab-DwAdK2nB.js`
+  (sha `ee953ae02a42…`) e `C6PaymentTab-CRwPyUVT.js` (sha `d016b5dfd084…`) **idênticos byte a
+  byte** ao `dist/` local, com as mensagens novas dentro.
+
+### 9.2 O que o banco mostrou da semana 07–13/09 (sem mexer em nada)
+- **O Victor confirmou a semana como PAGA** às 15:30 (PN) e 15:31 (CT), usuário 2626, do
+  Chrome dele — não foi teste (os testes usam 9999 e outro navegador; conferido no log).
+- **Ponte Nova completa:** triagem distribuída 15:27 (6 pessoas, R$ 78,00) + "Descontar
+  Erros" nos 5 com erro (R$ 44,00).
+- **Caratinga:** "Descontar Erros" em 17 de 18 (R$ 121,00) — o 18º (Arthur Teixeira de Paula
+  Miguel, 1 pacote em 11/09) tem pagamento de **R$ 0,00** na semana, nada a abater.
+  🔴 **A triagem de 07–12/09 (183 pacotes) NÃO foi distribuída** e a semana já está paga.
+  Avisado; decisão dele (a trava de semana paga não cobre a triagem).

@@ -25,7 +25,14 @@
 > "Auxiliar Administrativo" fora). E2E 18 **11/11**, unit 15/15, typecheck/lint 0.
 > E2E 10 **8/8** e 14 **5/5**, build limpo. ✅ **NO AR** (`4319ebe..fdf70f7`), conferido
 > byte a byte às 14:50 (bundle principal + chunk `ErrorsTab`). **Caratinga liberada.**
-> ⏳ Victor: aplicar "Descontar Erros" (erros individuais de 07–13/09) antes do arquivo. 🔴 Erros individuais de 07–13/09 **sem "Descontar
+> ⏳ Victor: aplicar "Descontar Erros" (erros individuais de 07–13/09) antes do arquivo.
+>
+> **Leva 4:** mensagem de erro real também em Erros individuais, Períodos e arquivo de
+> pagamento (§9) — `90621c3`; e `tests/19` atualizado pra regra de 11/09 (`7310443`, OK do
+> Victor; estava vermelho desde 11/09). **No ar, conferido byte a byte às 16:14.** O mesmo padrão segue em 36 arquivos de
+> `src/components` — não mexidos.
+> 🔴 **Semana 07–13/09 confirmada PAGA pelo Victor (15:30/15:31)** — em Caratinga **sem a
+> triagem distribuída (183 pacotes)**; Ponte Nova completa (§9.2). Decisão dele. 🔴 Erros individuais de 07–13/09 **sem "Descontar
 > Erros"** nas duas empresas — não entram no arquivo de pagamento até aplicar (§7.4).
 >
 > **📌 SESSÃO 14/09 — A NOTA DIVIDIDA FOI USADA DE VERDADE E PASSOU.** Detalhe em
