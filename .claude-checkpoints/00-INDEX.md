@@ -3,6 +3,19 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 SESSÃO 15/09 — DISTRIBUIÇÃO DE ERROS DE TRIAGEM VOLTOU A FUNCIONAR.** Detalhe em
+> **`CHECKPOINT_SESSAO_2026-09-15.md`**.
+>
+> 🔴 **Estava quebrada desde 03/09 nas duas empresas** ("Erro ao distribuir"; última
+> distribuição gravada em 01/09). A trava de segurança de 03/09 tirou a leitura de
+> `value_per_error`/`total_deducted`, e o INSERT pedia a linha inteira de volta → 403.
+> ✅ **Conserto `9c9a804`** (`.select('id')`, trava intacta), provado por simulação no
+> banco + E2E novo que clica em Confirmar (vermelho no código antigo; spec 18 **9/9**);
+> typecheck/lint 0, build limpo; **no ar conferido byte a byte**.
+> ⏳ **Com o Victor:** redistribuir as semanas presas — Caratinga 01–05/09 e 07–12/09,
+> Ponte Nova 01–05/09 e 08–12/09 — e decidir o que fazer se alguma já foi paga.
+> ⚠️ Token da Vercel CLI desta máquina **inválido** — conferir deploy por conteúdo.
+>
 > **📌 SESSÃO 14/09 — A NOTA DIVIDIDA FOI USADA DE VERDADE E PASSOU.** Detalhe em
 > **`CHECKPOINT_SESSAO_2026-09-14.md`**. Nenhum código mudou.
 >
@@ -1939,7 +1952,8 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-09-14.md` | **Mais recente.** Sem código. Nota dividida no primeiro uso real: Gessiley mandou as 4 notas (Shopee 7.238 + 7.238, iMile 752,30 + 752,30), todas validadas e conferidas no banco (tomador, emissores, valor, soma = espelho, 30 min, PDFs no bucket); relatório com 4 PIX conferido no código + unit 21/21, falta gerar com dado real antes de pagar. Guia em PDF pro entregador na Área de Trabalho. Regra "não gasta token atoa". | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-15.md` | **Mais recente.** Distribuição de triagem quebrada desde 03/09 nas duas empresas ("Erro ao distribuir"): o INSERT pedia a linha inteira de volta (`.select()`) e a trava de 03/09 tirou a leitura de `value_per_error`/`total_deducted` → 403. Conserto `.select('id')` (`9c9a804`), provado por simulação no banco + E2E novo que clica em Confirmar (vermelho no código antigo, spec 18 9/9). Semanas de 01–12/09 ficaram sem distribuir. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-14.md` | Sem código. Nota dividida no primeiro uso real: Gessiley mandou as 4 notas (Shopee 7.238 + 7.238, iMile 752,30 + 752,30), todas validadas e conferidas no banco (tomador, emissores, valor, soma = espelho, 30 min, PDFs no bucket); relatório com 4 PIX conferido no código + unit 21/21, falta gerar com dado real antes de pagar. Guia em PDF pro entregador na Área de Trabalho. Regra "não gasta token atoa". | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-12.md` | Manhã: aprovação de ponto removida (coluna + código; a correção manual de horário ficou quebrada 03:43–09:10 até o push). Tarde: relatórios dentro do Financeiro (ponto · financeiro · geral × PDF e planilha; aba Relatórios removida); spec 42 aplicava banco de horas em 23 funcionários REAIS — raiz corrigida (specs em 2037 + trava de 1 pessoa) e saldo restaurado (migration `20260912153353`); espelho saía 0h em 905 dias (+6.168h); adicional noturno nunca calculado (decisão pendente); `public-api-v1` v6. Suíte 101/1.527 verde; deploy conferido byte a byte em 14/09. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-11.md` | Etapa 2 do Financeiro: erro de R$ 82.980 (semanas sobrepostas → regra do dono único), recibos em lote + publicar pro funcionário (bucket privado), carimbo do vínculo, nome do banco fora de tudo, semanas gêmeas, "pago" que era automático, semana nascendo deslocada depois das 21h. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-10.md` | Nota dividida virou de lado: cada CNPJ é um bloco fechado (Shopee não mistura com iMile); trava do backend invertida; `--no-isolate` faz mock vazar entre arquivos. | 🟢 ATIVO |
@@ -2050,6 +2064,18 @@ janela). **Nada foi pro ar** — espera o OK dele.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
+
+- 🔴 **Trava de leitura quebra escrita que lê de volta (15/09/2026)** — tirar o SELECT
+  (da tabela ou de uma coluna) do `authenticated` faz todo `.insert/.update/.upsert(...)
+  .select()` naquela tabela falhar **inteiro** (42501 → 403; nada é gravado), porque
+  `.select()` pede a linha toda de volta. Foi o que parou a distribuição de triagem de
+  03/09 a 15/09 sem ninguém ver (a tela só dizia "Erro ao distribuir"). **Antes de
+  travar leitura:** grep de escrita seguida de `.select(` na tabela e trocar pelas
+  colunas liberadas (ex.: `.select('id')`). Tabelas com leitura restrita hoje (14):
+  `payments`, `error_records`, `triage_errors`, `triage_error_distributions`,
+  `triage_distribution_employees`, `bonus_removals` e 8 `driverpay_*` (payments,
+  payment_packages, discounts, vales, deduction_ledger, deduction_carryover, platforms,
+  platform_rates) — varridas em 15/09, nenhum outro caso.
 
 - 🔴 **`npx supabase db push` é PERIGOSO neste projeto (05/09/2026)** — o comando aplicaria **~90 migrations locais** que nunca foram registradas no banco remoto, algumas de **novembro de 2025**. O histórico está descasado porque as migrations vêm sendo aplicadas pelo MCP (`apply_migration`), que grava com outro carimbo. **Migration aqui se aplica UMA A UMA** (MCP, com o SQL da migration nova) e se confere com `select` no catálogo depois. Conferir SEMPRE com `supabase migration list` antes de qualquer comando que aplique em lote.
 - 🟡 **Nota do FERNANDO MARTINS a descoberto em quinzena FECHADA** (05/09): R$ 7.760,00 no lugar de R$ 7.773,20 (diferença de R$ 13,20), 1ª quinzena de julho, já paga. Não tocada de propósito — mexer em nota de quinzena concluída precisa de ordem explícita do Victor.
