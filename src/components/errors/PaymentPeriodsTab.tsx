@@ -11,6 +11,7 @@ import {
 } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 import toast from 'react-hot-toast';
 import { situacaoDaSemana, detalheDoPagamento } from '../../utils/situacaoDaSemana';
 
@@ -42,7 +43,7 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
       setAutoWeekly(cfg.auto_weekly);
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao carregar períodos');
+      toast.error(mensagemDeErro(err, 'Erro ao carregar períodos'));
     } finally {
       setLoading(false);
     }
@@ -87,7 +88,7 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
       load();
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : 'Erro ao criar período');
+      toast.error(mensagemDeErro(err, 'Erro ao criar período'));
     } finally {
       setSaving(false);
     }
@@ -103,7 +104,7 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
       load();
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao fechar período');
+      toast.error(mensagemDeErro(err, 'Erro ao fechar período'));
     }
   };
 
@@ -121,7 +122,7 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
       load();
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao fechar');
+      toast.error(mensagemDeErro(err, 'Erro ao fechar'));
     }
   };
 
@@ -138,7 +139,7 @@ export const PaymentPeriodsTab: React.FC<PaymentPeriodsTabProps> = ({ userId }) 
       }
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao atualizar configuração');
+      toast.error(mensagemDeErro(err, 'Erro ao atualizar configuração'));
     }
   };
 

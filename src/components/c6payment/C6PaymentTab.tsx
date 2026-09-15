@@ -6,6 +6,7 @@ import { useCompany } from '../../contexts/useCompany';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { exportC6PaymentSheet } from '../../utils/c6Export';
 import { moneyBRL } from '../../utils/moneyMask';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 import toast from 'react-hot-toast';
 import EmploymentTypeFilter, { EmploymentType } from '../common/EmploymentTypeFilter';
 import FunctionRoleFilter, { FUNCTION_ROLE_ALL, FUNCTION_ROLE_NONE } from '../common/FunctionRoleFilter';
@@ -91,7 +92,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
       setEmployees(employeesData);
     } catch (error) {
       console.error('Erro ao carregar funcionários:', error);
-      toast.error('Erro ao carregar funcionários');
+      toast.error(mensagemDeErro(error, 'Erro ao carregar funcionários'));
     }
   }, [company?.id]);
 
@@ -232,9 +233,8 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
       console.error('Erro ao importar dados:', error);
       // 03/09/2026: mostra a mensagem real (ex.: falta de permissão de ver valor)
       // em vez de sempre um texto genérico — senão "sem permissão" vira "erro" sem
-      // explicação nenhuma.
-      const message = error instanceof Error ? error.message : 'Erro ao importar dados financeiros';
-      toast.error(message);
+      // explicação nenhuma. 15/09: inclusive a do Supabase, que não é `Error`.
+      toast.error(mensagemDeErro(error, 'Erro ao importar dados financeiros'));
     } finally {
       setLoading(false);
     }
@@ -360,7 +360,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
       toast.success(`Semana ${quando} confirmada como paga.`);
     } catch (err) {
       console.error('Erro ao confirmar o pagamento:', err);
-      toast.error('Não consegui confirmar o pagamento. Tente de novo.');
+      toast.error(`${mensagemDeErro(err, 'Não consegui confirmar o pagamento')}. Tente de novo.`);
     } finally {
       setConfirmando(false);
     }
@@ -581,7 +581,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
       toast.success('Planilha gerada com sucesso!');
     } catch (error) {
       console.error('Erro ao gerar planilha:', error);
-      toast.error('Erro ao gerar planilha');
+      toast.error(mensagemDeErro(error, 'Erro ao gerar planilha'));
     }
   };
 
@@ -647,7 +647,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
       toast.success(`Planilha gerada com ${validRows.length} funcionário(s) válido(s)`);
     } catch (error) {
       console.error('Erro ao gerar planilha:', error);
-      toast.error('Erro ao gerar planilha');
+      toast.error(mensagemDeErro(error, 'Erro ao gerar planilha'));
     }
   };
 
@@ -658,7 +658,7 @@ export const C6PaymentTab: React.FC<C6PaymentTabProps> = ({
       toast.success('Planilha gerada com sucesso!');
     } catch (error) {
       console.error('Erro ao gerar planilha:', error);
-      toast.error('Erro ao gerar planilha');
+      toast.error(mensagemDeErro(error, 'Erro ao gerar planilha'));
     }
   };
 

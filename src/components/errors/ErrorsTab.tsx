@@ -10,6 +10,7 @@ import EmploymentTypeFilter, { EmploymentType } from '../common/EmploymentTypeFi
 import { TriageTab } from './TriageTab';
 import { PaymentPeriodsTab } from './PaymentPeriodsTab';
 import { moneyBRL } from '../../utils/moneyMask';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface ErrorsTabProps {
   userId: string;
@@ -94,7 +95,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
       processEmployeeErrorData(employeesData, attendancesData, errorRecordsData);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
-      toast.error('Erro ao carregar dados de erros');
+      toast.error(mensagemDeErro(error, 'Erro ao carregar dados de erros'));
     } finally {
       setLoading(false);
     }
@@ -344,8 +345,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
       loadData();
     } catch (error) {
       console.error('Erro ao salvar:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar registro';
-      toast.error(errorMessage);
+      toast.error(mensagemDeErro(error, 'Erro ao salvar registro'));
     } finally {
       setSavingError(false);
     }
@@ -365,7 +365,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
       loadData();
     } catch (error) {
       console.error('Erro ao excluir:', error);
-      toast.error('Erro ao excluir registro');
+      toast.error(mensagemDeErro(error, 'Erro ao excluir registro'));
     }
   };
 

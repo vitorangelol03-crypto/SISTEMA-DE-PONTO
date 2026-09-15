@@ -303,4 +303,28 @@ test.describe('Erros — individuais e triagem', () => {
     // Cleanup
     await s.from('triage_errors').delete().eq('date', iso);
   });
+
+  // 15/09/2026: o Supabase devolve o erro como objeto comum (não é Error) e a tela
+  // mostrava só "Erro ao salvar registro". Erro REAL do banco, sem simular nada:
+  // quantidade acima do limite da coluna (integer). Nada é gravado.
+  test('erro do banco ao salvar aparece na tela com a causa real', async ({ page }) => {
+    await openErrors(page);
+    await page.getByRole('button', { name: /Registrar Erro/ }).click();
+
+    const modal = page.locator('.fixed.inset-0').filter({ has: page.getByRole('heading', { name: /Registrar Erro/ }) });
+    await modal.locator('select').first().selectOption({ label: 'Victor Angelo da silva Pereira' });
+    await modal.locator('input[type="date"]').fill(FAKE_DATE);
+    await modal.getByText('📦 Por Quantidade').click();
+    await modal.locator('input[type="number"]').fill('99999999999');
+    await modal.getByPlaceholder(/Descreva os erros/).fill('PW Test erro do banco');
+    await modal.getByRole('button', { name: /^Registrar$/ }).click();
+
+    await expect(
+      page.getByText(/Erro ao salvar registro: .*out of range for type integer.*\(código 22003\)/),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const { data, error } = await getClient().from('error_records').select('id').eq('date', FAKE_DATE);
+    expect(error).toBeNull();
+    expect(data ?? []).toHaveLength(0);
+  });
 });
