@@ -23,6 +23,7 @@ import {
  *  - Mistura de tipos no mesmo período
  *  - Período sem presentes não permite triagem
  *  - Funcionário ausente não recebe triagem
+ *  - Confirmar a distribuição grava de verdade (cabeçalho + parte de cada um)
  */
 
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}ErrCompl `;
@@ -208,5 +209,58 @@ test.describe('Errors — completo', () => {
     // Ausente NÃO aparece no preview
     expect(await page.locator('body').textContent()).not.toContain(`${PREFIX}Aus`);
     await expect(page.locator('body')).toContainText(/Total a descontar:\s*R\$\s*50,00/);
+  });
+
+  // 15/09/2026: "Confirmar Distribuição" dava "Erro ao distribuir" nas duas
+  // empresas desde 03/09 — o INSERT pedia a linha inteira de volta e o
+  // authenticated não lê mais value_per_error/total_deducted (42501). Os testes
+  // acima só clicavam em "Calcular"; este clica em confirmar e confere o banco.
+  test('triagem — CONFIRMAR distribuição grava o cabeçalho e a parte de cada presente', async ({ page }) => {
+    const empA = await createTestEmployee({ name: `${PREFIX}ConfA`, withPix: false });
+    const empB = await createTestEmployee({ name: `${PREFIX}ConfB`, withPix: false });
+    await insertAttendance(empA, SAFE_DATE);
+    await insertAttendance(empB, SAFE_DATE);
+    await upsertTriageError(SAFE_DATE, { triage_type: 'quantity', error_count: 6 });
+
+    await goToTab(page, 'Erros');
+    await page.getByRole('button', { name: /^Triagem$/ }).click();
+    const dateInputs = page.locator('input[type="date"]');
+    await dateInputs.nth(1).fill(SAFE_DATE);
+    await dateInputs.nth(2).fill(SAFE_DATE);
+    await page.locator('input[type="number"]').nth(1).fill('1'); // R$ 1 por pacote
+    await page.getByRole('button', { name: /^Calcular$/ }).click();
+    // 6 ÷ 2 = 3 pacotes cada × R$ 1
+    await expect(page.locator('body')).toContainText(/Total a descontar:\s*R\$\s*6,00/, { timeout: 10_000 });
+
+    // A tela pede confirmação com window.confirm — sem aceitar, nada é gravado.
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByRole('button', { name: /Confirmar Distribuição/ }).click();
+    await expect(page.getByText(/Distribuição realizada!.*2 funcionários/)).toBeVisible({ timeout: 15_000 });
+
+    const s = getClient();
+    const { data: dists, error: distErr } = await s
+      .from('triage_error_distributions')
+      .select('id, total_errors, value_per_error, total_employees, total_deducted')
+      .eq('period_start', SAFE_DATE)
+      .eq('period_end', SAFE_DATE);
+    expect(distErr).toBeNull();
+    expect(dists).toHaveLength(1);
+    const dist = dists![0];
+    expect(dist.total_errors).toBe(6);
+    expect(Number(dist.value_per_error)).toBe(1);
+    expect(dist.total_employees).toBe(2);
+    expect(Number(dist.total_deducted)).toBe(6);
+
+    const { data: rows, error: rowsErr } = await s
+      .from('triage_distribution_employees')
+      .select('employee_id, errors_share, value_deducted')
+      .eq('distribution_id', dist.id);
+    expect(rowsErr).toBeNull();
+    const porFuncionario = (rows ?? [])
+      .map(r => ({ employee_id: r.employee_id, errors_share: r.errors_share, value_deducted: Number(r.value_deducted) }))
+      .sort((a, b) => a.employee_id.localeCompare(b.employee_id));
+    expect(porFuncionario).toEqual(
+      [empA, empB].sort().map(employee_id => ({ employee_id, errors_share: 3, value_deducted: 3 }))
+    );
   });
 });

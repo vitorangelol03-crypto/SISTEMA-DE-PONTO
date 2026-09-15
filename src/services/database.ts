@@ -2626,7 +2626,10 @@ export const distributeTriageErrors = async (
       distributed_by: distributedBy,
       company_id: companyId,
     }])
-    .select()
+    // Só o id: desde 03/09 (migration 20260903201630) o authenticated não lê
+    // value_per_error/total_deducted, e `.select()` pedia a linha inteira de
+    // volta — o banco recusava o INSERT inteiro com 42501.
+    .select('id')
     .single();
   if (distError) throw distError;
 
