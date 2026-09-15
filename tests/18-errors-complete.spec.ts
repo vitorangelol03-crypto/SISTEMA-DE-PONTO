@@ -24,6 +24,7 @@ import {
  *  - Período sem presentes não permite triagem
  *  - Funcionário ausente não recebe triagem
  *  - Confirmar a distribuição grava de verdade (cabeçalho + parte de cada um)
+ *  - Erro do banco aparece na tela com a causa real
  */
 
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}ErrCompl `;
@@ -262,5 +263,26 @@ test.describe('Errors — completo', () => {
     expect(porFuncionario).toEqual(
       [empA, empB].sort().map(employee_id => ({ employee_id, errors_share: 3, value_deducted: 3 }))
     );
+  });
+
+  // 15/09/2026: o Supabase devolve o erro como objeto comum (não é Error) e a
+  // tela mostrava só o texto genérico — foi assim que a distribuição ficou 12
+  // dias dizendo "Erro ao distribuir". Erro REAL do banco, sem simular nada:
+  // quantidade acima do limite da coluna (integer). Nada é gravado.
+  test('triagem — erro do banco aparece na tela com a causa real', async ({ page }) => {
+    await goToTab(page, 'Erros');
+    await page.getByRole('button', { name: /^Triagem$/ }).click();
+    await page.getByRole('button', { name: /Por Quantidade/ }).click();
+    await page.locator('input[type="date"]').nth(0).fill(SAFE_DATE);
+    await page.locator('input[type="number"]').nth(0).fill('99999999999');
+    await page.getByRole('button', { name: /^Registrar$/ }).click();
+
+    await expect(
+      page.getByText(/Erro ao registrar: .*out of range for type integer.*\(código 22003\)/),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const { data, error } = await getClient().from('triage_errors').select('id').eq('date', SAFE_DATE);
+    expect(error).toBeNull();
+    expect(data ?? []).toHaveLength(0);
   });
 });

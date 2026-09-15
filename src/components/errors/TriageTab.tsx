@@ -14,6 +14,7 @@ import {
 import { useCompany } from '../../contexts/useCompany';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { moneyBRL } from '../../utils/moneyMask';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 import toast from 'react-hot-toast';
 
 interface TriageTabProps {
@@ -67,7 +68,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
       setRecords(data);
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao carregar registros de triagem');
+      toast.error(mensagemDeErro(err, 'Erro ao carregar registros de triagem'));
     } finally {
       setLoading(false);
     }
@@ -158,7 +159,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
       loadRecords();
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : 'Erro ao registrar');
+      toast.error(mensagemDeErro(err, 'Erro ao registrar'));
     } finally {
       setSaving(false);
     }
@@ -176,7 +177,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
       loadRecords();
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao excluir');
+      toast.error(mensagemDeErro(err, 'Erro ao excluir'));
     }
   };
 
@@ -216,7 +217,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
       setPreview({ ...result, valuePerError: value });
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao calcular');
+      toast.error(mensagemDeErro(err, 'Erro ao calcular'));
     } finally {
       setCalculating(false);
     }
@@ -248,7 +249,7 @@ export const TriageTab: React.FC<TriageTabProps> = ({ userId, hasPermission }) =
       setValuePerError('');
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : 'Erro ao distribuir');
+      toast.error(mensagemDeErro(err, 'Erro ao distribuir'));
     } finally {
       setConfirming(false);
     }
