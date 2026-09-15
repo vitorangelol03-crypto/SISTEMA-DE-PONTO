@@ -16,6 +16,18 @@
 > Ponte Nova 01–05/09 e 08–12/09 — e decidir o que fazer se alguma já foi paga.
 > ⚠️ Token da Vercel CLI desta máquina **inválido** — conferir deploy por conteúdo.
 >
+> **Leva 2 (tarde):** mensagem de erro real na tela de triagem commitada (`3d4c8eb`).
+> 🔴 **ADM (Diendrel, Iago, Pablo) entrava no desconto da triagem de Caratinga.**
+> **Leva 3:** filtro "Quem entra no desconto" por função, salvo por empresa (§8) —
+> decisões do Victor: função nova e "sem função" entram marcadas; muda quem tem
+> `errors.distributeTriage`. **Migration `20260915173259` APLICADA** (tabela
+> `triage_config` + trava de permissão no banco, provada por simulação; Caratinga já com
+> "Auxiliar Administrativo" fora). E2E 18 **11/11**, unit 15/15, typecheck/lint 0.
+> E2E 10 **8/8** e 14 **5/5**, build limpo. ✅ **NO AR** (`4319ebe..fdf70f7`), conferido
+> byte a byte às 14:50 (bundle principal + chunk `ErrorsTab`). **Caratinga liberada.**
+> ⏳ Victor: aplicar "Descontar Erros" (erros individuais de 07–13/09) antes do arquivo. 🔴 Erros individuais de 07–13/09 **sem "Descontar
+> Erros"** nas duas empresas — não entram no arquivo de pagamento até aplicar (§7.4).
+>
 > **📌 SESSÃO 14/09 — A NOTA DIVIDIDA FOI USADA DE VERDADE E PASSOU.** Detalhe em
 > **`CHECKPOINT_SESSAO_2026-09-14.md`**. Nenhum código mudou.
 >

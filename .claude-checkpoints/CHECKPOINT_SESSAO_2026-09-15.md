@@ -77,3 +77,104 @@ responde; a conferência foi só por conteúdo (que é a prova mais forte mesmo)
    "Erro ao excluir") esconde a causa real quando o erro vem do Supabase.
 3. Seguem as de 14/09 (relatório com 4 PIX antes de pagar o Gessiley, E2E 02/15/47,
    decisões antigas).
+
+---
+
+## 7. Leva 2 (tarde) — mensagem de erro real + ADM na triagem
+
+### 7.1 Mensagem de erro de verdade — `3d4c8eb`, **commit LOCAL, sem push**
+- `src/utils/mensagemDeErro.ts` (novo): Error → a mensagem, como antes; objeto do
+  Supabase → "<contexto>: <mensagem> (código X)". Confirmado no `node_modules`
+  (postgrest-js 2.116): o `error` de `{data, error}` é objeto comum.
+- Aplicado nas 5 mensagens do `TriageTab` (carregar, registrar, excluir, calcular,
+  distribuir). **Outras telas têm o mesmo padrão** (Erros individuais, Períodos, C6) —
+  não mexidas.
+- Provas: unit 7/7 com o corpo real do 403; E2E novo em `tests/18` com erro REAL do
+  banco (quantidade 99999999999 > integer → 22003, nada gravado) — **vermelho no código
+  antigo, verde no novo**; typecheck 0, lint 0, build limpo. Spec 18 inteiro ainda não
+  rodou com esta mudança (roda junto com a leva do filtro).
+
+### 7.2 Varredura "já dá pra usar?" (logs das últimas 24h)
+- Única escrita recusada no sistema inteiro: a distribuição (antes do deploy das 14:02).
+- Leitura recusada: 4× `GET attendance` com `date=gte.&date=lte.` vazios (07:14, Opera,
+  PN) — campo de data apagado no formulário da triagem; inofensivo.
+
+### 7.3 🔴 ADM entrando no desconto da triagem (print do Victor, Caratinga 07–12/09)
+- Presentes 07–13/09: Caratinga 27 "Triagem - Shopee" + **3 "Auxiliar Administrativo"
+  (Diendrel, Iago, Pablo)**; Ponte Nova 6 "Triagem - Transportadoras" (**PN liberada**).
+- A tela não tem como desfazer distribuição confirmada → **Caratinga não confirmar**.
+- Não existe campo "setor" na ficha; o que separa é `function_role`.
+- **Pedido do Victor:** filtro por função com configuração salva ("a pessoa seleciona
+  quem ela quer descontar"). Plano apresentado; **aguardando 4 decisões**: função nova
+  entra marcada? (rec. sim) · "Sem função" marcada? (rec. sim) · quem muda (rec. quem tem
+  `errors.distributeTriage`) · OK da migration da tabela nova + Caratinga já com
+  "Auxiliar Administrativo" desmarcado (rec. sim).
+- Ele recusou o menu de múltipla escolha (AskUserQuestion) — perguntar em prosa.
+
+### 7.4 🔴 Erros individuais da semana 07–13/09 NÃO descontados
+Erro de QUANTIDADE só chega no arquivo de pagamento via "Descontar Erros" (rebaixa
+`payments.total`). Conferido: Caratinga 18 pessoas / 122 pacotes e Ponte Nova 5 / 44,
+**nenhuma com abatimento**. Avisado: aplicar antes de gerar o arquivo.
+Semana 31/08–06/09 está `paid` (sem `paid_at`) nas duas; a trava "semana paga não aceita
+erro" só existe em `insertErrorRecord` — a triagem não a respeita.
+
+---
+
+## 8. Leva 3 — quem entra no desconto da triagem, por função, salvo por empresa
+
+**Decisões do Victor (15/09, "1 sim, 2 sim, 3 sim, 4 sim"):** função nova entra marcada ·
+"Sem função" entra marcada · quem muda = quem tem `errors.distributeTriage` · OK da
+migration + Caratinga já com "Auxiliar Administrativo" fora. "Setor" = função (não existe
+campo de setor na ficha).
+
+### 8.1 Banco — migration `20260915173259_triage_config_funcoes_no_desconto` (APLICADA)
+- Tabela `triage_config` (1 linha por empresa): `excluded_function_roles text[]` (guarda as
+  DESMARCADAS) + `exclude_no_function`. Sem linha = todo mundo entra (como antes).
+- RLS por empresa (mesma policy das outras configs); `anon` sem nada; `authenticated` só
+  SELECT/INSERT/UPDATE (sem DELETE).
+- Trigger `triage_config_permission_check`: exige `errors.distributeTriage` pelo JWT
+  (`user_has_module_permission`); sem claims/service_role e 2626 passam.
+- Linha de Caratinga semeada com `{Auxiliar Administrativo}`. Ponte Nova sem linha.
+- **Provado por simulação (tudo desfeito):** 01 sem permissão → 42501 com a mensagem;
+  02 e 2626 gravam; 8888 (PN) vê 0 linhas de CT; 02 criando pra PN → RLS recusa; DELETE →
+  recusado; anon → recusado. Depois: linha de CT intacta.
+- Quem pode mudar hoje: 02, 03, 9999 (CT), 8888 (PN) + 2626.
+
+### 8.2 Código
+- `src/utils/triagemFuncoes.ts` (novo, puro): `entraNaTriagem`, `marcarFuncao`,
+  `TRIAGE_CONFIG_PADRAO`.
+- `database.ts`: `getTriageConfig`/`saveTriageConfig`; `computeTriageDistribution` filtra os
+  presentes pela função (vale pra prévia E pra confirmação, que recalcula) e devolve
+  `excludedEmployees`; `getEmployeesPresentInPeriod` (só a triagem usa) traz a função.
+- `TriageTab`: caixa "Quem entra no desconto" (uma caixinha por função + "Sem função"),
+  salva ao clicar com "✓ Salvo", trava enquanto salva, desabilitada sem permissão; prévia
+  mostra "Ficaram de fora do desconto (N): nome (função)"; o "Será dividido entre N" do
+  registro conta só quem entra.
+- `tests/integrity-helpers.ts`: `createTestEmployee` aceita `functionRole`.
+
+### 8.3 Validação
+- Unit: `triagemFuncoes` 8 + `mensagemDeErro` 7 = **15/15**.
+- typecheck 0 · lint 0.
+- E2E `tests/18` inteiro **11/11**, zero retry — o teste novo desmarca uma função de teste,
+  confere "✓ Salvo", **recarrega a página e confere que continua desmarcada**, calcula
+  (6 pacotes ÷ 1), vê o de fora avisado, confirma e confere no banco só a pessoa que entra;
+  devolve a configuração real no `finally` (conferido: CT intacta, sem sobra).
+- Sem rodada vermelha do teste do filtro (sem o código, a caixa não existe — falha óbvia).
+- E2E `tests/10` **8/8** e `tests/14` **5/5** (inclui "C6 importa valor LÍQUIDO" com
+  triagem descontada). Antes do 10, conferido que não havia triagem real em 15/01/2026 —
+  o spec apaga triagem daquele dia **sem filtrar empresa** (padrão perigoso, não mexido).
+- Build limpo. Sem sobra de teste no banco (0 `PW Test`, 0 distribuição órfã).
+
+### 8.4 No ar
+Push `4319ebe..fdf70f7` (leva 2 `3d4c8eb` + leva 3 `fdf70f7`). **Conferido às 14:50:**
+`index-Ds8WD0tp.js` (972.047 bytes, sha `c4d2313aa464…`) e o chunk lazy
+`ErrorsTab-enWCdd5s.js` (58.897 bytes, sha `d16a3008e34f…`) **idênticos byte a byte** ao
+`dist/` local, com `triage_config` e "Quem entra no desconto" dentro.
+✅ **Caratinga liberada** pra distribuir — precisa recarregar a página (F5).
+
+### 8.5 Pendências desta leva
+1. Victor: distribuir Caratinga 07–12/09 (conferir "Ficaram de fora (3)") e **aplicar
+   "Descontar Erros"** nos erros individuais antes de gerar o arquivo de pagamento.
+2. Semana 31/08–06/09 já está `paid` — triagem dela segue sem distribuir (decisão dele).
+3. Avisados, não mexidos: mensagem genérica nas outras telas (Erros individuais,
+   Períodos, C6); `tests/10` apaga triagem por data sem filtrar empresa.
