@@ -6,7 +6,7 @@ import { getClient } from './cleanup';
  * Cobertura completa de Períodos de Pagamento (PaymentPeriodsTab):
  *  - Criar período manual (start, end, payment date, label)
  *  - Validação data inicial < final
- *  - Fechar período (status='paid')
+ *  - Encerrar período (status='closed' — aguardando a confirmação do pagamento)
  *  - Toggle auto-weekly
  *  - Listagem
  */
@@ -67,8 +67,11 @@ test.describe('Payment Periods — completo', () => {
     await expect(page.getByText(/anterior\s+à\s+final|Data inicial/i).first()).toBeVisible({ timeout: 10_000 });
   });
 
-  test('fechar período: status open → paid', async ({ page }) => {
-    const label = `${TEST_LABEL_PREFIX}Fechar`;
+  // 15/09/2026: desde 11/09 (aee3cb7) o botão é "Encerrar" e NÃO marca como pago —
+  // a semana fica aguardando a confirmação do pagamento, que é outro botão, no arquivo
+  // de pagamento (decisão do Victor). O teste esperava o comportamento antigo.
+  test('encerrar período: status open → closed (aguardando pagamento)', async ({ page }) => {
+    const label = `${TEST_LABEL_PREFIX}Encerrar`;
     const s = getClient();
     await s.from('payment_periods').insert([{
       start_date: '2030-08-01',
@@ -86,11 +89,13 @@ test.describe('Payment Periods — completo', () => {
     const row = page.locator('tr', { hasText: label }).first();
     await expect(row).toBeVisible({ timeout: 10_000 });
     page.once('dialog', d => d.accept());
-    await row.getByRole('button', { name: /Fechar/i }).first().click();
-    await page.waitForTimeout(1500);
+    await row.getByRole('button', { name: /Encerrar/ }).first().click();
+    await expect(page.getByText(/Período encerrado — falta confirmar o pagamento/)).toBeVisible({ timeout: 10_000 });
 
-    const { data } = await s.from('payment_periods').select('status').eq('label', label).single();
-    expect(data?.status).toBe('paid');
+    const { data } = await s.from('payment_periods').select('status, paid_at, paid_by').eq('label', label).single();
+    expect(data?.status).toBe('closed');
+    expect(data?.paid_at).toBeNull();
+    expect(data?.paid_by).toBeNull();
   });
 
   test('toggle auto-weekly altera config (Caratinga)', async ({ page }) => {
