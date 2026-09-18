@@ -3,6 +3,26 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 SESSÃO 18/09 — A PLANILHA DA SHOPEE MUDOU DE CABEÇALHO E O IMPORT PAROU.**
+> Detalhe em **`CHECKPOINT_SESSAO_2026-09-18.md`**.
+>
+> 🔴 **"Processando a planilha…" pra sempre**, na 2ª quinzena de agosto. Duas causas
+> reais: a Shopee **tirou a coluna `Driver Name`** (agora vêm DUAS `nome motorista` —
+> código e nome — e, no .csv, `motorista - nome`), então a planilha não era mais
+> reconhecida; e ler o arquivo (144.725 × 57) custava **2,4 GB**, matando o Web Worker
+> **sem disparar `onerror`** — a tela girava sem fim.
+> ✅ **Conserto `e56c918`:** detecção pelos 3 títulos já vistos (o antigo continua),
+> escolha da coluna **pelo conteúdo** (nome, nunca código — decisão do Victor),
+> leitura `dense` (**20s / 1,6 GB** no lugar de 48s / 2,4 GB) e etapa visível +
+> desistência com mensagem após 5 min sem sinal.
+> **Provado no arquivo real:** 105 entregadores, 144.724 pacotes (142.842 SHOPEE +
+> 1.882 Coleta), 0 linha com código no lugar do nome. Unit 48/48 (+5 com o cabeçalho
+> real de 57 colunas) e 54/54 nos vizinhos; typecheck/lint 0; build limpo; E2E 67
+> verde. **No ar, conferido byte a byte.**
+> ⚠️ `tests/74` vermelho é o "dois botões Fechar" de 09/09 — **provado por `git stash`
+> que falha igual sem esta leva**. firefox/webkit desta máquina estão sem binário.
+> ⏳ **Victor:** F5 e importar. A tela segue aceitando só `.xlsx`/`.xls`.
+>
 > **📌 SESSÃO 15/09 — DISTRIBUIÇÃO DE ERROS DE TRIAGEM VOLTOU A FUNCIONAR.** Detalhe em
 > **`CHECKPOINT_SESSAO_2026-09-15.md`**.
 >
@@ -32,7 +52,19 @@
 > Victor; estava vermelho desde 11/09). **No ar, conferido byte a byte às 16:14.** O mesmo padrão segue em 36 arquivos de
 > `src/components` — não mexidos.
 > 🔴 **Semana 07–13/09 confirmada PAGA pelo Victor (15:30/15:31)** — em Caratinga **sem a
-> triagem distribuída (183 pacotes)**; Ponte Nova completa (§9.2). Decisão dele. 🔴 Erros individuais de 07–13/09 **sem "Descontar
+> triagem distribuída (183 pacotes)**; Ponte Nova completa (§9.2). Decisão dele — **não
+> distribuir em semana paga sem "distribui" explícito**.
+>
+> **Leva 5 ("corrija"):** mensagem de erro real em **todo o painel interno** — 37 arquivos
+> (§10). Tradução compartilhada (sessão expirada / nome repetido) saiu do `throwDbError`
+> pra `utils/mensagemDeErro`; erro cru do banco agora sai com contexto e código; 4 bugs
+> "[object Object]" consertados de carona. **Fora de propósito:** app do entregador,
+> página de erros do funcionário e login (gente de fora não vê erro técnico).
+> ⚠️ **Não traduzir "Failed to fetch"** — `tests/100` e `101` usam o texto pra ignorar a
+> corrida da troca de empresa.
+> ✅ **No ar** (`cdd9e58`), conferido byte a byte às 18:23. E2E 99 verdes; o vermelho
+> (`tests/57`) falhava igual sem a leva — teste velho: dois "Fechar" desde 09/09 e a aba
+> que leva >10s com servidor frio. Conserto do teste com OK do Victor (§10.4). 🔴 Erros individuais de 07–13/09 **sem "Descontar
 > Erros"** nas duas empresas — não entram no arquivo de pagamento até aplicar (§7.4).
 >
 > **📌 SESSÃO 14/09 — A NOTA DIVIDIDA FOI USADA DE VERDADE E PASSOU.** Detalhe em
