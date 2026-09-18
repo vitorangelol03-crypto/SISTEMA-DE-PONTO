@@ -65,6 +65,14 @@ export interface EmployeeFinancialData {
    * minutos — olhar só um deles zeraria a hora de quase metade dos dias.
    */
   totalNightHours: number;
+  /**
+   * DATAS das faltas que DESCONTAM na folha (as sem atestado). A justificada fica de
+   * fora — é o ponto de existirem os dois tipos (decisão do Victor, 18/09).
+   *
+   * São datas e não contagem por causa do DSR: duas faltas na mesma semana derrubam
+   * um descanso só, e sem a data não dá pra saber a semana.
+   */
+  faltasInjustificadas: string[];
 }
 
 /**
@@ -128,6 +136,10 @@ export function agregarFinanceiroPorPessoa(
     // não baterem no mesmo papel.
     const totaisHolerite = somarTotaisDoHolerite(employeePayments);
     const totalNightHours = employeeAttendances.reduce((soma, att) => soma + horasNoturnasDoDia(att), 0);
+    const faltasInjustificadas = employeeAttendances
+      .filter(att => att.status === 'absent' && !(att as unknown as { absence_justified?: boolean }).absence_justified)
+      .map(att => att.date)
+      .sort();
 
     return {
       employee,
@@ -144,6 +156,7 @@ export function agregarFinanceiroPorPessoa(
       triageDiscounts,
       ...totaisHolerite,
       totalNightHours: Math.round(totalNightHours * 100) / 100,
+      faltasInjustificadas,
     };
   });
 }

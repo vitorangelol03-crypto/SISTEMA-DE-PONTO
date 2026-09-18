@@ -22,6 +22,7 @@ import {
   Payment,
   getBonusTypes,
   BonusTypeRecord,
+  setAbsenceJustified,
 } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import { resolveMarkingCount } from './attendanceTabHelpers';
@@ -299,6 +300,30 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
     const attendance = attendances.find(att => att.employee_id === employeeId);
     return attendance?.status || null;
   }, [attendances]);
+
+  /** A falta daquele dia está marcada como justificada (com atestado)? */
+  const faltaJustificada = useCallback((employeeId: string): boolean => {
+    const attendance = attendances.find(att => att.employee_id === employeeId);
+    return Boolean(attendance?.absence_justified);
+  }, [attendances]);
+
+  /**
+   * Liga/desliga o atestado na falta do dia (18/09/2026).
+   *
+   * Muda dinheiro: falta justificada NÃO desconta na folha de quem é carteira assinada.
+   * Por isso usa a mesma permissão de marcar presença e recarrega a lista depois.
+   */
+  const alternarAtestado = async (employeeId: string) => {
+    if (!company?.id) return;
+    const tinha = faltaJustificada(employeeId);
+    try {
+      await setAbsenceJustified(employeeId, selectedDate, !tinha, company.id, userId);
+      toast.success(tinha ? 'Atestado removido da falta.' : 'Falta marcada com atestado — não desconta na folha.');
+      await loadData();
+    } catch (error) {
+      toast.error(mensagemDeErro(error, 'Erro ao mudar o atestado da falta'));
+    }
+  };
 
   const getEmployeeBonusByType = useCallback((employeeId: string): Record<BonusType, number> => {
     const payment = payments.find(p => p.employee_id === employeeId);
@@ -1090,10 +1115,23 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
                         </span>
                       )}
                       {status === 'absent' && (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          <XCircle className="w-3 h-3 mr-1" />
-                          Falta
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            faltaJustificada(employee.id) ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            <XCircle className="w-3 h-3 mr-1" />
+                            {faltaJustificada(employee.id) ? 'Falta com atestado' : 'Falta'}
+                          </span>
+                          {hasPermission('attendance.mark') && (
+                            <button
+                              type="button"
+                              onClick={() => alternarAtestado(employee.id)}
+                              className="text-xs text-blue-600 hover:underline text-left"
+                            >
+                              {faltaJustificada(employee.id) ? 'Tirar o atestado' : 'Marcar com atestado'}
+                            </button>
+                          )}
+                        </div>
                       )}
                       {!status && (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">

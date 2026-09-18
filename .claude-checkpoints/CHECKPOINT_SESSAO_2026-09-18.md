@@ -275,3 +275,68 @@ Uma melhoria saiu daí: o salário voltava como `1700` na ficha e agora volta `1
   Shopee) ao criar o meu com `Write`. Recuperado do commit `b6b0601` e a minha parte virou
   esta "LEVA 2" no mesmo arquivo. **Lição: dois trabalhos no mesmo dia dividem o arquivo do
   dia — ler antes de escrever, sempre.**
+
+---
+
+# LEVA 3 — FALTAS E FÉRIAS NA FOLHA
+
+> Pedido do Victor logo depois da leva 2: *"adiciona ... função de férias e falta também"*.
+> Decisões dele: **"quero ter as duas opções"** (falta) · **"sim"** (1/3 de férias) ·
+> **"descarta isso, falei errado"** (Logística/Mecânica — não foi feito).
+
+## 1. O que entrou
+
+- **Dois tipos de falta.** `attendance.absence_justified` (nova coluna, padrão `false`).
+  Na tela do Ponto o selo da falta vira "Falta com atestado" e tem o botão
+  "Marcar com atestado" / "Tirar o atestado". A justificada **não desconta nada**.
+- **DSR como chave configurável**, por empresa e por ano, **nascendo desligada**: ligada,
+  a falta sem atestado derruba também o descanso da semana. Duas faltas na MESMA semana
+  derrubam **um** descanso só — a conta agrupa por semana de verdade (`semanaDaData`),
+  não multiplica por falta.
+- **Férias** (`employee_vacations`, tabela nova): lançadas na ficha, com histórico e
+  remoção. Os dias saem do salário e viram **"Férias"** e **"1/3 de férias"** no recibo.
+  Férias que atravessam o mês contam só os dias do período — ninguém perde salário duas
+  vezes (`diasDeFeriasNoPeriodo`, com teste).
+
+## 2. 🔴 O erro de desenho que eu peguei antes de implementar
+
+Do jeito que eu tinha escrito o teste, **a falta descontaria DUAS vezes**: o salário vinha
+reduzido pelos dias faltados *e* ainda saía uma linha de desconto. Refeito:
+
+- **Férias REDUZEM a linha do salário** (têm que reduzir: senão a pessoa receberia duas
+  vezes pelos mesmos dias, já que férias é provento à parte).
+- **Falta NÃO reduz a linha do salário** — sai como **desconto**, com os dias à vista.
+  É a lição de 04/08/2026 (o desconto de erro que ninguém via): descontar escondido,
+  reduzindo a referência, deixa o funcionário sem saber para onde foi o dinheiro.
+- O desconto da falta nunca passa do salário do mês, então o líquido não fica negativo.
+
+Tem teste travando isso: *"a falta NÃO desconta duas vezes: o líquido bate com os dias
+pagos"* e *"faltar o mês inteiro zera o líquido, nunca fica negativo"*.
+
+## 3. Banco — migration `20260918175402` (APLICADA)
+
+`attendance.absence_justified` + `absence_note` · tabela `employee_vacations` (RLS por
+empresa, trigger exigindo `employees.editPayroll`) · `payroll_config.dsr_on_unjustified_absence`.
+
+**Provado por simulação que se desfaz:** usuário 02 (sem `editPayroll`) barrado com 42501 ·
+2626 lança · 8888 (PN) enxerga **0** férias de Caratinga · anon barrado · período com fim
+antes do começo recusado pela regra de data (23514, conferido à parte, porque na primeira
+simulação ele bateu na trava de permissão antes e eu quase dei por provado o que não foi).
+
+## 4. Validação
+
+| | |
+|---|---|
+| Unitários | **88 verdes** (`folhaCalc` 69 — 24 novos de falta/DSR/férias — · `holeriteLinhasFolha` 9 · `permissions` 10) |
+| typecheck · lint · build | 0 · 0 · limpo |
+| E2E `tests/115` | **3/3** depois da mudança (a ficha ganhou o bloco de férias e não quebrou) |
+| Banco | sem sobra de teste |
+
+## 5. O que ainda NÃO faz
+
+- **INSS e IRRF** seguem para a segunda leva (combinado em 12/09).
+- **13º, rescisão e o cálculo de férias por avos** (aquisitivo) não entram: aqui as férias
+  são o período que alguém lança, não o direito calculado.
+- Os **relatórios** ainda não mostram as linhas da folha — segue pendente da leva 2.
+- A **jornada de 220h** do adicional noturno continua sendo o padrão da CLT, não um número
+  conferido contra o papel.

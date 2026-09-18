@@ -31,6 +31,8 @@
  * Mora fora do componente, como o `driverPayCalc`, pra poder ser testado sem React.
  */
 
+import { semanaDaData } from '../dateUtils';
+
 /** O que a ficha do funcionário guarda de folha. Espelha as colunas novas de `employees`. */
 export interface FichaDeFolha {
   /** Salário do contrato, cheio. 0 quando ninguém preencheu ainda. */
@@ -51,6 +53,14 @@ export interface ConfiguracaoDaFolha {
   cotaSalarioFamilia: number;
   /** Salário até o qual a pessoa tem direito à cota. Acima disso, não recebe. */
   tetoSalarioFamilia: number;
+  /**
+   * Falta injustificada derruba TAMBÉM o descanso da semana (DSR)?
+   *
+   * Pela CLT, quem falta sem atestado perde o descanso semanal remunerado daquela
+   * semana — na prática uma falta custa dois dias. Nasce **desligada** (decisão do
+   * Victor, 18/09: quer as duas opções disponíveis, sem mudar nada sozinho).
+   */
+  dsrNaFaltaInjustificada: boolean;
 }
 
 /**
@@ -62,6 +72,7 @@ export const CONFIGURACAO_DA_FOLHA_PADRAO: ConfiguracaoDaFolha = {
   percentualFgts: 8,
   cotaSalarioFamilia: 67.54,
   tetoSalarioFamilia: 1906.04,
+  dsrNaFaltaInjustificada: false,
 };
 
 /** Uma linha impressa na tabela "Composição do Pagamento" do recibo. */
@@ -75,6 +86,14 @@ export interface LinhaDaFolha {
 
 export interface FolhaCalculada {
   diasDeReferencia: number;
+  /** Dias efetivamente pagos como salário: referência − faltas − DSR perdido − férias. */
+  diasPagos: number;
+  diasDeFalta: number;
+  /** Descansos semanais perdidos por falta injustificada (0 com a chave desligada). */
+  diasDeDsrPerdido: number;
+  diasDeFerias: number;
+  ferias: number;
+  tercoDeFerias: number;
   salarioDoMes: number;
   adicionalNoturno: number;
   salarioFamilia: number;
@@ -96,6 +115,16 @@ export interface EntradaDaFolha {
   mes: number;
   /** Vem do ponto do mês, já em dinheiro — a folha não recalcula hora. */
   adicionalNoturno: number;
+  /**
+   * DATAS das faltas que descontam (as injustificadas). Falta com atestado não entra
+   * aqui — ela não desconta nada, que é o ponto de existirem os dois tipos.
+   *
+   * São datas, e não uma contagem, por causa do DSR: duas faltas na MESMA semana
+   * derrubam UM descanso só, e sem a data não dá pra saber que semana é.
+   */
+  faltasInjustificadas?: readonly string[];
+  /** Dias de férias dentro deste mês. Saem do salário e viram linha própria. */
+  diasDeFerias?: number;
 }
 
 /** Dias corridos do mês. `new Date(ano, mes, 0)` cai no último dia do mês pedido. */
@@ -183,12 +212,90 @@ export function calcularAdicionalNoturno(
   return truncaCentavos((salario / horasMensais) * horas * 0.2);
 }
 
-export function calcularFolha({ ficha, config, ano, mes, adicionalNoturno }: EntradaDaFolha): FolhaCalculada {
+/**
+ * Quantos dias de férias caem DENTRO do período pedido.
+ *
+ * As férias de alguém podem começar num mês e terminar no outro; o recibo de cada mês
+ * só pode contar os dias que são dele, senão a pessoa perderia salário duas vezes.
+ * Conta pelo texto 'YYYY-MM-DD', sem `new Date(string)` (o parse de ISO puxa UTC e já
+ * custou dia trocado neste projeto).
+ */
+export function diasDeFeriasNoPeriodo(
+  ferias: readonly { start_date: string; end_date: string }[],
+  inicio: string,
+  fim: string,
+): number {
+  const dias = new Set<string>();
+  for (const f of ferias) {
+    const de = f.start_date > inicio ? f.start_date : inicio;
+    const ate = f.end_date < fim ? f.end_date : fim;
+    if (de > ate) continue;
+    for (let d = new Date(`${de}T00:00:00Z`); d.toISOString().slice(0, 10) <= ate; d.setUTCDate(d.getUTCDate() + 1)) {
+      dias.add(d.toISOString().slice(0, 10));
+    }
+  }
+  return dias.size;
+}
+
+/**
+ * Semanas distintas em que houve falta — é assim que o DSR se perde: a CLT tira o
+ * descanso DA SEMANA, então duas faltas na mesma semana derrubam um descanso só.
+ */
+function semanasComFalta(datas: readonly string[]): number {
+  const semanas = new Set<string>();
+  for (const data of datas) {
+    try {
+      semanas.add(semanaDaData(data).segunda);
+    } catch {
+      // Data inválida não vira desconto silencioso: ignora pro DSR e segue.
+    }
+  }
+  return semanas.size;
+}
+
+/**
+ * COMO A FALTA E AS FÉRIAS ENTRAM NO PAPEL (decidido em 18/09/2026):
+ *
+ * - **Férias REDUZEM a linha do salário** e viram linha própria de provento. Tem que ser
+ *   assim: se o salário continuasse cheio e as férias somassem por cima, a pessoa
+ *   receberia duas vezes pelos mesmos dias.
+ * - **Falta NÃO reduz a linha do salário** — ela sai como DESCONTO, com a quantidade de
+ *   dias à vista. É a lição de 04/08/2026 (o desconto de erro que ninguém via): descontar
+ *   escondido, reduzindo a referência, deixa o funcionário sem saber para onde foi o
+ *   dinheiro. O gabarito da contabilidade reduz a referência; aqui a conta dá no mesmo e
+ *   o papel explica.
+ *
+ * O desconto da falta nunca passa do salário do mês, então o líquido não fica negativo
+ * por mais faltas que existam.
+ */
+export function calcularFolha({
+  ficha,
+  config,
+  ano,
+  mes,
+  adicionalNoturno,
+  faltasInjustificadas,
+  diasDeFerias,
+}: EntradaDaFolha): FolhaCalculada {
   const dias = diasDeReferencia(ficha.admissao, ano, mes);
   const salarioBase = Math.max(0, Number(ficha.salarioMensal) || 0);
   const noturno = doisDecimais(Math.max(0, Number(adicionalNoturno) || 0));
 
-  const salarioDoMes = proporcional(salarioBase, dias);
+  // Férias: saem do salário e viram provento próprio.
+  const feriasDias = Math.min(dias, Math.max(0, Math.trunc(Number(diasDeFerias) || 0)));
+  const diasDeSalario = Math.max(0, dias - feriasDias);
+  const salarioDoMes = proporcional(salarioBase, diasDeSalario);
+  const ferias = proporcional(salarioBase, feriasDias);
+  // O 1/3 constitucional, em linha separada (decisão do Victor, 18/09: "sim").
+  const tercoDeFerias = truncaCentavos(ferias / 3);
+
+  // Falta: só a injustificada chega aqui. A com atestado não desconta nada.
+  const datasDeFalta = Array.from(new Set(faltasInjustificadas ?? []));
+  const diasDeFalta = Math.min(diasDeSalario, datasDeFalta.length);
+  const dsrPerdido = config.dsrNaFaltaInjustificada ? semanasComFalta(datasDeFalta) : 0;
+  const diasDeDsrPerdido = Math.min(Math.max(0, diasDeSalario - diasDeFalta), dsrPerdido);
+  const diasPagos = Math.max(0, diasDeSalario - diasDeFalta - diasDeDsrPerdido);
+  const descontoDeFaltas = doisDecimais(salarioDoMes - proporcional(salarioBase, diasPagos));
 
   const filhos = Math.max(0, Math.trunc(Number(ficha.filhosSalarioFamilia) || 0));
   const temDireito = filhos > 0 && salarioBase > 0 && salarioBase <= config.tetoSalarioFamilia;
@@ -197,14 +304,17 @@ export function calcularFolha({ ficha, config, ano, mes, adicionalNoturno }: Ent
     : 0;
 
   // O FGTS é custo da empresa: entra no papel como informação e NÃO abate o líquido.
-  const baseFgts = ficha.fgtsAtivo ? doisDecimais(salarioDoMes + noturno) : 0;
+  // Férias e o 1/3 entram na base; o salário família fica fora (Camila, no gabarito).
+  const baseFgts = ficha.fgtsAtivo
+    ? doisDecimais(salarioDoMes + noturno + ferias + tercoDeFerias)
+    : 0;
   const valorFgts = truncaCentavos((baseFgts * config.percentualFgts) / 100);
 
   const linhas: LinhaDaFolha[] = [];
   if (salarioDoMes > 0) {
     linhas.push({
       descricao: 'Salário mensalista',
-      referencia: formataReferencia(dias),
+      referencia: formataReferencia(diasDeSalario),
       provento: salarioDoMes,
       desconto: 0,
     });
@@ -220,12 +330,37 @@ export function calcularFolha({ ficha, config, ano, mes, adicionalNoturno }: Ent
       desconto: 0,
     });
   }
+  if (ferias > 0) {
+    linhas.push({
+      descricao: 'Férias',
+      referencia: formataReferencia(feriasDias),
+      provento: ferias,
+      desconto: 0,
+    });
+  }
+  if (tercoDeFerias > 0) {
+    linhas.push({ descricao: '1/3 de férias', provento: tercoDeFerias, desconto: 0 });
+  }
+  if (descontoDeFaltas > 0) {
+    linhas.push({
+      descricao: 'Faltas',
+      referencia: formataReferencia(diasDeFalta + diasDeDsrPerdido),
+      provento: 0,
+      desconto: descontoDeFaltas,
+    });
+  }
 
   const totalProventos = doisDecimais(linhas.reduce((soma, l) => soma + l.provento, 0));
   const totalDescontos = doisDecimais(linhas.reduce((soma, l) => soma + l.desconto, 0));
 
   return {
     diasDeReferencia: dias,
+    diasPagos,
+    diasDeFalta,
+    diasDeDsrPerdido,
+    diasDeFerias: feriasDias,
+    ferias,
+    tercoDeFerias,
     salarioDoMes,
     adicionalNoturno: noturno,
     salarioFamilia,

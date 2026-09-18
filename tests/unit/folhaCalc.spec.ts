@@ -4,6 +4,7 @@ import {
   HORAS_MENSAIS_CLT,
   calcularAdicionalNoturno,
   calcularFolha,
+  diasDeFeriasNoPeriodo,
   diasDeReferencia,
   type ConfiguracaoDaFolha,
 } from '../../src/utils/folha/folhaCalc';
@@ -443,5 +444,202 @@ describe('adicional noturno do mensalista', () => {
     });
     expect(folha.baseFgts).toBe(1715.45);
     expect(folha.valorFgts).toBe(137.23); // 1.715,45 × 8% = 137,236 → truncado
+  });
+});
+
+describe('faltas', () => {
+  const comFaltas = (faltas: string[], dsr = false) =>
+    calcularFolha({
+      ficha: { salarioMensal: 1700, filhosSalarioFamilia: 0, fgtsAtivo: true, admissao: '2020-01-01' },
+      config: { ...CONFIGURACAO_DA_FOLHA_PADRAO, dsrNaFaltaInjustificada: dsr },
+      ...JULHO_2026,
+      adicionalNoturno: 0,
+      faltasInjustificadas: faltas,
+    });
+
+  /**
+   * O DESENHO (18/09/2026): a linha do salário continua CHEIA e a falta sai como
+   * desconto, com os dias à vista — em vez de reduzir a referência em silêncio.
+   * É a lição de 04/08/2026: desconto que não aparece deixa o funcionário sem saber
+   * para onde foi o dinheiro. A conta dá no mesmo; o papel é que explica.
+   */
+  it('cada falta vira desconto de um dia (1.700 ÷ 30 = 56,66 por dia)', () => {
+    expect(comFaltas([]).salarioDoMes).toBe(1700);
+    expect(comFaltas([]).diasPagos).toBe(30);
+
+    const uma = comFaltas(['2026-07-06']);
+    expect(uma.diasPagos).toBe(29);
+    expect(uma.salarioDoMes).toBe(1700);            // a linha do salário não encolhe
+    expect(uma.totalDescontos).toBe(56.67);         // 1.700 − 1.643,33
+    expect(uma.liquido).toBe(1643.33);              // é o que ela recebe de fato
+
+    expect(comFaltas(['2026-07-06', '2026-07-07']).diasPagos).toBe(28);
+  });
+
+  it('a falta NÃO desconta duas vezes: o líquido bate com os dias pagos', () => {
+    const folha = comFaltas(['2026-07-06', '2026-07-07']);
+    expect(folha.liquido).toBe(1586.66); // 1.700 ÷ 30 × 28
+  });
+
+  it('a falta aparece no papel com a quantidade, como desconto', () => {
+    const folha = comFaltas(['2026-07-06', '2026-07-07']);
+    const falta = folha.linhas.find(l => l.descricao === 'Faltas');
+    expect(falta?.referencia).toBe('2,00');
+    expect(falta?.desconto).toBe(113.34); // 1.700 − 1.586,66
+    expect(falta?.provento).toBe(0);
+  });
+
+  it('sem faltas, a linha nem aparece', () => {
+    expect(comFaltas([]).linhas.some(l => l.descricao === 'Faltas')).toBe(false);
+  });
+
+  describe('DSR — a chave que nasce desligada', () => {
+    it('desligada: a falta custa só o dia', () => {
+      expect(comFaltas(['2026-07-06']).diasDeDsrPerdido).toBe(0);
+      expect(comFaltas(['2026-07-06']).diasPagos).toBe(29);
+      expect(comFaltas(['2026-07-06']).totalDescontos).toBe(56.67);
+    });
+
+    it('ligada: a falta derruba também o descanso da semana (custa dois dias)', () => {
+      expect(comFaltas(['2026-07-06'], true).diasDeDsrPerdido).toBe(1);
+      expect(comFaltas(['2026-07-06'], true).diasPagos).toBe(28);
+      expect(comFaltas(['2026-07-06'], true).totalDescontos).toBe(113.34); // 1.700 − 1.586,66
+    });
+
+    it('ligada: duas faltas na MESMA semana perdem UM descanso só', () => {
+      // 06 e 07/07/2026 caem na mesma semana (segunda e terça).
+      const folha = comFaltas(['2026-07-06', '2026-07-07'], true);
+      expect(folha.diasDeDsrPerdido).toBe(1);
+      expect(folha.diasPagos).toBe(27); // 30 − 2 faltas − 1 descanso
+    });
+
+    it('ligada: faltas em semanas diferentes perdem um descanso cada', () => {
+      const folha = comFaltas(['2026-07-06', '2026-07-14'], true);
+      expect(folha.diasDeDsrPerdido).toBe(2);
+      expect(folha.diasPagos).toBe(26);
+    });
+  });
+
+  it('faltar o mês inteiro zera o líquido, nunca fica negativo', () => {
+    const trintaFaltas = Array.from({ length: 35 }, (_, i) => `2026-07-${String((i % 31) + 1).padStart(2, '0')}`);
+    const folha = comFaltas(trintaFaltas);
+    expect(folha.diasPagos).toBe(0);
+    expect(folha.totalDescontos).toBe(1700); // o desconto para no tamanho do salário
+    expect(folha.liquido).toBe(0);
+  });
+});
+
+describe('férias', () => {
+  const comFerias = (dias: number) =>
+    calcularFolha({
+      ficha: { salarioMensal: 1700, filhosSalarioFamilia: 0, fgtsAtivo: true, admissao: '2020-01-01' },
+      config: CONFIGURACAO_DA_FOLHA_PADRAO,
+      ...JULHO_2026,
+      adicionalNoturno: 0,
+      diasDeFerias: dias,
+    });
+
+  it('os dias de férias saem do salário e entram como linha própria', () => {
+    const folha = comFerias(10);
+    expect(folha.diasPagos).toBe(20);
+    expect(folha.salarioDoMes).toBe(1133.33); // 1.700 ÷ 30 × 20
+    expect(folha.ferias).toBe(566.66);        // 1.700 ÷ 30 × 10
+  });
+
+  it('o 1/3 sai em linha separada (decisão do Victor, 18/09)', () => {
+    expect(comFerias(10).tercoDeFerias).toBe(188.88); // 566,66 ÷ 3, truncado
+    expect(comFerias(30).tercoDeFerias).toBe(566.66);
+  });
+
+  it('as duas linhas aparecem no papel, com a quantidade de dias', () => {
+    const folha = comFerias(10);
+    const ferias = folha.linhas.find(l => l.descricao === 'Férias');
+    expect(ferias?.referencia).toBe('10,00');
+    expect(ferias?.provento).toBe(566.66);
+    expect(folha.linhas.find(l => l.descricao === '1/3 de férias')?.provento).toBe(188.88);
+  });
+
+  it('férias e 1/3 entram na base do FGTS (o salário família é que fica fora)', () => {
+    const folha = comFerias(10);
+    expect(folha.baseFgts).toBe(1888.87); // 1.133,33 + 566,66 + 188,88
+  });
+
+  it('mês inteiro de férias: salário zero, férias cheias, líquido não some', () => {
+    const folha = comFerias(30);
+    expect(folha.salarioDoMes).toBe(0);
+    expect(folha.ferias).toBe(1700);
+    expect(folha.liquido).toBe(2266.66); // 1.700 + 566,66
+  });
+
+  it('sem férias, nenhuma das duas linhas aparece', () => {
+    const folha = comFerias(0);
+    expect(folha.linhas.some(l => l.descricao.includes('férias') || l.descricao === 'Férias')).toBe(false);
+  });
+});
+
+describe('falta e férias no mesmo mês', () => {
+  it('os dois descontam dias, sem se atropelar', () => {
+    const folha = calcularFolha({
+      ficha: { salarioMensal: 1700, filhosSalarioFamilia: 0, fgtsAtivo: true, admissao: '2020-01-01' },
+      config: CONFIGURACAO_DA_FOLHA_PADRAO,
+      ...JULHO_2026,
+      adicionalNoturno: 0,
+      faltasInjustificadas: ['2026-07-06', '2026-07-07'],
+      diasDeFerias: 5,
+    });
+    expect(folha.diasPagos).toBe(23);        // 30 − 5 de férias − 2 de falta
+    expect(folha.salarioDoMes).toBe(1416.66); // as férias REDUZEM a linha do salário (25 dias)
+    expect(folha.ferias).toBe(283.33);        // e viram provento próprio (5 dias)
+    expect(folha.totalDescontos).toBe(113.33); // a falta desconta por fora
+  });
+});
+
+describe('o recibo da Silvia, que o gabarito mostra com férias', () => {
+  it('com os 9 dias de férias lançados, o salário dela bate com o papel', () => {
+    // O papel traz 21 dias e R$ 1.190,00 — ela tirou 9 dias de férias em julho.
+    const folha = calcularFolha({
+      ficha: { salarioMensal: 1700, filhosSalarioFamilia: 0, fgtsAtivo: true, admissao: '2025-07-21' },
+      config: CONFIGURACAO_DA_FOLHA_PADRAO,
+      ...JULHO_2026,
+      adicionalNoturno: 61.62,
+      diasDeFerias: 9,
+    });
+    expect(folha.diasPagos).toBe(21);
+    expect(folha.salarioDoMes).toBe(1190);
+  });
+});
+
+describe('dias de férias dentro do período', () => {
+  const julho = ['2026-07-01', '2026-07-31'] as const;
+
+  it('conta só os dias que caem no período pedido', () => {
+    expect(diasDeFeriasNoPeriodo([{ start_date: '2026-07-06', end_date: '2026-07-15' }], ...julho)).toBe(10);
+  });
+
+  it('férias que começam no mês anterior entram só com a parte de cá', () => {
+    expect(diasDeFeriasNoPeriodo([{ start_date: '2026-06-25', end_date: '2026-07-05' }], ...julho)).toBe(5);
+  });
+
+  it('férias que terminam no mês seguinte também', () => {
+    expect(diasDeFeriasNoPeriodo([{ start_date: '2026-07-28', end_date: '2026-08-10' }], ...julho)).toBe(4);
+  });
+
+  it('período inteiro fora não conta nada', () => {
+    expect(diasDeFeriasNoPeriodo([{ start_date: '2026-09-01', end_date: '2026-09-10' }], ...julho)).toBe(0);
+  });
+
+  it('dois lançamentos que se sobrepõem não contam o mesmo dia duas vezes', () => {
+    expect(diasDeFeriasNoPeriodo([
+      { start_date: '2026-07-06', end_date: '2026-07-10' },
+      { start_date: '2026-07-08', end_date: '2026-07-12' },
+    ], ...julho)).toBe(7);
+  });
+
+  it('um dia só de férias conta um dia', () => {
+    expect(diasDeFeriasNoPeriodo([{ start_date: '2026-07-06', end_date: '2026-07-06' }], ...julho)).toBe(1);
+  });
+
+  it('sem férias, zero', () => {
+    expect(diasDeFeriasNoPeriodo([], ...julho)).toBe(0);
   });
 });

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound, Clock, Briefcase, Calendar, Hash, Save, Copy, CheckCircle2, XCircle, Clock3, ArchiveRestore, UserCheck } from 'lucide-react';
-import { getAllEmployees, getAllEmployeesAcrossAllCompanies, createEmployee, updateEmployee, deleteEmployee, updateEmployeeRegistrationStatus, Employee, type EmployeeExtras, bulkCreateEmployees, setEmployeePin, resetEmployeePin, getCompanies } from '../../services/database';
+import { getAllEmployees, getAllEmployeesAcrossAllCompanies, createEmployee, updateEmployee, deleteEmployee, updateEmployeeRegistrationStatus, Employee, type EmployeeExtras, bulkCreateEmployees, setEmployeePin, resetEmployeePin, getCompanies, getEmployeeVacationsOfEmployee, createEmployeeVacation, deleteEmployeeVacation, type EmployeeVacation } from '../../services/database';
 import { parseNumericInput, isInRange } from '../../utils/numericInputHelpers';
+import { formatDateBR } from '../../utils/dateUtils';
 import { supabase } from '../../lib/supabase';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
@@ -101,6 +102,11 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   // Folha (18/09/2026): permissão própria — quem edita ficha não vê salário por padrão.
   const canViewPayroll = hasPermission('employees.viewPayroll');
   const canEditPayroll = hasPermission('employees.editPayroll');
+  // Férias do funcionário aberto na ficha (18/09/2026). Tabela própria, carga própria.
+  const [feriasDoFuncionario, setFeriasDoFuncionario] = useState<EmployeeVacation[]>([]);
+  const [feriasInicio, setFeriasInicio] = useState('');
+  const [feriasFim, setFeriasFim] = useState('');
+  const [feriasSalvando, setFeriasSalvando] = useState(false);
   const canViewApproval = hasPermission('employeeapproval.view');
   const canApproveRegistration = hasPermission('employeeapproval.approve');
   const canRejectRegistration = hasPermission('employeeapproval.reject');
@@ -480,7 +486,52 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       cbo: employee.cbo || '',
       fgtsEnabled: employee.fgts_enabled ?? false,
     });
+    setFeriasInicio('');
+    setFeriasFim('');
+    setFeriasDoFuncionario([]);
+    if (canViewPayroll && company?.id) {
+      // Janela larga de propósito: a ficha mostra o histórico, não só o mês atual.
+      getEmployeeVacationsOfEmployee(employee.id)
+        .then(setFeriasDoFuncionario)
+        .catch(err => toast.error(mensagemDeErro(err, 'Erro ao carregar as férias')));
+    }
     setShowForm(true);
+  };
+
+  const lancarFerias = async () => {
+    if (!editingEmployee || !company?.id) return;
+    if (!feriasInicio || !feriasFim) {
+      toast.error('Preencha o começo e o fim das férias');
+      return;
+    }
+    if (feriasFim < feriasInicio) {
+      toast.error('O fim das férias não pode ser antes do começo');
+      return;
+    }
+    setFeriasSalvando(true);
+    try {
+      await createEmployeeVacation(editingEmployee.id, company.id, feriasInicio, feriasFim, userId);
+      setFeriasDoFuncionario(await getEmployeeVacationsOfEmployee(editingEmployee.id));
+      setFeriasInicio('');
+      setFeriasFim('');
+      toast.success('Férias lançadas. Esses dias saem do salário e viram linha própria no recibo.');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Erro ao lançar as férias'));
+    } finally {
+      setFeriasSalvando(false);
+    }
+  };
+
+  const removerFerias = async (id: string) => {
+    if (!editingEmployee) return;
+    if (!confirm('Remover este período de férias? O recibo volta a pagar esses dias como salário.')) return;
+    try {
+      await deleteEmployeeVacation(id);
+      setFeriasDoFuncionario(await getEmployeeVacationsOfEmployee(editingEmployee.id));
+      toast.success('Período removido.');
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Erro ao remover as férias'));
+    }
   };
 
   const handleDelete = async (employee: Employee) => {
@@ -1476,6 +1527,68 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                     </label>
                   </div>
                 </div>
+
+                {/* Férias (18/09/2026). Só na edição: o funcionário precisa existir antes
+                    de ter férias lançadas. Os dias saem do salário e viram linha própria. */}
+                {editingEmployee && (
+                  <div className="mt-5 pt-4 border-t border-gray-100" data-testid="bloco-ferias">
+                    <h5 className="text-sm font-medium text-gray-900 mb-1">Férias</h5>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Os dias lançados saem do salário do mês e aparecem no recibo como
+                      "Férias" e "1/3 de férias".
+                    </p>
+
+                    {feriasDoFuncionario.length === 0 ? (
+                      <p className="text-xs text-gray-500 mb-3">Nenhum período lançado.</p>
+                    ) : (
+                      <ul className="mb-3 space-y-1">
+                        {feriasDoFuncionario.map(f => (
+                          <li key={f.id} className="flex items-center justify-between text-sm bg-gray-50 rounded px-3 py-2">
+                            <span className="text-gray-700">
+                              {formatDateBR(f.start_date)} a {formatDateBR(f.end_date)}
+                            </span>
+                            {canEditPayroll && (
+                              <button
+                                type="button"
+                                onClick={() => removerFerias(f.id)}
+                                className="text-xs text-red-600 hover:underline"
+                              >
+                                Remover
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {canEditPayroll && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <input
+                          type="date"
+                          value={feriasInicio}
+                          onChange={(e) => setFeriasInicio(e.target.value)}
+                          aria-label="Começo das férias"
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm min-h-[44px]"
+                        />
+                        <input
+                          type="date"
+                          value={feriasFim}
+                          onChange={(e) => setFeriasFim(e.target.value)}
+                          aria-label="Fim das férias"
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm min-h-[44px]"
+                        />
+                        <button
+                          type="button"
+                          onClick={lancarFerias}
+                          disabled={feriasSalvando}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 min-h-[44px]"
+                        >
+                          {feriasSalvando ? 'Lançando…' : 'Lançar férias'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

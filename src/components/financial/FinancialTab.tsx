@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from
 import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
-  getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, getPayrollConfig,
+  getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, getPayrollConfig, getEmployeeVacations, type EmployeeVacation,
   clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getBonusRemovalHistory, BonusRemoval,
   getTriageDistributionsForEmployees, getBonusTypes, BonusTypeRecord,
   getPaymentPeriods, PaymentPeriod,
@@ -49,6 +49,7 @@ import {
   CONFIGURACAO_DA_FOLHA_PADRAO,
   calcularAdicionalNoturno,
   calcularFolha,
+  diasDeFeriasNoPeriodo,
   type ConfiguracaoDaFolha,
   type FolhaCalculada,
 } from '../../utils/folha/folhaCalc';
@@ -86,6 +87,7 @@ function montarDadosDoRecibo(
   fim: string,
   company: { display_name?: string | null; legal_name?: string | null; cnpj?: string | null } | null,
   configDaFolha: ConfiguracaoDaFolha,
+  feriasDaEmpresa: readonly EmployeeVacation[],
 ) {
   return {
     company: {
@@ -119,7 +121,7 @@ function montarDadosDoRecibo(
     totalBonusC2: d.totalBonusC2 || 0,
     totalGross: d.totalEarnedGross || 0,
     totalNet: d.totalEarned || 0,
-    folha: folhaDoRecibo(d, inicio, configDaFolha),
+    folha: folhaDoRecibo(d, inicio, fim, configDaFolha, feriasDaEmpresa),
   };
 }
 
@@ -133,7 +135,9 @@ function montarDadosDoRecibo(
 function folhaDoRecibo(
   d: EmployeeFinancialData,
   inicio: string,
+  fim: string,
   config: ConfiguracaoDaFolha,
+  feriasDaEmpresa: readonly EmployeeVacation[],
 ): FolhaCalculada | undefined {
   const ficha = d.employee;
   const salario = Number(ficha.monthly_salary ?? 0);
@@ -156,6 +160,14 @@ function folhaDoRecibo(
     // Decisão do Victor (18/09): o adicional noturno passa a sair em R$ SÓ pra carteira
     // assinada. O diarista continua como está — a tela dele nunca mostrou valor.
     adicionalNoturno: calcularAdicionalNoturno(salario, d.totalNightHours || 0),
+    // Só a falta SEM atestado desconta (decisão do Victor, 18/09: quer os dois tipos).
+    faltasInjustificadas: d.faltasInjustificadas,
+    // Férias podem atravessar o mês: conta só os dias que caem neste período.
+    diasDeFerias: diasDeFeriasNoPeriodo(
+      feriasDaEmpresa.filter(f => f.employee_id === ficha.id),
+      inicio,
+      fim,
+    ),
   });
 }
 
@@ -282,6 +294,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
    * diarista — que é a maioria — continua idêntico.
    */
   const [configDaFolha, setConfigDaFolha] = useState<ConfiguracaoDaFolha>(CONFIGURACAO_DA_FOLHA_PADRAO);
+  /** Férias que encostam no período filtrado — o recibo desconta só os dias de cá. */
+  const [feriasDaEmpresa, setFeriasDaEmpresa] = useState<EmployeeVacation[]>([]);
 
   // ─── Banco de horas (combo G — sub-fase 2.17) ──────────────────────────
   // Dropdown de payment_periods da empresa atual + modal de preview/apply.
@@ -389,7 +403,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     try {
       const { generateHoleritePdf, downloadHoleritePdf } = await import('../../utils/holeritePdf');
       const dadosDoRecibo = (d: EmployeeFinancialData) =>
-        montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha);
+        montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa);
 
       if (escolhidos.length === 1) {
         setPdfGerando('Gerando…');
@@ -448,7 +462,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       setPdfGerando(`Montando ${escolhidos.length} folhas…`);
       const { generateLoteHoleritePdf } = await import('../../utils/holeritePdf');
       const pdf = await generateLoteHoleritePdf(
-        escolhidos.map((d) => montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha)),
+        escolhidos.map((d) => montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa)),
       );
       baixarArquivo(
         pdf,
@@ -480,7 +494,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         const d = escolhidos[i];
         setPdfGerando(`Publicando ${i + 1} de ${escolhidos.length}…`);
         const pdf = await generateHoleritePdf(
-          montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha),
+          montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa),
         );
         await publicarReciboDePagamento({
           companyId: company.id,
@@ -582,6 +596,21 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       loadData();
     }
   }, [filters, isEditingDate, loadData]);
+
+  useEffect(() => {
+    if (!company?.id || !filters.startDate || !filters.endDate) return;
+    let cancelado = false;
+    getEmployeeVacations(company.id, filters.startDate, filters.endDate)
+      .then(ferias => { if (!cancelado) setFeriasDaEmpresa(ferias); })
+      // Falhar aqui não pode travar a tela: sem férias carregadas o recibo sai como
+      // saía antes (mês cheio), e o aviso aparece pra pessoa saber que faltou dado.
+      .catch(err => {
+        if (cancelado) return;
+        setFeriasDaEmpresa([]);
+        console.error('Erro ao carregar as férias do período:', err);
+      });
+    return () => { cancelado = true; };
+  }, [company?.id, filters.startDate, filters.endDate]);
 
   const anoDaFolha = Number(filters.startDate.slice(0, 4));
   useEffect(() => {
@@ -1763,7 +1792,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                           // recibo diferente do que foi conferido. (11/09/2026.)
                           const { downloadHoleritePdf } = await import('../../utils/holeritePdf');
                           await downloadHoleritePdf(
-                            montarDadosDoRecibo(data, filters.startDate, filters.endDate, company, configDaFolha),
+                            montarDadosDoRecibo(data, filters.startDate, filters.endDate, company, configDaFolha, feriasDaEmpresa),
                           );
                           toast.success('Holerite PDF gerado');
                         }}

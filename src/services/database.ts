@@ -131,6 +131,9 @@ export interface Attendance {
   exit_time_full: string | null;
   hours_worked: number | null;
   night_hours: number | null;
+  /** Falta com atestado (18/09/2026): não desconta na folha. */
+  absence_justified?: boolean | null;
+  absence_note?: string | null;
   night_additional: number | null;
   clock_source: 'manual' | 'employee_self' | null;
   marked_by: string;
@@ -2449,7 +2452,7 @@ export const getPayrollConfig = async (
 ): Promise<ConfiguracaoDaFolha> => {
   const { data, error } = await supabase
     .from('payroll_config')
-    .select('fgts_percent, family_allowance_quota, family_allowance_ceiling')
+    .select('fgts_percent, family_allowance_quota, family_allowance_ceiling, dsr_on_unjustified_absence')
     .eq('company_id', companyId)
     .eq('ano', ano)
     .maybeSingle();
@@ -2459,6 +2462,7 @@ export const getPayrollConfig = async (
     percentualFgts: Number(data.fgts_percent ?? CONFIGURACAO_DA_FOLHA_PADRAO.percentualFgts),
     cotaSalarioFamilia: Number(data.family_allowance_quota ?? 0),
     tetoSalarioFamilia: Number(data.family_allowance_ceiling ?? 0),
+    dsrNaFaltaInjustificada: data.dsr_on_unjustified_absence ?? false,
   };
 };
 
@@ -2486,9 +2490,105 @@ export const savePayrollConfig = async (
       fgts_percent: config.percentualFgts,
       family_allowance_quota: config.cotaSalarioFamilia,
       family_allowance_ceiling: config.tetoSalarioFamilia,
+      dsr_on_unjustified_absence: config.dsrNaFaltaInjustificada,
       updated_by: userId,
       updated_at: new Date().toISOString(),
     }], { onConflict: 'company_id,ano' });
+  if (error) throw error;
+};
+
+/**
+ * Marca (ou desmarca) uma falta como JUSTIFICADA — a com atestado, que não desconta na
+ * folha (decisão do Victor, 18/09: quer os dois tipos de falta).
+ *
+ * Usa a mesma permissão de marcar presença (`attendance.mark`): quem marca a falta é
+ * quem sabe se teve atestado.
+ */
+export const setAbsenceJustified = async (
+  employeeId: string,
+  date: string,
+  justified: boolean,
+  companyId: string,
+  userId: string,
+  note?: string | null
+): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'attendance.mark');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  const { error } = await supabase
+    .from('attendance')
+    .update({ absence_justified: justified, absence_note: note ?? null })
+    .eq('employee_id', employeeId)
+    .eq('date', date)
+    .eq('company_id', companyId);
+  if (error) throw error;
+};
+
+/** Um período de férias lançado para alguém. */
+export interface EmployeeVacation {
+  id: string;
+  employee_id: string;
+  company_id: string;
+  start_date: string;
+  end_date: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** Férias que encostam no intervalo pedido (qualquer sobreposição, não só as inteiras). */
+export const getEmployeeVacations = async (
+  companyId: string,
+  startDate: string,
+  endDate: string
+): Promise<EmployeeVacation[]> => {
+  const { data, error } = await supabase
+    .from('employee_vacations')
+    .select('*')
+    .eq('company_id', companyId)
+    .lte('start_date', endDate)
+    .gte('end_date', startDate)
+    .order('start_date');
+  if (error) throw error;
+  return (data ?? []) as EmployeeVacation[];
+};
+
+/** Todas as férias de UMA pessoa, pra mostrar o histórico na ficha. */
+export const getEmployeeVacationsOfEmployee = async (
+  employeeId: string
+): Promise<EmployeeVacation[]> => {
+  const { data, error } = await supabase
+    .from('employee_vacations')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .order('start_date', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as EmployeeVacation[];
+};
+
+/** Lançar férias mexe em salário: o banco exige `employees.editPayroll` no trigger. */
+export const createEmployeeVacation = async (
+  employeeId: string,
+  companyId: string,
+  startDate: string,
+  endDate: string,
+  userId: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('employee_vacations')
+    .insert([{
+      employee_id: employeeId,
+      company_id: companyId,
+      start_date: startDate,
+      end_date: endDate,
+      created_by: userId,
+    }]);
+  if (error) throw error;
+};
+
+export const deleteEmployeeVacation = async (id: string): Promise<void> => {
+  const { error } = await supabase.from('employee_vacations').delete().eq('id', id);
   if (error) throw error;
 };
 

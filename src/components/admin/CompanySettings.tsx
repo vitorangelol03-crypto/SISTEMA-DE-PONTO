@@ -99,6 +99,9 @@ export const CompanySettings: React.FC = () => {
   const [familyQuotaRaw, setFamilyQuotaRaw] = useState('');
   const [familyCeilingRaw, setFamilyCeilingRaw] = useState('');
   const [folhaCarregando, setFolhaCarregando] = useState(true);
+  // Decisão do Victor (18/09): quer as DUAS opções de falta. Esta chave nasce desligada —
+  // ligada, a falta injustificada derruba também o descanso da semana (na prática 2 dias).
+  const [dsrNaFalta, setDsrNaFalta] = useState(false);
 
   // COMBO I FIX #5: números derivados dos states raw — consumidos por validação, submit e useMemo.
   const bankHoursExtraMultiplier = parseNumericInput(extraMultRaw) ?? 0;
@@ -153,6 +156,7 @@ export const CompanySettings: React.FC = () => {
         setFgtsPercentRaw(String(config.percentualFgts).replace('.', ','));
         setFamilyQuotaRaw(String(config.cotaSalarioFamilia).replace('.', ','));
         setFamilyCeilingRaw(String(config.tetoSalarioFamilia).replace('.', ','));
+        setDsrNaFalta(config.dsrNaFaltaInjustificada);
       })
       .catch(err => {
         if (!vivo) return;
@@ -243,6 +247,7 @@ export const CompanySettings: React.FC = () => {
           percentualFgts: fgtsPercent as number,
           cotaSalarioFamilia: familyQuota as number,
           tetoSalarioFamilia: familyCeiling as number,
+          dsrNaFaltaInjustificada: dsrNaFalta,
         }, user.id);
       }
       toast.success('Configurações salvas');
@@ -743,6 +748,29 @@ export const CompanySettings: React.FC = () => {
                 <p className="text-xs text-gray-500 mt-1">Quem ganha acima disso não recebe a cota.</p>
               </div>
             </div>
+          )}
+
+          {!folhaCarregando && (
+            <label
+              className={`flex items-start gap-3 p-3 border rounded-md ${
+                podeEditarFolha ? 'cursor-pointer hover:bg-gray-50 border-gray-300' : 'bg-gray-100 border-gray-200'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={dsrNaFalta}
+                onChange={(e) => setDsrNaFalta(e.target.checked)}
+                disabled={!podeEditarFolha}
+                className="w-5 h-5 mt-0.5"
+              />
+              <span className="text-sm text-gray-700">
+                Falta sem atestado desconta também o descanso da semana
+                <span className="block text-xs text-gray-500 mt-0.5">
+                  Ligado, uma falta custa dois dias (o dia e o domingo). Desligado, custa só o
+                  dia. Falta COM atestado nunca desconta, dos dois jeitos.
+                </span>
+              </span>
+            </label>
           )}
         </section>
 
