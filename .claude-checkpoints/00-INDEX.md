@@ -3,7 +3,27 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
-> **📌 SESSÃO 18/09 — A PLANILHA DA SHOPEE MUDOU DE CABEÇALHO E O IMPORT PAROU.**
+> **📌 SESSÃO 18/09 (leva 2) — O ESPELHO PASSOU A SAIR COM SALÁRIO FIXO, SALÁRIO
+> FAMÍLIA E FGTS.** Etapa 3 do `PLANO_FINANCEIRO_2026-09.md`. Detalhe na seção
+> **LEVA 2** do `CHECKPOINT_SESSAO_2026-09-18.md`.
+>
+> ✅ Cálculo provado contra os **12 recibos reais** da contabilidade (Julho/2026), lidos
+> de dentro do PDF. Três achados que mudam centavo: **FGTS é 8% TRUNCADO** (12/12;
+> arredondar erraria 4), **salário família fica fora da base do FGTS** (e a PLR também),
+> e **o salário do mês não passa do cheio** nem em mês de 31 dias.
+> ✅ Migration `20260918162520` aplicada e provada por simulação que se desfaz (sem
+> permissão → 42501 · 8888 não vê linha de Caratinga · anon e DELETE barrados).
+> ✅ **Salário é permissão própria** (`employees.viewPayroll`/`editPayroll`), desligada
+> pra todo mundo menos o 2626 — decisão dele: "será decidido com permissões".
+> ✅ Validado: typecheck 0 · lint 0 · build limpo · **64 unitários** · **E2E 115 3/3**.
+> Commit `e30c287`.
+> 🔴 **Falta e férias ainda NÃO descontam** — quem faltou sai com o salário cheio no
+> recibo. INSS e IRRF são a 2ª leva (combinado em 12/09).
+> ⏳ **Com o Victor:** 3 decisões da próxima leva (DSR na falta injustificada · 1/3 de
+> férias · "Logística"/"Mecânica" como função fixa ou só cadastro).
+> ⚠️ Em produção **nada muda de valor ainda**: 0 de 98 fichas têm salário preenchido.
+
+> **📌 SESSÃO 18/09 (leva 1) — A PLANILHA DA SHOPEE MUDOU DE CABEÇALHO E O IMPORT PAROU.**
 > Detalhe em **`CHECKPOINT_SESSAO_2026-09-18.md`**.
 >
 > 🔴 **"Processando a planilha…" pra sempre**, na 2ª quinzena de agosto. Duas causas
