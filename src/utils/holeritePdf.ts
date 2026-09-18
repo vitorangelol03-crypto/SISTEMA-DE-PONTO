@@ -22,6 +22,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatCpf, formatDateBR } from './mirrorGenerator';
+import type { FolhaCalculada } from './folha/folhaCalc';
 
 export interface HoleritePaymentLine {
   date: string;
@@ -61,6 +62,15 @@ export interface HoleriteData {
   totalGross: number;
   totalNet: number;
   generatedAt?: string;
+  /**
+   * FOLHA DE CARTEIRA ASSINADA (18/09/2026). Quando vem preenchida, o recibo sai no
+   * modelo de mensalista: salário do mês, adicional noturno e salário família no lugar
+   * das diárias, mais o rodapé com salário base, base do FGTS e valor do FGTS.
+   *
+   * Ausente = recibo de DIARISTA, exatamente como sempre foi. É o mesmo papel e o mesmo
+   * gerador: o que muda é a lista de linhas, que já era lista justamente por isto.
+   */
+  folha?: FolhaCalculada;
 }
 
 const PAGE_W = 595;
@@ -175,20 +185,7 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
   doc.text('COMPOSIÇÃO DO PAGAMENTO', X_LEFT, compY);
   doc.setTextColor(0);
 
-  const proventos: Array<[string, string, string]> = [
-    [`Diárias (${workingDays} dia${workingDays !== 1 ? 's' : ''})`, '+', fmtBRL(data.totalDailyRate)],
-  ];
-  if (data.totalBonusB > 0) proventos.push([`Bonificação B (${bonusCounts.b}×)`, '+', fmtBRL(data.totalBonusB)]);
-  if (data.totalBonusC1 > 0) proventos.push([`Bonificação C1 (${bonusCounts.c1}×)`, '+', fmtBRL(data.totalBonusC1)]);
-  if (data.totalBonusC2 > 0) proventos.push([`Bonificação C2 (${bonusCounts.c2}×)`, '+', fmtBRL(data.totalBonusC2)]);
-
-  const quantityErrorDiscount = data.quantityErrorDiscount || 0;
-  const descontos: Array<[string, string, string]> = [];
-  if (quantityErrorDiscount > 0) {
-    descontos.push(['Desconto por erros de quantidade', '-', fmtBRL(quantityErrorDiscount)]);
-  }
-  if (data.errorDiscount > 0) descontos.push(['Desconto de Erros', '-', fmtBRL(data.errorDiscount)]);
-  if (data.triageDiscount > 0) descontos.push(['Desconto de Triagem', '-', fmtBRL(data.triageDiscount)]);
+  const { proventos, descontos, quantityErrorDiscount } = linhasDoRecibo(data);
 
   autoTable(doc, {
     startY: compY + 6,
@@ -219,8 +216,10 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
   // `totalGross` — o total gravado ja vem com o desconto de quantidade abatido, e usa-lo
   // aqui deixava o papel sem fechar. Com a linha do desconto no lugar, agora bate:
   // proventos - descontos = liquido.
+  const proventosDaFolha = data.folha?.totalProventos ?? 0;
+  const diariasNoPapel = !data.folha || data.totalDailyRate > 0 ? data.totalDailyRate : 0;
   const totalProventos =
-    data.totalDailyRate + data.totalBonusB + data.totalBonusC1 + data.totalBonusC2;
+    proventosDaFolha + diariasNoPapel + data.totalBonusB + data.totalBonusC1 + data.totalBonusC2;
   const totalDescontos = quantityErrorDiscount + (data.errorDiscount || 0) + (data.triageDiscount || 0);
 
   autoTable(doc, {
@@ -249,8 +248,52 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
   // @ts-expect-error — autoTable mutates doc.lastAutoTable
   const afterResumo = doc.lastAutoTable?.finalY || afterComp + 80;
 
+  // ═══ Rodapé da folha CLT: as BASES ═══
+  // Igual ao modelo da contabilidade (Salário base · Base FGTS · Valor FGTS). O FGTS
+  // aparece aqui, e NÃO na lista de descontos, porque é custo da empresa: não sai do
+  // bolso do funcionário. Mostrar como desconto faria o líquido do papel não fechar.
+  let afterBases = afterResumo;
+  if (data.folha) {
+    const { folha } = data;
+    const caixas: Array<[string, string]> = [
+      ['Salário base', fmtBRL(folha.salarioBase)],
+      ['Base FGTS', fmtBRL(folha.baseFgts)],
+      ['Valor FGTS', fmtBRL(folha.valorFgts)],
+    ];
+    const larguraTotal = X_RIGHT - X_LEFT;
+    const larguraCaixa = larguraTotal / caixas.length;
+    const topo = afterResumo + 18;
+    const altura = 38;
+
+    doc.setFillColor(COLOR_BG_BOX[0], COLOR_BG_BOX[1], COLOR_BG_BOX[2]);
+    doc.setDrawColor(200);
+    doc.setLineWidth(0.5);
+    doc.rect(X_LEFT, topo, larguraTotal, altura, 'FD');
+
+    caixas.forEach(([rotulo, valor], i) => {
+      const centro = X_LEFT + larguraCaixa * i + larguraCaixa / 2;
+      if (i > 0) doc.line(X_LEFT + larguraCaixa * i, topo, X_LEFT + larguraCaixa * i, topo + altura);
+      doc.setFont('helvetica', 'bold').setFontSize(8);
+      doc.setTextColor(100);
+      doc.text(rotulo, centro, topo + 14, { align: 'center' });
+      doc.setFont('helvetica', 'bold').setFontSize(10.5);
+      doc.setTextColor(0);
+      doc.text(valor, centro, topo + 30, { align: 'center' });
+    });
+
+    doc.setFont('helvetica', 'italic').setFontSize(7.5);
+    doc.setTextColor(120);
+    doc.text(
+      'O FGTS é recolhido pela empresa e não é descontado do funcionário.',
+      X_LEFT,
+      topo + altura + 12,
+    );
+    doc.setTextColor(0);
+    afterBases = topo + altura + 16;
+  }
+
   // ═══ Footer: data + assinaturas ═══
-  let yFooter = afterResumo + 40;
+  let yFooter = afterBases + 40;
   doc.setFont('helvetica', 'italic').setFontSize(8.5);
   doc.setTextColor(120);
   const generatedAt = data.generatedAt || new Date().toLocaleString('pt-BR');
@@ -268,6 +311,50 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
 
   doc.line(X_RIGHT - 220, yFooter, X_RIGHT, yFooter);
   doc.text('Assinatura do empregador', X_RIGHT - 110, yFooter + 14, { align: 'center' });
+}
+
+/**
+ * As LINHAS que o recibo imprime, sem desenhar nada.
+ *
+ * Mora fora do desenho pra poder ser testada sem jsPDF e sem React — é a parte que
+ * decide o que o funcionário vê no papel, e ela mudou em 18/09/2026 pra caber a folha
+ * de carteira assinada. Devolve as colunas já formatadas, na ordem de impressão.
+ */
+export function linhasDoRecibo(data: HoleriteData): {
+  proventos: Array<[string, string, string]>;
+  descontos: Array<[string, string, string]>;
+  quantityErrorDiscount: number;
+} {
+  const workingDays = workingDaysFromPayments(data.payments);
+  const bonusCounts = bonusInstancesFromPayments(data.payments);
+  const proventos: Array<[string, string, string]> = [];
+
+  // Mensalista: as linhas vêm prontas do `folhaCalc` (salário, adicional noturno,
+  // salário família), já na ordem do modelo da contabilidade e com a referência
+  // (dias, cotas) que o papel mostra na coluna do meio.
+  for (const linha of data.folha?.linhas ?? []) {
+    const descricao = linha.referencia ? `${linha.descricao} (${linha.referencia})` : linha.descricao;
+    proventos.push([descricao, '+', fmtBRL(linha.provento)]);
+  }
+
+  // Diarista (ou quem tem os dois): a linha das diárias só entra se houver diária.
+  // Sem esta guarda, o recibo de mensalista sairia com "Diárias (0 dias) R$ 0,00".
+  if (!data.folha || data.totalDailyRate > 0) {
+    proventos.push([`Diárias (${workingDays} dia${workingDays !== 1 ? 's' : ''})`, '+', fmtBRL(data.totalDailyRate)]);
+  }
+  if (data.totalBonusB > 0) proventos.push([`Bonificação B (${bonusCounts.b}×)`, '+', fmtBRL(data.totalBonusB)]);
+  if (data.totalBonusC1 > 0) proventos.push([`Bonificação C1 (${bonusCounts.c1}×)`, '+', fmtBRL(data.totalBonusC1)]);
+  if (data.totalBonusC2 > 0) proventos.push([`Bonificação C2 (${bonusCounts.c2}×)`, '+', fmtBRL(data.totalBonusC2)]);
+
+  const quantityErrorDiscount = data.quantityErrorDiscount || 0;
+  const descontos: Array<[string, string, string]> = [];
+  if (quantityErrorDiscount > 0) {
+    descontos.push(['Desconto por erros de quantidade', '-', fmtBRL(quantityErrorDiscount)]);
+  }
+  if (data.errorDiscount > 0) descontos.push(['Desconto de Erros', '-', fmtBRL(data.errorDiscount)]);
+  if (data.triageDiscount > 0) descontos.push(['Desconto de Triagem', '-', fmtBRL(data.triageDiscount)]);
+
+  return { proventos, descontos, quantityErrorDiscount };
 }
 
 function buildPdf(data: HoleriteData): jsPDF {

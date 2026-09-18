@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound, Clock, Briefcase, Calendar, Hash, Save, Copy, CheckCircle2, XCircle, Clock3, ArchiveRestore, UserCheck } from 'lucide-react';
-import { getAllEmployees, getAllEmployeesAcrossAllCompanies, createEmployee, updateEmployee, deleteEmployee, updateEmployeeRegistrationStatus, Employee, bulkCreateEmployees, setEmployeePin, resetEmployeePin, getCompanies } from '../../services/database';
+import { getAllEmployees, getAllEmployeesAcrossAllCompanies, createEmployee, updateEmployee, deleteEmployee, updateEmployeeRegistrationStatus, Employee, type EmployeeExtras, bulkCreateEmployees, setEmployeePin, resetEmployeePin, getCompanies } from '../../services/database';
+import { parseNumericInput, isInRange } from '../../utils/numericInputHelpers';
 import { supabase } from '../../lib/supabase';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
@@ -97,6 +98,9 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   const [registrationView, setRegistrationView] = useState<'ativos' | 'bloqueados'>('ativos');
   const [savingApprovalId, setSavingApprovalId] = useState<string | null>(null);
   const [registerLinkCopied, setRegisterLinkCopied] = useState(false);
+  // Folha (18/09/2026): permissão própria — quem edita ficha não vê salário por padrão.
+  const canViewPayroll = hasPermission('employees.viewPayroll');
+  const canEditPayroll = hasPermission('employees.editPayroll');
   const canViewApproval = hasPermission('employeeapproval.view');
   const canApproveRegistration = hasPermission('employeeapproval.approve');
   const canRejectRegistration = hasPermission('employeeapproval.reject');
@@ -120,6 +124,14 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     hireDate: '',
     contractType: '',
     expectedSchedule: null as number[] | null,  // null = herda da empresa
+    // Folha de carteira assinada (18/09/2026). Só aparece/salva com employees.editPayroll.
+    // Salário fica como texto cru pra aceitar vírgula enquanto digita (parseNumericInput).
+    monthlySalary: '',
+    familyChildren: '',
+    ctpsNumber: '',
+    ctpsSeries: '',
+    cbo: '',
+    fgtsEnabled: false,
   });
 
   // Sub-modal de jornada individual do funcionário
@@ -303,6 +315,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       hireDate: '',
       contractType: '',
       expectedSchedule: null,
+      monthlySalary: '',
+      familyChildren: '',
+      ctpsNumber: '',
+      ctpsSeries: '',
+      cbo: '',
+      fgtsEnabled: false,
     });
     setEditingEmployee(null);
     setShowForm(false);
@@ -345,6 +363,35 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
         }
       }
 
+      // Folha: só entra no que vai pro banco se quem está salvando PODE editar folha.
+      // Sem a permissão os campos nem são montados, e omiti-los aqui garante que um
+      // salvamento comum não apaga o salário que outra pessoa preencheu.
+      let dadosDeFolha: EmployeeExtras = {};
+      if (canEditPayroll) {
+        const salario = formData.monthlySalary.trim()
+          ? parseNumericInput(formData.monthlySalary)
+          : null;
+        if (formData.monthlySalary.trim() && (salario === null || salario < 0)) {
+          toast.error('Salário inválido — use apenas números (ex.: 1700,00)');
+          return;
+        }
+        const filhos = formData.familyChildren.trim()
+          ? parseNumericInput(formData.familyChildren)
+          : null;
+        if (formData.familyChildren.trim() && (filhos === null || !Number.isInteger(filhos) || !isInRange(filhos, 0, 20))) {
+          toast.error('Filhos do salário família: use um número inteiro de 0 a 20');
+          return;
+        }
+        dadosDeFolha = {
+          monthly_salary: salario,
+          family_allowance_children: filhos ?? 0,
+          ctps_number: formData.ctpsNumber.trim() || null,
+          ctps_series: formData.ctpsSeries.trim() || null,
+          cbo: formData.cbo.trim() || null,
+          fgts_enabled: formData.fgtsEnabled,
+        };
+      }
+
       const extras = {
         function_role: formData.functionRole.trim() || null,
         badge_number: formData.badgeNumber.trim() || null,
@@ -354,6 +401,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
         hire_date: formData.hireDate || null,
         contract_type: formData.contractType || null,
         expected_schedule: formData.expectedSchedule,
+        ...dadosDeFolha,
       };
 
       if (editingEmployee) {
@@ -420,6 +468,17 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
       hireDate: employee.hire_date || '',
       contractType: employee.contract_type || '',
       expectedSchedule: employee.expected_schedule ?? null,
+      // Vírgula na tela, ponto no banco — é o padrão brasileiro de digitar dinheiro.
+      // Sempre com os centavos: o banco devolve 1700 e mostrar "1700" num campo de
+      // salário parece valor pela metade.
+      monthlySalary: employee.monthly_salary != null
+        ? Number(employee.monthly_salary).toFixed(2).replace('.', ',')
+        : '',
+      familyChildren: employee.family_allowance_children ? String(employee.family_allowance_children) : '',
+      ctpsNumber: employee.ctps_number || '',
+      ctpsSeries: employee.ctps_series || '',
+      cbo: employee.cbo || '',
+      fgtsEnabled: employee.fgts_enabled ?? false,
     });
     setShowForm(true);
   };
@@ -1323,6 +1382,102 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
                 </div>
               </div>
             </div>
+
+            {/* Folha de carteira assinada (18/09/2026). Bloco separado e fechado por
+                permissão própria: quem edita ficha não vê salário a menos que o Victor
+                ligue `employees.viewPayroll` na tela de Permissões. */}
+            {canViewPayroll && (
+              <div className="border-t border-gray-200 pt-4" data-testid="bloco-folha">
+                <div className="flex items-center gap-2 mb-1">
+                  <Briefcase className="w-4 h-4 text-gray-500" />
+                  <h4 className="font-medium text-gray-900">Folha (carteira assinada)</h4>
+                </div>
+                <p className="text-xs text-gray-500 mb-4">
+                  Usado só no recibo de quem é carteira assinada. Em branco, não entra na conta.
+                  {!canEditPayroll && ' Você pode ver, mas não alterar.'}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Salário mensal</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.monthlySalary}
+                      onChange={(e) => setFormData(prev => ({ ...prev, monthlySalary: e.target.value }))}
+                      disabled={!canEditPayroll}
+                      placeholder="Ex.: 1700,00"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px] disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Filhos com direito ao salário família
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={formData.familyChildren}
+                      onChange={(e) => setFormData(prev => ({ ...prev, familyChildren: e.target.value.replace(/\D/g, '') }))}
+                      disabled={!canEditPayroll}
+                      placeholder="0"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px] disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">CTPS</label>
+                    <input
+                      type="text"
+                      value={formData.ctpsNumber}
+                      onChange={(e) => setFormData(prev => ({ ...prev, ctpsNumber: e.target.value }))}
+                      disabled={!canEditPayroll}
+                      placeholder="Número"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px] disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Série</label>
+                    <input
+                      type="text"
+                      value={formData.ctpsSeries}
+                      onChange={(e) => setFormData(prev => ({ ...prev, ctpsSeries: e.target.value }))}
+                      disabled={!canEditPayroll}
+                      placeholder="Série da CTPS"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px] disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">CBO</label>
+                    <input
+                      type="text"
+                      value={formData.cbo}
+                      onChange={(e) => setFormData(prev => ({ ...prev, cbo: e.target.value }))}
+                      disabled={!canEditPayroll}
+                      placeholder="Ex.: 4141-40"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-base min-h-[48px] disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">FGTS</label>
+                    <label
+                      className={`flex items-center gap-3 px-4 py-3 border rounded-lg min-h-[48px] ${
+                        canEditPayroll ? 'cursor-pointer hover:bg-gray-50 border-gray-300' : 'bg-gray-100 border-gray-200'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formData.fgtsEnabled}
+                        onChange={(e) => setFormData(prev => ({ ...prev, fgtsEnabled: e.target.checked }))}
+                        disabled={!canEditPayroll}
+                        className="w-5 h-5"
+                      />
+                      <span className="text-sm text-gray-700">
+                        Recolhe FGTS <span className="text-gray-500">(custo da empresa, não desconta do funcionário)</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <button

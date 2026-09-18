@@ -55,6 +55,16 @@ export interface EmployeeFinancialData {
   totalBonusB: number;
   totalBonusC1: number;
   totalBonusC2: number;
+  /**
+   * Horas noturnas do período (18/09/2026). A folha de carteira assinada precisa delas
+   * pra calcular o adicional noturno em R$ — decisão do Victor: ligar o cálculo SÓ pra
+   * carteira assinada, deixando o diarista como está.
+   *
+   * Lê os dois conjuntos de campos da linha de ponto, como o espelho passou a fazer em
+   * 12/09: `night_hours` (legado) e os minutos novos. De 5.664 dias só 2.083 têm os
+   * minutos — olhar só um deles zeraria a hora de quase metade dos dias.
+   */
+  totalNightHours: number;
 }
 
 /**
@@ -68,6 +78,19 @@ export interface EmployeeFinancialData {
  *   `total` — são abatidos aqui.
  * - `totalEarned` nunca fica negativo: desconto maior que o ganho vira zero.
  */
+/**
+ * Horas noturnas de UM dia, olhando os dois conjuntos de campos que convivem na linha
+ * de ponto: os minutos novos (`nighttime_minutes`) e a hora legado (`night_hours`).
+ *
+ * É a mesma lição de 12/09/2026, quando o espelho saía com 0h em 905 dias por ler só
+ * os minutos. Aqui o minuto manda quando existe; senão, vale a hora legado.
+ */
+function horasNoturnasDoDia(att: Attendance): number {
+  const minutos = Number((att as unknown as { nighttime_minutes?: number | null }).nighttime_minutes ?? 0);
+  if (minutos > 0) return minutos / 60;
+  return Number(att.night_hours ?? 0);
+}
+
 export function agregarFinanceiroPorPessoa(
   employeesData: Employee[],
   paymentsData: Payment[],
@@ -104,6 +127,7 @@ export function agregarFinanceiroPorPessoa(
     // quantidade de cada bônus a partir dela, então outra origem faria contagem e valor
     // não baterem no mesmo papel.
     const totaisHolerite = somarTotaisDoHolerite(employeePayments);
+    const totalNightHours = employeeAttendances.reduce((soma, att) => soma + horasNoturnasDoDia(att), 0);
 
     return {
       employee,
@@ -119,6 +143,7 @@ export function agregarFinanceiroPorPessoa(
       totalEarned,
       triageDiscounts,
       ...totaisHolerite,
+      totalNightHours: Math.round(totalNightHours * 100) / 100,
     };
   });
 }

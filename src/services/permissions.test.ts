@@ -44,6 +44,8 @@ describe('permissions.ts - Sistema de Permissões', () => {
           edit: false,
           delete: false,
           import: false,
+          viewPayroll: false,
+          editPayroll: false,
         },
         financial: {
           view: false,

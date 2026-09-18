@@ -13,6 +13,7 @@ import {
   type ExpectedSchedule,
 } from '../utils/attendanceCalc';
 import { entraNaTriagem, TRIAGE_CONFIG_PADRAO, type TriageConfig } from '../utils/triagemFuncoes';
+import { CONFIGURACAO_DA_FOLHA_PADRAO, type ConfiguracaoDaFolha } from '../utils/folha/folhaCalc';
 import { mensagemDeErro } from '../utils/mensagemDeErro';
 
 // Sub-fase 11.8 — helper pra chamar edge fn employee-public-api (verify_jwt:false).
@@ -85,6 +86,14 @@ export interface Employee {
   marking_count?: 2 | 4 | null;
   hire_date?: string | null;
   contract_type?: string | null;
+  // Folha de carteira assinada (18/09/2026, migration 20260918162520). Todos opcionais:
+  // nascem vazios e, sem preencher, a folha não inventa valor nenhum.
+  monthly_salary?: number | null;
+  family_allowance_children?: number | null;
+  ctps_number?: string | null;
+  ctps_series?: string | null;
+  cbo?: string | null;
+  fgts_enabled?: boolean | null;
   // Sub-fase: cadastro público de funcionário (26/08).
   phone?: string | null;
   registration_status?: 'pending' | 'approved' | 'rejected';
@@ -102,6 +111,14 @@ export interface EmployeeExtras {
   marking_count?: 2 | 4 | null;
   hire_date?: string | null;
   contract_type?: string | null;
+  // Folha (18/09/2026): só chegam aqui quando quem salvou tem `employees.editPayroll`.
+  // Sem a permissão, a tela nem monta estes campos — o que já estava gravado não muda.
+  monthly_salary?: number | null;
+  family_allowance_children?: number | null;
+  ctps_number?: string | null;
+  ctps_series?: string | null;
+  cbo?: string | null;
+  fgts_enabled?: boolean | null;
 }
 
 export interface Attendance {
@@ -2417,6 +2434,61 @@ export const saveTriageConfig = async (
       updated_by: userId,
       updated_at: new Date().toISOString(),
     }], { onConflict: 'company_id' });
+  if (error) throw error;
+};
+
+// ─── FOLHA DE CARTEIRA ASSINADA (18/09/2026) ────────────────────────────────
+// A configuração é por empresa E POR ANO: cota e teto do salário família mudam por
+// lei todo ano, e sem o ano um mês antigo recalculado sairia com o valor de hoje —
+// o papel deixaria de bater com o que a pessoa recebeu.
+
+/** Lê a configuração do ano. Sem linha, devolve os padrões do `folhaCalc` (não inventa). */
+export const getPayrollConfig = async (
+  companyId: string,
+  ano: number
+): Promise<ConfiguracaoDaFolha> => {
+  const { data, error } = await supabase
+    .from('payroll_config')
+    .select('fgts_percent, family_allowance_quota, family_allowance_ceiling')
+    .eq('company_id', companyId)
+    .eq('ano', ano)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return CONFIGURACAO_DA_FOLHA_PADRAO;
+  return {
+    percentualFgts: Number(data.fgts_percent ?? CONFIGURACAO_DA_FOLHA_PADRAO.percentualFgts),
+    cotaSalarioFamilia: Number(data.family_allowance_quota ?? 0),
+    tetoSalarioFamilia: Number(data.family_allowance_ceiling ?? 0),
+  };
+};
+
+/**
+ * Grava a configuração do ano. Mexer em % de FGTS, cota e teto é mexer em dinheiro:
+ * exige `settings.editDailyRate`, a mesma permissão do valor da diária. O banco trava
+ * igual (trigger `payroll_config_permission_check`) — aqui é só pra mensagem boa.
+ */
+export const savePayrollConfig = async (
+  companyId: string,
+  ano: number,
+  config: ConfiguracaoDaFolha,
+  userId: string
+): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'settings.editDailyRate');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  const { error } = await supabase
+    .from('payroll_config')
+    .upsert([{
+      company_id: companyId,
+      ano,
+      fgts_percent: config.percentualFgts,
+      family_allowance_quota: config.cotaSalarioFamilia,
+      family_allowance_ceiling: config.tetoSalarioFamilia,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    }], { onConflict: 'company_id,ano' });
   if (error) throw error;
 };
 

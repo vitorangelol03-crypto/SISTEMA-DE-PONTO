@@ -18,6 +18,16 @@ export interface EmployeesPermissions extends TabPermissions {
   edit: boolean;
   delete: boolean;
   import: boolean;
+  /**
+   * Folha de carteira assinada (18/09/2026): salário do contrato, filhos do salário
+   * família, FGTS, CTPS/série/CBO. Permissão PRÓPRIA, separada de `edit`, porque quem
+   * edita ficha hoje (02 e 03, supervisores) não necessariamente pode ver salário —
+   * decisão do Victor: "será decidido com permissões". Nasce desligada pra todo mundo:
+   * quem já tem linha salva em `user_permissions` não recebe a chave nova, e
+   * `hasPermission` só devolve true no `=== true`. Só o 2626 passa por bypass.
+   */
+  viewPayroll: boolean;
+  editPayroll: boolean;
 }
 
 export interface ReportsPermissions extends TabPermissions {
@@ -140,7 +150,7 @@ export interface UserPermissions {
 
 export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
   attendance: { view: true, mark: true, edit: true, search: true, reset: true, viewHistory: true, editHistory: true, manualTime: true, generateMassMirror: true },
-  employees: { view: true, create: true, edit: true, delete: true, import: true },
+  employees: { view: true, create: true, edit: true, delete: true, import: true, viewPayroll: true, editPayroll: true },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: true, editBonus: true, delete: true, clear: true, applyBonus: true, applyBonusB: true, applyBonusC1: true, applyBonusC2: true, removeBonus: true, removeBonusByType: true, removeBonusBulk: true, applyDiscount: true, viewHistory: true },
   c6payment: { view: true, generate: true, export: true, import: true, edit: true, bulkEdit: true, delete: true, viewValues: true },
@@ -160,7 +170,7 @@ export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
   // valer de verdade — supervisor nasce SEM essas duas (Victor concede explicitamente
   // quem ele quiser depois, "máximo controle").
   attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false, manualTime: false, generateMassMirror: true },
-  employees: { view: true, create: true, edit: true, delete: false, import: true },
+  employees: { view: true, create: true, edit: true, delete: false, import: true, viewPayroll: false, editPayroll: false },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   // Sub-fase 14.13 (bug #6 audit): supervisor padrão tinha applyBonus=true mas
   // applyBonusB/C1/C2=false. Como `canApplyBonus` em AttendanceTab.tsx:79 só
@@ -182,7 +192,7 @@ export const DEFAULT_SUPERVISOR_PERMISSIONS: UserPermissions = {
 
 export const DEFAULT_READONLY_PERMISSIONS: UserPermissions = {
   attendance: { view: true, mark: false, edit: false, search: true, reset: false, viewHistory: true, editHistory: false, manualTime: false, generateMassMirror: false },
-  employees: { view: true, create: false, edit: false, delete: false, import: false },
+  employees: { view: true, create: false, edit: false, delete: false, import: false, viewPayroll: false, editPayroll: false },
   reports: { view: true, generate: true, exportExcel: true, exportPDF: true },
   financial: { view: true, viewPayments: true, editRate: false, editBonus: false, delete: false, clear: false, applyBonus: false, applyBonusB: false, applyBonusC1: false, applyBonusC2: false, removeBonus: false, removeBonusByType: false, removeBonusBulk: false, applyDiscount: false, viewHistory: false },
   c6payment: { view: true, generate: false, export: false, import: false, edit: false, bulkEdit: false, delete: false, viewValues: true },
@@ -232,7 +242,9 @@ export const PERMISSION_LABELS = {
     create: 'Criar funcionário',
     edit: 'Editar funcionário',
     delete: 'Excluir funcionário',
-    import: 'Importar planilha'
+    import: 'Importar planilha',
+    viewPayroll: 'Ver dados de folha (salário, filhos, FGTS)',
+    editPayroll: 'Editar dados de folha'
   },
   reports: {
     title: 'Relatórios',

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from
 import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
-  getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance,
+  getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, getPayrollConfig,
   clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getBonusRemovalHistory, BonusRemoval,
   getTriageDistributionsForEmployees, getBonusTypes, BonusTypeRecord,
   getPaymentPeriods, PaymentPeriod,
@@ -45,6 +45,13 @@ import {
   descontoDeQuantidadeEmbutido,
   type EmployeeFinancialData,
 } from '../../utils/financeiroPorPessoa';
+import {
+  CONFIGURACAO_DA_FOLHA_PADRAO,
+  calcularAdicionalNoturno,
+  calcularFolha,
+  type ConfiguracaoDaFolha,
+  type FolhaCalculada,
+} from '../../utils/folha/folhaCalc';
 import { ModalShell } from '../driverpay/ModalShell';
 
 /**
@@ -78,6 +85,7 @@ function montarDadosDoRecibo(
   inicio: string,
   fim: string,
   company: { display_name?: string | null; legal_name?: string | null; cnpj?: string | null } | null,
+  configDaFolha: ConfiguracaoDaFolha,
 ) {
   return {
     company: {
@@ -111,7 +119,44 @@ function montarDadosDoRecibo(
     totalBonusC2: d.totalBonusC2 || 0,
     totalGross: d.totalEarnedGross || 0,
     totalNet: d.totalEarned || 0,
+    folha: folhaDoRecibo(d, inicio, configDaFolha),
   };
+}
+
+/**
+ * A parte de CARTEIRA ASSINADA do recibo (18/09/2026).
+ *
+ * Devolve `undefined` pra quem não é carteira assinada ou ainda não tem salário na
+ * ficha — e aí o papel sai exatamente como sempre saiu, de diarista. Ninguém perde
+ * nada enquanto o cadastro não estiver preenchido.
+ */
+function folhaDoRecibo(
+  d: EmployeeFinancialData,
+  inicio: string,
+  config: ConfiguracaoDaFolha,
+): FolhaCalculada | undefined {
+  const ficha = d.employee;
+  const salario = Number(ficha.monthly_salary ?? 0);
+  if (ficha.employment_type !== 'Carteira Assinada' || salario <= 0) return undefined;
+
+  // O mês de referência é o do INÍCIO do período — é o que o recibo imprime como
+  // "Referente ao mês" e o que manda no proporcional de quem foi admitido no meio.
+  const [ano, mes] = inicio.split('-').map(Number);
+
+  return calcularFolha({
+    ficha: {
+      salarioMensal: salario,
+      filhosSalarioFamilia: ficha.family_allowance_children ?? 0,
+      fgtsAtivo: ficha.fgts_enabled ?? false,
+      admissao: ficha.hire_date,
+    },
+    config,
+    ano,
+    mes,
+    // Decisão do Victor (18/09): o adicional noturno passa a sair em R$ SÓ pra carteira
+    // assinada. O diarista continua como está — a tela dele nunca mostrou valor.
+    adicionalNoturno: calcularAdicionalNoturno(salario, d.totalNightHours || 0),
+  });
 }
 
 const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
@@ -228,6 +273,16 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     endDate: false
   });
 
+  /**
+   * Configuração da folha do ano do período (18/09/2026). Fica por ANO porque cota e
+   * teto do salário família mudam por lei: um recibo de 2026 refeito em 2027 tem que
+   * sair com o valor de 2026, senão deixa de bater com o que a pessoa recebeu.
+   *
+   * Falhar aqui não pode travar a tela: sem configuração, vale o padrão e o recibo de
+   * diarista — que é a maioria — continua idêntico.
+   */
+  const [configDaFolha, setConfigDaFolha] = useState<ConfiguracaoDaFolha>(CONFIGURACAO_DA_FOLHA_PADRAO);
+
   // ─── Banco de horas (combo G — sub-fase 2.17) ──────────────────────────
   // Dropdown de payment_periods da empresa atual + modal de preview/apply.
   // Quando um period é selecionado, filters.startDate/endDate são derivados
@@ -334,7 +389,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     try {
       const { generateHoleritePdf, downloadHoleritePdf } = await import('../../utils/holeritePdf');
       const dadosDoRecibo = (d: EmployeeFinancialData) =>
-        montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company);
+        montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha);
 
       if (escolhidos.length === 1) {
         setPdfGerando('Gerando…');
@@ -393,7 +448,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       setPdfGerando(`Montando ${escolhidos.length} folhas…`);
       const { generateLoteHoleritePdf } = await import('../../utils/holeritePdf');
       const pdf = await generateLoteHoleritePdf(
-        escolhidos.map((d) => montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company)),
+        escolhidos.map((d) => montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha)),
       );
       baixarArquivo(
         pdf,
@@ -425,7 +480,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         const d = escolhidos[i];
         setPdfGerando(`Publicando ${i + 1} de ${escolhidos.length}…`);
         const pdf = await generateHoleritePdf(
-          montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company),
+          montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha),
         );
         await publicarReciboDePagamento({
           companyId: company.id,
@@ -527,6 +582,16 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       loadData();
     }
   }, [filters, isEditingDate, loadData]);
+
+  const anoDaFolha = Number(filters.startDate.slice(0, 4));
+  useEffect(() => {
+    if (!company?.id || !anoDaFolha) return;
+    let cancelado = false;
+    getPayrollConfig(company.id, anoDaFolha)
+      .then(config => { if (!cancelado) setConfigDaFolha(config); })
+      .catch(() => { if (!cancelado) setConfigDaFolha(CONFIGURACAO_DA_FOLHA_PADRAO); });
+    return () => { cancelado = true; };
+  }, [company?.id, anoDaFolha]);
 
   // ══════════════════════════════════════════════════════════════════════════
   // HISTÓRICO DE PAGAMENTOS (Etapa 2, 11/09/2026) — carga própria.
@@ -1698,7 +1763,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                           // recibo diferente do que foi conferido. (11/09/2026.)
                           const { downloadHoleritePdf } = await import('../../utils/holeritePdf');
                           await downloadHoleritePdf(
-                            montarDadosDoRecibo(data, filters.startDate, filters.endDate, company),
+                            montarDadosDoRecibo(data, filters.startDate, filters.endDate, company, configDaFolha),
                           );
                           toast.success('Holerite PDF gerado');
                         }}

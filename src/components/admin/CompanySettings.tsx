@@ -3,7 +3,8 @@ import { Building2, Save, MapPin, Clock, AlertCircle, Wallet, Calculator, Shield
 import toast from 'react-hot-toast';
 import { useCompany } from '../../contexts/useCompany';
 import { useAuth } from '../../hooks/useAuth';
-import { updateCompany, updateGeoLocation } from '../../services/database';
+import { updateCompany, updateGeoLocation, getPayrollConfig, savePayrollConfig } from '../../services/database';
+import { usePermissions } from '../../hooks/usePermissions';
 import {
   applyBankHours,
   type BankHoursAfterApply,
@@ -89,12 +90,25 @@ export const CompanySettings: React.FC = () => {
   const [scheduleMin, setScheduleMin] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [saving, setSaving] = useState(false);
 
+  // Folha de carteira assinada (18/09/2026). Fica numa tabela própria (`payroll_config`),
+  // por empresa E POR ANO — cota e teto do salário família mudam por lei todo ano.
+  const { hasPermission } = usePermissions(user?.id ?? null);
+  const podeEditarFolha = hasPermission('settings.editDailyRate');
+  const anoDaFolha = new Date().getFullYear();
+  const [fgtsPercentRaw, setFgtsPercentRaw] = useState('');
+  const [familyQuotaRaw, setFamilyQuotaRaw] = useState('');
+  const [familyCeilingRaw, setFamilyCeilingRaw] = useState('');
+  const [folhaCarregando, setFolhaCarregando] = useState(true);
+
   // COMBO I FIX #5: números derivados dos states raw — consumidos por validação, submit e useMemo.
   const bankHoursExtraMultiplier = parseNumericInput(extraMultRaw) ?? 0;
   const bankHoursCustomValue = parseNumericInput(customValueRaw) ?? 0;
   const bankHoursNightMultiplier = parseNumericInput(nightMultRaw) ?? 0;
   const geoLat = parseNumericInput(geoLatRaw);
   const geoLng = parseNumericInput(geoLngRaw);
+  const fgtsPercent = parseNumericInput(fgtsPercentRaw);
+  const familyQuota = parseNumericInput(familyQuotaRaw);
+  const familyCeiling = parseNumericInput(familyCeilingRaw);
   const geoLatValid = geoLat != null && isInRange(geoLat, -90, 90);
   const geoLngValid = geoLng != null && isInRange(geoLng, -180, 180);
 
@@ -127,6 +141,29 @@ export const CompanySettings: React.FC = () => {
     }
   }, [company]);
 
+  // A configuração da folha vem de outra tabela — busca própria, com estado de carregando
+  // e de erro (a tela não pode ficar mentindo "0%" enquanto não sabe).
+  useEffect(() => {
+    if (!company) return;
+    let vivo = true;
+    setFolhaCarregando(true);
+    getPayrollConfig(company.id, anoDaFolha)
+      .then(config => {
+        if (!vivo) return;
+        setFgtsPercentRaw(String(config.percentualFgts).replace('.', ','));
+        setFamilyQuotaRaw(String(config.cotaSalarioFamilia).replace('.', ','));
+        setFamilyCeilingRaw(String(config.tetoSalarioFamilia).replace('.', ','));
+      })
+      .catch(err => {
+        if (!vivo) return;
+        toast.error(mensagemDeErro(err, 'Erro ao carregar a configuração da folha'));
+      })
+      .finally(() => {
+        if (vivo) setFolhaCarregando(false);
+      });
+    return () => { vivo = false; };
+  }, [company, anoDaFolha]);
+
   const totalWeeklyMin = scheduleMin.reduce((a, b) => a + b, 0);
   const overCLT = totalWeeklyMin > FOUR_WEEK_HOURS_MIN;
 
@@ -151,6 +188,22 @@ export const CompanySettings: React.FC = () => {
       }
       if (bankHoursFormula === 'custom_hour_value' && bankHoursCustomValue < 0) {
         toast.error('Valor customizado por hora não pode ser negativo');
+        return;
+      }
+    }
+
+    // Folha: centavo errado aqui vira recibo errado — falha cedo, com o motivo.
+    if (podeEditarFolha) {
+      if (fgtsPercent == null || !isInRange(fgtsPercent, 0, 100)) {
+        toast.error('FGTS: use uma porcentagem de 0 a 100 (ex.: 8)');
+        return;
+      }
+      if (familyQuota == null || familyQuota < 0) {
+        toast.error('Cota do salário família: use um valor válido (ex.: 67,54)');
+        return;
+      }
+      if (familyCeiling == null || familyCeiling < 0) {
+        toast.error('Teto do salário família: use um valor válido (ex.: 1906,04)');
         return;
       }
     }
@@ -183,6 +236,15 @@ export const CompanySettings: React.FC = () => {
         bank_hours_night_separate: bankHoursNightSeparate,
         bank_hours_night_multiplier: bankHoursNightMultiplier,
       });
+      // A folha mora em outra tabela e tem permissão própria: quem não pode editar
+      // simplesmente não grava (os campos já vêm bloqueados na tela).
+      if (podeEditarFolha && user?.id) {
+        await savePayrollConfig(company.id, anoDaFolha, {
+          percentualFgts: fgtsPercent as number,
+          cotaSalarioFamilia: familyQuota as number,
+          tetoSalarioFamilia: familyCeiling as number,
+        }, user.id);
+      }
       toast.success('Configurações salvas');
       // Recarrega o contexto pra refletir nas demais telas (ex.: schedule editado).
       await setCompany(company.id);
@@ -620,6 +682,65 @@ export const CompanySettings: React.FC = () => {
                   Simulador de cálculo
                 </h5>
                 <BankHoursSimulator settings={bankHoursSettings} />
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Folha de carteira assinada (18/09/2026) — os valores que a lei muda todo ano.
+            Guardados por ANO: recalcular um mês antigo tem que usar o valor da época. */}
+        <section className="space-y-4 pt-6 border-t border-gray-200">
+          <h3 className="text-base font-semibold flex items-center gap-2 text-gray-800">
+            <Wallet className="w-4 h-4 text-gray-600" />
+            Folha (carteira assinada) — {anoDaFolha}
+          </h3>
+          <p className="text-xs text-gray-600">
+            Valem para os recibos de quem é carteira assinada. Mudam por lei todo ano — sem
+            atualizar, a folha sai errada em silêncio.
+            {!podeEditarFolha && ' Você pode ver, mas não alterar.'}
+          </p>
+
+          {folhaCarregando ? (
+            <p className="text-sm text-gray-500">Carregando a configuração da folha…</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className={labelCls}>FGTS (%)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={fgtsPercentRaw}
+                  onChange={(e) => setFgtsPercentRaw(e.target.value)}
+                  disabled={!podeEditarFolha}
+                  placeholder="8"
+                  className={`${inputCls} disabled:bg-gray-100 disabled:text-gray-500`}
+                />
+                <p className="text-xs text-gray-500 mt-1">Custo da empresa — não desconta do funcionário.</p>
+              </div>
+              <div>
+                <label className={labelCls}>Salário família — valor por filho (R$)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={familyQuotaRaw}
+                  onChange={(e) => setFamilyQuotaRaw(e.target.value)}
+                  disabled={!podeEditarFolha}
+                  placeholder="67,54"
+                  className={`${inputCls} disabled:bg-gray-100 disabled:text-gray-500`}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Salário família — teto de salário (R$)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={familyCeilingRaw}
+                  onChange={(e) => setFamilyCeilingRaw(e.target.value)}
+                  disabled={!podeEditarFolha}
+                  placeholder="1906,04"
+                  className={`${inputCls} disabled:bg-gray-100 disabled:text-gray-500`}
+                />
+                <p className="text-xs text-gray-500 mt-1">Quem ganha acima disso não recebe a cota.</p>
               </div>
             </div>
           )}
