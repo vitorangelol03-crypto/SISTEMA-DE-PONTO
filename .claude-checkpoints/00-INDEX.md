@@ -23,6 +23,19 @@
 > férias · "Logística"/"Mecânica" como função fixa ou só cadastro).
 > ⚠️ Em produção **nada muda de valor ainda**: 0 de 98 fichas têm salário preenchido.
 
+> **📌 18/09 — A FOLHA DE CARTEIRA ASSINADA FICOU PRONTA (levas 2 a 4).** Salário fixo,
+> salário família, FGTS, falta com atestado, DSR configurável, férias com 1/3, INSS e IR.
+> No ar, conferido byte a byte (6/6 pedaços). Fechamento no fim do
+> `CHECKPOINT_SESSAO_2026-09-18.md`.
+>
+> ⚠️ **Em produção nada mudou de valor ainda: 0 das 98 fichas têm salário preenchido.**
+> O caminho combinado é testar com UMA pessoa antes de preencher o resto.
+> 📋 **5 pontos pro contador** (faixas de 12%/14% e teto do INSS · tabela inteira do IR ·
+> dependentes do IR usando o campo do salário família · jornada de 220h · divisor do mês
+> de admissão). Até serem marcados como conferidos, **todo recibo sai com tarja
+> "VALORES EM CONFERÊNCIA"**.
+> ⏳ **Próximo candidato:** os relatórios mostrarem as linhas novas da folha.
+
 > **📌 SESSÃO 18/09 (leva 4) — INSS E IMPOSTO DE RENDA.** Detalhe na seção **LEVA 4**
 > do `CHECKPOINT_SESSAO_2026-09-18.md`. Commit `d8506d2`.
 >

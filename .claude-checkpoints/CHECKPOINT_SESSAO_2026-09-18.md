@@ -450,3 +450,72 @@ bundle o `index.html` referencia** e depois comparar o conteúdo.
 ⚠️ Segunda pegadinha na mesma conferência: usei nomes de chunk do build ANTERIOR pro
 `EmployeesTab` e o `AttendanceTab`. Como o `folhaCalc` mudou, os dois foram renomeados —
 tirar o nome do `grep` no bundle atual, nunca de uma lista de antes.
+
+---
+
+# FECHAMENTO DA SESSÃO — 18/09/2026
+
+## Em uma frase
+
+A **folha de carteira assinada inteira** entrou: salário fixo, salário família, FGTS,
+falta com atestado, DSR configurável, férias com 1/3, INSS e IR. Tudo no ar, conferido
+byte a byte, com 3 migrations aplicadas e provadas por simulação.
+
+## ⚠️ Em produção NADA mudou de valor ainda
+
+**0 das 98 fichas têm salário preenchido.** Enquanto ninguém digitar um salário, todo
+recibo sai exatamente como saía — inclusive o de diarista, que tem teste só pra garantir
+que não mudou nem uma linha. O primeiro recibo diferente é uma escolha do Victor, não um
+efeito colateral.
+
+**Caminho seguro combinado com ele:** preencher o salário de UMA pessoa de carteira
+assinada, lançar uma falta e umas férias, gerar o recibo dela no Financeiro e conferir.
+Se não bater, é uma pessoa e dá pra desfazer.
+
+## Os commits desta sessão (levas 2 a 4)
+
+| Commit | O quê |
+|---|---|
+| `e30c287` | Salário fixo, salário família e FGTS no espelho |
+| `6ed75d2` | Falta com atestado, DSR configurável e férias com 1/3 |
+| `d8506d2` | INSS derivado do recibo real, e IR com aviso de conferência |
+| `fe6fc4a` · `09c94e6` · `581a115` · `6f8a95b` | checkpoints |
+
+Migrations: `20260918162520` (ficha + config) · `20260918175402` (faltas + férias) ·
+`20260918182605` (tabelas de INSS/IRRF).
+
+## 📋 A lista do contador (o que o sistema NÃO conseguiu provar)
+
+1. Faixas de **12% e 14% do INSS** e o **teto** — ninguém do gabarito chega lá.
+2. **A tabela inteira do IR** — nenhum dos 12 recibos pagou imposto de renda.
+3. **Dependentes do IR usam hoje o MESMO campo dos filhos do salário família.** Na lei
+   não é a mesma coisa; se for diferente, vira dois campos.
+4. **Jornada de 220h**, que define o valor da hora do adicional noturno.
+5. **Divisor do mês de admissão**: o recibo da Vitoria dividiu por 31 e o do Fábio por
+   30 — não cabem na mesma regra. Ficou o ÷30 (CLT), que bate em 11 dos 12.
+
+Enquanto as tabelas não forem marcadas como conferidas na tela de Configurações, **todo
+recibo sai com a tarja amarela "VALORES EM CONFERÊNCIA"**.
+
+## ⏳ O que ficou de fora da folha
+
+- **Os relatórios ainda não mostram as linhas novas** (salário, férias, INSS, IR) — ficou
+  da leva 2 e é o próximo candidato natural.
+- **Férias por avos** (o direito adquirido), **13º** e **rescisão**.
+- O aviso do PDF de relatório ("o adicional noturno não aparece em valor") **segue
+  verdadeiro lá**, porque o relatório não usa a folha ainda.
+
+## Área de trabalho ao encerrar (NÃO é desta sessão)
+
+`tests/57-driverpay-edits-roundtrip.spec.ts` e `CHECKPOINT_SESSAO_2026-09-15.md` seguem
+modificados e sem commit desde 15/09, e há 3 PDFs soltos na raiz (`espelho.pdf`,
+`lote.pdf`, `x.pdf`). Deixados como estavam, de propósito.
+
+## Pendências antigas que continuam abertas
+
+- 🔴 **Excluir quinzena do Pagamentos Driver quebrado desde 08/09** (achado em 15/09):
+  a trava de quinzena concluída barra o apagamento dos pagamentos e a tela só oferece
+  Excluir em quinzena concluída — ninguém exclui, nem o 2626. **Espera decisão do Victor.**
+- 🔴 **Triagem de Caratinga 07–12/09 (183 pacotes) não distribuída** e a semana já paga.
+- Gessiley: conferir o relatório com as 4 linhas de PIX antes de pagar.
+- E2E 02, 15 e 47 nunca rodaram.
