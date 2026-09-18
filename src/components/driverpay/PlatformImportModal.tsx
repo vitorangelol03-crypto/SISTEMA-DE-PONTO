@@ -3,7 +3,11 @@ import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2, Users } 
 import toast from 'react-hot-toast';
 import { ModalShell } from './ModalShell';
 import { DriverResolutionPicker } from './DriverResolutionPicker';
-import { parseDriverSheetFileInWorker, type DriverSheetResult } from '../../utils/driverSheetImport';
+import {
+  parseDriverSheetFileInWorker,
+  type DriverSheetResult,
+  type EtapaDaPlanilha,
+} from '../../utils/driverSheetImport';
 import {
   matchDriver,
   normalizeDriverName,
@@ -31,6 +35,13 @@ import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 const PLATFORM_LABEL: Record<string, string> = { imile: 'iMile', shopee: 'Shopee', anjun: 'Anjun', loggi: 'LOGGI' };
 
+/** O que a tela mostra em cada etapa do processamento (planilha grande demora). */
+const ETAPA_LABEL: Record<EtapaDaPlanilha, string> = {
+  lendo: 'Abrindo o arquivo…',
+  montando: 'Montando as linhas…',
+  somando: 'Somando os pacotes por entregador…',
+};
+
 /** Nome legivel para pre-preencher ao criar um driver novo (tira codigo/XPT/parenteses). */
 function suggestName(raw: string): string {
   const s = raw
@@ -57,6 +68,7 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
+  const [etapa, setEtapa] = useState<EtapaDaPlanilha>('lendo');
   const [result, setResult] = useState<DriverSheetResult | null>(null);
   const [drivers, setDrivers] = useState<DriverCandidate[]>([]);
   const [aliases, setAliases] = useState<DriverAlias[]>([]);
@@ -78,12 +90,13 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
         return;
       }
       setParsing(true);
+      setEtapa('lendo');
       setResult(null);
       try {
         // `false` = traz tambem as arquivadas: elas EXISTEM no cadastro, entao a
         // taxa e resolvida normalmente e nao devem disparar o bloqueio.
         const [parsed, ctx, pers, plats] = await Promise.all([
-          parseDriverSheetFileInWorker(file),
+          parseDriverSheetFileInWorker(file, setEtapa),
           getDriverMatchContext(companyId),
           getPeriods(companyId),
           getPlatforms(companyId, false),
@@ -234,9 +247,9 @@ export const PlatformImportModal: React.FC<PlatformImportModalProps> = ({
             {parsing ? (
               <>
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                <span className="text-sm text-gray-600">Processando a planilha…</span>
+                <span className="text-sm text-gray-600">{ETAPA_LABEL[etapa]}</span>
                 <span className="text-xs text-gray-400 text-center max-w-xs">
-                  Arquivos grandes (Shopee, ~130 mil linhas) podem levar até 1 minuto. A tela continua respondendo.
+                  Arquivos grandes (Shopee, ~145 mil linhas) podem levar alguns minutos. A tela continua respondendo.
                 </span>
               </>
             ) : (

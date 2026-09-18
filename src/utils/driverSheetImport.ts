@@ -16,8 +16,10 @@
  *
  * Formatos (colunas-chave), confirmados nas planilhas reais 2026-07-17 / 2026-08-18:
  *  - iMile "Delivered":  DA (entregador) · Recipient City (cidade) · Waybill No. (codigo). 1 plataforma: eMile.
- *  - Shopee "CLAYTON...": Driver Name (entregador) · Cidade Entrega · 3PL Tracking Number (codigo).
+ *  - Shopee "CLAYTON...": entregador · Cidade Entrega · 3PL Tracking Number (codigo).
  *                         Tipo do Servico = ENTREGA->SHOPEE / COLETA->Coleta Shopee.
+ *                         O titulo da coluna do entregador JA MUDOU (ver SHOPEE_COLUNAS_ENTREGADOR):
+ *                         "Driver Name" ate 08/2026; "nome motorista" e "motorista - nome" desde 09/2026.
  *  - Anjun "Taxas a Pagar": operador de despacho (entregador/login) · Cidade destinataria · numero do negocio (codigo).
  *  - LOGGI "entregas-por-entregador": Entregador ("(HUB) Nome (rota, as vezes)") · Entregues (total no periodo).
  *    Traz VARIOS hubs/regioes misturados (18/08/2026, decisao do Victor): nao filtramos por
@@ -27,6 +29,15 @@
 import * as XLSX from 'xlsx';
 
 export type DriverSheetPlatform = 'imile' | 'shopee' | 'anjun' | 'loggi';
+
+/** Em que ponto do processamento a planilha esta (o worker avisa a cada etapa). */
+export type EtapaDaPlanilha = 'lendo' | 'montando' | 'somando';
+
+/** O que o worker manda de volta: etapa (ainda vivo), resultado ou erro. */
+export type WorkerResponse =
+  | { ok: true; result: DriverSheetResult }
+  | { ok: false; error: string }
+  | { etapa: EtapaDaPlanilha };
 
 /** Nomes de plataforma no sistema (batem com driverpay_platforms.name). */
 export const PLATFORM_IMILE = 'eMile';
@@ -79,7 +90,12 @@ const cleanCell = (v: unknown): string => String(v == null ? '' : v).replace(/\s
 export function detectPlatform(headers: unknown[]): DriverSheetPlatform | null {
   const h = new Set(headers.map(normHeader));
   if (h.has('da') && h.has('waybill no.') && h.has('recipient city')) return 'imile';
-  if (h.has('tipo do servico') && h.has('driver name') && h.has('cidade entrega')) return 'shopee';
+  if (
+    h.has('tipo do servico') &&
+    h.has('cidade entrega') &&
+    SHOPEE_COLUNAS_ENTREGADOR.some((titulo) => h.has(titulo))
+  )
+    return 'shopee';
   if (h.has('numero do negocio') && h.has('operador de despacho')) return 'anjun';
   if (h.has('entregador') && h.has('entregues')) return 'loggi';
   return null;
@@ -95,6 +111,51 @@ function colExact(headers: unknown[], name: string): number {
 function colStartsWith(headers: unknown[], prefix: string): number {
   const p = normHeader(prefix);
   return headers.map(normHeader).findIndex((h) => h.startsWith(p));
+}
+
+/**
+ * Titulos ja vistos para a coluna do ENTREGADOR na planilha da Shopee, do mais
+ * antigo pro mais novo. Ela muda de nome de tempos em tempos e o import inteiro
+ * para quando isso acontece (18/09/2026: a planilha da 2a quinzena de agosto
+ * chegou sem "Driver Name" e a tela nao reconhecia mais o arquivo).
+ *
+ * ⚠️ Na planilha de 09/2026 ha DUAS colunas chamadas "nome motorista": a primeira
+ * traz o CODIGO do motorista (2769116) e a segunda o NOME (Fulano da Silva). O
+ * casamento com o cadastro e por nome — decisao do Victor (18/09/2026) — entao a
+ * escolha da coluna olha o CONTEUDO, nao so o titulo (`colunaDoEntregadorShopee`).
+ */
+const SHOPEE_COLUNAS_ENTREGADOR = ['driver name', 'motorista - nome', 'nome motorista'];
+
+/** A celula parece nome de gente (tem letra) e nao codigo ("2769116")? */
+const pareceNome = (v: unknown): boolean => /\p{L}/u.test(cleanCell(v));
+
+/**
+ * Coluna do entregador na Shopee. Com mais de uma candidata (o caso das duas
+ * "nome motorista"), fica a que tem NOME: olha ate 50 celulas preenchidas de cada
+ * uma e escolhe a primeira em que a maioria tem letra. Nenhuma com letra (planilha
+ * so de codigos) -> a ultima, que e onde o nome vem hoje.
+ */
+function colunaDoEntregadorShopee(aoa: unknown[][], headers: unknown[]): number {
+  const norm = headers.map(normHeader);
+  const candidatas: number[] = [];
+  for (const titulo of SHOPEE_COLUNAS_ENTREGADOR) {
+    norm.forEach((h, i) => {
+      if (h === titulo && !candidatas.includes(i)) candidatas.push(i);
+    });
+  }
+  if (candidatas.length <= 1) return candidatas[0] ?? -1;
+  const comNome = candidatas.find((i) => {
+    let vistas = 0;
+    let comLetra = 0;
+    for (let r = 1; r < aoa.length && vistas < 50; r++) {
+      const v = aoa[r]?.[i];
+      if (cleanCell(v) === '') continue;
+      vistas += 1;
+      if (pareceNome(v)) comLetra += 1;
+    }
+    return vistas > 0 && comLetra * 2 > vistas;
+  });
+  return comNome ?? candidatas[candidatas.length - 1];
 }
 
 interface RawRecord {
@@ -167,7 +228,7 @@ function extractImile(aoa: unknown[][], headers: unknown[]): ExtractResult {
  */
 function extractShopee(aoa: unknown[][], headers: unknown[]): ExtractResult {
   const cTipo = colExact(headers, 'tipo do servico');
-  const cDriver = colExact(headers, 'driver name');
+  const cDriver = colunaDoEntregadorShopee(aoa, headers);
   const cCity = colExact(headers, 'cidade entrega');
   const cCode = colStartsWith(headers, '3pl tracking number');
   const out: RawRecord[] = [];
@@ -302,7 +363,7 @@ export function parseDriverSheetFile(file: File): Promise<DriverSheetResult> {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const workbook = XLSX.read(e.target?.result, { type: 'binary' });
+        const workbook = XLSX.read(e.target?.result, { type: 'binary', dense: true });
         const first = workbook.SheetNames[0];
         const sheet = first ? workbook.Sheets[first] : undefined;
         if (!sheet) {
@@ -321,26 +382,63 @@ export function parseDriverSheetFile(file: File): Promise<DriverSheetResult> {
 }
 
 /**
- * Igual a `parseDriverSheetFile`, mas roda o processamento pesado num Web Worker —
- * a tela NAO congela durante o parse (essencial para a Shopee, ~132 mil linhas).
+ * Quanto tempo sem NENHUM sinal do worker antes de desistir. Ele avisa a cada
+ * etapa, entao silencio por tanto tempo significa que morreu (falta de memoria
+ * mata o worker sem disparar `onerror` — 18/09/2026, a tela girava pra sempre).
+ * Folga grande de proposito: a maior planilha ja vista leva ~20s de leitura.
  */
-export function parseDriverSheetFileInWorker(file: File): Promise<DriverSheetResult> {
+const LIMITE_SEM_SINAL_MS = 5 * 60_000;
+
+/**
+ * Igual a `parseDriverSheetFile`, mas roda o processamento pesado num Web Worker —
+ * a tela NAO congela durante o parse (essencial para a Shopee, ~145 mil linhas).
+ * `onEtapa` recebe em que ponto esta (a tela mostra pro operador).
+ */
+export function parseDriverSheetFileInWorker(
+  file: File,
+  onEtapa?: (etapa: EtapaDaPlanilha) => void,
+): Promise<DriverSheetResult> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./driverSheetImport.worker.ts', import.meta.url), { type: 'module' });
-    worker.onmessage = (e: MessageEvent<{ ok: true; result: DriverSheetResult } | { ok: false; error: string }>) => {
+    let vigia: ReturnType<typeof setTimeout>;
+    const encerrar = () => {
+      clearTimeout(vigia);
       worker.terminate();
+    };
+    const desistirSeMorrer = () => {
+      clearTimeout(vigia);
+      vigia = setTimeout(() => {
+        encerrar();
+        const mb = Math.round(file.size / 1048576);
+        reject(
+          new Error(
+            `O processamento da planilha parou sozinho (arquivo de ${mb} MB). ` +
+              'Costuma ser falta de memoria do navegador: feche as outras abas e tente de novo, ' +
+              'ou peca a planilha dividida em partes.',
+          ),
+        );
+      }, LIMITE_SEM_SINAL_MS);
+    };
+    worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+      if ('etapa' in e.data) {
+        desistirSeMorrer();
+        onEtapa?.(e.data.etapa);
+        return;
+      }
+      encerrar();
       if (e.data.ok) resolve(e.data.result);
       else reject(new Error(e.data.error));
     };
     worker.onerror = (err) => {
-      worker.terminate();
+      encerrar();
       reject(new Error(err.message || 'Erro no processamento da planilha.'));
     };
+    desistirSeMorrer();
     file
       .arrayBuffer()
       .then((buf) => worker.postMessage({ buffer: buf }, [buf]))
       .catch((err) => {
-        worker.terminate();
+        encerrar();
         reject(err instanceof Error ? err : new Error('Erro ao ler o arquivo.'));
       });
   });

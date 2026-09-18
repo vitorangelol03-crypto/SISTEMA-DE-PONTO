@@ -14,6 +14,12 @@ describe('driverSheetImport — deteccao de plataforma pelo cabecalho', () => {
   it('reconhece iMile, Shopee, Anjun e LOGGI; rejeita desconhecido', () => {
     expect(detectPlatform(['DA', 'Waybill No.', 'Recipient City', 'Delivered time'])).toBe('imile');
     expect(detectPlatform(['Tipo do Serviço', 'Driver Name', 'Cidade Entrega', 'Rota'])).toBe('shopee');
+    // 18/09/2026: a Shopee trocou o titulo da coluna do entregador — sem isto o
+    // import inteiro parava com "planilha nao reconhecida".
+    expect(detectPlatform(['tipo do serviço', 'cidade entrega', 'nome motorista'])).toBe('shopee');
+    expect(detectPlatform(['tipo do serviço', 'cidade entrega', 'motorista - nome'])).toBe('shopee');
+    // sem NENHUMA coluna de entregador continua nao sendo reconhecida
+    expect(detectPlatform(['tipo do serviço', 'cidade entrega', 'placa'])).toBeNull();
     expect(detectPlatform(['número do negócio', 'operador de despacho', 'Cidade destinatária'])).toBe('anjun');
     expect(detectPlatform(['Entregador', 'Entregues'])).toBe('loggi');
     expect(detectPlatform(['Nome', 'Valor', 'Cidade'])).toBeNull();
@@ -217,5 +223,77 @@ describe('driverSheetImport — fixtures .xlsx das 3 plataformas (regressao do l
     expect(r.totalDrivers).toBe(2);
     expect(r.totalPackages).toBe(8); // 5 + 3
     expect(r.rows.every((x) => x.platform === 'LOGGI')).toBe(true);
+  });
+});
+
+/**
+ * 18/09/2026 — a planilha da 2a quinzena de agosto chegou com OUTRO cabecalho:
+ * sumiu "Driver Name" e vieram DUAS colunas "nome motorista" (a 1a com o codigo
+ * do motorista, a 2a com o nome). Decisao do Victor: vale a do NOME, e os dois
+ * formatos novos (o do .xlsx e o do .csv) tem que ser aceitos.
+ *
+ * O cabecalho abaixo e o REAL do arquivo "CLAYTONBDOSSANTOS (97) atualizada 2
+ * quinzena de agosto.xlsx" (57 colunas), copiado do arquivo, nao digitado.
+ */
+describe('driverSheetImport — Shopee 09/2026: a coluna do entregador mudou de nome', () => {
+  const CABECALHO_REAL = ['tipo do serviço','operação','soc','hub','rota','período(ano_mês_quinzena)','3pl tracking number / número etiqueta / ordem (shopee)','3pl tracking number (enviado por api pela transportadora)','data da prestação do serviço','nome tomador do serviço','cnpj tomador','nome transportadora (3pl)','cnpj emitente (3pl)','cep origem','cidade origem','uf origem','cep entrega','cidade entrega','uf entrega','dados do seller','data da entrega','quantidade volume','peso real','peso cubado','peso calculado/cobrado','km rodado','tipo do veículo','fator agrupador (p/ cobrança por veiculo)','placa','valor nota fiscal mercadoria','tarifa aplicada','frete/tarifa base (peso/km/veículo)','frete calculado','adv','gris','aliquota icms/iss','base calc icms/iss','valor icms/iss','icms subst','outros valores','descontos','valor final à receber','data emissão cte/nf','fatura','número cte','número nf','serie cte/ nf','chave de acesso cte','motivo rejeição cte','prefeitura nfse','comentários','payment orders','e_mails_3pl','e_mails_internos_shopee','e_mail_auditor_shopee','nome motorista','nome motorista'];
+
+  /** Monta uma linha real: tipo, cidade, codigo do pacote, codigo e nome do motorista. */
+  function linha(tipo: string, cidade: string, codigo: string, codMotorista: string, nome: string): unknown[] {
+    const l: unknown[] = new Array(CABECALHO_REAL.length).fill(null);
+    l[0] = tipo;
+    l[6] = codigo;
+    l[17] = cidade;
+    l[55] = codMotorista;
+    l[56] = nome;
+    return l;
+  }
+
+  const aoa = [
+    CABECALHO_REAL,
+    linha('Entrega', 'Caratinga', 'BR1', '2769116', 'Fulano da Silva'),
+    linha('Entrega', 'Caratinga', 'BR2', '2769116', 'Fulano da Silva'),
+    linha('Entrega', 'Caratinga', 'BR2', '2769116', 'Fulano da Silva'), // re-scan: nao conta 2x
+    linha('Coleta', 'Ipanema', 'BR3', '111102', 'Beltrana de Souza'),
+  ];
+
+  it('🎯 reconhece a planilha nova e conta os pacotes (era aqui que parava)', () => {
+    const r = parseDriverSheetData(aoa);
+    expect(r.platform).toBe('shopee');
+    expect(r.totalDrivers).toBe(2);
+    expect(r.totalPackages).toBe(3); // BR1, BR2 e BR3
+    expect(r.rows.find((x) => x.platform === 'SHOPEE')?.packages).toBe(2);
+    expect(r.rows.find((x) => x.platform === 'Coleta Shopee')?.packages).toBe(1);
+  });
+
+  it('🎯 pega a coluna do NOME, nunca a do codigo (as duas se chamam "nome motorista")', () => {
+    const r = parseDriverSheetData(aoa);
+    expect(r.rows.map((x) => x.driverRaw).sort()).toEqual(['Beltrana de Souza', 'Fulano da Silva']);
+    expect(r.rows.some((x) => /^\d+$/.test(x.driverRaw))).toBe(false);
+  });
+
+  it('aceita tambem o formato do .csv ("motorista - código" / "motorista - nome")', () => {
+    const r = parseDriverSheetData([
+      ['tipo do serviço', 'cidade entrega', '3pl tracking number / número etiqueta / ordem (shopee)', 'motorista - código', 'motorista - nome'],
+      ['Entrega', 'Caratinga', 'BR1', '2769116', 'Fulano da Silva'],
+      ['Coleta', 'Caratinga', 'BR2', '2769116', 'Fulano da Silva'],
+    ]);
+    expect(r.platform).toBe('shopee');
+    expect(r.rows.map((x) => x.driverRaw)).toEqual(['Fulano da Silva', 'Fulano da Silva']);
+    expect(r.totalPackages).toBe(2);
+  });
+
+  it('a planilha ANTIGA ("Driver Name") continua igual — nada foi quebrado', () => {
+    const r = parseDriverSheetData([
+      ['Tipo do Serviço', 'Driver Name', 'Cidade Entrega', '3PL Tracking Number / Número Etiqueta / Ordem (Shopee)'],
+      ['ENTREGA', '108810-Fulano da Silva', 'Caratinga', 'T1'],
+    ]);
+    expect(r.rows[0].driverRaw).toBe('108810-Fulano da Silva');
+  });
+
+  it('so ENTREGA e COLETA sao pagas — a regra de 04/08 vale igual no cabecalho novo', () => {
+    const r = parseDriverSheetData([...aoa, linha('Devolução', 'Caratinga', 'BR9', '111102', 'Beltrana de Souza')]);
+    expect(r.totalPackages).toBe(3);
+    expect(r.ignored).toEqual([{ type: 'Devolução', rows: 1 }]);
   });
 });
