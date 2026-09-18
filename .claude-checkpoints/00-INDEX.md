@@ -23,6 +23,26 @@
 > férias · "Logística"/"Mecânica" como função fixa ou só cadastro).
 > ⚠️ Em produção **nada muda de valor ainda**: 0 de 98 fichas têm salário preenchido.
 
+> **📌 SESSÃO 18/09 (leva 4) — INSS E IMPOSTO DE RENDA.** Detalhe na seção **LEVA 4**
+> do `CHECKPOINT_SESSAO_2026-09-18.md`. Commit `d8506d2`.
+>
+> ✅ **O INSS foi DERIVADO dos 12 recibos reais** (resolvendo a conta ao contrário) e
+> reproduz **11 de 11**: progressivo, 7,5% até ~R$ 1.621 e 9% sobre o que passar,
+> truncado. A alíquota impressa ("9,00%") é a FAIXA, não o que a pessoa paga no total —
+> a Camila tem base 1.772,87 e paga 7,6% efetivos.
+> 🔴 **O IR não é provado por NADA**: nenhum dos 12 pagou imposto de renda. Idem as
+> faixas de 12%/14% do INSS e o teto. Por isso as tabelas nascem **não confirmadas** e
+> **todo recibo sai com tarja "VALORES EM CONFERÊNCIA"** até alguém marcar que bateu.
+> ✅ No IR o sistema calcula pelos **dois caminhos** (simplificado × deduções) e usa o de
+> **menor imposto** — e qual ganha **muda com o salário** (o INSS passa o simplificado
+> por volta de R$ 6.000).
+> ✅ Migration `20260918182605` (`payroll_tax_tables`, FEDERAL, por ano) aplicada e
+> provada. Tela de edição das faixas em Configurações.
+> ✅ Validado: typecheck 0 · lint 0 · build limpo · **114 unitários** · **E2E 115 3/3**.
+> ⚠️ **A confirmar com o contador:** faixas de 12%/14% e teto do INSS · tabela inteira do
+> IR · os **dependentes do IR usam hoje o mesmo campo dos filhos do salário família**
+> (na lei não é a mesma coisa) · jornada de 220h · divisor do mês de admissão.
+
 > **📌 SESSÃO 18/09 (leva 3) — FALTA COM ATESTADO E FÉRIAS ENTRARAM NA FOLHA.**
 > Detalhe na seção **LEVA 3** do `CHECKPOINT_SESSAO_2026-09-18.md`.
 >
