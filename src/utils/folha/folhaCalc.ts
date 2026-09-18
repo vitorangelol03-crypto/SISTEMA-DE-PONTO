@@ -32,6 +32,13 @@
  */
 
 import { semanaDaData } from '../dateUtils';
+import {
+  calcularInss,
+  calcularIrrf,
+  faixaAplicada,
+  type TabelaDoInss,
+  type TabelaDoIrrf,
+} from './impostos';
 
 /** O que a ficha do funcionário guarda de folha. Espelha as colunas novas de `employees`. */
 export interface FichaDeFolha {
@@ -104,6 +111,15 @@ export interface FolhaCalculada {
   salarioBase: number;
   baseFgts: number;
   valorFgts: number;
+  /** Remuneração que sofre INSS: salário + noturno + férias + 1/3, menos as faltas. */
+  baseInss: number;
+  inss: number;
+  baseIrrf: number;
+  irrf: number;
+  /** Qual caminho do IRRF ganhou — o recibo mostra, pra ninguém achar que é chute. */
+  caminhoDoIrrf: 'simplificado' | 'deducoes' | null;
+  /** Falso = o recibo precisa sair com o aviso de "valores em conferência". */
+  tabelasConfirmadas: boolean;
   linhas: LinhaDaFolha[];
 }
 
@@ -125,6 +141,17 @@ export interface EntradaDaFolha {
   faltasInjustificadas?: readonly string[];
   /** Dias de férias dentro deste mês. Saem do salário e viram linha própria. */
   diasDeFerias?: number;
+  /** Tabela do INSS do ano. Sem ela, o recibo sai sem a linha (como antes desta leva). */
+  tabelaInss?: TabelaDoInss;
+  /** Tabela do IRRF do ano. Idem. */
+  tabelaIrrf?: TabelaDoIrrf;
+  /**
+   * As duas tabelas do ano já foram conferidas com a contabilidade?
+   *
+   * Falso faz o recibo sair com o aviso de "valores em conferência" (decisão 3 do
+   * Victor). Nasce falso: o sistema não é fonte oficial antes de bater com o contador.
+   */
+  tabelasConfirmadas?: boolean;
 }
 
 /** Dias corridos do mês. `new Date(ano, mes, 0)` cai no último dia do mês pedido. */
@@ -276,6 +303,9 @@ export function calcularFolha({
   adicionalNoturno,
   faltasInjustificadas,
   diasDeFerias,
+  tabelaInss,
+  tabelaIrrf,
+  tabelasConfirmadas,
 }: EntradaDaFolha): FolhaCalculada {
   const dias = diasDeReferencia(ficha.admissao, ano, mes);
   const salarioBase = Math.max(0, Number(ficha.salarioMensal) || 0);
@@ -303,12 +333,29 @@ export function calcularFolha({
     ? proporcional(doisDecimais(config.cotaSalarioFamilia * filhos), dias)
     : 0;
 
+  /**
+   * A remuneração que os impostos enxergam: salário + adicional noturno + férias + 1/3,
+   * menos o que a falta tirou. O salário família fica FORA — provado no recibo da Camila
+   * (1.700,00 + 72,87 = 1.772,87, sem os 67,54), e é a mesma base que o papel imprime
+   * como "Base INSS" e "Base FGTS".
+   */
+  const remuneracaoTributavel = doisDecimais(
+    Math.max(0, salarioDoMes + noturno + ferias + tercoDeFerias - descontoDeFaltas),
+  );
+
   // O FGTS é custo da empresa: entra no papel como informação e NÃO abate o líquido.
-  // Férias e o 1/3 entram na base; o salário família fica fora (Camila, no gabarito).
-  const baseFgts = ficha.fgtsAtivo
-    ? doisDecimais(salarioDoMes + noturno + ferias + tercoDeFerias)
-    : 0;
+  // Depende da chave da ficha; o INSS, não — por isso são duas variáveis.
+  const baseFgts = ficha.fgtsAtivo ? remuneracaoTributavel : 0;
   const valorFgts = truncaCentavos((baseFgts * config.percentualFgts) / 100);
+
+  const baseInss = remuneracaoTributavel;
+  const inss = tabelaInss ? calcularInss(baseInss, tabelaInss) : 0;
+  /**
+   * ⚠️ Dependentes do IRRF usam o MESMO campo do salário família. Não é a mesma coisa na
+   * lei (o do salário família tem limite de idade e de renda; o do IR é mais largo), mas
+   * a ficha só tem um campo. Registrado pra confirmar com o contador.
+   */
+  const resultadoIrrf = tabelaIrrf ? calcularIrrf(baseInss, inss, ficha.filhosSalarioFamilia ?? 0, tabelaIrrf) : null;
 
   const linhas: LinhaDaFolha[] = [];
   if (salarioDoMes > 0) {
@@ -349,6 +396,24 @@ export function calcularFolha({
       desconto: descontoDeFaltas,
     });
   }
+  if (inss > 0 && tabelaInss) {
+    // A referência é a FAIXA alcançada, como no papel ("9,00%") — e não a porcentagem
+    // que a pessoa paga no total, que é sempre menor por ser progressivo.
+    linhas.push({
+      descricao: 'INSS',
+      referencia: `${formataReferencia(faixaAplicada(baseInss, tabelaInss.faixas))}%`,
+      provento: 0,
+      desconto: inss,
+    });
+  }
+  if (resultadoIrrf && resultadoIrrf.valor > 0 && tabelaIrrf) {
+    linhas.push({
+      descricao: 'IRRF',
+      referencia: `${formataReferencia(faixaAplicada(resultadoIrrf.base, tabelaIrrf.faixas))}%`,
+      provento: 0,
+      desconto: resultadoIrrf.valor,
+    });
+  }
 
   const totalProventos = doisDecimais(linhas.reduce((soma, l) => soma + l.provento, 0));
   const totalDescontos = doisDecimais(linhas.reduce((soma, l) => soma + l.desconto, 0));
@@ -370,6 +435,12 @@ export function calcularFolha({
     salarioBase,
     baseFgts,
     valorFgts,
+    baseInss,
+    inss,
+    baseIrrf: resultadoIrrf?.base ?? 0,
+    irrf: resultadoIrrf?.valor ?? 0,
+    caminhoDoIrrf: resultadoIrrf?.caminho ?? null,
+    tabelasConfirmadas: Boolean(tabelasConfirmadas),
     linhas,
   };
 }

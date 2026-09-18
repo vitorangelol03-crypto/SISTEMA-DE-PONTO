@@ -8,6 +8,7 @@ import {
   diasDeReferencia,
   type ConfiguracaoDaFolha,
 } from '../../src/utils/folha/folhaCalc';
+import { TABELA_INSS_2026, TABELA_IRRF_2026, calcularIrrf } from '../../src/utils/folha/impostos';
 
 /**
  * GABARITO REAL — "569 - REC PGTO", Julho/2026, CD LOGISTICA, contabilidade Arruda
@@ -641,5 +642,136 @@ describe('dias de férias dentro do período', () => {
 
   it('sem férias, zero', () => {
     expect(diasDeFeriasNoPeriodo([], ...julho)).toBe(0);
+  });
+});
+
+describe('a folha inteira, com INSS — o recibo da Camila fechado', () => {
+  /**
+   * O caso completo do gabarito: salário 1.700, adicional noturno 72,87, 1 filho.
+   * O papel traz proventos 1.840,41, desconto de INSS 135,23 e líquido 1.705,18.
+   */
+  const camila = () =>
+    calcularFolha({
+      ficha: { salarioMensal: 1700, filhosSalarioFamilia: 1, fgtsAtivo: true, admissao: '2026-01-02' },
+      config: CONFIGURACAO_DA_FOLHA_PADRAO,
+      ...JULHO_2026,
+      adicionalNoturno: 72.87,
+      tabelaInss: TABELA_INSS_2026,
+      tabelaIrrf: TABELA_IRRF_2026,
+    });
+
+  it('os proventos, o desconto e o líquido batem com o papel', () => {
+    const folha = camila();
+    expect(folha.totalProventos).toBe(1840.41);
+    expect(folha.inss).toBe(135.23);
+    expect(folha.totalDescontos).toBe(135.23);
+    expect(folha.liquido).toBe(1705.18);
+  });
+
+  it('as bases do rodapé batem com o papel', () => {
+    const folha = camila();
+    expect(folha.baseInss).toBe(1772.87);
+    expect(folha.baseFgts).toBe(1772.87);
+    expect(folha.valorFgts).toBe(141.82);
+  });
+
+  it('ela não paga imposto de renda, como no papel', () => {
+    expect(camila().irrf).toBe(0);
+  });
+
+  it('as linhas saem na ordem do modelo da contabilidade', () => {
+    expect(camila().linhas.map(l => l.descricao)).toEqual([
+      'Salário mensalista',
+      'Adicional noturno',
+      'Salário família',
+      'INSS',
+    ]);
+  });
+
+  it('a linha do INSS mostra a FAIXA, como o papel ("9,00%")', () => {
+    expect(camila().linhas.find(l => l.descricao === 'INSS')?.referencia).toBe('9,00%');
+  });
+});
+
+describe('INSS e IR dentro da folha', () => {
+  const folhaCom = (salario: number, extras: Record<string, unknown> = {}) =>
+    calcularFolha({
+      ficha: { salarioMensal: salario, filhosSalarioFamilia: 0, fgtsAtivo: true, admissao: '2020-01-01' },
+      config: CONFIGURACAO_DA_FOLHA_PADRAO,
+      ...JULHO_2026,
+      adicionalNoturno: 0,
+      tabelaInss: TABELA_INSS_2026,
+      tabelaIrrf: TABELA_IRRF_2026,
+      ...extras,
+    });
+
+  it('sem tabela cadastrada, o recibo sai sem as linhas (como antes desta leva)', () => {
+    const semTabela = calcularFolha({
+      ficha: { salarioMensal: 1700, filhosSalarioFamilia: 0, fgtsAtivo: true, admissao: '2020-01-01' },
+      config: CONFIGURACAO_DA_FOLHA_PADRAO,
+      ...JULHO_2026,
+      adicionalNoturno: 0,
+    });
+    expect(semTabela.inss).toBe(0);
+    expect(semTabela.irrf).toBe(0);
+    expect(semTabela.linhas.some(l => l.descricao === 'INSS')).toBe(false);
+  });
+
+  it('a falta reduz a base do INSS — quem trabalhou menos contribui menos', () => {
+    const cheio = folhaCom(1700);
+    const comFalta = folhaCom(1700, { faltasInjustificadas: ['2026-07-06', '2026-07-07'] });
+    expect(comFalta.baseInss).toBeLessThan(cheio.baseInss);
+    expect(comFalta.inss).toBeLessThan(cheio.inss);
+    expect(comFalta.baseInss).toBe(1586.66);
+  });
+
+  it('férias e o 1/3 entram na base do INSS', () => {
+    const comFerias = folhaCom(1700, { diasDeFerias: 10 });
+    expect(comFerias.baseInss).toBe(1888.87); // 1.133,33 + 566,66 + 188,88
+  });
+
+  it('salário alto paga IR e o líquido fecha com os dois impostos', () => {
+    const folha = folhaCom(6000);
+    expect(folha.irrf).toBeGreaterThan(0);
+    expect(folha.liquido).toBe(
+      Number((folha.totalProventos - folha.inss - folha.irrf).toFixed(2)),
+    );
+  });
+
+  /**
+   * Qual caminho ganha depende do SALÁRIO, não é fixo — e a conta escolhe sozinha o que
+   * paga menos (decisão do Victor). O ponto de virada é o INSS passar do desconto
+   * simplificado: com 6.000 o INSS já é R$ 633,18 contra os R$ 607,20 do simplificado.
+   */
+  it('em salário menor ganha o simplificado; em salário maior, as deduções', () => {
+    expect(folhaCom(3500).caminhoDoIrrf).toBe('simplificado');
+    expect(folhaCom(6000).caminhoDoIrrf).toBe('deducoes');
+  });
+
+  it('o caminho escolhido é sempre o de MENOS imposto', () => {
+    for (const salario of [2500, 3500, 4500, 6000, 9000]) {
+      const folha = folhaCom(salario);
+      const soSimplificado = calcularIrrf(folha.baseInss, folha.inss, 0, {
+        ...TABELA_IRRF_2026,
+        deducaoPorDependente: 0,
+      });
+      const soDeducoes = calcularIrrf(folha.baseInss, folha.inss, 0, {
+        ...TABELA_IRRF_2026,
+        descontoSimplificado: 0,
+      });
+      expect(folha.irrf).toBe(Math.min(soSimplificado.valor, soDeducoes.valor));
+    }
+  });
+
+  it('o aviso de "em conferência" nasce ligado e só sai quando confirmado', () => {
+    expect(folhaCom(1700).tabelasConfirmadas).toBe(false);
+    expect(folhaCom(1700, { tabelasConfirmadas: true }).tabelasConfirmadas).toBe(true);
+  });
+
+  it('o FGTS continua fora dos descontos — não é imposto do funcionário', () => {
+    const folha = folhaCom(1700);
+    expect(folha.valorFgts).toBeGreaterThan(0);
+    expect(folha.linhas.some(l => l.descricao.includes('FGTS'))).toBe(false);
+    expect(folha.totalDescontos).toBe(folha.inss + folha.irrf);
   });
 });

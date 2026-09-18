@@ -255,10 +255,13 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
   let afterBases = afterResumo;
   if (data.folha) {
     const { folha } = data;
+    // As cinco caixas do modelo da contabilidade, na mesma ordem.
     const caixas: Array<[string, string]> = [
       ['Salário base', fmtBRL(folha.salarioBase)],
+      ['Base INSS', fmtBRL(folha.baseInss)],
       ['Base FGTS', fmtBRL(folha.baseFgts)],
       ['Valor FGTS', fmtBRL(folha.valorFgts)],
+      ['Base IRRF', fmtBRL(folha.baseIrrf)],
     ];
     const larguraTotal = X_RIGHT - X_LEFT;
     const larguraCaixa = larguraTotal / caixas.length;
@@ -273,10 +276,10 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
     caixas.forEach(([rotulo, valor], i) => {
       const centro = X_LEFT + larguraCaixa * i + larguraCaixa / 2;
       if (i > 0) doc.line(X_LEFT + larguraCaixa * i, topo, X_LEFT + larguraCaixa * i, topo + altura);
-      doc.setFont('helvetica', 'bold').setFontSize(8);
+      doc.setFont('helvetica', 'bold').setFontSize(7.5);
       doc.setTextColor(100);
       doc.text(rotulo, centro, topo + 14, { align: 'center' });
-      doc.setFont('helvetica', 'bold').setFontSize(10.5);
+      doc.setFont('helvetica', 'bold').setFontSize(9.5);
       doc.setTextColor(0);
       doc.text(valor, centro, topo + 30, { align: 'center' });
     });
@@ -290,6 +293,26 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
     );
     doc.setTextColor(0);
     afterBases = topo + altura + 16;
+
+    // AVISO DE CONFERÊNCIA (decisão do Victor, 18/09): enquanto as tabelas de INSS e IR
+    // do ano não forem conferidas com a contabilidade, o papel diz isso na cara. O
+    // sistema não é fonte oficial antes de rodar em paralelo por alguns meses.
+    if (!folha.tabelasConfirmadas && (folha.inss > 0 || folha.irrf > 0)) {
+      const alturaAviso = 22;
+      doc.setFillColor(255, 247, 214);
+      doc.setDrawColor(214, 178, 60);
+      doc.setLineWidth(0.7);
+      doc.rect(X_LEFT, afterBases + 6, X_RIGHT - X_LEFT, alturaAviso, 'FD');
+      doc.setFont('helvetica', 'bold').setFontSize(8);
+      doc.setTextColor(130, 95, 10);
+      doc.text(
+        'VALORES EM CONFERÊNCIA — as tabelas de INSS e IR deste ano ainda não foram conferidas com a contabilidade.',
+        X_LEFT + 8,
+        afterBases + 20,
+      );
+      doc.setTextColor(0);
+      afterBases += 6 + alturaAviso + 4;
+    }
   }
 
   // ═══ Footer: data + assinaturas ═══

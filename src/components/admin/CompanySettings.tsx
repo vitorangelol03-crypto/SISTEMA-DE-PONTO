@@ -3,7 +3,8 @@ import { Building2, Save, MapPin, Clock, AlertCircle, Wallet, Calculator, Shield
 import toast from 'react-hot-toast';
 import { useCompany } from '../../contexts/useCompany';
 import { useAuth } from '../../hooks/useAuth';
-import { updateCompany, updateGeoLocation, getPayrollConfig, savePayrollConfig } from '../../services/database';
+import { updateCompany, updateGeoLocation, getPayrollConfig, savePayrollConfig, getTabelasDeImposto, saveTabelaDeImposto } from '../../services/database';
+import type { FaixaDeImposto } from '../../utils/folha/impostos';
 import { usePermissions } from '../../hooks/usePermissions';
 import {
   applyBankHours,
@@ -102,6 +103,18 @@ export const CompanySettings: React.FC = () => {
   // Decisão do Victor (18/09): quer as DUAS opções de falta. Esta chave nasce desligada —
   // ligada, a falta injustificada derruba também o descanso da semana (na prática 2 dias).
   const [dsrNaFalta, setDsrNaFalta] = useState(false);
+  /**
+   * Tabelas de INSS e IR do ano (18/09/2026). São FEDERAIS — valem pras duas empresas.
+   * Nascem semeadas e NÃO confirmadas: o recibo avisa "em conferência" até alguém marcar
+   * que bateu com a contabilidade.
+   */
+  const [tabelaInss, setTabelaInss] = useState<FaixaDeImposto[]>([]);
+  const [tabelaIrrf, setTabelaIrrf] = useState<FaixaDeImposto[]>([]);
+  const [tetoInssRaw, setTetoInssRaw] = useState('');
+  const [deducaoDependenteRaw, setDeducaoDependenteRaw] = useState('');
+  const [descontoSimplificadoRaw, setDescontoSimplificadoRaw] = useState('');
+  const [inssConferida, setInssConferida] = useState(false);
+  const [irrfConferida, setIrrfConferida] = useState(false);
 
   // COMBO I FIX #5: números derivados dos states raw — consumidos por validação, submit e useMemo.
   const bankHoursExtraMultiplier = parseNumericInput(extraMultRaw) ?? 0;
@@ -157,6 +170,17 @@ export const CompanySettings: React.FC = () => {
         setFamilyQuotaRaw(String(config.cotaSalarioFamilia).replace('.', ','));
         setFamilyCeilingRaw(String(config.tetoSalarioFamilia).replace('.', ','));
         setDsrNaFalta(config.dsrNaFaltaInjustificada);
+      })
+      .then(() => getTabelasDeImposto(anoDaFolha))
+      .then(t => {
+        if (!vivo || !t) return;
+        setTabelaInss(t.inss?.faixas ?? []);
+        setTetoInssRaw(String(t.inss?.teto ?? 0).replace('.', ','));
+        setTabelaIrrf(t.irrf?.faixas ?? []);
+        setDeducaoDependenteRaw(String(t.irrf?.deducaoPorDependente ?? 0).replace('.', ','));
+        setDescontoSimplificadoRaw(String(t.irrf?.descontoSimplificado ?? 0).replace('.', ','));
+        setInssConferida(t.confirmadas);
+        setIrrfConferida(t.confirmadas);
       })
       .catch(err => {
         if (!vivo) return;
@@ -248,6 +272,23 @@ export const CompanySettings: React.FC = () => {
           cotaSalarioFamilia: familyQuota as number,
           tetoSalarioFamilia: familyCeiling as number,
           dsrNaFaltaInjustificada: dsrNaFalta,
+        }, user.id);
+      }
+      // As tabelas de imposto são federais e ficam em tabela própria — salvam junto,
+      // mas por caminho próprio, com a mesma permissão.
+      if (podeEditarFolha && user?.id && tabelaInss.length > 0) {
+        await saveTabelaDeImposto(anoDaFolha, 'inss', {
+          faixas: tabelaInss,
+          teto: parseNumericInput(tetoInssRaw) ?? 0,
+          confirmado: inssConferida,
+        }, user.id);
+      }
+      if (podeEditarFolha && user?.id && tabelaIrrf.length > 0) {
+        await saveTabelaDeImposto(anoDaFolha, 'irrf', {
+          faixas: tabelaIrrf,
+          deducaoPorDependente: parseNumericInput(deducaoDependenteRaw) ?? 0,
+          descontoSimplificado: parseNumericInput(descontoSimplificadoRaw) ?? 0,
+          confirmado: irrfConferida,
         }, user.id);
       }
       toast.success('Configurações salvas');
@@ -771,6 +812,149 @@ export const CompanySettings: React.FC = () => {
                 </span>
               </span>
             </label>
+          )}
+
+          {/* Tabelas de INSS e IR — federais, valem pras duas empresas. Nascem semeadas
+              e NÃO conferidas: enquanto a marca não for ligada, o recibo avisa. */}
+          {!folhaCarregando && (tabelaInss.length > 0 || tabelaIrrf.length > 0) && (
+            <div className="space-y-4 pt-2" data-testid="tabelas-imposto">
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+                <p className="text-xs text-amber-900">
+                  <strong>Confira com seu contador antes de usar.</strong> As duas primeiras
+                  faixas do INSS foram tiradas do recibo real de Julho/2026 e batem com ele;
+                  as faixas de 12% e 14%, o teto e a tabela inteira do IR <strong>não</strong>{' '}
+                  foram conferidas contra nada — ninguém do recibo pagou imposto de renda.
+                  Enquanto as marcas abaixo estiverem desligadas, todo recibo sai com o aviso
+                  "valores em conferência".
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold text-gray-800 mb-2">INSS — faixas de {anoDaFolha}</h4>
+                {tabelaInss.map((faixa, i) => (
+                  <div key={i} className="flex items-center gap-2 mb-2">
+                    <span className="text-xs text-gray-500 w-16">até R$</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={faixa.ate === null ? '' : String(faixa.ate).replace('.', ',')}
+                      onChange={(e) => {
+                        const v = parseNumericInput(e.target.value);
+                        setTabelaInss(t => t.map((f, j) => (j === i ? { ...f, ate: v } : f)));
+                      }}
+                      disabled={!podeEditarFolha}
+                      placeholder="sem teto"
+                      className={`${inputCls} max-w-[140px] disabled:bg-gray-100`}
+                    />
+                    <span className="text-xs text-gray-500">paga</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={String(faixa.aliquota).replace('.', ',')}
+                      onChange={(e) => {
+                        const v = parseNumericInput(e.target.value) ?? 0;
+                        setTabelaInss(t => t.map((f, j) => (j === i ? { ...f, aliquota: v } : f)));
+                      }}
+                      disabled={!podeEditarFolha}
+                      className={`${inputCls} max-w-[90px] disabled:bg-gray-100`}
+                    />
+                    <span className="text-xs text-gray-500">%</span>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs text-gray-500">Teto de contribuição R$</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={tetoInssRaw}
+                    onChange={(e) => setTetoInssRaw(e.target.value)}
+                    disabled={!podeEditarFolha}
+                    className={`${inputCls} max-w-[140px] disabled:bg-gray-100`}
+                  />
+                </div>
+                <label className="flex items-center gap-2 mt-3 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={inssConferida}
+                    onChange={(e) => setInssConferida(e.target.checked)}
+                    disabled={!podeEditarFolha}
+                    className="w-5 h-5"
+                  />
+                  <span className="text-gray-700">Conferida com a contabilidade</span>
+                </label>
+              </div>
+
+              <div className="pt-2 border-t border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-800 mb-2">Imposto de Renda — faixas de {anoDaFolha}</h4>
+                {tabelaIrrf.map((faixa, i) => (
+                  <div key={i} className="flex items-center gap-2 mb-2">
+                    <span className="text-xs text-gray-500 w-16">até R$</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={faixa.ate === null ? '' : String(faixa.ate).replace('.', ',')}
+                      onChange={(e) => {
+                        const v = parseNumericInput(e.target.value);
+                        setTabelaIrrf(t => t.map((f, j) => (j === i ? { ...f, ate: v } : f)));
+                      }}
+                      disabled={!podeEditarFolha}
+                      placeholder="sem teto"
+                      className={`${inputCls} max-w-[140px] disabled:bg-gray-100`}
+                    />
+                    <span className="text-xs text-gray-500">paga</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={String(faixa.aliquota).replace('.', ',')}
+                      onChange={(e) => {
+                        const v = parseNumericInput(e.target.value) ?? 0;
+                        setTabelaIrrf(t => t.map((f, j) => (j === i ? { ...f, aliquota: v } : f)));
+                      }}
+                      disabled={!podeEditarFolha}
+                      className={`${inputCls} max-w-[90px] disabled:bg-gray-100`}
+                    />
+                    <span className="text-xs text-gray-500">%</span>
+                  </div>
+                ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <label className={labelCls}>Abate por dependente (R$)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={deducaoDependenteRaw}
+                      onChange={(e) => setDeducaoDependenteRaw(e.target.value)}
+                      disabled={!podeEditarFolha}
+                      className={`${inputCls} disabled:bg-gray-100`}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Desconto simplificado (R$)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={descontoSimplificadoRaw}
+                      onChange={(e) => setDescontoSimplificadoRaw(e.target.value)}
+                      disabled={!podeEditarFolha}
+                      className={`${inputCls} disabled:bg-gray-100`}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      O sistema calcula pelos dois caminhos e usa o que der menos imposto.
+                    </p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 mt-3 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={irrfConferida}
+                    onChange={(e) => setIrrfConferida(e.target.checked)}
+                    disabled={!podeEditarFolha}
+                    className="w-5 h-5"
+                  />
+                  <span className="text-gray-700">Conferida com a contabilidade</span>
+                </label>
+              </div>
+            </div>
           )}
         </section>
 

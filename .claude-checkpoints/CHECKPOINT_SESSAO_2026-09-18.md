@@ -340,3 +340,96 @@ simulação ele bateu na trava de permissão antes e eu quase dei por provado o 
 - Os **relatórios** ainda não mostram as linhas da folha — segue pendente da leva 2.
 - A **jornada de 220h** do adicional noturno continua sendo o padrão da CLT, não um número
   conferido contra o papel.
+
+---
+
+# LEVA 4 — INSS E IMPOSTO DE RENDA
+
+> *"agora faz o INSS e IR"* · *"quero fechar tudo relacionado a isso hoje"*.
+> Decisões dele: **(1)** a tela nasce pronta e semeada, ele corrige com o contador ·
+> **(2)** no IR vale o caminho que der MENOS imposto · **(3)** enquanto a tabela do ano
+> não for conferida, o recibo sai com aviso de "valores em conferência".
+
+## 1. 🟢 O INSS foi DERIVADO do papel — e bate em 11 de 11
+
+Não veio de tabela decorada: saiu dos próprios recibos, resolvendo a conta ao contrário.
+
+- **Progressivo: 7,5% até ~R$ 1.621 e 9% sobre o que passar.** Truncado, como o FGTS.
+- A alíquota que o papel imprime ("9,00%") é a **faixa alcançada**, não o que a pessoa
+  paga no total: a Camila tem base 1.772,87 e paga 135,23 — **7,6% efetivos**.
+- 9 dos 10 recibos de 9% convergem no mesmo limite de faixa (1.621,2 a 1.621,9 — o papel
+  não permite cravar o centavo). A Silvia fica fora: o INSS dela incidiu sobre férias
+  pagas em recibo à parte.
+- Testado contra os 11: **11/11**, com a faixa impressa batendo também.
+
+## 2. 🔴 O que NÃO é provado por nada
+
+- **As faixas de 12% e 14% do INSS e o teto.** O maior salário do gabarito é R$ 2.200 —
+  ninguém chega lá.
+- **A tabela inteira do IRRF.** **Nenhum dos 12 pagou imposto de renda** (todos abaixo da
+  isenção); o papel só mostra a "Base IRRF". Tentei derivar a regra da base e ela não
+  fecha — o abatimento varia de R$ 423 a R$ 514 entre as pessoas, sem padrão que o papel
+  explique.
+
+Por isso as tabelas nascem **`confirmado = false`** e o recibo sai com uma tarja amarela
+de **"VALORES EM CONFERÊNCIA"** enquanto ninguém marcar que bateu com a contabilidade.
+
+## 3. O que entrou
+
+- `src/utils/folha/impostos.ts`: `calcularInss` (progressivo, truncado, com teto),
+  `calcularIrrf` (**calcula pelos dois caminhos — simplificado e deduções — e usa o que
+  der menos imposto**) e `faixaAplicada` (a porcentagem que o papel imprime).
+- Migration `20260918...` — `payroll_tax_tables` (ano + tipo, faixas em jsonb, marca de
+  conferida, quem confirmou e quando). **Federal: sem `company_id`**, vale pras duas
+  empresas. Leitura liberada pra quem está logado; escrita exige `settings.editDailyRate`,
+  travado no banco.
+- A folha ganhou `baseInss`, `inss`, `baseIrrf`, `irrf` e o caminho escolhido do IR. A
+  base é a **remuneração tributável** (salário + noturno + férias + 1/3 − faltas), a
+  mesma que o papel imprime como "Base INSS" e "Base FGTS" — com o salário família fora.
+- O recibo passou a ter as **5 caixas do modelo** (Salário base · Base INSS · Base FGTS ·
+  Valor FGTS · Base IRRF) e a tarja de conferência.
+- Configurações: tela pra editar as faixas dos dois impostos, o teto, o abate por
+  dependente e o desconto simplificado, com a marca "Conferida com a contabilidade".
+
+## 4. ⚠️ Coisas a confirmar com o contador (registradas, não escondidas)
+
+1. As faixas de **12% e 14%** do INSS e o **teto**.
+2. **A tabela inteira do IR** e o desconto simplificado.
+3. **Os dependentes do IR usam o mesmo campo do salário família.** Na lei não é a mesma
+   coisa (o do salário família tem limite de idade e renda), mas a ficha só tem um campo.
+4. As de antes: jornada de 220h do adicional noturno e o divisor do mês de admissão.
+
+## 4.1 Validação
+
+| | |
+|---|---|
+| Unitários | **114 verdes** — `folhaCalc` 82 · `impostosFolha` 23 · `holeriteLinhasFolha` 9 |
+| INSS contra o papel | **11/11** recibos reais, com a faixa impressa batendo também |
+| typecheck · lint · build | 0 · 0 · limpo |
+| E2E `tests/115` | **3/3**, sem flaky |
+| Migration `20260918182605` | aplicada; travas provadas por simulação (04 barrado, 8888 lê as 2 tabelas por serem federais, anon barrado) |
+
+⚠️ **Os três arquivos de teste nunca rodaram na MESMA rodada** (o robô da Shopee derruba o
+worker do vitest). Cada um foi provado numa rodada própria, conferida pela contagem
+"Test Files 1 passed (1)" — que é o que dá pra afirmar com honestidade.
+
+🔴 **Um vermelho real apareceu e era expectativa MINHA errada**, não o código: eu tinha
+escrito que o caminho simplificado do IR sempre ganharia. Não ganha — com salário de
+6.000 o INSS (R$ 633,18) já é maior que o desconto simplificado (R$ 607,20), então as
+deduções pagam menos. O sistema escolhia certo; o teste é que estava errado. Trocado por
+dois testes melhores, incluindo uma varredura de 2.500 a 9.000 exigindo que o escolhido
+seja sempre o de menor imposto.
+
+⚠️ O caso das Configurações ficou **flaky** na primeira rodada (passou só no retry): era
+um `scrollIntoViewIfNeeded` meu, inútil ali, estourando com o orçamento do teste no fim.
+Removido + `setTimeout(150s)` no caso, porque a aba Admin ficou mais pesada. Rodada
+seguinte: 3/3 limpo.
+
+## 5. Armadilha da máquina (de novo, pior)
+
+O **robô da Shopee** (projeto CRIADOR DE AT, 11 Chrome) estava rodando, e o vitest passou
+a falhar com *"Failed to start worker"* — saindo com **código 0 e "no tests"**. Conferido
+no código do vitest: `START_TIMEOUT = 6e4` / `9e4`, **fixo, sem flag nem config**. Com o
+robô de pé, `--pool=threads` chegou a funcionar uma vez e depois também falhou; a saída é
+**repetir até a rodada valer** e conferir SEMPRE a contagem de arquivos, nunca o código de
+saída. CPU estava 93% ociosa — é o `/mnt/c` do WSL, não falta de processador.

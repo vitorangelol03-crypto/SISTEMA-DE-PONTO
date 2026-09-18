@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from
 import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
-  getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, getPayrollConfig, getEmployeeVacations, type EmployeeVacation,
+  getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, getPayrollConfig, getEmployeeVacations, type EmployeeVacation, getTabelasDeImposto, type TabelasDeImposto,
   clearEmployeePayments, clearAllPayments, getErrorRecords, ErrorRecord, getBonusRemovalHistory, BonusRemoval,
   getTriageDistributionsForEmployees, getBonusTypes, BonusTypeRecord,
   getPaymentPeriods, PaymentPeriod,
@@ -88,6 +88,7 @@ function montarDadosDoRecibo(
   company: { display_name?: string | null; legal_name?: string | null; cnpj?: string | null } | null,
   configDaFolha: ConfiguracaoDaFolha,
   feriasDaEmpresa: readonly EmployeeVacation[],
+  tabelas: TabelasDeImposto,
 ) {
   return {
     company: {
@@ -121,7 +122,7 @@ function montarDadosDoRecibo(
     totalBonusC2: d.totalBonusC2 || 0,
     totalGross: d.totalEarnedGross || 0,
     totalNet: d.totalEarned || 0,
-    folha: folhaDoRecibo(d, inicio, fim, configDaFolha, feriasDaEmpresa),
+    folha: folhaDoRecibo(d, inicio, fim, configDaFolha, feriasDaEmpresa, tabelas),
   };
 }
 
@@ -138,6 +139,7 @@ function folhaDoRecibo(
   fim: string,
   config: ConfiguracaoDaFolha,
   feriasDaEmpresa: readonly EmployeeVacation[],
+  tabelas: TabelasDeImposto,
 ): FolhaCalculada | undefined {
   const ficha = d.employee;
   const salario = Number(ficha.monthly_salary ?? 0);
@@ -168,6 +170,9 @@ function folhaDoRecibo(
       inicio,
       fim,
     ),
+    tabelaInss: tabelas.inss ?? undefined,
+    tabelaIrrf: tabelas.irrf ?? undefined,
+    tabelasConfirmadas: tabelas.confirmadas,
   });
 }
 
@@ -296,6 +301,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   const [configDaFolha, setConfigDaFolha] = useState<ConfiguracaoDaFolha>(CONFIGURACAO_DA_FOLHA_PADRAO);
   /** Férias que encostam no período filtrado — o recibo desconta só os dias de cá. */
   const [feriasDaEmpresa, setFeriasDaEmpresa] = useState<EmployeeVacation[]>([]);
+  /**
+   * Tabelas de INSS e IRRF do ano. Sem elas o recibo sai SEM as duas linhas — que é
+   * melhor do que sair com um imposto inventado.
+   */
+  const [tabelasDeImposto, setTabelasDeImposto] = useState<TabelasDeImposto>({
+    inss: null, irrf: null, confirmadas: false,
+  });
 
   // ─── Banco de horas (combo G — sub-fase 2.17) ──────────────────────────
   // Dropdown de payment_periods da empresa atual + modal de preview/apply.
@@ -403,7 +415,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     try {
       const { generateHoleritePdf, downloadHoleritePdf } = await import('../../utils/holeritePdf');
       const dadosDoRecibo = (d: EmployeeFinancialData) =>
-        montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa);
+        montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto);
 
       if (escolhidos.length === 1) {
         setPdfGerando('Gerando…');
@@ -462,7 +474,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       setPdfGerando(`Montando ${escolhidos.length} folhas…`);
       const { generateLoteHoleritePdf } = await import('../../utils/holeritePdf');
       const pdf = await generateLoteHoleritePdf(
-        escolhidos.map((d) => montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa)),
+        escolhidos.map((d) => montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto)),
       );
       baixarArquivo(
         pdf,
@@ -494,7 +506,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         const d = escolhidos[i];
         setPdfGerando(`Publicando ${i + 1} de ${escolhidos.length}…`);
         const pdf = await generateHoleritePdf(
-          montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa),
+          montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto),
         );
         await publicarReciboDePagamento({
           companyId: company.id,
@@ -613,6 +625,19 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   }, [company?.id, filters.startDate, filters.endDate]);
 
   const anoDaFolha = Number(filters.startDate.slice(0, 4));
+  useEffect(() => {
+    if (!anoDaFolha) return;
+    let cancelado = false;
+    getTabelasDeImposto(anoDaFolha)
+      .then(t => { if (!cancelado) setTabelasDeImposto(t); })
+      .catch(err => {
+        if (cancelado) return;
+        setTabelasDeImposto({ inss: null, irrf: null, confirmadas: false });
+        console.error('Erro ao carregar as tabelas de INSS/IRRF:', err);
+      });
+    return () => { cancelado = true; };
+  }, [anoDaFolha]);
+
   useEffect(() => {
     if (!company?.id || !anoDaFolha) return;
     let cancelado = false;
@@ -1792,7 +1817,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                           // recibo diferente do que foi conferido. (11/09/2026.)
                           const { downloadHoleritePdf } = await import('../../utils/holeritePdf');
                           await downloadHoleritePdf(
-                            montarDadosDoRecibo(data, filters.startDate, filters.endDate, company, configDaFolha, feriasDaEmpresa),
+                            montarDadosDoRecibo(data, filters.startDate, filters.endDate, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto),
                           );
                           toast.success('Holerite PDF gerado');
                         }}

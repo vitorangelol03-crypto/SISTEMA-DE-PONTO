@@ -14,6 +14,7 @@ import {
 } from '../utils/attendanceCalc';
 import { entraNaTriagem, TRIAGE_CONFIG_PADRAO, type TriageConfig } from '../utils/triagemFuncoes';
 import { CONFIGURACAO_DA_FOLHA_PADRAO, type ConfiguracaoDaFolha } from '../utils/folha/folhaCalc';
+import type { FaixaDeImposto, TabelaDoInss, TabelaDoIrrf } from '../utils/folha/impostos';
 import { mensagemDeErro } from '../utils/mensagemDeErro';
 
 // Sub-fase 11.8 — helper pra chamar edge fn employee-public-api (verify_jwt:false).
@@ -2523,6 +2524,93 @@ export const setAbsenceJustified = async (
     .eq('employee_id', employeeId)
     .eq('date', date)
     .eq('company_id', companyId);
+  if (error) throw error;
+};
+
+// ─── TABELAS DE INSS E IRRF (18/09/2026) ────────────────────────────────────
+// São FEDERAIS: valem para as duas empresas, por isso a tabela não tem company_id.
+// Guardadas por ANO, com marca de "conferida" — enquanto não confirmada, o recibo sai
+// com o aviso de "valores em conferência" (decisão do Victor).
+
+export interface TabelasDeImposto {
+  inss: TabelaDoInss | null;
+  irrf: TabelaDoIrrf | null;
+  /** Só é `true` quando AS DUAS do ano estiverem confirmadas. */
+  confirmadas: boolean;
+}
+
+interface LinhaDeTabelaDeImposto {
+  tipo: 'inss' | 'irrf';
+  faixas: FaixaDeImposto[];
+  teto: number | null;
+  deducao_dependente: number | null;
+  desconto_simplificado: number | null;
+  confirmado: boolean;
+}
+
+export const getTabelasDeImposto = async (ano: number): Promise<TabelasDeImposto> => {
+  const { data, error } = await supabase
+    .from('payroll_tax_tables')
+    .select('tipo, faixas, teto, deducao_dependente, desconto_simplificado, confirmado')
+    .eq('ano', ano);
+  if (error) throw error;
+
+  const linhas = (data ?? []) as LinhaDeTabelaDeImposto[];
+  const doInss = linhas.find(l => l.tipo === 'inss');
+  const doIrrf = linhas.find(l => l.tipo === 'irrf');
+
+  return {
+    inss: doInss ? { faixas: doInss.faixas, teto: Number(doInss.teto ?? 0) } : null,
+    irrf: doIrrf
+      ? {
+          faixas: doIrrf.faixas,
+          deducaoPorDependente: Number(doIrrf.deducao_dependente ?? 0),
+          descontoSimplificado: Number(doIrrf.desconto_simplificado ?? 0),
+        }
+      : null,
+    // Uma só confirmada não basta: o aviso do recibo cobre o cálculo inteiro.
+    confirmadas: Boolean(doInss?.confirmado) && Boolean(doIrrf?.confirmado),
+  };
+};
+
+/**
+ * Grava a tabela de um ano. Mexer em faixa de imposto mexe no dinheiro de todo mundo:
+ * exige `settings.editDailyRate`, e o banco trava igual no trigger.
+ *
+ * Marcar como conferida é ato consciente: quem confirma fica registrado no banco.
+ */
+export const saveTabelaDeImposto = async (
+  ano: number,
+  tipo: 'inss' | 'irrf',
+  dados: {
+    faixas: FaixaDeImposto[];
+    teto?: number;
+    deducaoPorDependente?: number;
+    descontoSimplificado?: number;
+    confirmado: boolean;
+  },
+  userId: string
+): Promise<void> => {
+  const permissionCheck = await validatePermission(userId, 'settings.editDailyRate');
+  if (!permissionCheck.allowed) {
+    throw new Error(permissionCheck.error || 'Permissão negada');
+  }
+
+  const { error } = await supabase
+    .from('payroll_tax_tables')
+    .upsert([{
+      ano,
+      tipo,
+      faixas: dados.faixas,
+      teto: dados.teto ?? 0,
+      deducao_dependente: dados.deducaoPorDependente ?? 0,
+      desconto_simplificado: dados.descontoSimplificado ?? 0,
+      confirmado: dados.confirmado,
+      confirmado_por: dados.confirmado ? userId : null,
+      confirmado_em: dados.confirmado ? new Date().toISOString() : null,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    }], { onConflict: 'ano,tipo' });
   if (error) throw error;
 };
 

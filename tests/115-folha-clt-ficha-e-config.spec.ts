@@ -130,6 +130,9 @@ test.describe('Folha CLT — ficha do funcionário e configuração', () => {
   });
 
   test('a configuração da folha do ano aparece nas Configurações', async ({ page }) => {
+    // A aba Admin carrega senha + várias seções (agora também as tabelas de imposto);
+    // com a máquina ocupada ela passa dos 60s padrão.
+    test.setTimeout(150_000);
     await loginAs(page, MASTER_2626);
     await goToTab(page, 'Admin');
 
@@ -149,10 +152,10 @@ test.describe('Folha CLT — ficha do funcionário e configuração', () => {
 
     const ano = new Date().getFullYear();
     const titulo = page.getByRole('heading', { name: new RegExp(`Folha \\(carteira assinada\\) — ${ano}`) });
-    // Esperar ANTES de rolar: a aba Admin monta em partes e o `scrollIntoViewIfNeeded`
-    // estoura em 10s se o elemento ainda não existe (foi assim que este teste caiu).
+    // Sem `scrollIntoViewIfNeeded`: ele não serve pra nada aqui (as conferências abaixo
+    // funcionam com o elemento fora da tela) e, com a aba Admin lenta, sobrava tão pouco
+    // do orçamento do teste que ele estourava sozinho — deixou o caso FLAKY em 18/09.
     await expect(titulo).toBeVisible({ timeout: 60_000 });
-    await titulo.scrollIntoViewIfNeeded();
 
     // Os valores semeados pela migration, lidos do banco (não chumbados na tela).
     await expect(page.getByPlaceholder('8')).toHaveValue('8', { timeout: 20_000 });
