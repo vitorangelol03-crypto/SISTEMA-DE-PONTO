@@ -23,6 +23,23 @@
 > férias · "Logística"/"Mecânica" como função fixa ou só cadastro).
 > ⚠️ Em produção **nada muda de valor ainda**: 0 de 98 fichas têm salário preenchido.
 
+> **📌 SESSÃO 18/09 (leva 3) — FALTA COM ATESTADO E FÉRIAS ENTRARAM NA FOLHA.**
+> Detalhe na seção **LEVA 3** do `CHECKPOINT_SESSAO_2026-09-18.md`.
+>
+> ✅ **Dois tipos de falta** (decisão dele: "quero ter as duas opções"): a com atestado
+> não desconta; a comum desconta o dia. Botão no selo da falta, na tela do Ponto.
+> ✅ **DSR como chave configurável, nascendo DESLIGADA** — ligada, a falta sem atestado
+> derruba também o descanso da semana. Duas faltas na mesma semana = **um** descanso só.
+> ✅ **Férias** em tabela própria, lançadas na ficha: viram "Férias" + "1/3 de férias"
+> (decisão dele: "sim"), e férias que atravessam o mês contam só os dias do período.
+> 🔴 **Erro de desenho pego antes de implementar:** a falta descontaria DUAS vezes.
+> Refeito — férias reduzem a linha do salário, falta sai como desconto com os dias à
+> vista. Tem teste travando isso.
+> ✅ Migration `20260918175402` aplicada e provada por simulação. Validado: typecheck 0 ·
+> lint 0 · build limpo · **88 unitários** · **E2E 115 3/3**. Commit `6ed75d2`.
+> ❌ **"Logística/Mecânica" foi descartado pelo próprio Victor** ("falei errado").
+> ⏳ Segue faltando: INSS/IRRF (2ª leva) e os relatórios com as linhas da folha.
+
 > **📌 SESSÃO 18/09 (leva 1) — A PLANILHA DA SHOPEE MUDOU DE CABEÇALHO E O IMPORT PAROU.**
 > Detalhe em **`CHECKPOINT_SESSAO_2026-09-18.md`**.
 >
