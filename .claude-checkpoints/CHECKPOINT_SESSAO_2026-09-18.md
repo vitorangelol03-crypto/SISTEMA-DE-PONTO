@@ -61,6 +61,13 @@ A 2ª quinzena de agosto inteira: **105 entregadores, 144.724 pacotes**
 - Unit: `driverSheetImport` + 3 specs de import = **48/48** (5 casos novos, com o
   **cabeçalho real de 57 colunas** copiado do arquivo); vizinhos **54/54**.
 - `npm run typecheck` 0 · `npm run lint` 0 · `npm run build` limpo.
+- 🎯 **Prova no NAVEGADOR de verdade** (o que faltava: a planilha de 33 MB travava
+  era dentro do browser). Spec temporário (apagado depois, não entrou no git) que
+  loga como 2626, abre Pagamentos Driver, escolhe o arquivo real e espera a prévia:
+  **45,1s** do clique até a tela, **zero erro de console**, e a prévia disse
+  "Detectado: Shopee · **105 entregadores · 144.724 pacotes**", período de destino
+  "2 QUINZENA DE AGOSTO", **99 reconhecidos automaticamente** e 6 a conferir.
+  **Não clicou em Importar** — nada gravado.
 - E2E `tests/67` (import) **verde** em chromium e mobile-pixel5 (1ª tentativa caiu
   no "Novo período" com servidor frio, passou no retry — o mesmo padrão do §10.4
   de 15/09).
@@ -79,7 +86,14 @@ byte** ao `dist/` local; `index.html` aponta pro `index-CJ6BW9Es.js` do mesmo bu
 
 ## 6. Pendências
 
-1. **Victor:** F5 na aba e importar a 2ª quinzena de agosto (Shopee).
+1. **Victor:** F5 na aba e importar a 2ª quinzena de agosto (Shopee). Na prévia ele
+   vai ter que decidir **6 nomes não reconhecidos** — Carlos Eduardo Gonçalves
+   Cassimiro (983 pct), Douglas Felipe da Silva (755), Rogerio de Cassio Pereira
+   (678), Elias Moraes Medeiros (540), ROMULO EUGENIO DA SILVA (393) e RODRIGO
+   THEODORO DE JESUS (258). A tela sugere "Criar", mas a planilha nova traz o
+   **nome puro** (a antiga vinha "108810-Fulano"), então alguns podem ser driver já
+   cadastrado escrito diferente: melhor **ligar ao existente** (ele aprende o
+   apelido) do que criar repetido. Avisado.
 2. A tela só aceita `.xlsx`/`.xls`. O `.csv` que a Shopee também manda **não** sobe —
    os títulos dele já são aceitos, o formato de arquivo não. Decidir se abre.
 3. `tests/74` com o "dois Fechar" (conserto igual ao do `tests/57`).

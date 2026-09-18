@@ -91,7 +91,13 @@
 > verde. **No ar, conferido byte a byte.**
 > ⚠️ `tests/74` vermelho é o "dois botões Fechar" de 09/09 — **provado por `git stash`
 > que falha igual sem esta leva**. firefox/webkit desta máquina estão sem binário.
-> ⏳ **Victor:** F5 e importar. A tela segue aceitando só `.xlsx`/`.xls`.
+> ✅ **Provado no NAVEGADOR** (spec temporário, apagado depois): a planilha de 33 MB
+> sobe em **45s**, sem erro de console, prévia com "Shopee · 105 entregadores ·
+> 144.724 pacotes", 99 reconhecidos sozinhos. Nada foi gravado.
+> ⏳ **Victor:** F5 e importar — vai ter que decidir **6 nomes novos** na prévia
+> (a planilha nova traz o nome puro; podem ser drivers já cadastrados escritos
+> diferente — melhor ligar ao existente que criar repetido).
+> A tela segue aceitando só `.xlsx`/`.xls`.
 >
 > **📌 SESSÃO 15/09 — DISTRIBUIÇÃO DE ERROS DE TRIAGEM VOLTOU A FUNCIONAR.** Detalhe em
 > **`CHECKPOINT_SESSAO_2026-09-15.md`**.
