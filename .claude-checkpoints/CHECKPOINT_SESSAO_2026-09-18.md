@@ -433,3 +433,20 @@ no código do vitest: `START_TIMEOUT = 6e4` / `9e4`, **fixo, sem flag nem config
 robô de pé, `--pool=threads` chegou a funcionar uma vez e depois também falhou; a saída é
 **repetir até a rodada valer** e conferir SEMPRE a contagem de arquivos, nunca o código de
 saída. CPU estava 93% ociosa — é o `/mnt/c` do WSL, não falta de processador.
+
+## 6. Deploy — e a armadilha do falso 200, de novo
+
+Push `09c94e6..581a115`. **Conferido byte a byte: 6 de 6 pedaços** idênticos ao `dist/`
+local (`index` · `holeritePdf` com a tarja · `AdminTab` com a tela das tabelas ·
+`FinancialTab` · `EmployeesTab` · `AttendanceTab`), com "VALORES EM CONFERÊNCIA" e
+"Conferida com a contabilidade" conferidos DENTRO dos arquivos servidos.
+
+🔴 **Caí na armadilha que a própria memória do projeto avisa** (`reference_vercel_autodeploy_gap`):
+vigiei o deploy perguntando "esse arquivo responde 200?". O rewrite de SPA devolve **200
+com o index.html** pra qualquer caminho inexistente, então os 4 pedaços "chegaram" sem ter
+chegado — a página ainda servia o bundle da leva anterior. O jeito confiável é ler **qual
+bundle o `index.html` referencia** e depois comparar o conteúdo.
+
+⚠️ Segunda pegadinha na mesma conferência: usei nomes de chunk do build ANTERIOR pro
+`EmployeesTab` e o `AttendanceTab`. Como o `folhaCalc` mudou, os dois foram renomeados —
+tirar o nome do `grep` no bundle atual, nunca de uma lista de antes.
