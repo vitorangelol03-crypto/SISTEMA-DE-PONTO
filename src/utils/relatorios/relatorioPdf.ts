@@ -201,13 +201,34 @@ function desenharFolhaFinanceira(doc: jsPDF, r: RelatorioMontado, p: PessoaDoRel
     doc.text(valor, xCentro, y + 25, { align: 'center' });
   });
 
+  /**
+   * Os avisos do rodapé (19/09/2026).
+   *
+   * O do adicional noturno deixou de valer pra quem tem folha: desde 18/09 o mensalista
+   * com salário na ficha tem o adicional CALCULADO em R$, e ele está na lista acima.
+   * Imprimir "não aparece em valor" bem embaixo do valor confundiria quem lê.
+   *
+   * O da folha fora do mês explica uma AUSÊNCIA: sem ele, o salário de quem é carteira
+   * assinada simplesmente sumiria do relatório de uma semana e ninguém saberia por quê.
+   */
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
-  doc.text(
-    'O adicional noturno não aparece em valor: o sistema nunca o calculou. As horas noturnas ao lado estão corretas.',
-    X_LEFT,
-    yBot + 12,
-  );
+  let yAviso = yBot + 12;
+  if (!p.folha) {
+    doc.text(
+      'O adicional noturno não aparece em valor: o sistema nunca o calculou. As horas noturnas ao lado estão corretas.',
+      X_LEFT,
+      yAviso,
+    );
+    yAviso += 10;
+  }
+  if (p.folhaForaDoMes) {
+    doc.text(
+      'O salário de carteira assinada aparece no relatório do MÊS — este período é menor que um mês.',
+      X_LEFT,
+      yAviso,
+    );
+  }
 }
 
 function desenharFechamento(doc: jsPDF, r: RelatorioMontado): void {
@@ -217,6 +238,13 @@ function desenharFechamento(doc: jsPDF, r: RelatorioMontado): void {
   const cabecalho = ['Funcionário', 'Função', 'Vínculo', 'Dias', 'Faltas'];
   if (r.tipo !== 'financeiro') cabecalho.push('Horas', 'Noturnas');
   if (temDinheiro) cabecalho.push('Proventos', 'Descontos', 'Líquido');
+  /**
+   * A coluna do FGTS só existe quando há FGTS (19/09/2026). Fixa, ela apertaria o
+   * fechamento de todo relatório de diarista com uma coluna de zeros — e o FGTS é o
+   * número que o empregador procura no fim do mês, não o funcionário.
+   */
+  const temCustoEmpresa = temDinheiro && r.totais.custoEmpresa > 0;
+  if (temCustoEmpresa) cabecalho.push('FGTS (empresa)');
 
   const corpo = r.pessoas.map(p => {
     const rp = p.resumoPonto;
@@ -236,6 +264,7 @@ function desenharFechamento(doc: jsPDF, r: RelatorioMontado): void {
     if (temDinheiro) {
       linha.push(dinheiro(p.totalProventos), dinheiro(p.totalDescontos), dinheiro(p.totalLiquido));
     }
+    if (temCustoEmpresa) linha.push(dinheiro(p.totalCustoEmpresa));
     return linha;
   });
 
@@ -247,6 +276,7 @@ function desenharFechamento(doc: jsPDF, r: RelatorioMontado): void {
   if (temDinheiro) {
     rodape.push(dinheiro(r.totais.proventos), dinheiro(r.totais.descontos), dinheiro(r.totais.liquido));
   }
+  if (temCustoEmpresa) rodape.push(dinheiro(r.totais.custoEmpresa));
 
   autoTable(doc, {
     startY: y + 6,

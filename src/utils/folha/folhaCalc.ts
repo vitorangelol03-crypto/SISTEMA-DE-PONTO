@@ -203,6 +203,30 @@ export function diasDeReferencia(
   return diasDoMes(ano, mes) - diaAdm + 1;
 }
 
+/**
+ * O período pedido é um MÊS FECHADO (dia 1 até o último dia do mesmo mês)?
+ *
+ * A folha de carteira assinada é MENSAL: o salário, o salário família e — principalmente
+ * — o INSS e o IRRF só existem sobre o mês inteiro, porque são progressivos. Calcular
+ * "a parte da semana" daria um imposto menor do que o real, e somar as quatro semanas
+ * NÃO fecharia com o recibo do mês.
+ *
+ * Por isso a folha só entra em papel de mês fechado (decisão do Victor, 19/09/2026,
+ * opção "não mostra, avisa"). Num recorte menor — uma semana, uma quinzena — o papel sai
+ * sem as linhas da folha e com o aviso de onde o salário aparece. O ponto, as faltas e
+ * os descontos de erro continuam saindo normalmente: só o que é mensal fica de fora.
+ *
+ * Comparação pelo texto 'YYYY-MM-DD', sem `new Date(string)`: o parse de ISO puxa UTC e
+ * já custou dia trocado neste projeto.
+ */
+export function ehMesInteiro(inicio: string, fim: string): boolean {
+  const [anoI, mesI, diaI] = (inicio ?? '').split('-').map(Number);
+  const [anoF, mesF, diaF] = (fim ?? '').split('-').map(Number);
+  if (!anoI || !mesI || !diaI || !anoF || !mesF || !diaF) return false;
+  if (anoI !== anoF || mesI !== mesF) return false;
+  return diaI === 1 && diaF === diasDoMes(anoI, mesI);
+}
+
 /** Proporcional aos dias, limitado ao valor cheio e truncado em centavos. */
 const proporcional = (valorCheio: number, dias: number): number =>
   Math.min(valorCheio, truncaCentavos((valorCheio / 30) * dias));

@@ -37,6 +37,10 @@ function abaResumo(r: RelatorioMontado): Celula[][] {
   if (temPonto || r.tipo === 'financeiro') cabecalho.push('Dias trabalhados', 'Faltas');
   if (temPonto) cabecalho.push('Horas trabalhadas', 'Horas noturnas', 'Intervalo', 'Previstas', 'Saldo banco de horas');
   if (temDinheiro) cabecalho.push('Proventos (R$)', 'Descontos (R$)', 'Líquido (R$)');
+  // FGTS só ganha coluna quando existe — senão todo relatório de diarista levaria uma
+  // coluna de zeros (19/09/2026).
+  const temCustoEmpresa = temDinheiro && r.totais.custoEmpresa > 0;
+  if (temCustoEmpresa) cabecalho.push('FGTS empresa (R$)');
 
   const linhas: Celula[][] = [cabecalho];
 
@@ -58,6 +62,7 @@ function abaResumo(r: RelatorioMontado): Celula[][] {
     if (temDinheiro) {
       linha.push(p.totalProventos, p.totalDescontos, p.totalLiquido);
     }
+    if (temCustoEmpresa) linha.push(p.totalCustoEmpresa);
     linhas.push(linha);
   }
 
@@ -66,6 +71,7 @@ function abaResumo(r: RelatorioMontado): Celula[][] {
   if (temPonto || r.tipo === 'financeiro') total.push(r.totais.diasTrabalhados, r.totais.faltas);
   if (temPonto) total.push(horas(r.totais.minutosTrabalhados), horas(r.totais.minutosNoturnos), '', '', '');
   if (temDinheiro) total.push(r.totais.proventos, r.totais.descontos, r.totais.liquido);
+  if (temCustoEmpresa) total.push(r.totais.custoEmpresa);
   linhas.push([], total);
 
   return linhas;
@@ -114,7 +120,9 @@ function abaFinanceiro(r: RelatorioMontado): Celula[][] {
   const linhas: Celula[][] = [];
 
   for (const p of r.pessoas) {
-    if (p.linhas.length === 0 && p.totalLiquido === 0) continue;
+    // Quem tem salário e caiu num recorte menor que o mês entra MESMO zerado: é a linha
+    // do aviso que explica por que o salário dela não está aqui.
+    if (p.linhas.length === 0 && p.totalLiquido === 0 && !p.folhaForaDoMes) continue;
 
     linhas.push([`${p.employee.name}`, `CPF ${p.employee.cpf ?? '—'}`, `Função: ${p.employee.function_role ?? '—'}`, `Vínculo: ${vinculo(p)}`]);
     linhas.push(['Descrição', 'Quantidade', 'Valor (R$)', 'Tipo']);
@@ -131,6 +139,12 @@ function abaFinanceiro(r: RelatorioMontado): Celula[][] {
     linhas.push(['Total de proventos', null, p.totalProventos, '']);
     linhas.push(['Total de descontos', null, p.totalDescontos, '']);
     linhas.push(['LÍQUIDO RECEBIDO', null, p.totalLiquido, '']);
+    if (p.totalCustoEmpresa > 0) {
+      linhas.push(['FGTS depositado pela empresa', null, p.totalCustoEmpresa, 'Não sai do bolso do funcionário']);
+    }
+    if (p.folhaForaDoMes) {
+      linhas.push(['O salário de carteira assinada aparece no relatório do MÊS — este período é menor que um mês.']);
+    }
     if (p.resumoPonto) {
       linhas.push([`Dias trabalhados: ${p.resumoPonto.diasTrabalhados}`, `Faltas: ${p.resumoPonto.faltas}`]);
     }

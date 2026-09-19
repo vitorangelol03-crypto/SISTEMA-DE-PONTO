@@ -27,19 +27,37 @@
  * ser implementados depois). Quando existirem, entram como mais itens da lista,
  * sem mexer no desenho do PDF nem da planilha. É por isso que é lista.
  *
- * ## O adicional noturno não aparece em R$
+ * ## O adicional noturno não aparece em R$ — MENOS para carteira assinada
  *
  * Decisão do Victor (12/09/2026, opção "c"): o sistema NUNCA calculou esse
  * valor — são 2.443 dias com hora noturna e R$ 0,00 em todos, porque o código
  * procura a diária dentro do registro de ponto, onde essa coluna não existe.
  * Enquanto ele não decide se o adicional é devido, o relatório mostra as HORAS
  * noturnas (que estão certas) e nenhum valor. Melhor faltar do que mentir.
+ *
+ * Desde 18/09/2026 a folha de carteira assinada CALCULA o adicional (20% sobre a
+ * hora do salário mensal), então para quem é mensalista com salário na ficha ele
+ * sai em R$ — e o aviso não é impresso na folha dessa pessoa. Para o diarista
+ * tudo continua como estava.
+ *
+ * ## A folha de carteira assinada entra como MAIS LINHAS
+ *
+ * É exatamente o que o parágrafo acima previa em 12/09: salário, salário família,
+ * férias, faltas, INSS, IRRF e FGTS entram como itens da lista de `LinhaDeValor`,
+ * sem mexer no desenho do PDF nem da planilha. O FGTS entra como `custo-empresa`,
+ * a natureza que já existia esperando por ele.
+ *
+ * A folha é MENSAL: num relatório de semana ou quinzena ela não aparece, e a folha
+ * da pessoa sai com o aviso de onde o salário está (decisão do Victor, 19/09/2026).
+ * O porquê está em `ehMesInteiro`, no `folhaCalc`.
  */
 
 import type { Employee, Company, Attendance } from '../../services/database';
 import type { EmployeeFinancialData } from '../financeiroPorPessoa';
 import { descontoDeQuantidadeEmbutido } from '../financeiroPorPessoa';
 import { buildMirrorData, type MirrorData } from '../mirrorGenerator';
+import type { FolhaCalculada } from '../folha/folhaCalc';
+import type { FolhaDaPessoa } from '../folha/folhaDaPessoa';
 
 export type TipoRelatorio = 'ponto' | 'financeiro' | 'geral';
 
@@ -97,6 +115,13 @@ export interface PessoaDoRelatorio {
   /** O que a pessoa recebeu — o mesmo número que a tela do Financeiro mostra. */
   totalLiquido: number;
   totalCustoEmpresa: number;
+  /** A folha de carteira assinada do mês, quando existe. */
+  folha?: FolhaCalculada;
+  /**
+   * A pessoa é mensalista com salário, mas o período do relatório não é um mês
+   * fechado — a folha dela sai com o aviso de onde o salário aparece.
+   */
+  folhaForaDoMes: boolean;
 }
 
 export interface TotaisDoRelatorio {
@@ -128,6 +153,16 @@ export interface MontarRelatorioInput {
   /** Todas as batidas do período, de todo mundo — separadas aqui por pessoa. */
   attendances: Attendance[];
   emissionDate?: string;
+  /**
+   * A folha de cada pessoa, por `employee.id` (19/09/2026).
+   *
+   * Vem PRONTA de fora, do `folhaDaPessoa` — a mesmíssima função que o recibo e a tela
+   * do Financeiro usam. Este arquivo não busca nada no banco nem decide quem tem folha:
+   * é a regra de 12/09 ("aqui é a conta; lá é só desenho") valendo também pra folha.
+   *
+   * Ausente = relatório sem nada de folha, exatamente como era antes desta leva.
+   */
+  folhaPorPessoa?: ReadonlyMap<string, FolhaDaPessoa>;
 }
 
 /** Conta quantos pagamentos têm aquele campo preenchido (0 não conta). */
@@ -140,9 +175,29 @@ function quantosCom(pagamentos: EmployeeFinancialData['payments'], campo: 'daily
  *
  * A ordem importa: primeiro o que entra, depois o que sai — é como o recibo já
  * imprime, e é como a pessoa lê.
+ *
+ * A folha de carteira assinada (19/09/2026) entra nas pontas: os proventos dela
+ * (salário, adicional noturno, salário família, férias, 1/3) abrem a lista, e os
+ * descontos dela (faltas, INSS, IRRF) mais o FGTS fecham. Quem é diarista passa por
+ * aqui com `folha` indefinida e recebe EXATAMENTE a mesma lista de antes — tem teste
+ * de regressão travando isso.
  */
-export function montarLinhasDeValor(d: EmployeeFinancialData): LinhaDeValor[] {
+export function montarLinhasDeValor(d: EmployeeFinancialData, folha?: FolhaCalculada): LinhaDeValor[] {
   const linhas: LinhaDeValor[] = [];
+
+  // Mensalista primeiro: o salário é o que a pessoa procura no alto da lista.
+  for (const linha of folha?.linhas ?? []) {
+    if (linha.provento <= 0) continue;
+    linhas.push({
+      rotulo: linha.descricao,
+      // A referência da folha é texto ("30,00" dias, "9,00%"); a coluna do relatório é
+      // número. Só vira quantidade quando é de fato um número — senão fica vazia, em vez
+      // de virar `NaN` na planilha.
+      quantidade: quantidadeDaReferencia(linha.referencia),
+      valor: linha.provento,
+      natureza: 'provento',
+    });
+  }
 
   if (d.totalDailyRate !== 0) {
     linhas.push({ rotulo: 'Diárias', quantidade: quantosCom(d.payments, 'daily_rate'), valor: d.totalDailyRate, natureza: 'provento' });
@@ -187,7 +242,38 @@ export function montarLinhasDeValor(d: EmployeeFinancialData): LinhaDeValor[] {
     linhas.push({ rotulo: 'Desconto da triagem', quantidade: pacotes || null, valor: d.totalTriageDiscount, natureza: 'desconto' });
   }
 
+  // O que a folha tira: faltas, INSS e IRRF.
+  for (const linha of folha?.linhas ?? []) {
+    if (linha.desconto <= 0) continue;
+    linhas.push({
+      rotulo: linha.descricao,
+      quantidade: quantidadeDaReferencia(linha.referencia),
+      valor: linha.desconto,
+      natureza: 'desconto',
+    });
+  }
+
+  // O FGTS fecha a lista: a empresa deposita, mas não sai do bolso da pessoa — por isso
+  // `custo-empresa`, a natureza que este arquivo já previa em 12/09 esperando por ele.
+  // Não entra em proventos nem em descontos, e não mexe no líquido.
+  if (folha && folha.valorFgts > 0) {
+    linhas.push({ rotulo: 'FGTS depositado', quantidade: null, valor: folha.valorFgts, natureza: 'custo-empresa' });
+  }
+
   return linhas;
+}
+
+/**
+ * A "referência" da folha vira quantidade só quando é número.
+ *
+ * O `folhaCalc` escreve a referência como o papel imprime: "30,00" para dias, "1,00"
+ * para cotas, mas "9,00%" para a faixa do INSS. A coluna do relatório é numérica (a
+ * planilha precisa somar), então a porcentagem fica de fora em vez de virar `NaN`.
+ */
+function quantidadeDaReferencia(referencia: string | undefined): number | null {
+  if (!referencia || referencia.includes('%')) return null;
+  const n = Number(referencia.replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
 }
 
 function resumoDoEspelho(espelho: MirrorData, d: EmployeeFinancialData): ResumoDePonto {
@@ -213,7 +299,7 @@ function resumoDoEspelho(espelho: MirrorData, d: EmployeeFinancialData): ResumoD
  * trabalhou. Quem teve qualquer coisa entra, mesmo que zerado.
  */
 export function montarRelatorio(input: MontarRelatorioInput): RelatorioMontado {
-  const { tipo, company, periodo, financeiro, attendances, emissionDate } = input;
+  const { tipo, company, periodo, financeiro, attendances, emissionDate, folhaPorPessoa } = input;
   const temPonto = RELATORIO_TEM_PONTO[tipo];
   const temDinheiro = RELATORIO_TEM_DINHEIRO[tipo];
 
@@ -228,8 +314,13 @@ export function montarRelatorio(input: MontarRelatorioInput): RelatorioMontado {
 
   for (const d of financeiro) {
     const doPonto = pontoPorPessoa.get(d.employee.id) ?? [];
+    const daFolha = folhaPorPessoa?.get(d.employee.id);
+    // Quem tem salário conta como "teve algo" mesmo sem ponto e sem pagamento: alguém de
+    // férias o mês inteiro não bate ponto nenhum e mesmo assim recebe — deixar de fora
+    // faria a pessoa sumir da folha de pagamento do mês.
     const teveAlgo = doPonto.length > 0 || d.payments.length > 0
-      || d.errorRecords.length > 0 || d.triageDiscounts.length > 0;
+      || d.errorRecords.length > 0 || d.triageDiscounts.length > 0
+      || (temDinheiro && daFolha?.folha !== undefined);
     if (!teveAlgo) continue;
 
     const espelho = temPonto
@@ -242,7 +333,8 @@ export function montarRelatorio(input: MontarRelatorioInput): RelatorioMontado {
         })
       : null;
 
-    const linhas = temDinheiro ? montarLinhasDeValor(d) : [];
+    const folha = temDinheiro ? daFolha?.folha : undefined;
+    const linhas = temDinheiro ? montarLinhasDeValor(d, folha) : [];
     const totalProventos = linhas.filter(l => l.natureza === 'provento').reduce((s, l) => s + l.valor, 0);
     const totalDescontos = linhas.filter(l => l.natureza === 'desconto').reduce((s, l) => s + l.valor, 0);
     const totalCustoEmpresa = linhas.filter(l => l.natureza === 'custo-empresa').reduce((s, l) => s + l.valor, 0);
@@ -272,8 +364,16 @@ export function montarRelatorio(input: MontarRelatorioInput): RelatorioMontado {
       linhas,
       totalProventos,
       totalDescontos,
-      totalLiquido: temDinheiro ? d.totalEarned : 0,
+      /**
+       * O líquido soma as duas metades, como o recibo faz desde 19/09: `totalEarned` é o
+       * dinheiro do pagamento por diária (já líquido de erro e triagem) e `folha.liquido`
+       * é o da carteira assinada (já líquido de falta, INSS e IRRF). Sem folha, soma zero
+       * — o relatório do diarista é idêntico ao de antes.
+       */
+      totalLiquido: temDinheiro ? d.totalEarned + (folha?.liquido ?? 0) : 0,
       totalCustoEmpresa,
+      folha,
+      folhaForaDoMes: Boolean(temDinheiro && daFolha?.foraDoMes),
     });
   }
 

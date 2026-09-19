@@ -71,6 +71,15 @@ export interface HoleriteData {
    * gerador: o que muda é a lista de linhas, que já era lista justamente por isto.
    */
   folha?: FolhaCalculada;
+  /**
+   * A pessoa é mensalista com salário na ficha, mas o período do papel NÃO é um mês
+   * fechado (19/09/2026, decisão do Victor: "não mostra, avisa").
+   *
+   * A folha é mensal — principalmente o INSS e o IRRF, que são progressivos sobre o mês.
+   * Num recorte menor o recibo sai sem as linhas da folha e COM este aviso, em vez de um
+   * valor de mês inteiro num papel de semana. Ver `ehMesInteiro` no `folhaCalc`.
+   */
+  folhaForaDoMes?: boolean;
 }
 
 const PAGE_W = 595;
@@ -185,7 +194,7 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
   doc.text('COMPOSIÇÃO DO PAGAMENTO', X_LEFT, compY);
   doc.setTextColor(0);
 
-  const { proventos, descontos, quantityErrorDiscount } = linhasDoRecibo(data);
+  const { proventos, descontos } = linhasDoRecibo(data);
 
   autoTable(doc, {
     startY: compY + 6,
@@ -216,11 +225,7 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
   // `totalGross` — o total gravado ja vem com o desconto de quantidade abatido, e usa-lo
   // aqui deixava o papel sem fechar. Com a linha do desconto no lugar, agora bate:
   // proventos - descontos = liquido.
-  const proventosDaFolha = data.folha?.totalProventos ?? 0;
-  const diariasNoPapel = !data.folha || data.totalDailyRate > 0 ? data.totalDailyRate : 0;
-  const totalProventos =
-    proventosDaFolha + diariasNoPapel + data.totalBonusB + data.totalBonusC1 + data.totalBonusC2;
-  const totalDescontos = quantityErrorDiscount + (data.errorDiscount || 0) + (data.triageDiscount || 0);
+  const { totalProventos, totalDescontos, liquido: liquidoDoPapel } = totaisDoRecibo(data);
 
   autoTable(doc, {
     startY: afterComp + 12,
@@ -228,7 +233,7 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
       ['TOTAL DE PROVENTOS', fmtBRL(totalProventos)],
       ['TOTAL DE DESCONTOS', `-${fmtBRL(totalDescontos)}`],
     ],
-    foot: [['VALOR LÍQUIDO A RECEBER', fmtBRL(data.totalNet)]],
+    foot: [['VALOR LÍQUIDO A RECEBER', fmtBRL(liquidoDoPapel)]],
     theme: 'plain',
     styles: { fontSize: 10.5, cellPadding: 7 },
     bodyStyles: { fontStyle: 'bold' },
@@ -315,6 +320,27 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
     }
   }
 
+  // ═══ Aviso: a folha é mensal e este papel não é de um mês fechado ═══
+  // Decisão do Victor (19/09/2026): num recorte menor que o mês o salário NÃO sai, e o
+  // papel diz onde ele aparece. Sem este aviso o salário simplesmente sumiria e a pessoa
+  // acharia que o sistema esqueceu. O resto do recibo (diárias, erros) sai normalmente.
+  if (data.folhaForaDoMes && !data.folha) {
+    const alturaAviso = 22;
+    doc.setFillColor(238, 244, 252);
+    doc.setDrawColor(120, 160, 210);
+    doc.setLineWidth(0.7);
+    doc.rect(X_LEFT, afterBases + 6, X_RIGHT - X_LEFT, alturaAviso, 'FD');
+    doc.setFont('helvetica', 'bold').setFontSize(8);
+    doc.setTextColor(40, 80, 140);
+    doc.text(
+      'O salário de carteira assinada aparece no recibo do MÊS — este período é menor que um mês.',
+      X_LEFT + 8,
+      afterBases + 20,
+    );
+    doc.setTextColor(0);
+    afterBases += 6 + alturaAviso + 4;
+  }
+
   // ═══ Footer: data + assinaturas ═══
   let yFooter = afterBases + 40;
   doc.setFont('helvetica', 'italic').setFontSize(8.5);
@@ -337,6 +363,48 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
 }
 
 /**
+ * Os TOTAIS que o recibo imprime, sem desenhar nada.
+ *
+ * Mora fora do desenho pelo mesmo motivo do `linhasDoRecibo`: é a conta que decide o
+ * número grande e verde do papel, e ela precisa ser testável sem jsPDF e sem React.
+ * Foi a falta disso que deixou o furo de 18/09 passar — o cálculo da folha tinha 114
+ * testes e o total do papel, nenhum.
+ *
+ * ## A invariante: proventos − descontos = líquido
+ *
+ * `totalNet` é o dinheiro do pagamento por DIÁRIA, já líquido de erro e triagem — é a
+ * invariante que o conserto de 04/08/2026 estabeleceu: (diárias + bônus) − (erros +
+ * triagem) = totalNet. A folha é a outra metade, e `folha.liquido` já é os proventos
+ * dela menos os descontos dela. Somando as duas o papel continua fechando.
+ *
+ * Antes de 19/09/2026 o líquido era só o `totalNet`, e os descontos da folha nem eram
+ * contados: quem tinha salário via "TOTAL DE PROVENTOS R$ 5.150,00", "TOTAL DE DESCONTOS
+ * R$ 0,00" e "LÍQUIDO A RECEBER R$ 3.442,00" no mesmo papel.
+ *
+ * Quem não tem folha (a grande maioria) soma zero — o recibo de diarista não mudou.
+ */
+export function totaisDoRecibo(data: HoleriteData): {
+  totalProventos: number;
+  totalDescontos: number;
+  liquido: number;
+} {
+  const { quantityErrorDiscount } = linhasDoRecibo(data);
+  const proventosDaFolha = data.folha?.totalProventos ?? 0;
+  // A linha das diárias só entra se houver diária — senão o recibo de mensalista sairia
+  // com "Diárias (0 dias) R$ 0,00". A mesma guarda do `linhasDoRecibo`.
+  const diariasNoPapel = !data.folha || data.totalDailyRate > 0 ? data.totalDailyRate : 0;
+
+  return {
+    totalProventos:
+      proventosDaFolha + diariasNoPapel + data.totalBonusB + data.totalBonusC1 + data.totalBonusC2,
+    totalDescontos:
+      (data.folha?.totalDescontos ?? 0)
+      + quantityErrorDiscount + (data.errorDiscount || 0) + (data.triageDiscount || 0),
+    liquido: (data.totalNet || 0) + (data.folha?.liquido ?? 0),
+  };
+}
+
+/**
  * As LINHAS que o recibo imprime, sem desenhar nada.
  *
  * Mora fora do desenho pra poder ser testada sem jsPDF e sem React — é a parte que
@@ -353,11 +421,19 @@ export function linhasDoRecibo(data: HoleriteData): {
   const proventos: Array<[string, string, string]> = [];
 
   // Mensalista: as linhas vêm prontas do `folhaCalc` (salário, adicional noturno,
-  // salário família), já na ordem do modelo da contabilidade e com a referência
-  // (dias, cotas) que o papel mostra na coluna do meio.
+  // salário família, férias, faltas, INSS, IRRF), já na ordem do modelo da contabilidade
+  // e com a referência (dias, cotas, faixa) que o papel mostra na coluna do meio.
+  //
+  // 🔴 CADA LINHA VAI PRO LADO CERTO (consertado em 19/09/2026). Até aqui, TODAS iam
+  // para `proventos` — e as que são desconto (Faltas, INSS, IRRF) saíam no papel como
+  // provento de "R$ 0,00", sem entrar no total de descontos e sem abater o líquido.
+  // Um recibo de R$ 1.700 com uma falta e INSS imprimia "TOTAL DE DESCONTOS R$ 0,00".
+  // Os testes de então só cobriam folha sem falta e sem imposto, onde só há provento.
+  const descontosDaFolha: Array<[string, string, string]> = [];
   for (const linha of data.folha?.linhas ?? []) {
     const descricao = linha.referencia ? `${linha.descricao} (${linha.referencia})` : linha.descricao;
-    proventos.push([descricao, '+', fmtBRL(linha.provento)]);
+    if (linha.desconto > 0) descontosDaFolha.push([descricao, '-', fmtBRL(linha.desconto)]);
+    else proventos.push([descricao, '+', fmtBRL(linha.provento)]);
   }
 
   // Diarista (ou quem tem os dois): a linha das diárias só entra se houver diária.
@@ -370,7 +446,9 @@ export function linhasDoRecibo(data: HoleriteData): {
   if (data.totalBonusC2 > 0) proventos.push([`Bonificação C2 (${bonusCounts.c2}×)`, '+', fmtBRL(data.totalBonusC2)]);
 
   const quantityErrorDiscount = data.quantityErrorDiscount || 0;
-  const descontos: Array<[string, string, string]> = [];
+  // Folha primeiro (faltas, INSS, IRRF), como no modelo da contabilidade; os descontos
+  // de erro e triagem vêm depois, na ordem em que o recibo de diarista sempre imprimiu.
+  const descontos: Array<[string, string, string]> = [...descontosDaFolha];
   if (quantityErrorDiscount > 0) {
     descontos.push(['Desconto por erros de quantidade', '-', fmtBRL(quantityErrorDiscount)]);
   }

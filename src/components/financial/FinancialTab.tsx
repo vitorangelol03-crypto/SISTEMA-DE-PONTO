@@ -47,12 +47,9 @@ import {
 } from '../../utils/financeiroPorPessoa';
 import {
   CONFIGURACAO_DA_FOLHA_PADRAO,
-  calcularAdicionalNoturno,
-  calcularFolha,
-  diasDeFeriasNoPeriodo,
   type ConfiguracaoDaFolha,
-  type FolhaCalculada,
 } from '../../utils/folha/folhaCalc';
+import { folhaDaPessoa, type FolhaDaPessoa } from '../../utils/folha/folhaDaPessoa';
 import { ModalShell } from '../driverpay/ModalShell';
 
 /**
@@ -90,6 +87,7 @@ function montarDadosDoRecibo(
   feriasDaEmpresa: readonly EmployeeVacation[],
   tabelas: TabelasDeImposto,
 ) {
+  const daFolha = folhaDoPeriodo(d, inicio, fim, configDaFolha, feriasDaEmpresa, tabelas);
   return {
     company: {
       name: company?.display_name || company?.legal_name || 'Empresa',
@@ -122,59 +120,103 @@ function montarDadosDoRecibo(
     totalBonusC2: d.totalBonusC2 || 0,
     totalGross: d.totalEarnedGross || 0,
     totalNet: d.totalEarned || 0,
-    folha: folhaDoRecibo(d, inicio, fim, configDaFolha, feriasDaEmpresa, tabelas),
+    folha: daFolha.folha,
+    // Sem salário no papel de uma quinzena, o recibo explica onde ele está (19/09/2026).
+    folhaForaDoMes: daFolha.foraDoMes,
   };
 }
 
 /**
- * A parte de CARTEIRA ASSINADA do recibo (18/09/2026).
+ * A parte de CARTEIRA ASSINADA do recibo e da tela (18/09/2026, movida em 19/09/2026).
  *
- * Devolve `undefined` pra quem não é carteira assinada ou ainda não tem salário na
- * ficha — e aí o papel sai exatamente como sempre saiu, de diarista. Ninguém perde
- * nada enquanto o cadastro não estiver preenchido.
+ * A decisão de quem tem folha e quando ela aparece mudou de casa: mora agora no
+ * `utils/folha/folhaDaPessoa`, porque o relatório e a tela do Financeiro precisam da
+ * MESMA conta que o recibo. Aqui ficou só a tradução do `EmployeeFinancialData` para a
+ * entrada de lá — duas contas paralelas para a mesma folha é exatamente o que este
+ * projeto não pode ter.
  */
-function folhaDoRecibo(
+function folhaDoPeriodo(
   d: EmployeeFinancialData,
   inicio: string,
   fim: string,
   config: ConfiguracaoDaFolha,
   feriasDaEmpresa: readonly EmployeeVacation[],
   tabelas: TabelasDeImposto,
-): FolhaCalculada | undefined {
-  const ficha = d.employee;
-  const salario = Number(ficha.monthly_salary ?? 0);
-  if (ficha.employment_type !== 'Carteira Assinada' || salario <= 0) return undefined;
-
-  // O mês de referência é o do INÍCIO do período — é o que o recibo imprime como
-  // "Referente ao mês" e o que manda no proporcional de quem foi admitido no meio.
-  const [ano, mes] = inicio.split('-').map(Number);
-
-  return calcularFolha({
-    ficha: {
-      salarioMensal: salario,
-      filhosSalarioFamilia: ficha.family_allowance_children ?? 0,
-      fgtsAtivo: ficha.fgts_enabled ?? false,
-      admissao: ficha.hire_date,
-    },
+): FolhaDaPessoa {
+  return folhaDaPessoa({
+    ficha: d.employee,
+    inicio,
+    fim,
     config,
-    ano,
-    mes,
-    // Decisão do Victor (18/09): o adicional noturno passa a sair em R$ SÓ pra carteira
-    // assinada. O diarista continua como está — a tela dele nunca mostrou valor.
-    adicionalNoturno: calcularAdicionalNoturno(salario, d.totalNightHours || 0),
-    // Só a falta SEM atestado desconta (decisão do Victor, 18/09: quer os dois tipos).
+    ferias: feriasDaEmpresa,
+    tabelas,
+    horasNoturnas: d.totalNightHours || 0,
     faltasInjustificadas: d.faltasInjustificadas,
-    // Férias podem atravessar o mês: conta só os dias que caem neste período.
-    diasDeFerias: diasDeFeriasNoPeriodo(
-      feriasDaEmpresa.filter(f => f.employee_id === ficha.id),
-      inicio,
-      fim,
-    ),
-    tabelaInss: tabelas.inss ?? undefined,
-    tabelaIrrf: tabelas.irrf ?? undefined,
-    tabelasConfirmadas: tabelas.confirmadas,
   });
 }
+
+/**
+ * O LÍQUIDO de uma pessoa, com as duas metades somadas (19/09/2026).
+ *
+ * `totalEarned` é o pagamento por diária (já líquido de erro e triagem); `folha.liquido`
+ * é a carteira assinada (já líquido de falta, INSS e IRRF). O recibo imprime esta mesma
+ * soma — se a tela mostrasse só uma das metades, o papel e a tela diriam números
+ * diferentes para a mesma pessoa.
+ *
+ * Quem não tem folha (hoje: todo mundo, porque nenhuma ficha tem salário) soma zero.
+ */
+function liquidoComFolha(d: EmployeeFinancialData, daFolha: FolhaDaPessoa | undefined): number {
+  return (d.totalEarned || 0) + (daFolha?.folha?.liquido ?? 0);
+}
+
+/**
+ * O bloco do valor recebido, igual na tabela (computador) e no cartão (celular).
+ *
+ * Mostra o líquido com a folha somada e, quando há salário, a linha do salário embaixo —
+ * decisão do Victor (19/09/2026): *"mostra se tiver"*. Quando a pessoa tem salário mas o
+ * período da tela não é um mês fechado, explica a ausência em vez de deixar sumir.
+ */
+const ValorRecebido: React.FC<{
+  data: EmployeeFinancialData;
+  daFolha: FolhaDaPessoa | undefined;
+  canViewValues: boolean;
+  /** O cartão do celular imprime o valor maior que a tabela — era assim antes, fica assim. */
+  destaque?: boolean;
+}> = ({ data, daFolha, canViewValues, destaque }) => (
+  <>
+    <div className={destaque ? 'text-base font-bold text-green-600' : 'text-sm font-medium text-green-600'}>
+      {moneyBRL(liquidoComFolha(data, daFolha), canViewValues)}
+    </div>
+    {daFolha?.folha && (
+      <div className="text-xs text-blue-700 mt-0.5" data-testid="valor-com-salario">
+        Salário: {moneyBRL(daFolha.folha.salarioDoMes, canViewValues)}
+        {daFolha.folha.totalDescontos > 0 && (
+          <> · −{moneyBRL(daFolha.folha.totalDescontos, canViewValues)} folha</>
+        )}
+      </div>
+    )}
+    {daFolha?.foraDoMes && (
+      <div className="text-xs text-gray-500 mt-0.5" data-testid="salario-so-no-mes">
+        Salário aparece no período do mês fechado
+      </div>
+    )}
+    {(data.totalErrorValue > 0 || data.totalTriageDiscount > 0) && (
+      <div className="text-xs text-gray-500 mt-0.5">
+        Bruto: {moneyBRL(data.totalEarnedGross, canViewValues)}
+      </div>
+    )}
+    {data.totalErrorValue > 0 && (
+      <div className="text-xs text-red-600">
+        -{moneyBRL(data.totalErrorValue, canViewValues)} erro valor
+      </div>
+    )}
+    {data.totalTriageDiscount > 0 && (
+      <div className="text-xs text-red-600">
+        -{moneyBRL(data.totalTriageDiscount, canViewValues)} triagem
+      </div>
+    )}
+  </>
+);
 
 const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
   { id: 'fallback-B',  company_id: '', code: 'B',  name: 'Bônus B',  default_value: 0, order_index: 1, active: true, created_at: '', updated_at: '' },
@@ -368,6 +410,27 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     return data;
   }, [financialData, employeeSearch, filters.functionRole]);
 
+  /**
+   * A folha de cada pessoa no período que está NA TELA (19/09/2026).
+   *
+   * Decisão do Victor: a tela do Financeiro mostra o salário quando a pessoa tem um.
+   * Fica em `useMemo` porque é a conta de até ~100 pessoas e ela não pode rodar a cada
+   * digitada na busca.
+   *
+   * ⚠️ É a folha do período dos FILTROS. O PDF em lote usa `pdfLote`, que pode ser outro
+   * período — por isso ele monta a folha dele mesmo, dentro do `montarDadosDoRecibo`, em
+   * vez de reaproveitar este mapa. Reaproveitar daria recibo com a folha do mês errado.
+   */
+  const folhasDaTela = React.useMemo(() => {
+    const mapa = new Map<string, FolhaDaPessoa>();
+    for (const d of financialData) {
+      mapa.set(d.employee.id, folhaDoPeriodo(
+        d, filters.startDate, filters.endDate, configDaFolha, feriasDaEmpresa, tabelasDeImposto,
+      ));
+    }
+    return mapa;
+  }, [financialData, filters.startDate, filters.endDate, configDaFolha, feriasDaEmpresa, tabelasDeImposto]);
+
   const displayedBonusRemovals = React.useMemo(() => {
     const q = historyEmployeeSearch.trim().toLowerCase();
     if (!q) return bonusRemovals;
@@ -395,11 +458,12 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         nome: d.employee.name,
         vinculo: d.employee.employment_type === 'Carteira Assinada'
           ? 'Carteira Assinada' as const : 'Diarista' as const,
-        valor: d.totalEarned || 0,
+        // Com a folha somada: é o mesmo número que vai sair no recibo dela (19/09/2026).
+        valor: liquidoComFolha(d, folhasDaTela.get(d.employee.id)),
         equipe: d.employee.function_role || '',
       }))
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  }, [financialData, loteNoPeriodoCerto]);
+  }, [financialData, loteNoPeriodoCerto, folhasDaTela]);
 
   const gerarRecibosEmLote = async (ids: string[]) => {
     if (!pdfLote) return;
@@ -514,7 +578,17 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
           periodStart: pdfLote.inicio,
           periodEnd: pdfLote.fim,
           titulo: pdfLote.titulo,
-          totalNet: d.totalEarned || 0,
+          /**
+           * O mesmo líquido que o PDF acabou de imprimir (19/09/2026).
+           *
+           * Este número é o que o funcionário vê como "você recebeu X" na tela dele. Se
+           * ficasse só com `totalEarned`, quem tem salário veria no app um valor menor
+           * do que o do próprio recibo anexado — dois números oficiais discordando.
+           */
+          totalNet: liquidoComFolha(
+            d,
+            folhaDoPeriodo(d, pdfLote.inicio, pdfLote.fim, configDaFolha, feriasDaEmpresa, tabelasDeImposto),
+          ),
           pdf,
           userId,
         });
@@ -1190,7 +1264,10 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     );
   }
 
-  const totalEarnings = displayedFinancialData.reduce((sum, data) => sum + data.totalEarned, 0);
+  const totalEarnings = displayedFinancialData.reduce(
+    (sum, data) => sum + liquidoComFolha(data, folhasDaTela.get(data.employee.id)),
+    0,
+  );
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -1769,24 +1846,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                       })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-green-600">
-                        {moneyBRL(data.totalEarned, canViewValues)}
-                      </div>
-                      {(data.totalErrorValue > 0 || data.totalTriageDiscount > 0) && (
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          Bruto: {moneyBRL(data.totalEarnedGross, canViewValues)}
-                        </div>
-                      )}
-                      {data.totalErrorValue > 0 && (
-                        <div className="text-xs text-red-600">
-                          -{moneyBRL(data.totalErrorValue, canViewValues)} erro valor
-                        </div>
-                      )}
-                      {data.totalTriageDiscount > 0 && (
-                        <div className="text-xs text-red-600">
-                          -{moneyBRL(data.totalTriageDiscount, canViewValues)} triagem
-                        </div>
-                      )}
+                      <ValorRecebido
+                        data={data}
+                        daFolha={folhasDaTela.get(data.employee.id)}
+                        canViewValues={canViewValues}
+                      />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
@@ -2094,16 +2158,12 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
 
               <div className="bg-gray-50 rounded p-2 mb-3">
                 <span className="text-xs text-gray-500 block">Total Ganho</span>
-                <span className="text-base font-bold text-green-600">
-                  {moneyBRL(data.totalEarned, canViewValues)}
-                </span>
-                {(data.totalErrorValue > 0 || data.totalTriageDiscount > 0) && (
-                  <div className="text-xs text-gray-500 mt-0.5">
-                    Bruto: {moneyBRL(data.totalEarnedGross, canViewValues)}
-                    {data.totalErrorValue > 0 && <div className="text-red-600">-{moneyBRL(data.totalErrorValue, canViewValues)} erro valor</div>}
-                    {data.totalTriageDiscount > 0 && <div className="text-red-600">-{moneyBRL(data.totalTriageDiscount, canViewValues)} triagem</div>}
-                  </div>
-                )}
+                <ValorRecebido
+                  data={data}
+                  daFolha={folhasDaTela.get(data.employee.id)}
+                  canViewValues={canViewValues}
+                  destaque
+                />
               </div>
 
               <button

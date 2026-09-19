@@ -27,10 +27,14 @@ import {
   getErrorRecords,
   getTriageDistributionsForEmployees,
   getPaymentPeriods,
+  getPayrollConfig,
+  getTabelasDeImposto,
+  getEmployeeVacations,
   type Company,
   type Employee,
   type PaymentPeriod,
 } from '../../services/database';
+import { folhaDaPessoa, type FolhaDaPessoa } from '../../utils/folha/folhaDaPessoa';
 import EmploymentTypeFilter, { type EmploymentType } from '../common/EmploymentTypeFilter';
 import FunctionRoleFilter, { FUNCTION_ROLE_ALL, FUNCTION_ROLE_NONE, type FunctionRoleFilterValue } from '../common/FunctionRoleFilter';
 import { agregarFinanceiroPorPessoa } from '../../utils/financeiroPorPessoa';
@@ -225,6 +229,21 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({ company, canVi
         escolhidos.map(e => e.id), periodo.inicio, periodo.fim, company.id,
       );
 
+      /**
+       * A folha de carteira assinada (19/09/2026).
+       *
+       * Config e tabelas são POR ANO — o ano sai do início do período, igual ao
+       * Financeiro faz. Se qualquer uma falhar, o relatório sai sem as linhas da folha
+       * em vez de não sair: quem puxa um relatório de ponto não pode ficar sem ele
+       * porque a tabela do IR não carregou.
+       */
+      const anoDaFolha = Number(periodo.inicio.slice(0, 4));
+      const [configDaFolha, tabelasDeImposto, feriasDaEmpresa] = await Promise.all([
+        getPayrollConfig(company.id, anoDaFolha).catch(() => null),
+        getTabelasDeImposto(anoDaFolha).catch(() => null),
+        getEmployeeVacations(company.id, periodo.inicio, periodo.fim).catch(() => []),
+      ]);
+
       // O corte por pessoa é feito AQUI, não na busca: as funções do banco
       // filtram por UM funcionário só, e aqui são vários escolhidos a dedo.
       const financeiro = agregarFinanceiroPorPessoa(
@@ -235,6 +254,23 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({ company, canVi
         triagem,
       );
 
+      // A MESMA função que o recibo e a tela do Financeiro usam — nenhuma conta nova.
+      const folhaPorPessoa = new Map<string, FolhaDaPessoa>();
+      if (configDaFolha && tabelasDeImposto) {
+        for (const d of financeiro) {
+          folhaPorPessoa.set(d.employee.id, folhaDaPessoa({
+            ficha: d.employee,
+            inicio: periodo.inicio,
+            fim: periodo.fim,
+            config: configDaFolha,
+            ferias: feriasDaEmpresa,
+            tabelas: tabelasDeImposto,
+            horasNoturnas: d.totalNightHours || 0,
+            faltasInjustificadas: d.faltasInjustificadas,
+          }));
+        }
+      }
+
       const relatorio = montarRelatorio({
         tipo,
         company,
@@ -242,6 +278,7 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({ company, canVi
         financeiro,
         attendances: pontos.filter(a => ids.has(a.employee_id)),
         emissionDate: hoje,
+        folhaPorPessoa,
       });
 
       if (relatorio.pessoas.length === 0) {
