@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft, FileText } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft, FileText, Gift } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
   getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, getPayrollConfig, getEmployeeVacations, type EmployeeVacation, getTabelasDeImposto, type TabelasDeImposto,
@@ -27,6 +27,11 @@ import { mensagemDeErro } from '../../utils/mensagemDeErro';
    paga por eles no carregamento da tela. */
 const RelatoriosPanel = lazy(() =>
   import('./RelatoriosPanel').then(m => ({ default: m.RelatoriosPanel })),
+);
+
+/* O 13º também puxa o jsPDF e o ponto do ano inteiro: só carrega pra quem abrir. */
+const DecimoTerceiroPanel = lazy(() =>
+  import('./DecimoTerceiroPanel').then(m => ({ default: m.DecimoTerceiroPanel })),
 );
 import { SelecaoParaPdf, type PessoaDoPdf } from './SelecaoParaPdf';
 import type {
@@ -255,7 +260,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
    * O histórico é a porta de entrada; a lista de pagamentos é o que está DENTRO
    * de uma semana. Quem quiser a lista solta continua tendo o botão "Pagamentos".
    */
-  const [activeView, setActiveView] = useState<'financial' | 'history' | 'payments-history' | 'relatorios'>('payments-history');
+  const [activeView, setActiveView] = useState<'financial' | 'history' | 'payments-history' | 'relatorios' | 'decimo'>('payments-history');
   /**
    * Preenchido quando a pessoa entrou na lista VINDO de uma semana/mês do
    * histórico — é o que permite voltar pra onde ela estava. `null` quando ela
@@ -1380,6 +1385,23 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             <FileText className="w-4 h-4" />
             <span>Relatórios</span>
           </button>
+
+          {/* 13º salário (19/09/2026). Mesma permissão da folha na ficha: quem não pode
+              ver salário não pode ver o 13º, que é salário. */}
+          <button
+            onClick={() => setActiveView('decimo')}
+            disabled={!hasPermission('employees.viewPayroll')}
+            title={!hasPermission('employees.viewPayroll') ? 'Você não tem permissão para ver salário' : ''}
+            data-testid="decimo-btn"
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] whitespace-nowrap ${
+              activeView === 'decimo'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <Gift className="w-4 h-4" />
+            <span>13º Salário</span>
+          </button>
         </div>
 
         {/* A volta pro histórico. Sem isto o fluxo era de mão única: a pessoa
@@ -2255,6 +2277,24 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         }>
           <div className="bg-white rounded-lg shadow p-4 sm:p-6">
             <RelatoriosPanel company={company!} canViewValues={canViewValues} hasPermission={hasPermission} />
+          </div>
+        </Suspense>
+      )}
+
+      {activeView === 'decimo' && (
+        <Suspense fallback={
+          <div className="bg-white rounded-lg shadow p-8 text-center">
+            <RefreshCw className="w-8 h-8 mx-auto text-gray-400 animate-spin mb-3" />
+            <p className="text-sm text-gray-500">Abrindo o 13º…</p>
+          </div>
+        }>
+          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+            <DecimoTerceiroPanel
+              company={company!}
+              userId={userId}
+              canViewValues={canViewValues}
+              hasPermission={hasPermission}
+            />
           </div>
         </Suspense>
       )}

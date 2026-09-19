@@ -2680,6 +2680,69 @@ export const deleteEmployeeVacation = async (id: string): Promise<void> => {
   if (error) throw error;
 };
 
+// ─── 13º SALÁRIO (19/09/2026) ───────────────────────────────────────────────
+// O que foi PAGO fica gravado, e não recalculado: a 2ª parcela abate o que a 1ª de fato
+// pagou. Se o salário mudar entre novembro e dezembro, refazer a conta abateria um valor
+// que a pessoa nunca recebeu.
+
+/** Uma parcela de 13º já paga. Espelha `payroll_thirteenth`. */
+export interface DecimoTerceiroPago {
+  id: string;
+  employee_id: string;
+  company_id: string;
+  ano: number;
+  parcela: 'primeira' | 'segunda' | 'unica';
+  avos: number;
+  base: number;
+  bruto: number;
+  inss: number;
+  irrf: number;
+  fgts: number;
+  adiantamento: number;
+  valor: number;
+  pago_em: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** Tudo que já foi pago de 13º naquele ano, na empresa. */
+export const getDecimoTerceiroDoAno = async (
+  companyId: string,
+  ano: number
+): Promise<DecimoTerceiroPago[]> => {
+  const { data, error } = await supabase
+    .from('payroll_thirteenth')
+    .select('*')
+    .eq('company_id', companyId)
+    .eq('ano', ano);
+  if (error) throw error;
+  return (data ?? []) as DecimoTerceiroPago[];
+};
+
+/**
+ * Grava (ou regrava) uma parcela de 13º.
+ *
+ * `upsert` pela chave (pessoa, ano, parcela) porque gerar de novo é CORRIGIR, não pagar
+ * duas vezes — duas linhas "primeira" fariam a 2ª parcela abater o adiantamento em
+ * dobro. O banco também tem a restrição única, então nem por fora dá pra duplicar.
+ *
+ * Mexe em salário: o trigger exige `employees.editPayroll`.
+ */
+export const registrarDecimoTerceiro = async (
+  registro: Omit<DecimoTerceiroPago, 'id' | 'created_at'>
+): Promise<void> => {
+  const { error } = await supabase
+    .from('payroll_thirteenth')
+    .upsert([registro], { onConflict: 'employee_id,ano,parcela' });
+  if (error) throw error;
+};
+
+/** Apaga uma parcela gravada (para refazer do zero). */
+export const apagarDecimoTerceiro = async (id: string): Promise<void> => {
+  const { error } = await supabase.from('payroll_thirteenth').delete().eq('id', id);
+  if (error) throw error;
+};
+
 export interface TriageDistributionPreview {
   totalErrors: number;
   totalDirectValue: number;

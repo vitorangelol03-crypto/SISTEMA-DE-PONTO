@@ -92,9 +92,18 @@ export interface EmployeeFinancialData {
  *
  * É a mesma lição de 12/09/2026, quando o espelho saía com 0h em 905 dias por ler só
  * os minutos. Aqui o minuto manda quando existe; senão, vale a hora legado.
+ *
+ * Exportada em 19/09/2026 (e com o parâmetro afrouxado para a FORMA mínima, não para o
+ * `Attendance` inteiro) porque o 13º precisa da hora noturna mês a mês. Duas contas da
+ * mesma hora noturna é exatamente o que causou os 905 dias zerados.
  */
-function horasNoturnasDoDia(att: Attendance): number {
-  const minutos = Number((att as unknown as { nighttime_minutes?: number | null }).nighttime_minutes ?? 0);
+export interface PontoComNoturno {
+  night_hours?: number | null;
+  nighttime_minutes?: number | null;
+}
+
+export function horasNoturnasDoDia(att: PontoComNoturno): number {
+  const minutos = Number(att.nighttime_minutes ?? 0);
   if (minutos > 0) return minutos / 60;
   return Number(att.night_hours ?? 0);
 }

@@ -23,6 +23,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatCpf, formatDateBR } from './mirrorGenerator';
 import type { FolhaCalculada } from './folha/folhaCalc';
+import type { DecimoCalculado } from './folha/decimoTerceiro';
 
 export interface HoleritePaymentLine {
   date: string;
@@ -80,6 +81,16 @@ export interface HoleriteData {
    * valor de mês inteiro num papel de semana. Ver `ehMesInteiro` no `folhaCalc`.
    */
   folhaForaDoMes?: boolean;
+  /**
+   * 13º SALÁRIO (19/09/2026). Quando vem preenchido, o papel é o recibo da gratificação
+   * natalina: as linhas do 13º, o abatimento do adiantamento e o imposto sobre o total.
+   *
+   * Sai num papel PRÓPRIO, separado do salário do mês — é assim que a contabilidade faz
+   * e é o que a lei pede, porque o IRRF do 13º é tributação exclusiva na fonte: ele não
+   * se soma ao imposto do mês. Misturar os dois no mesmo recibo faria a pessoa achar que
+   * pagou imposto duas vezes.
+   */
+  decimo?: DecimoCalculado;
 }
 
 const PAGE_W = 595;
@@ -138,7 +149,16 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
   doc.rect(X_LEFT, 78, X_RIGHT - X_LEFT, 28, 'F');
   doc.setTextColor(255);
   doc.setFont('helvetica', 'bold').setFontSize(14);
-  doc.text('RECIBO DE PAGAMENTO', PAGE_W / 2, 96, { align: 'center' });
+  /**
+   * O papel diz o que ele é. Um recibo de 13º com o título "RECIBO DE PAGAMENTO" seria
+   * confundido com o salário do mês — e os dois saem no mesmo dezembro.
+   */
+  const titulo = data.decimo
+    ? data.decimo.parcela === 'primeira' ? 'RECIBO DE 13º SALÁRIO — 1ª PARCELA'
+      : data.decimo.parcela === 'segunda' ? 'RECIBO DE 13º SALÁRIO — 2ª PARCELA'
+        : 'RECIBO DE 13º SALÁRIO'
+    : 'RECIBO DE PAGAMENTO';
+  doc.text(titulo, PAGE_W / 2, 96, { align: 'center' });
   doc.setFont('helvetica', 'normal').setFontSize(10);
   const periodoStr = `Período: ${formatDateBR(data.period.start)} a ${formatDateBR(data.period.end)}`;
   doc.setTextColor(220);
@@ -258,16 +278,28 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
   // aparece aqui, e NÃO na lista de descontos, porque é custo da empresa: não sai do
   // bolso do funcionário. Mostrar como desconto faria o líquido do papel não fechar.
   let afterBases = afterResumo;
-  if (data.folha) {
-    const { folha } = data;
-    // As cinco caixas do modelo da contabilidade, na mesma ordem.
-    const caixas: Array<[string, string]> = [
-      ['Salário base', fmtBRL(folha.salarioBase)],
-      ['Base INSS', fmtBRL(folha.baseInss)],
-      ['Base FGTS', fmtBRL(folha.baseFgts)],
-      ['Valor FGTS', fmtBRL(folha.valorFgts)],
-      ['Base IRRF', fmtBRL(folha.baseIrrf)],
-    ];
+  if (data.folha || data.decimo) {
+    const { folha, decimo } = data;
+    /**
+     * As caixas do rodapé. No salário do mês são as cinco do modelo da contabilidade; no
+     * 13º são as que explicam a gratificação — principalmente os AVOS, que é a pergunta
+     * que todo funcionário faz ao ver um 13º menor que o salário.
+     */
+    const caixas: Array<[string, string]> = decimo
+      ? [
+        ['Avos', `${decimo.avos}/12`],
+        ['Base do 13º', fmtBRL(decimo.base)],
+        ['13º bruto', fmtBRL(decimo.bruto)],
+        ['Valor FGTS', fmtBRL(decimo.fgts)],
+        ['Base IRRF', fmtBRL(decimo.baseIrrf)],
+      ]
+      : [
+        ['Salário base', fmtBRL(folha!.salarioBase)],
+        ['Base INSS', fmtBRL(folha!.baseInss)],
+        ['Base FGTS', fmtBRL(folha!.baseFgts)],
+        ['Valor FGTS', fmtBRL(folha!.valorFgts)],
+        ['Base IRRF', fmtBRL(folha!.baseIrrf)],
+      ];
     const larguraTotal = X_RIGHT - X_LEFT;
     const larguraCaixa = larguraTotal / caixas.length;
     const topo = afterResumo + 18;
@@ -302,7 +334,9 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
     // AVISO DE CONFERÊNCIA (decisão do Victor, 18/09): enquanto as tabelas de INSS e IR
     // do ano não forem conferidas com a contabilidade, o papel diz isso na cara. O
     // sistema não é fonte oficial antes de rodar em paralelo por alguns meses.
-    if (!folha.tabelasConfirmadas && (folha.inss > 0 || folha.irrf > 0)) {
+    const confirmadas = decimo ? decimo.tabelasConfirmadas : folha!.tabelasConfirmadas;
+    const temImposto = decimo ? decimo.inss > 0 || decimo.irrf > 0 : folha!.inss > 0 || folha!.irrf > 0;
+    if (!confirmadas && temImposto) {
       const alturaAviso = 22;
       doc.setFillColor(255, 247, 214);
       doc.setDrawColor(214, 178, 60);
@@ -389,18 +423,19 @@ export function totaisDoRecibo(data: HoleriteData): {
   liquido: number;
 } {
   const { quantityErrorDiscount } = linhasDoRecibo(data);
-  const proventosDaFolha = data.folha?.totalProventos ?? 0;
+  const proventosDaFolha = (data.folha?.totalProventos ?? 0) + (data.decimo?.totalProventos ?? 0);
   // A linha das diárias só entra se houver diária — senão o recibo de mensalista sairia
   // com "Diárias (0 dias) R$ 0,00". A mesma guarda do `linhasDoRecibo`.
-  const diariasNoPapel = !data.folha || data.totalDailyRate > 0 ? data.totalDailyRate : 0;
+  const temFolha = Boolean(data.folha || data.decimo);
+  const diariasNoPapel = !temFolha || data.totalDailyRate > 0 ? data.totalDailyRate : 0;
 
   return {
     totalProventos:
       proventosDaFolha + diariasNoPapel + data.totalBonusB + data.totalBonusC1 + data.totalBonusC2,
     totalDescontos:
-      (data.folha?.totalDescontos ?? 0)
+      (data.folha?.totalDescontos ?? 0) + (data.decimo?.totalDescontos ?? 0)
       + quantityErrorDiscount + (data.errorDiscount || 0) + (data.triageDiscount || 0),
-    liquido: (data.totalNet || 0) + (data.folha?.liquido ?? 0),
+    liquido: (data.totalNet || 0) + (data.folha?.liquido ?? 0) + (data.decimo?.liquido ?? 0),
   };
 }
 
@@ -430,7 +465,9 @@ export function linhasDoRecibo(data: HoleriteData): {
   // Um recibo de R$ 1.700 com uma falta e INSS imprimia "TOTAL DE DESCONTOS R$ 0,00".
   // Os testes de então só cobriam folha sem falta e sem imposto, onde só há provento.
   const descontosDaFolha: Array<[string, string, string]> = [];
-  for (const linha of data.folha?.linhas ?? []) {
+  // O 13º usa o MESMO formato de linha da folha mensal, então passa pelo mesmo caminho —
+  // e herda de graça a separação provento/desconto consertada em 19/09/2026.
+  for (const linha of [...(data.folha?.linhas ?? []), ...(data.decimo?.linhas ?? [])]) {
     const descricao = linha.referencia ? `${linha.descricao} (${linha.referencia})` : linha.descricao;
     if (linha.desconto > 0) descontosDaFolha.push([descricao, '-', fmtBRL(linha.desconto)]);
     else proventos.push([descricao, '+', fmtBRL(linha.provento)]);
@@ -438,7 +475,7 @@ export function linhasDoRecibo(data: HoleriteData): {
 
   // Diarista (ou quem tem os dois): a linha das diárias só entra se houver diária.
   // Sem esta guarda, o recibo de mensalista sairia com "Diárias (0 dias) R$ 0,00".
-  if (!data.folha || data.totalDailyRate > 0) {
+  if (!(data.folha || data.decimo) || data.totalDailyRate > 0) {
     proventos.push([`Diárias (${workingDays} dia${workingDays !== 1 ? 's' : ''})`, '+', fmtBRL(data.totalDailyRate)]);
   }
   if (data.totalBonusB > 0) proventos.push([`Bonificação B (${bonusCounts.b}×)`, '+', fmtBRL(data.totalBonusB)]);
