@@ -3,6 +3,43 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 SESSÃO 19/09 — O RECIBO ESTAVA JOGANDO OS DESCONTOS DA FOLHA FORA. CONSERTADO,
+> E A FOLHA CHEGOU AO RELATÓRIO E À TELA.** Detalhe em `CHECKPOINT_SESSAO_2026-09-19.md`.
+> Commit `7504f43`.
+>
+> 🔴 **O furo:** `linhasDoRecibo` empurrava **todas** as linhas da folha para *proventos*
+> — inclusive falta, INSS e IRRF. Um recibo de R$ 1.700 com uma falta imprimia
+> "Faltas + R$ 0,00", "INSS + R$ 0,00", "TOTAL DE DESCONTOS R$ 0,00" e um líquido que
+> ignorava o salário. **Provado gerando o PDF e lendo o texto de dentro dele.**
+> Passou porque os 9 testes do recibo só usavam folha **sem falta e sem imposto**, e os
+> 114 da folha provavam o CÁLCULO (que estava certo) — ninguém testava o TOTAL do papel.
+> Era o caminho que o Victor ia percorrer: **18 das 21 pessoas de carteira assinada são
+> pagas por diária hoje**.
+> ✅ Consertado; `totaisDoRecibo` extraído do desenho e testável. O papel fecha:
+> proventos − descontos = líquido.
+> ✅ **`utils/folha/folhaDaPessoa` (novo)** — a decisão de quem tem folha saiu do
+> `FinancialTab` e virou módulo: recibo, relatório e tela usam a MESMA conta.
+> ✅ **Relatórios (PDF e planilha)** com salário, noturno, salário família, férias,
+> faltas, INSS e IRRF; **FGTS como "custo da empresa"** (o lugar que o `relatorioDados`
+> já previa pra ele em 12/09). Coluna de FGTS só quando existe.
+> ✅ **Tela do Financeiro mostra o salário** e o `total_net` gravado no banco virou o
+> mesmo número do papel.
+> ⚖️ **4 decisões do Victor gravadas:** (1) quem tem salário E diária vê os dois, com o
+> líquido somado; (2) período menor que o mês **não mostra a folha e avisa** — vale pro
+> recibo e pro relatório, porque INSS/IRRF são progressivos sobre o mês; (3) a tela mostra
+> o salário "se tiver"; (4) ordem das levas: **13º → férias por avos → rescisão**.
+> ✅ Validado: typecheck 0 · lint 0 · build limpo · **104 arquivos / 1.649 unitários** ·
+> E2E **116 3/3** (novo) · sem regressão em 06 (6/6), 115 (3/3) e 16 (8+2 skip).
+> ⚠️ **Em produção nada muda de valor: 0 das 105 fichas tem salário.** Sem salário a
+> folha devolve `undefined` e o recibo de diarista sai idêntico (teste travando).
+> 🟡 **Vizinhança avisada, NÃO consertada:** `moneyBRL` (de 03/09) não tem separador de
+> milhar — a tela escreve `R$ 1700,00` enquanto os PDFs escrevem `R$ 1.700,00`. Conserto
+> de 1 linha que muda Financeiro, C6 e Erros — **esperando o Victor**.
+> 🔴 **Armadilha da máquina:** o pool padrão do vitest não sobe com o robô da Shopee de
+> pé; usar `--pool=vmThreads --no-file-parallelism` — **mas** esse pool faz o
+> `vi.mock('jspdf')` vazar entre `mirrorPdf.spec` e `mirrorPdf.real.spec` (passam
+> sozinhos, falham juntos; não é regressão).
+
 > **📌 SESSÃO 18/09 (leva 2) — O ESPELHO PASSOU A SAIR COM SALÁRIO FIXO, SALÁRIO
 > FAMÍLIA E FGTS.** Etapa 3 do `PLANO_FINANCEIRO_2026-09.md`. Detalhe na seção
 > **LEVA 2** do `CHECKPOINT_SESSAO_2026-09-18.md`.
@@ -2079,7 +2116,9 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-09-15.md` | **Mais recente.** Distribuição de triagem quebrada desde 03/09 nas duas empresas ("Erro ao distribuir"): o INSERT pedia a linha inteira de volta (`.select()`) e a trava de 03/09 tirou a leitura de `value_per_error`/`total_deducted` → 403. Conserto `.select('id')` (`9c9a804`), provado por simulação no banco + E2E novo que clica em Confirmar (vermelho no código antigo, spec 18 9/9). Semanas de 01–12/09 ficaram sem distribuir. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-19.md` | **Mais recente.** O recibo de carteira assinada jogava os descontos da folha fora: `linhasDoRecibo` mandava TODAS as linhas pra *proventos*, então falta/INSS/IRRF saíam como "+ R$ 0,00", o total de descontos dava zero e o líquido ignorava o salário (provado gerando o PDF e lendo o texto de dentro). Passou porque os 9 testes do recibo só usavam folha sem falta e sem imposto. Consertado + `totaisDoRecibo` extraído; `utils/folha/folhaDaPessoa` novo (uma conta só pra recibo, relatório e tela); relatórios com salário/noturno/sal. família/férias/faltas/INSS/IRRF e FGTS como custo-empresa; tela do Financeiro mostra o salário. Folha só em MÊS FECHADO, com aviso no recorte menor. 4 decisões do Victor gravadas. 104 arquivos / 1.649 unitários + E2E 116 3/3. Produção inerte: 0 das 105 fichas tem salário. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-18.md` | A folha de carteira assinada inteira, em 4 levas: import da Shopee consertado (cabeçalho novo + leitura `dense`, 33 MB em 45s no navegador); salário fixo, salário família e FGTS (8% TRUNCADO, provado contra os 12 recibos reais); falta com atestado, DSR configurável e férias com 1/3; INSS derivado do papel (11/11) e IR calculado pelos dois caminhos. 3 migrations aplicadas. A lista dos 5 pontos pro contador e a tarja "VALORES EM CONFERÊNCIA" nascem daqui. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-15.md` | Distribuição de triagem quebrada desde 03/09 nas duas empresas ("Erro ao distribuir"): o INSERT pedia a linha inteira de volta (`.select()`) e a trava de 03/09 tirou a leitura de `value_per_error`/`total_deducted` → 403. Conserto `.select('id')` (`9c9a804`), provado por simulação no banco + E2E novo que clica em Confirmar (vermelho no código antigo, spec 18 9/9). Semanas de 01–12/09 ficaram sem distribuir. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-14.md` | Sem código. Nota dividida no primeiro uso real: Gessiley mandou as 4 notas (Shopee 7.238 + 7.238, iMile 752,30 + 752,30), todas validadas e conferidas no banco (tomador, emissores, valor, soma = espelho, 30 min, PDFs no bucket); relatório com 4 PIX conferido no código + unit 21/21, falta gerar com dado real antes de pagar. Guia em PDF pro entregador na Área de Trabalho. Regra "não gasta token atoa". | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-12.md` | Manhã: aprovação de ponto removida (coluna + código; a correção manual de horário ficou quebrada 03:43–09:10 até o push). Tarde: relatórios dentro do Financeiro (ponto · financeiro · geral × PDF e planilha; aba Relatórios removida); spec 42 aplicava banco de horas em 23 funcionários REAIS — raiz corrigida (specs em 2037 + trava de 1 pessoa) e saldo restaurado (migration `20260912153353`); espelho saía 0h em 905 dias (+6.168h); adicional noturno nunca calculado (decisão pendente); `public-api-v1` v6. Suíte 101/1.527 verde; deploy conferido byte a byte em 14/09. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-11.md` | Etapa 2 do Financeiro: erro de R$ 82.980 (semanas sobrepostas → regra do dono único), recibos em lote + publicar pro funcionário (bucket privado), carimbo do vínculo, nome do banco fora de tudo, semanas gêmeas, "pago" que era automático, semana nascendo deslocada depois das 21h. | 🟢 ATIVO |
