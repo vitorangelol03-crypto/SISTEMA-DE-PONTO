@@ -3,6 +3,22 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 SESSÃO 19/09 (leva 5) — 2ª VIA DO 13º E DA RESCISÃO.** Commit `9650eb7`.
+>
+> 🔴 **Ponta minha:** as tabelas guardavam o acerto "para reimprimir depois" (diz assim
+> na tela), mas **não existia tela que reimprimisse**.
+> 🔴 **E o 13º até dava pra reconstruir dos valores; a RESCISÃO não** — os dias e avos da
+> coluna de referência nunca eram gravados. Papel parecido ≠ o mesmo papel, e numa
+> rescisão isso é grave.
+> ✅ **Migration `20260920023702`** (com OK): coluna `papel` (jsonb) nas duas tabelas,
+> guardando o cálculo INTEIRO como saiu. A 2ª via é **releitura, nunca recálculo**.
+> ✅ O papel sai marcado **"— 2ª VIA"**: duas vias circulando como original é o que não
+> pode existir.
+> 🎯 **A prova:** o E2E registra a rescisão com salário 1.700, **muda para 2.600**, e
+> reimprime — o PDF sai com o líquido ORIGINAL, lido de dentro do arquivo.
+> ✅ **109 arquivos / 1.744 unitários** · E2E **120 2/2** · sem regressão. Deploy 3/3.
+> ⏳ **Próximo candidato:** os relatórios mostrarem 13º e rescisão (hoje só a folha mensal).
+
 > **📌 SESSÃO 19/09 (leva 4) — RESCISÃO. A FOLHA ESTÁ COMPLETA.** Detalhe no
 > `CHECKPOINT_SESSAO_2026-09-19.md`. Commit `12bc30c`.
 >
@@ -2161,7 +2177,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-09-19.md` | **Mais recente.** A FOLHA FICOU COMPLETA em 4 levas: (0+1) o recibo jogava os descontos da folha fora e a folha chegou ao relatorio e a tela; (2) 13o salario com as duas parcelas, avos e media do noturno, migration `20260919220837` aplicada e provada; (3) ferias por avos com o alerta de VENCIDA; (4) rescisao com os 4 motivos, aviso projetado e migration `20260920003533`. 18 das 21 fichas sem data de admissao bloqueiam o uso real das ferias. O recibo de carteira assinada jogava os descontos da folha fora: `linhasDoRecibo` mandava TODAS as linhas pra *proventos*, então falta/INSS/IRRF saíam como "+ R$ 0,00", o total de descontos dava zero e o líquido ignorava o salário (provado gerando o PDF e lendo o texto de dentro). Passou porque os 9 testes do recibo só usavam folha sem falta e sem imposto. Consertado + `totaisDoRecibo` extraído; `utils/folha/folhaDaPessoa` novo (uma conta só pra recibo, relatório e tela); relatórios com salário/noturno/sal. família/férias/faltas/INSS/IRRF e FGTS como custo-empresa; tela do Financeiro mostra o salário. Folha só em MÊS FECHADO, com aviso no recorte menor. 4 decisões do Victor gravadas. 104 arquivos / 1.649 unitários + E2E 116 3/3. Produção inerte: 0 das 105 fichas tem salário. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-19.md` | **Mais recente.** A FOLHA FICOU COMPLETA em 4 levas: (0+1) o recibo jogava os descontos da folha fora e a folha chegou ao relatorio e a tela; (2) 13o salario com as duas parcelas, avos e media do noturno, migration `20260919220837` aplicada e provada; (3) ferias por avos com o alerta de VENCIDA; (4) rescisao com os 4 motivos, aviso projetado e migration `20260920003533`; (5) 2a via do 13o e da rescisao (migration `20260920023702`), releitura e nunca recalculo. Tambem: o ponto do milhar voltou pro dinheiro das telas. 18 das 21 fichas sem data de admissao bloqueiam o uso real das ferias. O recibo de carteira assinada jogava os descontos da folha fora: `linhasDoRecibo` mandava TODAS as linhas pra *proventos*, então falta/INSS/IRRF saíam como "+ R$ 0,00", o total de descontos dava zero e o líquido ignorava o salário (provado gerando o PDF e lendo o texto de dentro). Passou porque os 9 testes do recibo só usavam folha sem falta e sem imposto. Consertado + `totaisDoRecibo` extraído; `utils/folha/folhaDaPessoa` novo (uma conta só pra recibo, relatório e tela); relatórios com salário/noturno/sal. família/férias/faltas/INSS/IRRF e FGTS como custo-empresa; tela do Financeiro mostra o salário. Folha só em MÊS FECHADO, com aviso no recorte menor. 4 decisões do Victor gravadas. 104 arquivos / 1.649 unitários + E2E 116 3/3. Produção inerte: 0 das 105 fichas tem salário. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-18.md` | A folha de carteira assinada inteira, em 4 levas: import da Shopee consertado (cabeçalho novo + leitura `dense`, 33 MB em 45s no navegador); salário fixo, salário família e FGTS (8% TRUNCADO, provado contra os 12 recibos reais); falta com atestado, DSR configurável e férias com 1/3; INSS derivado do papel (11/11) e IR calculado pelos dois caminhos. 3 migrations aplicadas. A lista dos 5 pontos pro contador e a tarja "VALORES EM CONFERÊNCIA" nascem daqui. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-15.md` | Distribuição de triagem quebrada desde 03/09 nas duas empresas ("Erro ao distribuir"): o INSERT pedia a linha inteira de volta (`.select()`) e a trava de 03/09 tirou a leitura de `value_per_error`/`total_deducted` → 403. Conserto `.select('id')` (`9c9a804`), provado por simulação no banco + E2E novo que clica em Confirmar (vermelho no código antigo, spec 18 9/9). Semanas de 01–12/09 ficaram sem distribuir. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-14.md` | Sem código. Nota dividida no primeiro uso real: Gessiley mandou as 4 notas (Shopee 7.238 + 7.238, iMile 752,30 + 752,30), todas validadas e conferidas no banco (tomador, emissores, valor, soma = espelho, 30 min, PDFs no bucket); relatório com 4 PIX conferido no código + unit 21/21, falta gerar com dado real antes de pagar. Guia em PDF pro entregador na Área de Trabalho. Regra "não gasta token atoa". | 🟢 ATIVO |

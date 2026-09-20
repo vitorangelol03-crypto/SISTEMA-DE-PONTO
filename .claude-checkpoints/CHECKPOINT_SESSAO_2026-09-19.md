@@ -287,6 +287,7 @@ rescisão** — tudo no ar, com 2 migrations aplicadas e provadas.
 | `df8fe32` | Leva 3 — férias por avos |
 | `12bc30c` | Leva 4 — rescisão |
 | `718d5a2` | O ponto do milhar no dinheiro das telas |
+| `9650eb7` | 2ª via do 13º e da rescisão |
 | `9c9fcc7` · `1326acc` | checkpoints |
 
 Migrations: `20260919220837` (13º) · `20260920003533` (rescisão).
@@ -323,7 +324,43 @@ virando `R$ 0,00` em vez de espalhar "NaN" pela tela.
 Validado: **108 arquivos / 1.741 unitários** · E2E das três telas afetadas sem regressão
 (07/14/16: 18+2 skip · 20 e 116: 11 · 10 e 18: 20). Deploy conferido por conteúdo.
 
-## O que a folha ainda NÃO faz
-- Os relatórios não mostram 13º nem rescisão (só a folha mensal).
-- Não há tela para reimprimir um 13º ou uma rescisão já registrados.
-- Desligado continua aparecendo em todas as telas (decisão 4, de propósito).
+---
+
+# LEVA 5 — 2ª VIA (commit `9650eb7`), fechando uma ponta minha
+
+## O que estava errado
+As tabelas guardavam o acerto **"para reimprimir depois"** — diz assim na tela e no
+commit da rescisão —, mas **não existia tela que reimprimisse**. Promessa no texto do
+produto sem nada por trás.
+
+## O problema que apareceu ao construir
+O 13º até dá para reconstruir dos valores, mas a **rescisão não**: os dias e avos da
+coluna de referência (`Férias vencidas (90,00)`, `13º proporcional (10,00/12)`) nunca
+eram gravados. Reimprimir só dos valores daria um papel **parecido**, não o **mesmo**.
+Num 13º é chato; numa rescisão é grave — é o documento que a pessoa assinou.
+
+## O que entrou
+- **Migration `20260920023702`** (aplicada com OK): coluna `papel` (jsonb) nas duas
+  tabelas, guardando o cálculo **inteiro como ele saiu**. Guardar o objeto é de
+  propósito: o dia em que o desenho do papel mudar, a 2ª via de um acerto velho continua
+  saindo como saiu, porque é **relida**, não recalculada.
+- 2ª via do 13º (botão na linha de quem já está registrado) e da rescisão (lista das já
+  emitidas). O papel sai marcado **"— 2ª VIA"** no título.
+
+## A prova que dá nome à leva
+O E2E **registra** a rescisão com salário 1.700, **muda** o salário para 2.600 na ficha,
+e **reimprime**: o PDF sai com o líquido original, lido de dentro do arquivo. Se a tela
+estivesse recalculando, o número seria outro.
+
+## Validação
+typecheck 0 · lint 0 · build limpo · **109 arquivos / 1.744 unitários** · E2E **120 2/2**
+novo · 117 e 119 sem regressão (10 verdes). Deploy conferido por conteúdo (3/3).
+
+---
+
+## O que a folha ainda NÃO faz (atualizado)
+- Os relatórios não mostram 13º nem rescisão (só a folha mensal). **É o próximo
+  candidato natural.**
+- Desligado continua aparecendo em todas as telas (decisão 4, de propósito — esconder
+  mexeria em todas as abas de uma vez e pede leva própria).
+- ~~Não há tela para reimprimir~~ — **fechado na leva 5.**
