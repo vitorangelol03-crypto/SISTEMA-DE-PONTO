@@ -31,6 +31,22 @@ function pessoa(nome: string, cpf: string, liquido: number): HoleriteData {
     totalBonusC2: 0,
     totalGross: 215,
     totalNet: liquido,
+    /**
+     * A HORA FIXA (19/09/2026) — sem ela este arquivo pisca sozinho.
+     *
+     * O rodapé do recibo imprime "Documento gerado em <data>, <hora com segundos>", e
+     * sem `generatedAt` cada chamada usa o relógio na hora. O teste do "MESMO papel"
+     * gera os dois PDFs com microssegundos de diferença e, quando eles atravessam a
+     * virada do segundo, acusa diferença onde não há: 19:36:26 contra 19:36:27.
+     *
+     * Medido: **1 em 400 comparações**. Não é pouco — aparece em rodada de lote, que é
+     * quando a suíte inteira roda nesta máquina.
+     *
+     * Fixar aqui é o conserto certo, e não "mudar o teste pra passar": o que este
+     * arquivo prova é que o CONTEÚDO dos dois papéis é o mesmo, e o relógio é ruído.
+     * Imprimir a hora da geração continua sendo o comportamento certo do recibo.
+     */
+    generatedAt: '19/09/2026, 12:00:00',
   };
 }
 

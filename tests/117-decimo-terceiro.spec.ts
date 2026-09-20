@@ -20,7 +20,6 @@ const ANO = 2026;
 const SALARIO = 1700;
 
 let employeeId = '';
-let companyId = '';
 
 /** Abre o painel do 13º no ano e parcela pedidos, e manda calcular. */
 async function calcular(page: Page, parcela: 'primeira' | 'segunda' | 'unica'): Promise<void> {
@@ -47,13 +46,10 @@ test.describe('13º salário', () => {
     });
 
     const s = getClient();
-    const { data, error } = await s.from('employees')
+    const { error } = await s.from('employees')
       .update({ monthly_salary: SALARIO, family_allowance_children: 0, fgts_enabled: true, hire_date: '2024-05-10' })
-      .eq('id', employeeId)
-      .select('company_id')
-      .single();
+      .eq('id', employeeId);
     if (error) throw error;
-    companyId = (data as { company_id: string }).company_id;
   });
 
   test.afterAll(async () => {

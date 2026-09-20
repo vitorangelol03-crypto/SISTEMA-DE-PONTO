@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft, FileText, Gift } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft, FileText, Gift, Palmtree } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
   getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, getPayrollConfig, getEmployeeVacations, type EmployeeVacation, getTabelasDeImposto, type TabelasDeImposto,
@@ -32,6 +32,11 @@ const RelatoriosPanel = lazy(() =>
 /* O 13º também puxa o jsPDF e o ponto do ano inteiro: só carrega pra quem abrir. */
 const DecimoTerceiroPanel = lazy(() =>
   import('./DecimoTerceiroPanel').then(m => ({ default: m.DecimoTerceiroPanel })),
+);
+
+/* Férias lê o ponto desde a admissão mais antiga: idem. */
+const FeriasPanel = lazy(() =>
+  import('./FeriasPanel').then(m => ({ default: m.FeriasPanel })),
 );
 import { SelecaoParaPdf, type PessoaDoPdf } from './SelecaoParaPdf';
 import type {
@@ -260,7 +265,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
    * O histórico é a porta de entrada; a lista de pagamentos é o que está DENTRO
    * de uma semana. Quem quiser a lista solta continua tendo o botão "Pagamentos".
    */
-  const [activeView, setActiveView] = useState<'financial' | 'history' | 'payments-history' | 'relatorios' | 'decimo'>('payments-history');
+  const [activeView, setActiveView] = useState<'financial' | 'history' | 'payments-history' | 'relatorios' | 'decimo' | 'ferias'>('payments-history');
   /**
    * Preenchido quando a pessoa entrou na lista VINDO de uma semana/mês do
    * histórico — é o que permite voltar pra onde ela estava. `null` quando ela
@@ -1402,6 +1407,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             <Gift className="w-4 h-4" />
             <span>13º Salário</span>
           </button>
+
+          {/* Férias — o direito adquirido (19/09/2026). Mesma permissão do 13º: é salário. */}
+          <button
+            onClick={() => setActiveView('ferias')}
+            disabled={!hasPermission('employees.viewPayroll')}
+            title={!hasPermission('employees.viewPayroll') ? 'Você não tem permissão para ver salário' : ''}
+            data-testid="ferias-btn"
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] whitespace-nowrap ${
+              activeView === 'ferias'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <Palmtree className="w-4 h-4" />
+            <span>Férias</span>
+          </button>
         </div>
 
         {/* A volta pro histórico. Sem isto o fluxo era de mão única: a pessoa
@@ -2295,6 +2316,19 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               canViewValues={canViewValues}
               hasPermission={hasPermission}
             />
+          </div>
+        </Suspense>
+      )}
+
+      {activeView === 'ferias' && (
+        <Suspense fallback={
+          <div className="bg-white rounded-lg shadow p-8 text-center">
+            <RefreshCw className="w-8 h-8 mx-auto text-gray-400 animate-spin mb-3" />
+            <p className="text-sm text-gray-500">Abrindo as férias…</p>
+          </div>
+        }>
+          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+            <FeriasPanel company={company!} />
           </div>
         </Suspense>
       )}
