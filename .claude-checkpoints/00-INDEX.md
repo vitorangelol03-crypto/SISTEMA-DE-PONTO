@@ -3,6 +3,20 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 20/09 — SIMULAÇÃO COM GENTE DE VERDADE NAS DUAS EMPRESAS.** Commit `ad297dc`.
+>
+> 🔒 **`tests/125`, somente leitura**: usa funcionários, batidas e pagamentos REAIS.
+> Conta 8 tabelas antes e depois e exige que nada mude.
+> ✅ **Caratinga 40 pessoas** (R$ 47.979,00 no banco → R$ 45.737,01 de líquido) e
+> **Ponte Nova 6** (R$ 14.154,00 → R$ 13.449,92). Cada linha fecha, o TOTAL é a soma, e
+> o espelho bateu exato nas duas (27/27 e 24/24 dias com entrada).
+> ✅ **Nenhuma correção foi necessária no sistema.**
+> 🔴 **As duas falhas foram do TESTE:** `XLSX.readFile` não existe na build de navegador
+> do `xlsx` (usar `fs` + `XLSX.read`); e o **espelho tem uma linha por DIA DO MÊS**, não
+> por batida — folga e falta aparecem em branco, como cartão de ponto de papel.
+> ✅ **Espelho, relatório e financeiro: validados com dado real.**
+> ❌ **A FOLHA continua sem uso real** — 0 das 105 fichas tem salário.
+
 > **📌 20/09 — PREMIAÇÃO, VALIDAÇÃO DE VIDA REAL E TUTORIAL EM PDF.** Commit `775a097`.
 >
 > ✅ **Premiação**: não entra na base do FGTS/INSS, lançada na tela do mês, sai como

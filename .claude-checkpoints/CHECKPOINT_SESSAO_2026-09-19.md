@@ -293,6 +293,7 @@ rescisão** — tudo no ar, com 2 migrations aplicadas e provadas.
 | `de28bbd` | Localizador do campo de busca em Funcionários |
 | `39057ea` | E2E do PASSO 2, de ponta a ponta |
 | `775a097` | Premiação + validação de vida real + tutorial em PDF |
+| `ad297dc` | Simulação com gente de verdade nas duas empresas |
 | `9c9fcc7` · `1326acc` | checkpoints |
 
 Migrations: `20260919220837` (13º) · `20260920003533` (rescisão).
@@ -554,3 +555,43 @@ conteúdo (3/3).
 **0 das 105 fichas tem salário.** Tudo o que foi validado usa fixture que o próprio teste
 cria e apaga. O caminho está provado; o resultado, não — o INSS de R$ 128,68 só o
 contador confirma.
+
+---
+
+# 20/09 — SIMULAÇÃO COM GENTE DE VERDADE (commit `ad297dc`)
+
+Pedido do Victor: *"roda um teste simulado com gente de verdade, simulações reais em
+Ponte Nova e Caratinga, para fechar e validar de vez essa parte de espelho, relatório e
+financeiro"*.
+
+## 🔒 Somente leitura
+`tests/125` usa os funcionários, batidas e pagamentos REAIS que já existem. Conta 8
+tabelas antes e depois e exige que nada tenha mudado.
+
+## Não confere valor por valor — exige PROPRIEDADES
+Conferir 46 pessoas valor a valor seria eu refazendo a conta do sistema e comparando com
+ela mesma. O spec exige o que tem de valer para **toda pessoa real**: cada linha fecha ·
+o TOTAL é a soma · o líquido não passa do bruto do banco · o espelho tem uma linha por
+dia do mês e as com entrada batem.
+
+## Resultado — nenhuma correção foi necessária no sistema
+| | Pessoas | Banco | Líquido | Espelho |
+|---|---|---|---|---|
+| Caratinga | 40 | R$ 47.979,00 | R$ 45.737,01 | 31 linhas · 27 com entrada · 27 no banco |
+| Ponte Nova | 6 | R$ 14.154,00 | R$ 13.449,92 | 31 linhas · 24 com entrada · 24 no banco |
+
+Contagens finais idênticas: payments 3.720 · attendance 5.822 · erros 1.456 · 105 fichas.
+
+## 🔴 As duas falhas do caminho foram do TESTE
+1. **`XLSX.readFile` não existe** — o pacote `xlsx` deste projeto é a build de NAVEGADOR,
+   sem acesso a disco. Ler os bytes com `fs` e passar para `XLSX.read`.
+2. **Eu exigia "uma linha de espelho por batida"** e acusei erro que não existe: o espelho
+   tem uma linha por **DIA DO MÊS** — folga e falta aparecem em branco, como num cartão de
+   ponto de papel. Agosto dá 31 linhas mesmo com 27 dias trabalhados. Confirmado lendo o
+   `buildMirrorData` (`listDatesInRange` sobre o período), não supondo.
+
+## O que isto fecha — e o que NÃO fecha
+✅ **Espelho, relatório e financeiro estão validados com dado real das duas empresas.**
+❌ **A FOLHA continua sem uso real**: 0 das 105 fichas tem salário, então o salário, o
+INSS, o FGTS, o 13º e a rescisão nunca rodaram sobre uma pessoa de verdade. Para isso
+seria preciso preencher um salário real — escrita em produção, que espera o Victor.
