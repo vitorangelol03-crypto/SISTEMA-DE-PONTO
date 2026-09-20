@@ -3,6 +3,21 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 20/09 — O PASSO 2 ESTÁ PROVADO DE PONTA A PONTA.** Commit `39057ea`.
+>
+> `tests/123` percorre o caminho pelas TELAS: preenche o salário na ficha → confere que
+> gravou e volta → vê na tela do Financeiro → gera o recibo → **lê os números de dentro
+> do PDF**. Cenário REAL: salário **+ diárias no mesmo mês** (18 das 21 pessoas estão
+> assim). A conta fecha: **2.000,00 − 128,68 = 1.871,32**. E o 4º teste cobre a
+> armadilha: em QUINZENA o salário não sai, e o papel avisa.
+> ⚠️ **A 1ª faixa do INSS no BANCO vai até 1.621,30**, não 1.621,00 como os testes
+> unitários usam. Aqui deu o mesmo centavo, mas é diferença que pode estragar um valor
+> esperado sem ninguém ver.
+> 🔴 **Caí na armadilha do CPF do fixture que eu mesmo tinha anotado.** O sintoma não diz
+> "CPF": o "Atualizar" **não faz nada**, sem toast nenhum. Memória reforçada.
+> ⚠️ **Continua sem uso real:** 0 das 105 fichas tem salário. O que está provado é que o
+> caminho funciona, não que já rodou com gente de verdade.
+
 > **📌 SESSÃO 19/09 (leva 7) — DESLIGADO SOME DAS TELAS.** Commit `c60c0cf`.
 >
 > ✅ Regra num lugar só (`utils/desligados.ts`): aparece se não tem data de saída, OU se

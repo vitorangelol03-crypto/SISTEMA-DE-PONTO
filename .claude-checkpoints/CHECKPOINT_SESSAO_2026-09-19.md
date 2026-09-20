@@ -291,6 +291,7 @@ rescisão** — tudo no ar, com 2 migrations aplicadas e provadas.
 | `fb28abb` | 13º e rescisão no relatório |
 | `c60c0cf` | Desligado some das telas |
 | `de28bbd` | Localizador do campo de busca em Funcionários |
+| `39057ea` | E2E do PASSO 2, de ponta a ponta |
 | `9c9fcc7` · `1326acc` | checkpoints |
 
 Migrations: `20260919220837` (13º) · `20260920003533` (rescisão).
@@ -472,3 +473,36 @@ Nasce inerte: **0 das 105 fichas tem data de saída**.
 - ~~Os relatórios não mostram 13º nem rescisão~~ — **fechado na leva 6.**
 - ~~Desligado continua aparecendo em todas as telas~~ — **fechado na leva 7**, com a
   trava de bater ponto **publicada e provada por sonda** (v16).
+
+---
+
+# O PASSO 2 ESTÁ PROVADO (commit `39057ea`)
+
+Pedido do Victor: *"rode testes completos que garantem que o passo 2 vai funcionar"*.
+
+`tests/123-passo2-salario-e-recibo.spec.ts` percorre o caminho pelas TELAS, não por
+peças. O cenário é o **real**: a pessoa tem salário **e diárias no mesmo mês**, porque é
+assim que estão **18 das 21** pessoas de carteira assinada.
+
+| | O que prova | Estado |
+|---|---|---|
+| 1 | O salário digitado na ficha **fica gravado** e volta ao reabrir | ✅ |
+| 2 | A tela do Financeiro mostra o salário **antes** de gerar papel | ✅ |
+| 3 | O recibo sai completo e **a conta fecha**: 2.000,00 − 128,68 = **1.871,32** | ✅ |
+| 4 | Em QUINZENA o salário não sai, e o papel **avisa por quê** | ✅ |
+
+**Os números vieram da tabela que está NO BANCO**, não da do teste: o INSS de 128,68 sai
+de 7,5% sobre 1.621,30 + 9% sobre os 78,70 que passam. ⚠️ A 1ª faixa do banco vai até
+**1.621,30**, e não 1.621,00 como eu usava nos testes unitários — por sorte dá o mesmo
+centavo aqui, mas é o tipo de diferença que estragaria o esperado sem ninguém ver.
+
+## 🔴 Caí numa armadilha que eu MESMO já tinha anotado
+O `createTestEmployee` gera CPF **único**, não **válido**, e a ficha confere o dígito
+antes de salvar. O sintoma não diz "CPF": o **"Atualizar" não faz nada**, sem toast
+nenhum, e o vermelho é o toast de sucesso não encontrado. Memória reforçada com o
+sintoma. Não afeta produção — lá os CPFs são reais.
+
+## O que isto NÃO prova
+Continua valendo o que já estava escrito: **nada foi rodado sobre dado real**. O teste usa
+fixture que ele mesmo cria e apaga. Banco conferido depois: **0 fixtures, 0 fichas com
+salário, 105 fichas**.
