@@ -76,9 +76,10 @@
 > E2E **116 3/3** (novo) · sem regressão em 06 (6/6), 115 (3/3) e 16 (8+2 skip).
 > ⚠️ **Em produção nada muda de valor: 0 das 105 fichas tem salário.** Sem salário a
 > folha devolve `undefined` e o recibo de diarista sai idêntico (teste travando).
-> 🟡 **Vizinhança avisada, NÃO consertada:** `moneyBRL` (de 03/09) não tem separador de
-> milhar — a tela escreve `R$ 1700,00` enquanto os PDFs escrevem `R$ 1.700,00`. Conserto
-> de 1 linha que muda Financeiro, C6 e Erros — **esperando o Victor**.
+> ✅ **O separador de milhar foi CONSERTADO** no fim da sessão (`718d5a2`): a tela
+> escrevia `R$ 1700,00` e os PDFs `R$ 1.700,00`. Agrupamento **manual**, não `Intl` — o
+> `Intl` usa espaço NÃO-QUEBRÁVEL (U+00A0) e quebraria toda comparação de texto por um
+> caractere invisível. Vale p/ Financeiro, C6 e Erros; ganhou o teste que nunca teve.
 > 🔴 **Armadilha da máquina:** o pool padrão do vitest não sobe com o robô da Shopee de
 > pé; usar `--pool=vmThreads --no-file-parallelism` — **mas** esse pool faz o
 > `vi.mock('jspdf')` vazar entre `mirrorPdf.spec` e `mirrorPdf.real.spec` (passam

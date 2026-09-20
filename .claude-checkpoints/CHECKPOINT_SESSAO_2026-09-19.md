@@ -286,6 +286,7 @@ rescisão** — tudo no ar, com 2 migrations aplicadas e provadas.
 | `0e23499` | Leva 2 — 13º salário |
 | `df8fe32` | Leva 3 — férias por avos |
 | `12bc30c` | Leva 4 — rescisão |
+| `718d5a2` | O ponto do milhar no dinheiro das telas |
 | `9c9fcc7` · `1326acc` | checkpoints |
 
 Migrations: `20260919220837` (13º) · `20260920003533` (rescisão).
@@ -305,10 +306,22 @@ isso em cada leva.
 3. **As tabelas de INSS/IR não estão marcadas como conferidas** — todo papel sai com a
    tarja amarela até alguém marcar em Configurações.
 
-## 🟡 Vizinhança avisada, NÃO consertada
-`moneyBRL` (de 03/09) não tem separador de milhar: a tela escreve `R$ 1700,00` enquanto
-os PDFs escrevem `R$ 1.700,00`. Conserto de 1 linha em `src/utils/moneyMask.ts`, mas
-muda Financeiro, C6 e Erros. **Esperando o Victor.**
+## ✅ O separador de milhar — CONSERTADO no fim da sessão (commit `718d5a2`)
+A tela escrevia `R$ 1700,00` enquanto **todos** os PDFs escreviam `R$ 1.700,00`. Com OK
+do Victor, arrumado em `src/utils/moneyMask.ts` — vale para Financeiro, C6 e Erros.
+
+**Agrupamento MANUAL, não `Intl.NumberFormat`:** o `Intl` separa o "R$" do número com um
+**espaço não-quebrável** (U+00A0), e todo lugar que compara texto (E2E, busca do
+navegador, `includes`) deixaria de casar por um caractere invisível. Do jeito que ficou,
+o formato é byte a byte o mesmo de antes, só com os pontos a mais. Tem teste travando
+isso (`charCodeAt(2) === 32`).
+
+A função ganhou lógica, então ganhou o teste que nunca teve: milhar, o corte exato no
+4º dígito, negativo, o espaço comum, o mascaramento sem permissão, e número quebrado
+virando `R$ 0,00` em vez de espalhar "NaN" pela tela.
+
+Validado: **108 arquivos / 1.741 unitários** · E2E das três telas afetadas sem regressão
+(07/14/16: 18+2 skip · 20 e 116: 11 · 10 e 18: 20). Deploy conferido por conteúdo.
 
 ## O que a folha ainda NÃO faz
 - Os relatórios não mostram 13º nem rescisão (só a folha mensal).
