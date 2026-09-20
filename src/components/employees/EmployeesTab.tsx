@@ -40,6 +40,7 @@ import { validateImportRow, normalizeCPF, type ValidationContext, type ImportRow
 import { useCompany } from '../../contexts/useCompany';
 import { FunctionRoleInput } from '../common/FunctionRoleInput';
 import toast from 'react-hot-toast';
+import { estaDesligado } from '../../utils/desligados';
 
 interface EmployeesTabProps {
   userId: string;
@@ -94,6 +95,14 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
   const [cityFilter, setCityFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [employmentTypeFilter, setEmploymentTypeFilter] = useState('');
+  /**
+   * Desligado fica FORA da lista por padrão (decisão do Victor, 19/09/2026: "não fica
+   * ocupando espaço com registro à toa").
+   *
+   * O botão existe porque é daqui que se conserta uma data de saída digitada errada —
+   * sem ele, um engano de digitação esconderia a pessoa para sempre.
+   */
+  const [mostrarDesligados, setMostrarDesligados] = useState(false);
   // Aprovação de Cadastro embutida (01/09/2026) — só existe de verdade pra
   // quem tem employeeapproval.view (2626).
   const [registrationView, setRegistrationView] = useState<'ativos' | 'bloqueados'>('ativos');
@@ -232,7 +241,13 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
           ? registrationStatus === 'rejected'
           : registrationStatus !== 'rejected';
 
-      return matchesSearch && matchesCity && matchesState && matchesEmploymentType && matchesRegistrationView;
+      // Desligado só entra quando o botão está ligado. A busca por nome NÃO fura a
+      // regra de propósito: quem procura alguém que saiu clica em "Mostrar desligados",
+      // e assim a lista nunca mistura os dois sem a pessoa saber.
+      const matchesDesligado = mostrarDesligados || !estaDesligado(employee);
+
+      return matchesSearch && matchesCity && matchesState && matchesEmploymentType
+        && matchesRegistrationView && matchesDesligado;
     });
     // Pedido do Victor (01/09/2026): pendente sempre em primeiro na lista, pra
     // não passar batido no meio dos aprovados. Só pro 2626 (só ele vê o badge
@@ -247,7 +262,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
         })
       : filtered;
     setFilteredEmployees(ordered);
-  }, [searchTerm, cityFilter, stateFilter, employmentTypeFilter, employees, canViewApproval, registrationView]);
+  }, [searchTerm, cityFilter, stateFilter, employmentTypeFilter, employees, canViewApproval, registrationView, mostrarDesligados]);
 
   const registrationCounts = useMemo(() => {
     const c = { pending: 0, rejected: 0 };
@@ -1033,6 +1048,27 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
               </select>
             </div>
           </div>
+
+          {/* Desligados: fora da lista por padrão (19/09/2026). O botão existe porque é
+              daqui que se conserta uma data de saída digitada errada. */}
+          {(() => {
+            const quantos = employees.filter(estaDesligado).length;
+            if (quantos === 0) return null;
+            return (
+              <button
+                type="button"
+                onClick={() => setMostrarDesligados(v => !v)}
+                data-testid="mostrar-desligados"
+                className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm min-h-[44px] transition-colors ${
+                  mostrarDesligados
+                    ? 'border-gray-700 bg-gray-700 text-white'
+                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {mostrarDesligados ? 'Ocultar desligados' : `Mostrar desligados (${quantos})`}
+              </button>
+            );
+          })()}
 
           {(cityFilter || stateFilter || employmentTypeFilter) && (
             <div className="flex items-center gap-2 flex-wrap">

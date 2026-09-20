@@ -31,6 +31,7 @@ import {
   AdminCleanupConfig,
   FaceAuthAttempt,
 } from '../../services/database';
+import { estaDesligado } from '../../utils/desligados';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
 
 interface AdminTabProps {
@@ -485,6 +486,15 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
     }
   };
 
+  /**
+   * A lista da FACIAL esconde quem foi desligado (19/09/2026).
+   *
+   * Aqui não há período: esta tela é sobre quem vai bater ponto daqui pra frente, e quem
+   * saiu não vai. O seletor de CONSULTA de log, logo abaixo, continua mostrando todo
+   * mundo de propósito — senão não dá mais para olhar o histórico de quem saiu.
+   */
+  const employeesAtivos = React.useMemo(() => employees.filter(e => !estaDesligado(e)), [employees]);
+
   const EmployeeSelect: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => (
     <select value={value} onChange={e => onChange(e.target.value)} className={selectCls}>
       <option value="">Todos</option>
@@ -811,7 +821,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {employees.map(e => {
+                {employeesAtivos.map(e => {
                   const enabled = !!e.face_recognition_enabled;
                   const registered = !!e.face_registered;
                   return (
@@ -872,7 +882,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ userId }) => {
 
           {/* Mobile: cards */}
           <div className="md:hidden space-y-3">
-            {employees.map(e => {
+            {employeesAtivos.map(e => {
               const enabled = !!e.face_recognition_enabled;
               const registered = !!e.face_registered;
               return (

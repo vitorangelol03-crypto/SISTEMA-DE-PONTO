@@ -66,6 +66,7 @@ import {
 } from '../../utils/folha/folhaCalc';
 import { folhaDaPessoa, type FolhaDaPessoa } from '../../utils/folha/folhaDaPessoa';
 import { ModalShell } from '../driverpay/ModalShell';
+import { apareceNoPeriodo } from '../../utils/desligados';
 
 /**
  * 09/09/2026 — o Pagamento C6 deixou de ser aba e passou a abrir num popup DAQUI
@@ -414,6 +415,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     const q = employeeSearch.trim().toLowerCase();
     const role = filters.functionRole;
     let data = financialData;
+
+    /**
+     * Desligado só aparece se tiver dado NESTE período (19/09/2026).
+     *
+     * O caso do Victor: saiu em setembro → em agosto ele continua na lista com tudo que
+     * recebeu; em outubro, some. E "ter dado" aqui é qualquer coisa — pagamento, ponto,
+     * erro, triagem —, porque qualquer uma delas é dinheiro ou trabalho que aconteceu e
+     * não pode sumir da tela.
+     */
+    const periodoDaTela = { inicio: filters.startDate, fim: filters.endDate };
+    data = data.filter(d => apareceNoPeriodo(
+      d.employee,
+      periodoDaTela,
+      d.payments.length > 0 || d.workDays > 0 || d.absences > 0
+        || d.errorRecords.length > 0 || d.triageDiscounts.length > 0,
+    ));
     if (role !== FUNCTION_ROLE_ALL) {
       if (role === FUNCTION_ROLE_NONE) {
         data = data.filter(d => !d.employee.function_role || !d.employee.function_role.trim());
@@ -423,7 +440,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     }
     if (q) data = data.filter(d => d.employee.name.toLowerCase().includes(q));
     return data;
-  }, [financialData, employeeSearch, filters.functionRole]);
+  }, [financialData, employeeSearch, filters.functionRole, filters.startDate, filters.endDate]);
 
   /**
    * A folha de cada pessoa no período que está NA TELA (19/09/2026).

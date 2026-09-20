@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, TrendingUp, TrendingDown, Calendar, Users, Target, Package, FileSearch } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line, Area, ComposedChart, LabelList, Cell } from 'recharts';
 import { getAllEmployees, getAttendanceHistory, getErrorRecords, insertErrorRecord, updateErrorRecord, deleteErrorRecord, getErrorStatistics, Employee, Attendance, ErrorRecord, ErrorType } from '../../services/database';
+import { apareceNoPeriodo } from '../../utils/desligados';
 import { useCompany } from '../../contexts/useCompany';
 import { formatDateBR, getBrazilDate } from '../../utils/dateUtils';
 import { formatCPF } from '../../utils/validation';
@@ -100,6 +101,24 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
       setLoading(false);
     }
   }, [filters.startDate, filters.endDate, filters.employeeId, filters.employmentType, company?.id]);
+
+  /**
+   * Quem pode ser ESCOLHIDO nos dois seletores desta tela (19/09/2026).
+   *
+   * A lista de baixo (quem tem erro) já filtrava por quem trabalhou no período, então a
+   * regra do desligado sempre valeu lá. Os seletores é que mostravam todo mundo — e um
+   * deles registra erro NOVO, que não pode cair em quem já saiu.
+   */
+  const employeesSelecionaveis = useMemo(() => {
+    // Quem trabalhou no período já está apurado em `employeesWithErrors` — é a mesma
+    // lista de quem tem ponto, e reusá-la evita uma segunda varredura das batidas.
+    const trabalharam = new Set(employeesWithErrors.map(x => x.employee.id));
+    return employees.filter(e => apareceNoPeriodo(
+      e,
+      { inicio: filters.startDate, fim: filters.endDate },
+      trabalharam.has(e.id),
+    ));
+  }, [employees, employeesWithErrors, filters.startDate, filters.endDate]);
 
   const processEmployeeErrorData = (
     employeesData: Employee[], 
@@ -519,7 +538,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 min-h-[44px] text-sm"
             >
               <option value="">Todos</option>
-              {employees.map(employee => (
+              {employeesSelecionaveis.map(employee => (
                 <option key={employee.id} value={employee.id}>
                   {employee.name}
                 </option>
@@ -1073,7 +1092,7 @@ export const ErrorsTab: React.FC<ErrorsTabProps> = ({ userId, hasPermission }) =
                   disabled={!!editingError}
                 >
                   <option value="">Selecione um funcionário</option>
-                  {employees.map(employee => (
+                  {employeesSelecionaveis.map(employee => (
                     <option key={employee.id} value={employee.id}>
                       {employee.name}
                     </option>

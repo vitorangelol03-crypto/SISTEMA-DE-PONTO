@@ -24,6 +24,7 @@ import {
   BonusTypeRecord,
   setAbsenceJustified,
 } from '../../services/database';
+import { apareceNoDia } from '../../utils/desligados';
 import { useCompany } from '../../contexts/useCompany';
 import { resolveMarkingCount } from './attendanceTabHelpers';
 import { attendancesToReset, resetIsFiltered } from '../../utils/attendanceReset';
@@ -252,22 +253,33 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ userId, hasPermiss
   }, [company?.id]);
 
   useEffect(() => {
+    /**
+     * Desligado só aparece no dia em que ainda era da casa — ou no dia em que bateu
+     * ponto (19/09/2026). Quem saiu em 15/09 aparece no dia 15 e some no dia 16; se por
+     * algum motivo existir batida no dia 16, ela volta a aparecer, porque esconder um
+     * registro que existe seria pior do que mostrar alguém que saiu.
+     */
+    const quemBateuHoje = new Set(attendances.map(a => a.employee_id));
+    const daCasaNoDia = employees.filter(e =>
+      apareceNoDia(e, selectedDate, quemBateuHoje.has(e.id)),
+    );
+
     if (!searchTerm.trim()) {
-      setFilteredEmployees(employees);
+      setFilteredEmployees(daCasaNoDia);
       return;
     }
 
     const searchLower = searchTerm.toLowerCase().trim();
     const searchNumbers = searchTerm.replace(/\D/g, '');
-    
-    const filtered = employees.filter(employee => {
+
+    const filtered = daCasaNoDia.filter(employee => {
       const nameMatch = employee.name.toLowerCase().includes(searchLower);
       const cpfMatch = searchNumbers && (employee.cpf ?? '').includes(searchNumbers);
       return nameMatch || cpfMatch;
     });
-    
+
     setFilteredEmployees(filtered);
-  }, [searchTerm, employees]);
+  }, [searchTerm, employees, attendances, selectedDate]);
 
   const handleDateChange = (newDate: string) => {
     if (!hasPermission('attendance.viewHistory') && newDate !== getBrazilDate()) {

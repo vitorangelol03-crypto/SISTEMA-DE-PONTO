@@ -13,6 +13,7 @@ import {
   Employee,
   Company,
 } from '../../services/database';
+import { apareceNoPeriodo } from '../../utils/desligados';
 import { buildMirrorData } from '../../utils/mirrorGenerator';
 import { downloadMirrorsBatchPdf } from '../../utils/mirrorPdf';
 import toast from 'react-hot-toast';
@@ -82,13 +83,22 @@ export const MirrorMassDialog: React.FC<MirrorMassDialogProps> = ({ open, onClos
   }, [open, company.id]);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return employees;
+    /**
+     * Desligado só entra se ainda era da casa no período do espelho (19/09/2026).
+     *
+     * Aqui a regra é pelo PERÍODO escolhido, e não "nunca": gerar o espelho de agosto de
+     * quem saiu em setembro é exatamente o que se pede junto da rescisão. Passa `false`
+     * em "tem dado" porque este diálogo não carrega as batidas — e não precisa: quem
+     * saiu depois do início do período já entra pela primeira metade da regra.
+     */
+    const daCasa = employees.filter(e => apareceNoPeriodo(e, { inicio: start, fim: end }, false));
+    if (!search.trim()) return daCasa;
     const q = search.toLowerCase().trim();
     const qDigits = search.replace(/\D/g, '');
-    return employees.filter(e =>
+    return daCasa.filter(e =>
       e.name.toLowerCase().includes(q) || (qDigits && (e.cpf ?? '').includes(qDigits)),
     );
-  }, [employees, search]);
+  }, [employees, search, start, end]);
 
   const allFilteredSelected =
     filtered.length > 0 && filtered.every(e => selected.has(e.id));

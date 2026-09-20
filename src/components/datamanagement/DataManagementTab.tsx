@@ -23,6 +23,7 @@ import {
   CleanupLog,
   Employee
 } from '../../services/database';
+import { apareceNoPeriodo } from '../../utils/desligados';
 import { useCompany } from '../../contexts/useCompany';
 import { format } from 'date-fns';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
@@ -45,6 +46,18 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('');
+
+  /**
+   * Quem pode ser escolhido aqui (19/09/2026).
+   *
+   * Desligado só aparece se ainda era da casa no período marcado. **Sem período**, a
+   * lista mostra todo mundo de propósito: esta tela serve justamente para mexer em dados
+   * antigos, e esconder quem saiu impediria a limpeza de chegar neles.
+   */
+  const employeesDoPeriodo = React.useMemo(() => {
+    if (!startDate || !endDate) return employees;
+    return employees.filter(e => apareceNoPeriodo(e, { inicio: startDate, fim: endDate }, false));
+  }, [employees, startDate, endDate]);
   const [previewCounts, setPreviewCounts] = useState<Record<string, number> | null>(null);
   const [showPreview, setShowPreview] = useState(false);
 
@@ -630,7 +643,10 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({ userId, ha
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Todos os funcionários</option>
-                  {employees.map((emp) => (
+                  {/* Desligado só aparece se ainda era da casa no período escolhido
+                      (19/09/2026). Sem período marcado, a lista mostra todo mundo —
+                      senão uma limpeza de dados antigos não alcançaria quem saiu. */}
+                  {employeesDoPeriodo.map((emp) => (
                     <option key={emp.id} value={emp.id}>{emp.name}</option>
                   ))}
                 </select>

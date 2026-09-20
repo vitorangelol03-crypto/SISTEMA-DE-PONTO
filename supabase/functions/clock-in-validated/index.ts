@@ -235,7 +235,7 @@ Deno.serve(async (req: Request) => {
     // Verify employee exists, CPF matches, capture canonical company_id
     const { data: emp, error: empErr } = await supabase
       .from("employees")
-      .select("id, cpf, company_id, face_descriptor, face_registered")
+      .select("id, cpf, company_id, face_descriptor, face_registered, termination_date")
       .eq("id", employee_id)
       .single();
 
@@ -249,6 +249,31 @@ Deno.serve(async (req: Request) => {
     if (emp.cpf !== cpf.replace(/\D/g, "")) {
       return new Response(
         JSON.stringify({ error: "CPF não confere" }),
+        { status: 403, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+      );
+    }
+
+    /**
+     * DESLIGADO NÃO BATE PONTO depois da data de saída (19/09/2026).
+     *
+     * Decisão do Victor: *"não, mas só depois da data de saída"* — quem sai dia 15 bate
+     * até o dia 15, mesmo que a rescisão tenha sido registrada no dia 10. Registrar o
+     * acerto antes não pode tirar da pessoa os dias que ela ainda vai trabalhar.
+     *
+     * A trava é AQUI, no servidor, e não só na tela: esconder da lista não impede
+     * ninguém de bater pelo celular. A mensagem diz a data para a pessoa saber que não é
+     * defeito — e procurar o responsável se for engano.
+     *
+     * Comparação por TEXTO 'YYYY-MM-DD', com o dia do Brasil: `new Date(string)` puxa
+     * UTC e viraria o dia antes da hora neste projeto.
+     */
+    const saida: string | null = (emp as { termination_date?: string | null }).termination_date ?? null;
+    if (saida && getBrazilDateString() > saida) {
+      const [ano, mes, dia] = saida.split("-");
+      return new Response(
+        JSON.stringify({
+          error: `Seu cadastro foi encerrado em ${dia}/${mes}/${ano}. Se isso não está certo, procure o responsável.`,
+        }),
         { status: 403, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
     }
