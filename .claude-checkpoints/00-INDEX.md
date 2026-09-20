@@ -10,14 +10,19 @@
 > `teveAlgo` do relatório (12/09) valendo em todas as telas.
 > ✅ Funcionários (botão "Mostrar desligados"), Financeiro, Ponto, Erros, Espelho em
 > massa, Gestão de Dados e Admin. **C6 e Relatórios já estavam certos.**
-> ⚠️ **A trava de BATER PONTO está escrita e NÃO PUBLICADA** — vive na
-> `clock-in-validated` e publicar é deploy em produção. **Espera o OK do Victor.**
+> ✅ **A trava de BATER PONTO foi PUBLICADA** (`clock-in-validated` v15→v16, com OK).
+> Antes de publicar, conferi que o repo não estava atrasado em relação ao deployado —
+> 12 marcas do código no ar, todas presentes no arquivo. **Provado por SONDA na rota:**
+> desligado em 15/09 batendo em 20/09 → **403** com a mensagem; saída marcada para HOJE →
+> **passou** e chegou na facial (é a decisão dele: registrar antes não tira os dias que
+> a pessoa ainda vai trabalhar).
 > 🔴 **Lição do E2E:** o Financeiro só busca o período novo quando o campo de data PERDE
 > o foco (`isEditingDate`). `fill()` sem `blur()` deixa a lista anterior na tela, e o
 > teste afirma coisas sobre a tela errada. **Pôr o teste para conferir o próprio dado no
 > banco** foi o que separou "a tela escondeu" de "os dados nem chegaram".
-> ⚠️ `tests/05-employees.spec.ts` tem 3 vermelhos **pré-existentes** (provados por `git
-> stash`): localizador `input[type="text"]` + `.first()` pega o campo do link de cadastro.
+> ✅ Os 3 vermelhos de `tests/05-employees.spec.ts` **arrumados** (`de28bbd`): era o
+> localizador — `input[type="text"]` + `.first()` pegava o campo somente-leitura do link
+> de cadastro. **`.first()` sobre seletor amplo é armadilha.**
 > ✅ **111 arquivos / 1.776 unitários** · E2E **122 4/4** · sem regressão. Nasce inerte:
 > 0 das 105 fichas tem data de saída.
 

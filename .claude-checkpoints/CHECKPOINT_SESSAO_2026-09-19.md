@@ -290,6 +290,7 @@ rescisão** — tudo no ar, com 2 migrations aplicadas e provadas.
 | `9650eb7` | 2ª via do 13º e da rescisão |
 | `fb28abb` | 13º e rescisão no relatório |
 | `c60c0cf` | Desligado some das telas |
+| `de28bbd` | Localizador do campo de busca em Funcionários |
 | `9c9fcc7` · `1326acc` | checkpoints |
 
 Migrations: `20260919220837` (13º) · `20260920003533` (rescisão).
@@ -421,10 +422,23 @@ em massa · Gestão de Dados (sem período marcado mostra todos — é a tela de
 antigo) · Admin (facial esconde; o seletor de **consulta de log** não, senão some o
 histórico de quem saiu). **C6 e Relatórios já estavam certos.**
 
-## ⚠️ A trava de bater ponto está escrita e NÃO PUBLICADA
-Vive na edge function `clock-in-validated`, a única que grava batida — esconder da tela
-não impede ninguém de bater pelo celular. **Publicar é deploy em produção e espera o OK
-do Victor.** O commit subiu só o código-fonte.
+## ✅ A trava de bater ponto — PUBLICADA (20/09, com OK do Victor)
+Edge function `clock-in-validated`, **v15 → v16**, hash novo.
+
+**Antes de publicar**, conferi que o repo NÃO estava atrasado em relação ao deployado
+(a armadilha que a memória do projeto avisa): 12 marcas distintivas do código no ar,
+inclusive as dos commits de 01/09, 03/09 e 12/09, todas presentes no arquivo do repo.
+Sem essa conferência, publicar teria apagado o que só existisse em produção.
+
+**Provado por SONDA na rota**, não por versão:
+| Sonda | Resultado |
+|---|---|
+| Desligado em 15/09 batendo em 20/09 | **HTTP 403** — "Seu cadastro foi encerrado em 15/09/2026…" |
+| Saída marcada para HOJE, batendo hoje | **passou** pela trava e chegou na facial |
+
+A segunda sonda é a que prova a decisão do Victor: registrar a rescisão antes não tira da
+pessoa os dias que ela ainda vai trabalhar. Fixture da sonda apagada; banco conferido
+depois (0 sondas, 0 fichas desligadas, 105 fichas).
 
 ## 🔴 O E2E me pegou em dois erros meus
 1. Localizador de "a lista carregou" pegou o `<span>Funcionários</span>` do menu, escondido.
@@ -436,9 +450,15 @@ do Victor.** O commit subiu só o código-fonte.
    de olhar a tela. Sem isso, "a tela escondeu" e "os dados nem foram buscados" davam
    exatamente o mesmo vermelho — e a investigação começou pelo lado errado.
 
-## ⚠️ Vizinhança: 3 vermelhos PRÉ-EXISTENTES em `tests/05-employees.spec.ts`
-Provados por `git stash` (falham igual sem esta leva). O teste usa `input[type="text"]`
-com `.first()` e pega o campo **somente-leitura do link público de cadastro**. Não mexido.
+## ✅ Os 3 vermelhos de `tests/05-employees.spec.ts` — ARRUMADOS (`de28bbd`, com OK)
+Eram do **localizador**, não da tela: `input[type="text"]` com `.first()` pegava o campo
+**somente-leitura do link público de cadastro**, que vem antes no HTML, e o `fill()`
+estourava com "element is not editable". Trocado pelo placeholder exato. Provado por
+`git stash` que já falhavam antes desta leva.
+⚠️ Sobrou **1 flaky** ("lista mostra funcionários", passa no retry) — outro teste, que
+não usa a busca e não foi tocado.
+🔑 **Lição:** `.first()` sobre um seletor amplo é armadilha — o primeiro input da página
+raramente é o que o teste quer.
 
 ## Validação
 typecheck 0 · lint 0 · build limpo · **111 arquivos / 1.776 unitários** (10 lotes,
@@ -450,5 +470,5 @@ Nasce inerte: **0 das 105 fichas tem data de saída**.
 ## O que a folha ainda NÃO faz (atualizado)
 - ~~Não há tela para reimprimir~~ — **fechado na leva 5.**
 - ~~Os relatórios não mostram 13º nem rescisão~~ — **fechado na leva 6.**
-- ~~Desligado continua aparecendo em todas as telas~~ — **fechado na leva 7**, menos a
-  trava de bater ponto, que espera o OK para publicar.
+- ~~Desligado continua aparecendo em todas as telas~~ — **fechado na leva 7**, com a
+  trava de bater ponto **publicada e provada por sonda** (v16).
