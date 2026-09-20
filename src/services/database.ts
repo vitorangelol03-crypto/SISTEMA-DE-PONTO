@@ -2686,6 +2686,64 @@ export const deleteEmployeeVacation = async (id: string): Promise<void> => {
   if (error) throw error;
 };
 
+// ─── PREMIAÇÃO (19/09/2026) ─────────────────────────────────────────────────
+// Sai como BÔNUS (decisão do Victor): entra no líquido e em NENHUMA base — nem FGTS,
+// nem INSS, nem IRRF. É o que a contabilidade dele já faz com a PLR.
+
+export interface Premiacao {
+  id: string;
+  employee_id: string;
+  company_id: string;
+  /** Define em qual recibo aparece: o do mês que contém esta data. */
+  data: string;
+  valor: number;
+  descricao: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** As premiações que caem dentro do período pedido. */
+export const getPremiacoes = async (
+  companyId: string,
+  inicio: string,
+  fim: string
+): Promise<Premiacao[]> => {
+  const { data, error } = await supabase
+    .from('payroll_awards')
+    .select('*')
+    .eq('company_id', companyId)
+    .gte('data', inicio)
+    .lte('data', fim)
+    .order('data');
+  if (error) throw error;
+  return (data ?? []) as Premiacao[];
+};
+
+/** Lançar premiação mexe em dinheiro: o banco exige `employees.editPayroll` no trigger. */
+export const createPremiacao = async (
+  employeeId: string,
+  companyId: string,
+  data: string,
+  valor: number,
+  descricao: string | null,
+  userId: string
+): Promise<void> => {
+  const { error } = await supabase.from('payroll_awards').insert([{
+    employee_id: employeeId,
+    company_id: companyId,
+    data,
+    valor,
+    descricao,
+    created_by: userId,
+  }]);
+  if (error) throw error;
+};
+
+export const deletePremiacao = async (id: string): Promise<void> => {
+  const { error } = await supabase.from('payroll_awards').delete().eq('id', id);
+  if (error) throw error;
+};
+
 // ─── 13º SALÁRIO (19/09/2026) ───────────────────────────────────────────────
 // O que foi PAGO fica gravado, e não recalculado: a 2ª parcela abate o que a 1ª de fato
 // pagou. Se o salário mudar entre novembro e dezembro, refazer a conta abateria um valor

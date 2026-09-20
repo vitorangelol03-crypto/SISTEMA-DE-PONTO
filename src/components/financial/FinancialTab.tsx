@@ -66,6 +66,7 @@ import {
 } from '../../utils/folha/folhaCalc';
 import { folhaDaPessoa, type FolhaDaPessoa } from '../../utils/folha/folhaDaPessoa';
 import { ModalShell } from '../driverpay/ModalShell';
+import { getPremiacoes, createPremiacao, type Premiacao } from '../../services/database';
 import { apareceNoPeriodo } from '../../utils/desligados';
 
 /**
@@ -102,8 +103,9 @@ function montarDadosDoRecibo(
   configDaFolha: ConfiguracaoDaFolha,
   feriasDaEmpresa: readonly EmployeeVacation[],
   tabelas: TabelasDeImposto,
+  premiacoes: readonly Premiacao[] = [],
 ) {
-  const daFolha = folhaDoPeriodo(d, inicio, fim, configDaFolha, feriasDaEmpresa, tabelas);
+  const daFolha = folhaDoPeriodo(d, inicio, fim, configDaFolha, feriasDaEmpresa, tabelas, premiacoes);
   return {
     company: {
       name: company?.display_name || company?.legal_name || 'Empresa',
@@ -158,6 +160,7 @@ function folhaDoPeriodo(
   config: ConfiguracaoDaFolha,
   feriasDaEmpresa: readonly EmployeeVacation[],
   tabelas: TabelasDeImposto,
+  premiacoes: readonly Premiacao[] = [],
 ): FolhaDaPessoa {
   return folhaDaPessoa({
     ficha: d.employee,
@@ -168,6 +171,7 @@ function folhaDoPeriodo(
     tabelas,
     horasNoturnas: d.totalNightHours || 0,
     faltasInjustificadas: d.faltasInjustificadas,
+    premiacoes,
   });
 }
 
@@ -360,6 +364,16 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
   /** Férias que encostam no período filtrado — o recibo desconta só os dias de cá. */
   const [feriasDaEmpresa, setFeriasDaEmpresa] = useState<EmployeeVacation[]>([]);
   /**
+   * Premiações do período (19/09/2026). Decisão do Victor: o lançamento é AQUI, na tela
+   * do mês — por isso elas moram no estado desta aba, e não da ficha.
+   */
+  const [premiacoes, setPremiacoes] = useState<Premiacao[]>([]);
+  /** A pessoa cujo modal de premiação está aberto. */
+  const [premiando, setPremiando] = useState<EmployeeFinancialData | null>(null);
+  const [premioValor, setPremioValor] = useState('');
+  const [premioMotivo, setPremioMotivo] = useState('');
+  const [premioSalvando, setPremioSalvando] = useState(false);
+  /**
    * Tabelas de INSS e IRRF do ano. Sem elas o recibo sai SEM as duas linhas — que é
    * melhor do que sair com um imposto inventado.
    */
@@ -457,11 +471,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     const mapa = new Map<string, FolhaDaPessoa>();
     for (const d of financialData) {
       mapa.set(d.employee.id, folhaDoPeriodo(
-        d, filters.startDate, filters.endDate, configDaFolha, feriasDaEmpresa, tabelasDeImposto,
+        d, filters.startDate, filters.endDate, configDaFolha, feriasDaEmpresa, tabelasDeImposto, premiacoes,
       ));
     }
     return mapa;
-  }, [financialData, filters.startDate, filters.endDate, configDaFolha, feriasDaEmpresa, tabelasDeImposto]);
+  }, [financialData, filters.startDate, filters.endDate, configDaFolha, feriasDaEmpresa, tabelasDeImposto, premiacoes]);
 
   const displayedBonusRemovals = React.useMemo(() => {
     const q = historyEmployeeSearch.trim().toLowerCase();
@@ -511,7 +525,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
     try {
       const { generateHoleritePdf, downloadHoleritePdf } = await import('../../utils/holeritePdf');
       const dadosDoRecibo = (d: EmployeeFinancialData) =>
-        montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto);
+        montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto, premiacoes);
 
       if (escolhidos.length === 1) {
         setPdfGerando('Gerando…');
@@ -570,7 +584,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       setPdfGerando(`Montando ${escolhidos.length} folhas…`);
       const { generateLoteHoleritePdf } = await import('../../utils/holeritePdf');
       const pdf = await generateLoteHoleritePdf(
-        escolhidos.map((d) => montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto)),
+        escolhidos.map((d) => montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto, premiacoes)),
       );
       baixarArquivo(
         pdf,
@@ -602,7 +616,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         const d = escolhidos[i];
         setPdfGerando(`Publicando ${i + 1} de ${escolhidos.length}…`);
         const pdf = await generateHoleritePdf(
-          montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto),
+          montarDadosDoRecibo(d, pdfLote.inicio, pdfLote.fim, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto, premiacoes),
         );
         await publicarReciboDePagamento({
           companyId: company.id,
@@ -619,7 +633,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
            */
           totalNet: liquidoComFolha(
             d,
-            folhaDoPeriodo(d, pdfLote.inicio, pdfLote.fim, configDaFolha, feriasDaEmpresa, tabelasDeImposto),
+            folhaDoPeriodo(d, pdfLote.inicio, pdfLote.fim, configDaFolha, feriasDaEmpresa, tabelasDeImposto, premiacoes),
           ),
           pdf,
           userId,
@@ -743,6 +757,19 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
       });
     return () => { cancelado = true; };
   }, [anoDaFolha]);
+
+  const carregarPremiacoes = React.useCallback(async () => {
+    if (!company?.id) return;
+    try {
+      setPremiacoes(await getPremiacoes(company.id, filters.startDate, filters.endDate));
+    } catch {
+      // Premiação é aditiva: se a busca falhar, o recibo sai sem ela em vez de a aba
+      // inteira quebrar. O valor não some do banco.
+      setPremiacoes([]);
+    }
+  }, [company?.id, filters.startDate, filters.endDate]);
+
+  useEffect(() => { void carregarPremiacoes(); }, [carregarPremiacoes]);
 
   useEffect(() => {
     if (!company?.id || !anoDaFolha) return;
@@ -1962,7 +1989,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                           // recibo diferente do que foi conferido. (11/09/2026.)
                           const { downloadHoleritePdf } = await import('../../utils/holeritePdf');
                           await downloadHoleritePdf(
-                            montarDadosDoRecibo(data, filters.startDate, filters.endDate, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto),
+                            montarDadosDoRecibo(data, filters.startDate, filters.endDate, company, configDaFolha, feriasDaEmpresa, tabelasDeImposto, premiacoes),
                           );
                           toast.success('Holerite PDF gerado');
                         }}
@@ -1971,6 +1998,24 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
                       >
                         Holerite PDF
                       </button>
+
+                      {/* Premiação (19/09/2026) — decisão do Victor: o lançamento é aqui,
+                          na tela do mês. Só aparece para quem é carteira assinada: é
+                          linha de folha, e o diarista não tem folha. */}
+                      {data.employee.employment_type === 'Carteira Assinada' && (
+                        <button
+                          onClick={() => {
+                            setPremiando(data);
+                            setPremioValor('');
+                            setPremioMotivo('');
+                          }}
+                          data-testid="premiar-btn"
+                          className="ml-3 text-purple-700 hover:text-purple-900"
+                          title="Lançar premiação neste mês"
+                        >
+                          Premiação
+                        </button>
+                      )}
                     </td>
                   </tr>
                   
@@ -2824,6 +2869,108 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
               embutido
             />
           </Suspense>
+        </ModalShell>
+      )}
+
+      {/* ══ PREMIAÇÃO (19/09/2026) ══
+          Sai como BÔNUS: o valor digitado é exatamente o que a pessoa recebe. Não entra
+          na base do FGTS, nem na do INSS, nem sofre IR — é o que a contabilidade do
+          Victor já faz com a PLR (recibo do Maycon: base de FGTS sem a PLR). */}
+      {premiando && (
+        <ModalShell
+          icon={<DollarSign className="w-5 h-5" />}
+          title="Lançar premiação"
+          subtitle={premiando.employee.name}
+          onClose={() => setPremiando(null)}
+        >
+          <div className="space-y-4" data-testid="modal-premiacao">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={premioValor}
+                onChange={e => setPremioValor(e.target.value)}
+                placeholder="Ex.: 500,00"
+                data-testid="premio-valor"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[44px] text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Motivo <span className="text-gray-400">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                value={premioMotivo}
+                onChange={e => setPremioMotivo(e.target.value)}
+                placeholder="Ex.: Meta de agosto"
+                data-testid="premio-motivo"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[44px] text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                O motivo sai impresso no recibo, para a pessoa saber de onde veio o dinheiro.
+              </p>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <p className="text-sm text-purple-900">
+                <strong>Sai como bônus.</strong> O valor digitado é exatamente o que a pessoa
+                recebe: sem desconto de INSS, sem Imposto de Renda e sem FGTS em cima.
+              </p>
+              <p className="text-xs text-purple-800 mt-1">
+                Aparece no recibo de <strong>{formatDateBR(filters.startDate)} a {formatDateBR(filters.endDate)}</strong>.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  const valor = Number(premioValor.replace(/\./g, '').replace(',', '.'));
+                  if (!Number.isFinite(valor) || valor <= 0) {
+                    toast.error('Digite um valor maior que zero.');
+                    return;
+                  }
+                  if (!company?.id) return;
+                  setPremioSalvando(true);
+                  try {
+                    await createPremiacao(
+                      premiando.employee.id,
+                      company.id,
+                      // Cai no recibo do período que está na tela — que é onde o Victor
+                      // está olhando quando clica.
+                      filters.startDate,
+                      valor,
+                      premioMotivo.trim() || null,
+                      userId,
+                    );
+                    toast.success('Premiação lançada — já aparece no recibo deste período.');
+                    setPremiando(null);
+                    await carregarPremiacoes();
+                  } catch (err) {
+                    console.error('Erro ao lançar a premiação:', err);
+                    toast.error(mensagemDeErro(err, 'Não consegui lançar a premiação.'));
+                  } finally {
+                    setPremioSalvando(false);
+                  }
+                }}
+                disabled={premioSalvando}
+                data-testid="premio-salvar"
+                className="flex-1 px-4 py-2 bg-purple-700 text-white rounded-md hover:bg-purple-800 disabled:opacity-50 min-h-[44px]"
+              >
+                {premioSalvando ? 'Lançando…' : 'Lançar premiação'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPremiando(null)}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 min-h-[44px]"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </ModalShell>
       )}
     </div>

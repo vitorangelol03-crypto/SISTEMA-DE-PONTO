@@ -41,6 +41,14 @@ export interface FichaParaFolha {
   hire_date?: string | null;
 }
 
+/** Uma premiação lançada, do jeito que o banco guarda. */
+export interface PremiacaoParaFolha {
+  employee_id: string;
+  data: string;
+  valor: number;
+  descricao?: string | null;
+}
+
 /** Um período de férias, do jeito que o banco guarda. */
 export interface FeriasParaFolha {
   employee_id: string;
@@ -66,6 +74,11 @@ export interface EntradaDaFolhaDaPessoa {
   horasNoturnas: number;
   /** Datas das faltas SEM atestado. As com atestado não descontam nada. */
   faltasInjustificadas: readonly string[];
+  /**
+   * Premiações de TODA a empresa no período — filtradas por pessoa aqui dentro, como as
+   * férias. Saem como bônus: entram no líquido e em nenhuma base.
+   */
+  premiacoes?: readonly PremiacaoParaFolha[];
 }
 
 export interface FolhaDaPessoa {
@@ -91,6 +104,7 @@ export function folhaDaPessoa({
   tabelas,
   horasNoturnas,
   faltasInjustificadas,
+  premiacoes,
 }: EntradaDaFolhaDaPessoa): FolhaDaPessoa {
   const salario = Number(ficha.monthly_salary ?? 0);
   if (ficha.employment_type !== 'Carteira Assinada' || salario <= 0) return SEM_FOLHA;
@@ -122,6 +136,9 @@ export function folhaDaPessoa({
         inicio,
         fim,
       ),
+      premiacoes: (premiacoes ?? [])
+        .filter(p => p.employee_id === ficha.id)
+        .map(p => ({ descricao: p.descricao ?? undefined, valor: Number(p.valor) })),
       tabelaInss: tabelas.inss ?? undefined,
       tabelaIrrf: tabelas.irrf ?? undefined,
       tabelasConfirmadas: tabelas.confirmadas,

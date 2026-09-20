@@ -104,6 +104,8 @@ export interface FolhaCalculada {
   salarioDoMes: number;
   adicionalNoturno: number;
   salarioFamilia: number;
+  /** Soma das premiações do mês. Entra no líquido e em NENHUMA base. */
+  premiacao: number;
   totalProventos: number;
   totalDescontos: number;
   liquido: number;
@@ -141,6 +143,22 @@ export interface EntradaDaFolha {
   faltasInjustificadas?: readonly string[];
   /** Dias de férias dentro deste mês. Saem do salário e viram linha própria. */
   diasDeFerias?: number;
+  /**
+   * PREMIAÇÕES do mês (19/09/2026) — prêmio, PLR, bonificação.
+   *
+   * Decisão do Victor: *"tem que ser premiação para sair como bônus e não gera imposto"*.
+   * Então ela **entra no bolso da pessoa e em mais nada**: não soma na base do INSS, não
+   * soma na do FGTS, não sofre IRRF. A pessoa recebe exatamente o valor digitado.
+   *
+   * Isto não é invenção: é o que a contabilidade dele já faz. No recibo real do Maycon
+   * (salário 2.200 + noturno 115,78) a base do FGTS é **2.315,78** — a PLR que ele
+   * recebeu ficou de fora. Mesmo tratamento do salário família.
+   *
+   * ⚠️ Vale para prêmio EVENTUAL e PLR. Prêmio pago todo mês de forma habitual a lei
+   * entende como salário e aí integraria a base — se isso passar a acontecer, é decisão
+   * nova, não um ajuste de código.
+   */
+  premiacoes?: readonly { descricao?: string; valor: number }[];
   /** Tabela do INSS do ano. Sem ela, o recibo sai sem a linha (como antes desta leva). */
   tabelaInss?: TabelaDoInss;
   /** Tabela do IRRF do ano. Idem. */
@@ -327,6 +345,7 @@ export function calcularFolha({
   adicionalNoturno,
   faltasInjustificadas,
   diasDeFerias,
+  premiacoes,
   tabelaInss,
   tabelaIrrf,
   tabelasConfirmadas,
@@ -350,6 +369,14 @@ export function calcularFolha({
   const diasDeDsrPerdido = Math.min(Math.max(0, diasDeSalario - diasDeFalta), dsrPerdido);
   const diasPagos = Math.max(0, diasDeSalario - diasDeFalta - diasDeDsrPerdido);
   const descontoDeFaltas = doisDecimais(salarioDoMes - proporcional(salarioBase, diasPagos));
+
+  /**
+   * A premiação é somada ANTES das bases de propósito — para deixar claro, ao ler, que
+   * ela existe e mesmo assim NÃO entra em nenhuma delas. Ver o comentário em
+   * `EntradaDaFolha.premiacoes`.
+   */
+  const listaDePremios = (premiacoes ?? []).filter(p => Number(p.valor) > 0);
+  const premiacao = doisDecimais(listaDePremios.reduce((soma, p) => soma + Number(p.valor), 0));
 
   const filhos = Math.max(0, Math.trunc(Number(ficha.filhosSalarioFamilia) || 0));
   const temDireito = filhos > 0 && salarioBase > 0 && salarioBase <= config.tetoSalarioFamilia;
@@ -398,6 +425,13 @@ export function calcularFolha({
       descricao: 'Salário família',
       referencia: formataReferencia(filhos),
       provento: salarioFamilia,
+      desconto: 0,
+    });
+  }
+  for (const premio of listaDePremios) {
+    linhas.push({
+      descricao: premio.descricao?.trim() ? `Premiação — ${premio.descricao.trim()}` : 'Premiação',
+      provento: doisDecimais(Number(premio.valor)),
       desconto: 0,
     });
   }
@@ -453,6 +487,7 @@ export function calcularFolha({
     salarioDoMes,
     adicionalNoturno: noturno,
     salarioFamilia,
+    premiacao,
     totalProventos,
     totalDescontos,
     liquido: doisDecimais(totalProventos - totalDescontos),

@@ -32,6 +32,7 @@ import {
   getEmployeeVacations,
   getDecimoTerceiroPorPagamento,
   getRescisoesNoPeriodo,
+  getPremiacoes,
   type Company,
   type Employee,
   type PaymentPeriod,
@@ -243,7 +244,7 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({ company, canVi
        * porque a tabela do IR não carregou.
        */
       const anoDaFolha = Number(periodo.inicio.slice(0, 4));
-      const [configDaFolha, tabelasDeImposto, feriasDaEmpresa, decimosPagos, rescisoesDoPeriodo] = await Promise.all([
+      const [configDaFolha, tabelasDeImposto, feriasDaEmpresa, decimosPagos, rescisoesDoPeriodo, premiacoesDoPeriodo] = await Promise.all([
         getPayrollConfig(company.id, anoDaFolha).catch(() => null),
         getTabelasDeImposto(anoDaFolha).catch(() => null),
         getEmployeeVacations(company.id, periodo.inicio, periodo.fim).catch(() => []),
@@ -251,6 +252,9 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({ company, canVi
         // contenha o pagamento os mostra, diferente do salário, que é mensal.
         getDecimoTerceiroPorPagamento(company.id, periodo.inicio, periodo.fim).catch(() => []),
         getRescisoesNoPeriodo(company.id, periodo.inicio, periodo.fim).catch(() => []),
+        // Premiação entra na folha do mês como bônus — o relatório mostra pelo mesmo
+        // caminho do salário, não por uma conta própria.
+        getPremiacoes(company.id, periodo.inicio, periodo.fim).catch(() => []),
       ]);
 
       // O corte por pessoa é feito AQUI, não na busca: as funções do banco
@@ -276,6 +280,7 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({ company, canVi
             tabelas: tabelasDeImposto,
             horasNoturnas: d.totalNightHours || 0,
             faltasInjustificadas: d.faltasInjustificadas,
+            premiacoes: premiacoesDoPeriodo,
           }));
         }
       }
