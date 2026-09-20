@@ -3,6 +3,24 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 SESSÃO 19/09 (leva 7) — DESLIGADO SOME DAS TELAS.** Commit `c60c0cf`.
+>
+> ✅ Regra num lugar só (`utils/desligados.ts`): aparece se não tem data de saída, OU se
+> saiu durante/depois do período, OU se tem dado nele. **Não é conta nova** — é o
+> `teveAlgo` do relatório (12/09) valendo em todas as telas.
+> ✅ Funcionários (botão "Mostrar desligados"), Financeiro, Ponto, Erros, Espelho em
+> massa, Gestão de Dados e Admin. **C6 e Relatórios já estavam certos.**
+> ⚠️ **A trava de BATER PONTO está escrita e NÃO PUBLICADA** — vive na
+> `clock-in-validated` e publicar é deploy em produção. **Espera o OK do Victor.**
+> 🔴 **Lição do E2E:** o Financeiro só busca o período novo quando o campo de data PERDE
+> o foco (`isEditingDate`). `fill()` sem `blur()` deixa a lista anterior na tela, e o
+> teste afirma coisas sobre a tela errada. **Pôr o teste para conferir o próprio dado no
+> banco** foi o que separou "a tela escondeu" de "os dados nem chegaram".
+> ⚠️ `tests/05-employees.spec.ts` tem 3 vermelhos **pré-existentes** (provados por `git
+> stash`): localizador `input[type="text"]` + `.first()` pega o campo do link de cadastro.
+> ✅ **111 arquivos / 1.776 unitários** · E2E **122 4/4** · sem regressão. Nasce inerte:
+> 0 das 105 fichas tem data de saída.
+
 > **📌 SESSÃO 19/09 (leva 6) — 13º E RESCISÃO NO RELATÓRIO.** Commit `fb28abb`.
 >
 > ✅ Entram em **qualquer período que contenha a data do pagamento** (≠ salário, que é
@@ -2192,7 +2210,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-09-19.md` | **Mais recente.** A FOLHA FICOU COMPLETA em 4 levas: (0+1) o recibo jogava os descontos da folha fora e a folha chegou ao relatorio e a tela; (2) 13o salario com as duas parcelas, avos e media do noturno, migration `20260919220837` aplicada e provada; (3) ferias por avos com o alerta de VENCIDA; (4) rescisao com os 4 motivos, aviso projetado e migration `20260920003533`; (5) 2a via do 13o e da rescisao (migration `20260920023702`), releitura e nunca recalculo; (6) 13o e rescisao no relatorio, por data e verba a verba. Tambem: o ponto do milhar voltou pro dinheiro das telas. 18 das 21 fichas sem data de admissao bloqueiam o uso real das ferias. O recibo de carteira assinada jogava os descontos da folha fora: `linhasDoRecibo` mandava TODAS as linhas pra *proventos*, então falta/INSS/IRRF saíam como "+ R$ 0,00", o total de descontos dava zero e o líquido ignorava o salário (provado gerando o PDF e lendo o texto de dentro). Passou porque os 9 testes do recibo só usavam folha sem falta e sem imposto. Consertado + `totaisDoRecibo` extraído; `utils/folha/folhaDaPessoa` novo (uma conta só pra recibo, relatório e tela); relatórios com salário/noturno/sal. família/férias/faltas/INSS/IRRF e FGTS como custo-empresa; tela do Financeiro mostra o salário. Folha só em MÊS FECHADO, com aviso no recorte menor. 4 decisões do Victor gravadas. 104 arquivos / 1.649 unitários + E2E 116 3/3. Produção inerte: 0 das 105 fichas tem salário. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-19.md` | **Mais recente.** A FOLHA FICOU COMPLETA em 4 levas: (0+1) o recibo jogava os descontos da folha fora e a folha chegou ao relatorio e a tela; (2) 13o salario com as duas parcelas, avos e media do noturno, migration `20260919220837` aplicada e provada; (3) ferias por avos com o alerta de VENCIDA; (4) rescisao com os 4 motivos, aviso projetado e migration `20260920003533`; (5) 2a via do 13o e da rescisao (migration `20260920023702`), releitura e nunca recalculo; (6) 13o e rescisao no relatorio, por data e verba a verba; (7) desligado some das telas (regra em `utils/desligados.ts`), com a trava de bater ponto escrita mas NAO publicada. Tambem: o ponto do milhar voltou pro dinheiro das telas. 18 das 21 fichas sem data de admissao bloqueiam o uso real das ferias. O recibo de carteira assinada jogava os descontos da folha fora: `linhasDoRecibo` mandava TODAS as linhas pra *proventos*, então falta/INSS/IRRF saíam como "+ R$ 0,00", o total de descontos dava zero e o líquido ignorava o salário (provado gerando o PDF e lendo o texto de dentro). Passou porque os 9 testes do recibo só usavam folha sem falta e sem imposto. Consertado + `totaisDoRecibo` extraído; `utils/folha/folhaDaPessoa` novo (uma conta só pra recibo, relatório e tela); relatórios com salário/noturno/sal. família/férias/faltas/INSS/IRRF e FGTS como custo-empresa; tela do Financeiro mostra o salário. Folha só em MÊS FECHADO, com aviso no recorte menor. 4 decisões do Victor gravadas. 104 arquivos / 1.649 unitários + E2E 116 3/3. Produção inerte: 0 das 105 fichas tem salário. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-18.md` | A folha de carteira assinada inteira, em 4 levas: import da Shopee consertado (cabeçalho novo + leitura `dense`, 33 MB em 45s no navegador); salário fixo, salário família e FGTS (8% TRUNCADO, provado contra os 12 recibos reais); falta com atestado, DSR configurável e férias com 1/3; INSS derivado do papel (11/11) e IR calculado pelos dois caminhos. 3 migrations aplicadas. A lista dos 5 pontos pro contador e a tarja "VALORES EM CONFERÊNCIA" nascem daqui. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-15.md` | Distribuição de triagem quebrada desde 03/09 nas duas empresas ("Erro ao distribuir"): o INSERT pedia a linha inteira de volta (`.select()`) e a trava de 03/09 tirou a leitura de `value_per_error`/`total_deducted` → 403. Conserto `.select('id')` (`9c9a804`), provado por simulação no banco + E2E novo que clica em Confirmar (vermelho no código antigo, spec 18 9/9). Semanas de 01–12/09 ficaram sem distribuir. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-14.md` | Sem código. Nota dividida no primeiro uso real: Gessiley mandou as 4 notas (Shopee 7.238 + 7.238, iMile 752,30 + 752,30), todas validadas e conferidas no banco (tomador, emissores, valor, soma = espelho, 30 min, PDFs no bucket); relatório com 4 PIX conferido no código + unit 21/21, falta gerar com dado real antes de pagar. Guia em PDF pro entregador na Área de Trabalho. Regra "não gasta token atoa". | 🟢 ATIVO |

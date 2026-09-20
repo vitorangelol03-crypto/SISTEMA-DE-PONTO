@@ -289,6 +289,7 @@ rescisão** — tudo no ar, com 2 migrations aplicadas e provadas.
 | `718d5a2` | O ponto do milhar no dinheiro das telas |
 | `9650eb7` | 2ª via do 13º e da rescisão |
 | `fb28abb` | 13º e rescisão no relatório |
+| `c60c0cf` | Desligado some das telas |
 | `9c9fcc7` · `1326acc` | checkpoints |
 
 Migrations: `20260919220837` (13º) · `20260920003533` (rescisão).
@@ -395,8 +396,59 @@ de dentro do PDF: **16.990,54 − 203,05 = 16.787,49** com 13º e rescisão junt
 
 ---
 
+---
+
+# LEVA 7 — DESLIGADO SOME DAS TELAS (commit `c60c0cf`)
+
+## A regra, nas palavras do Victor
+*"Se o funcionário trabalhou até o mês 8, ele recebeu no mês 8, no mês 9 ele foi
+desligado, no mês 8 nos registros financeiros vai estar ele lá, mas no mês 9 ele já está
+como desligado"* — e *"não fica ocupando espaço com registro à toa"*.
+
+`utils/desligados.ts`: aparece se **não tem data de saída**, OU se **saiu durante/depois
+daquele período**, OU se **tem algum dado nele**. Não é conta nova — é o mesmo `teveAlgo`
+que o relatório já usava desde 12/09, tirado de dentro de uma tela para valer em todas.
+
+## Decisões do Victor
+1. **Bater ponto:** só até a data de saída — quem sai dia 15 bate até o dia 15, mesmo com
+   a rescisão registrada antes.
+2. **Cadastro:** escondido, com botão "Mostrar desligados (N)".
+3. **Telas em massa:** escondem com a mesma regra (pelo período da operação).
+
+## Onde valeu
+Funcionários · Financeiro · Ponto · Erros (os seletores; a lista já filtrava) · Espelho
+em massa · Gestão de Dados (sem período marcado mostra todos — é a tela de mexer em dado
+antigo) · Admin (facial esconde; o seletor de **consulta de log** não, senão some o
+histórico de quem saiu). **C6 e Relatórios já estavam certos.**
+
+## ⚠️ A trava de bater ponto está escrita e NÃO PUBLICADA
+Vive na edge function `clock-in-validated`, a única que grava batida — esconder da tela
+não impede ninguém de bater pelo celular. **Publicar é deploy em produção e espera o OK
+do Victor.** O commit subiu só o código-fonte.
+
+## 🔴 O E2E me pegou em dois erros meus
+1. Localizador de "a lista carregou" pegou o `<span>Funcionários</span>` do menu, escondido.
+2. **O bom:** eu preenchia a data com `fill()` e ia direto conferir a tela — mas o
+   Financeiro só busca o período novo quando o campo **perde o foco** (`isEditingDate`,
+   para não consultar a cada tecla). A lista continuava a anterior e o teste afirmava
+   coisas sobre a tela errada.
+   **O que tornou isso visível:** pôr o teste para conferir o PRÓPRIO dado no banco antes
+   de olhar a tela. Sem isso, "a tela escondeu" e "os dados nem foram buscados" davam
+   exatamente o mesmo vermelho — e a investigação começou pelo lado errado.
+
+## ⚠️ Vizinhança: 3 vermelhos PRÉ-EXISTENTES em `tests/05-employees.spec.ts`
+Provados por `git stash` (falham igual sem esta leva). O teste usa `input[type="text"]`
+com `.first()` e pega o campo **somente-leitura do link público de cadastro**. Não mexido.
+
+## Validação
+typecheck 0 · lint 0 · build limpo · **111 arquivos / 1.776 unitários** (10 lotes,
+contados um a um) · E2E **122 4/4** novo · 03-attendance e 21-employees sem regressão.
+Nasce inerte: **0 das 105 fichas tem data de saída**.
+
+---
+
 ## O que a folha ainda NÃO faz (atualizado)
-- Desligado continua aparecendo em todas as telas (decisão 4, de propósito — esconder
-  mexeria em todas as abas de uma vez e pede leva própria).
 - ~~Não há tela para reimprimir~~ — **fechado na leva 5.**
 - ~~Os relatórios não mostram 13º nem rescisão~~ — **fechado na leva 6.**
+- ~~Desligado continua aparecendo em todas as telas~~ — **fechado na leva 7**, menos a
+  trava de bater ponto, que espera o OK para publicar.
