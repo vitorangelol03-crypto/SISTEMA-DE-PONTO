@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
-import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft, FileText, Gift, Palmtree } from 'lucide-react';
+import { DollarSign, Calendar, Users, Calculator, CreditCard as Edit2, Save, X, Trash2, RefreshCw, AlertTriangle, Minus, History, Download, Search, Wallet, FileSpreadsheet, CalendarRange, ChevronLeft, FileText, Gift, Palmtree, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
   getAllEmployees, getPayments, upsertPayment, deletePayment, Employee, Payment, getAttendanceHistory, Attendance, getPayrollConfig, getEmployeeVacations, type EmployeeVacation, getTabelasDeImposto, type TabelasDeImposto,
@@ -37,6 +37,11 @@ const DecimoTerceiroPanel = lazy(() =>
 /* Férias lê o ponto desde a admissão mais antiga: idem. */
 const FeriasPanel = lazy(() =>
   import('./FeriasPanel').then(m => ({ default: m.FeriasPanel })),
+);
+
+/* Rescisão puxa o jsPDF e o ponto do contrato inteiro: idem. */
+const RescisaoPanel = lazy(() =>
+  import('./RescisaoPanel').then(m => ({ default: m.RescisaoPanel })),
 );
 import { SelecaoParaPdf, type PessoaDoPdf } from './SelecaoParaPdf';
 import type {
@@ -265,7 +270,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
    * O histórico é a porta de entrada; a lista de pagamentos é o que está DENTRO
    * de uma semana. Quem quiser a lista solta continua tendo o botão "Pagamentos".
    */
-  const [activeView, setActiveView] = useState<'financial' | 'history' | 'payments-history' | 'relatorios' | 'decimo' | 'ferias'>('payments-history');
+  const [activeView, setActiveView] = useState<'financial' | 'history' | 'payments-history' | 'relatorios' | 'decimo' | 'ferias' | 'rescisao'>('payments-history');
   /**
    * Preenchido quando a pessoa entrou na lista VINDO de uma semana/mês do
    * histórico — é o que permite voltar pra onde ela estava. `null` quando ela
@@ -1423,6 +1428,22 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             <Palmtree className="w-4 h-4" />
             <span>Férias</span>
           </button>
+
+          {/* Rescisão (19/09/2026) — o documento mais caro que esta folha emite. */}
+          <button
+            onClick={() => setActiveView('rescisao')}
+            disabled={!hasPermission('employees.viewPayroll')}
+            title={!hasPermission('employees.viewPayroll') ? 'Você não tem permissão para ver salário' : ''}
+            data-testid="rescisao-btn"
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] whitespace-nowrap ${
+              activeView === 'rescisao'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Rescisão</span>
+          </button>
         </div>
 
         {/* A volta pro histórico. Sem isto o fluxo era de mão única: a pessoa
@@ -2329,6 +2350,24 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
         }>
           <div className="bg-white rounded-lg shadow p-4 sm:p-6">
             <FeriasPanel company={company!} />
+          </div>
+        </Suspense>
+      )}
+
+      {activeView === 'rescisao' && (
+        <Suspense fallback={
+          <div className="bg-white rounded-lg shadow p-8 text-center">
+            <RefreshCw className="w-8 h-8 mx-auto text-gray-400 animate-spin mb-3" />
+            <p className="text-sm text-gray-500">Abrindo a rescisão…</p>
+          </div>
+        }>
+          <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+            <RescisaoPanel
+              company={company!}
+              userId={userId}
+              canViewValues={canViewValues}
+              hasPermission={hasPermission}
+            />
           </div>
         </Suspense>
       )}

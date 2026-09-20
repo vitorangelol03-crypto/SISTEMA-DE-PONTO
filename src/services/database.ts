@@ -91,6 +91,9 @@ export interface Employee {
   // nascem vazios e, sem preencher, a folha não inventa valor nenhum.
   monthly_salary?: number | null;
   family_allowance_children?: number | null;
+  /** Data de saída (19/09/2026). Nula = pessoa ativa. */
+  termination_date?: string | null;
+  termination_reason?: string | null;
   ctps_number?: string | null;
   ctps_series?: string | null;
   cbo?: string | null;
@@ -116,6 +119,9 @@ export interface EmployeeExtras {
   // Sem a permissão, a tela nem monta estes campos — o que já estava gravado não muda.
   monthly_salary?: number | null;
   family_allowance_children?: number | null;
+  /** Data de saída (19/09/2026). Nula = pessoa ativa. */
+  termination_date?: string | null;
+  termination_reason?: string | null;
   ctps_number?: string | null;
   ctps_series?: string | null;
   cbo?: string | null;
@@ -2741,6 +2747,76 @@ export const registrarDecimoTerceiro = async (
 export const apagarDecimoTerceiro = async (id: string): Promise<void> => {
   const { error } = await supabase.from('payroll_thirteenth').delete().eq('id', id);
   if (error) throw error;
+};
+
+// ─── RESCISÃO (19/09/2026) ──────────────────────────────────────────────────
+// O acerto é guardado inteiro: é o que permite reimprimir o MESMO termo depois, com o
+// salário e as tabelas que eram. Numa rescisão isso não é conforto — é o documento.
+
+export interface RescisaoRegistrada {
+  id: string;
+  employee_id: string;
+  company_id: string;
+  data_de_saida: string;
+  motivo: string;
+  aviso: string;
+  dias_de_aviso: number;
+  anos_de_casa: number;
+  saldo_de_salario: number;
+  aviso_previo: number;
+  aviso_descontado: number;
+  decimo_proporcional: number;
+  ferias_vencidas: number;
+  terco_vencidas: number;
+  ferias_proporcionais: number;
+  terco_proporcionais: number;
+  saldo_fgts_informado: number;
+  multa_fgts: number;
+  inss: number;
+  irrf: number;
+  inss_decimo: number;
+  irrf_decimo: number;
+  total_proventos: number;
+  total_descontos: number;
+  liquido: number;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** As rescisões já geradas na empresa, da mais recente para a mais antiga. */
+export const getRescisoes = async (companyId: string): Promise<RescisaoRegistrada[]> => {
+  const { data, error } = await supabase
+    .from('payroll_termination')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('data_de_saida', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as RescisaoRegistrada[];
+};
+
+/**
+ * Grava o acerto E carimba a saída na ficha, nesta ordem.
+ *
+ * A ficha é carimbada DEPOIS: se o acerto falhar, ninguém fica marcado como desligado
+ * sem o documento que explica a saída. O contrário deixaria a pessoa fora do ar sem
+ * papel nenhum.
+ *
+ * Decisão 4 do Victor: carimbar é tudo que acontece — a pessoa continua aparecendo nas
+ * telas como hoje.
+ */
+export const registrarRescisao = async (
+  acerto: Omit<RescisaoRegistrada, 'id' | 'created_at'>
+): Promise<void> => {
+  const { error } = await supabase
+    .from('payroll_termination')
+    .upsert([acerto], { onConflict: 'employee_id,data_de_saida' });
+  if (error) throw error;
+
+  const { error: erroDaFicha } = await supabase
+    .from('employees')
+    .update({ termination_date: acerto.data_de_saida, termination_reason: acerto.motivo })
+    .eq('id', acerto.employee_id);
+  if (erroDaFicha) throw erroDaFicha;
 };
 
 export interface TriageDistributionPreview {
