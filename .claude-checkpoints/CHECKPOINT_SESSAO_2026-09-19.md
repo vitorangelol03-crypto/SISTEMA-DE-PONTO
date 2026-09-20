@@ -288,6 +288,7 @@ rescisão** — tudo no ar, com 2 migrations aplicadas e provadas.
 | `12bc30c` | Leva 4 — rescisão |
 | `718d5a2` | O ponto do milhar no dinheiro das telas |
 | `9650eb7` | 2ª via do 13º e da rescisão |
+| `fb28abb` | 13º e rescisão no relatório |
 | `9c9fcc7` · `1326acc` | checkpoints |
 
 Migrations: `20260919220837` (13º) · `20260920003533` (rescisão).
@@ -358,9 +359,44 @@ novo · 117 e 119 sem regressão (10 verdes). Deploy conferido por conteúdo (3/
 
 ---
 
+---
+
+# LEVA 6 — 13º E RESCISÃO NO RELATÓRIO (commit `fb28abb`)
+
+## Decisões do Victor
+1. **Entram em qualquer período que contenha a data do pagamento** — diferente do
+   salário, que só sai em mês fechado. O motivo: eles são pagamentos que aconteceram
+   num DIA; o salário é uma competência mensal que não dá para fatiar.
+2. **Cada verba numa linha**, como o relatório já faz com o resto.
+
+## O que entrou
+- `getDecimoTerceiroPorPagamento` e `getRescisoesNoPeriodo` buscam por **data**, não pelo
+  ano do 13º: a 1ª parcela pode ter saído em novembro e a 2ª em dezembro.
+- **`utils/folha/papelGravado.ts`** — lê o papel guardado, **nunca recalcula** (mesma
+  regra da 2ª via). Sem o `papel`, monta um bloco mínimo dos valores: o detalhe se perde,
+  **o dinheiro não**. Sumir com a verba faria o total não fechar sem explicação.
+- Quem só recebeu 13º ou rescisão no período passa a aparecer no relatório.
+
+## 🔴 Achado gerando o relatório de verdade
+Em dezembro a pessoa pode receber o 13º do ano **e** ser desligada no mesmo mês — e saía
+**"INSS sobre 13º" duas vezes**, com valores diferentes, que lido de fora parece erro de
+duplicação. O da rescisão virou **"INSS sobre 13º proporcional"**.
+
+## ⚠️ Erro MEU na validação, corrigido aqui
+Meu laço de lotes ia só até o 9º, mas o `split` criava **10**. O commit da leva 5 disse
+"109 arquivos" tendo rodado **108**. O que faltou (`xlsxSecurity.spec.ts`) foi rodado e
+está verde — nenhuma regressão ficou escondida, mas a contagem estava errada.
+**Lição, junto com a do `split -d`: conferir `ls lote_* | wc -l` contra o laço.**
+
+## Validação
+typecheck 0 · lint 0 · build limpo · **110 arquivos / 1.762 unitários** (os 10 lotes) ·
+E2E **121 1/1** novo · 116, 06 e 119 sem regressão (14 verdes). Relatório gerado e lido
+de dentro do PDF: **16.990,54 − 203,05 = 16.787,49** com 13º e rescisão juntos.
+
+---
+
 ## O que a folha ainda NÃO faz (atualizado)
-- Os relatórios não mostram 13º nem rescisão (só a folha mensal). **É o próximo
-  candidato natural.**
 - Desligado continua aparecendo em todas as telas (decisão 4, de propósito — esconder
   mexeria em todas as abas de uma vez e pede leva própria).
 - ~~Não há tela para reimprimir~~ — **fechado na leva 5.**
+- ~~Os relatórios não mostram 13º nem rescisão~~ — **fechado na leva 6.**
