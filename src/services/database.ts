@@ -2707,6 +2707,11 @@ export interface DecimoTerceiroPago {
   adiantamento: number;
   valor: number;
   pago_em: string;
+  /**
+   * O cálculo INTEIRO como foi emitido. A 2ª via relê isto em vez de recalcular — se o
+   * salário ou a tabela de imposto mudarem depois, o papel velho continua o mesmo.
+   */
+  papel?: unknown;
   created_by: string | null;
   created_at: string;
 }
@@ -2779,6 +2784,8 @@ export interface RescisaoRegistrada {
   total_proventos: number;
   total_descontos: number;
   liquido: number;
+  /** O acerto INTEIRO como foi emitido. A 2ª via relê isto, nunca recalcula. */
+  papel?: unknown;
   created_by: string | null;
   created_at: string;
 }

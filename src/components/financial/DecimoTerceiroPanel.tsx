@@ -36,7 +36,7 @@ import {
 import { CONFIGURACAO_DA_FOLHA_PADRAO } from '../../utils/folha/folhaCalc';
 import { decimoDaPessoa } from '../../utils/folha/decimoDaPessoa';
 import type { DecimoCalculado, ParcelaDoDecimo } from '../../utils/folha/decimoTerceiro';
-import { generateLoteHoleritePdf } from '../../utils/holeritePdf';
+import { downloadHoleritePdf, generateLoteHoleritePdf } from '../../utils/holeritePdf';
 import { moneyBRL } from '../../utils/moneyMask';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
 import { getBrazilDate } from '../../utils/dateUtils';
@@ -185,6 +185,51 @@ export const DecimoTerceiroPanel: React.FC<Props> = ({ company, userId, canViewV
     }
   }, [comDireito, company, ano, parcela]);
 
+  /**
+   * A 2ª VIA: relê o papel gravado e imprime, sem recalcular nada.
+   *
+   * Recalcular seria o erro clássico — se o salário ou a tabela de imposto mudarem, o
+   * recálculo daria outro número e a 2ª via não bateria com o dinheiro que saiu do caixa.
+   */
+  const reimprimir = useCallback(async (l: LinhaDoDecimo) => {
+    const guardado = l.jaRegistrado?.papel as DecimoCalculado | undefined;
+    if (!guardado || !guardado.linhas) {
+      toast.error('Esta parcela foi registrada antes da 2ª via existir — não dá para reimprimir fiel.');
+      return;
+    }
+    setTrabalhando('pdf');
+    try {
+      await downloadHoleritePdf({
+        company: { name: company.display_name || company.legal_name || 'Empresa', cnpj: company.cnpj || undefined },
+        employee: {
+          name: l.employee.name,
+          cpf: l.employee.cpf,
+          employmentType: l.employee.employment_type || undefined,
+          functionRole: l.employee.function_role || undefined,
+          hireDate: l.employee.hire_date || undefined,
+        },
+        period: { start: `${ano}-01-01`, end: `${ano}-12-31` },
+        payments: [],
+        errorDiscount: 0,
+        triageDiscount: 0,
+        totalDailyRate: 0,
+        totalBonusB: 0,
+        totalBonusC1: 0,
+        totalBonusC2: 0,
+        totalGross: 0,
+        totalNet: 0,
+        decimo: guardado,
+        segundaVia: true,
+      }, `13o_2via_${l.employee.name.replace(/\s+/g, '_')}_${ano}.pdf`);
+      toast.success('2ª via gerada com os valores que foram pagos.');
+    } catch (err) {
+      console.error('Erro ao reimprimir o 13º:', err);
+      toast.error(mensagemDeErro(err, 'Não consegui gerar a 2ª via.'));
+    } finally {
+      setTrabalhando(null);
+    }
+  }, [company, ano]);
+
   const registrar = useCallback(async () => {
     if (comDireito.length === 0) return;
     if (!podeRegistrar) {
@@ -218,6 +263,8 @@ export const DecimoTerceiroPanel: React.FC<Props> = ({ company, userId, canViewV
           adiantamento: d.adiantamento,
           valor: d.valor,
           pago_em: hoje,
+          // O papel INTEIRO como está saindo: a 2ª via relê isto em vez de recalcular.
+          papel: d,
           created_by: userId,
         });
       }
@@ -353,9 +400,20 @@ export const DecimoTerceiroPanel: React.FC<Props> = ({ company, userId, canViewV
                     </td>
                     <td className="px-4 py-2 text-center">
                       {l.jaRegistrado ? (
-                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                          {l.jaRegistrado.pago_em.split('-').reverse().join('/')}
-                        </span>
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                            {l.jaRegistrado.pago_em.split('-').reverse().join('/')}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => reimprimir(l)}
+                            disabled={trabalhando !== null}
+                            data-testid="decimo-reimprimir"
+                            className="text-xs text-blue-700 underline hover:text-blue-900 disabled:opacity-50"
+                          >
+                            2ª via
+                          </button>
+                        </div>
                       ) : (
                         <span className="text-xs text-gray-400">—</span>
                       )}

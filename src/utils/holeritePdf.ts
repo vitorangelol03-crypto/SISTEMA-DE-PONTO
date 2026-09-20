@@ -102,6 +102,15 @@ export interface HoleriteData {
    * misturado esconderia de onde saiu cada imposto.
    */
   rescisao?: RescisaoCalculada;
+  /**
+   * 2ª VIA (19/09/2026): este papel está sendo REIMPRESSO a partir do que foi gravado,
+   * e não recalculado agora.
+   *
+   * O papel diz isso na cara de propósito. Duas vias do mesmo acerto circulando como
+   * original é exatamente o que não pode existir — ainda mais numa rescisão, que é o
+   * documento que vale num processo.
+   */
+  segundaVia?: boolean;
 }
 
 const PAGE_W = 595;
@@ -171,7 +180,7 @@ function desenharRecibo(doc: jsPDF, data: HoleriteData): void {
         : data.decimo.parcela === 'segunda' ? 'RECIBO DE 13º SALÁRIO — 2ª PARCELA'
           : 'RECIBO DE 13º SALÁRIO'
       : 'RECIBO DE PAGAMENTO';
-  doc.text(titulo, PAGE_W / 2, 96, { align: 'center' });
+  doc.text(data.segundaVia ? `${titulo} — 2ª VIA` : titulo, PAGE_W / 2, 96, { align: 'center' });
   doc.setFont('helvetica', 'normal').setFontSize(10);
   const periodoStr = `Período: ${formatDateBR(data.period.start)} a ${formatDateBR(data.period.end)}`;
   doc.setTextColor(220);

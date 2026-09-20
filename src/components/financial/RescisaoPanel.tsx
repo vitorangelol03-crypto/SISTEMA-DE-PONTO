@@ -28,7 +28,9 @@ import {
   getEmployeeVacationsOfEmployee,
   getPayrollConfig,
   getTabelasDeImposto,
+  getRescisoes,
   registrarRescisao,
+  type RescisaoRegistrada,
   type Company,
   type Employee,
   type Attendance,
@@ -71,6 +73,8 @@ export const RescisaoPanel: React.FC<Props> = ({ company, userId, canViewValues,
   const [saldoFgts, setSaldoFgts] = useState('');
 
   const [acerto, setAcerto] = useState<RescisaoCalculada | null>(null);
+  /** As rescisões já emitidas na empresa — a lista de onde sai a 2ª via. */
+  const [geradas, setGeradas] = useState<RescisaoRegistrada[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [trabalhando, setTrabalhando] = useState<'pdf' | 'registrar' | null>(null);
@@ -85,7 +89,17 @@ export const RescisaoPanel: React.FC<Props> = ({ company, userId, canViewValues,
     }
   }, [company.id]);
 
+  const carregarGeradas = useCallback(async () => {
+    try {
+      setGeradas(await getRescisoes(company.id));
+    } catch {
+      // A lista de 2ª via é conforto: se ela falhar, a tela principal continua de pé.
+      setGeradas([]);
+    }
+  }, [company.id]);
+
   React.useEffect(() => { void carregarPessoas(); }, [carregarPessoas]);
+  React.useEffect(() => { void carregarGeradas(); }, [carregarGeradas]);
 
   const visiveis = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -183,6 +197,54 @@ export const RescisaoPanel: React.FC<Props> = ({ company, userId, canViewValues,
     }
   }, [acerto, escolhida, papel, dataDeSaida]);
 
+  /**
+   * A 2ª VIA: relê o acerto gravado e imprime, sem recalcular nada.
+   *
+   * Numa rescisão isto não é conforto. Recalcular hoje um acerto de meses atrás — com
+   * outro salário na ficha, outra tabela de imposto, outras férias lançadas — daria um
+   * papel diferente do que a pessoa assinou. Duas vias divergentes do mesmo acerto é
+   * exatamente o que não pode existir num documento que vale num processo.
+   */
+  const reimprimir = useCallback(async (r: RescisaoRegistrada) => {
+    const guardado = r.papel as RescisaoCalculada | undefined;
+    const pessoa = (pessoas ?? []).find(p => p.id === r.employee_id);
+    if (!guardado || !guardado.linhas) {
+      toast.error('Esta rescisão foi registrada antes da 2ª via existir — não dá para reimprimir fiel.');
+      return;
+    }
+    setTrabalhando('pdf');
+    try {
+      await downloadHoleritePdf({
+        company: { name: company.display_name || company.legal_name || 'Empresa', cnpj: company.cnpj || undefined },
+        employee: {
+          name: pessoa?.name ?? 'Funcionário',
+          cpf: pessoa?.cpf ?? null,
+          employmentType: pessoa?.employment_type || undefined,
+          functionRole: pessoa?.function_role || undefined,
+          hireDate: pessoa?.hire_date || undefined,
+        },
+        period: { start: pessoa?.hire_date ?? r.data_de_saida, end: r.data_de_saida },
+        payments: [],
+        errorDiscount: 0,
+        triageDiscount: 0,
+        totalDailyRate: 0,
+        totalBonusB: 0,
+        totalBonusC1: 0,
+        totalBonusC2: 0,
+        totalGross: 0,
+        totalNet: 0,
+        rescisao: guardado,
+        segundaVia: true,
+      }, `Rescisao_2via_${(pessoa?.name ?? 'funcionario').replace(/\s+/g, '_')}_${r.data_de_saida}.pdf`);
+      toast.success('2ª via gerada com os valores do acerto original.');
+    } catch (err) {
+      console.error('Erro ao reimprimir a rescisão:', err);
+      toast.error(mensagemDeErro(err, 'Não consegui gerar a 2ª via.'));
+    } finally {
+      setTrabalhando(null);
+    }
+  }, [company, pessoas]);
+
   const registrar = useCallback(async () => {
     if (!acerto || !escolhida) return;
     if (!podeRegistrar) {
@@ -222,17 +284,20 @@ export const RescisaoPanel: React.FC<Props> = ({ company, userId, canViewValues,
         total_proventos: acerto.totalProventos,
         total_descontos: acerto.totalDescontos,
         liquido: acerto.liquido,
+        // O acerto INTEIRO como está saindo: a 2ª via relê isto, nunca recalcula.
+        papel: acerto,
         created_by: userId,
       });
       toast.success('Desligamento registrado e acerto guardado.');
       await carregarPessoas();
+      await carregarGeradas();
     } catch (err) {
       console.error('Erro ao registrar a rescisão:', err);
       toast.error(mensagemDeErro(err, 'Não consegui registrar. Nada foi perdido.'));
     } finally {
       setTrabalhando(null);
     }
-  }, [acerto, escolhida, podeRegistrar, dataDeSaida, motivo, aviso, saldoFgts, company.id, userId, carregarPessoas]);
+  }, [acerto, escolhida, podeRegistrar, dataDeSaida, motivo, aviso, saldoFgts, company.id, userId, carregarPessoas, carregarGeradas]);
 
   return (
     <div className="space-y-4" data-testid="rescisao-panel">
@@ -457,6 +522,45 @@ export const RescisaoPanel: React.FC<Props> = ({ company, userId, canViewValues,
             para reimprimir depois — a pessoa continua aparecendo nas telas.
           </p>
         </>
+      )}
+
+      {/* ─── As rescisões já emitidas, de onde sai a 2ª via ─── */}
+      {geradas.length > 0 && (
+        <details className="text-sm border-t border-gray-200 pt-4" data-testid="rescisao-geradas">
+          <summary className="cursor-pointer text-gray-700 hover:text-gray-900 font-medium">
+            {geradas.length} {geradas.length === 1 ? 'rescisão já emitida' : 'rescisões já emitidas'} — tirar 2ª via
+          </summary>
+          <ul className="mt-2 divide-y divide-gray-100 border border-gray-200 rounded-md">
+            {geradas.map(r => {
+              const pessoa = (pessoas ?? []).find(p => p.id === r.employee_id);
+              return (
+                <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <div>
+                    <span className="font-medium text-gray-900">{pessoa?.name ?? 'Funcionário'}</span>
+                    <span className="block text-xs text-gray-600">
+                      {formatDateBR(r.data_de_saida)} ·{' '}
+                      {MOTIVOS.find(m => m.id === r.motivo)?.nome ?? r.motivo} ·{' '}
+                      {moneyBRL(Number(r.liquido), canViewValues)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => reimprimir(r)}
+                    disabled={trabalhando !== null}
+                    data-testid="rescisao-reimprimir"
+                    className="text-xs text-blue-700 underline hover:text-blue-900 disabled:opacity-50 shrink-0"
+                  >
+                    2ª via
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="text-xs text-gray-500 mt-2">
+            A 2ª via relê o acerto que foi gravado — não recalcula. Se o salário ou a tabela de
+            imposto mudarem depois, o papel continua o mesmo que a pessoa assinou.
+          </p>
+        </details>
       )}
     </div>
   );
