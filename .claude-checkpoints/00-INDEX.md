@@ -3,6 +3,37 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 20/09 — O SISTEMA JOGAVA UM CENTAVO FORA. CONFERIDO POR FORA E CORRIGIDO NA RAIZ.**
+>
+> 🔴 **Bug real, achado por um conferidor INDEPENDENTE** (implementação separada, escrita
+> a partir da regra da lei, sobre 431 casos): `truncaCentavos` fazia
+> `Math.floor(valor * 100)`, e em ponto flutuante `5.06 * 100` vale **505.99999999999994**
+> — o `floor` derrubava para 505 e pagava R$ 5,05. Medido centavo a centavo de R$ 1.000 a
+> R$ 15.000: **5,34% dos salários** (mês não cheio), 0,24% do FGTS, 0,04% do INSS. Sempre
+> **contra o funcionário**.
+> ✅ **Raiz:** estava **copiado em 4 arquivos**. Agora é um só (`utils/folha/dinheiro.ts`),
+> multiplicando primeiro e limpando o ruído depois. Teste escrito **vermelho primeiro**
+> (`tests/unit/centavoTruncado.spec.ts`, 4 falhas → 6/6), com 2 guardas que não podiam
+> quebrar (o caso da Silvia e "continua truncando de verdade").
+> ✅ **Conferência final: 5.640 conferências, 0 divergências.** Refaz o imposto por fora E
+> checa as leis que têm que valer sempre (o líquido fecha; premiação e salário família
+> fora de toda base; 1ª parcela do 13º sem imposto; 1ª+2ª = única; justa causa sem multa;
+> art. 130 por período).
+> ✅ **1.833 unitários (115 arquivos) · E2E folha 37/37 · build · tsc · lint** — tudo verde.
+> ✅ **Produção intocada:** 0 fichas com salário, 0 décimos, 0 rescisões. Ninguém foi pago
+> errado.
+> 🔴 **O RISCO MAIOR NÃO É O BUG, É A TABELA:** `payroll_tax_tables` está `confirmado:
+> false`. Só a 1ª e a 2ª faixa do INSS foram provadas contra recibo real. **As faixas de
+> 12% e 14%, o teto e o IRRF INTEIRO nunca foram conferidos.** Até ~R$ 3.041 é terreno
+> provado; acima, não. **Pendência: pedir a tabela de 2026 ao contador.**
+> 🔴 **Duas armadilhas que fizeram uma rodada inteira MENTIR:** `--reporter=basic` não
+> existe no vitest 4 (10 lotes morreram na largada e o log terminou com "lotes com falha:
+> 0"); e `código=$?` não funciona no bash (acento no nome da variável). Os 3 sinais
+> existem para isso.
+> ✅ **Tutorial na 10ª página:** "A conta do INSS, por dentro" — as faixas abertas, o
+> corte dos centavos no fim (128,68 e não 128,67) e o **"9,00%" impresso que na verdade é
+> 7,57% pago**. Detalhe em `CHECKPOINT_SESSAO_2026-09-20.md`.
+
 > **📌 20/09 — SIMULAÇÃO COM GENTE DE VERDADE NAS DUAS EMPRESAS.** Commit `ad297dc`.
 >
 > 🔒 **`tests/125`, somente leitura**: usa funcionários, batidas e pagamentos REAIS.
@@ -2262,7 +2293,8 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-09-19.md` | **Mais recente.** A FOLHA FICOU COMPLETA em 4 levas: (0+1) o recibo jogava os descontos da folha fora e a folha chegou ao relatorio e a tela; (2) 13o salario com as duas parcelas, avos e media do noturno, migration `20260919220837` aplicada e provada; (3) ferias por avos com o alerta de VENCIDA; (4) rescisao com os 4 motivos, aviso projetado e migration `20260920003533`; (5) 2a via do 13o e da rescisao (migration `20260920023702`), releitura e nunca recalculo; (6) 13o e rescisao no relatorio, por data e verba a verba; (7) desligado some das telas (regra em `utils/desligados.ts`), com a trava de bater ponto escrita mas NAO publicada. Tambem: o ponto do milhar voltou pro dinheiro das telas. 18 das 21 fichas sem data de admissao bloqueiam o uso real das ferias. O recibo de carteira assinada jogava os descontos da folha fora: `linhasDoRecibo` mandava TODAS as linhas pra *proventos*, então falta/INSS/IRRF saíam como "+ R$ 0,00", o total de descontos dava zero e o líquido ignorava o salário (provado gerando o PDF e lendo o texto de dentro). Passou porque os 9 testes do recibo só usavam folha sem falta e sem imposto. Consertado + `totaisDoRecibo` extraído; `utils/folha/folhaDaPessoa` novo (uma conta só pra recibo, relatório e tela); relatórios com salário/noturno/sal. família/férias/faltas/INSS/IRRF e FGTS como custo-empresa; tela do Financeiro mostra o salário. Folha só em MÊS FECHADO, com aviso no recorte menor. 4 decisões do Victor gravadas. 104 arquivos / 1.649 unitários + E2E 116 3/3. Produção inerte: 0 das 105 fichas tem salário. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-20.md` | **Mais recente.** Pedido do Victor: *"testa todo o sistema, o fluxo completo... se ele calcula os valores corretos e pode realmente confiar nessas folhas"*. Montado um **conferidor independente** (implementacao separada em Python, escrita da regra da lei) rodando o sistema sobre **431 casos**: **5.640 conferencias, 0 divergencias** — refaz INSS/IRRF/FGTS por fora E checa invariantes (liquido fecha, premiacao e salario familia fora de toda base, 1a parcela do 13o sem imposto, 1a+2a = unica, justa causa sem multa, art. 130 por periodo). 🔴 **Achou bug real: o centavo do truncamento** (`Math.floor(v*100)`, 5.06*100 = 505.99999999999994) em 5,34% dos salarios de mes nao cheio, sempre contra o funcionario; raiz era estar **copiado em 4 arquivos** → `utils/folha/dinheiro.ts`, teste vermelho primeiro. 🔴 **Risco maior que o bug: as tabelas estao `confirmado: false`** — so a 1a e 2a faixa do INSS foram provadas; 12%, 14%, teto e IRRF inteiro, nunca. 🔴 Duas armadilhas de ferramenta fizeram uma rodada mentir (`--reporter=basic` inexistente no vitest 4; `codigo=$?` com acento no bash). Tutorial ganhou a 10a pagina com a conta do INSS aberta. 1.833 unitarios / 115 arquivos · E2E folha 37/37 · build · tsc · lint. Producao intocada. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-19.md` | A FOLHA FICOU COMPLETA em 4 levas: (0+1) o recibo jogava os descontos da folha fora e a folha chegou ao relatorio e a tela; (2) 13o salario com as duas parcelas, avos e media do noturno, migration `20260919220837` aplicada e provada; (3) ferias por avos com o alerta de VENCIDA; (4) rescisao com os 4 motivos, aviso projetado e migration `20260920003533`; (5) 2a via do 13o e da rescisao (migration `20260920023702`), releitura e nunca recalculo; (6) 13o e rescisao no relatorio, por data e verba a verba; (7) desligado some das telas (regra em `utils/desligados.ts`), com a trava de bater ponto escrita mas NAO publicada. Tambem: o ponto do milhar voltou pro dinheiro das telas. 18 das 21 fichas sem data de admissao bloqueiam o uso real das ferias. O recibo de carteira assinada jogava os descontos da folha fora: `linhasDoRecibo` mandava TODAS as linhas pra *proventos*, então falta/INSS/IRRF saíam como "+ R$ 0,00", o total de descontos dava zero e o líquido ignorava o salário (provado gerando o PDF e lendo o texto de dentro). Passou porque os 9 testes do recibo só usavam folha sem falta e sem imposto. Consertado + `totaisDoRecibo` extraído; `utils/folha/folhaDaPessoa` novo (uma conta só pra recibo, relatório e tela); relatórios com salário/noturno/sal. família/férias/faltas/INSS/IRRF e FGTS como custo-empresa; tela do Financeiro mostra o salário. Folha só em MÊS FECHADO, com aviso no recorte menor. 4 decisões do Victor gravadas. 104 arquivos / 1.649 unitários + E2E 116 3/3. Produção inerte: 0 das 105 fichas tem salário. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-18.md` | A folha de carteira assinada inteira, em 4 levas: import da Shopee consertado (cabeçalho novo + leitura `dense`, 33 MB em 45s no navegador); salário fixo, salário família e FGTS (8% TRUNCADO, provado contra os 12 recibos reais); falta com atestado, DSR configurável e férias com 1/3; INSS derivado do papel (11/11) e IR calculado pelos dois caminhos. 3 migrations aplicadas. A lista dos 5 pontos pro contador e a tarja "VALORES EM CONFERÊNCIA" nascem daqui. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-15.md` | Distribuição de triagem quebrada desde 03/09 nas duas empresas ("Erro ao distribuir"): o INSERT pedia a linha inteira de volta (`.select()`) e a trava de 03/09 tirou a leitura de `value_per_error`/`total_deducted` → 403. Conserto `.select('id')` (`9c9a804`), provado por simulação no banco + E2E novo que clica em Confirmar (vermelho no código antigo, spec 18 9/9). Semanas de 01–12/09 ficaram sem distribuir. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-14.md` | Sem código. Nota dividida no primeiro uso real: Gessiley mandou as 4 notas (Shopee 7.238 + 7.238, iMile 752,30 + 752,30), todas validadas e conferidas no banco (tomador, emissores, valor, soma = espelho, 30 min, PDFs no bucket); relatório com 4 PIX conferido no código + unit 21/21, falta gerar com dado real antes de pagar. Guia em PDF pro entregador na Área de Trabalho. Regra "não gasta token atoa". | 🟢 ATIVO |
