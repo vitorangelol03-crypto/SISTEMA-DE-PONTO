@@ -144,3 +144,78 @@ empresa. Conserto é de 1 linha em `src/utils/moneyMask.ts`, mas muda três tela
 `tests/57-driverpay-edits-roundtrip.spec.ts` e `CHECKPOINT_SESSAO_2026-09-15.md` seguem
 modificados e sem commit desde 15/09; os 3 PDFs soltos na raiz (`espelho.pdf`,
 `lote.pdf`, `x.pdf`) continuam lá. Deixados como estavam, de propósito.
+
+---
+
+# LEVA 2 — 13º SALÁRIO (commit `0e23499`)
+
+## Decisões do Victor (gravadas)
+1. **As duas opções de parcela**, escolhidas na hora: 1ª + 2ª, ou única.
+2. **Base = salário + média do adicional noturno** do ano (o correto pela lei).
+3. **Avos pela regra dos 15 dias** (art. 146).
+
+## O que entrou
+- `utils/folha/decimoTerceiro.ts` (conta pura) e `decimoDaPessoa.ts` (tira avos e média
+  do noturno do PONTO do ano, reusando a `horasNoturnasDoDia` — exportada pra isso).
+- O recibo aprendeu 13º: título por parcela, linhas pelo mesmo caminho da folha mensal
+  (herdou de graça a separação provento/desconto da leva 0), rodapé com os **AVOS**.
+- Tela "13º Salário" no Financeiro: ano, parcela, lista, quem ficou de fora **com o
+  motivo**. **Baixar** não grava; **Registrar** grava — separados de propósito.
+- Migration `20260919220837` (`payroll_thirteenth`), **aplicada com OK do Victor** e
+  provada: catálogo (RLS, anon barrado, trigger) + 3 simulações que se desfizeram
+  (04 barrado com 42501 · 2626 grava · parcela duplicada barrada · 0 linhas restantes).
+
+## Números provados no papel
+1ª = 857,72 · 2ª = 727,66 · única = 1.585,38 — e **857,72 + 727,66 = 1.585,38**.
+
+## ⚠️ Sem gabarito
+Os 12 recibos da contabilidade são de julho: **nenhum tem 13º**. É a regra da CLT como
+escrita, e o papel sai com a tarja "VALORES EM CONFERÊNCIA" igual ao IRRF.
+
+## Dois achados (expectativa minha errada, não código)
+- A 2ª parcela **nunca fica negativa por salário alto** (INSS tem teto, IR para em
+  27,5% → nunca passam de 50%). O caso real é o **salário CAIR** entre nov e dez.
+- O **FGTS das duas parcelas perde 1 centavo** contra o da única (trunca duas vezes). O
+  certo é o de duas — o depósito é por parcela. O teste exigia igualdade exata e passava
+  só pela sorte dos números; agora são 12 combinações com tolerância honesta.
+
+---
+
+# LEVA 3 — FÉRIAS POR AVOS (commit `df8fe32`)
+
+## Decisões do Victor (gravadas)
+1. **Sem data de admissão o sistema NÃO inventa** — lista à parte pedindo a data.
+2. **Os DOIS números na tela**: 30 cheios e o corte da tabela de faltas (art. 130).
+3. **Painel próprio** no Financeiro (o lançamento continua na ficha).
+
+## O que entrou
+- `utils/folha/feriasPorAvos.ts`: período aquisitivo, avos contados no **relógio da
+  admissão** (10/05 a 09/06) e não no calendário, tabela do art. 130, dias já tirados,
+  data limite para gozar. **Nenhuma migration** — tudo já existia.
+- Painel "Férias": **vencidas no topo** (a lei manda pagar em dobro), depois quem vence
+  em 90 dias, depois por nome.
+
+## 🔴 Erro de desenho pego por teste vermelho
+A 1ª versão somava num "saldo" só os 30 dias do período fechado **e** o proporcional do
+período em curso — a tela deixaria agendar 40 dias pra quem só pode tirar 30. O
+proporcional só vira direito de gozo quando o período fecha. Separado em `diasCheios`
+(pode tirar) e `proporcionalCheio` (em formação, só conta em rescisão).
+
+## ⚠️ O DADO QUE FALTA (bloqueia o uso real)
+**18 das 21 fichas de carteira assinada estão SEM data de admissão.** Sem ela não há
+período aquisitivo. E o "primeiro ponto" **não serve de atalho**: 11 pessoas têm o
+primeiro ponto no mesmo **06/11/2025**, que é o dia em que o sistema começou — e são
+justamente as mais antigas, as que podem ter férias vencidas.
+**Ação do Victor:** preencher as 18 datas (a contabilidade tem) em Funcionários → editar.
+
+## Consertos fora do escopo, feitos com OK dele
+- `holeriteLotePdf.spec.ts` piscava **1 em 400**: comparava os dois PDFs letra por letra
+  incluindo "Documento gerado em <hora com segundos>". Hora fixada; provado com **3.000
+  comparações, 0 diferenças**.
+- `tests/117` tinha variável sem uso quebrando o lint — **escapou no commit do 13º**
+  porque rodei o lint antes de escrever o spec e não de novo depois. Lição: lint DEPOIS
+  do último arquivo, sempre.
+
+## Validação das levas 2 e 3
+typecheck 0 · lint 0 · build limpo · **106 arquivos / 1.707 unitários** · E2E **117 5/5**
+e **118 4/4** novos · 116 e 06 sem regressão. Deploy conferido por conteúdo nas duas.
