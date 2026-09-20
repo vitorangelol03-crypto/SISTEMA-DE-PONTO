@@ -36,6 +36,7 @@
  */
 
 import type { LinhaDaFolha } from './folhaCalc';
+import { truncaCentavos } from './dinheiro';
 import {
   calcularInss,
   calcularIrrf,
@@ -113,11 +114,6 @@ export interface DecimoCalculado {
   parcelaNegativa: boolean;
   linhas: LinhaDaFolha[];
 }
-
-const truncaCentavos = (valor: number): number => {
-  if (!Number.isFinite(valor) || valor <= 0) return 0;
-  return Math.floor(Number(valor.toFixed(6)) * 100) / 100;
-};
 
 const doisDecimais = (valor: number): number => Number(valor.toFixed(2));
 

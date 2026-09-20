@@ -213,9 +213,52 @@ export function montarTutorialFolha(telas: TelasDoTutorial): ArrayBuffer {
   y = paragrafo(doc, y, 'Se aparecer uma tarja amarela escrita "VALORES EM CONFERÊNCIA" no recibo, é porque as tabelas de INSS e Imposto de Renda deste ano ainda não foram conferidas com o contador. Ela some quando alguém marcar isso em Configurações.', 10);
   rodape(doc, pagina);
 
-  // ═══════════════ 4. PREMIAÇÃO ═══════════════
+  // ═══════════════ 4. A CONTA DO INSS ═══════════════
   novaPagina();
-  y = titulo(doc, '4', 'Lançar uma premiação');
+  y = titulo(doc, '4', 'A conta do INSS, por dentro');
+  y = paragrafo(doc, y, 'O INSS é progressivo: cada faixa cobra só sobre o pedaço do salário que cai nela. Por isso quem ganha R$ 1.700 NÃO paga 9% de tudo.');
+  y += 10;
+
+  doc.setTextColor(20).setFont('helvetica', 'bold').setFontSize(12);
+  doc.text('Exemplo: salário de R$ 1.700,00', MARGEM, y);
+  autoTable(doc, {
+    startY: y + 10,
+    margin: { left: MARGEM, right: MARGEM },
+    tableWidth: CONTEUDO,
+    head: [['Faixa', 'Sobre quanto', 'Cobra', 'Dá']],
+    body: [
+      ['Até R$ 1.621,30', 'R$ 1.621,30', '7,5%', 'R$ 121,5975'],
+      ['O que passa disso', 'R$ 78,70', '9%', 'R$ 7,0830'],
+      ['', '', 'Soma', 'R$ 128,6805'],
+    ],
+    foot: [['', '', 'No recibo', 'R$ 128,68']],
+    theme: 'grid',
+    styles: { font: 'helvetica', fontSize: 10, cellPadding: 6, lineColor: 225, textColor: 40 },
+    headStyles: { fillColor: [240, 243, 248], textColor: 40, fontStyle: 'bold' },
+    footStyles: { fillColor: [232, 240, 250], textColor: 20, fontStyle: 'bold', fontSize: 11 },
+    columnStyles: {
+      1: { halign: 'right', cellWidth: 100 },
+      2: { halign: 'right', cellWidth: 70 },
+      3: { halign: 'right', cellWidth: 100 },
+    },
+  });
+  // jspdf-autotable expõe finalY via doc.lastAutoTable em runtime (não tipado) — mesmo
+  // idioma de mirrorPdf.ts/driverReport.ts.
+  const ultima = (doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable;
+  y = (typeof ultima?.finalY === 'number' ? ultima.finalY : y + 120) + 18;
+
+  y = destaque(doc, y, 'Os centavos são cortados no FIM, não em cada faixa',
+    'Cortando só no fim dá R$ 128,68. Se cortasse faixa por faixa daria R$ 128,67. É um centavo — e é o centavo que faz o papel não bater com o da contabilidade.', AZUL);
+
+  y = destaque(doc, y, 'O recibo imprime "9,00%", mas ela não paga 9%',
+    'A porcentagem impressa é a FAIXA que o salário alcançou, não o que a pessoa paga no total. Nos R$ 1.700 do exemplo, ela paga R$ 128,68 — que são 7,57% do salário. É a dúvida mais comum de quem lê o recibo.', ROXO);
+
+  y = paragrafo(doc, y, 'As faixas ficam em Configurações e mudam por lei todo ano. Se a tabela estiver desatualizada, a conta sai errada em silêncio — por isso o ano de vigência aparece junto dela.', 10);
+  rodape(doc, pagina);
+
+  // ═══════════════ 5. PREMIAÇÃO ═══════════════
+  novaPagina();
+  y = titulo(doc, '5', 'Lançar uma premiação');
   y = paragrafo(doc, y, 'Na mesma tela do mês, clique em "Premiação" na linha da pessoa. Digite o valor e, se quiser, o motivo — ele sai impresso no recibo.');
   y += 4;
   y = tela(doc, y, telas.premiacao, 420);
@@ -223,9 +266,9 @@ export function montarTutorialFolha(telas: TelasDoTutorial): ArrayBuffer {
     'A premiação aparece no recibo do período que você está olhando quando clicou. Se quiser em outro mês, mude o período antes.', [200, 120, 20]);
   rodape(doc, pagina);
 
-  // ═══════════════ 5. FÉRIAS ═══════════════
+  // ═══════════════ 6. FÉRIAS ═══════════════
   novaPagina();
-  y = titulo(doc, '5', 'Férias — quem já tem, quem está vencendo');
+  y = titulo(doc, '6', 'Férias — quem já tem, quem está vencendo');
   y = paragrafo(doc, y, 'Financeiro > Férias > Calcular. Quem está com férias vencidas aparece no topo, em vermelho.');
   y += 4;
   y = tela(doc, y, telas.ferias, 430);
@@ -233,9 +276,9 @@ export function montarTutorialFolha(telas: TelasDoTutorial): ArrayBuffer {
     'Férias vencida é a que passou de 12 meses sem ser tirada — a lei manda pagar em dobro. Amarelo é quem vence nos próximos 90 dias.', [180, 50, 50]);
   rodape(doc, pagina);
 
-  // ═══════════════ 6. 13º ═══════════════
+  // ═══════════════ 7. 13º ═══════════════
   novaPagina();
-  y = titulo(doc, '6', '13º salário');
+  y = titulo(doc, '7', '13º salário');
   y = paragrafo(doc, y, 'Financeiro > 13º Salário > escolha o ano e a parcela > Calcular. Depois é só baixar os recibos e registrar.');
   y += 4;
   y = tela(doc, y, telas.decimo, 380);
@@ -244,9 +287,9 @@ export function montarTutorialFolha(telas: TelasDoTutorial): ArrayBuffer {
     '"Baixar os recibos" só gera papel — dá para conferir à vontade. "Registrar" é o que grava, e é o que faz a 2ª parcela saber quanto a 1ª já pagou.', AZUL);
   rodape(doc, pagina);
 
-  // ═══════════════ 7. RESCISÃO ═══════════════
+  // ═══════════════ 8. RESCISÃO ═══════════════
   novaPagina();
-  y = titulo(doc, '7', 'Rescisão');
+  y = titulo(doc, '8', 'Rescisão');
   y = paragrafo(doc, y, 'Financeiro > Rescisão > procure a pessoa > escolha o motivo, a data e o aviso prévio. A conta aparece aberta antes de gerar qualquer papel.');
   y += 4;
   y = tela(doc, y, telas.rescisao, 400);
@@ -254,9 +297,9 @@ export function montarTutorialFolha(telas: TelasDoTutorial): ArrayBuffer {
     'O sistema não tem o extrato da Caixa, então não inventa a multa de 40%. Sem esse número, a multa simplesmente não entra na conta — e o papel avisa.', [200, 120, 20]);
   rodape(doc, pagina);
 
-  // ═══════════════ 8. AS ARMADILHAS ═══════════════
+  // ═══════════════ 9. AS ARMADILHAS ═══════════════
   novaPagina();
-  y = titulo(doc, '8', 'Três coisas que confundem');
+  y = titulo(doc, '9', 'Três coisas que confundem');
   y += 6;
 
   y = destaque(doc, y, '1. O salário só aparece no recibo do MÊS inteiro',

@@ -32,6 +32,7 @@
  */
 
 import { semanaDaData } from '../dateUtils';
+import { truncaCentavos } from './dinheiro';
 import {
   calcularInss,
   calcularIrrf,
@@ -174,19 +175,6 @@ export interface EntradaDaFolha {
 
 /** Dias corridos do mês. `new Date(ano, mes, 0)` cai no último dia do mês pedido. */
 const diasDoMes = (ano: number, mes: number): number => new Date(ano, mes, 0).getDate();
-
-/**
- * Trunca em centavos.
- *
- * O arredondamento de 6 casas antes do corte NÃO é enfeite: `1700 / 30 * 21` dá
- * 1189.9999999999998 em ponto flutuante, e truncar direto pagaria R$ 1.189,99 no lugar
- * dos R$ 1.190,00 do recibo da Silvia — um centavo a menos numa folha de verdade.
- */
-const truncaCentavos = (valor: number): number => {
-  if (!Number.isFinite(valor) || valor <= 0) return 0;
-  const semRuido = Number(valor.toFixed(6));
-  return Math.floor(semRuido * 100) / 100;
-};
 
 const doisDecimais = (valor: number): number => Number(valor.toFixed(2));
 

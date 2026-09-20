@@ -48,6 +48,7 @@
 import { feriasPorAvos, somaMeses, type FeriasDaPessoa } from './feriasPorAvos';
 import { mesesComAvo } from './decimoTerceiro';
 import type { LinhaDaFolha } from './folhaCalc';
+import { truncaCentavos } from './dinheiro';
 import {
   calcularInss,
   calcularIrrf,
@@ -142,11 +143,6 @@ export interface RescisaoCalculada {
   /** As férias apuradas, para a tela mostrar de onde saiu o número. */
   ferias: FeriasDaPessoa;
 }
-
-const truncaCentavos = (valor: number): number => {
-  if (!Number.isFinite(valor) || valor <= 0) return 0;
-  return Math.floor(Number(valor.toFixed(6)) * 100) / 100;
-};
 
 const doisDecimais = (valor: number): number => Number(valor.toFixed(2));
 const formataReferencia = (valor: number): string => valor.toFixed(2).replace('.', ',');

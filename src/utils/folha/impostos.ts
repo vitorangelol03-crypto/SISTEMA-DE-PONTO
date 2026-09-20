@@ -27,6 +27,8 @@
  * rodar em paralelo com a contabilidade.
  */
 
+import { truncaCentavos } from './dinheiro';
+
 /** Uma faixa da tabela progressiva. `ate` nulo = a última, sem teto. */
 export interface FaixaDeImposto {
   ate: number | null;
@@ -46,15 +48,6 @@ export interface TabelaDoIrrf {
   /** Abatimento único do caminho simplificado. */
   descontoSimplificado: number;
 }
-
-/**
- * Trunca em centavos — mesma regra do FGTS, e é o que o papel da contabilidade faz:
- * com arredondamento normal, 4 dos 11 recibos de INSS sairiam um centavo a mais.
- */
-const truncaCentavos = (valor: number): number => {
-  if (!Number.isFinite(valor) || valor <= 0) return 0;
-  return Math.floor(Number(valor.toFixed(6)) * 100) / 100;
-};
 
 /**
  * Soma progressiva: cada faixa incide só sobre a parte do valor que cai dentro dela.
