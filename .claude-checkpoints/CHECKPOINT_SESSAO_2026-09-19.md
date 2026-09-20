@@ -219,3 +219,98 @@ justamente as mais antigas, as que podem ter férias vencidas.
 ## Validação das levas 2 e 3
 typecheck 0 · lint 0 · build limpo · **106 arquivos / 1.707 unitários** · E2E **117 5/5**
 e **118 4/4** novos · 116 e 06 sem regressão. Deploy conferido por conteúdo nas duas.
+
+---
+
+# LEVA 4 — RESCISÃO (commit `12bc30c`) — A ÚLTIMA DA FOLHA
+
+## Decisões do Victor (gravadas)
+1. **Os quatro motivos**: sem justa causa · pedido de demissão · justa causa · acordo 484-A.
+2. **O saldo do FGTS é DIGITADO** — o sistema não tem histórico de depósitos, e estimar
+   seria inventar o número mais caro do acerto. Sem ele a multa não sai, e o papel avisa.
+3. **Aviso prévio: 30 dias + 3 por ano, teto de 90**, trabalhado ou indenizado.
+4. **Gerar o acerto só grava a data de saída** — a pessoa continua aparecendo nas telas.
+   (Esconder o desligado mexeria em todas as abas de uma vez: leva própria, com calma.)
+
+## O que entrou
+- `utils/folha/rescisao.ts`: uma **tabela de regras por motivo**, não `if` espalhado.
+  Reusa `feriasPorAvos` (vencidas e proporcionais), `mesesComAvo` (13º) e as tabelas de
+  imposto — nenhuma conta nova.
+- O recibo virou também **TERMO DE RESCISÃO**: título próprio, linhas pelo mesmo caminho
+  da folha e do 13º, rodapé com motivo, tempo de casa e dias de aviso.
+- Tela "Rescisão": uma pessoa por vez, com a conta **aberta verba por verba** antes de
+  deixar gerar papel. Baixar não grava; Registrar carimba a ficha.
+- Migration `20260920003533` (`employees.termination_date/reason` + `payroll_termination`),
+  **aplicada com OK do Victor** e provada por catálogo + **5 simulações que se desfizeram**
+  (04 barrado com 42501 · 2626 grava · motivo fora dos 4 barrado · duplicada barrada ·
+  saída antes da admissão barrada; 0 linhas e 0 fichas desligadas restantes).
+
+## O que a conta acerta e costuma passar batido
+- **Aviso indenizado PROJETA o contrato** (Súmula 371): saída em 20/12 com 39 dias de
+  aviso conta como 28/01 — e dá um avo a mais no 13º e nas férias. Ignorar paga a menos.
+- **Imposto só sobre o que é salário.** Férias, 1/3, aviso indenizado e multa do FGTS são
+  indenizatórios; somar tudo numa base só descontaria imposto de dinheiro isento.
+- **Justa causa NÃO tira as férias vencidas** — só as proporcionais.
+- **Pedido de demissão sem cumprir aviso:** quem deve é a pessoa → desconto de 30 dias
+  **secos** (os +3/ano são benefício de quem é mandado embora).
+
+## Números provados no papel
+Sem justa causa **R$ 15.791,11** · justa causa **R$ 7.586,25** (mesma pessoa, salário
+1.700, 3 anos de casa, saída 15/09, FGTS 8.500).
+
+## ⚠️ Sem gabarito
+Nenhum dos 12 recibos da contabilidade é rescisão. Sai com a tarja "VALORES EM
+CONFERÊNCIA".
+
+## Achado do E2E (localizador meu frouxo, não código)
+`hasText: 'Férias vencidas'` casava também com "1/3 sobre férias vencidas" — o Playwright
+compara **por pedaço e sem diferenciar maiúscula**. Ancorado com `^` no começo da linha.
+
+## Validação da leva 4
+typecheck 0 · lint 0 · build limpo · **107 arquivos / 1.733 unitários** · E2E **119 5/5**
+novo · 117 e 118 sem regressão (9 verdes). Deploy conferido por conteúdo (3/3).
+
+---
+
+# FECHAMENTO DA SESSÃO — 19/09/2026
+
+## Em uma frase
+As quatro levas que faltavam da folha entraram: o recibo parou de jogar os descontos
+fora, os relatórios ganharam a folha, e nasceram **13º salário, férias por avos e
+rescisão** — tudo no ar, com 2 migrations aplicadas e provadas.
+
+## Os commits
+| Commit | O quê |
+|---|---|
+| `7504f43` | Leva 0+1 — recibo consertado + folha no relatório e na tela |
+| `0e23499` | Leva 2 — 13º salário |
+| `df8fe32` | Leva 3 — férias por avos |
+| `12bc30c` | Leva 4 — rescisão |
+| `9c9fcc7` · `1326acc` | checkpoints |
+
+Migrations: `20260919220837` (13º) · `20260920003533` (rescisão).
+
+## ⚠️ EM PRODUÇÃO NADA MUDOU DE VALOR
+**0 das 105 fichas tem salário preenchido.** Sem salário, a folha devolve `undefined`
+para todo mundo e o recibo de diarista sai idêntico — com testes de regressão travando
+isso em cada leva.
+
+## 🔴 O QUE BLOQUEIA O USO REAL (ação do Victor)
+1. **18 das 21 fichas de carteira assinada sem data de admissão.** Sem ela não há
+   período aquisitivo (férias), nem tempo de casa, nem aviso prévio (rescisão). A
+   contabilidade tem essas datas. O "primeiro ponto" **não serve** — 11 pessoas têm o
+   primeiro ponto no mesmo 06/11/2025, que é o dia em que o sistema começou.
+2. **Nenhum salário preenchido.** O caminho seguro combinado: preencher UMA pessoa,
+   conferir o recibo, e só então o resto.
+3. **As tabelas de INSS/IR não estão marcadas como conferidas** — todo papel sai com a
+   tarja amarela até alguém marcar em Configurações.
+
+## 🟡 Vizinhança avisada, NÃO consertada
+`moneyBRL` (de 03/09) não tem separador de milhar: a tela escreve `R$ 1700,00` enquanto
+os PDFs escrevem `R$ 1.700,00`. Conserto de 1 linha em `src/utils/moneyMask.ts`, mas
+muda Financeiro, C6 e Erros. **Esperando o Victor.**
+
+## O que a folha ainda NÃO faz
+- Os relatórios não mostram 13º nem rescisão (só a folha mensal).
+- Não há tela para reimprimir um 13º ou uma rescisão já registrados.
+- Desligado continua aparecendo em todas as telas (decisão 4, de propósito).
