@@ -43,12 +43,23 @@ test.describe('Funcionários', () => {
     await cleanupAllTestArtifacts(readSuiteStart());
   });
 
+  /**
+   * ⚠️ O CAMPO DE BUSCA PELO PLACEHOLDER EXATO (19/09/2026).
+   *
+   * Antes era `input[placeholder*="Buscar" i], input[placeholder*="nome" i],
+   * input[type="text"]` com `.first()` — e `.first()` pegava o campo **somente-leitura**
+   * que mostra o link público de cadastro, que vem antes no HTML. O `fill()` estourava
+   * com "element is not editable", e os 3 testes que usavam o campo caíam juntos.
+   *
+   * Confirmado por `git stash` que já falhavam antes da leva do desligado — o
+   * localizador é que era frouxo, não a tela.
+   */
   test('lista mostra funcionários', async ({ page }) => {
     await expect(page.locator('tbody tr, .md\\:hidden > div').first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('busca por nome filtra corretamente', async ({ page }) => {
-    const searchInput = page.locator('input[placeholder*="Buscar" i], input[placeholder*="nome" i], input[type="text"]').first();
+    const searchInput = page.getByPlaceholder('Buscar por nome ou CPF...');
     await expect(searchInput).toBeVisible();
 
     // Digita um nome que provavelmente não existe
@@ -62,7 +73,7 @@ test.describe('Funcionários', () => {
   });
 
   test('busca por letras aleatórias NÃO retorna todos (regressão do bug de filtro de CPF)', async ({ page }) => {
-    const searchInput = page.locator('input[placeholder*="Buscar" i], input[placeholder*="nome" i], input[type="text"]').first();
+    const searchInput = page.getByPlaceholder('Buscar por nome ou CPF...');
 
     // Conta total sem filtro
     await searchInput.fill('');
@@ -99,7 +110,7 @@ test.describe('Funcionários', () => {
     await expect(page.getByRole('heading', { name: /Novo Funcionário/ })).toBeHidden({ timeout: 10_000 });
 
     // O funcionário aparece na lista
-    const searchInput = page.locator('input[placeholder*="Buscar" i], input[placeholder*="nome" i], input[type="text"]').first();
+    const searchInput = page.getByPlaceholder('Buscar por nome ou CPF...');
     await searchInput.fill(testName);
     await page.waitForTimeout(500);
     await expect(page.getByText(testName).first()).toBeVisible({ timeout: 5_000 });
