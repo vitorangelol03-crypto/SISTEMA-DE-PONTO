@@ -89,9 +89,10 @@ test.describe('Folha de carteira assinada no Financeiro e no relatório', () => 
     const salario = page.getByTestId('valor-com-salario').first();
     await expect(salario).toBeVisible({ timeout: 30_000 });
     await expect(salario).toContainText('Salário:');
-    // O ponto do milhar é opcional de propósito: o `moneyBRL` desta tela (03/09/2026)
-    // imprime "R$ 1700,00", sem separador, em TODA a aba — não é coisa desta leva. O
-    // regex aceita os dois para o teste não quebrar se isso for arrumado um dia.
+    // O regex aceita o ponto do milhar como opcional porque este teste atravessou a
+    // mudança: até 19/09/2026 o `moneyBRL` escrevia "R$ 1700,00" sem separador, e foi
+    // este teste que expôs a diferença contra os PDFs. Arrumado no mesmo dia — o
+    // opcional fica, e o teste vale dos dois lados da correção.
     await expect(salario).toContainText(/R\$ 1\.?700,00/);
 
     // O aviso de "fora do mês" NÃO pode aparecer aqui.
