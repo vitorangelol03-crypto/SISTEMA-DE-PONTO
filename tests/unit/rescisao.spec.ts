@@ -176,7 +176,9 @@ describe('🎯 imposto só sobre o que é salário', () => {
     // Duas contas separadas: a do saldo e a do 13º.
     expect(r.baseInss).not.toBe(r.decimoProporcional);
     expect(descricoes(r)).toContain('INSS sobre saldo');
-    expect(descricoes(r)).toContain('INSS sobre 13º');
+    // "proporcional" no rótulo: em dezembro a pessoa pode ter o 13º do ano E a rescisão,
+    // e duas linhas "INSS sobre 13º" no mesmo relatório parecem erro de duplicação.
+    expect(descricoes(r)).toContain('INSS sobre 13º proporcional');
   });
 
   it('sem tabela de imposto, sai sem desconto — como antes de elas existirem', () => {

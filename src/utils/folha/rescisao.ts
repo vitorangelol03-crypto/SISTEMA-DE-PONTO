@@ -288,11 +288,17 @@ export function calcularRescisao(entrada: EntradaDaRescisao): RescisaoCalculada 
   if (irrf > 0 && tabelaIrrf && doIrrf) {
     desconto('IRRF sobre saldo', irrf, `${formataReferencia(faixaAplicada(doIrrf.base, tabelaIrrf.faixas))}%`);
   }
+  /**
+   * "PROPORCIONAL" no rótulo não é enfeite (19/09/2026): em dezembro a pessoa pode
+   * receber o 13º do ano E ser desligada no mesmo mês, e aí o relatório mostrava duas
+   * linhas "INSS sobre 13º" com valores diferentes — que lido de fora parece erro de
+   * duplicação. Achado gerando o relatório de verdade com os dois juntos.
+   */
   if (inssDoDecimo > 0 && tabelaInss) {
-    desconto('INSS sobre 13º', inssDoDecimo, `${formataReferencia(faixaAplicada(decimoProporcional, tabelaInss.faixas))}%`);
+    desconto('INSS sobre 13º proporcional', inssDoDecimo, `${formataReferencia(faixaAplicada(decimoProporcional, tabelaInss.faixas))}%`);
   }
   if (irrfDoDecimo > 0 && tabelaIrrf && doIrrfDecimo) {
-    desconto('IRRF sobre 13º', irrfDoDecimo, `${formataReferencia(faixaAplicada(doIrrfDecimo.base, tabelaIrrf.faixas))}%`);
+    desconto('IRRF sobre 13º proporcional', irrfDoDecimo, `${formataReferencia(faixaAplicada(doIrrfDecimo.base, tabelaIrrf.faixas))}%`);
   }
 
   const totalProventos = doisDecimais(linhas.reduce((s, l) => s + l.provento, 0));

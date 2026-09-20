@@ -50,14 +50,27 @@
  * A folha é MENSAL: num relatório de semana ou quinzena ela não aparece, e a folha
  * da pessoa sai com o aviso de onde o salário está (decisão do Victor, 19/09/2026).
  * O porquê está em `ehMesInteiro`, no `folhaCalc`.
+ *
+ * ## 13º e rescisão entram por DATA, não por mês fechado
+ *
+ * Decisão do Victor (19/09/2026): diferente do salário, eles aparecem em **qualquer**
+ * período que contenha a data do pagamento — porque são pagamentos que aconteceram num
+ * dia, e não uma competência mensal que não dá para fatiar. Pagou o 13º em 18/12? Ele
+ * sai no relatório da semana de 18/12, da quinzena, do mês e do ano.
+ *
+ * E vêm do que foi GRAVADO, nunca recalculados — a mesma regra da 2ª via. Recalcular um
+ * acerto velho com o salário de hoje faria o relatório discordar do papel que a pessoa
+ * assinou.
  */
 
 import type { Employee, Company, Attendance } from '../../services/database';
 import type { EmployeeFinancialData } from '../financeiroPorPessoa';
 import { descontoDeQuantidadeEmbutido } from '../financeiroPorPessoa';
 import { buildMirrorData, type MirrorData } from '../mirrorGenerator';
-import type { FolhaCalculada } from '../folha/folhaCalc';
+import type { FolhaCalculada, LinhaDaFolha } from '../folha/folhaCalc';
 import type { FolhaDaPessoa } from '../folha/folhaDaPessoa';
+import type { DecimoCalculado } from '../folha/decimoTerceiro';
+import type { RescisaoCalculada } from '../folha/rescisao';
 
 export type TipoRelatorio = 'ponto' | 'financeiro' | 'geral';
 
@@ -122,6 +135,10 @@ export interface PessoaDoRelatorio {
    * fechado — a folha dela sai com o aviso de onde o salário aparece.
    */
   folhaForaDoMes: boolean;
+  /** 13ºs pagos dentro do período (pode ter as duas parcelas). */
+  decimos: DecimoCalculado[];
+  /** Rescisões cuja saída caiu no período. */
+  rescisoes: RescisaoCalculada[];
 }
 
 export interface TotaisDoRelatorio {
@@ -163,6 +180,15 @@ export interface MontarRelatorioInput {
    * Ausente = relatório sem nada de folha, exatamente como era antes desta leva.
    */
   folhaPorPessoa?: ReadonlyMap<string, FolhaDaPessoa>;
+  /**
+   * Os 13ºs pagos no período, por `employee.id`, já LIDOS do que foi gravado.
+   *
+   * Como a folha, vêm prontos de fora: este arquivo não busca nada no banco nem
+   * recalcula — ele desenha o que aconteceu.
+   */
+  decimosPorPessoa?: ReadonlyMap<string, DecimoCalculado[]>;
+  /** Idem para as rescisões do período. */
+  rescisoesPorPessoa?: ReadonlyMap<string, RescisaoCalculada[]>;
 }
 
 /** Conta quantos pagamentos têm aquele campo preenchido (0 não conta). */
@@ -182,7 +208,12 @@ function quantosCom(pagamentos: EmployeeFinancialData['payments'], campo: 'daily
  * aqui com `folha` indefinida e recebe EXATAMENTE a mesma lista de antes — tem teste
  * de regressão travando isso.
  */
-export function montarLinhasDeValor(d: EmployeeFinancialData, folha?: FolhaCalculada): LinhaDeValor[] {
+export function montarLinhasDeValor(
+  d: EmployeeFinancialData,
+  folha?: FolhaCalculada,
+  decimos: readonly DecimoCalculado[] = [],
+  rescisoes: readonly RescisaoCalculada[] = [],
+): LinhaDeValor[] {
   const linhas: LinhaDeValor[] = [];
 
   // Mensalista primeiro: o salário é o que a pessoa procura no alto da lista.
@@ -253,14 +284,61 @@ export function montarLinhasDeValor(d: EmployeeFinancialData, folha?: FolhaCalcu
     });
   }
 
+  /**
+   * 13º e rescisão entram DEPOIS do mês, cada verba na sua linha (decisão do Victor,
+   * 19/09/2026) — é o que o relatório já faz com o resto, e é o que explica de onde veio
+   * o dinheiro. Os rótulos não colidem com os da folha mensal: lá é "INSS", aqui é
+   * "INSS sobre 13º" e "INSS sobre saldo".
+   */
+  for (const bloco of [...decimos, ...rescisoes]) {
+    linhas.push(...linhasDeUmBloco(bloco.linhas));
+  }
+
   // O FGTS fecha a lista: a empresa deposita, mas não sai do bolso da pessoa — por isso
   // `custo-empresa`, a natureza que este arquivo já previa em 12/09 esperando por ele.
   // Não entra em proventos nem em descontos, e não mexe no líquido.
-  if (folha && folha.valorFgts > 0) {
-    linhas.push({ rotulo: 'FGTS depositado', quantidade: null, valor: folha.valorFgts, natureza: 'custo-empresa' });
+  const fgtsTotal = (folha?.valorFgts ?? 0)
+    + decimos.reduce((t, x) => t + x.fgts, 0)
+    + rescisoes.reduce((t, x) => t + x.fgtsDoMes, 0);
+  if (fgtsTotal > 0) {
+    linhas.push({
+      rotulo: 'FGTS depositado',
+      quantidade: null,
+      valor: Number(fgtsTotal.toFixed(2)),
+      natureza: 'custo-empresa',
+    });
   }
 
   return linhas;
+}
+
+/**
+ * Traduz as linhas de um bloco da folha (13º ou rescisão) para as do relatório.
+ *
+ * As duas estruturas são quase iguais — a diferença é que a do relatório separa a
+ * natureza num campo e a quantidade num número. É a mesma tradução que a folha mensal
+ * já fazia, extraída aqui para não existir em duas cópias.
+ */
+function linhasDeUmBloco(doBloco: readonly LinhaDaFolha[]): LinhaDeValor[] {
+  const saida: LinhaDeValor[] = [];
+  for (const linha of doBloco) {
+    if (linha.provento > 0) {
+      saida.push({
+        rotulo: linha.descricao,
+        quantidade: quantidadeDaReferencia(linha.referencia),
+        valor: linha.provento,
+        natureza: 'provento',
+      });
+    } else if (linha.desconto > 0) {
+      saida.push({
+        rotulo: linha.descricao,
+        quantidade: quantidadeDaReferencia(linha.referencia),
+        valor: linha.desconto,
+        natureza: 'desconto',
+      });
+    }
+  }
+  return saida;
 }
 
 /**
@@ -299,7 +377,10 @@ function resumoDoEspelho(espelho: MirrorData, d: EmployeeFinancialData): ResumoD
  * trabalhou. Quem teve qualquer coisa entra, mesmo que zerado.
  */
 export function montarRelatorio(input: MontarRelatorioInput): RelatorioMontado {
-  const { tipo, company, periodo, financeiro, attendances, emissionDate, folhaPorPessoa } = input;
+  const {
+    tipo, company, periodo, financeiro, attendances, emissionDate,
+    folhaPorPessoa, decimosPorPessoa, rescisoesPorPessoa,
+  } = input;
   const temPonto = RELATORIO_TEM_PONTO[tipo];
   const temDinheiro = RELATORIO_TEM_DINHEIRO[tipo];
 
@@ -315,12 +396,16 @@ export function montarRelatorio(input: MontarRelatorioInput): RelatorioMontado {
   for (const d of financeiro) {
     const doPonto = pontoPorPessoa.get(d.employee.id) ?? [];
     const daFolha = folhaPorPessoa?.get(d.employee.id);
+    const decimosDaPessoa = decimosPorPessoa?.get(d.employee.id) ?? [];
+    const rescisoesDaPessoa = rescisoesPorPessoa?.get(d.employee.id) ?? [];
     // Quem tem salário conta como "teve algo" mesmo sem ponto e sem pagamento: alguém de
     // férias o mês inteiro não bate ponto nenhum e mesmo assim recebe — deixar de fora
-    // faria a pessoa sumir da folha de pagamento do mês.
+    // faria a pessoa sumir da folha de pagamento do mês. O mesmo vale para quem só
+    // recebeu 13º ou rescisão no período: é dinheiro que saiu, tem que aparecer.
     const teveAlgo = doPonto.length > 0 || d.payments.length > 0
       || d.errorRecords.length > 0 || d.triageDiscounts.length > 0
-      || (temDinheiro && daFolha?.folha !== undefined);
+      || (temDinheiro && (daFolha?.folha !== undefined
+        || decimosDaPessoa.length > 0 || rescisoesDaPessoa.length > 0));
     if (!teveAlgo) continue;
 
     const espelho = temPonto
@@ -334,7 +419,9 @@ export function montarRelatorio(input: MontarRelatorioInput): RelatorioMontado {
       : null;
 
     const folha = temDinheiro ? daFolha?.folha : undefined;
-    const linhas = temDinheiro ? montarLinhasDeValor(d, folha) : [];
+    const decimos = temDinheiro ? decimosDaPessoa : [];
+    const rescisoes = temDinheiro ? rescisoesDaPessoa : [];
+    const linhas = temDinheiro ? montarLinhasDeValor(d, folha, decimos, rescisoes) : [];
     const totalProventos = linhas.filter(l => l.natureza === 'provento').reduce((s, l) => s + l.valor, 0);
     const totalDescontos = linhas.filter(l => l.natureza === 'desconto').reduce((s, l) => s + l.valor, 0);
     const totalCustoEmpresa = linhas.filter(l => l.natureza === 'custo-empresa').reduce((s, l) => s + l.valor, 0);
@@ -365,15 +452,24 @@ export function montarRelatorio(input: MontarRelatorioInput): RelatorioMontado {
       totalProventos,
       totalDescontos,
       /**
-       * O líquido soma as duas metades, como o recibo faz desde 19/09: `totalEarned` é o
-       * dinheiro do pagamento por diária (já líquido de erro e triagem) e `folha.liquido`
-       * é o da carteira assinada (já líquido de falta, INSS e IRRF). Sem folha, soma zero
-       * — o relatório do diarista é idêntico ao de antes.
+       * O líquido soma tudo que a pessoa recebeu no período: o pagamento por diária (já
+       * líquido de erro e triagem), a folha do mês (já líquida de falta, INSS e IRRF), o
+       * 13º e a rescisão. Sem nada disso, soma zero — o relatório do diarista é idêntico
+       * ao de antes, e tem teste de regressão travando isso.
        */
-      totalLiquido: temDinheiro ? d.totalEarned + (folha?.liquido ?? 0) : 0,
+      totalLiquido: temDinheiro
+        ? Number((
+          d.totalEarned
+          + (folha?.liquido ?? 0)
+          + decimos.reduce((t, x) => t + x.liquido, 0)
+          + rescisoes.reduce((t, x) => t + x.liquido, 0)
+        ).toFixed(2))
+        : 0,
       totalCustoEmpresa,
       folha,
       folhaForaDoMes: Boolean(temDinheiro && daFolha?.foraDoMes),
+      decimos,
+      rescisoes,
     });
   }
 

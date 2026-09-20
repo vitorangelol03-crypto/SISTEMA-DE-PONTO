@@ -30,11 +30,16 @@ import {
   getPayrollConfig,
   getTabelasDeImposto,
   getEmployeeVacations,
+  getDecimoTerceiroPorPagamento,
+  getRescisoesNoPeriodo,
   type Company,
   type Employee,
   type PaymentPeriod,
 } from '../../services/database';
 import { folhaDaPessoa, type FolhaDaPessoa } from '../../utils/folha/folhaDaPessoa';
+import { decimoDoRegistro, rescisaoDoRegistro } from '../../utils/folha/papelGravado';
+import type { DecimoCalculado } from '../../utils/folha/decimoTerceiro';
+import type { RescisaoCalculada } from '../../utils/folha/rescisao';
 import EmploymentTypeFilter, { type EmploymentType } from '../common/EmploymentTypeFilter';
 import FunctionRoleFilter, { FUNCTION_ROLE_ALL, FUNCTION_ROLE_NONE, type FunctionRoleFilterValue } from '../common/FunctionRoleFilter';
 import { agregarFinanceiroPorPessoa } from '../../utils/financeiroPorPessoa';
@@ -238,10 +243,14 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({ company, canVi
        * porque a tabela do IR não carregou.
        */
       const anoDaFolha = Number(periodo.inicio.slice(0, 4));
-      const [configDaFolha, tabelasDeImposto, feriasDaEmpresa] = await Promise.all([
+      const [configDaFolha, tabelasDeImposto, feriasDaEmpresa, decimosPagos, rescisoesDoPeriodo] = await Promise.all([
         getPayrollConfig(company.id, anoDaFolha).catch(() => null),
         getTabelasDeImposto(anoDaFolha).catch(() => null),
         getEmployeeVacations(company.id, periodo.inicio, periodo.fim).catch(() => []),
+        // 13º e rescisão entram por DATA (decisão do Victor): qualquer período que
+        // contenha o pagamento os mostra, diferente do salário, que é mensal.
+        getDecimoTerceiroPorPagamento(company.id, periodo.inicio, periodo.fim).catch(() => []),
+        getRescisoesNoPeriodo(company.id, periodo.inicio, periodo.fim).catch(() => []),
       ]);
 
       // O corte por pessoa é feito AQUI, não na busca: as funções do banco
@@ -271,6 +280,27 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({ company, canVi
         }
       }
 
+      /**
+       * 13º e rescisão são LIDOS do que foi gravado, nunca recalculados — a mesma regra
+       * da 2ª via. Recalcular um acerto velho com o salário de hoje faria o relatório
+       * discordar do papel que a pessoa assinou.
+       */
+      const decimosPorPessoa = new Map<string, DecimoCalculado[]>();
+      for (const r of decimosPagos) {
+        if (!ids.has(r.employee_id)) continue;
+        const lista = decimosPorPessoa.get(r.employee_id) ?? [];
+        lista.push(decimoDoRegistro(r));
+        decimosPorPessoa.set(r.employee_id, lista);
+      }
+
+      const rescisoesPorPessoa = new Map<string, RescisaoCalculada[]>();
+      for (const r of rescisoesDoPeriodo) {
+        if (!ids.has(r.employee_id)) continue;
+        const lista = rescisoesPorPessoa.get(r.employee_id) ?? [];
+        lista.push(rescisaoDoRegistro(r));
+        rescisoesPorPessoa.set(r.employee_id, lista);
+      }
+
       const relatorio = montarRelatorio({
         tipo,
         company,
@@ -279,6 +309,8 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({ company, canVi
         attendances: pontos.filter(a => ids.has(a.employee_id)),
         emissionDate: hoje,
         folhaPorPessoa,
+        decimosPorPessoa,
+        rescisoesPorPessoa,
       });
 
       if (relatorio.pessoas.length === 0) {

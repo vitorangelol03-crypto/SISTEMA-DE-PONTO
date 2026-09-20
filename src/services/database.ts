@@ -2748,6 +2748,28 @@ export const registrarDecimoTerceiro = async (
   if (error) throw error;
 };
 
+/**
+ * Os 13ºs PAGOS dentro de um intervalo de datas.
+ *
+ * Filtra por `pago_em`, e não pelo ano do 13º: o que o relatório mostra é o dinheiro que
+ * saiu naquele período. A 1ª parcela de 2026 pode ter sido paga em novembro e a 2ª em
+ * dezembro — são dois relatórios diferentes, e o `ano` não separaria os dois.
+ */
+export const getDecimoTerceiroPorPagamento = async (
+  companyId: string,
+  inicio: string,
+  fim: string
+): Promise<DecimoTerceiroPago[]> => {
+  const { data, error } = await supabase
+    .from('payroll_thirteenth')
+    .select('*')
+    .eq('company_id', companyId)
+    .gte('pago_em', inicio)
+    .lte('pago_em', fim);
+  if (error) throw error;
+  return (data ?? []) as DecimoTerceiroPago[];
+};
+
 /** Apaga uma parcela gravada (para refazer do zero). */
 export const apagarDecimoTerceiro = async (id: string): Promise<void> => {
   const { error } = await supabase.from('payroll_thirteenth').delete().eq('id', id);
@@ -2797,6 +2819,22 @@ export const getRescisoes = async (companyId: string): Promise<RescisaoRegistrad
     .select('*')
     .eq('company_id', companyId)
     .order('data_de_saida', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as RescisaoRegistrada[];
+};
+
+/** As rescisões cuja SAÍDA caiu dentro do intervalo — o que o relatório do período mostra. */
+export const getRescisoesNoPeriodo = async (
+  companyId: string,
+  inicio: string,
+  fim: string
+): Promise<RescisaoRegistrada[]> => {
+  const { data, error } = await supabase
+    .from('payroll_termination')
+    .select('*')
+    .eq('company_id', companyId)
+    .gte('data_de_saida', inicio)
+    .lte('data_de_saida', fim);
   if (error) throw error;
   return (data ?? []) as RescisaoRegistrada[];
 };
