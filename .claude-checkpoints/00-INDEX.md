@@ -3,6 +3,24 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 20/09 — PREMIAÇÃO, VALIDAÇÃO DE VIDA REAL E TUTORIAL EM PDF.** Commit `775a097`.
+>
+> ✅ **Premiação**: não entra na base do FGTS/INSS, lançada na tela do mês, sai como
+> bônus sem imposto. 🎯 **TEM GABARITO REAL** — recibo do Maycon (2.200 + 115,78 →
+> base FGTS 2.315,78, PLR fora). Migration `20260920203236` aplicada e provada.
+> ✅ **`tests/124` — vida real**: uma pessoa, na ordem em que a vida acontece (cadastro →
+> premiação → recibo → 13º → rescisão → relatório). Cenário real: salário **e** diárias.
+> Conta lida de dentro do PDF: **2.467,54 − 128,68 = 2.338,86**. 6/6 de primeira.
+> ✅ **Tutorial em PDF** (9 páginas, 250 KB, telas do sistema rodando): gerado por
+> `GERAR_TUTORIAL=1 npx playwright test tests/gerar-tutorial.spec.ts`. O PDF **não entra
+> no repo** (artefato regenerável, tem nomes reais).
+> 🔴 **Lições de gerar PDF, todas pegas OLHANDO A PÁGINA RENDERIZADA:** a seta "→" não
+> existe na fonte do jsPDF e **estraga a quebra de linha** (usar ">") · foto de linha de
+> tabela larga fica ilegível (usar o cartão do celular) · PNG→JPEG levou 9,6 MB para
+> 250 KB.
+> ✅ **112 arquivos / 1.789 unitários** · sem regressão. ⚠️ Continua **sem uso real**:
+> 0 das 105 fichas tem salário.
+
 > **📌 20/09 — O PASSO 2 ESTÁ PROVADO DE PONTA A PONTA.** Commit `39057ea`.
 >
 > `tests/123` percorre o caminho pelas TELAS: preenche o salário na ficha → confere que

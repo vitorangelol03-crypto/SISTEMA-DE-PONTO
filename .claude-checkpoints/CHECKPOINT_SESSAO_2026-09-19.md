@@ -292,6 +292,7 @@ rescisão** — tudo no ar, com 2 migrations aplicadas e provadas.
 | `c60c0cf` | Desligado some das telas |
 | `de28bbd` | Localizador do campo de busca em Funcionários |
 | `39057ea` | E2E do PASSO 2, de ponta a ponta |
+| `775a097` | Premiação + validação de vida real + tutorial em PDF |
 | `9c9fcc7` · `1326acc` | checkpoints |
 
 Migrations: `20260919220837` (13º) · `20260920003533` (rescisão).
@@ -506,3 +507,50 @@ sintoma. Não afeta produção — lá os CPFs são reais.
 Continua valendo o que já estava escrito: **nada foi rodado sobre dado real**. O teste usa
 fixture que ele mesmo cria e apaga. Banco conferido depois: **0 fixtures, 0 fichas com
 salário, 105 fichas**.
+
+---
+
+# 20/09 — PREMIAÇÃO, VIDA REAL E TUTORIAL (commit `775a097`)
+
+## 1. Premiação
+Decisões do Victor: **não entra na base** do FGTS nem do INSS · lançada **na tela do
+Financeiro do mês** · *"tem que ser premiação para sair como bônus e não gera imposto"*.
+O valor digitado é exatamente o que a pessoa recebe.
+
+🎯 **Esta tem GABARITO REAL** (diferente do 13º e da rescisão): recibo de julho do
+**Maycon** — salário 2.200 + noturno 115,78 → base do FGTS **2.315,78**, com a PLR dele
+fora. O teste roda 3 valores de prêmio e a base não se mexe.
+
+Migration `20260920203236` aplicada com OK e provada: catálogo + 4 simulações que se
+desfizeram (04 barrado 42501 · 2626 lança · valor zero e negativo barrados).
+
+## 2. Validação de vida real (`tests/124`)
+Uma pessoa, na ordem em que a vida acontece: cadastro → premiação → recibo → 13º →
+rescisão → relatório. Cenário real (salário **e** diárias, como 18 das 21).
+Conta lida de dentro do PDF: 1.700 + 67,54 + 500 + 200 = 2.467,54 − 128,68 = **2.338,86**.
+**6/6 de primeira.**
+
+## 3. Tutorial em PDF
+`src/utils/tutorialFolhaPdf.ts` + `tests/gerar-tutorial.spec.ts` (só com
+`GERAR_TUTORIAL=1`). 9 páginas, uma ideia por página, telas do sistema RODANDO.
+
+### 🔴 Três coisas pegas olhando o PDF RENDERIZADO, não o código
+1. **A seta "→" não existe na fonte do jsPDF.** Saía como `!'` **e estragava a medida da
+   linha**, que deixava de quebrar e vazava a margem. Usar ">".
+2. **Foto de linha de tabela larga fica ilegível** ao encolher pra caber na página.
+   Trocada pelo **cartão do celular**, que é compacto.
+3. **A caixa "sem data de admissão" despejava 15 nomes reais** — é lista de pendências,
+   não material de ensino. Escondida na captura.
+4. **9,6 MB em PNG → 250 KB** em JPEG 72 + `compress: true`.
+
+O PDF gerado **não entra no repo**: é artefato regenerável e tem nomes reais.
+
+## Validação
+typecheck 0 · lint 0 · build limpo · **112 arquivos / 1.789 unitários** (10 lotes) ·
+E2E **124 6/6** novo · 123, 116 e 115 sem regressão (10 verdes). Deploy conferido por
+conteúdo (3/3).
+
+## ⚠️ O que continua sem uso real
+**0 das 105 fichas tem salário.** Tudo o que foi validado usa fixture que o próprio teste
+cria e apaga. O caminho está provado; o resultado, não — o INSS de R$ 128,68 só o
+contador confirma.
