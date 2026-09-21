@@ -10,7 +10,7 @@ import { CircleDollarSign, LogOut, Eye, FileText, KeyRound, Upload, ChevronLeft,
 import {
   driverLogin, driverChangePassword, driverMyMirrors, driverMirrorUrl,
   driverNfSlots, driverNfList, driverNfUpload, driverNfSplitPreview,
-  driverProofSlots, driverProofUpload,
+  driverProofSlots, driverProofUpload, chaveDoCartaoDePrint,
   getDriverToken, getDriverName, setDriverSession, clearDriverSession,
   DriverApiError, type DriverMirror, type NfSlot, type NfFile, type NfIssuer,
   type ProofSlot,
@@ -375,7 +375,7 @@ export function DriverApp() {
         const { slots: novos } = await driverProofSlots('', token!);
         setProofSlots(novos);
         setProofPendentes(novos.filter((x) => x.sent === 0).length);
-        const s = novos.find((x) => `${x.driverId}|${x.platformName}` === chave);
+        const s = novos.find((x) => chaveDoCartaoDePrint(x) === chave);
         // Recusado ou ja contabilizado como enviado: acabou, nao precisa insistir.
         if (!s || s.rejected > 0 || s.sent > 0) return;
       } catch {
@@ -395,7 +395,7 @@ export function DriverApp() {
       toast.error('Envie uma imagem — o print ou a foto da tela do app.');
       return;
     }
-    const chave = `${slot.driverId}|${slot.platformName}`;
+    const chave = chaveDoCartaoDePrint(slot);
     setProofUploading(chave);
     try {
       const { base64, contentType, filename } = await fileToUpload(file);
@@ -596,7 +596,7 @@ export function DriverApp() {
     const appDoPrint = plataformas.length === 1 ? plataformas[0] : null;
 
     const cartao = (s: ProofSlot) => {
-      const chave = `${s.driverId}|${s.platformName}`;
+      const chave = chaveDoCartaoDePrint(s);
       const enviando = proofUploading === chave;
       const precisaReenviar = s.sent === 0 && s.rejected > 0;
       return (
@@ -644,12 +644,21 @@ export function DriverApp() {
      * sozinho, e aí o cartão volta a ser o de enviar.
      */
     const cartaoPronto = (s: ProofSlot) => {
-      const chave = `${s.driverId}|${s.platformName}`;
+      const chave = chaveDoCartaoDePrint(s);
       return (
         <div key={chave} className="bg-white/60 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-2">
             <CheckCircle2 size={18} className="text-green-600 flex-shrink-0" />
-            <span className="text-sm text-gray-600 break-words">{s.driverName}</span>
+            <div className="min-w-0">
+              <span className="text-sm text-gray-600 break-words">{s.driverName}</span>
+              {/* 21/09/2026: quem enviou print em duas quinzenas via o proprio nome
+                  repetido, sem nada diferenciando as linhas, e entendia que tinha
+                  mandado o mesmo espelho duas vezes. O cartao de quem FALTA ja dizia
+                  a quinzena; este nao dizia nunca. */}
+              {!umaQuinzenaSo && (
+                <div className="text-[11px] text-gray-500 break-words">{s.periodLabel}</div>
+              )}
+            </div>
           </div>
           <span className="text-xs text-gray-500 whitespace-nowrap flex-shrink-0">
             enviado
@@ -713,7 +722,7 @@ export function DriverApp() {
                         : `Faltam ${faltam.length} de ${todos.length}`}
                     </div>
                     <div className="text-amber-800 text-xs mt-0.5">
-                      {umaQuinzenaSo ? quinzenas[0] : 'Quinzenas em aberto'}
+                      {umaQuinzenaSo ? quinzenas[0] : quinzenas.join(' \u00b7 ')}
                     </div>
                   </>
                 )}
@@ -738,7 +747,10 @@ export function DriverApp() {
                 <p className="font-medium mb-1">Como tirar o print</p>
                 <ol className="list-decimal list-inside space-y-0.5 text-xs">
                   <li>Abra o app da <strong>{appDoPrint ?? 'plataforma'}</strong> e vá em <strong>Entrega</strong>.</li>
-                  <li>Toque em <strong>Selecionar data</strong> e escolha o período desta quinzena.</li>
+                  <li>
+                    Toque em <strong>Selecionar data</strong> e escolha o período
+                    {umaQuinzenaSo ? ' desta quinzena' : ' da quinzena escrita no cartão'}.
+                  </li>
                   <li>Deixe aparecendo a aba <strong>Encerrado</strong> com o número do lado.</li>
                   <li>Tire o print pelo próprio celular e envie aqui.</li>
                 </ol>

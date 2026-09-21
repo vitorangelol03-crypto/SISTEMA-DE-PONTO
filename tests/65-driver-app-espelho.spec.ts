@@ -48,6 +48,7 @@ const CPF = {
   lider: '99911100044',
   membro: '99911100055',
   soShopee: '99911100066',
+  duasQuinzenas: '99911100077',
 };
 
 /** Senha que o portal obriga a criar no 1o acesso (nao pode ser 1234). */
@@ -443,5 +444,78 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
     // 3) E o botão de enviar também — é o último lugar onde dá pra errar de app.
     await expect(page.getByText(/Enviar print do app SHOPEE/i).first()).toBeVisible();
     await print(page, 'H-tela-diz-shopee');
+  });
+
+  /**
+   * 🔴 CASO REAL (21/09/2026) — "o sistema esta duplicando, mostrando como se ele
+   * tivesse enviado 2 espelhos".
+   *
+   * A lider GREICE viu o PROPRIO NOME duas vezes em "Ja enviados" e entendeu que o
+   * sistema tinha duplicado o envio dela. Nao eram dois envios: era o print de uma
+   * quinzena e o de outra — a tela junta TODAS as quinzenas com print pedido, e a linha
+   * de quem JA ENVIOU so mostrava o nome, nunca a quinzena. O placar ainda dizia
+   * "Quinzenas em aberto" mesmo quando as quinzenas estavam concluidas.
+   *
+   * ⚠️ O print "ja enviado" entra DIRETO no banco, sem passar pelo portal: o que este
+   * cenario prova e a TELA, e um envio de verdade gastaria uma leitura da cota do
+   * Gemini que a operacao real usa (20/dia por modelo).
+   */
+  test('I. duas quinzenas: cada linha diz de qual quinzena e (nao parecem dois envios)', async ({ page }) => {
+    test.setTimeout(180_000);
+    // 1a quinzena: ja enviada. `cenario()` cria quinzena + driver + grupo + pedido.
+    const q1 = await cenario({
+      label: 'DuasQ1', cpf: CPF.duasQuinzenas, nome: 'DuasQuinzenas',
+      inicio: FOTO_INI, fim: FOTO_FIM, pacotes: 700,
+    });
+    const labelQ1 = `${PREF}DuasQ1 ${RUN}`;
+
+    // 2a quinzena, MESMO entregador. Nao da pra chamar `cenario()` de novo: ele cria um
+    // grupo por chamada e dois grupos com o mesmo lider quebram a edge fn (`maybeSingle`).
+    const labelQ2 = `${PREF}DuasQ2 ${RUN}`;
+    const { data: per2 } = await db.from('driverpay_periods').insert({
+      company_id: COMPANY, label: labelQ2,
+      start_date: '2026-07-16', end_date: '2026-07-31', status: 'aberto', created_by: '2626',
+    }).select('id').single();
+    criados.periodos.push(per2!.id);
+    const { data: pay2 } = await db.from('driverpay_payments').insert({
+      company_id: COMPANY, period_id: per2!.id, driver_id: q1.driverId,
+      driver_name_snapshot: `${PREF}DuasQuinzenas ${RUN}`,
+    }).select('id').single();
+    await db.from('driverpay_payment_packages').insert({
+      company_id: COMPANY, payment_id: pay2!.id,
+      platform_name: PLAT, route: '', packages: 800, rate_snapshot: 2.0,
+    });
+    await db.from('driverpay_proof_requests').insert({
+      company_id: COMPANY, period_id: per2!.id, platform_name: PLAT, requested_by: '2626',
+    });
+
+    // O print da 1a quinzena, ja aceito (sem gastar leitura da IA).
+    await db.from('driverpay_delivery_proofs').insert({
+      company_id: COMPANY, driver_id: q1.driverId, period_id: q1.periodId, payment_id: q1.paymentId,
+      platform_name: PLAT,
+      file_path: `${COMPANY}/${q1.periodId}/${q1.driverId}/${PLAT}/ja-enviado-${RUN}.jpg`,
+      file_type: 'image/jpeg', file_sha256: `pwtest-${RUN}`,
+      upload_source: 'app', uploaded_by: q1.driverId,
+      status: 'validado', check_status: 'ok',
+      check_qtd: true, check_periodo: true, read_packages: 700, expected_packages: 700,
+    });
+
+    await entrarNoPortal(page, CPF.duasQuinzenas);
+    await abrirEspelho(page);
+
+    // Um cartao por quinzena: um ja enviado, um faltando.
+    await expect(page.getByText('Faltam 1 de 2')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/J[áa] enviados \(1\)/i)).toBeVisible();
+
+    // 🔑 O QUE O BUG FAZIA: as duas linhas traziam so o nome, identicas. Agora cada uma
+    // diz a sua quinzena — no placar (as duas juntas) e no proprio cartao.
+    const tela = await page.locator('main').innerText();
+    const vezes = (todo: string) => tela.split(todo).length - 1;
+    expect(vezes(labelQ1), 'a quinzena JA ENVIADA aparece no placar e na linha dela').toBe(2);
+    expect(vezes(labelQ2), 'a quinzena que FALTA aparece no placar e no cartao dela').toBe(2);
+
+    // E o texto generico saiu: ele mentia quando a quinzena estava concluida.
+    await expect(page.getByText(/Quinzenas em aberto/i)).toHaveCount(0);
+    await print(page, 'I-duas-quinzenas-cada-uma-com-seu-rotulo');
   });
 });

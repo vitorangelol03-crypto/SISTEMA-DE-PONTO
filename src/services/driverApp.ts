@@ -261,6 +261,20 @@ export interface ProofFile {
   uploadedAt: string;
 }
 
+/**
+ * Identidade de um cartão de print na tela do entregador.
+ *
+ * ⚠️ A QUINZENA faz parte da identidade (21/09/2026). Sem ela, a mesma pessoa com print
+ * pedido em duas quinzenas virava dois cartões com a MESMA chave — e o que o entregador
+ * via era o próprio nome repetido em "Já enviados", como se tivesse mandado o mesmo
+ * espelho duas vezes. Ficava escrito à mão em 4 lugares; agora é um só.
+ */
+export function chaveDoCartaoDePrint(
+  s: Pick<ProofSlot, 'periodId' | 'driverId' | 'platformName'>,
+): string {
+  return `${s.periodId}|${s.driverId}|${s.platformName}`;
+}
+
 export function driverProofSlots(periodId: string | undefined, token: string): Promise<{ slots: ProofSlot[] }> {
   return callDriverApi<{ slots: ProofSlot[] }>('proof-slots', { periodId }, token);
 }
