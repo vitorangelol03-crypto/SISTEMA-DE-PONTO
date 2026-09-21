@@ -107,9 +107,13 @@
 > ✅ **Jeito certo:** empurrar o commit de CÓDIGO primeiro (o CI pega), e só depois
 > commitar+empurrar o checkpoint com `[skip ci]`. Foi o que a outra sessão de hoje fez
 > sem saber (`0899bdd` tem run verde; o checkpoint veio depois).
-> ⚠️ O código não foi cru para produção — validado localmente (1.858 unitários, E2E 37/37,
-> tsc, lint, build) e o deploy conferido por conteúdo. Mas a rede de segurança
-> compartilhada não viu. CI disparado à mão no fecho.
+> ⚠️ **Apurado depois:** o CI **viu sim** e passou — o run verde de 16:19 (`0899bdd`, push
+> de outra sessão) contém os três commits de correção. O buraco era de **rastreio**, não de
+> cobertura: não existe run no SHA do commit, então "esse commit passou?" não tem resposta.
+> A cobertura veio de carona num push posterior — num dia sem isso, não viria.
+> ⚠️ **E cuidado com o `workflow_dispatch`:** num push o CI roda a suíte **essencial**
+> (~15 min); num dispatch roda a **COMPLETA**, que leva >90 min e já estourou o timeout 3
+> vezes. O disparo manual do fecho foi cancelado aos 45 min por isso.
 
 > **📌 21/09 — AS TABELAS DE IMPOSTO ESTAVAM ERRADAS, E O MÉTODO DE CÁLCULO TAMBÉM.**
 >

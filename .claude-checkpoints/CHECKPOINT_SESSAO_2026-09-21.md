@@ -354,10 +354,22 @@ O GitHub decide pular olhando o **commit HEAD do push** — e o HEAD era o check
 o checkpoint `0493501` veio depois): **empurrar o commit de código primeiro**, deixar o CI
 pegar, e só então commitar+empurrar o checkpoint com `[skip ci]`.
 
-⚠️ O código não foi para produção sem validação — rodei tudo localmente (118 arquivos /
-1.858 unitários, E2E da folha 37/37, tsc, lint, build) e conferi o deploy por conteúdo.
-Mas o CI, que é a rede de segurança compartilhada, **nunca viu esse código**. Disparado à
-mão no fecho (`workflow_dispatch`) para cobrir o buraco.
+⚠️ **CORREÇÃO, apurada logo depois:** o CI **viu sim** este código, e passou. O run verde
+das 16:19 (`0899bdd`, por push de outra sessão) **contém os três commits de correção** —
+confirmado com `git merge-base --is-ancestor`. O buraco era de RASTREIO, não de
+cobertura: nenhum run existe *no SHA do commit de correção*, então "esse commit passou no
+CI?" não tem resposta olhando o commit. A cobertura veio de carona num push posterior — e
+só porque alguém empurrou código depois. Num dia sem isso, não teria vindo.
+
+⚠️ **E o disparo manual foi um erro meu:** o `ci.yml` roda a suíte **essencial** (~15 min)
+num push, mas a **COMPLETA** (chromium + mobile) num `workflow_dispatch` — e o comentário
+do próprio arquivo diz que ela leva >90 min e já estourou o timeout 3 vezes seguidas. A
+minha rodou 45 min e foi **cancelada**: ia dar um vermelho que não é sobre este código.
+Para cobrir um buraco desses, o certo é um push que dispare a suíte essencial, não o
+dispatch.
+
+O código também foi validado localmente: 118 arquivos / 1.858 unitários, E2E da folha
+37/37, tsc, lint, build, e o deploy conferido por conteúdo.
 
 ### 9.2 Estado no fecho
 
