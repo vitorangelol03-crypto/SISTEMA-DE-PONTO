@@ -11,7 +11,7 @@
  * seria recusado. Em 04/08 as duas quinzenas de produção estavam justamente com
  * o mês do fim adiantado, então este campo não é burocracia.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardList, Loader2, AlertTriangle, Users, Check, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -20,7 +20,10 @@ import {
   cancelProofRequest,
   updatePeriod,
 } from '../../services/driverPay';
-import { expectedProofPlatforms, proofForaPorSemGrupo, type DriverRowData, type ProofRequest } from './driverPayShared';
+import {
+  expectedProofPlatforms, proofForaPorSemGrupo, quemParaDeSerCobrado,
+  type DriverRowData, type ProofRequest, type ProofState,
+} from './driverPayShared';
 import { ModalShell } from './ModalShell';
 import { contemSemAcento } from '../../utils/buscaTexto';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
@@ -42,6 +45,11 @@ interface SolicitarEspelhoModalProps {
    * e a conferencia da QUANTIDADE espera a planilha chegar.
    */
   semPlanilha?: ReadonlySet<string>;
+  /**
+   * Estado do print por `driverId|plataforma` (o mesmo Map da grade). Serve pro aviso
+   * saber quem, ao perder a cobranca, AINDA NAO tinha mandado o print.
+   */
+  proofStates?: ReadonlyMap<string, ProofState>;
   userId: string;
   onClose: () => void;
   /** Chamado depois de gravar, pra grade recarregar. Pode ser async. */
@@ -60,7 +68,7 @@ type Escopo = 'todos' | 'grupo' | 'driver' | 'manter';
 
 export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
   companyId, periodId, periodLabel, periodStart, periodEnd,
-  rows, platformNames, semPlanilha, userId, onClose, onChanged,
+  rows, platformNames, semPlanilha, proofStates, userId, onClose, onChanged,
 }) => {
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -75,6 +83,19 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
   const [inicio, setInicio] = useState(periodStart ?? '');
   const [fim, setFim] = useState(periodEnd ?? '');
 
+  /**
+   * 🔴 A lista de plataformas NAO pode ser dependencia do efeito de carga (21/09/2026).
+   *
+   * O painel monta `platformNames` inline (`platforms.map(...)`), entao e um array NOVO a
+   * cada render — e o painel se re-renderiza sozinho a cada ~1,5s enquanto ha print na
+   * fila (a varredura). Com ele nas dependencias, o efeito recarregava do banco e
+   * SOBRESCREVIA o que o operador tinha acabado de marcar: ele escolhia uma plataforma (ou
+   * "so um entregador") e a tela voltava sozinha pro estado gravado, sem avisar. Ref aqui
+   * porque o valor so serve pra decidir o padrao na PRIMEIRA carga.
+   */
+  const platformNamesRef = useRef(platformNames);
+  platformNamesRef.current = platformNames;
+
   useEffect(() => {
     let vivo = true;
     (async () => {
@@ -83,7 +104,7 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
         if (!vivo) return;
         setJaSolicitadas(atuais);
         const plats = [...new Set(atuais.map((r) => r.platformName))];
-        setMarcadas(new Set(plats.length ? plats : platformNames.includes(PADRAO) ? [PADRAO] : []));
+        setMarcadas(new Set(plats.length ? plats : platformNamesRef.current.includes(PADRAO) ? [PADRAO] : []));
         // ⚠️ Deriva o alcance do que JA esta gravado. Se cair no 'todos' por engano, um clique
         // em "Solicitar espelho" ampliaria o pedido pra empresa inteira sem querer.
         const alvos = [...new Set(atuais.map((r) => r.driverId))];
@@ -97,7 +118,7 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
       }
     })();
     return () => { vivo = false; };
-  }, [companyId, periodId, platformNames]);
+  }, [companyId, periodId]);
 
   /** Entregadores que o alcance escolhido atinge (null = todo mundo). */
   const alvos = useMemo<(string | null)[]>(() => {
@@ -164,6 +185,22 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
     };
   }, [rows, pedidosDesejados, semPlanilha]);
 
+  /**
+   * 🔴 Quem PARA de ser cobrado se ele salvar assim (21/09/2026).
+   *
+   * O "Salvar" grava a diferenca: o que nao esta marcado na tela e APAGADO do banco. Pedir
+   * o print de uma pessoa, com o pedido geral no ar, cancelava a cobranca de todos os
+   * outros — calado. Agora a tela diz, antes, exatamente quem perde.
+   */
+  const perdemCobranca = useMemo(
+    () => quemParaDeSerCobrado(rows, jaSolicitadas, pedidosDesejados, semPlanilha, proofStates),
+    [rows, jaSolicitadas, pedidosDesejados, semPlanilha, proofStates],
+  );
+  const perdemSemPrint = useMemo(
+    () => perdemCobranca.filter((p) => p.aindaSemPrint),
+    [perdemCobranca],
+  );
+
   const datasOk = Boolean(inicio && fim && inicio <= fim);
   const duracao = datasOk
     ? Math.round((new Date(fim).getTime() - new Date(inicio).getTime()) / 86_400_000)
@@ -209,6 +246,21 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
 
   const handleSalvar = async () => {
     if (!datasOk) { toast.error('Preencha as datas da quinzena.'); return; }
+    // ⚠️ Reduzir o alcance APAGA pedido de gente que hoje e cobrada. Antes de 21/09/2026
+    // isso acontecia sem uma palavra na tela — e foi assim que um pedido individual
+    // derrubou a cobranca da quinzena inteira. Agora tem freio, com nome e numero.
+    if (perdemCobranca.length > 0) {
+      const nomes = perdemSemPrint.slice(0, 6).map((p) => `- ${p.name}`).join('\n');
+      const resto = perdemSemPrint.length > 6 ? `\n- e mais ${perdemSemPrint.length - 6}` : '';
+      if (!window.confirm(
+        `ATENCAO: isto vai PARAR de pedir o print de ${perdemCobranca.length} entregador(es).\n\n` +
+        (perdemSemPrint.length > 0
+          ? `${perdemSemPrint.length} deles AINDA NAO mandaram o print e somem da fila:\n${nomes}${resto}\n\n`
+          : 'Todos eles ja mandaram o print — nada se perde.\n\n') +
+        'Os prints que ja chegaram continuam guardados. Da pra solicitar de novo depois.\n\n' +
+        'Continuar?',
+      )) return;
+    }
     setSalvando(true);
     try {
       // 1. Grava as datas na quinzena (é contra elas que o print é conferido).
@@ -459,6 +511,38 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
                 importar a planilha — sem gastar leitura de novo, porque o numero do print ja fica
                 guardado.
               </p>
+            </div>
+          )}
+
+          {/* ── 🔴 Quem PARA de ser cobrado se salvar assim (21/09/2026) ──
+               O "Salvar" grava a diferenca: o que nao esta marcado aqui e apagado do banco.
+               Sem este aviso, pedir o print de UMA pessoa cancelava a cobranca de todas as
+               outras sem dizer nada — aconteceu em producao. */}
+          {perdemCobranca.length > 0 && (
+            <div
+              className="rounded-lg border-2 border-red-400 bg-red-50 px-3 py-3"
+              data-testid="proof-perde-cobranca-aviso"
+            >
+              <p className="text-sm text-red-900 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>
+                  <strong>
+                    Isto vai parar de pedir o print de {perdemCobranca.length} entregador(es).
+                  </strong>{' '}
+                  Eles sao cobrados hoje e deixam de ser com o que esta marcado acima.
+                </span>
+              </p>
+              {perdemSemPrint.length > 0 ? (
+                <p className="text-xs text-red-800 mt-1">
+                  <strong>{perdemSemPrint.length} ainda nao mandaram o print</strong> e somem da
+                  fila: {perdemSemPrint.slice(0, 8).map((x) => x.name).join(', ')}
+                  {perdemSemPrint.length > 8 ? ` e mais ${perdemSemPrint.length - 8}` : ''}.
+                </p>
+              ) : (
+                <p className="text-xs text-red-800 mt-1">
+                  Todos eles ja mandaram o print — nada se perde.
+                </p>
+              )}
             </div>
           )}
 

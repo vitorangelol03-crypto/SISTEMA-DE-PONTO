@@ -204,6 +204,31 @@ test.describe('Espelho do app da Shopee — painel (04/08/2026)', () => {
       await botaoSolicitar.click();
       await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 15_000 });
 
+      // ══ 1b. 🔴 REDUZIR O ALCANCE AVISA ANTES (21/09/2026) ════════════════
+      // Caso real: com o pedido GERAL no ar, pedir o print de UMA pessoa apagava o geral
+      // junto e a cobranca da quinzena inteira caia CALADA (8 entregadores sumiram da fila
+      // sem ninguem ver). Agora a tela diz, em vermelho, quem para de ser cobrado.
+      await page.getByRole('button', { name: 'Solicitar espelho' }).click();
+      await expect(modal(page).getByText('Solicitar espelho do app')).toBeVisible({ timeout: 10_000 });
+      // Abriu sem mexer em nada: ninguem perde, nenhum aviso.
+      await expect(modal(page).getByTestId('proof-perde-cobranca-aviso')).toHaveCount(0);
+
+      // Desmarcar a plataforma tira a cobranca de quem e cobrado hoje — e o aviso aparece.
+      const chipDoPedido = chip(plataforma.name);
+      await chipDoPedido.click();
+      const avisoPerda = modal(page).getByTestId('proof-perde-cobranca-aviso');
+      await expect(avisoPerda).toBeVisible({ timeout: 10_000 });
+      await expect(avisoPerda).toContainText(/parar de pedir o print de 1 entregador/i);
+      await expect(avisoPerda).toContainText(/ainda nao mandaram o print|ainda não mandaram o print/i);
+      await expect(avisoPerda).toContainText(DRIVER);
+
+      // Remarcar devolve tudo: o aviso some sozinho.
+      await chipDoPedido.click();
+      await expect(avisoPerda).toHaveCount(0);
+
+      // Sai sem salvar — o pedido do passo 1 continua de pe pro resto do teste.
+      await closeModal(page);
+
       // ══ 2. A grade tem UMA coluna só pro assunto: "Espelho" ══════════════
       // ⚠️ ATUALIZADO em 05/08/2026: a coluna "Print" SAIU. Ela e o "Espelho" contavam a
       // mesma história (o print é o meio, o espelho conferido é o fim) e o Victor pediu

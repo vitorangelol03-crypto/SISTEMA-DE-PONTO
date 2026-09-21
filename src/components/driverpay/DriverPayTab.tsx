@@ -1564,6 +1564,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     [rows, platforms],
   );
 
+  /** Estavel: array novo a cada render reiniciava o formulario dos modais (21/09/2026). */
+  const platformNames = useMemo(() => platforms.map((p) => p.name), [platforms]);
+
   const proofProgressByPayment = useMemo(
     () => computeProofProgressByPayment(rows, proofRequests, proofStates, semPlanilha),
     [rows, proofRequests, proofStates, semPlanilha],
@@ -2400,7 +2403,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         <MarkPaidModal
           rows={markPaidTarget.rows}
           title={markPaidTarget.title}
-          platformNames={platforms.map((p) => p.name)}
+          platformNames={platformNames}
           deductionLedger={deductionLedger}
           companyId={company.id}
           periodId={selectedPeriod.id}
@@ -2469,8 +2472,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           periodStart={selectedPeriod.start_date ?? null}
           periodEnd={selectedPeriod.end_date ?? null}
           rows={rows}
-          platformNames={platforms.map((p) => p.name)}
+          platformNames={platformNames}
           semPlanilha={semPlanilha}
+          proofStates={proofStates}
           userId={userId}
           onClose={() => setShowSolicitarEspelho(false)}
           onChanged={async () => {

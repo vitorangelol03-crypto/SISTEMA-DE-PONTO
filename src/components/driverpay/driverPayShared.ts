@@ -880,6 +880,55 @@ export function expectedProofPlatforms(
   return [...nomes];
 }
 
+/** Um entregador que PARA de ser cobrado quando a solicitacao muda de alcance. */
+export interface PerdaDeCobranca {
+  driverId: string;
+  name: string;
+  /** Plataformas que ele deixa de ser cobrado. */
+  plataformas: string[];
+  /** true = ainda NAO tem print valendo nelas — e quem de fato some da fila. */
+  aindaSemPrint: boolean;
+}
+
+/**
+ * Quem PARA de ser cobrado ao trocar a solicitacao de `antes` para `depois`.
+ *
+ * 🔴 EXISTE POR UM CASO REAL (21/09/2026): o modal "Solicitar espelho" grava a DIFERENCA
+ * entre o que esta no banco e o que esta marcado na tela — entao pedir o print de UMA
+ * pessoa apagava o pedido GERAL e, com ele, a cobranca de todos os outros. Aconteceu as
+ * 07:03 de 21/09: um pedido individual derrubou o pedido da quinzena inteira e 8
+ * entregadores que ainda nao tinham mandado o print sumiram da fila, calados.
+ *
+ * A conta e a mesma da coluna "Print" da grade (`expectedProofPlatforms`), feita duas
+ * vezes: o que ele e cobrado HOJE menos o que sera cobrado DEPOIS.
+ *
+ * `stateByDriverPlatform` (chave `driverId|plataforma`) e opcional: sem ele todo mundo
+ * conta como `aindaSemPrint`, que e o lado seguro do aviso.
+ */
+export function quemParaDeSerCobrado(
+  rows: readonly DriverRowData[],
+  antes: readonly ProofRequest[],
+  depois: readonly ProofRequest[],
+  semPlanilha?: ReadonlySet<string>,
+  stateByDriverPlatform?: ReadonlyMap<string, ProofState>,
+): PerdaDeCobranca[] {
+  const out: PerdaDeCobranca[] = [];
+  for (const row of rows) {
+    const agora = expectedProofPlatforms(row, antes, semPlanilha);
+    if (agora.length === 0) continue;
+    const futuro = new Set(expectedProofPlatforms(row, depois, semPlanilha));
+    const perdidas = agora.filter((p) => !futuro.has(p));
+    if (perdidas.length === 0) continue;
+    // Print RECUSADO nao vale: ele precisa mandar outro, entao ainda esta na fila.
+    const aindaSemPrint = perdidas.some((p) => {
+      const estado = stateByDriverPlatform?.get(`${row.driverId}|${p}`);
+      return estado === undefined || estado === 'recusado' || estado === 'faltando';
+    });
+    out.push({ driverId: row.driverId, name: row.name, plataformas: perdidas, aindaSemPrint });
+  }
+  return out;
+}
+
 /**
  * Veredito da QUANTIDADE quando a planilha finalmente chega, usando o número que a IA
  * **já leu** e está guardado no print. É conta pura: nenhuma foto é baixada e nenhuma
