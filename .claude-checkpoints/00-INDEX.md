@@ -1,5 +1,22 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **📌 21/09 — O PDF PUBLICADO, E DOIS TESTES QUE MENTIAM.** Commits `601ab82` e `cf057cb`.
+>
+> ✅ **"Ver o PDF que esta no app"** no dialogo de espelho: a previa e sempre uma geracao NOVA
+> e pode sair diferente do papel que o driver tem (republicar um espelho que ja abateu mostra
+> "NAO foram descontados", porque o livro-caixa ja registrou o abate). Agora da pra abrir o
+> arquivo publicado.
+> ✅ **Regra do desconto conferida no dado:** despublicar **estorna** e o painel rele o livro,
+> entao despublicar → publicar de novo **aplica de novo, sem cobrar em dobro**. Republicar POR
+> CIMA e que sai com valor cheio. Os 17 espelhos com desconto da quinzena **batem no centavo**.
+> 🔴 **`tests/101` D1 derruba o CI desde ONTEM** (facial obrigatoria mudou o /clock depois do
+> CPF) — nao e regressao de hoje, provado no run de 20/09 22:45. Nao consertado.
+> 🔴 **`tests/72` nao passava do SETUP** (`Novo driver`, 10s de actionTimeout): a aba carrega
+> **138 drivers** e leva mais que isso. **A/B com o painel antigo falha igual** e a maquina
+> estava ociosa. Corrigido com espera por condicao → 1 passed.
+> ⚠️ **O CI nao roda spec nenhum de driverpay** (essenciais: 01/02/25/38/47/49/50/51/100/101)
+> — foi por isso que o 72 ficou quebrado sem ninguem ver.
+
 > **📌 21/09 — PEDIR O PRINT DE UM CANCELAVA A COBRANÇA DE TODOS.** Commit `e6de04f`.
 >
 > 🔴 Hoje às **07:03**, com o pedido GERAL no ar, um pedido individual apagou o geral junto:

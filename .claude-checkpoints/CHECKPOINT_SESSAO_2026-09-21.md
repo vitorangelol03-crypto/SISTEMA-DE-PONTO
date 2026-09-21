@@ -206,6 +206,40 @@ dois. Scripts da conferência em `scratchpad` (descartáveis).
   timeout de 10s por carga do WSL): reproduziu igual nas duas rodadas, antes e depois da
   mudança.
 
+### 8.7 Ainda no mesmo dia: o PDF publicado, e dois testes que mentiam
+
+**O botao "Ver o PDF que esta no app"** (`601ab82`) — pedido dele ("confundiu minha
+cabeca"). A previa do dialogo de espelho e sempre uma geracao NOVA e pode sair diferente
+do papel que o driver tem: republicar um espelho que ja abateu mostra *"os vales e perdas
+NAO foram descontados"*, porque o livro-caixa ja registrou o abate e o modo padrao calcula
+zero. Agora da pra abrir o ARQUIVO publicado (link assinado), reusando o `mirrorPdfUrl` de
+05/08.
+
+**A regra do desconto ao republicar, conferida no dado** (ele perguntou se o desconto
+"some"): despublicar **estorna** o abate (`clearMirrorDeductions`) e o painel rele o livro
+junto (`reloadPublished`), entao despublicar → publicar de novo **aplica o desconto outra
+vez e nao cobra em dobro**. Republicar POR CIMA, sem despublicar, e o caso que engana: o
+papel sai com o valor cheio. Varri os 17 espelhos com desconto da quinzena: **todos batem
+no centavo** (papel = livro = divida); os 2 "devendo sem abate" (Fernando 350,73 e Othon
+12,00) tem **total a receber R$ 0,00** — a regra e nunca abater mais do que a pessoa
+recebe, e a divida fica pra proxima.
+
+🔴 **Dois testes estavam mentindo, e nenhum era regressao minha:**
+1. **`tests/101` D1 (/clock PN)** derruba o CI desde **ontem** (run de 20/09 22:45, mesma
+   linha, "110 passed, 1 failed"). O teste espera "Digite seu PIN" ou a escolha de empresa
+   depois do CPF — e a **facial obrigatoria** (ligada nas duas empresas em 31/08) mudou
+   esse caminho. Mesma familia dos specs 08/23/62 ja registrados. **Nao consertado** —
+   avisado, aguardando o Victor.
+2. **`tests/72`** nao passava mais do SETUP (`Novo driver`, `actionTimeout` de 10s): a aba
+   hoje carrega **138 drivers** com espelhos, notas e prints e leva mais que isso pra
+   assentar. **Provado por A/B** (falha igual com o painel na versao anterior) e com a
+   maquina ociosa (load 0,39). Corrigido com espera por condicao (`cf057cb`) → **1 passed,
+   saida 0**, e so ai o cenario do PDF publicado rodou de verdade.
+
+⚠️ **O CI nao cobre o driverpay:** a lista de specs essenciais e 01/02/25/38/47/49/50/51/
+100/101. Os specs de Pagamentos Driver (57, 60, 64, 65, 72, 76, 77...) **so rodam local** —
+foi por isso que o `tests/72` ficou quebrado sem ninguem ver.
+
 ### 8.6 Pendências desta frente
 
 1. 🔴 **Cartão de print para quem não entrega a plataforma** — a causa raiz do print
@@ -217,3 +251,8 @@ dois. Scripts da conferência em `scratchpad` (descartáveis).
    importação). Mapeado o que precisa ser movido e as travas do banco; **falta escrever**, e
    vai precisar de OK para uma migration (o merge tem que ser atômico).
 4. 🟡 2 prints ainda em nome de quem não tem pacote da plataforma (Cloves e Camilli).
+5. 🔴 **`tests/101` D1 derruba o CI desde ontem** (facial obrigatória mudou o /clock).
+   Conserto é só de teste; esperando o OK dele.
+6. 🟡 **Avisar ao republicar espelho que já abateu**: hoje o papel sai com valor cheio e só
+   quem sabe da regra entende por quê. Proposto, não feito.
+7. 🟡 **O CI não roda nenhum spec de driverpay** — vale decidir se entra pelo menos um.
