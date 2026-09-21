@@ -3,6 +3,29 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **📌 20/09 — EXCLUIR QUINZENA DO DRIVERPAY NUNCA FUNCIONOU.** Commit `02386bf`.
+>
+> 🔴 **Bug de produção, achado de rebote** ao validar a mudança do `tests/57` parada
+> desde 15/09. O botão **Excluir** só aparece em quinzena **CONCLUÍDA**
+> (`isConcluded`, DriverPeriodSelector), e o trigger `driverpay_enforce_period_locked`
+> recusa INSERT/UPDATE/**DELETE** nos lançamentos de quinzena concluída — **inclusive os
+> que vêm por CASCADE**. O único estado em que o botão aparece era exatamente o que o
+> banco recusava, e **não havia saída**: clicar em "Reabrir" faz o próprio Excluir sumir.
+> ✅ **Provado pelo RASTRO DE REDE do teste, não por leitura de código:**
+> `DELETE driverpay_payments -> HTTP 400` + `RAISE EXCEPTION 'Quinzena concluida'`.
+> ✅ **Correção (opção 1, escolhida pelo Victor, SEM migration):** `deletePeriod` lê o
+> estado, destrava com o `reopenPeriod` **que já existia**, e apaga; se falhar no meio,
+> devolve a trava **exatamente** como estava (status + concluded_at + concluded_by).
+> Destravar por dentro não afrouxa nada: manda `driverpay.managePeriods`, a MESMA
+> permissão do reabrir.
+> 🔬 **O A/B que separou os dois problemas** (`git stash`): SEM a mudança de 15/09 o teste
+> morre cedo no `closeModal` (desde 09/09 o X do cabeçalho também se chama "Fechar" e o
+> `getByRole` achava 2 botões); COM ela vai até o fim e bate no bug. **A mudança de 15/09
+> estava certa** — ela só destapou o que estava escondido atrás.
+> ✅ `tests/57` **é** o teste de regressão (conclui e depois exclui): vermelho antes,
+> **2/2 verde** depois · 31 arquivos e **414 unitários** de driverpay, 3/3 lotes código 0 ·
+> tsc · lint · build.
+
 > **📌 20/09 — O SISTEMA JOGAVA UM CENTAVO FORA. CONFERIDO POR FORA E CORRIGIDO NA RAIZ.**
 >
 > 🔴 **Bug real, achado por um conferidor INDEPENDENTE** (implementação separada, escrita
@@ -2293,7 +2316,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
-| `CHECKPOINT_SESSAO_2026-09-20.md` | **Mais recente.** Pedido do Victor: *"testa todo o sistema, o fluxo completo... se ele calcula os valores corretos e pode realmente confiar nessas folhas"*. Montado um **conferidor independente** (implementacao separada em Python, escrita da regra da lei) rodando o sistema sobre **431 casos**: **5.640 conferencias, 0 divergencias** — refaz INSS/IRRF/FGTS por fora E checa invariantes (liquido fecha, premiacao e salario familia fora de toda base, 1a parcela do 13o sem imposto, 1a+2a = unica, justa causa sem multa, art. 130 por periodo). 🔴 **Achou bug real: o centavo do truncamento** (`Math.floor(v*100)`, 5.06*100 = 505.99999999999994) em 5,34% dos salarios de mes nao cheio, sempre contra o funcionario; raiz era estar **copiado em 4 arquivos** → `utils/folha/dinheiro.ts`, teste vermelho primeiro. 🔴 **Risco maior que o bug: as tabelas estao `confirmado: false`** — so a 1a e 2a faixa do INSS foram provadas; 12%, 14%, teto e IRRF inteiro, nunca. 🔴 Duas armadilhas de ferramenta fizeram uma rodada mentir (`--reporter=basic` inexistente no vitest 4; `codigo=$?` com acento no bash). Tutorial ganhou a 10a pagina com a conta do INSS aberta. 1.833 unitarios / 115 arquivos · E2E folha 37/37 · build · tsc · lint. Producao intocada. | 🟢 ATIVO |
+| `CHECKPOINT_SESSAO_2026-09-20.md` | **Mais recente.** (§8) 🔴 **EXCLUIR QUINZENA DO DRIVERPAY NUNCA FUNCIONOU** — botao so aparece em quinzena CONCLUIDA e o trigger recusa DELETE dos lancamentos dela (inclusive por CASCADE); provado pelo rastro de rede (HTTP 400), corrigido destravando por dentro com o `reopenPeriod` que ja existia, SEM migration, e devolvendo a trava se falhar no meio. Pedido do Victor: *"testa todo o sistema, o fluxo completo... se ele calcula os valores corretos e pode realmente confiar nessas folhas"*. Montado um **conferidor independente** (implementacao separada em Python, escrita da regra da lei) rodando o sistema sobre **431 casos**: **5.640 conferencias, 0 divergencias** — refaz INSS/IRRF/FGTS por fora E checa invariantes (liquido fecha, premiacao e salario familia fora de toda base, 1a parcela do 13o sem imposto, 1a+2a = unica, justa causa sem multa, art. 130 por periodo). 🔴 **Achou bug real: o centavo do truncamento** (`Math.floor(v*100)`, 5.06*100 = 505.99999999999994) em 5,34% dos salarios de mes nao cheio, sempre contra o funcionario; raiz era estar **copiado em 4 arquivos** → `utils/folha/dinheiro.ts`, teste vermelho primeiro. 🔴 **Risco maior que o bug: as tabelas estao `confirmado: false`** — so a 1a e 2a faixa do INSS foram provadas; 12%, 14%, teto e IRRF inteiro, nunca. 🔴 Duas armadilhas de ferramenta fizeram uma rodada mentir (`--reporter=basic` inexistente no vitest 4; `codigo=$?` com acento no bash). Tutorial ganhou a 10a pagina com a conta do INSS aberta. 1.833 unitarios / 115 arquivos · E2E folha 37/37 · build · tsc · lint. Producao intocada. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-19.md` | A FOLHA FICOU COMPLETA em 4 levas: (0+1) o recibo jogava os descontos da folha fora e a folha chegou ao relatorio e a tela; (2) 13o salario com as duas parcelas, avos e media do noturno, migration `20260919220837` aplicada e provada; (3) ferias por avos com o alerta de VENCIDA; (4) rescisao com os 4 motivos, aviso projetado e migration `20260920003533`; (5) 2a via do 13o e da rescisao (migration `20260920023702`), releitura e nunca recalculo; (6) 13o e rescisao no relatorio, por data e verba a verba; (7) desligado some das telas (regra em `utils/desligados.ts`), com a trava de bater ponto escrita mas NAO publicada. Tambem: o ponto do milhar voltou pro dinheiro das telas. 18 das 21 fichas sem data de admissao bloqueiam o uso real das ferias. O recibo de carteira assinada jogava os descontos da folha fora: `linhasDoRecibo` mandava TODAS as linhas pra *proventos*, então falta/INSS/IRRF saíam como "+ R$ 0,00", o total de descontos dava zero e o líquido ignorava o salário (provado gerando o PDF e lendo o texto de dentro). Passou porque os 9 testes do recibo só usavam folha sem falta e sem imposto. Consertado + `totaisDoRecibo` extraído; `utils/folha/folhaDaPessoa` novo (uma conta só pra recibo, relatório e tela); relatórios com salário/noturno/sal. família/férias/faltas/INSS/IRRF e FGTS como custo-empresa; tela do Financeiro mostra o salário. Folha só em MÊS FECHADO, com aviso no recorte menor. 4 decisões do Victor gravadas. 104 arquivos / 1.649 unitários + E2E 116 3/3. Produção inerte: 0 das 105 fichas tem salário. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-18.md` | A folha de carteira assinada inteira, em 4 levas: import da Shopee consertado (cabeçalho novo + leitura `dense`, 33 MB em 45s no navegador); salário fixo, salário família e FGTS (8% TRUNCADO, provado contra os 12 recibos reais); falta com atestado, DSR configurável e férias com 1/3; INSS derivado do papel (11/11) e IR calculado pelos dois caminhos. 3 migrations aplicadas. A lista dos 5 pontos pro contador e a tarja "VALORES EM CONFERÊNCIA" nascem daqui. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-15.md` | Distribuição de triagem quebrada desde 03/09 nas duas empresas ("Erro ao distribuir"): o INSERT pedia a linha inteira de volta (`.select()`) e a trava de 03/09 tirou a leitura de `value_per_error`/`total_deducted` → 403. Conserto `.select('id')` (`9c9a804`), provado por simulação no banco + E2E novo que clica em Confirmar (vermelho no código antigo, spec 18 9/9). Semanas de 01–12/09 ficaram sem distribuir. | 🟢 ATIVO |

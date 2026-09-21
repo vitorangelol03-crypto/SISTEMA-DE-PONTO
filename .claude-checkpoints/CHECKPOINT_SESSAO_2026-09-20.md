@@ -153,7 +153,54 @@ O PDF **não entra no repo** (artefato regenerável, tem nomes reais):
 
 ---
 
-## 8. Pendências
+## 8. 🔴 BÔNUS: excluir quinzena do driverpay NUNCA funcionou
+
+Veio de rebote. O Victor mandou validar e subir a mudança do `tests/57` parada desde
+15/09 (não commitada). Ela não passou — e a investigação achou um bug de produção.
+
+**O A/B que separou as duas coisas** (`git stash` + rodar os dois):
+
+| | Onde o teste morre |
+|---|---|
+| **SEM** a mudança de 15/09 | cedo, no `closeModal` (linha 44) |
+| **COM** a mudança | vai até o fim da jornada, morre ao excluir a quinzena |
+
+Ou seja: a mudança de 15/09 **está certa e é necessária** (desde 09/09 o X do cabeçalho
+do `ModalShell` também tem `aria-label="Fechar"`, o `getByRole` achava 2 botões e o
+clique travava). Ela só destapou um segundo problema que estava escondido atrás do
+primeiro.
+
+**O bug, provado pelo RASTRO DE REDE — não por leitura de código:**
+
+```
+DELETE driverpay_payments?period_id=... -> HTTP 400
+RAISE EXCEPTION 'Quinzena concluida: reabra a quinzena para editar'
+```
+
+- O botão **Excluir** só aparece com `isConcluded` (`DriverPeriodSelector`).
+- O trigger `driverpay_enforce_period_locked` recusa INSERT/UPDATE/**DELETE** nos
+  lançamentos de quinzena concluída — **inclusive os que vêm por CASCADE**.
+- O único estado em que o botão aparece é exatamente o que o banco recusa. E não havia
+  saída: clicar em "Reabrir" faz o próprio Excluir sumir da tela.
+
+**Correção (opção 1, escolhida pelo Victor):** `deletePeriod` lê o estado, destrava com o
+`reopenPeriod` **que já existia**, e apaga. Se falhar no meio, devolve a trava
+**exatamente** como estava (`status`, `concluded_at`, `concluded_by`) — senão sobraria
+uma quinzena fechada editável sem ninguém saber.
+
+Destravar por dentro **não afrouxa nada**: quem manda é `driverpay.managePeriods`, a
+MESMA permissão do reabrir. Quem pode excluir já podia reabrir à mão.
+
+⚠️ **Sem migration.** As outras duas opções (mexer no trigger, ou tirar o botão) foram
+apresentadas e recusadas.
+
+O `tests/57` **é** o teste de regressão: ele conclui a quinzena e depois exclui — o
+caminho quebrado. Vermelho antes, verde depois (2/2, saída 0). Mais 31 arquivos e **414
+unitários** de driverpay em 3 lotes, todos código 0. Commit `02386bf`.
+
+---
+
+## 9. Pendências
 
 1. 🔴 **Tabela de INSS e IRRF de 2026 com o contador** — o maior risco aberto da folha.
 2. ⚠️ **`tests/57-driverpay-edits-roundtrip.spec.ts` tem mudança de 15/09 não commitada**
