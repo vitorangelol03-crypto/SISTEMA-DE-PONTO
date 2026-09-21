@@ -1396,14 +1396,55 @@ export const deletePeriod = async (periodId: string, companyId: string, userId: 
       .map((r) => r[col])
       .filter((p): p is string => !!p);
 
-  const { error: e1 } = await supabase
-    .from('driverpay_payments')
-    .delete()
-    .eq('period_id', periodId)
-    .eq('company_id', companyId);
-  if (e1) throwDbError(e1);
-  const { error: e2 } = await supabase.from('driverpay_periods').delete().eq('id', periodId).eq('company_id', companyId);
-  if (e2) throwDbError(e2);
+  // 20/09/2026: DESTRAVA ANTES DE APAGAR — sem isto, excluir quinzena NUNCA funcionou.
+  //
+  // O botão Excluir só existe em quinzena CONCLUÍDA (`isConcluded` no DriverPeriodSelector),
+  // e o trigger `driverpay_enforce_period_locked` recusa INSERT/UPDATE/**DELETE** nos
+  // lançamentos de uma quinzena concluída — inclusive nos que vêm por CASCADE. O único
+  // estado em que o botão aparece é exatamente o que o banco recusa, e não havia saída:
+  // clicar em "Reabrir" faz o próprio Excluir sumir da tela.
+  //
+  // Achado em 20/09 pelo rastro de rede do `tests/57`: `DELETE driverpay_payments` → 400,
+  // e o modal parado com a mensagem "Quinzena concluida: reabra a quinzena para editar".
+  //
+  // Destravar aqui dentro não afrouxa nada: quem manda é `driverpay.managePeriods`, a
+  // MESMA permissão do `reopenPeriod` — quem pode excluir já podia reabrir à mão.
+  const { data: antes, error: eLer } = await supabase
+    .from('driverpay_periods')
+    .select('status, concluded_at, concluded_by')
+    .eq('id', periodId)
+    .eq('company_id', companyId)
+    .maybeSingle();
+  if (eLer) throwDbError(eLer);
+  const estavaConcluida = antes?.status === 'concluido';
+  if (estavaConcluida) await reopenPeriod(periodId, companyId, userId);
+
+  try {
+    const { error: e1 } = await supabase
+      .from('driverpay_payments')
+      .delete()
+      .eq('period_id', periodId)
+      .eq('company_id', companyId);
+    if (e1) throwDbError(e1);
+    const { error: e2 } = await supabase.from('driverpay_periods').delete().eq('id', periodId).eq('company_id', companyId);
+    if (e2) throwDbError(e2);
+  } catch (e) {
+    // Falhou no meio do caminho: devolve a trava EXATAMENTE como estava (inclusive quem
+    // concluiu e quando). Sem isto sobraria uma quinzena fechada editável sem ninguém
+    // saber — que é o oposto do que a trava existe pra garantir.
+    if (estavaConcluida) {
+      await supabase
+        .from('driverpay_periods')
+        .update({
+          status: 'concluido',
+          concluded_at: antes?.concluded_at ?? null,
+          concluded_by: antes?.concluded_by ?? null,
+        })
+        .eq('id', periodId)
+        .eq('company_id', companyId);
+    }
+    throw e;
+  }
 
   // Arquivos em melhor esforço, DEPOIS do período sair (falhar aqui = órfão como
   // antes, nunca linha apontando pro nada). Lotes de 100 por folga do storage.

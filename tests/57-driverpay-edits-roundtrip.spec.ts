@@ -39,9 +39,12 @@ const periodSelect = (page: Page, label: string): Locator =>
   page.locator('select').filter({ hasText: label }).first();
 
 async function closeModal(page: Page): Promise<void> {
-  const fechar = modal(page).getByRole('button', { name: 'Fechar' });
+  // 15/09/2026: desde 09/09 (c993e8c) o X do cabeçalho do ModalShell também se chama
+  // "Fechar" (aria-label) — o getByRole achava 2 botões e o clique travava. O do rodapé
+  // é o único com o TEXTO "Fechar" (o X só tem ícone).
+  const fechar = modal(page).getByRole('button', { name: 'Fechar' }).filter({ hasText: 'Fechar' });
   if (await fechar.count()) {
-    await fechar.click();
+    await fechar.first().click();
   } else {
     await modal(page).getByRole('button').first().click(); // X do header
   }
@@ -73,6 +76,16 @@ test.describe('Pagamentos Driver — jornada completa de edições', () => {
     page.on('dialog', (d) => d.accept());
     await loginAs(page, MASTER_2626);
     await goToTab(page, 'Pagamentos Driver');
+    // 15/09/2026: com o servidor frio, a aba (chunk grande + ~130 drivers) leva mais que
+    // os 10s do clique — a 1ª tentativa travava com a aba inteira em "Carregando…" (print
+    // da falha) e só o retry passava. Espera a aba DE VERDADE (condição, não tempo fixo),
+    // com a mesma folga de 60s que a navegação já tem no playwright.config.
+    await expect(page.getByRole('button', { name: /Novo driver/ })).toBeVisible({ timeout: 60_000 });
+    // ...e mesmo com o botão na tela, a aba segue chegando dados em ONDAS (trace da falha:
+    // 8 buscas terminando junto do clique, mais levas a +4,4s, +6,4s e +7,5s) e cada onda
+    // redesenha a grade pesada e congela a página (4,4s sem nenhum quadro de tela) — o
+    // clique estourava os 10s. Espera a rede ficar quieta (a aba não tem polling).
+    await page.waitForLoadState('networkidle', { timeout: 60_000 });
   });
 
   test('todas as edições, numa quinzena de teste descartável', async ({ page }) => {
