@@ -89,6 +89,16 @@ interface DriverMirrorPreviewDialogProps {
   publishedKeys?: ReadonlySet<string>;
   /** Despublicar (tirar do app) — só faz sentido pro destinatário único (individual/grupo). */
   onUnpublish?: () => Promise<void>;
+  /**
+   * Abre o PDF que ESTA no app do driver (o arquivo publicado), nao uma geracao nova.
+   *
+   * 🔴 21/09/2026, pedido do Victor ("confundiu minha cabeca"): esta tela mostra sempre uma
+   * previa RECEM-GERADA, que pode sair diferente do papel que o driver ja tem — o caso
+   * classico e o desconto, que na re-geracao aparece como "nao abatido" porque o livro-caixa
+   * ja registrou o abate da publicacao anterior. Sem um jeito de abrir o PDF publicado, nao
+   * havia como conferir o que ele esta vendo. Devolve null quando nao ha nada publicado.
+   */
+  onOpenPublished?: (allowed: string[] | null) => Promise<string | null>;
   /** Reconstrói o espelho com o filtro de plataforma (chips) + o modo de desconto. */
   onRebuild?: (allowed: string[] | null, modo: ModoDesconto) => MirrorRequest | null;
   /**
@@ -430,6 +440,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
   alreadyPublished,
   publishedKeys,
   onUnpublish,
+  onOpenPublished,
   onRebuild,
   alreadyDeducted,
   canViewValues,
@@ -460,6 +471,7 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
    * já foi descontado — o papel que o entregador recebe precisa bater com o que foi pago.
    */
   const [modoDesconto, setModoDesconto] = useState<ModoDesconto>('pendentes');
+  const [abrindoPublicado, setAbrindoPublicado] = useState(false);
   const deductionsTotal = useMemo(() => deductionsTotalOf(request), [request]);
   const alreadyDeductedList = alreadyDeducted ?? [];
 
@@ -698,6 +710,27 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
       ? 'Espelhos da seleção'
       : 'Espelhos em massa';
 
+  /**
+   * Abre, em outra aba, o PDF que o driver TEM no app agora. Nao gera nada: e o arquivo
+   * publicado, com link assinado de curta duracao.
+   */
+  const handleOpenPublished = async () => {
+    if (!onOpenPublished) return;
+    setAbrindoPublicado(true);
+    try {
+      const url = await onOpenPublished(allowedFromSelection);
+      if (!url) {
+        toast.error('Nao achei o PDF publicado deste espelho.');
+        return;
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      toast.error(mensagemDeErro(e, 'Nao consegui abrir o PDF publicado.'));
+    } finally {
+      setAbrindoPublicado(false);
+    }
+  };
+
   return (
     <ModalShell
       icon={<FileText className="w-5 h-5" />}
@@ -752,6 +785,19 @@ export const DriverMirrorPreviewDialog: React.FC<DriverMirrorPreviewDialogProps>
             >
               {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               {esteEspelhoPublicado ? 'Republicar (atualiza)' : 'Publicar no app'}
+            </button>
+          )}
+          {onOpenPublished && esteEspelhoPublicado && (
+            <button
+              type="button"
+              onClick={handleOpenPublished}
+              disabled={abrindoPublicado || publishing || generating || unpublishing}
+              title="Abre o PDF que o driver esta vendo no app agora — nao gera nada novo"
+              data-testid="mirror-abrir-publicado"
+              className="px-4 py-2 border-2 border-blue-600 text-blue-700 rounded-md hover:bg-blue-50 text-sm font-medium inline-flex items-center gap-2 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {abrindoPublicado ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+              Ver o PDF que está no app
             </button>
           )}
           {onUnpublish && esteEspelhoPublicado && (

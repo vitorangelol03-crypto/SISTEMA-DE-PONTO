@@ -42,6 +42,7 @@ import {
   publishDriverMirror,
   listMirrorPublications,
   unpublishDriverMirror,
+  mirrorPdfUrl,
   unpublishAllMirrorsForPeriod,
   listNotaFiscalFiles,
   listDriverNotaNamesByCompany,
@@ -101,6 +102,7 @@ import {
   formatInt,
   MIRROR_COMPANY_NAME,
   computeProofProgressByPayment,
+  mirrorPlatformKey,
   plataformasSemPlanilha,
   nfPrazoStatus,
   indexarMarcas,
@@ -1371,6 +1373,25 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     setMirror(null);
   }, [company, selectedPeriod, publishScope, publishGroupInfo, publishRows, userId, reloadPublished]);
 
+  /**
+   * O PDF que ESTA no app do driver — o arquivo publicado, nao uma geracao nova.
+   *
+   * 🔴 21/09/2026, pedido do Victor: a previa do dialogo e sempre recem-gerada e pode sair
+   * DIFERENTE do papel que o driver tem (o desconto e o caso classico: na re-geracao ele
+   * aparece como "nao abatido", porque o livro-caixa ja guardou o abate da publicacao
+   * anterior). Sem isto nao havia como conferir o que ele esta vendo de verdade.
+   */
+  const onOpenPublishedCurrent = useCallback(
+    async (allowed: string[] | null): Promise<string | null> => {
+      if (!company || !selectedPeriod) return null;
+      const driverId =
+        publishScope === 'group' ? publishGroupInfo?.leaderId ?? null : publishRows[0]?.driverId ?? null;
+      if (!driverId) return null;
+      return mirrorPdfUrl(company.id, selectedPeriod.id, driverId, mirrorPlatformKey(allowed));
+    },
+    [company, selectedPeriod, publishScope, publishGroupInfo, publishRows],
+  );
+
   // Despublica TODOS os espelhos do período (limpeza em massa).
   const handleUnpublishAll = useCallback(async () => {
     if (!company || !selectedPeriod) return;
@@ -2610,6 +2631,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             alreadyPublished={!!recipientId && publishedDriverIds.has(recipientId)}
             publishedKeys={new Set((pubsByDriver.get(recipientId ?? '') ?? []).map((p) => p.platformKey))}
             onUnpublish={canMirror && singleRecipient ? onUnpublishCurrent : undefined}
+            onOpenPublished={singleRecipient ? onOpenPublishedCurrent : undefined}
             onRebuild={rebuildMirror}
             alreadyDeducted={alreadyDeductedDrivers(publishRows, publications, rows)}
           />

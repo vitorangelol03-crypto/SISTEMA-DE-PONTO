@@ -336,6 +336,9 @@ test.describe('Pagamentos Driver — desconto por pessoa, com saldo', () => {
     expect(await mirrorTotal(page), 'e volta ao valor sem abate ao reescolher o padrão')
       .toBeCloseTo(espelhoPendentes, 2);
 
+    // Sem nada publicado ainda, nao existe PDF no app pra abrir.
+    await expect(modal(page).getByTestId('mirror-abrir-publicado')).toHaveCount(0);
+
     // Publicar de verdade: o insert grava `printed_total`/`deducted_amount`. Se as colunas
     // não existissem, ou o insert falhasse, o botão não viraria "Republicar".
     await modal(page).getByRole('button', { name: /^Publicar no app$/ }).click();
@@ -343,6 +346,38 @@ test.describe('Pagamentos Driver — desconto por pessoa, com saldo', () => {
     await rowOfDriver(page, AMBOS).getByTitle('Ver / gerar espelho').click();
     await expect(modal(page).getByRole('button', { name: /^Republicar \(atualiza\)$/ }))
       .toBeVisible({ timeout: 15_000 });
+
+    // ══ O PDF QUE ESTA NO APP (21/09/2026, pedido do Victor) ═════════════════
+    // A previa desta tela e sempre RECEM-GERADA e pode sair diferente do papel que o
+    // driver ja tem — com desconto e o caso classico: regerar mostra "nao abatido" porque
+    // o livro-caixa ja guardou o abate da publicacao. Este botao abre o ARQUIVO publicado.
+    const verPublicado = modal(page).getByTestId('mirror-abrir-publicado');
+    await expect(verPublicado).toBeVisible({ timeout: 10_000 });
+
+    // ⚠️ Nao da pra afirmar pela ABA: num navegador sem tela o PDF vira DOWNLOAD, a aba
+    // fica em branco e `url()` devolve "" (as duas primeiras versoes deste teste morreram
+    // assim). O que importa provar e PARA ONDE o botao manda abrir — entao capturamos o
+    // endereco que ele passa pro navegador.
+    await page.evaluate(() => {
+      (window as unknown as { __urlDoEspelho?: string | null }).__urlDoEspelho = null;
+      window.open = (url?: string | URL) => {
+        (window as unknown as { __urlDoEspelho?: string | null }).__urlDoEspelho = String(url ?? '');
+        return null;
+      };
+    });
+    await verPublicado.click();
+    // ⚠️ Espera por CONDICAO: o botao vai ao banco e assina a URL antes de abrir, entao ler
+    // a variavel na linha seguinte ao clique pega "" (foi assim que morreu a 3a versao).
+    // Link assinado do bucket dos espelhos — o arquivo publicado, nao um PDF novo.
+    await expect
+      .poll(
+        () => page.evaluate(
+          () => (window as unknown as { __urlDoEspelho?: string | null }).__urlDoEspelho ?? '',
+        ),
+        { timeout: 20_000, message: 'o botao abre o PDF publicado no bucket' },
+      )
+      .toContain('driverpay-mirrors');
+
     await closeModal(page);
 
     // ── Limpeza: a quinzena leva junto pacotes, vales e o livro-caixa (FK cascade) ──
