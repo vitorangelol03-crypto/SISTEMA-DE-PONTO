@@ -183,7 +183,14 @@ test.describe('Pagamentos Driver — desconto por pessoa, com saldo', () => {
 
     // ── 3 drivers de teste ──────────────────────────────────────────────────
     for (const nome of [AMBOS, SO_B, CAP]) {
-      await page.getByRole('button', { name: /Novo driver/ }).click();
+      // ⚠️ 21/09/2026: a aba de producao ja carrega 138 drivers (com espelhos, notas e
+      // prints) e a barra de acoes leva MAIS de 10s pra assentar — o `actionTimeout`
+      // global do projeto. O botao existe na tela (visto no snapshot da falha), o clique
+      // e que desistia antes. Provado por A/B: falha igual na versao anterior do painel.
+      // Esperar por CONDICAO (o botao pronto) em vez de aceitar o timeout curto.
+      const novoDriver = page.getByRole('button', { name: /Novo driver/ });
+      await expect(novoDriver).toBeVisible({ timeout: 60_000 });
+      await novoDriver.click({ timeout: 30_000 });
       await modal(page).getByPlaceholder('Nome completo do driver').fill(nome);
       await modal(page).getByPlaceholder('Ex.: Caratinga').fill('PW Rota Saldo');
       await modal(page).getByRole('button', { name: 'Cadastrar driver' }).click();
