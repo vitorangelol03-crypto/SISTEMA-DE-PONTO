@@ -152,14 +152,17 @@ describe('recibo — os descontos da folha vão pro lado certo', () => {
     // A faixa impressa é a que a base ALCANÇOU, não a que a pessoa paga no total: a base
     // aqui é 1.643,33 (salário menos a falta) e a 1ª faixa acaba em 1.621,00 — então ela
     // encosta na de 9%, como a Camila do recibo real (base 1.772,87 → "9,00%"). O INSS
-    // efetivo é menor: 7,5% sobre os primeiros 1.621 e 9% só sobre os 22,33 que passam.
+    // efetivo é bem menor: R$ 123,57 são 7,52% de 1.643,33.
+    // 21/09: era 123,58 pela soma faixa a faixa; com a parcela a deduzir oficial
+    // (1.643,33 × 9% − 24,32) dá 123,5797 → 123,57. É o método que reproduz os 11
+    // recibos reais da contabilidade.
     expect(descontos.map(l => [l[0], l[1]])).toEqual([
       ['Faltas (1,00)', '-'],
       ['INSS (9,00%)', '-'],
     ]);
     // R$ 1.700 ÷ 30 = R$ 56,66 por dia; a falta tira um dia.
     expect(descontos[0][2]).toContain('56,67');
-    expect(descontos[1][2]).toContain('123,58');
+    expect(descontos[1][2]).toContain('123,57');
   });
 
   it('nenhuma linha de desconto aparece nos proventos valendo R$ 0,00 (o furo de 18/09)', () => {

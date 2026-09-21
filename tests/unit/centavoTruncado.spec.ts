@@ -46,8 +46,11 @@ describe('o centavo do truncamento', () => {
   });
 
   it('🎯 o INSS não perde centavo', () => {
-    expect(calcularInss(1699.55, TABELA_INSS_2026)).toBe(128.64);  // era 128,63
-    expect(calcularInss(1700.55, TABELA_INSS_2026)).toBe(128.73);  // era 128,72
+    // 21/09: exemplos REFEITOS. O INSS passou a usar a parcela a deduzir oficial, então
+    // os casos antigos deixaram de cair na borda do centavo. Estes caem: com o truncador
+    // com bug dariam 128,13 e 128,22.
+    expect(calcularInss(1694, TABELA_INSS_2026)).toBe(128.14);
+    expect(calcularInss(1695, TABELA_INSS_2026)).toBe(128.23);
   });
 
   it('🎯 o FGTS do 13º não perde centavo', () => {

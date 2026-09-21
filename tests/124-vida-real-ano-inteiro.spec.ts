@@ -28,7 +28,7 @@ import { createTestEmployee, insertPaymentRow, cleanupByPrefix } from './integri
  *   ─────────────────────────────────────────────────────────────
  *   · Base do INSS e do FGTS = 1.700,00
  *     (salário família E premiação ficam FORA — gabarito real: Camila e Maycon)
- *   · INSS = 7,5% de 1.621,30 + 9% de 78,70 = **128,68**
+ *   · INSS = 7,5% de 1.621,00 + 9% de 79,00 = **128,68**
  *   · FGTS = 8% de 1.700,00 = **136,00** (custo da empresa, não desconta)
  */
 

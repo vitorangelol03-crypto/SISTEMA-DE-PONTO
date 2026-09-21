@@ -18,8 +18,9 @@ import { createTestEmployee, insertPaymentRow, cleanupByPrefix } from './integri
  * ## Os números, calculados à mão antes de rodar
  *
  * Salário 1.700, 30 dias de referência, sem falta e sem noturno:
- *   · INSS  = 7,5% de 1.621,30 + 9% de 78,70 = 128,6805 → truncado **128,68**
- *     (a 1ª faixa da tabela NO BANCO vai até 1.621,30, não 1.621,00)
+ *   · INSS  = 7,5% de 1.621,00 + 9% de 79,00 = 128,6850 → truncado **128,68**
+ *     (21/09: a 1ª faixa passou a ser a OFICIAL, 1.621,00 — a de 1.621,30 era derivada
+ *      dos recibos e errava acima de R$ 2.902; o total aqui não muda)
  *   · IRRF  = 0 (base 1.571,32, abaixo da 1ª faixa de 2.428,80)
  *   · Proventos = 1.700 (salário) + 300 (3 diárias) = **2.000,00**
  *   · Líquido   = 2.000,00 − 128,68 = **1.871,32**

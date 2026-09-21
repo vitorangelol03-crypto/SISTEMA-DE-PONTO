@@ -227,9 +227,9 @@ export function montarTutorialFolha(telas: TelasDoTutorial): ArrayBuffer {
     tableWidth: CONTEUDO,
     head: [['Faixa', 'Sobre quanto', 'Cobra', 'Dá']],
     body: [
-      ['Até R$ 1.621,30', 'R$ 1.621,30', '7,5%', 'R$ 121,5975'],
-      ['O que passa disso', 'R$ 78,70', '9%', 'R$ 7,0830'],
-      ['', '', 'Soma', 'R$ 128,6805'],
+      ['Até R$ 1.621,00', 'R$ 1.621,00', '7,5%', 'R$ 121,5750'],
+      ['O que passa disso', 'R$ 79,00', '9%', 'R$ 7,1100'],
+      ['', '', 'Soma', 'R$ 128,6850'],
     ],
     foot: [['', '', 'No recibo', 'R$ 128,68']],
     theme: 'grid',
@@ -247,13 +247,16 @@ export function montarTutorialFolha(telas: TelasDoTutorial): ArrayBuffer {
   const ultima = (doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable;
   y = (typeof ultima?.finalY === 'number' ? ultima.finalY : y + 120) + 18;
 
-  y = destaque(doc, y, 'Os centavos são cortados no FIM, não em cada faixa',
-    'Cortando só no fim dá R$ 128,68. Se cortasse faixa por faixa daria R$ 128,67. É um centavo — e é o centavo que faz o papel não bater com o da contabilidade.', AZUL);
-
   y = destaque(doc, y, 'O recibo imprime "9,00%", mas ela não paga 9%',
     'A porcentagem impressa é a FAIXA que o salário alcançou, não o que a pessoa paga no total. Nos R$ 1.700 do exemplo, ela paga R$ 128,68 — que são 7,57% do salário. É a dúvida mais comum de quem lê o recibo.', ROXO);
 
-  y = paragrafo(doc, y, 'As faixas ficam em Configurações e mudam por lei todo ano. Se a tabela estiver desatualizada, a conta sai errada em silêncio — por isso o ano de vigência aparece junto dela.', 10);
+  y = destaque(doc, y, 'O INSS tem um teto: para de crescer em R$ 8.475,55',
+    'Quem ganha acima disso contribui como se ganhasse o teto. O desconto máximo de INSS é R$ 988,08 por mês, por mais alto que seja o salário.', AZUL);
+
+  y = destaque(doc, y, 'A tabela oficial traz um atalho, e é ele que o sistema usa',
+    'Em vez de somar faixa por faixa, a conta pode ser feita de uma vez: salário x 9% menos R$ 24,32 (a "parcela a deduzir" da tabela). Dá o mesmo resultado, e é o que a sua contabilidade usa — por isso o recibo bate com o dela.', VERDE);
+
+  y = paragrafo(doc, y, 'As faixas ficam em Configurações e mudam por lei todo ano. Se a tabela estiver desatualizada, a conta sai errada EM SILÊNCIO: até 21/09/2026 este sistema tinha a tabela errada acima de R$ 2.902 e ninguém notaria, porque os recibos usados para conferir iam só até R$ 2.200. Por isso o ano de vigência aparece junto da tabela — e a tarja de conferência só sai quando o contador olhar.', 10);
   rodape(doc, pagina);
 
   // ═══════════════ 5. PREMIAÇÃO ═══════════════

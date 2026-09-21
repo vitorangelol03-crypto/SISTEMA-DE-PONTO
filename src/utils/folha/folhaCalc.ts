@@ -119,6 +119,8 @@ export interface FolhaCalculada {
   inss: number;
   baseIrrf: number;
   irrf: number;
+  /** Quanto a Lei 15.270/2025 abateu do imposto neste mês. Zero se não houve. */
+  reducaoDoIrrf: number;
   /** Qual caminho do IRRF ganhou — o recibo mostra, pra ninguém achar que é chute. */
   caminhoDoIrrf: 'simplificado' | 'deducoes' | null;
   /** Falso = o recibo precisa sair com o aviso de "valores em conferência". */
@@ -394,7 +396,11 @@ export function calcularFolha({
    * lei (o do salário família tem limite de idade e de renda; o do IR é mais largo), mas
    * a ficha só tem um campo. Registrado pra confirmar com o contador.
    */
-  const resultadoIrrf = tabelaIrrf ? calcularIrrf(baseInss, inss, ficha.filhosSalarioFamilia ?? 0, tabelaIrrf) : null;
+  // `incidenciaMensal` liga a redução da Lei 15.270/2025. É o ÚNICO lugar que liga:
+  // 13º e rescisão são tributados à parte (decisão do Victor, 21/09).
+  const resultadoIrrf = tabelaIrrf
+    ? calcularIrrf(baseInss, inss, ficha.filhosSalarioFamilia ?? 0, tabelaIrrf, { incidenciaMensal: true })
+    : null;
 
   const linhas: LinhaDaFolha[] = [];
   if (salarioDoMes > 0) {
@@ -453,9 +459,15 @@ export function calcularFolha({
     });
   }
   if (resultadoIrrf && resultadoIrrf.valor > 0 && tabelaIrrf) {
+    // Quando a Lei 15.270 abateu alguma coisa, o papel DIZ quanto — senão o contador vê
+    // um imposto menor que o da tabela e não tem como saber de onde saiu a diferença.
+    const faixa = `${formataReferencia(faixaAplicada(resultadoIrrf.base, tabelaIrrf.faixas))}%`;
     linhas.push({
       descricao: 'IRRF',
-      referencia: `${formataReferencia(faixaAplicada(resultadoIrrf.base, tabelaIrrf.faixas))}%`,
+      referencia:
+        resultadoIrrf.reducao > 0
+          ? `${faixa} - reducao Lei 15.270 R$ ${formataReferencia(resultadoIrrf.reducao)}`
+          : faixa,
       provento: 0,
       desconto: resultadoIrrf.valor,
     });
@@ -486,6 +498,7 @@ export function calcularFolha({
     inss,
     baseIrrf: resultadoIrrf?.base ?? 0,
     irrf: resultadoIrrf?.valor ?? 0,
+    reducaoDoIrrf: resultadoIrrf?.reducao ?? 0,
     caminhoDoIrrf: resultadoIrrf?.caminho ?? null,
     tabelasConfirmadas: Boolean(tabelasConfirmadas),
     linhas,

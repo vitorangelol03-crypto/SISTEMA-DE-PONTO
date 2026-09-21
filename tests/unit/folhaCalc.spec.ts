@@ -751,14 +751,17 @@ describe('INSS e IR dentro da folha', () => {
   it('o caminho escolhido é sempre o de MENOS imposto', () => {
     for (const salario of [2500, 3500, 4500, 6000, 9000]) {
       const folha = folhaCom(salario);
+      // 21/09: os dois lados precisam da MESMA regra da folha do mês — senão comparamos
+      // o imposto já reduzido pela Lei 15.270 contra o imposto cheio, e nunca bate.
+      const mensal = { incidenciaMensal: true };
       const soSimplificado = calcularIrrf(folha.baseInss, folha.inss, 0, {
         ...TABELA_IRRF_2026,
         deducaoPorDependente: 0,
-      });
+      }, mensal);
       const soDeducoes = calcularIrrf(folha.baseInss, folha.inss, 0, {
         ...TABELA_IRRF_2026,
         descontoSimplificado: 0,
-      });
+      }, mensal);
       expect(folha.irrf).toBe(Math.min(soSimplificado.valor, soDeducoes.valor));
     }
   });

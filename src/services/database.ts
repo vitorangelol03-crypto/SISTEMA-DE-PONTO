@@ -14,7 +14,7 @@ import {
 } from '../utils/attendanceCalc';
 import { entraNaTriagem, TRIAGE_CONFIG_PADRAO, type TriageConfig } from '../utils/triagemFuncoes';
 import { CONFIGURACAO_DA_FOLHA_PADRAO, type ConfiguracaoDaFolha } from '../utils/folha/folhaCalc';
-import type { FaixaDeImposto, TabelaDoInss, TabelaDoIrrf } from '../utils/folha/impostos';
+import type { FaixaDeImposto, ReducaoDoIrrf, TabelaDoInss, TabelaDoIrrf } from '../utils/folha/impostos';
 import { mensagemDeErro } from '../utils/mensagemDeErro';
 
 // Sub-fase 11.8 — helper pra chamar edge fn employee-public-api (verify_jwt:false).
@@ -2551,13 +2551,15 @@ interface LinhaDeTabelaDeImposto {
   teto: number | null;
   deducao_dependente: number | null;
   desconto_simplificado: number | null;
+  /** Redução da Lei 15.270/2025 (21/09/2026). Nulo = ano sem redução. */
+  reducao: ReducaoDoIrrf | null;
   confirmado: boolean;
 }
 
 export const getTabelasDeImposto = async (ano: number): Promise<TabelasDeImposto> => {
   const { data, error } = await supabase
     .from('payroll_tax_tables')
-    .select('tipo, faixas, teto, deducao_dependente, desconto_simplificado, confirmado')
+    .select('tipo, faixas, teto, deducao_dependente, desconto_simplificado, reducao, confirmado')
     .eq('ano', ano);
   if (error) throw error;
 
@@ -2572,6 +2574,7 @@ export const getTabelasDeImposto = async (ano: number): Promise<TabelasDeImposto
           faixas: doIrrf.faixas,
           deducaoPorDependente: Number(doIrrf.deducao_dependente ?? 0),
           descontoSimplificado: Number(doIrrf.desconto_simplificado ?? 0),
+          reducao: doIrrf.reducao ?? null,
         }
       : null,
     // Uma só confirmada não basta: o aviso do recibo cobre o cálculo inteiro.
