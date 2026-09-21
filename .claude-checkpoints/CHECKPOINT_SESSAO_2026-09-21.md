@@ -271,6 +271,39 @@ platform_id=(select id from driverpay_platforms where name='SHOPEE')`.
 pago. E o **Rogerio perdeu os 678 da Shopee** entre 09h e 13h (total de R$ 1.601,60 para
 R$ 110,00) — avisado, sem resposta ainda.
 
+### 8.9 O prazo da nota: de 14h para 15h, no banco E no papel
+
+Pedido dele no fim do dia, com hora marcada ("antes das 3"): os 53 espelhos publicados hoje
+traziam **14:00H** e ele queria **15:00**, "sem avisar o pessoal" e mantendo tudo validado.
+
+**São duas coisas diferentes, e isso era o ponto:**
+1. `nf_due_at` no banco — é o que decide quem mandou a nota atrasada. Alterado em 53 linhas
+   (`+ interval '1 hour'`), conferido, notas intactas. Rápido e reversível.
+2. O **PDF** — arquivo pronto no bucket. Mexer no banco NÃO reescreve o papel que o driver
+   já tem. Para mudar, só regerando.
+
+Ele pediu o papel também. Feito **pelo próprio sistema**, via Playwright, o mesmo caminho da
+equipe: "Despublicar todos" → "Espelhos (em massa)" com o corte 15:00 → publicar.
+✅ **Prova lida de DENTRO dos PDFs publicados** (pypdf): Claudiomar, Gustavo e Winglison com
+`"15:00 do dia 21/09"` e **sem nenhum "14:00"**.
+✅ **57 espelhos**, todos com 15:00 · **0 sumiram** · descontos no papel **R$ 1.678,95 = o
+livro-caixa** (soma conferida item a item) · **64 notas, todas validadas**.
+✅ O **Winglison voltou com os R$ 199,69** — despublicar antes de republicar é justamente o
+caminho que preserva o desconto (§8.x).
+⚠️ Ficaram **4 espelhos NOVOS** (o "em massa" alcança todo mundo com pagamento): Adriano
+Furtunato (3.309,20), Higino Alves (6.182,00), Fabricio Maia (138,01) e Camilli (0,00).
+Avisado; se algum não devia receber, é tirar.
+
+🔴 **O susto, registrado porque não pode se repetir:** a 1ª tentativa **despublicou os 53 e
+parou antes de publicar** — minha verificação esperava na tela um texto que o modal em massa
+não mostra (`/15:00H do dia 21\/09/`). Os entregadores ficaram alguns minutos sem espelho, no
+dia do prazo. Republicado em seguida.
+**Por que deu para dormir tranquilo:** ANTES de despublicar eu baixei **os 53 PDFs e as linhas
+de publicação** (`scratchpad/pdfs-backup`), porque `unpublishDriverMirror` **apaga os arquivos
+do bucket** junto com as linhas — sem isso, uma falha na republicação seria irreversível.
+**Lição:** em operação de massa pela UI, conferir o ESTADO (valor dos campos), nunca um texto
+de tela; e a asserção de conferência nunca deve ficar ENTRE o passo destrutivo e o que repõe.
+
 ### 8.6 Pendências desta frente
 
 1. 🔴 **Cartão de print para quem não entrega a plataforma** — a causa raiz do print
@@ -286,4 +319,9 @@ R$ 110,00) — avisado, sem resposta ainda.
    Conserto é só de teste; esperando o OK dele.
 6. 🟡 **Avisar ao republicar espelho que já abateu**: hoje o papel sai com valor cheio e só
    quem sabe da regra entende por quê. Proposto, não feito.
-7. 🟡 **O CI não roda nenhum spec de driverpay** — vale decidir se entra pelo menos um.
+7. ✅ **O CI já roda o `tests/72`** (entrou em `0899bdd`) — o driverpay deixou de ser um ponto
+   cego a cada push.
+8. 🟡 **4 espelhos novos** publicados no "em massa" (Adriano, Higino, Fabricio Maia, Camilli)
+   — confirmar com ele se todos deviam receber.
+9. 🟡 O prazo do corte para as PRÓXIMAS publicações continua vindo do padrão salvo; se a
+   intenção é 15h daqui pra frente, vale conferir o valor guardado.

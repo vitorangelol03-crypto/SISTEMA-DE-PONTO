@@ -1,5 +1,20 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **📌 21/09 — PRAZO DA NOTA DE 14h PARA 15h, NO BANCO E NO PAPEL.** (operação, sem commit de código)
+>
+> São **duas coisas**: o `nf_due_at` (que decide quem atrasou) e o **PDF** já entregue — mexer no
+> banco nao reescreve o papel. Os dois foram feitos: 53 linhas atualizadas e os espelhos
+> **republicados pelo proprio sistema** (Despublicar todos → Espelhos em massa com corte 15:00).
+> ✅ **Prova lida de DENTRO do PDF**: "15:00 do dia 21/09", sem nenhum "14:00".
+> ✅ 57 espelhos com 15h · 0 sumiram · descontos **R$ 1.678,95 = livro-caixa** · **64 notas todas
+> validadas** · ninguem avisado. O Winglison voltou com os R$ 199,69.
+> 🔴 **SUSTO:** a 1ª tentativa despublicou os 53 e **parou antes de publicar** (a asserção esperava
+> um texto que o modal em massa nao mostra) — ficaram minutos sem espelho no dia do prazo.
+> **`unpublishDriverMirror` APAGA os PDFs do bucket**: só deu pra ficar tranquilo porque os 53
+> arquivos e as linhas foram **baixados antes** (`scratchpad/pdfs-backup`).
+> **Regra nova:** em operação de massa pela UI, conferir o ESTADO (valor dos campos), nunca texto
+> de tela — e nenhuma asserção entre o passo destrutivo e o que repõe.
+
 > **📌 21/09 — CI VERDE DE NOVO, E A TAXA QUE A TELA MOSTRAVA ERRADA.** Commit `0899bdd`.
 >
 > ✅ **`tests/101` D1 nao era a facial:** passa AQUI em 11s e so falhava no CI — tinha
