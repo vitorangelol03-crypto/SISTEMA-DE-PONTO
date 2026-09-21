@@ -1,107 +1,136 @@
 # CHECKPOINT — Sessão 21/09/2026
 
-> **Em uma frase:** a queixa "o app está duplicando, parece que mandei 2 espelhos" era
-> verdadeira na tela — e, puxando o fio, achamos que o print de uma líder estava gravado
-> no nome de um membro que não entrega Shopee.
+> **Em uma frase:** as tabelas de INSS e IRRF do sistema estavam **erradas**, e o jeito de
+> calcular também — as duas coisas achadas em cima do "pode puxar a tabela da internet?"
+> do Victor, e as duas corrigidas com a fonte oficial e o gabarito dos recibos reais.
 
 ---
 
 ## 1. O que o Victor pediu
 
-> *"na parte de pagamentos dos drivers alguns me relataram que o sistema está duplicando
-> visualmente para eles, mostrando como se ele tivesse enviado 2 espelhos"* — depois, com
-> o print da tela e o do painel: *"sistema atribui aí Mikael quem nem entrega tem da
-> shopee"* → *"passa o print pro nome da greice e arruma a tela"*.
+Depois de eu dizer que a tabela de imposto era a pendência que eu não conseguia fechar
+sozinho: **"vc não consegue puxar essa tabela de contador da rede?"** — e, na sequência,
+**"vamos arrumar todas lacunas detectadas"** e **"pode seguir e corrigir que esse sistema
+completo"**.
 
 ---
 
-## 2. 🔴 O print da Greice estava no nome do Mikael (dado de produção, corrigido)
+## 2. 🔴 As três coisas erradas (em ordem de descoberta)
 
-Não era duplicata de linha: 183 publicações de espelho sem chave repetida, 374 prints sem
-par idêntico. O que existia era **atribuição errada**:
+### 2.1 A tabela do INSS: 3 faixas e o teto
 
-| | |
+|  | Estava | Oficial |
+|---|---|---|
+| 1ª faixa (7,5%) | 1.621,**30** | 1.621,**00** |
+| 2ª faixa (9%) | 3.041,65 | **2.902,84** |
+| 3ª faixa (12%) | 4.562,47 | **4.354,27** |
+| Teto | 9.124,94 | **8.475,55** |
+
+Efeito medido: salário 3.000 descontava 245,68 (devia 248,60) · 5.000 → 493,18 (501,51) ·
+9.500 → 1.070,67 quando o teto é 988,08.
+
+**Até R$ 2.902 não havia erro** — e é isso que o torna perigoso: era exatamente onde os
+11 recibos do gabarito paravam (maior salário R$ 2.200).
+
+### 2.2 O IRRF não tinha a redução da Lei 15.270/2025
+
+Desde janeiro/2026 quem ganha até R$ 5.000 é **isento**, e de R$ 5.000 a R$ 7.350 paga com
+desconto decrescente. O sistema não sabia disso e **cobrava imposto de quem a lei isenta**:
+R$ 312,89 de quem ganha R$ 5.000, R$ 114,76 de quem ganha R$ 4.000.
+
+### 2.3 🎯 O MÉTODO DE CÁLCULO (o achado que só apareceu porque o gabarito existia)
+
+Ao trocar a tabela pela oficial, **o gabarito dos 11 recibos reais ficou vermelho em 4**.
+
+A tabela oficial publica DOIS jeitos de calcular, e eles discordam em 1 centavo:
+
+| método | erros nos 11 recibos |
 |---|---|
-| Print gravado em | Mikael Barbosa Do Carmo |
-| Pacotes SHOPEE do Mikael na quinzena | **0** (ANJUN, eMile e LOGGI só) |
-| O print mostra | 1.132 |
-| Pacotes SHOPEE da Greice | **1.132** (1.030 + 102) |
-| `uploaded_by` do registro | a **Greice** |
+| somar faixa a faixa | **4** (Camila 135,24 × papel 135,23) |
+| `base × alíquota − parcela a deduzir` | **0** |
 
-**Causa, provada por carimbo de hora:** pedido do print em **17/09 11:10** → envio em
-**17/09 20:35** → planilha da Shopee só entrou em **19/09 10:09**. A regra "pedir antes da
-planilha" (04/08) mostra cartão para **todo o grupo** enquanto a planilha não chegou —
-nessa quinzena, **31 pessoas em grupo sem um pacote sequer de Shopee** viraram cartão na
-tela do líder. A líder mandou o print dela no cartão do membro.
+A parcela publicada é **arredondada** (a conta exata dá 24,315 e a tabela traz 24,32), e
+esse meio centavo vira um centavo depois do truncamento. **A contabilidade usa a parcela
+a deduzir.**
 
-Efeito colateral que ninguém veria: o pagamento do **Mikael** ficou com `espelho_conferido
-= true` (automático, 19/09 13:09) e o da **Greice** ficou sem.
+E isso explicou o `1.621,30`: não era um valor real — era o limite **entortado** pra fazer
+o método errado imitar o resultado certo. Funcionava até R$ 2.902 e quebrava acima.
 
-**Correção (autorizada por ele):** print movido (driver + payment), `expected_packages`
-1132 e `check_qtd` true (bate exato), marca de conferido passada de um para o outro.
-Backup com o SQL de desfazer em `backups/2026-09-21/` (fora do git). Conferido depois:
-print com a Greice, pagamento dela conferido, Mikael com **0 prints** e sem a marca.
-⚠️ O arquivo no bucket ficou no caminho antigo (tem o id do Mikael) — o caminho é opaco,
-nada quebra; mover objeto no storage foi descartado para não arriscar perder o print.
-
-Mais **2 prints** estão em nome de quem não tem pacote daquela plataforma (Cloves/2ª de
-agosto e Camilli/2ª de julho), os dois sem número lido. Não foram tocados.
+> 🔴 **A LIÇÃO DESTE DIA: bater com o gabarito não é estar certo — é estar certo no
+> pedaço que o gabarito cobre.**
 
 ---
 
-## 3. ✅ A tela (commit `1fc0e46`, no ar)
+## 3. O que foi feito
 
-A identidade do cartão era `driverId|platformName` — **sem a quinzena** — escrita à mão em
-4 lugares, e a tela junta **todas** as quinzenas com print pedido. Duas quinzenas da mesma
-pessoa colidiam: chave repetida no React, "Enviando..." nos dois cartões, acompanhamento
-da conferência no slot errado — e, na tela, **duas linhas iguais em "Já enviados"**.
+- **`impostos.ts`**: motor novo `impostoDaTabela` (parcela a deduzir, com queda para a
+  soma progressiva quando a faixa não tem `deduzir`); `ReducaoDoIrrf`; `calcularIrrf`
+  devolve `valorSemReducao` e `reducao`; tabelas padrão com os valores oficiais.
+- **A redução só sai se quem chama pedir** (`{ incidenciaMensal: true }`), e **o padrão é
+  não reduzir**. Só a folha do mês liga. 13º e rescisão não — decisão do Victor, porque
+  reduzir por engano faz a empresa recolher imposto a MENOS, que vira dívida.
+- **Recibo**: a linha do IRRF passa a dizer quanto a lei abateu
+  (`27,50% - reducao Lei 15.270 R$ 179,75`), senão o contador vê um imposto menor que o da
+  tabela sem saber de onde veio.
+- **`FolhaCalculada.reducaoDoIrrf`** e o carregador do banco lendo a coluna nova.
+- **Tutorial**: página do INSS com os números oficiais, o teto (988,08) e o atalho da
+  parcela a deduzir. Saiu a caixa do truncamento — com a tabela nova ela **deixou de ser
+  verdade** no exemplo de R$ 1.700, e tutorial com coisa errada não fica.
 
-- `chaveDoCartaoDePrint()` num lugar só, com a quinzena na identidade.
-- A linha de "já enviado" passou a dizer a quinzena (antes **nunca** dizia; a de quem falta
-  já dizia).
-- O placar dizia "Quinzenas em aberto" **mesmo com quinzena concluída** — agora nomeia as
-  que estão na tela.
-- Passo 2 do "como tirar o print" não dizia qual quinzena escolher quando há mais de uma.
+### Migrations aplicadas (as 3 liberadas pelo Victor)
+| versão | o quê |
+|---|---|
+| `20260921092418` | faixas e teto oficiais do INSS |
+| `20260921092748` | coluna `reducao` + a redução da Lei 15.270 |
+| `20260921095508` | `deduzir` em todas as faixas (INSS e IRRF) |
 
-**Validado:** typecheck 0 · lint 0 · build ok · 6/6 unitários novos
-(`tests/unit/driverAppCartaoPrint.spec.ts`) + 144 dos 6 arquivos de print · E2E
-`tests/65` cenário I **1/1**. **A/B provando o vermelho:** com os 2 arquivos revertidos ao
-HEAD o cenário falha com `Expected: 2, Received: 0`. O print "já enviado" do cenário entra
-**direto no banco** — provar tela não pode gastar leitura da cota do Gemini que a operação
-usa.
-
----
-
-## 4. Lições
-
-- 🔴 **Gastei um workflow de 7 agentes à toa.** O Victor cortou no meio ("cuidado com
-  agente rodando à toa e gastando muito token") e ele tinha razão: a causa saiu de 6
-  SELECTs e 2 leituras de código. Bug com caso concreto em produção se ataca pelo **dado**,
-  não por fan-out.
-- 🔴 **Havia trabalho NÃO COMMITADO de outra sessão dele na árvore** (folha: tabela INSS
-  2026, IRRF da Lei 15.270, 3 migrations novas), aparecendo aos poucos enquanto eu
-  trabalhava. `git diff --stat` antes de commitar salvou de commitar por cima. Para o A/B
-  usei cópia dos meus 2 arquivos + `git checkout --` **só neles** (nunca `git stash`, que
-  teria levado o trabalho dele junto), e conferi a volta com `md5sum -c`.
-- A tela do driver junta quinzenas porque `proof-slots` sem `periodId` varre **todas** as
-  que têm pedido — inclusive **concluídas**. É por desenho (04/08), mas a tela precisa
-  dizer de qual quinzena é cada linha.
+`confirmado` segue **FALSO** nas duas tabelas e a tarja "VALORES EM CONFERÊNCIA" continua
+no recibo — decisão do Victor: os números vêm do governo, mas a contabilidade dele não
+olhou.
 
 ---
 
-## 5. Pendências
+## 4. Gabaritos que agora batem
 
-1. 🔴 **Cartão de print para quem não entrega a plataforma** (a causa do print trocado)
-   **continua aberto** — é decisão de produto, apresentada e ainda não respondida.
-   Recomendação: enquanto a planilha não chega, mostrar só quem já é conhecido por entregar
-   aquela plataforma nas quinzenas anteriores.
-2. 🟡 **Juntar cadastro duplicado ao vincular no import** (pedido dele nesta sessão): o
-   alias `Luis101 -> Luis Fernando Ramos Torres` **existe**, mas o cadastro `Luis101` segue
-   ativo e com pagamento próprio — por isso aparecem dois drivers no mesmo grupo. O alias
-   ensina a **próxima** importação; não junta o que já entrou. Plano curto entregue,
-   aguardando as decisões dele.
-3. 🟡 **Dois entregadores com 678 da Shopee no grupo Dom Lara** (pergunta dele): não é
-   linha duplicada — ANGELO é 127 (Caratinga, 19/09) + **551 (Sapucaia, importado 21/09
-   05:58)** e ROGERIO é 678 numa linha só (Caratinga, 19/09). O histórico do Angelo sempre
-   teve Sapucaia alto (477, 621, 484). **Só a planilha fecha a resposta** — pedida a ele.
-4. Os 2 prints restantes em nome de quem não tem pacote da plataforma (§2).
+- **11 de 11 recibos reais** da contabilidade Arruda (INSS).
+- **O exemplo oficial da Receita** (Lei 15.270): Rita, R$ 6.000, INSS 649,60 →
+  base 5.350,40 → imposto 562,63 → redução 179,75 → **IRRF 382,88**. Bate no centavo.
+
+---
+
+## 5. Como foi validado
+
+| O quê | Resultado |
+|---|---|
+| Suíte unitária | **118 arquivos, 1.858 testes, 0 falhas**, 14/14 rodadas código 0, 0 worker morto |
+| E2E folha (`115`–`124`) | **37/37**, saída 0 (1 flaky por carga da máquina, provado rodando o `117` sozinho: 5/5 sem retry) |
+| `tsc` · `lint` · `build` | limpos |
+| Arquivo novo | `tests/unit/tabelasOficiais2026.spec.ts` (14 testes) |
+
+⚠️ **A máquina estava com o robô da Shopee de pé** (23 Chrome, carga 18+): o pool `forks`
+não sobe e mente com código de saída 0. Rodado com `--pool=vmThreads
+--no-file-parallelism`, com os 4 arquivos que usam `vi.mock` rodando **sozinhos**.
+
+---
+
+## 6. Três testes que mudaram de expectativa (e por quê)
+
+Nenhum foi "ajustado pra passar" — os três tinham valor antigo:
+
+1. `centavoTruncado`: os exemplos deixaram de cair na borda do centavo com o método novo.
+   **Refeitos** com bases que ainda exercitam o bug (1.694 e 1.695).
+2. `folhaCalc` "caminho de menos imposto": comparava o imposto já reduzido contra o cheio.
+   Agora os dois lados usam a mesma regra.
+3. `folhaNoReciboERelatorio`: INSS de 123,58 → **123,57** pela parcela a deduzir.
+
+---
+
+## 7. Pendências
+
+1. 🔴 **Levar ao contador** — três perguntas concretas agora, não uma vaga:
+   - as tabelas conferem? (aí `confirmado` vira true e a tarja sai)
+   - a redução da Lei 15.270 vale no **13º** e no **saldo de salário da rescisão**?
+   - no teto do INSS, vale **988,08** (fórmula) ou **988,09** (o que o material publica)?
+2. **6 pessoas** com `employment_type` e `contract_type` discordando.
+3. **18 das 21** de carteira sem data de admissão.
+4. **0 das 21** com salário preenchido — a folha segue sem uso real.
