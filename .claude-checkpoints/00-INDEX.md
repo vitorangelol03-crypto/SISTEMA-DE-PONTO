@@ -96,6 +96,21 @@
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
+> **⚠️ 21/09 — REGRA DE PUSH: NÃO EMPURRE CÓDIGO JUNTO COM CHECKPOINT `[skip ci]`.**
+>
+> 🔴 Descoberto no fecho da sessão: **três commits de correção não tiveram NENHUM run de
+> CI** (`437eae1` tabelas de imposto, `3f50e74` o centavo, `02386bf` excluir quinzena).
+> Não é filtro de caminho — o `ci.yml` dispara em qualquer push para `main`.
+> **A causa é o agrupamento do push.** O GitHub decide pular olhando o commit **HEAD do
+> push**, e o HEAD era o `docs(checkpoint): ... [skip ci]`. Pulou o push inteiro, código
+> junto, **em silêncio**.
+> ✅ **Jeito certo:** empurrar o commit de CÓDIGO primeiro (o CI pega), e só depois
+> commitar+empurrar o checkpoint com `[skip ci]`. Foi o que a outra sessão de hoje fez
+> sem saber (`0899bdd` tem run verde; o checkpoint veio depois).
+> ⚠️ O código não foi cru para produção — validado localmente (1.858 unitários, E2E 37/37,
+> tsc, lint, build) e o deploy conferido por conteúdo. Mas a rede de segurança
+> compartilhada não viu. CI disparado à mão no fecho.
+
 > **📌 21/09 — AS TABELAS DE IMPOSTO ESTAVAM ERRADAS, E O MÉTODO DE CÁLCULO TAMBÉM.**
 >
 > Veio de *"vc não consegue puxar essa tabela de contador da rede?"*. Consigo — e o que

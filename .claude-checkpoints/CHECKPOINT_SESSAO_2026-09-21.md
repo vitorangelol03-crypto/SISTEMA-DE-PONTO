@@ -325,3 +325,58 @@ de tela; e a asserção de conferência nunca deve ficar ENTRE o passo destrutiv
    — confirmar com ele se todos deviam receber.
 9. 🟡 O prazo do corte para as PRÓXIMAS publicações continua vindo do padrão salvo; se a
    intenção é 15h daqui pra frente, vale conferir o valor guardado.
+
+---
+
+## 9. 🔴 FECHO DA SESSÃO — e um erro de processo que passou três vezes
+
+### 9.1 O `[skip ci]` do checkpoint pulava o CI do commit de código junto
+
+Ao fechar a sessão, fui conferir se os commits da folha tinham passado no CI. **Não
+tinham: zero runs.** Nem `437eae1` (tabelas oficiais), nem `3f50e74` (o centavo), nem
+`02386bf` (excluir quinzena) — os três commits de correção desta leva e da anterior.
+
+Não é filtro de caminho: o `ci.yml` dispara em **qualquer** push para `main`.
+
+**A causa é o jeito como eu empurrei.** A regra do projeto manda agrupar os commits num
+push só (porque o CI cancela o run anterior do mesmo branch). Eu agrupava assim:
+
+```
+git commit  fix(...)                    <- o código
+git commit  docs(checkpoint): ... [skip ci]
+git push                                <- os dois juntos
+```
+
+O GitHub decide pular olhando o **commit HEAD do push** — e o HEAD era o checkpoint com
+`[skip ci]`. Resultado: **pulou o push inteiro, correção junto**, em silêncio.
+
+✅ **O jeito certo, e que outra sessão de hoje usou sem saber** (`0899bdd` tem run verde,
+o checkpoint `0493501` veio depois): **empurrar o commit de código primeiro**, deixar o CI
+pegar, e só então commitar+empurrar o checkpoint com `[skip ci]`.
+
+⚠️ O código não foi para produção sem validação — rodei tudo localmente (118 arquivos /
+1.858 unitários, E2E da folha 37/37, tsc, lint, build) e conferi o deploy por conteúdo.
+Mas o CI, que é a rede de segurança compartilhada, **nunca viu esse código**. Disparado à
+mão no fecho (`workflow_dispatch`) para cobrir o buraco.
+
+### 9.2 Estado no fecho
+
+- **No ar e conferido por conteúdo**: o site serve o pacote compilado aqui
+  (`index-CaHeI6xx.js`), deploy `qnlsfoeha` Ready.
+- **Tutorial** regerado com as tabelas oficiais (10 páginas, 252 KB) e entregue ao Victor.
+  Não entra no repo: tem nomes reais.
+- **Tabelas seguem `confirmado: false`** e a tarja "VALORES EM CONFERÊNCIA" continua no
+  recibo, como ele decidiu.
+
+### 9.3 Por onde recomeçar
+
+1. 🔴 **As três perguntas do §7 para o contador** — é o que destrava a folha virar oficial.
+2. 🔴 As pendências de produto do driverpay no §8.6 (as duas sem resposta).
+3. 🟡 Cadastro: 6 vínculos contraditórios, 18 sem data de admissão, 0 com salário.
+
+### 9.4 A frase que resume o dia
+
+Os dois erros graves da folha — a tabela errada e o imposto cobrado de quem é isento —
+**não foram achados pelos 1.858 testes**, que passavam felizes com a tabela errada. Foram
+achados por ir conferir na fonte. Teste prova que o sistema concorda com ele mesmo; só a
+fonte externa prova que ele está certo.
