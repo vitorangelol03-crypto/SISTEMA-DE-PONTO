@@ -1,5 +1,34 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **📌 21/09 — O PRINT DA LÍDER ESTAVA NO NOME DE QUEM NÃO ENTREGA SHOPEE.** Commit `1fc0e46`.
+>
+> 🔴 A queixa era *"o app está duplicando, parece que mandei 2 espelhos"* — e era verdade
+> na TELA: a identidade do cartão de print era `driverId|platformName`, **sem a quinzena**,
+> escrita à mão em 4 lugares, e a linha de "Já enviados" **nunca** dizia a quinzena. Duas
+> quinzenas da mesma pessoa viravam duas linhas idênticas (a tela junta TODAS as quinzenas
+> com print pedido, inclusive concluídas). ✅ `chaveDoCartaoDePrint()` num lugar só + quinzena
+> em cada linha + o placar parou de dizer "Quinzenas em aberto" para quinzena CONCLUÍDA.
+> 🔴 **Puxando o fio, um achado pior:** o print da líder **Greice** (1.132 pacotes = exatamente
+> os SHOPEE dela) estava gravado no **Mikael**, que tem **0 pacotes Shopee** — e o pagamento
+> DELE ficou com "espelho conferido ✓" e o dela sem. **Causa provada por hora:** pedido
+> 17/09 11:10 → envio 17/09 20:35 → planilha da Shopee só em **19/09 10:09**; pela regra
+> "pedir antes da planilha" (04/08), enquanto ela não chega o sistema mostra cartão para
+> **todo o grupo** — **31 pessoas sem um pacote de Shopee** viraram cartão na tela do líder.
+> ✅ **Print movido para a Greice com OK dele** (backup + SQL de desfazer em
+> `backups/2026-09-21/`), conferido depois: 1132=1132, `check_qtd` true, marca de conferido
+> trocada de lado, Mikael com 0 prints.
+> ✅ **A/B provou o vermelho:** com os 2 arquivos no HEAD o cenário I do `tests/65` falha com
+> `Expected: 2, Received: 0`. Unit 6/6 novos + 144 · E2E 1/1 · tsc · lint · build.
+> 🔴 **Fica aberto (decisão de produto):** o cartão de print para quem não entrega a
+> plataforma — a causa raiz do print trocado. E o pedido novo: **juntar o cadastro** quando
+> o nome é vinculado no import (o alias `Luis101 → Luis Fernando` existe, mas o cadastro
+> `Luis101` segue ativo com pagamento próprio — por isso aparecem 2 drivers no grupo).
+> ⚠️ **Lição:** gastei um workflow de 7 agentes à toa (ele cortou, com razão) — a causa saiu
+> de 6 SELECTs. E havia **trabalho não commitado de outra sessão dele** (folha/IRRF Lei
+> 15.270) na árvore: `git diff --stat` antes do commit evitou commitar por cima, e o A/B foi
+> feito com cópia + `git checkout --` **só nos meus arquivos** (nunca `git stash`).
+> Detalhe em `CHECKPOINT_SESSAO_2026-09-21.md`.
+
 > Regra de leitura: **este índice + o último checkpoint de sessão** bastam para retomar.
 > Só abra os outros arquivos quando o assunto pedir (a tabela diz qual).
 >
@@ -2431,6 +2460,15 @@ janela). **Nada foi pro ar** — espera o OK dele.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
+
+- 🔴 **Cartão de print para quem NÃO entrega a plataforma (21/09)** — enquanto a planilha
+  daquela quinzena não é importada, `proofSlots` mostra cartão para **todo o grupo**
+  (`semPlanilha`), inclusive quem nunca entregou aquela plataforma. Foi assim que o print da
+  Greice foi parar no Mikael. Na 2ª de agosto foram **31 pessoas** nessa situação. Decisão de
+  produto pendente; recomendação: mostrar só quem já entregou aquela plataforma antes.
+- 🟡 **Vincular nome no import NÃO junta o cadastro (21/09)** — o alias ensina a próxima
+  importação, mas o cadastro duplicado continua ativo e com pagamento próprio, aparecendo
+  como um segundo entregador no grupo (caso vivo: `Luis101` × `Luis Fernando Ramos Torres`).
 
 - 🔴 **Trava de leitura quebra escrita que lê de volta (15/09/2026)** — tirar o SELECT
   (da tabela ou de uma coluna) do `authenticated` faz todo `.insert/.update/.upsert(...)
