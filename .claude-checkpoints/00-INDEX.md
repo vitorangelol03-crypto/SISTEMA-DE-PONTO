@@ -1,5 +1,21 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **📌 21/09 — PEDIR O PRINT DE UM CANCELAVA A COBRANÇA DE TODOS.** Commit `e6de04f`.
+>
+> 🔴 Hoje às **07:03**, com o pedido GERAL no ar, um pedido individual apagou o geral junto:
+> o modal grava a **diferença** entre banco e tela, e fazia isso **calado**. **8 entregadores**
+> que ainda não tinham mandado o print sumiram da fila — só apareceu porque o Victor foi
+> cobrar o **Adriano da Ilha** na mão. ✅ `quemParaDeSerCobrado()` + aviso vermelho ANTES de
+> salvar (quantos perdem e quem ainda não mandou) + confirmação. ✅ Pedidos recriados um a um
+> para os 5 que faltavam.
+> 🔴 **Achado no meio:** `platformNames` vinha inline do painel (array novo a cada render) nas
+> dependências do efeito de carga do modal, e o painel se re-renderiza sozinho a cada ~1,5s com
+> print na fila — **a tela desfazia o que o operador marcava**. Corrigido com `useMemo` + ref.
+> ✅ 10/10 unitários novos · E2E `tests/64` verde (o flaky dele é no setup, pré-existente).
+> ⏳ **Sem resposta ainda:** o cartão de print para quem **não entrega** a plataforma (a causa
+> raiz do print trocado) e a **planilha da Shopee** (53 de 104 divergem; ANGELO +677 e FABRICIO
+> −657 — e a coluna que diz de quem é o pacote **não vem da Shopee**, é preenchida por fora).
+
 > **📌 21/09 — O PRINT DA LÍDER ESTAVA NO NOME DE QUEM NÃO ENTREGA SHOPEE.** Commit `1fc0e46`.
 >
 > 🔴 A queixa era *"o app está duplicando, parece que mandei 2 espelhos"* — e era verdade

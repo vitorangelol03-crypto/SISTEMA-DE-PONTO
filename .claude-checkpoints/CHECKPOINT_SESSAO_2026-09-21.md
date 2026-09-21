@@ -1,5 +1,11 @@
 # CHECKPOINT — Sessão 21/09/2026
 
+> ⚠️ **O dia 21/09 teve DUAS frentes rodando em paralelo, em sessões separadas.** Esta
+> primeira parte é a da **folha** (tabelas de imposto). A segunda, em **§8**, é a de
+> **Pagamentos Driver** (espelho duplicado, print no nome errado e a cobrança que sumia).
+> As duas mexeram na mesma árvore ao mesmo tempo — ver a lição em §8.
+
+
 > **Em uma frase:** as tabelas de INSS e IRRF do sistema estavam **erradas**, e o jeito de
 > calcular também — as duas coisas achadas em cima do "pode puxar a tabela da internet?"
 > do Victor, e as duas corrigidas com a fonte oficial e o gabarito dos recibos reais.
@@ -134,3 +140,80 @@ Nenhum foi "ajustado pra passar" — os três tinham valor antigo:
 2. **6 pessoas** com `employment_type` e `contract_type` discordando.
 3. **18 das 21** de carteira sem data de admissão.
 4. **0 das 21** com salário preenchido — a folha segue sem uso real.
+
+---
+
+## 8. A outra frente do dia — Pagamentos Driver
+
+### 8.1 "O app está duplicando, parece que mandei 2 espelhos" (commit `1fc0e46`)
+
+Era verdade, na tela. A identidade do cartão de print era `driverId|platformName`, **sem a
+quinzena**, escrita à mão em 4 lugares — e a tela junta **todas** as quinzenas com print
+pedido. Duas quinzenas da mesma pessoa viravam duas linhas idênticas em "Já enviados"
+(a de quem falta já dizia a quinzena; a de quem enviou, nunca).
+✅ `chaveDoCartaoDePrint()` num lugar só, quinzena em cada linha, e o placar parou de dizer
+"Quinzenas em aberto" para quinzena **concluída**. A/B provando o vermelho: `Expected: 2,
+Received: 0` no cenário I do `tests/65`.
+
+### 8.2 🔴 O print da líder estava no nome de quem não entrega Shopee
+
+O print de **1.132 pacotes** (exatamente os SHOPEE da **Greice**) estava gravado no
+**Mikael**, que tem **0** — e o pagamento **dele** ficou com "espelho conferido ✓", o dela
+sem. **Causa provada por hora:** pedido 17/09 11:10 → envio 17/09 20:35 → planilha da
+Shopee só em **19/09 10:09**; enquanto ela não chega, a regra "pedir antes da planilha"
+mostra cartão para **todo o grupo** — **31 pessoas sem um pacote de Shopee** viraram cartão
+na tela do líder. ✅ Print movido com OK dele (backup e SQL de desfazer em
+`backups/2026-09-21/`); conferido depois: 1132=1132, `check_qtd` true, marca trocada de
+lado, Mikael com 0 prints.
+
+### 8.3 🔴 Pedir o print de UM cancelava a cobrança de TODOS (commit `e6de04f`)
+
+Hoje às **07:03**: com o pedido GERAL no ar, um pedido individual (Carlos Eduardo) apagou o
+geral junto — o modal grava a **diferença** entre banco e tela. **8 entregadores** que ainda
+não tinham mandado o print sumiram da fila, calados. Só apareceu porque o Victor foi cobrar
+o **Adriano da Ilha** na mão.
+✅ `quemParaDeSerCobrado()` + aviso vermelho ANTES de salvar (quantos perdem, quem ainda não
+mandou) + confirmação. ✅ Pedidos recriados um a um para os 5 que faltavam (Adriano, Jonas,
+Rogério, Romulo, Fabricio Maia) — os outros 4 já estavam com espelho conferido.
+🔴 **Achado no meio:** `platformNames` era montado inline no painel (array novo a cada
+render) e estava nas dependências do efeito de carga do modal; como o painel se
+re-renderiza sozinho a cada ~1,5s com print na fila, **a tela desfazia o que o operador
+marcava**. Corrigido nos dois lados (`useMemo` + ref).
+
+### 8.4 A planilha da Shopee: quem decide de quem é o pacote não é a Shopee
+
+Investigando o "Ângelo com 678 igual ao Rogério": o arquivo cru da Shopee tem **55 colunas e
+nenhuma com nome de motorista** — traz o **código da rota** (`AT2026...`). As duas colunas
+"nome motorista" são **acrescentadas por fora**, cruzando o código AT com a tabela de
+códigos. Comparando a planilha atualizada com o banco: **53 dos 104 divergem** (42 por ≤5
+pacotes), e dois são graves — **ANGELO +677** e **FABRICIO DOS SANTOS FERREIRA −657**, os
+dois de Caratinga. Os 551 do Ângelo foram **digitados na mão** hoje 05:58 (ele confirmou).
+⏳ **Decisão pendente:** reimportar a planilha atualizada (conserta os 53) ou corrigir só os
+dois. Scripts da conferência em `scratchpad` (descartáveis).
+
+### 8.5 Lições
+
+- 🔴 **Gastei um workflow de 7 agentes à toa** e o Victor cortou no meio ("cuidado com agente
+  rodando à toa e gastando muito token"). A causa saiu de 6 SELECTs e 2 leituras de código.
+  Bug com caso concreto em produção se ataca pelo **dado**.
+- 🔴 **Duas sessões na mesma árvore ao mesmo tempo.** O `git status` do início estava limpo e
+  o trabalho da folha foi aparecendo enquanto eu trabalhava. `git diff --stat` antes de cada
+  commit evitou commitar por cima; o A/B do E2E foi feito com cópia + `git checkout --`
+  **só nos meus 2 arquivos** (nunca `git stash`, que levaria o trabalho da outra sessão
+  junto), conferindo a volta com `md5sum -c`. **Este checkpoint foi sobrescrito uma vez** —
+  daí a nota do topo.
+- O `tests/64` tem um flaky **pré-existente** no setup (clicar em "Novo driver", linha 117,
+  timeout de 10s por carga do WSL): reproduziu igual nas duas rodadas, antes e depois da
+  mudança.
+
+### 8.6 Pendências desta frente
+
+1. 🔴 **Cartão de print para quem não entrega a plataforma** — a causa raiz do print
+   trocado. Decisão de produto, apresentada e **não respondida**. Recomendação: enquanto a
+   planilha não chega, mostrar só quem já entregou aquela plataforma antes.
+2. 🔴 **A planilha da Shopee (§8.4)** — reimportar tudo ou corrigir os dois? Sem resposta.
+3. 🟡 **Juntar cadastro duplicado ao vincular no import** — decisões do Victor já colhidas
+   (desativa e esconde · só quinzenas abertas · PIX do principal · o nome vira vínculo de
+   importação). Mapeado o que precisa ser movido e as travas do banco; **falta escrever**, e
+   vai precisar de OK para uma migration (o merge tem que ser atômico).
+4. 🟡 2 prints ainda em nome de quem não tem pacote da plataforma (Cloves e Camilli).
