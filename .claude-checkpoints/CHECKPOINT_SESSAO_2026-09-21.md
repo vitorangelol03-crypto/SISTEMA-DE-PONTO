@@ -240,6 +240,37 @@ recebe, e a divida fica pra proxima.
 100/101. Os specs de Pagamentos Driver (57, 60, 64, 65, 72, 76, 77...) **so rodam local** —
 foi por isso que o `tests/72` ficou quebrado sem ninguem ver.
 
+### 8.8 CI verde de novo, e a taxa que a tela mostrava errada
+
+**O CI voltou ao verde** (`0899bdd`, run 35624889881: 3/3 jobs, 112 passed, 1 flaky no
+spec 38). Duas coisas:
+
+1. 🔴 **`tests/101` D1 nao era a facial.** Passa AQUI em 11s e so falhava no CI — o teste
+   tinha `waitForTimeout(2000)` + `isVisible()`, e nenhum dos dois espera de verdade
+   (`isVisible()` responde na hora; 2s fixos nao cobrem o CI, que tem ~4x a latencia
+   local). Trocado por espera por CONDICAO com `.or()` das duas telas. ⚠️ Sobram **7
+   `waitForTimeout` e 4 `isVisible()`** no mesmo arquivo — nao mexidos, so o D1 falhava.
+2. ✅ **`tests/72` entrou nos specs essenciais do CI.** Ate hoje o CI **nao rodava spec
+   nenhum de driverpay** — foi por isso que o 72 ficou quebrado por semanas sem ninguem
+   ver. Custo: ~50s por run. No primeiro run ja passou.
+
+**A taxa "alterada sozinha para 2,20"** (pergunta dele): ninguem alterou. O
+`driverpay_platforms.default_rate` da **SHOPEE e 2,20** (as outras 2,00, Coleta 1,00), e a
+grade mostra esse padrao quando o driver **nao tem taxa propria** — mas o pagamento usa o
+`rate_snapshot` gravado no import. No ANGELO isso divergia: tela **2,20**, pagamento
+**2,00** (R$ 1.398,00 fecha com 2,00; com 2,20 daria 1.533,60). Diferenca de **R$ 135,60**
+nos 678 pacotes.
+✅ **Victor decidiu: "e 2 o do angelo mesmo"** — entao o pagamento ja estava certo e nada
+de dinheiro mudou. Cadastrei a **taxa propria dele = 2,00** (`driverpay_platform_rates`),
+que e o que protege a PROXIMA importacao: sem taxa propria, o import pegaria o padrao de
+2,20. Varredura: dos 104 com Shopee na quinzena, **10 sem taxa propria e so 1 pago a 2,00**
+— o caso era isolado. Desfazer: `delete from driverpay_platform_rates where driver_id=(
+select id from driverpay_drivers where name='ANGELO FABRICIO AVELINO ESTEVES') and
+platform_id=(select id from driverpay_platforms where name='SHOPEE')`.
+⚠️ **Fica em aberto:** a grade mostrar o padrao da plataforma quando ele nao e o que sera
+pago. E o **Rogerio perdeu os 678 da Shopee** entre 09h e 13h (total de R$ 1.601,60 para
+R$ 110,00) — avisado, sem resposta ainda.
+
 ### 8.6 Pendências desta frente
 
 1. 🔴 **Cartão de print para quem não entrega a plataforma** — a causa raiz do print

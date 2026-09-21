@@ -1,5 +1,21 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **📌 21/09 — CI VERDE DE NOVO, E A TAXA QUE A TELA MOSTRAVA ERRADA.** Commit `0899bdd`.
+>
+> ✅ **`tests/101` D1 nao era a facial:** passa AQUI em 11s e so falhava no CI — tinha
+> `waitForTimeout(2000)` + `isVisible()`, e nenhum dos dois espera de verdade. Trocado por
+> espera por condicao. ⚠️ Sobram 7 `waitForTimeout` e 4 `isVisible()` no mesmo arquivo.
+> ✅ **`tests/72` entrou no CI** — ate hoje o CI **nao rodava spec nenhum de driverpay**, e
+> foi por isso que o 72 ficou quebrado por semanas sem ninguem ver. Run 35624889881: **3/3
+> jobs, 112 passed**.
+> 🔴 **A taxa "que mudou sozinha para 2,20"**: ninguem mudou — e o `default_rate` da
+> plataforma SHOPEE (2,20), que a grade mostra quando o driver **nao tem taxa propria**,
+> enquanto o pagamento usa o `rate_snapshot` do import. No ANGELO: tela 2,20, pagamento
+> 2,00 (R$ 135,60 de diferenca em 678 pacotes). **Victor: "e 2 o do angelo mesmo"** →
+> dinheiro ja estava certo; cadastrei a taxa propria 2,00 dele pra **proxima importacao nao
+> pegar 2,20**. Era caso isolado (1 de 104). ⚠️ A grade mostrar um numero que nao e o que
+> sera pago continua em aberto.
+
 > **📌 21/09 — O PDF PUBLICADO, E DOIS TESTES QUE MENTIAM.** Commits `601ab82` e `cf057cb`.
 >
 > ✅ **"Ver o PDF que esta no app"** no dialogo de espelho: a previa e sempre uma geracao NOVA
