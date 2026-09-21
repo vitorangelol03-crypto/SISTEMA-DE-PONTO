@@ -175,6 +175,12 @@ jobs:
         #   47-supervisor-users-create — supervisor com users.create perm (sub-fase 16.3)
         #   49-pdf-holerite-download — PDF holerite download (sub-fase 17.2.2)
         #   50-i18n-switch          — LanguageSwitcher pt/en (sub-fase 17.5.2)
+        #   72-driverpay-desconto   — Pagamentos Driver: desconto por pessoa com saldo,
+        #                             publicar/republicar espelho e o PDF publicado.
+        #                             ENTROU em 21/09/2026: o CI nao rodava spec NENHUM de
+        #                             driverpay, e por isso o proprio 72 ficou quebrado por
+        #                             semanas sem ninguem ver (morria no setup). E a aba
+        #                             mexe em dinheiro — e onde um bug custa caro.
         #   100-supremo-v2          — 46 tests cobertura ampla (CT)
         #   101-supremo-pn          — 25 tests Ponte Nova
         #
@@ -194,6 +200,7 @@ jobs:
               tests/49-pdf-holerite-download.spec.ts \
               tests/50-i18n-switch.spec.ts \
               tests/51-financial-function-filter.spec.ts \
+              tests/72-driverpay-desconto-por-pessoa.spec.ts \
               tests/100-supremo-v2.spec.ts \
               tests/101-supremo-pn.spec.ts
           fi

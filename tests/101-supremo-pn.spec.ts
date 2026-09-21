@@ -359,10 +359,16 @@ test.describe('SPEC 101 — Teste Supremo Ponte Nova', () => {
 
       // Como o CPF está só em PN (não em CT), vai direto pro PIN (numpad visual com
       // botões 0-9 + "Digite seu PIN para continuar") OU passa pelo company-select.
-      await page.waitForTimeout(2000);
-      const pinScreen = await page.getByText(/Digite seu PIN/i).first().isVisible().catch(() => false);
-      const companySelect = await page.getByText(/Selecione|Empresa/i).first().isVisible().catch(() => false);
-      expect(pinScreen || companySelect).toBe(true);
+      //
+      // ⚠️ 21/09/2026: aqui havia `waitForTimeout(2000)` + `isVisible()`, e foi o que
+      // derrubou o CI por dias. As duas coisas não esperam de verdade: o `isVisible()`
+      // responde na hora (não aceita timeout) e 2s fixos não cobrem o CI, que tem ~4x a
+      // latência daqui — local passava, CI falhava. Agora espera por CONDIÇÃO, aceitando
+      // qualquer uma das duas telas.
+      await expect(
+        page.getByText(/Digite seu PIN/i).first()
+          .or(page.getByText(/Selecione|Empresa/i).first()),
+      ).toBeVisible({ timeout: 30_000 });
     });
 
     test('D2. /clock CPF inexistente → toast erro', async ({ page }) => {
