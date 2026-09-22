@@ -864,19 +864,106 @@ export function jaPagosNoRelatorio(
   return out;
 }
 
-/** Plataformas em que este driver deve mandar print: as SOLICITADAS PRA ELE onde tem pacote. */
+/**
+ * Histórico de entrega: entregador -> plataformas que ele rodou nas **últimas 2 quinzenas**
+ * (decisão do Victor, 22/09/2026). Vem de `driverPlatformHistory`.
+ *
+ * `undefined` = não carregado (ou a consulta falhou): aí vale o comportamento antigo, que
+ * cobra demais. É de propósito — deixar de cobrar todo mundo por causa de uma consulta que
+ * falhou seria pior e mais silencioso do que cobrar a mais.
+ */
+export type HistoricoDePlataforma = ReadonlyMap<string, ReadonlySet<string>>;
+
+/**
+ * Plataformas em que este driver deve mandar print: as SOLICITADAS PRA ELE onde tem pacote.
+ *
+ * 🔴 Sem planilha importada a regra mudou em 22/09/2026 (decisão do Victor). Antes, o pedido
+ * "pra todos" cobrava **todo mundo em grupo** — e na 2ª quinzena de agosto isso pôs 31
+ * pessoas sem um pacote de Shopee como cartão na tela do líder, que foi como o print da
+ * Greice acabou gravado no Mikael. Agora, sem planilha, o pedido "pra todos" só alcança quem
+ * **já entregou naquela plataforma** na janela de histórico. Pedido INDIVIDUAL segue cobrando
+ * sempre: ali o operador escolheu a pessoa de propósito.
+ *
+ * ⚠️ A mesma conta roda na edge function que monta a tela do entregador — ver
+ * `deveCobrarPrint` em `supabase/functions/_shared/proofCards.ts`. As duas são travadas
+ * lado a lado em `tests/unit/driverPayCartaoPrintHistorico.spec.ts`.
+ */
 export function expectedProofPlatforms(
   row: DriverRowData,
   requests: readonly ProofRequest[],
   /** Plataformas sem planilha importada: aí cobra sem exigir pacote (ver acima). */
   semPlanilha?: ReadonlySet<string>,
+  historicoPorDriver?: HistoricoDePlataforma,
 ): string[] {
   const nomes = new Set<string>();
+  const doDriver = historicoPorDriver?.get(row.driverId);
   for (const req of requests) {
     if (!pedidoAlcanca(req, row)) continue;
-    const temPacote = platformPackages(row, req.platformName) > 0;
-    if (temPacote || semPlanilha?.has(req.platformName)) nomes.add(req.platformName);
+    // Pacote lançado (inclusive na mão, antes da planilha) já é prova de que ele entregou.
+    if (platformPackages(row, req.platformName) > 0) { nomes.add(req.platformName); continue; }
+    if (!semPlanilha?.has(req.platformName)) continue;   // planilha na mão e 0 pacote: nada a mandar
+    if (req.driverId !== null) { nomes.add(req.platformName); continue; } // pedido só dele
+    if (historicoPorDriver === undefined) { nomes.add(req.platformName); continue; } // sem histórico carregado
+    if (doDriver?.has(req.platformName)) nomes.add(req.platformName);
   }
+  return [...nomes];
+}
+
+/**
+ * As quinzenas que contam como histórico pra cobrar print: as **2 anteriores** à que está na
+ * tela (decisão do Victor, 22/09/2026 — *"as últimas 2 quinzenas"*).
+ *
+ * "Anterior" é por `start_date` **menor que a da quinzena atual**, não "as outras da lista":
+ * abrindo uma quinzena velha, o histórico tem que ser o que existia antes DELA, senão o
+ * painel usaria entrega do futuro pra decidir o passado.
+ *
+ * ⚠️ O número 2 também está em `QUINZENAS_DE_HISTORICO`
+ * (`supabase/functions/_shared/proofCards.ts`), usado pela tela do entregador.
+ */
+export function quinzenasDeHistorico<P extends { id: string; start_date: string | null }>(
+  periods: readonly P[],
+  periodoAtual: { start_date: string | null } | null | undefined,
+  quantas = 2,
+): string[] | null {
+  // Sem saber a data da quinzena da tela não há "anterior" nenhuma. Devolve null (= não sei)
+  // e não lista vazia, pra quem chama cair no comportamento antigo em vez de deixar de
+  // cobrar todo mundo por causa de um dado faltando.
+  const inicio = periodoAtual?.start_date;
+  if (!inicio) return null;
+  return periods
+    .filter((p) => p.start_date !== null && p.start_date < inicio)
+    .sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)))
+    .slice(0, quantas)
+    .map((p) => p.id);
+}
+
+/**
+ * Plataformas em que ele ficou de fora do pedido "pra todos" **por nunca ter entregado ali**
+ * (22/09/2026). Serve pro selo cinza do painel — decisão do Victor: aparecer o motivo, não
+ * um traço mudo, senão a operação fica sem saber por que aquele print nunca chega.
+ *
+ * Não entra no contador de prints, igual ao "sem grupo — não pedido": contador que nunca
+ * fecha vira ruído.
+ */
+export function proofForaPorSemHistorico(
+  row: DriverRowData,
+  requests: readonly ProofRequest[],
+  semPlanilha?: ReadonlySet<string>,
+  historicoPorDriver?: HistoricoDePlataforma,
+): string[] {
+  if (historicoPorDriver === undefined) return [];  // sem histórico carregado, ninguém está "de fora"
+  if (row.groupName === null) return [];            // esse caso já tem o selo "sem grupo"
+  const doDriver = historicoPorDriver.get(row.driverId);
+  const nomes = new Set<string>();
+  for (const req of requests) {
+    if (req.driverId !== null) continue;                            // pedido geral só
+    if (!semPlanilha?.has(req.platformName)) continue;              // com planilha, quem manda é o pacote
+    if (platformPackages(row, req.platformName) > 0) continue;      // tem pacote: está cobrado
+    if (doDriver?.has(req.platformName)) continue;                  // tem histórico: está cobrado
+    nomes.add(req.platformName);
+  }
+  // Se alguém pediu dele individualmente, ele ESTÁ sendo cobrado — não é "de fora".
+  for (const req of requests) if (req.driverId === row.driverId) nomes.delete(req.platformName);
   return [...nomes];
 }
 
@@ -911,12 +998,13 @@ export function quemParaDeSerCobrado(
   depois: readonly ProofRequest[],
   semPlanilha?: ReadonlySet<string>,
   stateByDriverPlatform?: ReadonlyMap<string, ProofState>,
+  historicoPorDriver?: HistoricoDePlataforma,
 ): PerdaDeCobranca[] {
   const out: PerdaDeCobranca[] = [];
   for (const row of rows) {
-    const agora = expectedProofPlatforms(row, antes, semPlanilha);
+    const agora = expectedProofPlatforms(row, antes, semPlanilha, historicoPorDriver);
     if (agora.length === 0) continue;
-    const futuro = new Set(expectedProofPlatforms(row, depois, semPlanilha));
+    const futuro = new Set(expectedProofPlatforms(row, depois, semPlanilha, historicoPorDriver));
     const perdidas = agora.filter((p) => !futuro.has(p));
     if (perdidas.length === 0) continue;
     // Print RECUSADO nao vale: ele precisa mandar outro, entao ainda esta na fila.
@@ -990,8 +1078,9 @@ export function printsParaRecusarAoDesmarcar(
   requests: readonly ProofRequest[],
   prints: readonly { id: string; driverId: string; platformName: string; status: string }[],
   semPlanilha?: ReadonlySet<string>,
+  historicoPorDriver?: HistoricoDePlataforma,
 ): string[] {
-  const cobradas = new Set(expectedProofPlatforms(row, requests, semPlanilha));
+  const cobradas = new Set(expectedProofPlatforms(row, requests, semPlanilha, historicoPorDriver));
   if (cobradas.size === 0) return [];
   return prints
     .filter((p) => p.driverId === row.driverId)
@@ -1054,10 +1143,11 @@ export function computeProofProgressByPayment(
   stateByDriverPlatform: ReadonlyMap<string, ProofState>,
   /** Plataformas sem planilha importada: cobra sem exigir pacote (ver expectedProofPlatforms). */
   semPlanilha?: ReadonlySet<string>,
+  historicoPorDriver?: HistoricoDePlataforma,
 ): Map<string, ProofProgress> {
   const out = new Map<string, ProofProgress>();
   for (const row of rows) {
-    const plataformas = expectedProofPlatforms(row, requests, semPlanilha);
+    const plataformas = expectedProofPlatforms(row, requests, semPlanilha, historicoPorDriver);
     const contagem: Record<ProofState, number> = {
       confirmado: 0, divergente: 0, pendente: 0, recusado: 0, faltando: 0,
     };

@@ -58,6 +58,7 @@ import {
   listProofRequests,
   listDeliveryProofs,
   platformsWithProofHistory,
+  driverPlatformHistory,
   requestProofForDrivers,
   setProofStatus,
   type MirrorPublicationRow,
@@ -111,6 +112,8 @@ import {
   marcasDoRelatorio,
   type PaymentMark,
   proofForaPorSemGrupo,
+  proofForaPorSemHistorico,
+  quinzenasDeHistorico,
   proofDispensadoSemPacote,
   printsParaRecusarAoDesmarcar,
   platformPackages,
@@ -235,6 +238,15 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const [proofRequests, setProofRequests] = useState<ProofRequest[]>([]);
   /** Estado do print por `driverId|plataforma`, pra pintar a coluna da grade. */
   const [proofStates, setProofStates] = useState<Map<string, ProofState>>(new Map());
+  /**
+   * Quem já entregou em quais plataformas nas 2 quinzenas anteriores (22/09/2026) — é o que
+   * decide o cartão de print enquanto a planilha não chega.
+   *
+   * `undefined` = ainda carregando **ou** a consulta falhou; aí vale o comportamento antigo
+   * (cobra todo mundo do grupo), porque deixar de cobrar em silêncio é pior.
+   */
+  const [historicoPlataformas, setHistoricoPlataformas] =
+    useState<Map<string, Set<string>> | undefined>(undefined);
   const [showCreatePeriod, setShowCreatePeriod] = useState(false);
   const [showConclude, setShowConclude] = useState(false);
   const [editPeriodModal, setEditPeriodModal] = useState<{ period: DriverPaymentPeriod; confirmDelete: boolean } | null>(
@@ -321,6 +333,12 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   useEffect(() => {
     proofRowsRef.current = proofRows;
   }, [proofRows]);
+  // Histórico de plataformas numa ref, pelo mesmo motivo: o desmarcar do espelho decide
+  // quais prints recusar usando a conta do cartão, que agora olha o histórico.
+  const historicoPlataformasRef = useRef<Map<string, Set<string>> | undefined>(undefined);
+  useEffect(() => {
+    historicoPlataformasRef.current = historicoPlataformas;
+  }, [historicoPlataformas]);
   useEffect(() => {
     selectedPeriodIdRef.current = selectedPeriodId;
   }, [selectedPeriodId]);
@@ -474,6 +492,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         setProofRequests([]);
         setProofRows([]);
         setProofStates(new Map());
+        setHistoricoPlataformas(undefined);
         return;
       }
       try {
@@ -493,6 +512,25 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         setProofStates(new Map([...porSlot].map(([k, v]) => [k, melhorEstado(v)])));
       } catch (e) {
         console.error('Erro ao carregar os espelhos do app:', e);
+      }
+      // Histórico das 2 quinzenas anteriores, em bloco PRÓPRIO: se ele falhar, a coluna de
+      // print continua funcionando (só volta a cobrar todo mundo do grupo, como até 21/09).
+      try {
+        const atual = periodsRef.current.find((p) => p.id === periodId);
+        const anteriores = quinzenasDeHistorico(periodsRef.current, atual);
+        // `null` = não deu pra saber quais são as anteriores: mantém o comportamento antigo.
+        // Lista vazia é diferente: é a PRIMEIRA quinzena da empresa, e aí ninguém tem
+        // histórico mesmo — o print é cobrado quando a planilha entrar.
+        setHistoricoPlataformas(
+          anteriores === null ? undefined : await driverPlatformHistory(company.id, anteriores),
+        );
+      } catch (e) {
+        console.error('Erro ao carregar o histórico de entregas por plataforma:', e);
+        setHistoricoPlataformas(undefined);
+        toast.error(
+          'Não consegui ler o histórico de entregas. Até recarregar, o painel cobra print de todo mundo do grupo.',
+          { duration: 9000 },
+        );
       }
     },
     [company?.id],
@@ -928,6 +966,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           );
           paraRecusar = printsParaRecusarAoDesmarcar(
             row, proofRequestsRef.current, proofRowsRef.current, semPlanilhaAgora,
+            historicoPlataformasRef.current,
           );
         }
         if (paraRecusar.length > 0) {
@@ -1589,8 +1628,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   const platformNames = useMemo(() => platforms.map((p) => p.name), [platforms]);
 
   const proofProgressByPayment = useMemo(
-    () => computeProofProgressByPayment(rows, proofRequests, proofStates, semPlanilha),
-    [rows, proofRequests, proofStates, semPlanilha],
+    () => computeProofProgressByPayment(rows, proofRequests, proofStates, semPlanilha, historicoPlataformas),
+    [rows, proofRequests, proofStates, semPlanilha, historicoPlataformas],
   );
 
   /**
@@ -1633,12 +1672,12 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     );
     const paraMarcar = pagamentosParaMarcarPorDispensa(
       linhasDaVarredura,
-      (row) => expectedProofPlatforms(row, proofRequests, semPlanilha),
+      (row) => expectedProofPlatforms(row, proofRequests, semPlanilha, historicoPlataformas),
       (row) => proofDispensadoSemPacote(row, proofRequests, semPlanilha),
     );
     const paraDesmarcar = pagamentosParaDesmarcarPorDispensa(
       linhasDaVarredura,
-      (row) => expectedProofPlatforms(row, proofRequests, semPlanilha),
+      (row) => expectedProofPlatforms(row, proofRequests, semPlanilha, historicoPlataformas),
       (row) => proofProgressByPayment.get(row.paymentId)?.complete === true,
     );
     if (paraMarcar.length === 0 && paraDesmarcar.length === 0) return;
@@ -1661,7 +1700,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         varreduraEspelhoBusyRef.current = false;
       }
     })();
-  }, [rows, proofRequests, semPlanilha, proofProgressByPayment, company?.id, selectedPeriod, isReadOnly, hasPermission, userId, reloadPayments, varreduraTick]);
+  }, [rows, proofRequests, semPlanilha, historicoPlataformas, proofProgressByPayment, company?.id, selectedPeriod, isReadOnly, hasPermission, userId, reloadPayments, varreduraTick]);
 
   /**
    * Quem tem pacote numa plataforma pedida "pra todos" mas ficou de fora **por não estar em
@@ -1677,6 +1716,20 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     }
     return m;
   }, [rows, proofRequests]);
+
+  /**
+   * Quem ficou de fora do pedido "pra todos" **por nunca ter entregado naquela plataforma**
+   * (22/09/2026, decisão do Victor). Fora do contador, igual ao "sem grupo": aparece com
+   * selo próprio na grade pra a operação saber por que aquele print nunca vai chegar.
+   */
+  const semHistoricoForaByPayment = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const r of rows) {
+      const fora = proofForaPorSemHistorico(r, proofRequests, semPlanilha, historicoPlataformas);
+      if (fora.length > 0) m.set(r.paymentId, fora);
+    }
+    return m;
+  }, [rows, proofRequests, semPlanilha, historicoPlataformas]);
 
   /** Quantos drivers precisam da sua atenção no print (divergente ou recusado). */
   const proofAtencao = useMemo(
@@ -2355,6 +2408,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
             nfProgressByPayment={nfProgressByPayment}
             proofProgressByPayment={proofProgressByPayment}
             semGrupoForaByPayment={semGrupoForaByPayment}
+            semHistoricoForaByPayment={semHistoricoForaByPayment}
             pagamentoByPayment={pagamentoPorPagamento}
             selGroups={canMirror ? selGroups : undefined}
             selDrivers={canMirror ? selDrivers : undefined}
@@ -2495,6 +2549,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           rows={rows}
           platformNames={platformNames}
           semPlanilha={semPlanilha}
+          historicoPlataformas={historicoPlataformas}
           proofStates={proofStates}
           userId={userId}
           onClose={() => setShowSolicitarEspelho(false)}

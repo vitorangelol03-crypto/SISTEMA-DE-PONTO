@@ -39,6 +39,7 @@ import {
   runProofCheck,
   type ProofCheckResult,
 } from '../_shared/proofCheck.ts';
+import { deveCobrarPrint, QUINZENAS_DE_HISTORICO } from '../_shared/proofCards.ts';
 import { readProofImage, visionConfigFromEnv } from '../_shared/visionRead.ts';
 import { readNotaFiscalTexto } from '../_shared/nfVisionRead.ts';
 
@@ -1848,6 +1849,47 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
     .select('driver_id').in('driver_id', driverIds);
   const temGrupo = new Set((emGrupo ?? []).map((m) => m.driver_id as string));
 
+  // CARTAO DE PRINT PARA QUEM NAO ENTREGA A PLATAFORMA (decisao do Victor, 22/09/2026).
+  // Sem planilha, o pedido "pra todos" so alcanca quem JA ENTREGOU naquela plataforma nas
+  // 2 quinzenas anteriores. Antes cobrava todo mundo em grupo — e foi assim que 31 pessoas
+  // sem um pacote de Shopee viraram cartao na tela do lider, e o print de 1.132 pacotes da
+  // Greice acabou gravado no Mikael, que tem 0 Shopee. Ver `_shared/proofCards.ts`.
+  const { data: todasPers } = await supabase.from('driverpay_periods')
+    .select('id, start_date').eq('company_id', claims.company_id);
+  const ordenadas = [...(todasPers ?? [])]
+    .sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)));
+  /** quinzena pedida -> as `QUINZENAS_DE_HISTORICO` anteriores A ELA (por data de inicio). */
+  const anterioresDe = new Map<string, string[]>();
+  for (const perId of periodosComPedido) {
+    const inicio = ordenadas.find((p) => p.id === perId)?.start_date as string | undefined;
+    anterioresDe.set(perId, inicio === undefined ? [] : ordenadas
+      .filter((p) => String(p.start_date) < String(inicio))
+      .slice(0, QUINZENAS_DE_HISTORICO)
+      .map((p) => p.id as string));
+  }
+  const idsHistorico = [...new Set([...anterioresDe.values()].flat())];
+  /** `quinzena|driver` -> plataformas em que ele teve pacote naquela quinzena. */
+  const platsAntes = new Map<string, Set<string>>();
+  if (idsHistorico.length > 0) {
+    // Filtra pelos pagamentos DESTE login (1 driver, ou os membros do grupo dele): a
+    // consulta fica pequena e nao carrega a quinzena inteira pra montar uma tela de celular.
+    const { data: pksAntes } = await supabase.from('driverpay_payment_packages')
+      .select('platform_name, packages, driverpay_payments!inner(driver_id, period_id)')
+      .in('driverpay_payments.period_id', idsHistorico)
+      .in('driverpay_payments.driver_id', driverIds)
+      .gt('packages', 0);
+    for (const pk of pksAntes ?? []) {
+      const pay = (pk as { driverpay_payments?: { driver_id?: string; period_id?: string } }).driverpay_payments;
+      if (!pay?.driver_id || !pay?.period_id) continue;
+      const chave = `${pay.period_id}|${pay.driver_id}`;
+      const atual = platsAntes.get(chave) ?? new Set<string>();
+      atual.add(pk.platform_name as string);
+      platsAntes.set(chave, atual);
+    }
+  }
+  const entregouAntes = (perId: string, driverId: string, plat: string): boolean =>
+    (anterioresDe.get(perId) ?? []).some((prev) => platsAntes.get(`${prev}|${driverId}`)?.has(plat) === true);
+
   // (quinzena, driver, plataforma) que foi solicitado E ele deve mandar.
   // ⚠️ Percorre PAGAMENTO x PLATAFORMA PEDIDA, nao a lista de pacotes: sem planilha nao
   // existe pacote nenhum, e varrer pacotes deixaria a tela do entregador vazia.
@@ -1861,12 +1903,14 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
       ...(platsDoDriver.get(`${perId}|${dId}`) ?? []),
     ]);
     for (const plat of plats) {
-      const praTodos = platsTodos.get(perId)?.has(plat) === true && temGrupo.has(dId);
-      const soPraEle = platsDoDriver.get(`${perId}|${dId}`)?.has(plat) === true;
-      if (!praTodos && !soPraEle) continue;
-      const temPacote = (pacotesDe.get(payId)?.get(plat) ?? 0) > 0;
-      const semPlanilha = !planilhaChegou.has(`${perId}|${plat}`);
-      if (temPacote || semPlanilha) precisa.add(`${perId}|${dId}|${plat}`);
+      const cobra = deveCobrarPrint({
+        praTodos: platsTodos.get(perId)?.has(plat) === true && temGrupo.has(dId),
+        soPraEle: platsDoDriver.get(`${perId}|${dId}`)?.has(plat) === true,
+        temPacote: (pacotesDe.get(payId)?.get(plat) ?? 0) > 0,
+        semPlanilha: !planilhaChegou.has(`${perId}|${plat}`),
+        entregouAntes: entregouAntes(perId, dId, plat),
+      });
+      if (cobra) precisa.add(`${perId}|${dId}|${plat}`);
     }
   }
 

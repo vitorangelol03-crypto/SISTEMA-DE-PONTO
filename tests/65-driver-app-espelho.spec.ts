@@ -21,6 +21,7 @@ import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
  *   E. foto que não é a tela do app -> RECUSADO na hora
  *   F. reenvio depois da recusa -> funciona
  *   G. GRUPO -> o líder vê um cartão POR MEMBRO (um print por driver)
+ *   J. SEM PLANILHA -> cartão SÓ pra quem já entregou a plataforma antes (22/09/2026)
  *
  * Segurança: tudo com prefixo "PW Test ", em quinzenas descartáveis, apagado no
  * final — inclusive os arquivos que subiram pro bucket.
@@ -49,6 +50,8 @@ const CPF = {
   membro: '99911100055',
   soShopee: '99911100066',
   duasQuinzenas: '99911100077',
+  comHistorico: '99911100088',
+  semHistorico: '99911100099',
 };
 
 /** Senha que o portal obriga a criar no 1o acesso (nao pode ser 1234). */
@@ -517,5 +520,93 @@ test.describe.serial('Portal do entregador — espelho do app (04/08/2026)', () 
     // E o texto generico saiu: ele mentia quando a quinzena estava concluida.
     await expect(page.getByText(/Quinzenas em aberto/i)).toHaveCount(0);
     await print(page, 'I-duas-quinzenas-cada-uma-com-seu-rotulo');
+  });
+
+  /**
+   * 🔴 22/09/2026 — CARTÃO DE PRINT PARA QUEM NÃO ENTREGA A PLATAFORMA.
+   *
+   * O caso real: na 2ª quinzena de agosto, com o pedido geral da Shopee no ar e a planilha
+   * ainda não importada, o portal mostrava cartão pra TODO MUNDO do grupo — **31 pessoas sem
+   * um pacote de Shopee**. Foi assim que o print da Greice (1.132 pacotes) acabou gravado no
+   * Mikael, que tem 0 Shopee: o pagamento DELE ficou "espelho conferido ✓" e o dela sem.
+   *
+   * Decisão dele: sem planilha, o pedido "pra todos" só alcança quem entregou naquela
+   * plataforma nas 2 quinzenas anteriores. Aqui os DOIS têm entrega na quinzena anterior —
+   * um na SHOPEE e o outro só na eMile — então o teste prova a regra por PLATAFORMA, não
+   * "novo × antigo".
+   *
+   * Datas em dezembro de propósito: a janela de histórico é "as 2 quinzenas anteriores por
+   * data", e as quinzenas reais da empresa param em agosto. Assim a anterior do teste é a
+   * primeira da janela, e nada do dado real interfere.
+   *
+   * Não envia print nenhum: é tela e regra, custo zero de cota do Gemini.
+   */
+  test('J. sem planilha: o cartão só vai pra quem já entregou a plataforma antes', async ({ page }) => {
+    test.setTimeout(180_000);
+
+    const criarQuinzena = async (label: string, inicio: string, fim: string) => {
+      const { data } = await db.from('driverpay_periods').insert({
+        company_id: COMPANY, label: `${PREF}${label} ${RUN}`,
+        start_date: inicio, end_date: fim, status: 'aberto', created_by: '2626',
+      }).select('id').single();
+      criados.periodos.push(data!.id);
+      return data!.id as string;
+    };
+    const criarDriver = async (nome: string, cpf: string) => {
+      const { data } = await db.from('driverpay_drivers').insert({
+        company_id: COMPANY, name: `${PREF}${nome} ${RUN}`, cpf, active: true, created_by: '2626',
+      }).select('id').single();
+      criados.drivers.push(data!.id);
+      return data!.id as string;
+    };
+    const criarPagamento = async (periodId: string, driverId: string, nome: string) => {
+      const { data } = await db.from('driverpay_payments').insert({
+        company_id: COMPANY, period_id: periodId, driver_id: driverId,
+        driver_name_snapshot: `${PREF}${nome} ${RUN}`,
+      }).select('id').single();
+      return data!.id as string;
+    };
+
+    // ── Quinzena ANTERIOR: um entregou SHOPEE, o outro só eMile ──────────────
+    const anterior = await criarQuinzena('HistAnterior', '2026-12-01', '2026-12-15');
+    const liderId = await criarDriver('ComHistorico', CPF.comHistorico);
+    const membroId = await criarDriver('SemHistorico', CPF.semHistorico);
+
+    const payAntesLider = await criarPagamento(anterior, liderId, 'ComHistorico');
+    await db.from('driverpay_payment_packages').insert({
+      company_id: COMPANY, payment_id: payAntesLider,
+      platform_name: PLAT, route: '', packages: 500, rate_snapshot: 2.0,
+    });
+    const payAntesMembro = await criarPagamento(anterior, membroId, 'SemHistorico');
+    await db.from('driverpay_payment_packages').insert({
+      company_id: COMPANY, payment_id: payAntesMembro,
+      platform_name: 'eMile', route: '', packages: 300, rate_snapshot: 2.0,
+    });
+
+    // ── Quinzena ATUAL: planilha NÃO importada (nenhum pacote) + pedido geral ─
+    const atual = await criarQuinzena('HistAtual', '2026-12-16', '2026-12-31');
+    await criarPagamento(atual, liderId, 'ComHistorico');
+    await criarPagamento(atual, membroId, 'SemHistorico');
+    await db.from('driverpay_proof_requests').insert({
+      company_id: COMPANY, period_id: atual, platform_name: PLAT, requested_by: '2626',
+    });
+
+    // Grupo: o líder lidera, o outro é membro (a regra "pra todos" só pega quem tem grupo).
+    const { data: grupo } = await db.from('driverpay_groups').insert({
+      company_id: COMPANY, name: `${PREF}Grupo Hist ${RUN}`, leader_driver_id: liderId,
+    }).select('id').single();
+    criados.grupos.push(grupo!.id);
+    await db.from('driverpay_group_members').insert([
+      { company_id: COMPANY, group_id: grupo!.id, driver_id: liderId },
+      { company_id: COMPANY, group_id: grupo!.id, driver_id: membroId },
+    ]);
+
+    await entrarNoPortal(page, CPF.comHistorico);
+    await abrirEspelho(page);
+
+    // 🔑 UM cartão só: o dele. O membro que nunca rodou SHOPEE não virou cobrança.
+    await expect(page.locator('input[type="file"]')).toHaveCount(1, { timeout: 30_000 });
+    await expect(page.getByText(`${PREF}SemHistorico ${RUN}`)).toHaveCount(0);
+    await print(page, 'J-cartao-so-para-quem-entregou-antes');
   });
 });

@@ -2888,6 +2888,40 @@ export const platformsWithProofHistory = async (companyId: string): Promise<Set<
 };
 
 /**
+ * Quem já entregou em quais plataformas nas quinzenas passadas (22/09/2026).
+ *
+ * É o que decide o cartão de print enquanto a planilha da quinzena não chegou: sem isto, o
+ * pedido "pra todos" cobrava **todo mundo em grupo**, e foi assim que 31 pessoas sem um
+ * pacote de Shopee viraram cartão na tela do líder (ver `expectedProofPlatforms`).
+ *
+ * ⚠️ Passa pela RPC mascarada de propósito: a leitura crua de `driverpay_payments` está
+ * fechada pro app desde 03/09 (bypass por REST). É a MESMA chamada que a grade já faz pra
+ * quinzena da tela, só que pras anteriores — nenhuma tabela nova, nenhuma migration.
+ *
+ * Devolve `entregador -> plataformas com pacote > 0`. Lista de quinzenas vazia = mapa vazio
+ * (ninguém tem histórico), que é o caso real da primeira quinzena da empresa.
+ */
+export const driverPlatformHistory = async (
+  companyId: string,
+  periodIds: readonly string[],
+): Promise<Map<string, Set<string>>> => {
+  const mapa = new Map<string, Set<string>>();
+  if (periodIds.length === 0) return mapa;
+  const porPeriodo = await Promise.all(periodIds.map((id) => getPayments(id, companyId)));
+  for (const pagamentos of porPeriodo) {
+    for (const pay of pagamentos) {
+      for (const pk of pay.packages ?? []) {
+        if ((pk.packages ?? 0) <= 0) continue;
+        const atual = mapa.get(pay.driver_id) ?? new Set<string>();
+        atual.add(pk.platform_name);
+        mapa.set(pay.driver_id, atual);
+      }
+    }
+  }
+  return mapa;
+};
+
+/**
  * Pede o print de VÁRIOS entregadores de uma vez (um pedido individual por pessoa).
  *
  * Usado pelo automático de depois da importação. Individual de propósito: o pedido "pra

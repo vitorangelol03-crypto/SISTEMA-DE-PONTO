@@ -21,7 +21,7 @@ import {
   updatePeriod,
 } from '../../services/driverPay';
 import {
-  expectedProofPlatforms, proofForaPorSemGrupo, quemParaDeSerCobrado,
+  expectedProofPlatforms, proofForaPorSemGrupo, proofForaPorSemHistorico, quemParaDeSerCobrado,
   type DriverRowData, type ProofRequest, type ProofState,
 } from './driverPayShared';
 import { ModalShell } from './ModalShell';
@@ -41,10 +41,15 @@ interface SolicitarEspelhoModalProps {
   platformNames: string[];
   /**
    * Plataformas cuja planilha ainda NAO foi importada nesta quinzena. Da pra pedir o print
-   * mesmo assim (pedido do Victor, 04/08, pra adiantar): cobra todo mundo que esta em grupo,
-   * e a conferencia da QUANTIDADE espera a planilha chegar.
+   * mesmo assim (pedido do Victor, 04/08, pra adiantar): cobra quem esta em grupo E ja
+   * entregou ali antes (22/09), e a conferencia da QUANTIDADE espera a planilha chegar.
    */
   semPlanilha?: ReadonlySet<string>;
+  /**
+   * Quem ja entregou em quais plataformas nas 2 quinzenas anteriores (22/09/2026). E o que
+   * decide quem e cobrado enquanto a planilha nao chega. Ausente = comportamento antigo.
+   */
+  historicoPlataformas?: ReadonlyMap<string, ReadonlySet<string>>;
   /**
    * Estado do print por `driverId|plataforma` (o mesmo Map da grade). Serve pro aviso
    * saber quem, ao perder a cobranca, AINDA NAO tinha mandado o print.
@@ -68,7 +73,7 @@ type Escopo = 'todos' | 'grupo' | 'driver' | 'manter';
 
 export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
   companyId, periodId, periodLabel, periodStart, periodEnd,
-  rows, platformNames, semPlanilha, proofStates, userId, onClose, onChanged,
+  rows, platformNames, semPlanilha, historicoPlataformas, proofStates, userId, onClose, onChanged,
 }) => {
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -170,10 +175,24 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
     [rows, pedidosDesejados],
   );
 
+  /**
+   * Quem fica de fora por NUNCA ter entregado na plataforma marcada (22/09/2026). O aviso
+   * azul prometia "vai pra todos os entregadores em grupo" — com a regra nova isso deixou
+   * de ser verdade, e tela que promete o que o sistema nao faz e como tutorial errado.
+   */
+  const foraSemHistorico = useMemo(
+    () => rows.filter((r) => proofForaPorSemHistorico(r, pedidosDesejados, semPlanilha, historicoPlataformas).length > 0),
+    [rows, pedidosDesejados, semPlanilha, historicoPlataformas],
+  );
+
   /** Quem vai ser cobrado — mesma funcao que a coluna "Print" da grade usa. */
   const previa = useMemo(() => {
-    const cobrados = rows.filter((r) => expectedProofPlatforms(r, pedidosDesejados, semPlanilha).length > 0);
-    const prints = cobrados.reduce((s, r) => s + expectedProofPlatforms(r, pedidosDesejados, semPlanilha).length, 0);
+    const cobrados = rows.filter(
+      (r) => expectedProofPlatforms(r, pedidosDesejados, semPlanilha, historicoPlataformas).length > 0,
+    );
+    const prints = cobrados.reduce(
+      (s, r) => s + expectedProofPlatforms(r, pedidosDesejados, semPlanilha, historicoPlataformas).length, 0,
+    );
     const emGrupo = cobrados.filter((r) => r.groupName);
     const grupos = new Set(emGrupo.map((r) => r.groupName as string));
     return {
@@ -183,7 +202,7 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
       grupos: grupos.size,
       avulsos: cobrados.length - emGrupo.length,
     };
-  }, [rows, pedidosDesejados, semPlanilha]);
+  }, [rows, pedidosDesejados, semPlanilha, historicoPlataformas]);
 
   /**
    * 🔴 Quem PARA de ser cobrado se ele salvar assim (21/09/2026).
@@ -193,8 +212,10 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
    * outros — calado. Agora a tela diz, antes, exatamente quem perde.
    */
   const perdemCobranca = useMemo(
-    () => quemParaDeSerCobrado(rows, jaSolicitadas, pedidosDesejados, semPlanilha, proofStates),
-    [rows, jaSolicitadas, pedidosDesejados, semPlanilha, proofStates],
+    () => quemParaDeSerCobrado(
+      rows, jaSolicitadas, pedidosDesejados, semPlanilha, proofStates, historicoPlataformas,
+    ),
+    [rows, jaSolicitadas, pedidosDesejados, semPlanilha, proofStates, historicoPlataformas],
   );
   const perdemSemPrint = useMemo(
     () => perdemCobranca.filter((p) => p.aindaSemPrint),
@@ -505,12 +526,20 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
                 </strong>
               </p>
               <p className="text-xs text-blue-800 mt-1">
-                Da pra pedir do mesmo jeito, pra adiantar: vai pra <b>todos os entregadores em
-                grupo</b> (o lider anexa por cada membro). O sistema ja <b>recusa na hora</b> print
-                de quinzena errada; a conferencia da <b>quantidade</b> acontece sozinha quando voce
-                importar a planilha — sem gastar leitura de novo, porque o numero do print ja fica
-                guardado.
+                Da pra pedir do mesmo jeito, pra adiantar: vai pros entregadores em grupo que
+                <b> ja entregaram nessa plataforma nas 2 ultimas quinzenas</b> (o lider anexa por
+                cada membro). O sistema ja <b>recusa na hora</b> print de quinzena errada; a
+                conferencia da <b>quantidade</b> acontece sozinha quando voce importar a planilha —
+                sem gastar leitura de novo, porque o numero do print ja fica guardado.
               </p>
+              {foraSemHistorico.length > 0 && (
+                <p className="text-xs text-blue-800 mt-1" data-testid="proof-sem-historico-aviso">
+                  <b>{foraSemHistorico.length} entregador(es) em grupo ficam de fora</b> por nunca
+                  terem entregado ai — e o que impede print no nome de quem nao roda a plataforma.
+                  Quando a planilha entrar, quem tiver pacote e cobrado sozinho; se precisar de um
+                  deles agora, peca o print <b>so dele</b>.
+                </p>
+              )}
             </div>
           )}
 

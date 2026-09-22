@@ -57,6 +57,8 @@ interface DriverRowProps {
   proofProgress?: ProofProgress;
   /** Plataformas em que ele ficou de fora do pedido geral por nao ter grupo. */
   semGrupoFora?: string[];
+  /** Plataformas em que ficou de fora por NUNCA ter entregado ali (22/09/2026). */
+  semHistoricoFora?: string[];
   /** Situacao de PAGAMENTO deste driver (tag "pago"/"parcial"). */
   pagamento?: PagamentoDoDriver;
   /** Seleção para "Espelhos da seleção" (2026-07-18). Ausente = sem checkbox. */
@@ -103,6 +105,7 @@ export const DriverRow: React.FC<DriverRowProps> = ({
   nfProgress,
   proofProgress,
   semGrupoFora = [],
+  semHistoricoFora = [],
   pagamento,
   selected,
   selectionLocked,
@@ -497,6 +500,20 @@ export const DriverRow: React.FC<DriverRowProps> = ({
               >
                 <Circle className="w-3 h-3" />
                 sem grupo
+              </span>
+            )}
+            {!row.espelhoConferido && semHistoricoFora.length > 0 && (
+              /* Cartao de print para quem NAO entrega a plataforma (22/09/2026, decisao do
+                 Victor). Enquanto a planilha nao chega, o pedido "pra todos" so alcanca quem
+                 ja entregou ali nas 2 ultimas quinzenas — e este selo diz POR QUE o print
+                 dele nao vai chegar, em vez de deixar a celula cinza e muda. */
+              <span
+                title={`Nao foi pedido: ele nao entregou nesta plataforma nas 2 ultimas quinzenas (${semHistoricoFora.join(', ')}). Quando a planilha desta quinzena entrar, se ele tiver pacote o sistema pede sozinho — ou peca o print so dele agora.`}
+                data-testid="espelho-sem-historico"
+                className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold border bg-gray-50 text-gray-500 border-gray-300 whitespace-nowrap"
+              >
+                <Circle className="w-3 h-3" />
+                nunca entregou
               </span>
             )}
             {publishedInApp && (
