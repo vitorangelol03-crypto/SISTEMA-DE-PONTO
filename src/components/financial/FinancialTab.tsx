@@ -67,6 +67,7 @@ import {
 import { folhaDaPessoa, type FolhaDaPessoa } from '../../utils/folha/folhaDaPessoa';
 import { ModalShell } from '../driverpay/ModalShell';
 import { getPremiacoes, createPremiacao, type Premiacao } from '../../services/database';
+import { PendenciasDaFolhaCard } from './PendenciasDaFolhaCard';
 import { apareceNoPeriodo } from '../../utils/desligados';
 
 /**
@@ -1489,6 +1490,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ userId, hasPermissio
             <span>Rescisão</span>
           </button>
         </div>
+
+        {/* ══ O QUE FALTA PRA FOLHA SAIR (22/09/2026) ══
+            Fica FORA do `activeView` de propósito: a pendência é da ficha, não da tela, e
+            some sozinha quando não há nada a preencher. Sem isto, quem abre o Financeiro vê
+            "não tem folha" em vez de "falta o salário na ficha" — que é o caso de 14 de 14
+            fichas de carteira assinada hoje. */}
+        {company && <PendenciasDaFolhaCard company={company} recarga={histRecarga} />}
 
         {/* A volta pro histórico. Sem isto o fluxo era de mão única: a pessoa
             entrava na semana e não tinha como voltar pras gavetas. */}

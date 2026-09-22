@@ -158,8 +158,13 @@ test.describe('Folha CLT — ficha do funcionário e configuração', () => {
     await expect(titulo).toBeVisible({ timeout: 60_000 });
 
     // Os valores semeados pela migration, lidos do banco (não chumbados na tela).
-    await expect(page.getByPlaceholder('8')).toHaveValue('8', { timeout: 20_000 });
+    // `exact: true` obrigatório: `getByPlaceholder` casa por PEDAÇO, e o teto do salário
+    // família virou "1980,38" em 22/09 — que contém "8" e fazia o seletor achar 2 campos.
+    await expect(page.getByPlaceholder('8', { exact: true })).toHaveValue('8', { timeout: 20_000 });
     await expect(page.getByPlaceholder('67,54')).toHaveValue('67,54');
-    await expect(page.getByPlaceholder('1906,04')).toHaveValue('1906,04');
+    // 22/09/2026: o teto passou a ser o OFICIAL (Portaria Interministerial MPS/MF nº 13,
+    // de 09/01/2026). Era 1.906,04, vindo do recibo da contabilidade — e com ele o sistema
+    // negava o salário família de quem ganha entre 1.906,05 e 1.980,38.
+    await expect(page.getByPlaceholder('1980,38')).toHaveValue('1980,38');
   });
 });

@@ -152,3 +152,62 @@ describe('onde a redução vale, e onde NÃO vale', () => {
     expect(decimo.irrf).toBe(312.89);   // o imposto CHEIO, sem redução
   });
 });
+
+/**
+ * SALÁRIO FAMÍLIA — o mesmo erro do INSS, achado em 22/09/2026.
+ *
+ * 🔴 O teto estava **R$ 1.906,04**, vindo do recibo de Julho/2026 da contabilidade. O
+ * oficial de 2026 é **R$ 1.980,38** (Portaria Interministerial MPS/MF nº 13, de
+ * 09/01/2026). Quem ganha entre 1.906,05 e 1.980,38 e tem filho **perdia R$ 67,54 por
+ * filho, todo mês**.
+ *
+ * E de novo: os 11 recibos do gabarito NUNCA pegariam isso — todos têm salário de
+ * R$ 1.700, abaixo dos dois tetos. É por isso que estes casos existem aqui e não lá.
+ */
+describe('salário família oficial de 2026', () => {
+  const tabelas = { tabelaInss: TABELA_INSS_2026, tabelaIrrf: TABELA_IRRF_2026 };
+  const comUmFilho = (salario: number) => calcularFolha({
+    ficha: { salarioMensal: salario, filhosSalarioFamilia: 1, fgtsAtivo: true },
+    config: CONFIGURACAO_DA_FOLHA_PADRAO, ano: 2026, mes: 8, adicionalNoturno: 0, ...tabelas,
+  }).salarioFamilia;
+
+  it('a cota e o teto são os da portaria', () => {
+    expect(CONFIGURACAO_DA_FOLHA_PADRAO.cotaSalarioFamilia).toBe(67.54);
+    expect(CONFIGURACAO_DA_FOLHA_PADRAO.tetoSalarioFamilia).toBe(1980.38);
+  });
+
+  it('🎯 quem ganha R$ 1.950 TEM direito (com o teto velho, recebia zero)', () => {
+    expect(comUmFilho(1950)).toBe(67.54);
+  });
+
+  it('🎯 a faixa inteira que era negada: de 1.906,05 a 1.980,38', () => {
+    for (const salario of [1906.05, 1920, 1950, 1980.38]) {
+      expect(comUmFilho(salario), `salário ${salario}`).toBe(67.54);
+    }
+  });
+
+  it('um centavo acima do teto não tem direito', () => {
+    expect(comUmFilho(1980.39)).toBe(0);
+  });
+
+  it('o gabarito de R$ 1.700 continua igual — a correção não mexeu nele', () => {
+    expect(comUmFilho(1700)).toBe(67.54);
+  });
+
+  it('dois filhos pagam duas cotas', () => {
+    const folha = calcularFolha({
+      ficha: { salarioMensal: 1950, filhosSalarioFamilia: 2, fgtsAtivo: true },
+      config: CONFIGURACAO_DA_FOLHA_PADRAO, ano: 2026, mes: 8, adicionalNoturno: 0, ...tabelas,
+    });
+    expect(folha.salarioFamilia).toBe(135.08);
+  });
+
+  it('o salário família fica FORA das bases de INSS e FGTS', () => {
+    const folha = calcularFolha({
+      ficha: { salarioMensal: 1950, filhosSalarioFamilia: 1, fgtsAtivo: true },
+      config: CONFIGURACAO_DA_FOLHA_PADRAO, ano: 2026, mes: 8, adicionalNoturno: 0, ...tabelas,
+    });
+    expect(folha.baseInss).toBe(1950);
+    expect(folha.baseFgts).toBe(1950);
+  });
+});

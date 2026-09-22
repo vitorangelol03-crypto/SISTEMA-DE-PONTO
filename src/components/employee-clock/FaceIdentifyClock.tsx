@@ -33,6 +33,16 @@ const CONFIRM_COUNTDOWN_SECONDS = 3;
 const SAME_PERSON_COOLDOWN_MS = 6000;
 const SCAN_INTERVAL_MS = 700;
 const IDENTIFY_COOLDOWN_MS = 1200; // não martela o servidor a cada frame
+/**
+ * Quanto tempo a tela aceita ficar em "Identificando..." antes de voltar a escanear.
+ *
+ * Existe porque ficar preso nessa fase foi exatamente a queixa dos supervisores em
+ * 22/09/2026 ("fica só validando a facial deles, não entra"). A causa era outra (o loop
+ * se desmontava no meio da chamada — ver o comentário do loop), mas uma resposta que
+ * nunca chega (rede caindo no galpão) produz o MESMO sintoma. Então a tela se cura
+ * sozinha: espera por CONDIÇÃO com limite, não por sorte.
+ */
+const IDENTIFY_TIMEOUT_MS = 9000;
 
 export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({ company, onConfirmed, onUseCpf }) => {
   const { loading: modelsLoading, ready: modelsReady, error: modelsError, detectFace } = useFaceApi();
@@ -54,6 +64,34 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({ company, o
     label: string;
   } | null>(null);
   const [countdown, setCountdown] = useState(0);
+
+  /**
+   * 🔴 ACHADO EM 22/09/2026 — POR QUE A FACIAL SEM CPF "NÃO ENTRAVA".
+   *
+   * O loop de escaneamento dependia de `phase`. Dentro dele, ao achar um rosto, o código
+   * fazia `setPhase('identifying')` **antes** de `await identifyFace(...)`. Essa troca de
+   * fase re-executava o efeito: o cleanup punha `mounted = false` e matava o intervalo, e
+   * o corpo novo saía na hora (`phase !== 'scanning'`). Quando a resposta do servidor
+   * chegava, ela caía num `if (!mounted) return;` — **a identificação era jogada no lixo e
+   * a tela ficava em "Identificando..." pra sempre**, sem reconhecer e sem voltar a
+   * escanear. Era só clicar em "digitar CPF" pra sair, que é exatamente o que a equipe
+   * relatou fazer.
+   *
+   * O irmão que funciona (`FaceVerification`, o 1:1 depois do CPF) não tinha o problema
+   * porque a comparação dele é SÍNCRONA: nenhum `await` entre a troca de fase e a decisão.
+   *
+   * A correção é de raiz: o loop é armado UMA vez (quando os modelos ficam prontos) e só
+   * é desarmado no unmount. Quem decide se escaneia agora é `phaseRef`, não a lista de
+   * dependências do efeito — assim nenhuma troca de fase interrompe uma chamada em voo.
+   * Tudo o que o loop usa de fora entra por ref, pelo mesmo motivo: um `onConfirmed` novo
+   * a cada render do pai voltaria a derrubar o loop no meio.
+   */
+  const phaseRef = useRef<Phase>('loading');
+  const identifyStartedAtRef = useRef(0);
+  const companyRef = useRef(company);
+  const detectFaceRef = useRef(detectFace);
+  const startConfirmRef = useRef<typeof startConfirmCountdown | null>(null);
+  const resumeRef = useRef<typeof resumeScanning | null>(null);
 
   const stopStream = () => {
     if (streamRef.current) {
@@ -160,6 +198,17 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({ company, o
     }, 1000);
   }, [onConfirmed]);
 
+  // As refs que o loop lê. Um efeito sem lista de dependências roda em TODO render, que é
+  // exatamente o que se quer aqui: o loop nunca fica com uma versão velha e também nunca
+  // é derrubado por causa de uma função nova.
+  useEffect(() => {
+    phaseRef.current = phase;
+    companyRef.current = company;
+    detectFaceRef.current = detectFace;
+    startConfirmRef.current = startConfirmCountdown;
+    resumeRef.current = resumeScanning;
+  });
+
   const cancelConfirm = () => {
     if (identified) recentRef.current.set(identified.employee.id, Date.now());
     resumeScanning();
@@ -167,31 +216,47 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({ company, o
 
   // Loop de escaneamento — detecta um rosto e, respeitando um cooldown entre
   // chamadas, pede pro servidor identificar (1:N roda SÓ no servidor).
+  //
+  // ⚠️ As dependências são SÓ `modelsReady` de propósito — ver o comentário grande acima.
+  // Tudo o que muda entre renders é lido por ref.
   useEffect(() => {
-    if (phase !== 'scanning') return;
-    const video = videoRef.current;
-    if (!video) return;
+    if (!modelsReady) return;
     let mounted = true;
 
     const interval = setInterval(async () => {
-      if (!mounted || identifyInFlightRef.current) return;
+      const video = videoRef.current;
+      if (!mounted || !video) return;
+
+      // Resposta que nunca chega não pode prender a tela: volta a escanear.
+      if (phaseRef.current === 'identifying'
+          && identifyStartedAtRef.current > 0
+          && Date.now() - identifyStartedAtRef.current > IDENTIFY_TIMEOUT_MS) {
+        identifyInFlightRef.current = false;
+        identifyStartedAtRef.current = 0;
+        resumeRef.current?.();
+        return;
+      }
+
+      if (phaseRef.current !== 'scanning' || identifyInFlightRef.current) return;
       const now = Date.now();
       if (now - lastIdentifyAtRef.current < IDENTIFY_COOLDOWN_MS) return;
 
       try {
-        const descriptor = await detectFace(video);
+        const descriptor = await detectFaceRef.current(video);
         if (!mounted || !descriptor) return;
 
         lastIdentifyAtRef.current = now;
         identifyInFlightRef.current = true;
+        identifyStartedAtRef.current = Date.now();
         setPhase('identifying');
 
+        const company = companyRef.current;
         const result = await identifyFace(company.id, Array.from(descriptor));
         if (!mounted) return;
 
         if (!result.matched || !result.employeeId) {
           setPhase('no-match');
-          resumeTimerRef.current = setTimeout(() => { if (mounted) resumeScanning(); }, 1500);
+          resumeTimerRef.current = setTimeout(() => { if (mounted) resumeRef.current?.(); }, 1500);
           return;
         }
 
@@ -218,21 +283,22 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({ company, o
           recentRef.current.set(emp.id, now);
           setPhase('already-done');
           setIdentified({ employee: emp, descriptor: Array.from(descriptor), type: 'entry', label: emp.name.split(' ')[0] });
-          resumeTimerRef.current = setTimeout(() => { if (mounted) resumeScanning(); }, 2500);
+          resumeTimerRef.current = setTimeout(() => { if (mounted) resumeRef.current?.(); }, 2500);
           return;
         }
 
-        startConfirmCountdown(emp, Array.from(descriptor), action.type, action.markingPosition, action.label);
+        startConfirmRef.current?.(emp, Array.from(descriptor), action.type, action.markingPosition, action.label);
       } catch (err) {
         console.error('Erro no reconhecimento sem CPF:', err);
         setPhase('scanning');
       } finally {
         identifyInFlightRef.current = false;
+        identifyStartedAtRef.current = 0;
       }
     }, SCAN_INTERVAL_MS);
 
     return () => { mounted = false; clearInterval(interval); };
-  }, [phase, detectFace, company, resumeScanning, startConfirmCountdown]);
+  }, [modelsReady]);
 
   if (modelsLoading || phase === 'loading') {
     return (
@@ -339,8 +405,11 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({ company, o
         </div>
       )}
 
-      {/* ── Alternativa manual (sempre disponível) ── */}
-      {(phase === 'scanning' || phase === 'no-match') && (
+      {/* ── Alternativa manual (sempre disponível) ──
+           'identifying' entrou em 22/09/2026: sem ele, a pessoa que caía nessa fase ficava
+           SEM saída nenhuma na tela (foi a queixa da equipe). A fase agora se cura sozinha
+           por timeout, e ainda assim o botão fica — preso no galpão ninguém pode ficar. */}
+      {(phase === 'scanning' || phase === 'no-match' || phase === 'identifying') && (
         <div className="absolute bottom-6 left-0 right-0 z-20 flex justify-center px-4">
           <button
             onClick={onUseCpf}

@@ -72,14 +72,22 @@ export interface ConfiguracaoDaFolha {
 }
 
 /**
- * Valores de 2026, conferidos no recibo de Julho/2026 (cota 67,54).
+ * Valores de 2026, da FONTE OFICIAL: Portaria Interministerial MPS/MF nº 13, de
+ * 09/01/2026 — cota de **R$ 67,54** por filho para quem recebe até **R$ 1.980,38**.
+ *
+ * 🔴 O teto estava **R$ 1.906,04** até 22/09/2026, e isso negava o salário família de
+ * quem ganha entre 1.906,05 e 1.980,38 (R$ 67,54 por filho, por mês). Os 11 recibos do
+ * gabarito nunca pegariam: todos eles têm salário de R$ 1.700 — a mesma armadilha da
+ * tabela do INSS em 21/09. **Bater com o gabarito não é estar certo; é estar certo no
+ * pedaço que o gabarito cobre.**
+ *
  * ⚠️ Mudam por lei todo ano: a empresa altera na tela de Configurações, e o ano de
  * vigência aparece junto — sem atualizar, a folha sai errada em silêncio.
  */
 export const CONFIGURACAO_DA_FOLHA_PADRAO: ConfiguracaoDaFolha = {
   percentualFgts: 8,
   cotaSalarioFamilia: 67.54,
-  tetoSalarioFamilia: 1906.04,
+  tetoSalarioFamilia: 1980.38,
   dsrNaFaltaInjustificada: false,
 };
 

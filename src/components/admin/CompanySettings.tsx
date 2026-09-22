@@ -231,7 +231,7 @@ export const CompanySettings: React.FC = () => {
         return;
       }
       if (familyCeiling == null || familyCeiling < 0) {
-        toast.error('Teto do salário família: use um valor válido (ex.: 1906,04)');
+        toast.error('Teto do salário família: use um valor válido (ex.: 1980,38)');
         return;
       }
     }
@@ -783,7 +783,7 @@ export const CompanySettings: React.FC = () => {
                   value={familyCeilingRaw}
                   onChange={(e) => setFamilyCeilingRaw(e.target.value)}
                   disabled={!podeEditarFolha}
-                  placeholder="1906,04"
+                  placeholder="1980,38"
                   className={`${inputCls} disabled:bg-gray-100 disabled:text-gray-500`}
                 />
                 <p className="text-xs text-gray-500 mt-1">Quem ganha acima disso não recebe a cota.</p>

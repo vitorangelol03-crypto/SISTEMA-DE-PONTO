@@ -328,8 +328,13 @@ describe('salário família', () => {
   });
 
   it('quem ganha acima do teto não recebe', () => {
-    expect(comFilhos(2, 1906.04).salarioFamilia).toBe(135.08);
-    expect(comFilhos(2, 1906.05).salarioFamilia).toBe(0);
+    // ⚠️ VALOR CORRIGIDO EM 22/09/2026. Este teste dizia 1.906,04/1.906,05 — o teto que
+    // veio do recibo de Julho da contabilidade. O oficial de 2026 é **R$ 1.980,38**
+    // (Portaria Interministerial MPS/MF nº 13, de 09/01/2026): com o valor antigo, quem
+    // ganha 1.950 e tem filho era mandado embora sem os R$ 67,54 a que tem direito.
+    // Não é "teste ajustado pra passar": era o teste que carregava o número errado.
+    expect(comFilhos(2, 1980.38).salarioFamilia).toBe(135.08);
+    expect(comFilhos(2, 1980.39).salarioFamilia).toBe(0);
   });
 
   it('no mês de admissão é proporcional e truncado (Vitoria: 2 cotas em 22 dias = 99,05)', () => {

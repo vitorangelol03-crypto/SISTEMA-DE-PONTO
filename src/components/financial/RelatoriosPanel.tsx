@@ -286,6 +286,32 @@ export const RelatoriosPanel: React.FC<RelatoriosPanelProps> = ({ company, canVi
       }
 
       /**
+       * 🔴 SE A FOLHA NÃO CARREGOU, O RELATÓRIO TEM QUE DIZER (22/09/2026).
+       *
+       * A queda pro relatório sem folha é de propósito (quem puxa um relatório de ponto não
+       * pode ficar sem ele porque a tabela do IR não carregou) — mas até hoje ela era
+       * **silenciosa**: o arquivo saía sem as linhas de salário, INSS, FGTS e IRRF com a
+       * mesma cara de "essa gente não tem folha". Hoje só existe tabela de **2026**: um
+       * relatório de dezembro/2025 ou de janeiro/2027 cai exatamente nisso.
+       */
+      const semConfig = !configDaFolha;
+      const semTabelas = !tabelasDeImposto;
+      const temCarteiraNaLista = financeiro.some(
+        (d) => d.employee.employment_type === 'Carteira Assinada',
+      );
+      if ((semConfig || semTabelas) && temCarteiraNaLista) {
+        const oQueFalta = semConfig && semTabelas
+          ? `a configuração da folha e as tabelas de INSS/IRRF de ${anoDaFolha}`
+          : semConfig ? `a configuração da folha de ${anoDaFolha}`
+          : `as tabelas de INSS e IRRF de ${anoDaFolha}`;
+        toast(
+          `Atenção: este relatório saiu SEM as linhas da folha (salário, INSS, FGTS, IRRF). `
+          + `Falta ${oQueFalta}. O resto do relatório está completo.`,
+          { icon: '⚠️', duration: 12000 },
+        );
+      }
+
+      /**
        * 13º e rescisão são LIDOS do que foi gravado, nunca recalculados — a mesma regra
        * da 2ª via. Recalcular um acerto velho com o salário de hoje faria o relatório
        * discordar do papel que a pessoa assinou.
