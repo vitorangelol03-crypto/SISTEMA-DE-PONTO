@@ -276,3 +276,60 @@ muda, sempre esperando por CONDIÇÃO. Local, depois da correção: `tests/101` 
 = **35 passed, ZERO flaky** (antes o 02 tinha 3 flaky e o 101 o vermelho).
 
 ⚠️ Faltou conferir o run do CI depois deste push — ver o último `gh run list`.
+
+---
+
+## 14. 🔴🔴 O ROMBO: R$ 1.678,95 PAGOS A MAIS (commit `75a0a15`, NO AR)
+
+**O Victor:** *"tive relato de vários motorista falando que recebeu a mais que sai sem
+descontos"* · *"na planilha saiu sem descontos se eu deixei marcado para descontar"*.
+
+### O que acontecia
+
+Publicar o espelho **lançava o abate no livro-caixa** (`source='espelho'`). A planilha de
+pagamento, gerada depois, perguntava ao livro *"quanto ele ainda deve?"*, recebia **ZERO** e
+pagava o **valor CHEIO** — mesmo com "Descontar vales e perdas" marcado. **O papel saía
+certo; o dinheiro saía errado.**
+
+Na operação: espelhos republicados em 21/09 às **17:07** (a troca do prazo 14h→15h) →
+planilha gerada às **18:30** → 21 pessoas pagas pelo bruto. Prova no banco: os 21
+lançamentos daquela quinzena são **todos `espelho`**, nenhum `relatorio`.
+
+🔑 **A causa de fundo: papel não é pagamento.** Um PDF publicado não pode dar baixa em dívida.
+
+### O que NÃO era (e eu cheguei a suspeitar)
+
+Não foi a mudança 14h→15h: a republicação **consertou** os papéis. Conferi os **57 PDFs que
+estão no app**, um por um, lendo o texto do arquivo: **55 corretos**; os 2 com o aviso "NÃO
+foram descontados" são Othon e Fernando, que tinham **R$ 0,00 a receber** (correto). O PDF que
+ele abriu (Fillipe, R$ 6.076,00) é o **da manhã**, de antes da republicação — o que está no app
+pra ele é **R$ 5.999,10**.
+
+### A correção
+
+O livro-caixa passa a ser lido em **duas visões**:
+- **`dinheiro`** (`relatorio`/`backfill`) manda no **PAGAMENTO** (relatório, planilha, marcar
+  como pago);
+- **`todos`** (inclui `espelho`) manda no **ESPELHO**, pra dois espelhos da mesma quinzena não
+  imprimirem o mesmo desconto duas vezes (regra de 07/08, preservada).
+
+Também corrigido o **saldo devedor de quinzena fechada**, que escondia dívida real só por ela
+ter saído num PDF. Migration `20260922160000`: a RPC do livro devolve `source` (nenhum dado
+alterado).
+
+✅ **Efeito colateral desejado:** os 21 voltam a **dever** sozinhos, sem cirurgia em dado.
+
+### O teste que faltava — e por que a suíte passava com o dinheiro vazando
+
+O `tests/72` cobria a ordem **relatório → espelho**. O rombo aconteceu na ordem **INVERSA**
+(espelho → planilha), que **nenhum teste percorria**. Caso novo publica o espelho, gera a
+planilha e **lê o .xlsx**: tem que vir 140 (200 − 60), não 200.
+**A/B:** com o código antigo o teste falha na prévia do desconto; com a correção passa.
+Spec 72 completo: **2 passed**. tsc · lint · build · produção conferida por conteúdo.
+
+🔴 **A minha parte, sem rodeio:** (1) em 21/09 eu escrevi que os espelhos "batiam no centavo"
+comparando **o banco com o banco** (`deducted_amount` × livro) em vez do **papel** com o banco
+— os dois são escritos pelo mesmo código e sempre concordam; (2) eu tinha registrado a
+armadilha do republicar ("o papel sai com valor cheio") como *"proposto, não feito"* e deixei
+pra depois; (3) a minha republicação das 17:07 deixou o livro todo "abatido" 1h23 antes de ele
+gerar a planilha.
