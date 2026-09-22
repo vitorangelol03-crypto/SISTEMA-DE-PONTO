@@ -175,8 +175,12 @@ relatório está completo.
 | Unitários novos desta sessão | 23 (cartão de print) + 4 (facial) + 17 (pendências) + 7 (salário família) |
 | **E2E da folha (115–125)** | **44 testes, 43 passaram**, 1 flaky (ver §9) |
 | E2E driverpay 65 cenário J | 1 passed, contra a edge function v47 já publicada |
+| E2E novo do cartão (`tests/126`) | **2 passed** — inclusive a prova de que o aviso SOME quando o dado entra |
+| Trava de facial+geo ao vivo (`edgeFnClockFacialGeoEstrito`) | **1 passed** contra a edge fn publicada: sem rosto recusa, rosto errado recusa ("não confere"), geo longe recusa (`fraud`), e o dia de 4 marcações passa na ordem |
 | `tsc` · `lint` · `build` | limpos |
 | Banco | teto do salário família conferido por SELECT nas 2 empresas |
+| Deploy | produção serve o bundle `index-C3dOTu1W.js` — o MESMO que o build local gerou; sondado por CONTEÚDO: `1980.38` no bundle principal e "nunca entregou" no chunk `DriverPayTab` |
+| CI | `740f33f` (cartão de print) **verde**; `01ddee4` conferido no fecho (ver §12) |
 
 ---
 
@@ -216,3 +220,30 @@ está, ninguém é bloqueado indevidamente. **Conferido, não assumido.**
   continua no recibo. **Só o contador tira isso** — as 3 perguntas de 21/09 §7 seguem de pé.
 - A folha está **pronta e validada**; o que falta é **anexar os dados** (salário de 18
   pessoas, data de admissão de 15, e aprovar os 3 cadastros de PN). O cartão novo lista quem.
+
+---
+
+## 12. Fecho: o CI e o que está no ar
+
+- **`740f33f`** (cartão de print): run **35691768582 verde**.
+- **`01ddee4`** (folha + facial): o run dele (35695432108) foi **cancelado** quando eu
+  empurrei o spec `126` logo depois — é a concorrência do CI cancelando o run anterior do
+  mesmo branch. O run que vale é o **35695946515** (`ce919dd`), que **contém** o `01ddee4`.
+  ⚠️ **Lição repetida de 21/09 §9.1:** agrupar os pushes. Empurrar duas vezes em 7 minutos
+  custa o rastreio do commit do meio.
+- **Produção conferida por CONTEÚDO** (não por status HTTP): o site serve
+  `index-C3dOTu1W.js`, o mesmo bundle do build local, com `1980.38` dentro; e o chunk
+  `DriverPayTab-DUF1Zm_V.js` tem o selo "nunca entregou".
+- **Edge function** `driver-public-api` na **v47**, sonda na rota respondendo.
+- Trava de **facial + geo** provada ao vivo contra a função publicada.
+
+### O que precisa dele (nada disso eu faço sozinho)
+
+1. **Anexar os dados da folha:** salário de 18 pessoas, data de admissão de 15, e **aprovar
+   os 3 cadastros de Ponte Nova** que batem ponto há meses como `pending`. O cartão novo no
+   Financeiro lista nome por nome.
+2. **As 3 perguntas do contador** (21/09 §7) — é o que tira a tarja "VALORES EM CONFERÊNCIA".
+3. **Ponte Nova usa o mesmo endereço de Caratinga?** (§10)
+4. As duas decisões de produto do driverpay que seguem sem resposta (cartão de print de quem
+   não entrega a plataforma **fechou**; faltam: juntar cadastro duplicado no import e os 4
+   espelhos novos publicados no "em massa" de 21/09).
