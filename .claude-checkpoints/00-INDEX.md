@@ -1,5 +1,31 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **📌 22/09 (madrugada) — TRÊS COISAS ERRADAS NO DINHEIRO E NA OPERAÇÃO.** Commits `740f33f` + os desta leva.
+>
+> 🔴 **O TETO DO SALÁRIO FAMÍLIA ESTAVA ERRADO:** 1.906,04 no sistema × **1.980,38** oficial
+> (Portaria Interministerial MPS/MF nº 13, de 09/01/2026, conferida em 2 fontes). Quem ganha
+> entre 1.906,05 e 1.980,38 e tem filho era mandado embora **sem os R$ 67,54 por filho, todo
+> mês**. Corrigido no banco (2 empresas, conferido por SELECT), no padrão do código, na tela e
+> no teste que carregava o número errado. ⚠️ **De novo os 11 recibos do gabarito não pegariam:
+> todos têm salário de R$ 1.700.** É a mesma armadilha do INSS em 21/09.
+> 🔴 **A FACIAL SEM CPF (o fluxo do tablet) NUNCA FUNCIONOU** quando o servidor demora de
+> verdade: o loop dependia de `phase` e `setPhase('identifying')` vinha ANTES do `await`, então
+> o efeito se desmontava no meio e a resposta caía num `mounted` já falso — tela presa em
+> "Identificando..." pra sempre. Era o relato dos supervisores. Corrigido na raiz (loop armado
+> uma vez, refs), + timeout de 9s e saída manual nessa fase. **Caratinga está com
+> `face_identify_default = true`** — acontecia todo dia. A/B: 4 de 4 testes falham no código
+> antigo, e o teste só pega o bug com atraso de 150ms (com mock instantâneo, passava igual).
+> 🔴 **CARTÃO DE PRINT PRA QUEM NÃO ENTREGA A PLATAFORMA — fechado** (decisões dele: 2
+> quinzenas de histórico · novo não é cobrado · selo cinza). Edge function `driver-public-api`
+> **v47** publicada (deployado conferido idêntico ao repo antes de subir; sonda → 401).
+> ✅ **Cartão "o que falta pra folha sair"** no Financeiro: 14 de 14 fichas de carteira de
+> Caratinga estão **sem salário**, 12 sem admissão, e 3 de PN batem ponto com cadastro
+> **`pending`**. O sistema passou a DIZER isso. 🔑 `CLT` ≡ `Carteira Assinada` (21 fichas): a
+> divergência real de vínculo são **6** (`Diarista` × `CLT`), não 21.
+> ✅ **Relatório avisa** quando sai sem as linhas da folha (só existe tabela de 2026).
+> ✅ Validação: 208 unitários do print · 284 da folha · 51 novos · **E2E folha 44 testes** ·
+> tsc · lint · build. 🔴 Pendências e o que NÃO fechou em `CHECKPOINT_SESSAO_2026-09-22.md` §9.
+
 > **📌 22/09 — A PLANILHA DA SHOPEE NÃO SERÁ REIMPORTADA: O BANCO ESTÁ CERTO, A PLANILHA NÃO.**
 > (decisão do Victor, sem commit de código)
 >
@@ -2532,6 +2558,10 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 ## ⚖️ Decisões ativas (não re-perguntar)
 
+- **Cartão de print sem planilha (Victor, 22/09/2026):** enquanto a planilha da plataforma não é importada, o pedido "pra todos" só cobra print de quem **entregou naquela plataforma nas 2 últimas quinzenas**; **entregador novo (sem histórico) não é cobrado** — o pedido automático pós-importação pega quem tem pacote; quem fica de fora ganha **selo cinza "nunca entregou"** na grade. Pedido **individual** cobra sempre (escolha do operador). Com a planilha na mão, nada muda. A conta roda nos dois lados (painel e tela do entregador) travada por teste lado a lado.
+- **Salário família (22/09/2026, fonte oficial):** cota **R$ 67,54** por filho até o teto de **R$ 1.980,38** (Portaria Interministerial MPS/MF nº 13, de 09/01/2026). O valor antigo (1.906,04) vinha do recibo da contabilidade e **negava o benefício** de quem ganha entre 1.906,05 e 1.980,38. Regra que ficou: **valor de lei se confere na fonte, não no recibo** — recibo só prova o pedaço que ele cobre.
+- **Vínculo: `CLT` ≡ `Carteira Assinada` (22/09/2026).** São o mesmo vínculo escrito diferente em 21 fichas; comparar as strings cruas dá 21 divergências falsas. A divergência de verdade são as **6** com `Diarista` × `CLT`. Quem manda na folha é o `employment_type`.
+
 - **Planilha da Shopee × banco (Victor, 22/09/2026):** onde os dois discordam, **o banco manda**. A coluna "nome do motorista" da planilha é acrescentada **por fora** (o arquivo cru da Shopee tem 55 colunas e nenhuma com nome — só o código da rota `AT2026...`), então ela **não prova de quem é o pacote**; quem prova é a operação. As 53 divergências de 104 da 2ª quinzena de agosto ficam **como estão** — incluindo os **678 de Shopee no ANGELO** (pago R$ 1.398,00), o **Rogerio de Cassio com `SHOPEE = 0`** e R$ 110,00 (zerado de propósito em 21/09 13:26) e o **Fabricio dos Santos Ferreira com 1.558** e R$ 5.623,50. ⚠️ **Não reimportar aquele arquivo naquele período** — a quinzena está `aberto`, o import passaria e desfaria os lançamentos manuais em silêncio.
 
 - **Nota fiscal dividida (Victor, 05/09/2026 — regra FINAL, depois de 4 voltas no mesmo dia):** a opção só aparece pra quem a CD **habilitou** (= tem recebedor cadastrado em "Nomes autorizados a emitir nota" na ficha); ao abrir "Anexar nota" a **escolha vem antes de qualquer botão de enviar** ("notas no valor integral" × "dividir em 2"); **só 50/50** (o 70/30 morreu dos dois lados da conta); as duas notas em **CNPJs diferentes**, com a tela avisando e **listando quem pode emitir (nome + CNPJ)**; prazo da 2ª nota **30 minutos** (era 10); a conferência recusa **valor errado, nome errado E CNPJ do emitente errado** — nome e CNPJ têm que bater na **MESMA linha** do cadastro, e **nome cadastrado sem CNPJ = recusa**. Driver **sem** cadastro nenhum segue na regra antiga (nome do driver ou do recebedor, sem olhar CNPJ do emitente).
@@ -2596,6 +2626,19 @@ janela). **Nada foi pro ar** — espera o OK dele.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
+
+- 🔴 **Folha sem dado: 18 pessoas sem salário e 15 sem data de admissão (22/09)** — a folha
+  está pronta e validada, mas só sai pra quem tem salário na ficha. O cartão novo do
+  Financeiro lista nome por nome. Em Ponte Nova, **3 pessoas batem ponto com o cadastro
+  `pending`** (259, 264 e 92 registros de ponto) e por isso não entram em folha nenhuma.
+- 🟡 **Só existe tabela de imposto de 2026** — relatório de dez/2025 ou jan/2027 sai sem as
+  linhas da folha. Desde 22/09 ele **avisa** em vez de sair calado.
+- 🟡 **`tests/122` flaky (22/09):** 1 falha com `payments_employee_id_fkey` (o funcionário de
+  teste sumiu entre o 2º e o 3º teste do arquivo), passou na repetição. Causa não achada —
+  `workers: 1` e `fullyParallel: false`, então não é corrida entre arquivos.
+- 🟡 **Não emende uma rodada de E2E na outra (22/09):** `reuseExistingServer` pega o Vite da
+  rodada anterior, que morre com o processo dela → `ERR_CONNECTION_REFUSED` no meio da nova.
+  Esperar a anterior terminar de verdade.
 
 - 🔴 **Reimportar planilha apaga lançamento feito na mão (22/09)** — o import sobrescreve os
   pacotes do período sem avisar que ali tem dado digitado por uma pessoa, e a quinzena não
