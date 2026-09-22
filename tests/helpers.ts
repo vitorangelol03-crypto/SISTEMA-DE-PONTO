@@ -199,12 +199,36 @@ export async function switchCompany(page: Page, targetName: 'Caratinga' | 'Ponte
  */
 export async function irAoCampoDeCpfDoPonto(page: Page) {
   const cpf = page.locator('input[placeholder="000.000.000-00"]');
-  const atalho = page.getByRole('button', { name: /Prefere digitar CPF e senha/i });
+  /**
+   * 🔴 22/09/2026 — O BOTÃO DE SAÍDA TEM QUATRO NOMES, UM POR FASE DA TELA:
+   * "Prefere digitar CPF e senha?" (carregando e escaneando), "Prefere entrar com CPF e
+   * senha?" (câmera bloqueada) e "Entrar com CPF e senha" (erro de câmera).
+   *
+   * O helper conhecia só o primeiro — e no CI, que não tem câmera, a tela TROCA de fase
+   * enquanto o teste decide: aparece "Carregando câmera" (nome 1), o `getUserMedia` falha
+   * e vira erro (nome 3). Quando o clique ia sair, o botão já tinha outro nome: o teste
+   * não clicava em nada e morria 15s depois esperando o campo de CPF que ninguém abriu.
+   *
+   * Era isso o "flaky do /clock" que aparecia e desaparecia no CI desde 12/09 (no run
+   * verde das 05:42 de hoje o `tests/101 D2` falhou 1× e passou na repetição; às 06:41
+   * falhou nas duas e derrubou o CI). Agora o seletor casa com QUALQUER um dos nomes e
+   * insiste enquanto a fase muda, sempre esperando por CONDIÇÃO.
+   */
+  const atalho = page.getByRole('button', { name: /CPF e senha/i });
 
   // Espera a tela decidir o que é: ou já veio o CPF, ou veio a facial.
-  await expect(cpf.or(atalho).first(), 'a tela do ponto tem que carregar')
+  await expect(cpf.or(atalho.first()).first(), 'a tela do ponto tem que carregar')
     .toBeVisible({ timeout: 30_000 });
-  if (await atalho.isVisible().catch(() => false)) await atalho.click();
+
+  // A fase pode trocar entre ver o botão e clicar nele. Insiste até o campo aparecer.
+  for (let tentativa = 0; tentativa < 4; tentativa += 1) {
+    if (await cpf.isVisible().catch(() => false)) break;
+    const botao = atalho.first();
+    if (await botao.isVisible().catch(() => false)) {
+      await botao.click({ timeout: 5_000 }).catch(() => {});
+    }
+    await expect(cpf.or(atalho.first()).first()).toBeVisible({ timeout: 10_000 });
+  }
 
   // E espera o campo ficar ESTÁVEL: sem isto o `fill` pega o campo no meio da
   // troca de tela e morre com "element was detached from the DOM".
