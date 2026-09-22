@@ -247,3 +247,32 @@ está, ninguém é bloqueado indevidamente. **Conferido, não assumido.**
 4. As duas decisões de produto do driverpay que seguem sem resposta (cartão de print de quem
    não entrega a plataforma **fechou**; faltam: juntar cadastro duplicado no import e os 4
    espelhos novos publicados no "em massa" de 21/09).
+
+---
+
+## 13. 🔴 O CI FECHOU VERMELHO E EU ACHEI A CAUSA (commit `706bb32`)
+
+Run **35695946515**: `tsc+eslint` verde, `vitest (unit)` verde (todos os unitários novos,
+inclusive o da facial com temporizadores), e o **Playwright vermelho**: **109 passaram, 1
+falhou, 4 flaky**.
+
+A falha: `tests/101 D2` (/clock de Ponte Nova), em `helpers.ts:211` — o campo de CPF
+`input[placeholder="000.000.000-00"]` **não aparecia**.
+
+🔑 **A causa: o helper conhecia UM nome do botão de saída, e a tela tem QUATRO** — um por
+fase: *"Prefere digitar CPF e senha?"* (carregando e escaneando), *"Prefere entrar com CPF
+e senha?"* (câmera bloqueada) e *"Entrar com CPF e senha"* (erro de câmera). No CI, que não
+tem câmera, a tela TROCA de fase enquanto o teste decide: aparece "Carregando câmera" (nome
+1), o `getUserMedia` falha e vira erro (nome 3) — e quando o clique ia sair, o botão já
+tinha outro nome. O teste não clicava em nada e morria 15s depois.
+
+🔑 **E NÃO foi a minha mudança de hoje** — provado no log: no run **verde** das 05:42
+(`740f33f`, antes do commit da facial) esse MESMO teste já falhou 1× e passou na repetição,
+entrando na lista de "3 flaky". Às 06:41 ele falhou nas duas tentativas e virou vermelho. É
+a mesma corrida, no mesmo lugar, que ia e vinha no CI desde 12/09.
+
+✅ **Corrigido:** o seletor casa com qualquer um dos quatro nomes e insiste enquanto a fase
+muda, sempre esperando por CONDIÇÃO. Local, depois da correção: `tests/101` + `tests/02`
+= **35 passed, ZERO flaky** (antes o 02 tinha 3 flaky e o 101 o vermelho).
+
+⚠️ Faltou conferir o run do CI depois deste push — ver o último `gh run list`.
