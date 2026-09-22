@@ -309,7 +309,10 @@ de tela; e a asserção de conferência nunca deve ficar ENTRE o passo destrutiv
 1. 🔴 **Cartão de print para quem não entrega a plataforma** — a causa raiz do print
    trocado. Decisão de produto, apresentada e **não respondida**. Recomendação: enquanto a
    planilha não chega, mostrar só quem já entregou aquela plataforma antes.
-2. 🔴 **A planilha da Shopee (§8.4)** — reimportar tudo ou corrigir os dois? Sem resposta.
+2. ✅ **A planilha da Shopee (§8.4)** — **RESPONDIDO em 22/09: não reimportar.** O banco
+   manda (lançamento manual); a coluna de nome da planilha é preenchida por fora e não
+   prova de quem é o pacote. Os 3 casos (ANGELO 678, Rogerio de Cassio R$ 110, Fabricio
+   1.558) confirmados certos por ele. Ver `CHECKPOINT_SESSAO_2026-09-22.md`.
 3. 🟡 **Juntar cadastro duplicado ao vincular no import** — decisões do Victor já colhidas
    (desativa e esconde · só quinzenas abertas · PIX do principal · o nome vira vínculo de
    importação). Mapeado o que precisa ser movido e as travas do banco; **falta escrever**, e

@@ -1,5 +1,26 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **📌 22/09 — A PLANILHA DA SHOPEE NÃO SERÁ REIMPORTADA: O BANCO ESTÁ CERTO, A PLANILHA NÃO.**
+> (decisão do Victor, sem commit de código)
+>
+> As 53 divergências de 104 (§8.4 de 21/09) estão **encerradas**. Victor: *"já foi pago não tem
+> como estar errado"* e *"foi feito manual está tudo certo"*.
+> 🔑 **Por que a decisão é a certa, e não só a dele:** a coluna "nome do motorista" da planilha
+> é preenchida **por fora** (a Shopee entrega 55 colunas e nenhuma com nome — só o código da
+> rota `AT2026...`). Então a planilha **não é gabarito de quem entregou**; quem é gabarito é a
+> operação, que lançou na mão. Reimportar jogaria a coluna errada por cima do lançamento certo.
+> ⚠️ **ARMADILHA REGISTRADA:** a 2ª quinzena de agosto segue **`aberto`** — um import daquele
+> arquivo **passaria** e desfaria os lançamentos manuais, em silêncio. Não reimportar aquela
+> planilha naquele período.
+> ✅ **Os 3 casos que eu levantei antes de aceitar, todos confirmados como certos por ele:**
+> os **678 pacotes de Shopee** (Sapucaia/Caratinga) são do **ANGELO** (pago R$ 1.398,00);
+> **Rogerio de Cassio Pereira** com `SHOPEE = 0` e pago **R$ 110,00** está certo (os 678 saíram
+> dele às 13:26 de 21/09 **de propósito**); **Fabricio dos Santos Ferreira** com 1.558 Shopee e
+> pago **R$ 5.623,50** está certo (os +657 da planilha não são dele).
+> 🔴 **A lição que eu levei:** "já foi pago" não prova que está certo — prova que saiu. O que
+> provou foi ele dizer que o lançamento foi manual. Numa divergência de pacote, o pagamento
+> feito não fecha a conta sozinho; fecha quando alguém que conhece a rota confirma.
+
 > **📌 21/09 — PRAZO DA NOTA DE 14h PARA 15h, NO BANCO E NO PAPEL.** (operação, sem commit de código)
 >
 > São **duas coisas**: o `nf_due_at` (que decide quem atrasou) e o **PDF** já entregue — mexer no
@@ -2511,6 +2532,8 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 ## ⚖️ Decisões ativas (não re-perguntar)
 
+- **Planilha da Shopee × banco (Victor, 22/09/2026):** onde os dois discordam, **o banco manda**. A coluna "nome do motorista" da planilha é acrescentada **por fora** (o arquivo cru da Shopee tem 55 colunas e nenhuma com nome — só o código da rota `AT2026...`), então ela **não prova de quem é o pacote**; quem prova é a operação. As 53 divergências de 104 da 2ª quinzena de agosto ficam **como estão** — incluindo os **678 de Shopee no ANGELO** (pago R$ 1.398,00), o **Rogerio de Cassio com `SHOPEE = 0`** e R$ 110,00 (zerado de propósito em 21/09 13:26) e o **Fabricio dos Santos Ferreira com 1.558** e R$ 5.623,50. ⚠️ **Não reimportar aquele arquivo naquele período** — a quinzena está `aberto`, o import passaria e desfaria os lançamentos manuais em silêncio.
+
 - **Nota fiscal dividida (Victor, 05/09/2026 — regra FINAL, depois de 4 voltas no mesmo dia):** a opção só aparece pra quem a CD **habilitou** (= tem recebedor cadastrado em "Nomes autorizados a emitir nota" na ficha); ao abrir "Anexar nota" a **escolha vem antes de qualquer botão de enviar** ("notas no valor integral" × "dividir em 2"); **só 50/50** (o 70/30 morreu dos dois lados da conta); as duas notas em **CNPJs diferentes**, com a tela avisando e **listando quem pode emitir (nome + CNPJ)**; prazo da 2ª nota **30 minutos** (era 10); a conferência recusa **valor errado, nome errado E CNPJ do emitente errado** — nome e CNPJ têm que bater na **MESMA linha** do cadastro, e **nome cadastrado sem CNPJ = recusa**. Driver **sem** cadastro nenhum segue na regra antiga (nome do driver ou do recebedor, sem olhar CNPJ do emitente).
 - **Nota do LÍDER de grupo (05/09/2026):** tem que cobrir o **grupo inteiro** naquele CNPJ. A soma só dele **nunca** vale — deixava a parte dos membros sem nota com a tela dizendo "NF ok". Candidatos individuais só existem pra quem não lidera ninguém.
 - **Pagamento dividido (Victor, 05/09/2026):** "os relatórios geral e simples devem saber a metade para um CNPJ e outro para outro, **de acordo com como foi feito as notas**" + "**cada recebedor deve ter sua chave PIX cadastrada**". Dupla **completa** (as 2 notas, nenhuma recusada) → relatório vira 2 linhas, metade pra cada recebedor, cada uma na chave PIX dele (coluna `driverpay_driver_nota_names.pix`; vazia = cai no CNPJ). Dupla pela metade, nota recusada, nota única ou nenhuma nota → **uma linha só**, como sempre.
@@ -2573,6 +2596,12 @@ janela). **Nada foi pro ar** — espera o OK dele.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
+
+- 🔴 **Reimportar planilha apaga lançamento feito na mão (22/09)** — o import sobrescreve os
+  pacotes do período sem avisar que ali tem dado digitado por uma pessoa, e a quinzena não
+  precisa estar concluída pra isso doer (a 2ª de agosto está `aberto`). Hoje a única proteção
+  é lembrar. Ideia (não pedida, não feita): marcar a linha lançada/editada na mão e o import
+  avisar antes de passar por cima.
 
 - 🔴 **Cartão de print para quem NÃO entrega a plataforma (21/09)** — enquanto a planilha
   daquela quinzena não é importada, `proofSlots` mostra cartão para **todo o grupo**
