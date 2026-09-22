@@ -47,6 +47,9 @@ const TAG = `${TEST_EMPLOYEE_NAME_PREFIX}Sald ${RUN}`;
 const AMBOS = `${TAG} Ambos`;
 const SO_B = `${TAG} SoB`;
 const CAP = `${TAG} Cap`;
+/** Cenario do rombo de 21/09: publica o ESPELHO primeiro, gera a PLANILHA depois. */
+const ESP_PRIMEIRO = `${TAG} EspPrim`;
+const PERIOD_ESP = `${TEST_EMPLOYEE_NAME_PREFIX}QuinzEsp ${RUN}`;
 const PERIOD = `${TEST_EMPLOYEE_NAME_PREFIX}QuinzSald ${RUN}`;
 
 const modal = (page: Page): Locator => page.locator(MODAL).last();
@@ -388,6 +391,111 @@ test.describe('Pagamentos Driver — desconto por pessoa, com saldo', () => {
     await closeModal(page);
 
     // ── Limpeza: a quinzena leva junto pacotes, vales e o livro-caixa (FK cascade) ──
+    await deleteCurrentPeriod(page);
+  });
+
+  /**
+   * 🔴 O ROMBO DE 21/09/2026 — R$ 1.678,95 pagos A MAIS para 21 entregadores.
+   *
+   * O que aconteceu na operação: os espelhos foram (re)publicados às 17:07 e a planilha de
+   * pagamento foi gerada às 18:30. Publicar o espelho lançava o abate no livro-caixa; a
+   * planilha então perguntava *"quanto ele ainda deve?"*, recebia **zero** e pagava o valor
+   * **CHEIO** — mesmo com "Descontar vales e perdas" marcado. O papel saía certo e o
+   * dinheiro saía errado. Vários motoristas ligaram dizendo que receberam a mais.
+   *
+   * O `tests/72` acima cobre a ordem RELATÓRIO → espelho. Este cobre a ordem INVERSA, que
+   * é a que quebrou — e é por isso que a suíte inteira passava enquanto o dinheiro vazava.
+   *
+   * A regra que este teste trava: **papel não é pagamento**. Publicar espelho não pode
+   * mexer em quanto a planilha desconta.
+   */
+  test('🔴 espelho publicado NÃO pode zerar o desconto da planilha (rombo de 21/09)', async ({ page }) => {
+    test.setTimeout(420_000);
+    page.on('dialog', (d) => d.accept());
+    await loginAs(page, MASTER_2626);
+    await goToTab(page, 'Pagamentos Driver');
+
+    // ── Um driver, uma plataforma, um vale ──────────────────────────────────
+    const novoDriver = page.getByRole('button', { name: /Novo driver/ });
+    await expect(novoDriver).toBeVisible({ timeout: 60_000 });
+    await novoDriver.click({ timeout: 30_000 });
+    await modal(page).getByPlaceholder('Nome completo do driver').fill(ESP_PRIMEIRO);
+    await modal(page).getByPlaceholder('Ex.: Caratinga').fill('PW Rota Espelho');
+    await modal(page).getByRole('button', { name: 'Cadastrar driver' }).click();
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 10_000 });
+
+    await page.getByRole('button', { name: /Novo período/ }).click();
+    await modal(page).getByPlaceholder(/1ª Quinzena de Junho/).fill(PERIOD_ESP);
+    await modal(page).getByRole('button', { name: 'Criar período' }).click();
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 15_000 });
+    await periodSelect(page, PERIOD_ESP).selectOption({ label: PERIOD_ESP });
+    await expect(page.getByText('Aberto').first()).toBeVisible({ timeout: 10_000 });
+
+    await page.getByPlaceholder(/Nome do driver/).fill(ESP_PRIMEIRO);
+    await expect(rowOfDriver(page, ESP_PRIMEIRO)).toBeVisible({ timeout: 15_000 });
+
+    const columns = await platformColumns(page);
+    expect(columns.length, 'plataformas na grade').toBeGreaterThan(0);
+    const plat = columns[0];
+    const input = rowOfDriver(page, ESP_PRIMEIRO).locator('td').nth(plat.index).locator('input').first();
+    await input.fill('100');            // 100 pacotes × R$ 2,00 = R$ 200,00
+    await input.blur();
+    await expect(rowOfDriver(page, ESP_PRIMEIRO)).toContainText('R$ 200,00', { timeout: 10_000 });
+
+    await rowOfDriver(page, ESP_PRIMEIRO).getByTitle('Lançar vale').click();
+    await expect(modal(page).getByText('Vales / adiantamentos')).toBeVisible({ timeout: 10_000 });
+    await modal(page).getByPlaceholder('0,00').first().fill('60,00');
+    await modal(page).getByPlaceholder(/Adiantamento combustível/).fill('PW vale espelho primeiro');
+    await modal(page).getByRole('button', { name: 'Lançar vale' }).click();
+    await expect(modal(page).getByText('PW vale espelho primeiro')).toBeVisible({ timeout: 10_000 });
+    await closeModal(page);
+    await expect(rowOfDriver(page, ESP_PRIMEIRO)).toContainText('R$ 140,00', { timeout: 10_000 });
+
+    // ══ PASSO 1: PUBLICA O ESPELHO ═════════════════════════════════════════
+    // O total impresso no espelho NÃO é o alvo aqui (a plataforma pode ser de "valor
+    // separado" e sair fora do TOTAL A RECEBER — regra de 20/07; foi o que derrubou as
+    // duas primeiras versões deste teste). O alvo é o EFEITO da publicação sobre a
+    // planilha, que é onde o dinheiro sai.
+    await rowOfDriver(page, ESP_PRIMEIRO).getByTitle('Ver / gerar espelho').click();
+    await expect(modal(page).getByText('Espelho individual')).toBeVisible({ timeout: 10_000 });
+    await expect(modal(page).getByTestId('mirror-deductions-modo-pendentes')).toBeChecked();
+    await modal(page).getByRole('button', { name: /^Publicar no app$/ }).click();
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 30_000 });
+    // Publicou de verdade: o botão vira "Republicar".
+    await rowOfDriver(page, ESP_PRIMEIRO).getByTitle('Ver / gerar espelho').click();
+    await expect(modal(page).getByRole('button', { name: /^Republicar \(atualiza\)$/ }))
+      .toBeVisible({ timeout: 15_000 });
+    await closeModal(page);
+
+    // ══ PASSO 2: A PLANILHA DE PAGAMENTO, DEPOIS DO ESPELHO ════════════════
+    await page.getByRole('button', { name: /^Relatório geral$/ }).click();
+    await expect(modal(page).getByText('Relatório geral — opções')).toBeVisible({ timeout: 10_000 });
+    await keepOnlyPlatform(page, plat.name);
+    await expect(modal(page).getByTestId('report-deductions-modo-pendentes')).toBeChecked();
+
+    // 🔑 A prévia tem que dizer que ele AINDA VAI ser descontado. Com o bug ela dizia
+    // "1 já foram descontados antes" — por causa do espelho — e ninguém era descontado.
+    await expect(modal(page).getByTestId('report-deducao-vao')).toContainText('R$ 60,00');
+    await expect(modal(page).getByTestId('report-deducao-ja')).toHaveCount(0);
+
+    await modal(page).getByTestId('report-marcar-pago').check();
+    const planilha = await downloadSheet(page);
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 20_000 });
+
+    // 🔴 A ASSERÇÃO QUE FALTAVA EM 21/09: com o bug isto vinha 200 (o valor cheio) e o
+    // entregador recebia R$ 60 a mais. O papel dizia 140 e a planilha pagava 200.
+    expect(totalDe(planilha.rows, ESP_PRIMEIRO),
+      'a planilha TEM que descontar o vale mesmo com o espelho já publicado: 200 − 60')
+      .toBe(140);
+
+    // ══ PASSO 3: agora que o DINHEIRO saiu, aí sim ele consta como descontado ═══
+    // (o outro lado da mesma regra: quem já foi pago não pode ser descontado de novo)
+    await page.getByRole('button', { name: /^Relatório geral$/ }).click();
+    await expect(modal(page).getByText('Relatório geral — opções')).toBeVisible({ timeout: 10_000 });
+    await keepOnlyPlatform(page, plat.name);
+    await expect(modal(page).getByTestId('report-deducao-ja')).toContainText('R$ 60,00');
+    await closeModal(page);
+
     await deleteCurrentPeriod(page);
   });
 });

@@ -3196,25 +3196,55 @@ export const markPaymentDone = async (
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Quanto ja foi abatido de cada driver nesta quinzena (driverId -> R$ somados).
- * Driver ausente do mapa = nada abatido ainda (deve tudo).
+ * O livro-caixa da quinzena, separado em PAPEL e DINHEIRO (22/09/2026).
+ *
+ * 🔴 POR QUE ISTO EXISTE. Na 2a quinzena de agosto 21 entregadores receberam R$ 1.678,95 a
+ * MAIS. Publicar o espelho lancava o abate no livro (`source='espelho'`); a planilha de
+ * pagamento, gerada depois, perguntava "quanto ele ainda deve?", recebia ZERO e pagava o
+ * valor CHEIO — mesmo com "Descontar vales e perdas" marcado. O papel saia certo e o
+ * dinheiro saia errado.
+ *
+ * **Papel nao e pagamento.** Um PDF publicado nao pode dar baixa em divida.
+ *
+ * - `dinheiro`: so o que virou pagamento de verdade. **E o que o relatorio/planilha e o
+ *   "marcar como pago" usam** pra decidir quanto abater.
+ * - `todos`: tudo, inclusive o que so foi impresso num espelho. **E o que a geracao do
+ *   ESPELHO usa**, pra dois espelhos da mesma quinzena nao imprimirem o mesmo desconto
+ *   duas vezes (o caso que o lancamento 'espelho' resolvia desde 07/08/2026).
  */
+export interface LivroCaixaDaQuinzena {
+  /** driverId -> R$ ja abatidos DE VERDADE (pagamento). Ausente = deve tudo. */
+  dinheiro: Map<string, number>;
+  /** driverId -> R$ ja lancados por qualquer fonte, inclusive papel (espelho). */
+  todos: Map<string, number>;
+}
+
+/** Fontes do livro-caixa que representam DINHEIRO que saiu (nao papel). */
+const FONTES_DE_DINHEIRO = new Set(['relatorio', 'backfill']);
+
 export const listDeductionLedger = async (
   companyId: string, periodId: string,
-): Promise<Map<string, number>> => {
+): Promise<LivroCaixaDaQuinzena> => {
   // 03/09/2026: REST-bypass fix — view security_invoker (02/09) nunca travou a tabela crua.
   const { data, error } = await supabase.rpc('get_driverpay_deduction_ledger_masked', {
     p_company_id: companyId,
     p_period_id: periodId,
   });
   if (error) throwDbError(error);
-  const out = new Map<string, number>();
+  const dinheiro = new Map<string, number>();
+  const todos = new Map<string, number>();
+  const soma = (m: Map<string, number>, id: string, v: number) =>
+    m.set(id, Math.round(((m.get(id) ?? 0) + v) * 100) / 100);
   for (const r of (data ?? []) as Record<string, unknown>[]) {
     const id = String(r.driver_id);
     const v = Number(r.amount) || 0;
-    out.set(id, Math.round(((out.get(id) ?? 0) + v) * 100) / 100);
+    soma(todos, id, v);
+    // `source` ausente (RPC antiga em cache) conta como dinheiro: o lado seguro e
+    // descontar demais, nunca deixar de descontar em silencio.
+    const fonte = r.source == null ? 'relatorio' : String(r.source);
+    if (FONTES_DE_DINHEIRO.has(fonte)) soma(dinheiro, id, v);
   }
-  return out;
+  return { dinheiro, todos };
 };
 
 /**
@@ -3281,7 +3311,9 @@ export const listClosedPeriodsDebt = async (
       name: pay.driver_name_snapshot,
       total: (pay.discounts ?? []).reduce((s, d) => s + d.amount, 0)
         + (pay.vales ?? []).reduce((s, v) => s + v.amount, 0),
-      jaAbatido: (ledger.get(pay.driver_id) ?? 0) + (carriedOut.get(pay.driver_id) ?? 0),
+      // DINHEIRO, nao papel (22/09/2026): espelho publicado nao quita divida — se contasse,
+      // a divida de uma quinzena fechada sumiria da tela so por ter saido num PDF.
+      jaAbatido: (ledger.dinheiro.get(pay.driver_id) ?? 0) + (carriedOut.get(pay.driver_id) ?? 0),
     }));
     out.push(...saldoDevedorDoPeriodo(period.id, period.label, pessoas));
   }

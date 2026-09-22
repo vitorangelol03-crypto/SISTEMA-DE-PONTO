@@ -53,6 +53,7 @@ import {
   unmarkPayment,
   markPaymentDone,
   listDeductionLedger,
+  type LivroCaixaDaQuinzena,
   recordDeductions,
   listCarryoverTo,
   listProofRequests,
@@ -286,7 +287,18 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
    * Quanto de vale/perda ja foi abatido de cada entregador nesta quinzena (livro-caixa,
    * 07/08/2026). E o que faz pagar Shopee e depois eMile nao cobrar duas vezes.
    */
-  const [deductionLedger, setDeductionLedger] = useState<Map<string, number>>(new Map());
+  /**
+   * O livro-caixa da quinzena, separado em PAPEL e DINHEIRO (22/09/2026).
+   *
+   * 🔴 Existe separado por causa dos R$ 1.678,95 pagos a mais na 2a quinzena de agosto:
+   * o espelho publicado lancava abate no livro, e a planilha de pagamento — gerada depois —
+   * via "ele nao deve mais nada" e pagava o valor CHEIO. Papel nao e pagamento.
+   * `dinheiro` manda no PAGAMENTO; `todos` manda no ESPELHO (pra dois espelhos da mesma
+   * quinzena nao imprimirem o mesmo desconto duas vezes).
+   */
+  const [deductionLedger, setDeductionLedger] = useState<LivroCaixaDaQuinzena>(
+    { dinheiro: new Map(), todos: new Map() },
+  );
 
   // Refs para leitura estavel em callbacks assincronos
   const driversRef = useRef<Driver[]>([]);
@@ -1256,7 +1268,9 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         const t = computeRowTotals(r, allowedSet, false);
         m.set(r.driverId, abaterAgora(
           modo,
-          { total: deductionsOf(r), jaAbatido: deductionLedger.get(r.driverId) ?? 0 },
+          // ESPELHO usa `todos`: se outro espelho da quinzena ja imprimiu este desconto,
+          // este nao imprime de novo. (O PAGAMENTO usa `dinheiro` — ver o estado acima.)
+          { total: deductionsOf(r), jaAbatido: deductionLedger.todos.get(r.driverId) ?? 0 },
           t.packagesAmount + t.zapex,
         ));
       }
@@ -1782,7 +1796,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     const nomes = platforms.map((p) => p.name);
     const m = new Map<string, ReturnType<typeof pagamentoDoDriver>>();
     for (const r of rows) {
-      m.set(r.paymentId, pagamentoDoDriver(r, nomes, indiceMarcas, deductionLedger.get(r.driverId) ?? 0));
+      m.set(r.paymentId, pagamentoDoDriver(r, nomes, indiceMarcas, deductionLedger.dinheiro.get(r.driverId) ?? 0));
     }
     return m;
   }, [rows, platforms, indiceMarcas, deductionLedger]);
@@ -1934,7 +1948,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         driverId: r.driverId,
         name: r.name,
         total: deductionsOf(r),
-        jaAbatido: deductionLedger.get(r.driverId) ?? 0,
+        // DINHEIRO, nunca papel: espelho publicado nao quita divida (22/09/2026).
+        jaAbatido: deductionLedger.dinheiro.get(r.driverId) ?? 0,
         brutoNoEscopo: t.packagesAmount + t.zapex,
       };
     });
@@ -2479,7 +2494,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
           rows={markPaidTarget.rows}
           title={markPaidTarget.title}
           platformNames={platformNames}
-          deductionLedger={deductionLedger}
+          deductionLedger={deductionLedger.dinheiro}
           companyId={company.id}
           periodId={selectedPeriod.id}
           userId={userId}
