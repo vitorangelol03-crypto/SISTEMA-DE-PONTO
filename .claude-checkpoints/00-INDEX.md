@@ -17,6 +17,7 @@
 > ✅ **E2E com ROSTO de verdade** (câmera falsa com retrato NASA, domínio público): `tests/127`, 7/7.
 > Unit 1.995 · banco 17 passos · edge fns em produção · produção conferida por conteúdo.
 > ⚠️ Detalhe, os 3 erros MEUS que o teste pegou e as pendências de segurança: `CHECKPOINT_SESSAO_2026-09-30.md`.
+> 🔒 **Tarde ("pode corrigir"):** fechado o golpe de pôr o próprio rosto na ficha de um colega (lookup devolvia a ficha inteira, set-pin e save-face sem senha) e apagada a coluna com a senha da aba Admin em TEXTO PURO. `52231d1` + `1141fb6`, edge fns v19/v18. 🔴 **Victor precisa trocar a senha da aba Admin.**
 
 > **📌 22/09 (madrugada) — TRÊS COISAS ERRADAS NO DINHEIRO E NA OPERAÇÃO.** Commits `740f33f` + os desta leva.
 >
@@ -2649,14 +2650,9 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 ## ⚠️ Áreas frágeis / pendências abertas
 
-- 🔴 **`save-face` e `face-descriptor` sem senha (30/09)** — a função pública troca o rosto de
-  qualquer funcionário (só com o id, que `lookup-employee` devolve pelo CPF) e entrega o rosto
-  cadastrado. Com a trava ligada, um colega que sabe o CPF de outro poderia trocar o rosto dele e
-  bater por ele no tablet. Não mexido (muda o fluxo de cadastro do rosto) — recomendação: exigir o
-  PIN (ou só aceitar quando `face_reset_requested`/sem rosto).
-- 🔴 **`companies.admin_secret_password` legível pelo anon (30/09)** — conferido no catálogo:
-  `has_column_privilege('anon', ..., 'SELECT') = true` + policy de SELECT pública. A chave anon vai
-  no site. Não mexido; recomendação: REVOKE da coluna pro anon/authenticated + ler por RPC.
+- 🟢 ~~`save-face`/`face-descriptor` sem senha~~ **FECHADO 30/09 à tarde** (`52231d1` + `1141fb6`): lookup só com 10 campos, set-pin só no 1º acesso, rosto com PIN, painel define PIN pela RPC `admin_set_employee_pin`.
+- 🟢 ~~`companies.admin_secret_password` legível~~ **FECHADO 30/09** (coluna apagada, migration `20260930132704`). 🔴 **O Victor precisa TROCAR a senha da aba Admin** — a atual esteve legível por qualquer um.
+- 🟡 **`today-attendance`/`attendance-history` públicos entregam o ponto (com lat/lng) de qualquer id**; e a batida confia nas coordenadas do aparelho — só a trava do tablet fecha isso.
 - 🟡 **3 pessoas com rosto "no limite"** (distância média 1:1 ≥ 0,45, cadastradas em maio):
   refazer o cadastro no tablet (nomes no checkpoint 30/09 §7).
 - 🟡 **`tests/62` "com GPS liberado" (2 testes)** falham IGUAL no código antigo — desligam a facial

@@ -191,3 +191,41 @@ Ele respondeu "pode seguir" ao plano com as recomendações — valem as 5:
    folga pra meta de 5–7s, dá pra baixar pra 2s (decisão dele).
 6. Medir no tablet de verdade: depois de uns dias, `face_auth_attempts` (desfecho + distâncias) +
    horário da batida dizem quanto tempo leva e quantas tentativas até reconhecer.
+
+## 10. Tarde — "pode corrigir": as duas falhas de segurança (FECHADAS)
+
+**Victor:** *"pode corrigir"* (itens 3 e 4 do §9).
+
+### O que a investigação achou (maior do que o relatado)
+- `lookup-employee` (público, só o CPF) devolvia a **FICHA INTEIRA**: `pin_hash` (PIN de 4–6
+  dígitos em bcrypt se descobre por tentativa em minutos), rosto cadastrado, PIX, telefone...
+- `set-pin` trocava o PIN de **qualquer** funcionário sem login — e o botão "Definir PIN" do
+  painel usava justamente essa ação pública.
+- `save-face` / `face-descriptor` sem PIN. Junto: pôr o PRÓPRIO rosto na ficha de um colega e
+  bater por ele. **Provado:** os 4 testes novos falhavam contra a produção antiga.
+- `companies.admin_secret_password` era a senha **ATUAL** da aba Admin em texto puro
+  (`verify_admin_secret` = true nas 2 empresas), numa tabela legível por qualquer um. A
+  conferência de verdade usa `admin_secret` (bcrypt) desde 12/05; a coluna era sobra.
+
+### Correção (ordem pra não derrubar ninguém: tela primeiro, servidor depois)
+- Migration `20260930132704`: apaga a coluna + RPC `admin_set_employee_pin` (confere
+  employees.edit e a empresa do login; provado 7/7 no banco; hash do banco aceito pelo
+  bcryptjs 2.4.3 do servidor).
+- `52231d1` (tela): rosto e batida mandam o PIN da sessão; "Definir PIN" pela RPC. CI verde.
+- Servidor (employee-public-api **v19**, clock-in-validated **v18**, conferidas = repo):
+  lookup só com 10 campos; set-pin só no 1º acesso (condição no UPDATE, 409); save-face e
+  face-descriptor com PIN (401); cadastro de rosto pela batida com PIN. `_shared/pin.ts` = a
+  conferência num lugar só (bcryptjs `?no-dts` — o `deno check` agora passa nas duas).
+- `1141fb6` (servidor + testes).
+
+### Validação
+- Unit 1.999 (131 arq.) · edge fns em produção 16/16 (+1 pulado de propósito) · A/B: 4 falhas
+  na produção antiga · E2E 127/05/79/02 com tela + servidor novos: **21/21** · banco limpo.
+- **CI verde nos dois envios:** `52231d1` (run 36723902441) e `1141fb6` (run 36725591890) —
+  tsc+eslint, vitest (com os testes ao vivo de segurança contra a produção nova) e playwright.
+
+### Precisa do Victor
+- 🔴 **Trocar a senha da aba Admin** — a atual esteve legível por qualquer um (até hoje).
+- Fica aberto (não pedido): `today-attendance`/`attendance-history` entregam o ponto (com
+  latitude/longitude) de qualquer id; a batida confia nas coordenadas que o aparelho manda —
+  só a trava do tablet fecha isso de verdade.
