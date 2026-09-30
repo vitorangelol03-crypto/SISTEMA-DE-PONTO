@@ -257,7 +257,10 @@ com muito zoom"*.
 5. Testes: fotos em 4 tamanhos (tablet em pé 800×1280, deitado 1280×800, 7" deitado 1024×600,
    celular 390×844) conferindo `scrollWidth ≤ innerWidth` e nada fora da tela + E2E 127.
 
-**As 3 decisões pendentes (com a minha recomendação):**
+**✅ DECIDIDO pelo Victor (30/09 ~11:30): "sim nos três"** — nome "Ponto" + relógio azul do
+sistema · tela cheia total · tela sempre acesa com o app de ponto aberto. **Já pode programar.**
+
+**As 3 decisões (respondidas acima):**
 1. Nome/ícone no tablet: **"Ponto" + o relógio azul do sistema** (ou ele manda o logo da empresa).
 2. Tela cheia total (some a barra de hora/bateria do Android): **sim**.
 3. Tela sempre acesa com o app de ponto aberto: **sim**.
@@ -276,5 +279,5 @@ com muito zoom"*.
   memória `reference_testar_em_copia_linux`). O Vite de screenshot que estava de pé foi derrubado.
 
 ### Como retomar
-1. Ler este §11. 2. Perguntar ao Victor as 3 decisões (se ele não tiver respondido).
-3. Com o "pode seguir": implementar 1→4, fotos DEPOIS nos 4 tamanhos, E2E, validar e publicar.
+1. Ler este §11. 2. As 3 decisões JÁ FORAM RESPONDIDAS ("sim nos três") — não perguntar de novo.
+3. Implementar 1→4, fotos DEPOIS nos 4 tamanhos, E2E, validar e publicar.

@@ -1,6 +1,6 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
-> **⏸️ PAROU AQUI (30/09 ~11:25, reinício do PC): tela de ponto como APLICATIVO INSTALÁVEL + responsiva no tablet** — plano pronto, **esperando 3 decisões do Victor** (nome/ícone "Ponto"+relógio azul · tela cheia total · tela sempre acesa). Nada programado ainda. Tudo o mais commitado, no ar e com CI verde. Retomar pelo **§11 de `CHECKPOINT_SESSAO_2026-09-30.md`**.
+> **⏸️ PAROU AQUI (30/09 ~11:25, reinício do PC): tela de ponto como APLICATIVO INSTALÁVEL + responsiva no tablet** — plano pronto e **as 3 decisões RESPONDIDAS: "sim nos três"** (nome "Ponto"+relógio azul · tela cheia total · tela sempre acesa) — **pode programar direto, não perguntar de novo**. Nada programado ainda. Tudo o mais commitado, no ar e com CI verde. Retomar pelo **§11 de `CHECKPOINT_SESSAO_2026-09-30.md`**.
 
 > **📌 30/09 — PONTO SÓ NO TABLET (NO AR, TRAVA DESLIGADA) + A FACIAL SEM CPF QUE NÃO RECONHECIA.**
 > Commit `eba2e45` · edge fns `clock-in-validated` v17 / `employee-public-api` v18 · migrations
@@ -2581,6 +2581,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 ## ⚖️ Decisões ativas (não re-perguntar)
 
 - **Ponto só no tablet (Victor, 30/09/2026):** só o **2626** cadastra tablet e liga/desliga a trava; com a trava ligada **todo mundo** só bate no tablet (supervisor incluído); no tablet continua o **CPF + senha** (rosto sempre exigido); a trava **nasceu desligada e fica desligada até ele mandar ligar** ("validar primeiro, o pessoal batendo normal"). Um tablet pode atender as 2 empresas.
+- **Tela de ponto como app instalável (Victor, 30/09/2026, "sim nos três"):** nome **"Ponto"** com o **relógio azul** do sistema; **tela cheia total** (some a barra de hora/bateria do Android); **tela sempre acesa** enquanto o app de ponto estiver aberto.
 - **Facial (Victor, 30/09/2026):** sem CPF (1:N) exige o **mesmo limite do 1:1 (0,50)**; meta de tempo **5–7s** da pessoa parar na frente até o ponto gravado; a contagem de 3s com o nome (04/09) continua.
 
 - **Cartão de print sem planilha (Victor, 22/09/2026):** enquanto a planilha da plataforma não é importada, o pedido "pra todos" só cobra print de quem **entregou naquela plataforma nas 2 últimas quinzenas**; **entregador novo (sem histórico) não é cobrado** — o pedido automático pós-importação pega quem tem pacote; quem fica de fora ganha **selo cinza "nunca entregou"** na grade. Pedido **individual** cobra sempre (escolha do operador). Com a planilha na mão, nada muda. A conta roda nos dois lados (painel e tela do entregador) travada por teste lado a lado.
