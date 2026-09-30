@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { MASTER_2626, loginAs, goToTab } from './helpers';
+import { MASTER_2626, loginAs, goToTab, irAoCampoDeCpfDoPonto } from './helpers';
 import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
+import { criarEmpresaDeTeste, apagarEmpresaDeTeste } from './integrity-helpers';
 
 /**
  * E2E — reverter decisão de cadastro (31/08/2026, pedido do Victor):
@@ -19,10 +20,16 @@ import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
  * 01/09/2026: a aba "Aprovação de Cadastro" separada foi removida — os
  * botões agora vivem na aba "Funcionários" (view "Ativos"/"Bloqueados" no
  * lugar dos filtros Pendente/Aprovado/Recusado de antes).
+ *
+ * 🔴 30/09/2026 — EMPRESA DE TESTE (Victor: "sim pode com cuidado"): o fim do teste digitava o
+ * CPF direto no /clock, mas Caratinga passou a abrir na câmera (falhava igual no código antigo).
+ * Agora o funcionário nasce numa empresa nova, só deste teste, que abre no CPF; o 2626 escolhe
+ * essa empresa no login, e ela é apagada no fim.
  */
 
 const RUN = Date.now().toString(36);
 const NOME = `${TEST_EMPLOYEE_NAME_PREFIX}Reverter ${RUN}`;
+const EMPRESA_NOME = `${TEST_EMPLOYEE_NAME_PREFIX}Reverter Empresa ${RUN}`;
 
 /** Gera um CPF com dígitos verificadores válidos (Mod 11), único por seed. */
 function validCpf(seed: number): string {
@@ -45,14 +52,7 @@ test.describe('Aprovação de Cadastro — reverter decisão', () => {
   test('aprovado → recusado (bloqueia) → reverte pra aprovado (desbloqueia)', async ({ page }) => {
     test.setTimeout(90_000);
     const supabase = getClient();
-    const { data: caratinga, error } = await supabase
-      .from('companies')
-      .select('id')
-      .ilike('display_name', '%caratinga%')
-      .limit(1)
-      .single();
-    if (error || !caratinga) throw new Error('Empresa Caratinga não encontrada para o teste');
-    const companyId = (caratinga as { id: string }).id;
+    const companyId = await criarEmpresaDeTeste(EMPRESA_NOME, { lat: -19.8024282, lng: -42.1361237 });
 
     const { data: created, error: insertError } = await supabase
       .from('employees')
@@ -66,11 +66,14 @@ test.describe('Aprovação de Cadastro — reverter decisão', () => {
       }])
       .select('id')
       .single();
-    if (insertError || !created) throw new Error(`Falha ao criar funcionário de teste: ${insertError?.message}`);
+    if (insertError || !created) {
+      await apagarEmpresaDeTeste(companyId);
+      throw new Error(`Falha ao criar funcionário de teste: ${insertError?.message}`);
+    }
     const employeeId = (created as { id: string }).id;
 
     try {
-      await loginAs(page, MASTER_2626);
+      await loginAs(page, MASTER_2626, { empresa: EMPRESA_NOME });
       await goToTab(page, 'Funcionários');
       await expect(page.getByRole('heading', { name: /Funcionários/ })).toBeVisible({ timeout: 10_000 });
       const search = page.getByPlaceholder('Buscar por nome ou CPF...');
@@ -110,12 +113,13 @@ test.describe('Aprovação de Cadastro — reverter decisão', () => {
       // Confirma desbloqueio real no /clock (sem PIN configurado ainda → cai
       // no setup de senha, prova que passou da checagem de recusado).
       await page.goto('/clock');
-      await page.locator('input[placeholder="000.000.000-00"]').fill(CPF);
+      await (await irAoCampoDeCpfDoPonto(page)).fill(CPF);
       await page.getByRole('button', { name: 'Continuar' }).click();
       await expect(page.getByText('Criar sua senha de acesso')).toBeVisible({ timeout: 10_000 });
     } finally {
       await supabase.from('attendance').delete().eq('employee_id', employeeId);
       await supabase.from('employees').delete().eq('id', employeeId);
+      await apagarEmpresaDeTeste(companyId);
     }
   });
 });

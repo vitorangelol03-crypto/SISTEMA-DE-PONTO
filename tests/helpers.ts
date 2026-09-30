@@ -54,17 +54,20 @@ export async function mockFacialFlagsOff(page: Page, companyIds: string[]): Prom
  * Admin (id === '9999') passa por uma tela de seleção de empresa após o
  * login (sub-fase 1.10). Os testes default selecionam Caratinga.
  */
-export async function loginAs(page: Page, user: { id: string; password: string }) {
+export async function loginAs(page: Page, user: { id: string; password: string }, opts: { empresa?: string } = {}) {
   await page.goto('/');
   await page.locator('#id').fill(user.id);
   await page.locator('#password').fill(user.password);
   await page.getByRole('button', { name: 'Entrar' }).click();
 
-  // Admin/mestre: lidar com CompanySelector — clica em Caratinga (empresa default dos testes).
+  // Admin/mestre: lidar com CompanySelector — clica em Caratinga (empresa default dos testes),
+  // ou na `empresa` pedida (30/09/2026: uma empresa de teste, pelo nome exato do cartão).
   if (user.id === '9999' || user.id === '2626') {
-    const caratingaCard = page.getByText('Caratinga', { exact: false }).first();
-    await expect(caratingaCard).toBeVisible({ timeout: 10_000 });
-    await caratingaCard.click();
+    const cartao = opts.empresa
+      ? page.getByRole('button').filter({ has: page.getByRole('heading', { name: opts.empresa, exact: true }) }).first()
+      : page.getByText('Caratinga', { exact: false }).first();
+    await expect(cartao).toBeVisible({ timeout: 10_000 });
+    await cartao.click();
   }
 
   // Sanity check: chegou ao painel (aparece botão "Ponto" do TabNavigation).

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { MASTER_2626, loginAs, goToTab } from './helpers';
+import { MASTER_2626, loginAs, goToTab, irAoCampoDeCpfDoPonto } from './helpers';
 import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
+import { criarEmpresaDeTeste, apagarEmpresaDeTeste, createTestEmployee } from './integrity-helpers';
 import { validateCPF } from '../src/utils/validation';
 
 /**
@@ -27,11 +28,18 @@ import { validateCPF } from '../src/utils/validation';
  * separada foi removida — tudo isso agora vive embutido na aba
  * "Funcionários" (badge de status + botões Aprovar/Recusar na própria
  * lista), exclusivo do 2626, igual antes.
+ *
+ * 🔴 30/09/2026 — EMPRESA DE TESTE (Victor: "sim pode com cuidado"). Antes o teste cadastrava
+ * em CARATINGA e morria no passo 3: Caratinga passou a abrir o /clock na câmera, e o teste
+ * digitava o CPF direto (falhava igual no código antigo). Agora tudo acontece numa empresa nova,
+ * só deste teste, que abre no CPF — e os cadastros de teste nem passam pela lista real de
+ * Caratinga. O 2626 escolhe essa empresa no login; ela é apagada no fim.
  */
 
 const RUN = Date.now().toString(36);
 const NOME_APROVADO = `${TEST_EMPLOYEE_NAME_PREFIX}CadastroOk ${RUN}`;
 const NOME_RECUSADO = `${TEST_EMPLOYEE_NAME_PREFIX}CadastroNo ${RUN}`;
+const EMPRESA_NOME = `${TEST_EMPLOYEE_NAME_PREFIX}Cadastro ${RUN}`;
 
 /** Gera um CPF com dígitos verificadores válidos (Mod 11), único por seed. */
 function validCpf(seed: number): string {
@@ -52,8 +60,8 @@ function validCpf(seed: number): string {
 const CPF_APROVADO = validCpf(Date.now());
 const CPF_RECUSADO = validCpf(Date.now() + 7);
 
-// Função real já usada por dezenas de funcionários da Caratinga — não é
-// dado de teste, só reaproveita o que já existe pro <select> oferecer.
+// A página pública oferece as funções JÁ USADAS na empresa: a empresa de teste ganha uma pessoa
+// com esta função (o mesmo nome usado em Caratinga) pro <select> oferecer.
 const FUNCAO_TRIAGEM = 'Triagem - Shopee';
 
 test.describe('Cadastro público + Aprovação de Cadastro', () => {
@@ -69,16 +77,11 @@ test.describe('Cadastro público + Aprovação de Cadastro', () => {
     // 2 checagens no /clock, e passou a estourar os 30s padrão.
     test.setTimeout(90_000);
     const supabase = getClient();
-    const { data: caratinga, error } = await supabase
-      .from('companies')
-      .select('id')
-      .ilike('display_name', '%caratinga%')
-      .limit(1)
-      .single();
-    if (error || !caratinga) throw new Error('Empresa Caratinga não encontrada para o teste');
-    const companyId = (caratinga as { id: string }).id;
+    const companyId = await criarEmpresaDeTeste(EMPRESA_NOME, { lat: -19.8024282, lng: -42.1361237 });
 
     try {
+      await createTestEmployee({ name: `${TEST_EMPLOYEE_NAME_PREFIX}Funcao ${RUN}`, functionRole: FUNCAO_TRIAGEM, companyId });
+
       // ── 1) Cadastro público — dois funcionários novos, sem login ──
       for (const [nome, cpf] of [[NOME_APROVADO, CPF_APROVADO], [NOME_RECUSADO, CPF_RECUSADO]] as const) {
         await page.goto(`/cadastro?empresa=${companyId}`);
@@ -88,8 +91,8 @@ test.describe('Cadastro público + Aprovação de Cadastro', () => {
         await page.getByPlaceholder('(00) 00000-0000').fill('33999998888');
         await page.locator('select').nth(0).selectOption('Aleatória');
         await page.getByPlaceholder('Sua chave PIX').fill('a1b2c3d4-e5f6-0000-0000-000000000000');
-        // Função: <select> com as funções já usadas na empresa (Caratinga já
-        // tem "Triagem - Shopee" real, não é dado de teste).
+        // Função: <select> com as funções já usadas na empresa (a empresa de teste tem
+        // "Triagem - Shopee" pela pessoa criada acima).
         await expect(page.locator('select').nth(1)).toBeVisible({ timeout: 10_000 });
         await page.locator('select').nth(1).selectOption(FUNCAO_TRIAGEM);
         await page.getByRole('button', { name: 'Enviar cadastro' }).click();
@@ -111,11 +114,11 @@ test.describe('Cadastro público + Aprovação de Cadastro', () => {
       }
 
       // ── 2) Painel: aprovação embutida na aba Funcionários — EXCLUSIVA do 2626 (nem 9999 vê) ──
-      await loginAs(page, MASTER_2626);
+      await loginAs(page, MASTER_2626, { empresa: EMPRESA_NOME });
       await goToTab(page, 'Funcionários');
       await expect(page.getByRole('heading', { name: /Funcionários/ })).toBeVisible({ timeout: 10_000 });
 
-      // Busca isola cada linha (lista tem centenas de funcionários reais).
+      // Busca isola cada linha.
       const search = page.getByPlaceholder('Buscar por nome ou CPF...');
 
       await search.fill(NOME_APROVADO);
@@ -146,12 +149,12 @@ test.describe('Cadastro público + Aprovação de Cadastro', () => {
 
       // ── 3) /clock: aprovado bate ponto normal, recusado é bloqueado ──
       await page.goto('/clock');
-      await page.locator('input[placeholder="000.000.000-00"]').fill(CPF_RECUSADO);
+      await (await irAoCampoDeCpfDoPonto(page)).fill(CPF_RECUSADO);
       await page.getByRole('button', { name: 'Continuar' }).click();
       await expect(page.getByText(/cadastro foi recusado/i)).toBeVisible({ timeout: 10_000 });
 
       await page.goto('/clock');
-      await page.locator('input[placeholder="000.000.000-00"]').fill(CPF_APROVADO);
+      await (await irAoCampoDeCpfDoPonto(page)).fill(CPF_APROVADO);
       await page.getByRole('button', { name: 'Continuar' }).click();
       // Sem PIN configurado ainda: vai pro setup de senha — prova que NÃO foi bloqueado.
       await expect(page.getByText('Criar sua senha de acesso')).toBeVisible({ timeout: 10_000 });
@@ -165,6 +168,7 @@ test.describe('Cadastro público + Aprovação de Cadastro', () => {
         await supabase.from('attendance').delete().in('employee_id', ids);
         await supabase.from('employees').delete().in('id', ids);
       }
+      await apagarEmpresaDeTeste(companyId);
     }
   });
 });

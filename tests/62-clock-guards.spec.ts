@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { getClient } from './cleanup';
-import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from './integrity-helpers';
+import { createTestEmployee, cleanupByPrefix, criarEmpresaDeTeste, apagarEmpresaDeTeste, TEST_EMPLOYEE_NAME_PREFIX } from './integrity-helpers';
 import { mockFacialFlagsOff, mockCompanyFacialFlags } from './helpers';
 
 /**
@@ -15,6 +15,8 @@ import { mockFacialFlagsOff, mockCompanyFacialFlags } from './helpers';
  */
 
 const PREFIX = `${TEST_EMPLOYEE_NAME_PREFIX}Guard `;
+const RUN = Date.now().toString(36);
+const CHAVE_EMPRESA = 'sistema_ponto_company_id';
 const CD_CARATINGA = { latitude: -19.8023373, longitude: -42.1360937 };
 const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
@@ -27,8 +29,8 @@ async function cleanup() {
   await cleanupByPrefix(PREFIX);
 }
 
-async function createClockEmployee(name: string): Promise<{ empId: string; cpfMasked: string }> {
-  const empId = await createTestEmployee({ name, pin: '4321' });
+async function createClockEmployee(name: string, companyId?: string): Promise<{ empId: string; cpfMasked: string }> {
+  const empId = await createTestEmployee({ name, pin: '4321', companyId });
   const s = getClient();
   // Facial OFF só neste funcionário (antes da tela carregá-lo) — nunca na config global.
   await s.from('employees').update({ face_recognition_enabled: false }).eq('id', empId);
@@ -37,8 +39,12 @@ async function createClockEmployee(name: string): Promise<{ empId: string; cpfMa
   return { empId, cpfMasked: `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}` };
 }
 
-async function loginToDashboard(page: Page, cpfMasked: string) {
+async function loginToDashboard(page: Page, cpfMasked: string, empresaId?: string) {
   await mockFacialFlagsOff(page, [CARATINGA_ID]);
+  // Empresa de teste (30/09/2026): a tela já abre nela (sem câmera primeiro).
+  if (empresaId) {
+    await page.addInitScript(({ chave, empresa }) => { localStorage.setItem(chave, empresa); }, { chave: CHAVE_EMPRESA, empresa: empresaId });
+  }
   await page.goto('/clock');
   await page.locator('input').first().fill(cpfMasked);
   await page.getByRole('button', { name: /Continuar/i }).click();
@@ -57,11 +63,32 @@ test.describe('Spec 62 — proteções da tela de ponto', () => {
   test.describe('com GPS liberado (CD Caratinga)', () => {
     test.use({ geolocation: CD_CARATINGA, permissions: ['geolocation'] });
 
+    /*
+     * 🔴 30/09/2026 — EMPRESA DE TESTE (Victor: "sim pode com cuidado"). Estes dois batem ponto
+     * DE VERDADE, e desde que a facial ficou obrigatória em Caratinga o servidor recusava o
+     * funcionário de teste (sem rosto): "Cadastre o rosto para bater ponto" — o mock da tela
+     * (mockFacialFlagsOff) só engana o navegador, não o servidor. Falhavam igual no código antigo.
+     * Agora batem numa empresa nova, só deste teste, com a cerca no MESMO ponto do CD (raio 150m)
+     * e sem facial obrigatória — o que se testa aqui são as travas da tela, não o rosto.
+     */
+    let empresaId = '';
+    test.beforeAll(async () => {
+      empresaId = await criarEmpresaDeTeste(`${PREFIX}Empresa ${RUN}`, {
+        lat: CD_CARATINGA.latitude,
+        lng: CD_CARATINGA.longitude,
+        raio: 150,
+      });
+    });
+    test.afterAll(async () => {
+      await cleanup();
+      if (empresaId) await apagarEmpresaDeTeste(empresaId);
+    });
+
     test('saída < 10 min pede confirmação; "Foi engano" NÃO registra; confirmar registra', async ({ page }) => {
       test.setTimeout(180_000);
-      const { empId, cpfMasked } = await createClockEmployee(`${PREFIX}SaidaRapida`);
+      const { empId, cpfMasked } = await createClockEmployee(`${PREFIX}SaidaRapida`, empresaId);
       const s = getClient();
-      await loginToDashboard(page, cpfMasked);
+      await loginToDashboard(page, cpfMasked, empresaId);
 
       // 1. Entrada real
       await page.getByRole('button', { name: /REGISTRAR ENTRADA/i }).click();
@@ -95,8 +122,8 @@ test.describe('Spec 62 — proteções da tela de ponto', () => {
 
     test('após registrar, a tela volta ao CPF sozinha em ~35s', async ({ page }) => {
       test.setTimeout(180_000);
-      const { cpfMasked } = await createClockEmployee(`${PREFIX}AutoVolta`);
-      await loginToDashboard(page, cpfMasked);
+      const { cpfMasked } = await createClockEmployee(`${PREFIX}AutoVolta`, empresaId);
+      await loginToDashboard(page, cpfMasked, empresaId);
 
       await page.getByRole('button', { name: /REGISTRAR ENTRADA/i }).click();
       await expect(page.getByText(/✅ Entrada registrada/i)).toBeVisible({ timeout: 30_000 });

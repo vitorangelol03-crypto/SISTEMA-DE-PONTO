@@ -38,6 +38,8 @@ export interface CreateEmployeeOpts {
   faceRegistered?: boolean;
   /** function_role — a triagem decide quem entra no desconto pela função (15/09/2026). */
   functionRole?: string;
+  /** Empresa do funcionário (30/09/2026) — ex.: uma empresa de teste (`criarEmpresaDeTeste`). */
+  companyId?: string;
 }
 
 /** Descriptor de 128 números — não precisa ser um rosto de verdade, só passar
@@ -70,6 +72,9 @@ export async function createTestEmployee(opts: CreateEmployeeOpts): Promise<stri
   if (opts.faceRegistered) {
     row.face_registered = true;
     row.face_descriptor = DUMMY_FACE_DESCRIPTOR;
+  }
+  if (opts.companyId) {
+    row.company_id = opts.companyId;
   }
   const { data, error } = await s.from('employees').insert([row]).select('id').single();
   if (error) throw error;
@@ -262,6 +267,82 @@ export async function cleanupByPrefix(prefix: string, dates: string[] = []): Pro
   if (dates.length > 0) {
     await s.from('triage_errors').delete().in('date', dates);
   }
+}
+
+/**
+ * EMPRESA DE TESTE (30/09/2026, pedido do Victor: "sim pode com cuidado").
+ *
+ * Por que existe: testes que batem ponto em Caratinga ficaram presos a configurações REAIS dela
+ * — a facial obrigatória e a câmera primeiro fazem o servidor recusar gente sem rosto, e o
+ * `tests/08` chegava a TROCAR a cerca real de Caratinga durante a rodada. Numa empresa nova, só
+ * do teste, cada spec escolhe a configuração que precisa sem encostar em nada real.
+ *
+ * O nome TEM que começar com `PW Test ` — é a marca que o `apagarEmpresaDeTeste` exige antes de
+ * apagar qualquer coisa (uma empresa real nunca é apagada por engano).
+ */
+export async function criarEmpresaDeTeste(
+  nome: string,
+  config: {
+    lat: number;
+    lng: number;
+    raio?: number;
+    facialObrigatoria?: boolean;
+    abreNaCamera?: boolean;
+  },
+): Promise<string> {
+  if (!nome.startsWith(TEST_EMPLOYEE_NAME_PREFIX)) {
+    throw new Error(`Empresa de teste precisa começar com "${TEST_EMPLOYEE_NAME_PREFIX}": ${nome}`);
+  }
+  const s = getClient();
+  const { data, error } = await s.from('companies').insert([{
+    legal_name: `${nome} LTDA`,
+    cnpj: `9${Date.now().toString().slice(-7)}${String(Math.floor(Math.random() * 1e4)).padStart(4, '0')}`,
+    display_name: nome,
+    city: 'Teste, MG',
+    default_geo_lat: config.lat,
+    default_geo_lng: config.lng,
+    default_geo_radius: config.raio ?? 150,
+    default_marking_count: 2,
+    require_facial_clock: config.facialObrigatoria ?? false,
+    face_identify_default: config.abreNaCamera ?? false,
+  }]).select('id').single();
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
+/**
+ * Apaga a empresa de teste e tudo o que os testes criam nela. Recusa (lança) se a empresa não
+ * tiver a marca `PW Test ` no nome. As tabelas ligadas à empresa têm chave estrangeira sem
+ * cascata — se sobrar alguma linha que esta lista não conhece, apagar a empresa FALHA e o erro
+ * sobe (nada fica órfão em silêncio).
+ */
+export async function apagarEmpresaDeTeste(companyId: string): Promise<void> {
+  const s = getClient();
+  const { data: empresa, error: erroEmpresa } = await s.from('companies').select('display_name').eq('id', companyId).maybeSingle();
+  if (erroEmpresa) throw erroEmpresa;
+  if (!empresa) return; // já apagada
+  const nome = (empresa as { display_name: string }).display_name;
+  if (!nome.startsWith(TEST_EMPLOYEE_NAME_PREFIX)) {
+    throw new Error(`Recusado: "${nome}" não é empresa de teste (nome sem "${TEST_EMPLOYEE_NAME_PREFIX}")`);
+  }
+
+  const { data: emps } = await s.from('employees').select('id').eq('company_id', companyId);
+  const empIds = (emps || []).map((e: { id: string }) => e.id);
+  if (empIds.length > 0) {
+    for (const tabela of ['attendance', 'payments', 'bonus_blocks', 'bonus_removals', 'bonuses', 'geo_fraud_attempts', 'face_auth_attempts', 'error_records']) {
+      await s.from(tabela).delete().in('employee_id', empIds);
+    }
+    await s.from('employees').delete().in('id', empIds);
+  }
+  for (const tabela of [
+    'attendance', 'payments', 'bonus_blocks', 'bonus_removals', 'bonuses', 'geo_fraud_attempts',
+    'face_auth_attempts', 'error_records', 'error_logs', 'payment_periods', 'payment_period_config',
+    'geolocation_config', 'face_recognition_config',
+  ]) {
+    await s.from(tabela).delete().eq('company_id', companyId);
+  }
+  const { error } = await s.from('companies').delete().eq('id', companyId);
+  if (error) throw new Error(`Não consegui apagar a empresa de teste "${nome}": ${error.message}`);
 }
 
 export { TEST_EMPLOYEE_NAME_PREFIX };

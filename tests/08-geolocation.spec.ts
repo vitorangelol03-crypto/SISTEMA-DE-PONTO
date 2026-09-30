@@ -1,23 +1,38 @@
 import { test, expect, Page } from '@playwright/test';
-import { getClient } from './cleanup';
-import { mockFacialFlagsOff } from './helpers';
+import { getClient, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
+import { criarEmpresaDeTeste, apagarEmpresaDeTeste } from './integrity-helpers';
+
+/**
+ * Geolocalização na batida de ponto (/clock) — dentro/fora do raio, GPS negado e GPS com erro.
+ *
+ * 🔴 30/09/2026 — REFEITO NUMA EMPRESA DE TESTE (Victor: "sim pode com cuidado").
+ * Antes, este spec trocava a cerca REAL de Caratinga (`geolocation_config`, que o servidor usa
+ * na batida) no beforeAll e só devolvia no afterAll: durante ~3 min, o ponto de verdade de
+ * Caratinga era conferido contra a cerca do teste — e um teste morto no meio deixava a cerca
+ * errada. E desde que a facial ficou obrigatória em Caratinga, ele falhava de qualquer jeito
+ * (funcionário sem rosto → "Cadastre o rosto para bater ponto"), igual no código antigo e no novo.
+ *
+ * Agora: uma empresa nova, só deste teste, com a MESMA cerca que o teste sempre usou (centro em
+ * VALID_LAT/VALID_LON, raio 200m, bloqueia fora) e sem facial obrigatória — o que se testa aqui é
+ * a localização. Apagada no fim (`apagarEmpresaDeTeste` só apaga empresa com "PW Test" no nome).
+ */
 
 const TEST_CPF = '99988877766';
 const TEST_PIN = '1234';
 const TEST_NAME = 'PW Test Geo Employee';
+const EMPRESA_NOME = `${TEST_EMPLOYEE_NAME_PREFIX}Geo ${Date.now().toString(36)}`;
+const CHAVE_EMPRESA = 'sistema_ponto_company_id';
 
 const VALID_LAT = -19.803105;
 const VALID_LON = -42.136271;
 const OUTSIDE_LAT = -19.900000;
 const OUTSIDE_LON = -42.200000;
-// Config REAL de produção: mexer SÓ na linha da Caratinga (o .limit(1) antigo
-// pegava uma linha arbitrária — podia escrever coords de Caratinga na config
-// de Ponte Nova). Restauração fica no afterAll; se uma bateria for morta no
-// meio, conferir/restaurar a config manualmente (raio real: 150m).
-const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
+
+let empresaId = '';
 
 async function loginEmployee(page: Page) {
-  await mockFacialFlagsOff(page, [CARATINGA_ID]);
+  // A tela abre direto na empresa de teste (que não abre na câmera): cai no CPF.
+  await page.addInitScript(({ chave, empresa }) => { localStorage.setItem(chave, empresa); }, { chave: CHAVE_EMPRESA, empresa: empresaId });
   await page.goto('/clock');
   await expect(page.getByText('Registro de Ponto')).toBeVisible();
   const input = page.locator('input[placeholder="000.000.000-00"]');
@@ -35,11 +50,6 @@ async function loginEmployee(page: Page) {
 test.describe('Geolocalização (/clock)', () => {
   const supabase = getClient();
   let employeeId: string;
-  let originalConfig: Record<string, unknown> | null = null;
-  // 04/09/2026: `require_facial_clock`/`face_identify_default` (Caratinga,
-  // produção) — `loginEmployee` intercepta a resposta da API pra este teste
-  // ver as duas desligadas, sem tocar no banco real (ver mockFacialFlagsOff).
-  // Esta spec testa geolocalização, não facial.
 
   test.beforeAll(async () => {
     // Remove leftover from crashed previous run
@@ -57,25 +67,8 @@ test.describe('Geolocalização (/clock)', () => {
       await supabase.from('employees').delete().eq('id', existing.id);
     }
 
-    // Save original config and set test config — SEMPRE a linha da Caratinga
-    const { data: geoConfig } = await supabase
-      .from('geolocation_config')
-      .select('*')
-      .eq('company_id', CARATINGA_ID)
-      .maybeSingle();
+    empresaId = await criarEmpresaDeTeste(EMPRESA_NOME, { lat: VALID_LAT, lng: VALID_LON, raio: 200 });
 
-    originalConfig = geoConfig;
-
-    await supabase.from('geolocation_config').upsert([{
-      id: geoConfig?.id ?? 'default',
-      company_id: CARATINGA_ID,
-      latitude: VALID_LAT,
-      longitude: VALID_LON,
-      allowed_radius_meters: 200,
-      block_outside: true,
-    }]);
-
-    // Create test employee
     // face_recognition_enabled=false: estes testes focam em geolocalização,
     // não queremos o gate facial interceptando o clique de ponto.
     const { data, error } = await supabase
@@ -87,6 +80,7 @@ test.describe('Geolocalização (/clock)', () => {
         pin_configured: true,
         face_recognition_enabled: false,
         created_by: '9999',
+        company_id: empresaId,
       }])
       .select('id')
       .single();
@@ -102,9 +96,7 @@ test.describe('Geolocalização (/clock)', () => {
       await supabase.from('payments').delete().eq('employee_id', employeeId);
       await supabase.from('employees').delete().eq('id', employeeId);
     }
-    if (originalConfig) {
-      await supabase.from('geolocation_config').upsert([originalConfig]);
-    }
+    if (empresaId) await apagarEmpresaDeTeste(empresaId);
   });
 
   test.beforeEach(async () => {
