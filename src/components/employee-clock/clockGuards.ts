@@ -13,6 +13,14 @@ import type { Attendance, Company, Employee } from '../../services/database';
 export const QUICK_EXIT_CONFIRM_MINUTES = 10;
 export const AUTO_LOGOUT_SECONDS = 35;
 
+/**
+ * Distância máxima (exclusiva) pra facial 1:1 no navegador considerar "é a mesma pessoa".
+ * O servidor reconfere com o MESMO número (LIMITE_FACIAL em
+ * supabase/functions/_shared/faceIdentify.ts, que desde 30/09/2026 vale também pro 1:N sem
+ * CPF) — um teste trava os dois juntos.
+ */
+export const FACE_MATCH_THRESHOLD = 0.5;
+
 // Sub-fase 2.10: 4 marcações. Movido de EmployeeClockIn.tsx (04/09/2026) pra
 // ser reaproveitado também pelo reconhecimento facial sem CPF (precisa saber
 // qual é a PRÓXIMA marcação sem ter passado pela tela de CPF antes).

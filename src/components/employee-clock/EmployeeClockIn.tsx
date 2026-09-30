@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle, Building2 } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle, Building2, Tablet } from 'lucide-react';
 import {
   getEmployeeByCpf,
   getEmployeeTodayAttendance,
@@ -8,10 +8,20 @@ import {
   setEmployeePin,
   getFaceRecognitionConfig,
   getCompaniesByEmployeeCpf,
+  getClockDeviceStatus,
+  activateClockDevice,
   Employee,
   Attendance,
   Company,
+  ClockDevice,
 } from '../../services/database';
+import {
+  aparelhoBarradoNaEmpresa,
+  esquecerSegredoDoTablet,
+  guardarSegredoDoTablet,
+  lerSegredoDoTablet,
+} from './clockDeviceStorage';
+import { mensagemDeErro } from '../../utils/mensagemDeErro';
 import { useCompany } from '../../contexts/useCompany';
 import { FaceRegistration } from './FaceRegistration';
 import { FaceVerification } from './FaceVerification';
@@ -46,7 +56,42 @@ function formatDateBR(d: string): string {
    funcionário via um "🟡 Aguardando aprovação" que não esperava nada: aprovar
    nunca mudou cálculo nenhum, e rejeitar (o único com efeito) nunca foi usado. */
 
-type Step = 'cpf' | 'company-select' | 'pin' | 'setup-pin' | 'face-register' | 'dashboard' | 'error' | 'face-scan';
+type Step =
+  | 'cpf' | 'company-select' | 'pin' | 'setup-pin' | 'face-register' | 'dashboard' | 'error' | 'face-scan'
+  // 30/09/2026 — ponto só no tablet da empresa
+  | 'device-blocked' | 'device-activate'
+  // 30/09/2026 — a tela ainda não sabe por onde começar (ver o efeito do passo inicial)
+  | 'carregando';
+
+/** Quanto a tela espera a resposta "quem é este aparelho?" antes de seguir sem ela. */
+const PRAZO_CONFERENCIA_DO_TABLET_MS = 5_000;
+
+/**
+ * Situação DESTE aparelho (30/09/2026): 'pendente' = ainda perguntando ao servidor;
+ * 'conferido' = sabe-se se é tablet (device) ou não (null); 'falhou' = a consulta deu erro de
+ * rede — aí a tela NÃO barra ninguém por conta própria (quem decide é o servidor na batida),
+ * pra um soluço de internet na hora de abrir a página não trancar o tablet de verdade.
+ */
+type ConferenciaDoAparelho = 'pendente' | 'conferido' | 'falhou';
+
+/**
+ * GPS PEDIDO MAIS CEDO (30/09/2026). Meta do Victor: da pessoa parar na frente do tablet até o
+ * ponto gravado, 5 a 7 segundos. Medido no banco (14 dias): do rosto reconhecido ao ponto
+ * gravado a mediana era 7,1s (pior 13s) — 3s são a contagem com o nome na tela (decisão de
+ * 04/09) e boa parte do resto era o GPS: a posição só era pedida DEPOIS da contagem/da facial, e
+ * a batida esperava o aparelho achar o satélite (16 batidas em 14 dias morreram em "Localização
+ * não fornecida").
+ *
+ * Agora o pedido sai no instante em que a pessoa é reconhecida (ou aperta "Registrar") e corre
+ * JUNTO com a contagem e a verificação facial; a batida usa esse pedido se ele saiu há no
+ * máximo GPS_ANTECIPADO_VALIDO_MS. A posição continua NOVA (maximumAge 0, obtida depois do
+ * pedido) — só deixou de esperar na fila.
+ *
+ * ⚠️ Descartado no caminho: "acompanhar" a posição com watchPosition. Medido no Chromium: com o
+ * acompanhamento ativo, o pedido de posição nova da batida ESTOURA os 10s — e o teste de cliques
+ * reais pegou isso ("Localização não fornecida" com o GPS ligado).
+ */
+const GPS_ANTECIPADO_VALIDO_MS = 20_000;
 
 /** Solicita geolocalização. Resolve com a position, ou rejeita com o código do erro. */
 function requestGeolocation(): Promise<GeolocationPosition> {
@@ -112,8 +157,15 @@ async function isCameraPermissionDenied(): Promise<boolean> {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const EmployeeClockIn: React.FC = () => {
-  const { company, setCompany } = useCompany();
-  const [step, setStep] = useState<Step>('cpf');
+  const { company, setCompany, loading: companyLoading } = useCompany();
+  /**
+   * 🔴 30/09/2026 — A TELA NASCE EM "carregando", NÃO EM "cpf".
+   * Antes ela nascia no CPF e, quando a empresa carregava, TROCAVA pra câmera (empresa com
+   * facial primeiro) — se a pessoa já estivesse digitando o CPF, a tela mudava debaixo dela.
+   * A espera pela conferência do tablet alongou essa janela e o teste de cliques reais pegou
+   * exatamente isso. Agora a tela só mostra CPF ou câmera quando JÁ SABE qual dos dois.
+   */
+  const [step, setStep] = useState<Step>('carregando');
   // Ponto sem CPF (04/09/2026): quando a empresa tem reconhecimento facial
   // ligado, a tela abre direto na câmera em vez de pedir CPF — o CPF vira só
   // uma alternativa manual (botão "Prefere digitar CPF e senha?"). Resolvido
@@ -153,6 +205,32 @@ export const EmployeeClockIn: React.FC = () => {
   const [cameraBlocked, setCameraBlocked] = useState(false);
   // Volta pro início (CPF) sozinho após registrar ponto (aparelho compartilhado)
   const autoLogoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ─── Ponto só no tablet da empresa (30/09/2026) ────────────────────────────
+  // O segredo do tablet vive só neste aparelho; o servidor confere em toda batida.
+  const [deviceToken, setDeviceToken] = useState<string | null>(() => lerSegredoDoTablet());
+  const [device, setDevice] = useState<ClockDevice | null>(null);
+  const [deviceCheck, setDeviceCheck] = useState<ConferenciaDoAparelho>(() => (lerSegredoDoTablet() ? 'pendente' : 'conferido'));
+  const [empresaBarrada, setEmpresaBarrada] = useState<string | null>(null);
+  const [activationCode, setActivationCode] = useState('');
+  const [activationError, setActivationError] = useState('');
+  const [activating, setActivating] = useState(false);
+  const [activated, setActivated] = useState<ClockDevice | null>(null);
+
+  // GPS pedido mais cedo (30/09/2026 — ver GPS_ANTECIPADO_VALIDO_MS).
+  const posicaoAntecipadaRef = useRef<{ promessa: Promise<GeolocationPosition>; pedidaEm: number } | null>(null);
+  /** Dispara agora o pedido de posição da batida que vem nos próximos segundos. */
+  const anteciparPosicao = useCallback(() => {
+    const atual = posicaoAntecipadaRef.current;
+    if (atual && Date.now() - atual.pedidaEm <= GPS_ANTECIPADO_VALIDO_MS) return; // já tem pedido recente
+    const promessa = requestGeolocation();
+    // Quem decide o que fazer com a falha é a batida (vira "sem localização", como sempre foi);
+    // aqui só fica registrado, pra rejeição não ficar solta.
+    promessa.catch((err: unknown) => {
+      console.warn('GPS pedido mais cedo falhou (a batida segue sem localização, como antes):', err);
+    });
+    posicaoAntecipadaRef.current = { promessa, pedidaEm: Date.now() };
+  }, []);
 
   // Guards anti-duplo-clique e watchdog do botão de ponto
   const inFlightClockRef = useRef(false);
@@ -203,13 +281,64 @@ export const EmployeeClockIn: React.FC = () => {
   // state). Lê `company.face_identify_default` direto (já veio junto com a
   // empresa, sem chamada extra) — de propósito: uma 2ª chamada de rede aqui
   // criaria uma corrida real contra a pessoa já digitando o CPF na tela.
+  //
+  // 30/09/2026: espera também a conferência do aparelho — com a trava da empresa ligada e este
+  // aparelho não sendo um tablet dela, a tela já abre dizendo isso (em vez de abrir a câmera
+  // ou pedir CPF e senha pra recusar no fim).
   useEffect(() => {
-    if (!company?.id || defaultStepResolvedRef.current) return;
+    if (defaultStepResolvedRef.current || deviceCheck === 'pendente') return;
+    // Empresa ainda carregando: espera. Se falhou de vez (sem empresa nenhuma), segue no CPF —
+    // o CPF resolve a empresa sozinho, como sempre.
+    if (!company?.id && companyLoading) return;
     defaultStepResolvedRef.current = true;
-    const resolved: Step = company.face_identify_default === true ? 'face-scan' : 'cpf';
+    const resolved: Step = company?.face_identify_default === true ? 'face-scan' : 'cpf';
     setDefaultStep(resolved);
-    setStep((prev) => (prev === 'cpf' ? resolved : prev));
-  }, [company?.id, company?.face_identify_default]);
+    const barrado = deviceCheck === 'conferido' && aparelhoBarradoNaEmpresa(company, device);
+    if (barrado) setEmpresaBarrada(company?.display_name ?? null);
+    setStep((prev) => (prev === 'carregando' ? (barrado ? 'device-blocked' : resolved) : prev));
+  }, [company, companyLoading, deviceCheck, device]);
+
+  // Quem é este aparelho? (só pergunta quando há um segredo guardado)
+  // Com PRAZO: resposta que não chega não pode prender a tela em "carregando" — passa a valer
+  // 'falhou' (a tela segue sem barrar ninguém e o servidor confere na batida).
+  useEffect(() => {
+    if (!deviceToken || deviceCheck !== 'pendente') return;
+    let cancelado = false;
+    let prazoTimer: ReturnType<typeof setTimeout> | null = null;
+    const prazo = new Promise<never>((_, rejeitar) => {
+      prazoTimer = setTimeout(() => rejeitar(new Error('sem resposta do servidor no prazo')), PRAZO_CONFERENCIA_DO_TABLET_MS);
+    });
+    Promise.race([getClockDeviceStatus(deviceToken), prazo])
+      .then((tablet) => {
+        if (cancelado) return;
+        // Removido no painel (ou segredo que não vale mais): o segredo guardado não serve.
+        if (!tablet) {
+          esquecerSegredoDoTablet();
+          setDeviceToken(null);
+        }
+        setDevice(tablet);
+        setDeviceCheck('conferido');
+      })
+      .catch((err: unknown) => {
+        if (cancelado) return;
+        console.error('Não foi possível conferir o tablet agora — o servidor confere na batida:', err);
+        setDeviceCheck('falhou');
+      })
+      .finally(() => { if (prazoTimer) clearTimeout(prazoTimer); });
+    return () => {
+      cancelado = true;
+      if (prazoTimer) clearTimeout(prazoTimer);
+    };
+  }, [deviceToken, deviceCheck]);
+
+  /** A tela deve barrar este aparelho na empresa? (só com a conferência feita — ver o tipo) */
+  const barradoNaEmpresa = (empresa: Company | null | undefined): boolean =>
+    deviceCheck === 'conferido' && aparelhoBarradoNaEmpresa(empresa, device);
+
+  const mostrarAparelhoBarrado = (nomeDaEmpresa: string | null) => {
+    setEmpresaBarrada(nomeDaEmpresa);
+    setStep('device-blocked');
+  };
 
   // Dispara o registro assim que `employee` (state) realmente virar a pessoa
   // identificada pela câmera sem CPF (ver comentário no ref, acima).
@@ -289,6 +418,11 @@ export const EmployeeClockIn: React.FC = () => {
       }
       if (companies.length === 1) {
         await setCompany(companies[0].id);
+        // Trava do tablet: avisa ANTES da senha (o servidor recusaria a batida no fim).
+        if (barradoNaEmpresa(companies[0])) {
+          mostrarAparelhoBarrado(companies[0].display_name);
+          return;
+        }
         const emp = await getEmployeeByCpf(cpfInput, companies[0].id);
         if (!emp) {
           setErrorMsg('Funcionário não encontrado. Verifique o CPF digitado.');
@@ -313,6 +447,10 @@ export const EmployeeClockIn: React.FC = () => {
     setLoading(true);
     try {
       await setCompany(company.id);
+      if (barradoNaEmpresa(company)) {
+        mostrarAparelhoBarrado(company.display_name);
+        return;
+      }
       const emp = await getEmployeeByCpf(cpfInput, company.id);
       if (!emp) {
         setErrorMsg('Funcionário não encontrado nesta empresa.');
@@ -383,7 +521,7 @@ export const EmployeeClockIn: React.FC = () => {
     signal?: AbortSignal,
     markingPosition?: MarkingPosition,
     faceDescriptor?: number[] | null,
-  ): Promise<{ success: boolean; fraud: boolean; geo_warning?: boolean; distance_meters: number | null; attendance?: Attendance; error?: string; message?: string; face_error?: boolean }> => {
+  ): Promise<{ success: boolean; fraud: boolean; geo_warning?: boolean; distance_meters: number | null; attendance?: Attendance; error?: string; message?: string; face_error?: boolean; device_error?: boolean }> => {
     if (!employee) throw new Error('Funcionário não carregado');
 
     let latitude: number | null = null;
@@ -391,7 +529,13 @@ export const EmployeeClockIn: React.FC = () => {
     let accuracy: number | null = null;
 
     try {
-      const position = await requestGeolocation();
+      // Pedido feito mais cedo (há no máximo GPS_ANTECIPADO_VALIDO_MS) serve a ESTA batida;
+      // sem ele, pede na hora (como antes). Cada pedido serve a uma batida só.
+      const antecipada = posicaoAntecipadaRef.current;
+      posicaoAntecipadaRef.current = null;
+      const position = antecipada && Date.now() - antecipada.pedidaEm <= GPS_ANTECIPADO_VALIDO_MS
+        ? await antecipada.promessa
+        : await requestGeolocation();
       latitude = position.coords.latitude;
       longitude = position.coords.longitude;
       accuracy = position.coords.accuracy;
@@ -422,6 +566,8 @@ export const EmployeeClockIn: React.FC = () => {
         // Rosto do momento (128 nºs) — o servidor reconfere na trava dura por empresa.
         // Só vai quando a facial rodou antes da batida; no modo legado fica de fora.
         ...(faceDescriptor && faceDescriptor.length ? { face_descriptor_now: faceDescriptor } : {}),
+        // Segredo do tablet (30/09/2026) — com a trava da empresa ligada, sem ele não bate.
+        ...(deviceToken ? { device_token: deviceToken } : {}),
       }),
       signal,
     });
@@ -589,6 +735,9 @@ export const EmployeeClockIn: React.FC = () => {
       return;
     }
 
+    // O GPS começa a procurar AGORA, junto com a verificação facial (ver GPS_ANTECIPADO_VALIDO_MS).
+    anteciparPosicao();
+
     if (type === 'exit') {
       const minutesAgo = quickExitMinutes(getPrevMarkingForExit(todayRecord, markingPosition));
       if (minutesAgo != null) {
@@ -638,6 +787,49 @@ export const EmployeeClockIn: React.FC = () => {
     setClockMsg('❌ Reconhecimento facial falhou. Procure o supervisor.');
   };
 
+  // 30/09/2026: a câmera nem abriu — "reconhecimento falhou" seria mentira (o rosto não foi olhado).
+  const handleFaceClockCameraExit = () => {
+    setPendingClockType(null);
+    pendingMarkingPositionRef.current = null;
+    setClockMsg('❌ A câmera não abriu — o ponto NÃO foi registrado. Tente de novo.');
+  };
+
+  // ─── Tablet de ponto: ativação (30/09/2026) ───────────────────────────────
+  const abrirAtivacaoDoTablet = () => {
+    setActivationCode('');
+    setActivationError('');
+    setActivated(null);
+    setStep('device-activate');
+  };
+
+  const handleActivateDevice = async () => {
+    setActivating(true);
+    setActivationError('');
+    try {
+      const { token, device: tablet } = await activateClockDevice(activationCode);
+      guardarSegredoDoTablet(token);
+      setDeviceToken(token);
+      setDevice(tablet);
+      setDeviceCheck('conferido');
+      setActivated(tablet);
+    } catch (err) {
+      setActivationError(mensagemDeErro(err, 'Não foi possível ativar o tablet. Tente de novo.'));
+    } finally {
+      setActivating(false);
+    }
+  };
+
+  /** Depois de ativar: volta ao início, já como tablet (ou barrado, se não atende esta empresa). */
+  const comecarComoTablet = () => {
+    setActivated(null);
+    setActivationCode('');
+    if (company && activated && aparelhoBarradoNaEmpresa(company, activated)) {
+      mostrarAparelhoBarrado(company.display_name);
+      return;
+    }
+    setStep(defaultStep);
+  };
+
   // Ponto sem CPF (04/09/2026): a câmera já identificou a pessoa, mostrou o
   // nome com 3s pra cancelar, e ninguém cancelou — troca pra essa pessoa e
   // deixa o efeito (acima) disparar o registro assim que `employee` atualizar.
@@ -651,7 +843,11 @@ export const EmployeeClockIn: React.FC = () => {
 
   const handleLogout = () => {
     if (autoLogoutRef.current) { clearTimeout(autoLogoutRef.current); autoLogoutRef.current = null; }
-    setStep(defaultStep);
+    if (barradoNaEmpresa(company)) {
+      mostrarAparelhoBarrado(company?.display_name ?? null);
+    } else {
+      setStep(defaultStep);
+    }
     setCpfInput('');
     setPin('');
     setNewPin('');
@@ -709,6 +905,20 @@ export const EmployeeClockIn: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
 
+        {/* ── CARREGANDO: a tela ainda não sabe se começa no CPF ou na câmera (30/09/2026) ── */}
+        {step === 'carregando' && (
+          <>
+            <Header
+              title="Registro de Ponto"
+              subtitle={new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+            />
+            <div className="p-8 flex flex-col items-center gap-3 text-gray-500" data-testid="clock-carregando">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+              <p className="text-sm">Preparando...</p>
+            </div>
+          </>
+        )}
+
         {/* ── CPF ── */}
         {step === 'cpf' && (
           <>
@@ -747,6 +957,105 @@ export const EmployeeClockIn: React.FC = () => {
                 >
                   ← Voltar pro reconhecimento facial
                 </button>
+              )}
+              {/* Tablet de ponto (30/09/2026): quem é este aparelho, ou como ativá-lo. */}
+              {device ? (
+                <p className="text-xs text-center text-green-700" data-testid="clock-device-badge">
+                  📟 Tablet autorizado: {device.name}
+                </p>
+              ) : (
+                <button
+                  onClick={abrirAtivacaoDoTablet}
+                  className="w-full text-xs text-gray-400 hover:text-gray-600 py-1"
+                >
+                  Ativar este aparelho como tablet de ponto
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── APARELHO NÃO AUTORIZADO (trava "ponto só no tablet", 30/09/2026) ── */}
+        {step === 'device-blocked' && (
+          <>
+            <Header title="Ponto só no tablet da empresa" />
+            <div className="p-6 text-center space-y-4" data-testid="device-blocked">
+              <Tablet className="w-14 h-14 text-blue-600 mx-auto" />
+              <p className="text-gray-700">
+                Este aparelho não está autorizado a registrar ponto
+                {empresaBarrada ? <> de <strong>{empresaBarrada}</strong></> : null}.
+              </p>
+              <p className="text-gray-600 text-sm">Use o <strong>tablet da empresa</strong>.</p>
+              <button
+                onClick={() => { setEmpresaBarrada(null); setCpfInput(''); setStep('cpf'); }}
+                className="w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 min-h-[44px]"
+              >
+                Sou de outra empresa — digitar CPF
+              </button>
+              <button
+                onClick={abrirAtivacaoDoTablet}
+                className="w-full text-xs text-gray-400 hover:text-gray-600 py-1"
+              >
+                Ativar este aparelho como tablet de ponto
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── ATIVAR TABLET (código gerado pelo 2626 em Configurações, 30/09/2026) ── */}
+        {step === 'device-activate' && (
+          <>
+            <Header title="Ativar tablet de ponto" />
+            <div className="p-6 space-y-4" data-testid="device-activate">
+              {activated ? (
+                <div className="text-center space-y-4">
+                  <CheckCircle className="w-14 h-14 text-green-600 mx-auto" />
+                  <p className="text-gray-800 font-semibold">Tablet ativado: {activated.name}</p>
+                  <p className="text-sm text-gray-600">
+                    Este aparelho agora registra ponto de: <strong>{activated.companyNames.join(', ')}</strong>.
+                  </p>
+                  <button
+                    onClick={comecarComoTablet}
+                    className="w-full py-4 bg-blue-600 text-white text-lg font-bold rounded-xl hover:bg-blue-700"
+                  >
+                    Começar
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600 text-center">
+                    Digite o <strong>código de ativação</strong> gerado pelo responsável em
+                    Configurações → Tablets de ponto. O código vale 15 minutos.
+                  </p>
+                  <input
+                    type="text"
+                    value={activationCode}
+                    onChange={(e) => setActivationCode(e.target.value.toUpperCase().slice(0, 9))}
+                    onKeyDown={(e) => e.key === 'Enter' && activationCode.replace(/[^A-Za-z0-9]/g, '').length === 8 && !activating && handleActivateDevice()}
+                    placeholder="XXXX-XXXX"
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-label="Código de ativação"
+                    className="w-full text-center text-2xl font-mono tracking-widest px-4 py-4 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none"
+                  />
+                  {activationError && (
+                    <p className="text-sm text-red-600 text-center font-medium">{activationError}</p>
+                  )}
+                  <button
+                    onClick={handleActivateDevice}
+                    disabled={activationCode.replace(/[^A-Za-z0-9]/g, '').length !== 8 || activating}
+                    className="w-full py-4 bg-blue-600 text-white text-lg font-bold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {activating ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Ativar tablet'}
+                  </button>
+                  <button
+                    onClick={() => handleLogout()}
+                    className="w-full text-sm text-gray-400 hover:text-gray-600 flex items-center justify-center gap-1 py-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Voltar
+                  </button>
+                </>
               )}
             </div>
           </>
@@ -1149,6 +1458,10 @@ export const EmployeeClockIn: React.FC = () => {
           company={company}
           onConfirmed={handleFaceIdentifyConfirmed}
           onUseCpf={() => setStep('cpf')}
+          deviceToken={deviceToken}
+          deviceName={device?.name ?? null}
+          onDeviceBlocked={() => mostrarAparelhoBarrado(company.display_name)}
+          onRecognized={anteciparPosicao}
         />
       )}
 
@@ -1167,6 +1480,7 @@ export const EmployeeClockIn: React.FC = () => {
           employee={employee}
           onSuccess={handleFaceClockVerifySuccess}
           onFail={handleFaceClockVerifyFail}
+          onCameraExit={handleFaceClockCameraExit}
           clockType={pendingClockType}
         />
       )}
@@ -1237,15 +1551,19 @@ export const EmployeeClockIn: React.FC = () => {
           <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4">
             <h2 className="text-lg font-bold text-gray-900 text-center">📷 Câmera bloqueada</h2>
             <p className="text-gray-600 text-sm">
-              Para bater o ponto, o sistema precisa da sua câmera — e ela está{' '}
-              <strong>bloqueada no navegador</strong>. Libere assim:
+              Para bater o ponto, o sistema precisa da sua câmera — e o navegador não está deixando
+              este site usá-la. Libere assim:
             </p>
             <ol className="text-gray-700 text-sm space-y-2 list-decimal list-inside bg-gray-50 rounded-xl p-3">
               <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
-              <li>Toque em <strong>Permissões</strong></li>
+              <li>Toque em <strong>Permissões</strong> (ou "Configurações do site")</li>
               <li>Em <strong>Câmera</strong>, escolha <strong>Permitir</strong></li>
             </ol>
+            {/* 30/09/2026: "diz que está bloqueada mas não está" — o Chrome passa a recusar
+                sozinho quando o pedido de câmera é fechado algumas vezes, e nas configurações
+                continua aparecendo "Perguntar". Escolher "Permitir" resolve. */}
             <p className="text-gray-500 text-xs">
+              Se lá aparecer <strong>"Perguntar"</strong>, mude mesmo assim para <strong>"Permitir"</strong>.
               Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Câmera → Permitir.
             </p>
             <button

@@ -4,12 +4,21 @@ import { getFaceDescriptor, logFaceAttempt, Employee } from '../../services/data
 import { useFaceApi } from '../../hooks/useFaceApi';
 import { useCompany } from '../../contexts/useCompany';
 import { FaceScanFrame, FaceScanVisual } from './FaceScanFrame';
+import { FACE_MATCH_THRESHOLD } from './clockGuards';
+import { useFrontCamera } from './useFrontCamera';
+import { CameraProblem } from './CameraProblem';
 
 interface FaceVerificationProps {
   employee: Employee;
   /** Recebe o descriptor do rosto reconhecido (128 nºs) — vai pro servidor reconferir. */
   onSuccess: (descriptor: number[]) => void;
   onFail: () => void;
+  /**
+   * Saída quando a CÂMERA não abre (30/09/2026). Separada de `onFail` porque "reconhecimento
+   * facial falhou, procure o supervisor" é mentira quando o rosto nem chegou a ser olhado.
+   * Sem ela, cai em `onFail` (comportamento de antes).
+   */
+  onCameraExit?: () => void;
   maxAttempts?: number;
   clockType?: 'entry' | 'exit' | null;
 }
@@ -21,154 +30,88 @@ type Phase =
   | 'success'
   | 'fail-retry'
   | 'fail-final'
-  | 'error'
-  | 'camera-blocked';
+  | 'error';
 
-const MATCH_THRESHOLD = 0.5; // distância < 0.5 = mesmo rosto
+const MATCH_THRESHOLD = FACE_MATCH_THRESHOLD; // distância < 0.5 = mesmo rosto (o servidor usa o mesmo)
 const DETECT_WINDOW_MS = 3000; // tempo com rosto detectado antes de declarar falha
 
 export const FaceVerification: React.FC<FaceVerificationProps> = ({
   employee,
   onSuccess,
   onFail,
+  onCameraExit,
   maxAttempts = 3,
   clockType = null,
 }) => {
   const { company } = useCompany();
   const { loading: modelsLoading, ready: modelsReady, error: modelsError, detectFace, compareFaces } = useFaceApi();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  // 30/09/2026: a câmera (abrir, erro com a causa certa, reabrir quando a tela volta, vigia de
+  // vídeo preto) mora em useFrontCamera — antes era uma cópia deste código em cada tela.
+  const camera = useFrontCamera({
+    videoRef,
+    habilitada: modelsReady,
+    componente: 'FaceVerification',
+    companyId: company?.id,
+    employeeId: employee.id,
+  });
+  const { parar: stopStream, streamRef } = camera;
   const savedDescriptorRef = useRef<number[] | null>(null);
   const faceFirstSeenRef = useRef<number | null>(null);
   const bestDistanceRef = useRef<number>(1);
   const resultHandledRef = useRef(false);
+  const detectInFlightRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>('loading');
+  const [descriptorReady, setDescriptorReady] = useState(false);
   const [attempt, setAttempt] = useState(1);
   const [confidence, setConfidence] = useState(0); // 0..1 (1 = match perfeito)
   const [errorMsg, setErrorMsg] = useState('');
-  const [debug, setDebug] = useState({ w: 0, h: 0, ready: 0, active: false, retries: 0 });
-  // Bump manual pra reabrir a câmera sem sair da tela (botão "Já liberei —
-  // vou tentar de novo" da tela de câmera bloqueada, 05/09/2026).
-  const [retryToken, setRetryToken] = useState(0);
+  const [debug, setDebug] = useState({ w: 0, h: 0, ready: 0, active: false });
 
-  const stopStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-  };
-
-  // Carrega descriptor salvo + câmera (com auto-retry em caso de vídeo preto)
+  // Rosto cadastrado da pessoa (a comparação 1:1 roda aqui no navegador).
   useEffect(() => {
-    if (!modelsReady) return;
+    if (!modelsReady || savedDescriptorRef.current) return;
     let cancelled = false;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let retryCount = 0;
-
-    const startCamera = async (): Promise<void> => {
-      try {
-        if (!savedDescriptorRef.current) {
-          const saved = await getFaceDescriptor(employee.id);
-          if (cancelled) return;
-          if (!saved || saved.length === 0) {
-            setErrorMsg('Cadastro facial não encontrado.');
-            setPhase('error');
-            return;
-          }
-          savedDescriptorRef.current = saved;
-        }
-
-        if (!navigator.mediaDevices?.getUserMedia) {
-          throw new Error('A câmera não está disponível neste navegador. Acesse via HTTPS ou localhost.');
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'user' },
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-          },
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach(t => t.stop());
+    getFaceDescriptor(employee.id)
+      .then((saved) => {
+        if (cancelled) return;
+        if (!saved || saved.length === 0) {
+          setErrorMsg('Cadastro facial não encontrado.');
+          setPhase('error');
           return;
         }
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (video) {
-          video.setAttribute('playsinline', 'true');
-          video.setAttribute('muted', 'true');
-          video.setAttribute('autoplay', 'true');
-          video.muted = true;
-          video.srcObject = stream;
-          await new Promise<void>((resolve) => {
-            if (video.readyState >= 1) {
-              resolve();
-            } else {
-              video.onloadedmetadata = () => resolve();
-            }
-          });
-          try {
-            await video.play();
-          } catch (err) {
-            console.warn('video.play() falhou:', err);
-          }
-        }
-        setPhase('no-face');
-
-        // Watchdog: reinicia se após 2s não houver frame
-        retryTimer = setTimeout(() => {
-          if (cancelled) return;
-          const v = videoRef.current;
-          if (v && v.videoWidth === 0 && retryCount < 3) {
-            retryCount++;
-            setDebug(d => ({ ...d, retries: retryCount }));
-            console.warn(`Câmera sem frame, retry #${retryCount}`);
-            stopStream();
-            setTimeout(() => { if (!cancelled) startCamera(); }, 500);
-          }
-        }, 2000);
-      } catch (err) {
-        console.error('Erro ao iniciar verificação:', err);
-        // 04/09/2026: câmera BLOQUEADA (o driver já negou antes) é diferente de
-        // qualquer outro erro — o navegador não vai perguntar de novo sozinho, e
-        // "procure o supervisor" não ajuda em nada. Mostra como liberar de verdade.
-        if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
-          setPhase('camera-blocked');
-          return;
-        }
-        const msg = err instanceof Error ? err.message : 'Não foi possível acessar a câmera.';
-        setErrorMsg(msg.includes('HTTPS') ? msg : 'Não foi possível acessar a câmera.');
+        savedDescriptorRef.current = saved;
+        setDescriptorReady(true);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        console.error('Erro ao carregar o rosto cadastrado:', err);
+        setErrorMsg('Não foi possível carregar o seu rosto cadastrado. Verifique a internet e tente de novo.');
         setPhase('error');
-      }
-    };
+      });
+    return () => { cancelled = true; };
+  }, [modelsReady, employee.id]);
 
-    startCamera();
-
-    return () => {
-      cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      stopStream();
-    };
-  }, [modelsReady, employee.id, retryToken]);
+  // Câmera aberta + rosto cadastrado carregado = começa a procurar o rosto.
+  useEffect(() => {
+    if (camera.estado === 'aberta' && descriptorReady && phase === 'loading') setPhase('no-face');
+  }, [camera.estado, descriptorReady, phase]);
 
   // Atualiza badge de debug a cada 500ms
   useEffect(() => {
     const iv = setInterval(() => {
       const v = videoRef.current;
       const stream = streamRef.current;
-      setDebug(d => ({
-        ...d,
+      setDebug({
         w: v?.videoWidth ?? 0,
         h: v?.videoHeight ?? 0,
         ready: v?.readyState ?? 0,
         active: !!stream && stream.getTracks().some(t => t.readyState === 'live'),
-      }));
+      });
     }, 500);
     return () => clearInterval(iv);
-  }, []);
+  }, [streamRef]);
 
   const handleSuccess = useCallback(async (distance: number, descriptor: number[]) => {
     if (resultHandledRef.current) return;
@@ -180,7 +123,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
     await logFaceAttempt(employee.id, true, Math.max(0, 1 - distance), clockType, company.id);
     // O rosto reconhecido segue pro servidor reconferir (trava dura por empresa).
     setTimeout(() => onSuccess(descriptor), 1000);
-  }, [employee.id, clockType, onSuccess, company?.id]);
+  }, [employee.id, clockType, onSuccess, company?.id, stopStream]);
 
   const handleFail = useCallback(async (distance: number) => {
     if (resultHandledRef.current) return;
@@ -203,7 +146,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
         setPhase('no-face');
       }, 1500);
     }
-  }, [attempt, maxAttempts, employee.id, clockType, onFail, company?.id]);
+  }, [attempt, maxAttempts, employee.id, clockType, onFail, company?.id, stopStream]);
 
   // Loop de detecção + match
   useEffect(() => {
@@ -215,10 +158,18 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
     const interval = setInterval(async () => {
       if (!mounted) return;
       const saved = savedDescriptorRef.current;
-      if (!saved) return;
+      // Uma detecção por vez (30/09/2026 — ver o comentário em FaceIdentifyClock): empilhar
+      // detecções num aparelho lento é o que deixava a tela "procurando rosto" sem fim.
+      if (!saved || detectInFlightRef.current) return;
 
       try {
-        const descriptor = await detectFace(video);
+        detectInFlightRef.current = true;
+        let descriptor: Float32Array | null;
+        try {
+          descriptor = await detectFace(video);
+        } finally {
+          detectInFlightRef.current = false;
+        }
         if (!mounted) return;
         if (!descriptor) {
           setPhase('no-face');
@@ -257,49 +208,18 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
     };
   }, [phase, detectFace, compareFaces, handleSuccess, handleFail]);
 
-  // Loading / erro
-  if (modelsLoading || phase === 'loading') {
-    return (
-      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-8 text-center">
-          <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-blue-600" />
-          <h2 className="text-lg font-bold text-gray-800 mb-1">Preparando verificação...</h2>
-          <p className="text-sm text-gray-500">Iniciando reconhecimento facial</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === 'camera-blocked') {
-    return (
-      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center">
-          <h2 className="text-lg font-bold text-gray-800 mb-2">📷 Câmera bloqueada</h2>
-          <p className="text-sm text-gray-600 mb-3 text-left">
-            Para bater o ponto, o sistema precisa da sua câmera — e ela está{' '}
-            <strong>bloqueada no navegador</strong>. Libere assim:
-          </p>
-          <ol className="text-sm text-gray-700 space-y-1.5 list-decimal list-inside bg-gray-50 rounded-xl p-3 mb-3 text-left">
-            <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
-            <li>Toque em <strong>Permissões</strong></li>
-            <li>Em <strong>Câmera</strong>, escolha <strong>Permitir</strong></li>
-          </ol>
-          <p className="text-xs text-gray-500 mb-5 text-left">
-            Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Câmera → Permitir.
-          </p>
-          <button
-            onClick={() => setRetryToken(t => t + 1)}
-            className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 min-h-[48px]"
-          >
-            Já liberei — vou tentar de novo
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (modelsError || phase === 'error') {
-    return (
+  // O <video> fica SEMPRE montado; carregando/erro aparecem por cima (30/09/2026 — ver o
+  // comentário igual em FaceIdentifyClock: sem isto a câmera abria sem ter onde mostrar a
+  // imagem e só o vigia de vídeo preto, 2s depois, reabria).
+  const sobreposicao =
+    camera.estado === 'problema' && camera.problema ? (
+      <CameraProblem
+        problema={camera.problema}
+        onTentarDeNovo={camera.reabrir}
+        onSair={onCameraExit ?? onFail}
+        rotuloSair="Voltar"
+      />
+    ) : (modelsError || phase === 'error') ? (
       <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center">
           <X className="w-12 h-12 mx-auto mb-4 text-red-600" />
@@ -313,8 +233,15 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
           </button>
         </div>
       </div>
-    );
-  }
+    ) : (modelsLoading || phase === 'loading') ? (
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-8 text-center">
+          <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-blue-600" />
+          <h2 className="text-lg font-bold text-gray-800 mb-1">Preparando verificação...</h2>
+          <p className="text-sm text-gray-500">Iniciando reconhecimento facial</p>
+        </div>
+      </div>
+    ) : null;
 
   const visual: FaceScanVisual =
     phase === 'no-face'     ? { color: 'blue',  pulse: true, showScanLine: true, label: '🔍 Procurando rosto...' }
@@ -371,9 +298,11 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
           fontFamily: 'monospace',
           pointerEvents: 'none',
         }}>
-          stream: {debug.active ? 'ativo' : 'off'} | w: {debug.w} | h: {debug.h} | ready: {debug.ready}{debug.retries > 0 ? ` | retry: ${debug.retries}` : ''}
+          stream: {debug.active ? 'ativo' : 'off'} | w: {debug.w} | h: {debug.h} | ready: {debug.ready}{camera.reaberturasPorVideoPreto > 0 ? ` | retry: ${camera.reaberturasPorVideoPreto}` : ''}
         </div>
       </div>
+
+      {sobreposicao}
     </div>
   );
 };

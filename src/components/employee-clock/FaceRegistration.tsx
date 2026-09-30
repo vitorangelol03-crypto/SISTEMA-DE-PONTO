@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabase';
 import { saveFaceData, Employee } from '../../services/database';
 import { useFaceApi } from '../../hooks/useFaceApi';
 import { FaceScanFrame, FaceScanVisual } from './FaceScanFrame';
+import { useFrontCamera } from './useFrontCamera';
+import { CameraProblem } from './CameraProblem';
 import toast from 'react-hot-toast';
 
 interface FaceRegistrationProps {
@@ -17,113 +19,44 @@ type Phase = 'loading' | 'no-face' | 'detected' | 'capturing' | 'saving' | 'succ
 export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, onComplete, onSkip }) => {
   const { loading: modelsLoading, ready: modelsReady, error: modelsError, detectFace } = useFaceApi();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  // 30/09/2026: câmera em useFrontCamera (erro com a causa certa, reabre quando a tela volta,
+  // vigia de vídeo preto) — antes, qualquer erro virava "verifique as permissões".
+  const camera = useFrontCamera({
+    videoRef,
+    habilitada: modelsReady,
+    componente: 'FaceRegistration',
+    companyId: employee.company_id,
+    employeeId: employee.id,
+  });
+  const { parar: stopStream, streamRef } = camera;
   const lastDescriptorRef = useRef<Float32Array | null>(null);
   const countdownStartedRef = useRef(false);
+  const detectInFlightRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [countdown, setCountdown] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string>('');
-  const [debug, setDebug] = useState({ w: 0, h: 0, ready: 0, active: false, retries: 0 });
+  const [debug, setDebug] = useState({ w: 0, h: 0, ready: 0, active: false });
 
-  // Inicia câmera assim que modelos estiverem prontos, com auto-retry em caso de vídeo preto
+  // Câmera aberta pela 1ª vez = começa a procurar o rosto.
   useEffect(() => {
-    if (!modelsReady) return;
-    let cancelled = false;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let retryCount = 0;
-
-    const cleanupStream = () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-        streamRef.current = null;
-      }
-    };
-
-    const startCamera = async (): Promise<void> => {
-      try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          throw new Error('A câmera não está disponível neste navegador. Acesse via HTTPS ou localhost.');
-        }
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'user' },
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-          },
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (video) {
-          video.setAttribute('playsinline', 'true');
-          video.setAttribute('muted', 'true');
-          video.setAttribute('autoplay', 'true');
-          video.muted = true;
-          video.srcObject = stream;
-          await new Promise<void>((resolve) => {
-            if (video.readyState >= 1) {
-              resolve();
-            } else {
-              video.onloadedmetadata = () => resolve();
-            }
-          });
-          try {
-            await video.play();
-          } catch (err) {
-            console.warn('video.play() falhou:', err);
-          }
-        }
-        setPhase('no-face');
-
-        // Watchdog: se após 2s o vídeo ainda não tem frame (videoWidth=0), reinicia
-        retryTimer = setTimeout(() => {
-          if (cancelled) return;
-          const v = videoRef.current;
-          if (v && v.videoWidth === 0 && retryCount < 3) {
-            retryCount++;
-            setDebug(d => ({ ...d, retries: retryCount }));
-            console.warn(`Câmera sem frame, retry #${retryCount}`);
-            cleanupStream();
-            setTimeout(() => { if (!cancelled) startCamera(); }, 500);
-          }
-        }, 2000);
-      } catch (err) {
-        console.error('Erro ao acessar câmera:', err);
-        const msg = err instanceof Error ? err.message : 'Não foi possível acessar a câmera.';
-        setErrorMsg(msg.includes('HTTPS') ? msg : 'Não foi possível acessar a câmera. Verifique as permissões.');
-        setPhase('error');
-      }
-    };
-
-    startCamera();
-
-    return () => {
-      cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      cleanupStream();
-    };
-  }, [modelsReady]);
+    if (camera.estado === 'aberta' && phase === 'loading') setPhase('no-face');
+  }, [camera.estado, phase]);
 
   // Atualiza badge de debug a cada 500ms
   useEffect(() => {
     const iv = setInterval(() => {
       const v = videoRef.current;
       const stream = streamRef.current;
-      setDebug(d => ({
-        ...d,
+      setDebug({
         w: v?.videoWidth ?? 0,
         h: v?.videoHeight ?? 0,
         ready: v?.readyState ?? 0,
         active: !!stream && stream.getTracks().some(t => t.readyState === 'live'),
-      }));
+      });
     }, 500);
     return () => clearInterval(iv);
-  }, []);
+  }, [streamRef]);
 
   // Loop de detecção a cada 500ms
   useEffect(() => {
@@ -133,9 +66,17 @@ export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, on
 
     let mounted = true;
     const interval = setInterval(async () => {
-      if (!mounted) return;
+      // Uma detecção por vez (30/09/2026 — ver o comentário em FaceIdentifyClock): empilhar
+      // detecções num aparelho lento é o que deixava a tela "procurando rosto" sem fim.
+      if (!mounted || detectInFlightRef.current) return;
       try {
-        const descriptor = await detectFace(video);
+        detectInFlightRef.current = true;
+        let descriptor: Float32Array | null;
+        try {
+          descriptor = await detectFace(video);
+        } finally {
+          detectInFlightRef.current = false;
+        }
         if (!mounted) return;
         if (descriptor) {
           lastDescriptorRef.current = descriptor;
@@ -223,17 +164,14 @@ export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, on
       setPhase('success');
       toast.success('Rosto cadastrado com sucesso!');
       // stop stream antes de chamar onComplete
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-        streamRef.current = null;
-      }
+      stopStream();
       setTimeout(() => onComplete(), 1200);
     } catch (err) {
       console.error('Erro ao salvar descriptor:', err);
       setErrorMsg('Erro ao salvar cadastro. Tente novamente.');
       setPhase('error');
     }
-  }, [employee.id, onComplete]);
+  }, [employee.id, onComplete, stopStream]);
 
   const retry = () => {
     countdownStartedRef.current = false;
@@ -243,22 +181,18 @@ export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, on
     setPhase('no-face');
   };
 
-  // Loading dos modelos
-  if (modelsLoading || phase === 'loading') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-8 text-center">
-          <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-blue-600" />
-          <h2 className="text-lg font-bold text-gray-800 mb-1">Preparando câmera...</h2>
-          <p className="text-sm text-gray-500">Carregando reconhecimento facial</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (modelsError || phase === 'error') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+  // O <video> fica SEMPRE montado; carregando/erro aparecem por cima (30/09/2026 — ver o
+  // comentário igual em FaceIdentifyClock).
+  const sobreposicao =
+    camera.estado === 'problema' && camera.problema ? (
+      <CameraProblem
+        problema={camera.problema}
+        onTentarDeNovo={camera.reabrir}
+        onSair={onSkip}
+        rotuloSair="Voltar"
+      />
+    ) : (modelsError || phase === 'error') ? (
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center">
           <X className="w-12 h-12 mx-auto mb-4 text-red-600" />
           <h2 className="text-lg font-bold text-gray-800 mb-2">Erro no cadastro facial</h2>
@@ -282,8 +216,15 @@ export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, on
           </div>
         </div>
       </div>
-    );
-  }
+    ) : (modelsLoading || phase === 'loading') ? (
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-8 text-center">
+          <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-blue-600" />
+          <h2 className="text-lg font-bold text-gray-800 mb-1">Preparando câmera...</h2>
+          <p className="text-sm text-gray-500">Carregando reconhecimento facial</p>
+        </div>
+      </div>
+    ) : null;
 
   const visual: FaceScanVisual =
     phase === 'no-face'   ? { color: 'blue',  pulse: true,  showScanLine: true,  label: '🔍 Procurando rosto...' }
@@ -307,7 +248,7 @@ export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, on
         {onSkip && phase !== 'success' && phase !== 'saving' && phase !== 'capturing' && (
           <button
             onClick={() => {
-              if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+              stopStream();
               onSkip();
             }}
             className="p-2 rounded-md hover:bg-white/10 min-h-[44px] min-w-[44px] flex items-center justify-center"
@@ -355,9 +296,11 @@ export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, on
           fontFamily: 'monospace',
           pointerEvents: 'none',
         }}>
-          stream: {debug.active ? 'ativo' : 'off'} | w: {debug.w} | h: {debug.h} | ready: {debug.ready}{debug.retries > 0 ? ` | retry: ${debug.retries}` : ''}
+          stream: {debug.active ? 'ativo' : 'off'} | w: {debug.w} | h: {debug.h} | ready: {debug.ready}{camera.reaberturasPorVideoPreto > 0 ? ` | retry: ${camera.reaberturasPorVideoPreto}` : ''}
         </div>
       </div>
+
+      {sobreposicao}
     </div>
   );
 };

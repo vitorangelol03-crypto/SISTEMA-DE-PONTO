@@ -296,6 +296,12 @@ export interface Company {
    * de face_recognition_config.enabled de propósito — ver a migration.
    */
   face_identify_default?: boolean | null;
+  /**
+   * Ponto só no tablet da empresa (30/09/2026): quando true, o servidor recusa batida (e
+   * identificação sem CPF) de aparelho que não seja um tablet ATIVO desta empresa. Nasce
+   * false; só o 2626 liga, pelo cartão "Tablets de ponto" (clock_device_set_lock).
+   */
+  require_clock_device?: boolean | null;
   bank_hours_enabled: boolean;
   bank_hours_apply_in_payment?: boolean | null;
   // Configuração do banco de horas no pagamento (combo G — sub-fase 2.16).
@@ -5087,6 +5093,9 @@ export const getFaceDescriptor = async (employeeId: string): Promise<number[] | 
 export interface FaceIdentifyResult {
   matched: boolean;
   ambiguous?: boolean;
+  /** 30/09/2026: a empresa exige tablet e este aparelho não é um tablet autorizado dela. */
+  deviceBlocked?: boolean;
+  message?: string;
   employeeId?: string;
   employeeName?: string;
   cpf?: string;
@@ -5097,9 +5106,115 @@ export interface FaceIdentifyResult {
  * Ponto sem CPF (04/09/2026): identifica QUEM é o rosto capturado agora,
  * comparando contra todos os rostos cadastrados da empresa — a comparação
  * roda inteira no servidor (`identify-face`), nunca no navegador.
+ * 30/09/2026: leva o segredo do tablet (quando houver) — com a trava da empresa ligada,
+ * o servidor só identifica em tablet autorizado.
  */
-export const identifyFace = async (companyId: string, descriptorNow: number[]): Promise<FaceIdentifyResult> => {
-  return await callEmployeePublicApi<FaceIdentifyResult>('identify-face', { companyId, descriptorNow });
+export const identifyFace = async (
+  companyId: string,
+  descriptorNow: number[],
+  deviceToken?: string | null,
+): Promise<FaceIdentifyResult> => {
+  return await callEmployeePublicApi<FaceIdentifyResult>('identify-face', {
+    companyId,
+    descriptorNow,
+    ...(deviceToken ? { deviceToken } : {}),
+  });
+};
+
+// ─── Ponto só no tablet da empresa (30/09/2026, roadmap item 3) ─────────────────────────────
+
+/** Um tablet ATIVO, como a tela de ponto enxerga. */
+export interface ClockDevice {
+  id: string;
+  name: string;
+  companyIds: string[];
+  companyNames: string[];
+}
+
+/** Quem é este aparelho? null = não é um tablet ativo (nunca ativado, removido ou segredo inválido). */
+export const getClockDeviceStatus = async (deviceToken: string): Promise<ClockDevice | null> => {
+  const data = await callEmployeePublicApi<{ device: ClockDevice | null }>('clock-device-status', { deviceToken });
+  return data.device ?? null;
+};
+
+/** Troca o código de ativação (gerado pelo 2626) pelo segredo do tablet — o segredo volta UMA vez. */
+export const activateClockDevice = async (code: string): Promise<{ token: string; device: ClockDevice }> => {
+  return await callEmployeePublicApi<{ token: string; device: ClockDevice }>('activate-clock-device', { code });
+};
+
+/**
+ * Registra no servidor um problema da tela de ponto (hoje: erro de câmera). Best-effort: a tela
+ * nunca espera nem mostra erro disto — a falha fica só no console, pra não travar quem bate ponto.
+ */
+export const logClockEvent = async (p: {
+  companyId: string;
+  employeeId?: string | null;
+  kind: 'camera_error';
+  details: Record<string, string | number | boolean | null>;
+}): Promise<void> => {
+  try {
+    await callEmployeePublicApi('log-clock-event', {
+      companyId: p.companyId,
+      employeeId: p.employeeId ?? null,
+      kind: p.kind,
+      details: p.details,
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+    });
+  } catch (err) {
+    console.error('logClockEvent falhou:', err);
+  }
+};
+
+/** Linha do cartão "Tablets de ponto" (painel, só 2626). status 'expired' = código vencido sem uso. */
+export interface ClockDeviceRow {
+  id: string;
+  name: string;
+  status: 'pending' | 'active' | 'revoked' | 'expired';
+  pairing_expires_at: string | null;
+  created_at: string;
+  created_by: string;
+  activated_at: string | null;
+  last_seen_at: string | null;
+  revoked_at: string | null;
+  revoked_by: string | null;
+  company_ids: string[];
+  company_names: string[];
+}
+
+export const listClockDevices = async (): Promise<ClockDeviceRow[]> => {
+  const { data, error } = await supabase.rpc('clock_device_list');
+  if (error) throw error;
+  return (data ?? []) as ClockDeviceRow[];
+};
+
+/** Gera o código de ativação (8 símbolos, vale 15 min). O banco guarda só o hash. */
+export const createClockDevicePairing = async (
+  name: string,
+  companyIds: string[],
+): Promise<{ deviceId: string; pairingCode: string; expiresAt: string }> => {
+  const { data, error } = await supabase.rpc('clock_device_create_pairing', {
+    p_name: name,
+    p_company_ids: companyIds,
+  });
+  if (error) throw error;
+  const row = (Array.isArray(data) ? data[0] : data) as { device_id: string; pairing_code: string; expires_at: string } | null;
+  if (!row) throw new Error('O banco não devolveu o código de ativação.');
+  return { deviceId: row.device_id, pairingCode: row.pairing_code, expiresAt: row.expires_at };
+};
+
+export const revokeClockDevice = async (deviceId: string): Promise<void> => {
+  const { error } = await supabase.rpc('clock_device_revoke', { p_device_id: deviceId });
+  if (error) throw error;
+};
+
+/** Liga/desliga "ponto só no tablet" de uma empresa. Ligar exige pelo menos um tablet ativo dela. */
+export const setClockDeviceLock = async (companyId: string, enabled: boolean): Promise<boolean> => {
+  const { data, error } = await supabase.rpc('clock_device_set_lock', {
+    p_company_id: companyId,
+    p_enabled: enabled,
+  });
+  if (error) throw error;
+  return data === true;
 };
 
 // Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).

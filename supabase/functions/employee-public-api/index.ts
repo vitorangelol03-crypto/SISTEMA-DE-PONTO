@@ -25,13 +25,23 @@
 //   face-config              { companyId } → { enabled: boolean }
 //   face-descriptor          { employeeId } → { descriptor: number[] | null }
 //   save-face                { employeeId, photoUrl, descriptor } → { ok: true }
-//   identify-face            { companyId, descriptorNow } → { matched, employeeId?, employeeName?, cpf?, faceDistance? }
+//   identify-face            { companyId, descriptorNow, deviceToken? } → { matched, employeeId?, employeeName?, cpf?, faceDistance?, ambiguous?, deviceBlocked? }
 //     04/09/2026 — ponto SÓ pela facial, sem digitar CPF. Compara contra TODOS
-//     os rostos ativos da empresa (1:N) com limite mais rígido (0.42) e margem
-//     mínima contra o 2º colocado (0.08) — ambíguo ou sem certeza = não bate.
-//     Isto só IDENTIFICA; quem registra o ponto de fato é o clock-in-validated
-//     de sempre, reconferindo o mesmo rosto 1:1 contra a pessoa identificada.
+//     os rostos ativos da empresa (1:N) com margem mínima contra o 2º colocado
+//     (0.08) — ambíguo ou sem certeza = não bate. Isto só IDENTIFICA; quem
+//     registra o ponto de fato é o clock-in-validated de sempre, reconferindo o
+//     mesmo rosto 1:1 contra a pessoa identificada.
+//     30/09/2026 — limite 0.42 → 0.50 (o MESMO do 1:1; ver _shared/faceIdentify.ts),
+//     a tentativa grava o desfecho (matched/no_match/ambiguous) e as distâncias do
+//     1º e 2º colocados, e com a trava do tablet ligada exige um tablet autorizado.
 //   log-face-attempt         { employeeId, success, confidence, clockType, companyId } → { ok: true }
+//   clock-device-status      { deviceToken } → { device: { id, name, companyIds, companyNames } | null }
+//   activate-clock-device    { code } → { token, device }
+//     30/09/2026 — ponto só no tablet da empresa (ver _shared/clockDevice.ts e a
+//     migration 20260930034644). O código de ativação vem do painel (2626).
+//   log-clock-event          { companyId, employeeId?, kind: 'camera_error', details, userAgent? } → { ok: true }
+//     30/09/2026 — "câmera bloqueada" sem estar: até aqui nenhum erro de câmera
+//     chegava ao servidor. Grava em error_logs (best-effort, texto truncado).
 //   employee-errors-by-period { employeeId, periodId, companyId } → { period, individual_errors, triage_errors, total_individual, total_triage }
 //   employee-error-periods    { employeeId, companyId } → { periods: Array<{ period, has_errors, total_errors }> }
 //   register-employee        { companyId, name, cpf, phone, pixKey, pixType, functionRole } → { employee: { id } }
@@ -45,6 +55,16 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
+import { decidirIdentificacao, type CandidatoFacial } from '../_shared/faceIdentify.ts';
+import {
+  MENSAGEM_APARELHO_NAO_AUTORIZADO,
+  decidirAparelho,
+  gerarSegredoDoTablet,
+  normalizarCodigoDeAtivacao,
+  resolverTablet,
+  sha256Hex,
+  tabletDaLinha,
+} from '../_shared/clockDevice.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -72,12 +92,9 @@ function getBrazilDateString(): string {
 // ── Facial 1:N — reconhecimento sem CPF (04/09/2026) ──────────────────────────
 // Mesma conta do servidor de clock-in-validated (euclideanDistance sobre os 128
 // números do face-api), mas aqui comparando contra TODOS os rostos da empresa,
-// não contra um só. Por isso o limite é mais RIGOROSO que o 0.5 do 1:1 (pedido
-// do Victor: "não pode confundir, tem que ser robusta") — e exige MARGEM contra
-// o segundo colocado: se dois funcionários ficarem parecidos demais entre si,
-// recusa em vez de arriscar escolher o errado.
-const FACE_1N_THRESHOLD = 0.42;
-const FACE_1N_MIN_MARGIN = 0.08;
+// não contra um só. O limite e a margem contra o 2º colocado moram em
+// _shared/faceIdentify.ts desde 30/09/2026 (limite 0.42 → 0.50, o mesmo do 1:1 —
+// o motivo, com os números reais, está lá).
 
 function euclideanDistance(a: number[], b: number[]): number {
   let sum = 0;
@@ -424,6 +441,14 @@ async function identifyFace(body: Body): Promise<Response> {
   if (!companyId) return json({ error: 'Invalid companyId' }, 400);
   if (!now) return json({ error: 'Invalid descriptorNow' }, 400);
 
+  // Trava do tablet (30/09/2026): com ela ligada, só um tablet autorizado identifica —
+  // senão qualquer celular apontado pra um rosto descobriria nome e CPF da pessoa.
+  const aparelho = await conferirAparelhoDaEmpresa(companyId, body.deviceToken);
+  if (aparelho === 'erro') return json({ error: 'Database error' }, 500);
+  if (aparelho === 'bloqueado') {
+    return json({ matched: false, deviceBlocked: true, message: MENSAGEM_APARELHO_NAO_AUTORIZADO });
+  }
+
   // employees não tem coluna "active" (diferente de driverpay_drivers/platforms) —
   // quem sai da empresa hoje é excluído da tabela, não desativado. `registration_status`
   // é o único filtro de elegibilidade que existe (fora abaixo).
@@ -434,43 +459,152 @@ async function identifyFace(body: Body): Promise<Response> {
     .not('face_descriptor', 'is', null);
   if (error) return json({ error: 'Database error', details: error.message }, 500);
 
-  type Candidate = { id: string; name: string; cpf: string; distance: number };
-  const candidates: Candidate[] = [];
+  const candidates: CandidatoFacial[] = [];
   for (const emp of data ?? []) {
     if (emp.registration_status === 'rejected') continue;
     const enrolled = parseDescriptor(emp.face_descriptor);
     if (!enrolled) continue;
     candidates.push({ id: emp.id, name: emp.name, cpf: emp.cpf, distance: euclideanDistance(now, enrolled) });
   }
-  candidates.sort((a, b) => a.distance - b.distance);
 
-  const best = candidates[0];
-  const second = candidates[1];
-  const ambiguous = !!second && (second.distance - (best?.distance ?? 0)) < FACE_1N_MIN_MARGIN;
-  const matched = !!best && best.distance < FACE_1N_THRESHOLD && !ambiguous;
+  const { outcome, best, second } = decidirIdentificacao(candidates);
+  const matched = outcome === 'matched' && best !== null;
 
   // Log da tentativa — sem employee_id quando não deu pra confirmar (não
-  // registra um "quase" como se fosse a pessoa certa).
-  await supabase.from('face_auth_attempts').insert([{
-    employee_id: matched ? best!.id : null,
+  // registra um "quase" como se fosse a pessoa certa). Desde 30/09 grava também o
+  // desfecho e as duas distâncias: é o que permite calibrar com dado real.
+  const { error: logErr } = await supabase.from('face_auth_attempts').insert([{
+    employee_id: matched ? best.id : null,
     date: getBrazilDateString(),
     attempted_at: new Date().toISOString(),
     success: matched,
     confidence: best ? Math.max(0, 1 - best.distance) : null,
     clock_type: null,
     company_id: companyId,
+    outcome,
+    best_distance: best ? best.distance : null,
+    second_distance: second ? second.distance : null,
   }]);
+  if (logErr) console.error('[identify-face] log da tentativa falhou:', logErr.message);
 
   if (!matched) {
-    return json({ matched: false, ambiguous });
+    return json({ matched: false, ambiguous: outcome === 'ambiguous' });
   }
   return json({
     matched: true,
-    employeeId: best!.id,
-    employeeName: best!.name,
-    cpf: best!.cpf,
-    faceDistance: best!.distance,
+    employeeId: best.id,
+    employeeName: best.name,
+    cpf: best.cpf,
+    faceDistance: best.distance,
   });
+}
+
+/**
+ * Trava do tablet para UMA empresa: 'liberado' quando a trava está desligada ou quando o
+ * segredo enviado é de um tablet ATIVO que atende a empresa; 'bloqueado' caso contrário.
+ * Erro de banco = 'erro' (quem chama responde 500 — nunca libera no escuro).
+ */
+async function conferirAparelhoDaEmpresa(
+  companyId: string,
+  deviceToken: unknown,
+): Promise<'liberado' | 'bloqueado' | 'erro'> {
+  const { data: company, error } = await supabase
+    .from('companies')
+    .select('require_clock_device')
+    .eq('id', companyId)
+    .maybeSingle();
+  if (error) {
+    console.error('[clock-device] leitura da trava falhou:', error.message);
+    return 'erro';
+  }
+  const travaLigada = company?.require_clock_device === true;
+  if (!travaLigada) return 'liberado';
+  try {
+    const tablet = await resolverTablet(supabase, deviceToken);
+    return decidirAparelho({ travaLigada, tablet, companyId }).liberado ? 'liberado' : 'bloqueado';
+  } catch (err) {
+    console.error('[clock-device] resolução do tablet falhou:', err);
+    return 'erro';
+  }
+}
+
+/** Quem é este aparelho? (null = não é um tablet ativo). Não depende de empresa nem de trava. */
+async function clockDeviceStatus(body: Body): Promise<Response> {
+  try {
+    const tablet = await resolverTablet(supabase, body.deviceToken);
+    return json({ device: tablet });
+  } catch (err) {
+    console.error('[clock-device-status] falhou:', err);
+    return json({ error: 'Database error' }, 500);
+  }
+}
+
+/**
+ * Troca o código de ativação (gerado pelo 2626 no painel) pelo segredo do tablet. O segredo
+ * volta UMA vez e fica só no aparelho; o banco guarda o sha256. Código vencido, já usado ou
+ * digitado errado dão a mesma resposta — não ajuda quem tenta adivinhar.
+ */
+async function activateClockDevice(body: Body): Promise<Response> {
+  const codigo = normalizarCodigoDeAtivacao(body.code);
+  if (!codigo) {
+    return json({ error: 'Código inválido. Confira as 8 letras e números (ex.: K7P2-9XQM).' }, 400);
+  }
+  const token = gerarSegredoDoTablet();
+  const [codeHash, tokenHash] = await Promise.all([sha256Hex(codigo), sha256Hex(token)]);
+  const { data, error } = await supabase.rpc('clock_device_activate', {
+    p_code_hash: codeHash,
+    p_token_hash: tokenHash,
+  });
+  if (error) {
+    console.error('[activate-clock-device] falhou:', error.message);
+    return json({ error: 'Database error' }, 500);
+  }
+  const tablet = tabletDaLinha(Array.isArray(data) ? data[0] : data);
+  if (!tablet) {
+    return json({ error: 'Código inválido, vencido ou já usado. Peça um código novo ao responsável.' }, 400);
+  }
+  return json({ token, device: tablet });
+}
+
+const CLOCK_EVENT_KINDS = new Set(['camera_error']);
+
+function textoCurto(valor: unknown, max: number): string | null {
+  if (valor == null) return null;
+  const s = String(valor);
+  return s.length > max ? s.slice(0, max) : s;
+}
+
+/**
+ * Registro de problema da tela de ponto (30/09/2026). Hoje: erro de câmera — a queixa
+ * "diz que a câmera está bloqueada mas não está" não tinha rastro nenhum no servidor.
+ * Best-effort pro chamador (a tela não espera nem mostra erro disto).
+ */
+async function logClockEvent(body: Body): Promise<Response> {
+  const companyId = String(body.companyId ?? '').trim();
+  const kind = String(body.kind ?? '').trim();
+  if (!companyId || !CLOCK_EVENT_KINDS.has(kind)) return json({ error: 'Invalid companyId or kind' }, 400);
+
+  const detalhesBrutos = body.details && typeof body.details === 'object' ? body.details as Record<string, unknown> : {};
+  const detalhes: Record<string, string | null> = {};
+  for (const [k, v] of Object.entries(detalhesBrutos).slice(0, 12)) {
+    detalhes[textoCurto(k, 40) ?? ''] = textoCurto(v, 300);
+  }
+  const employeeId = textoCurto(body.employeeId, 64);
+
+  const { error } = await supabase.from('error_logs').insert([{
+    user_id: employeeId,
+    company_id: companyId,
+    error_type: kind,
+    severity: 'medium',
+    message: textoCurto(detalhes.name ?? kind, 200),
+    component: textoCurto(detalhes.component ?? 'employee-clock', 60),
+    module: 'employee-clock',
+    error_context: detalhes,
+    user_agent: textoCurto(body.userAgent, 300),
+    occurrence_count: 1,
+  }]);
+  if (error) return json({ error: 'Database error', details: error.message }, 500);
+  return json({ ok: true });
 }
 
 async function logFaceAttempt(body: Body): Promise<Response> {
@@ -740,6 +874,9 @@ Deno.serve(async (req) => {
       case 'save-face': return await saveFace(body);
       case 'identify-face': return await identifyFace(body);
       case 'log-face-attempt': return await logFaceAttempt(body);
+      case 'clock-device-status': return await clockDeviceStatus(body);
+      case 'activate-clock-device': return await activateClockDevice(body);
+      case 'log-clock-event': return await logClockEvent(body);
       case 'employee-errors-by-period': return await employeeErrorsByPeriod(body);
       case 'employee-error-periods': return await employeeErrorPeriods(body);
       case 'employee-receipts': return await employeeReceipts(body);

@@ -7,8 +7,9 @@ import {
   BonusType,
 } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
-import { isMaster } from '../../config/masters';
+import { isMaster, PONTO_EDITOR_ID } from '../../config/masters';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
+import { ClockDevicesCard } from './ClockDevicesCard';
 
 interface SettingsTabProps {
   userId: string;
@@ -198,6 +199,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ userId }) => {
           )}
         </div>
       )}
+
+      {/* Tablets de ponto (30/09/2026) — decisão do Victor: só o 2626 cadastra e liga a trava.
+          O banco confere de novo (funções clock_device_*); isto só não mostra pra quem não pode. */}
+      {userId === PONTO_EDITOR_ID && <ClockDevicesCard />}
 
       <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
         <h3 className="text-base sm:text-lg font-semibold mb-4 text-gray-800">Instruções de Uso</h3>

@@ -1,0 +1,3 @@
+# Vídeos da câmera falsa dos testes de facial (tests/fixtures/facial): bytes de imagem,
+# nunca texto — sem isto o git pode converter CRLF dentro do quadro e estragar o rosto.
+*.y4m binary

@@ -1,4 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { LIMITE_FACIAL } from "../_shared/faceIdentify.ts";
+import {
+  MENSAGEM_APARELHO_NAO_AUTORIZADO,
+  decidirAparelho,
+  resolverTablet,
+} from "../_shared/clockDevice.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -55,7 +61,8 @@ function calcDistance(
 // Mesma conta e mesmo limite do navegador (faceapi.euclideanDistance < 0.5): o
 // descriptor do face-api são 128 números; o servidor reconfere a distância entre
 // o rosto do momento e o cadastrado. Conta pura, sem lib pesada no Deno.
-const FACE_THRESHOLD = 0.5;
+// 30/09/2026: o número mora em _shared/faceIdentify.ts, o mesmo do 1:N (sem CPF).
+const FACE_THRESHOLD = LIMITE_FACIAL;
 
 function euclideanDistance(a: number[], b: number[]): number {
   let sum = 0;
@@ -186,6 +193,7 @@ Deno.serve(async (req: Request) => {
       company_id: bodyCompanyId,
       marking_position: markingPositionRaw,
       face_descriptor_now: faceDescriptorNow,
+      device_token: deviceToken,
     } = await req.json();
 
     if (!employee_id || !cpf || !clock_type) {
@@ -293,7 +301,7 @@ Deno.serve(async (req: Request) => {
     // Resolve geo config: companies.default_geo_* (base) + geolocation_config (override por empresa)
     const { data: company } = await supabase
       .from("companies")
-      .select("default_geo_lat, default_geo_lng, default_geo_radius, require_facial_clock")
+      .select("default_geo_lat, default_geo_lng, default_geo_radius, require_facial_clock, require_clock_device")
       .eq("id", effectiveCompanyId)
       .maybeSingle();
 
@@ -307,6 +315,32 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "Configuração de geolocalização da empresa não encontrada" }),
         { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
+    }
+
+    /**
+     * PONTO SÓ NO TABLET DA EMPRESA (30/09/2026, roadmap item 3; decisões do Victor: vale pra
+     * TODO MUNDO, supervisor incluído; nasce desligada, ele liga empresa por empresa).
+     *
+     * Vem ANTES de qualquer gravação — inclusive do cadastro do rosto na 1ª vez, logo abaixo:
+     * um aparelho não autorizado não pode escrever nada. Sem bonus_block nem geo_fraud: não é
+     * fraude de localização, é o aparelho errado; a pessoa só precisa ir até o tablet.
+     * Erro ao resolver o tablet cai no catch geral (500) — com a trava ligada, nunca libera no
+     * escuro.
+     */
+    if (company.require_clock_device === true) {
+      const tablet = await resolverTablet(supabase, deviceToken);
+      const decisao = decidirAparelho({ travaLigada: true, tablet, companyId: effectiveCompanyId });
+      if (!decisao.liberado) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            device_error: true,
+            device_reason: decisao.motivo,
+            message: MENSAGEM_APARELHO_NAO_AUTORIZADO,
+          }),
+          { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+        );
+      }
     }
 
     const geoConfig = {

@@ -32,6 +32,8 @@ vi.mock('../../src/services/database', () => ({
   identifyFace: (...a: unknown[]) => identifyFace(...a),
   getEmployeeByCpf: (...a: unknown[]) => getEmployeeByCpf(...a),
   getEmployeeTodayAttendance: (...a: unknown[]) => getEmployeeTodayAttendance(...a),
+  // 30/09/2026: a câmera (useFrontCamera) registra erro de câmera no servidor.
+  logClockEvent: vi.fn(),
 }));
 
 vi.mock('../../src/hooks/useFaceApi', () => ({
@@ -64,12 +66,17 @@ const FUNCIONARIO = {
 const comAtraso = <T,>(valor: T, ms = 150) =>
   new Promise<T>((resolve) => setTimeout(() => resolve(valor), ms));
 
-/** jsdom não tem câmera: finge stream, metadados prontos e frame com tamanho. */
+/**
+ * jsdom não tem câmera: finge stream, metadados prontos e frame com tamanho.
+ * 30/09/2026: o stream falso ganhou `getVideoTracks` e a trilha ganhou `readyState` e
+ * `addEventListener` — como um MediaStream de verdade. A câmera agora escuta o fim da trilha
+ * (tela do tablet que apaga) e o falso antigo, sem isso, não era mais uma câmera plausível.
+ */
 function fingirCamera() {
-  const track = { stop: vi.fn() };
+  const track = { stop: vi.fn(), readyState: 'live', addEventListener: vi.fn(), removeEventListener: vi.fn() };
   Object.defineProperty(navigator, 'mediaDevices', {
     configurable: true,
-    value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [track] }) },
+    value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [track], getVideoTracks: () => [track] }) },
   });
   Object.defineProperty(HTMLMediaElement.prototype, 'readyState', { configurable: true, get: () => 1 });
   Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, get: () => 640 });
@@ -129,16 +136,19 @@ describe('facial sem CPF (o fluxo do tablet)', () => {
 
     render(<FaceIdentifyClock company={EMPRESA} onConfirmed={vi.fn()} onUseCpf={vi.fn()} />);
 
+    // 30/09/2026: o aviso só vem depois de 3 recusas SEGUIDAS (quadros ruins passam em silêncio
+    // — ver NO_MATCH_BEFORE_WARNING); o que este teste trava continua igual: avisa e não trava.
     await waitFor(
       () => expect(screen.getByText(/Não reconheci/i)).toBeTruthy(),
-      { timeout: 8000 },
+      { timeout: 12_000 },
     );
+    expect(identifyFace.mock.calls.length).toBeGreaterThanOrEqual(3);
     // Voltou a escanear sozinho: a instrução de aproximar o rosto reaparece.
     await waitFor(
       () => expect(screen.getByText(/Aproxime o rosto/i)).toBeTruthy(),
       { timeout: 8000 },
     );
-  }, 20_000);
+  }, 30_000);
 
   it('ponto do dia já completo: diz isso e volta a escanear', async () => {
     identifyFace.mockImplementation(() => comAtraso({ matched: true, employeeId: 'f-1', cpf: '12345678901' }));
