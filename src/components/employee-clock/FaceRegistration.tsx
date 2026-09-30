@@ -10,13 +10,15 @@ import toast from 'react-hot-toast';
 
 interface FaceRegistrationProps {
   employee: Employee;
+  /** PIN que a pessoa acabou de digitar/criar — o servidor só grava o rosto com ele (30/09/2026). */
+  pin: string;
   onComplete: () => void;
   onSkip?: () => void;
 }
 
 type Phase = 'loading' | 'no-face' | 'detected' | 'capturing' | 'saving' | 'success' | 'error';
 
-export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, onComplete, onSkip }) => {
+export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, pin, onComplete, onSkip }) => {
   const { loading: modelsLoading, ready: modelsReady, error: modelsError, detectFace } = useFaceApi();
   const videoRef = useRef<HTMLVideoElement>(null);
   // 30/09/2026: câmera em useFrontCamera (erro com a causa certa, reabre quando a tela volta,
@@ -160,7 +162,7 @@ export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, on
     }
 
     try {
-      await saveFaceData(employee.id, photoUrl, Array.from(descriptor));
+      await saveFaceData(employee.id, photoUrl, Array.from(descriptor), pin);
       setPhase('success');
       toast.success('Rosto cadastrado com sucesso!');
       // stop stream antes de chamar onComplete
@@ -171,7 +173,7 @@ export const FaceRegistration: React.FC<FaceRegistrationProps> = ({ employee, on
       setErrorMsg('Erro ao salvar cadastro. Tente novamente.');
       setPhase('error');
     }
-  }, [employee.id, onComplete, stopStream]);
+  }, [employee.id, onComplete, stopStream, pin]);
 
   const retry = () => {
     countdownStartedRef.current = false;

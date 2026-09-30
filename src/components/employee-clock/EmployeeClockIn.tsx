@@ -183,6 +183,13 @@ export const EmployeeClockIn: React.FC = () => {
   const [setupField, setSetupField] = useState<'new' | 'confirm'>('new');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  /**
+   * O PIN desta sessão (30/09/2026): o que a pessoa digitou pra entrar, ou o que acabou de criar
+   * no 1º acesso. O servidor exige ele pra gravar/ler o rosto e pra cadastrar rosto pela batida —
+   * sem isso, quem soubesse o CPF de um colega trocava o rosto dele. Some no "sair" (handleLogout
+   * zera os dois). Na facial sem CPF não existe PIN — e ela nem usa essas ações.
+   */
+  const pinDaSessao = pin || newPin;
   const [setupError, setSetupError] = useState('');
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
@@ -568,6 +575,8 @@ export const EmployeeClockIn: React.FC = () => {
         ...(faceDescriptor && faceDescriptor.length ? { face_descriptor_now: faceDescriptor } : {}),
         // Segredo do tablet (30/09/2026) — com a trava da empresa ligada, sem ele não bate.
         ...(deviceToken ? { device_token: deviceToken } : {}),
+        // PIN que a pessoa digitou (30/09/2026): o servidor só cadastra rosto pela batida com ele.
+        ...(pinDaSessao ? { pin: pinDaSessao } : {}),
       }),
       signal,
     });
@@ -1469,6 +1478,7 @@ export const EmployeeClockIn: React.FC = () => {
       {step === 'face-register' && employee && (
         <FaceRegistration
           employee={employee}
+          pin={pinDaSessao}
           onComplete={handleFaceRegistrationComplete}
           onSkip={handleLogout}
         />
@@ -1478,6 +1488,7 @@ export const EmployeeClockIn: React.FC = () => {
       {step === 'dashboard' && pendingClockType && employee && (
         <FaceVerification
           employee={employee}
+          pin={pinDaSessao}
           onSuccess={handleFaceClockVerifySuccess}
           onFail={handleFaceClockVerifyFail}
           onCameraExit={handleFaceClockCameraExit}

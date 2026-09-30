@@ -10,6 +10,8 @@ import { CameraProblem } from './CameraProblem';
 
 interface FaceVerificationProps {
   employee: Employee;
+  /** PIN que a pessoa acabou de digitar — o servidor só entrega o rosto cadastrado com ele (30/09/2026). */
+  pin: string;
   /** Recebe o descriptor do rosto reconhecido (128 nºs) — vai pro servidor reconferir. */
   onSuccess: (descriptor: number[]) => void;
   onFail: () => void;
@@ -37,6 +39,7 @@ const DETECT_WINDOW_MS = 3000; // tempo com rosto detectado antes de declarar fa
 
 export const FaceVerification: React.FC<FaceVerificationProps> = ({
   employee,
+  pin,
   onSuccess,
   onFail,
   onCameraExit,
@@ -73,7 +76,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
   useEffect(() => {
     if (!modelsReady || savedDescriptorRef.current) return;
     let cancelled = false;
-    getFaceDescriptor(employee.id)
+    getFaceDescriptor(employee.id, pin)
       .then((saved) => {
         if (cancelled) return;
         if (!saved || saved.length === 0) {
@@ -91,7 +94,7 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
         setPhase('error');
       });
     return () => { cancelled = true; };
-  }, [modelsReady, employee.id]);
+  }, [modelsReady, employee.id, pin]);
 
   // Câmera aberta + rosto cadastrado carregado = começa a procurar o rosto.
   useEffect(() => {

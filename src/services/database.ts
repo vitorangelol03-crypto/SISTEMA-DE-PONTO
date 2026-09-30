@@ -317,7 +317,9 @@ export interface Company {
   bank_hours_after_apply?: BankHoursAfterApply | null;
   bank_hours_night_separate?: boolean | null;
   bank_hours_night_multiplier?: number | null;
-  admin_secret_password: string | null;
+  // 30/09/2026: `admin_secret_password` SAIU — guardava em texto puro a senha da aba Admin e a
+  // tabela companies é legível por qualquer um. A senha de verdade é conferida pela RPC
+  // verify_admin_secret (tabela admin_secret, bcrypt). Migration 20260930132704.
   created_at: string;
   updated_at: string;
 }
@@ -4334,14 +4336,26 @@ export const setManualTimeFourMarkings = async (
 
 // ─── PIN functions ─────────────────────────────────────────────────────────────
 
-/** Define ou altera o PIN de um funcionário e marca como configurado.
+/** Cria o PIN no 1º ACESSO do funcionário (tela de ponto, sem login) e marca como configurado.
  *  Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
- *  Validação de PIN duplicada client-side por UX (early feedback). */
+ *  Validação de PIN duplicada client-side por UX (early feedback).
+ *  30/09/2026 (segurança): o servidor só aceita pra quem AINDA NÃO TEM PIN (409 senão) — antes
+ *  trocava o PIN de qualquer um. Pra o painel definir/trocar: `adminSetEmployeePin`. */
 export const setEmployeePin = async (employeeId: string, pin: string): Promise<void> => {
   if (!/^\d{4,6}$/.test(pin)) {
     throw new Error('PIN deve ser numérico com 4 a 6 dígitos');
   }
   await callEmployeePublicApi('set-pin', { employeeId, newPin: pin });
+};
+
+/** Painel: define (ou troca) o PIN de um funcionário com o LOGIN de quem está usando — a RPC
+ *  confere employees.edit e a empresa, como a RLS de funcionários (30/09/2026). */
+export const adminSetEmployeePin = async (employeeId: string, pin: string): Promise<void> => {
+  if (!/^\d{4,6}$/.test(pin)) {
+    throw new Error('PIN deve ser numérico com 4 a 6 dígitos');
+  }
+  const { error } = await supabase.rpc('admin_set_employee_pin', { p_employee_id: employeeId, p_pin: pin });
+  if (error) throw error;
 };
 
 /** Reseta o PIN do funcionário — exige nova criação no próximo acesso.
@@ -5076,17 +5090,20 @@ export const resetFaceForEmployee = async (
 };
 
 // Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
+// 30/09/2026 (segurança): exige o PIN da própria pessoa — o servidor recusa sem ele (401).
 export const saveFaceData = async (
   employeeId: string,
   photoUrl: string | null,
-  descriptor: number[]
+  descriptor: number[],
+  pin: string,
 ): Promise<void> => {
-  await callEmployeePublicApi('save-face', { employeeId, photoUrl, descriptor });
+  await callEmployeePublicApi('save-face', { employeeId, pin, photoUrl, descriptor });
 };
 
 // Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
-export const getFaceDescriptor = async (employeeId: string): Promise<number[] | null> => {
-  const data = await callEmployeePublicApi<{ descriptor: number[] | null }>('face-descriptor', { employeeId });
+// 30/09/2026 (segurança): o rosto cadastrado é biometria — só com o PIN da pessoa.
+export const getFaceDescriptor = async (employeeId: string, pin: string): Promise<number[] | null> => {
+  const data = await callEmployeePublicApi<{ descriptor: number[] | null }>('face-descriptor', { employeeId, pin });
   return data.descriptor ?? null;
 };
 

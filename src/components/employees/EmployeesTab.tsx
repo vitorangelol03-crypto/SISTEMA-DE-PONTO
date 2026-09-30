@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Plus, Search, CreditCard as Edit2, Trash2, RefreshCw, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, KeyRound, Clock, Briefcase, Calendar, Hash, Save, Copy, CheckCircle2, XCircle, Clock3, ArchiveRestore, UserCheck } from 'lucide-react';
-import { getAllEmployees, getAllEmployeesAcrossAllCompanies, createEmployee, updateEmployee, deleteEmployee, updateEmployeeRegistrationStatus, Employee, type EmployeeExtras, bulkCreateEmployees, setEmployeePin, resetEmployeePin, getCompanies, getEmployeeVacationsOfEmployee, createEmployeeVacation, deleteEmployeeVacation, type EmployeeVacation } from '../../services/database';
+import { getAllEmployees, getAllEmployeesAcrossAllCompanies, createEmployee, updateEmployee, deleteEmployee, updateEmployeeRegistrationStatus, Employee, type EmployeeExtras, bulkCreateEmployees, adminSetEmployeePin, resetEmployeePin, getCompanies, getEmployeeVacationsOfEmployee, createEmployeeVacation, deleteEmployeeVacation, type EmployeeVacation } from '../../services/database';
 import { parseNumericInput, isInRange } from '../../utils/numericInputHelpers';
 import { formatDateBR } from '../../utils/dateUtils';
 import { supabase } from '../../lib/supabase';
@@ -820,7 +820,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({ userId, hasPermissio
     }
     setPinLoading(true);
     try {
-      await setEmployeePin(pinModal.employee.id, pinInput);
+      // 30/09/2026: pelo login de quem está no painel (RPC), não pela ação pública da tela de ponto.
+      await adminSetEmployeePin(pinModal.employee.id, pinInput);
       toast.success('PIN definido com sucesso!');
       setPinModal(null);
       setPinInput('');

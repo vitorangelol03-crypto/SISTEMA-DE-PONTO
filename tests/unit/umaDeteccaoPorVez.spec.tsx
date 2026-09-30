@@ -99,13 +99,13 @@ describe('uma detecção de rosto por vez', () => {
   }, 20_000);
 
   it('verificação com CPF', async () => {
-    render(<FaceVerification employee={FUNCIONARIO} onSuccess={vi.fn()} onFail={vi.fn()} />);
+    render(<FaceVerification employee={FUNCIONARIO} pin="4821" onSuccess={vi.fn()} onFail={vi.fn()} />);
     await esperarVariasVoltas();
     expect(maximoAoMesmoTempo).toBe(1);
   }, 20_000);
 
   it('cadastro do rosto', async () => {
-    render(<FaceRegistration employee={FUNCIONARIO} onComplete={vi.fn()} />);
+    render(<FaceRegistration employee={FUNCIONARIO} pin="4821" onComplete={vi.fn()} />);
     await esperarVariasVoltas();
     expect(maximoAoMesmoTempo).toBe(1);
   }, 20_000);
