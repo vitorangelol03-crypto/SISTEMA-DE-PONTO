@@ -311,8 +311,9 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
       // Câmera que não abriu: a causa certa, com a saída pro CPF sempre à mão (30/09/2026).
       <CameraProblem problema={camera.problema} onTentarDeNovo={camera.reabrir} onSair={onUseCpf} />
     ) : modelsError ? (
-      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center space-y-4">
+      // `overflow-y-auto` + `m-auto` (30/09/2026): janela mais alta que a tela rola, não corta o topo.
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex overflow-y-auto p-4">
+        <div className="m-auto w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center space-y-4">
           <X className="w-12 h-12 mx-auto text-red-600" />
           <h2 className="text-lg font-bold text-gray-800">Erro na câmera</h2>
           <p className="text-sm text-gray-600">{modelsError}</p>
@@ -322,8 +323,8 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         </div>
       </div>
     ) : (modelsLoading || phase === 'loading') ? (
-      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-8 text-center space-y-4">
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex overflow-y-auto p-4">
+        <div className="m-auto w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-8 text-center space-y-4">
           <Loader2 className="w-12 h-12 mx-auto animate-spin text-blue-600" />
           <div>
             <h2 className="text-lg font-bold text-gray-800 mb-1">Preparando reconhecimento...</h2>
@@ -337,6 +338,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
       </div>
     ) : null;
   const telaDaCamera = sobreposicao === null;
+  const botaoDeCpfNaTela = telaDaCamera && (phase === 'scanning' || phase === 'no-match' || phase === 'identifying');
 
   const visual: FaceScanVisual =
     phase === 'scanning'      ? { color: 'blue',  pulse: true, showScanLine: true, label: '🔍 Aproxime o rosto da câmera' }
@@ -369,7 +371,14 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
             objectFit: 'cover', transform: 'scaleX(-1)',
           }}
         />
-        <FaceScanFrame visual={visual} countdown={phase === 'identified' ? countdown : 0} />
+        {/* 🔴 30/09/2026: o botão de CPF (abaixo) ficava EM CIMA do aviso — "Aproxime o rosto",
+            "Identificando..." e "Não reconheci" não apareciam. Com o botão na tela, o aviso sobe
+            pra cima dele: botão a 1,5rem do fundo + 2,5rem de altura = 4rem, e 12px de folga. */}
+        <FaceScanFrame
+          visual={visual}
+          countdown={phase === 'identified' ? countdown : 0}
+          labelBottom={botaoDeCpfNaTela ? 'calc(4rem + 12px)' : undefined}
+        />
       </div>
 
       {/* ── Confirmação (cancelável) ── */}
@@ -393,7 +402,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
            'identifying' entrou em 22/09/2026: sem ele, a pessoa que caía nessa fase ficava
            SEM saída nenhuma na tela (foi a queixa da equipe). A fase agora se cura sozinha
            por timeout, e ainda assim o botão fica — preso no galpão ninguém pode ficar. */}
-      {telaDaCamera && (phase === 'scanning' || phase === 'no-match' || phase === 'identifying') && (
+      {botaoDeCpfNaTela && (
         <div className="absolute bottom-6 left-0 right-0 z-20 flex justify-center px-4">
           <button
             onClick={onUseCpf}

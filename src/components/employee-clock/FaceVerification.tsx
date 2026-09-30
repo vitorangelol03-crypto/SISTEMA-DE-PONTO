@@ -223,8 +223,8 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
         rotuloSair="Voltar"
       />
     ) : (modelsError || phase === 'error') ? (
-      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center">
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex overflow-y-auto p-4">
+        <div className="m-auto w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center">
           <X className="w-12 h-12 mx-auto mb-4 text-red-600" />
           <h2 className="text-lg font-bold text-gray-800 mb-2">Erro na verificação</h2>
           <p className="text-sm text-gray-600 mb-5">{errorMsg || modelsError}</p>
@@ -237,8 +237,8 @@ export const FaceVerification: React.FC<FaceVerificationProps> = ({
         </div>
       </div>
     ) : (modelsLoading || phase === 'loading') ? (
-      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-8 text-center">
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex overflow-y-auto p-4">
+        <div className="m-auto w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-8 text-center">
           <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-blue-600" />
           <h2 className="text-lg font-bold text-gray-800 mb-1">Preparando verificação...</h2>
           <p className="text-sm text-gray-500">Iniciando reconhecimento facial</p>

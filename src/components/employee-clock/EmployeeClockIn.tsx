@@ -31,6 +31,8 @@ import {
   MarkingPosition, MARKING_LABELS, getTimestampForPosition, getNextMarkingPosition,
 } from './clockGuards';
 import { FaceIdentifyClock } from './FaceIdentifyClock';
+import { abertoComoApp, useAppDoPonto } from './useAppDoPonto';
+import { PassosNoAppDoPonto } from './CameraProblem';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,9 @@ type Step =
 
 /** Quanto a tela espera a resposta "quem é este aparelho?" antes de seguir sem ela. */
 const PRAZO_CONFERENCIA_DO_TABLET_MS = 5_000;
+
+const TEXTO_DO_PRIMEIRO_ACESSO =
+  'Este é seu primeiro acesso. Defina uma senha numérica de 4 a 6 dígitos para registrar seu ponto.';
 
 /**
  * Situação DESTE aparelho (30/09/2026): 'pendente' = ainda perguntando ao servidor;
@@ -157,6 +162,8 @@ async function isCameraPermissionDenied(): Promise<boolean> {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const EmployeeClockIn: React.FC = () => {
+  // Aplicativo "Ponto" no tablet (30/09/2026): instalável, sem zoom, letras maiores e tela acesa.
+  useAppDoPonto();
   const { company, setCompany, loading: companyLoading } = useCompany();
   /**
    * 🔴 30/09/2026 — A TELA NASCE EM "carregando", NÃO EM "cpf".
@@ -902,17 +909,30 @@ export const EmployeeClockIn: React.FC = () => {
 
   // ─── UI ───────────────────────────────────────────────────────────────────
 
-  const Header = ({ title, subtitle }: { title: string; subtitle?: string }) => (
-    <div className="bg-blue-600 px-6 py-5 text-white text-center">
-      <Clock className="w-10 h-10 mx-auto mb-2 opacity-90" />
-      <h1 className="text-xl font-bold">{title}</h1>
-      {subtitle && <p className="text-blue-100 text-sm mt-1">{subtitle}</p>}
+  // Deitado (tablet/celular na horizontal), o cabeçalho vira a coluna azul da esquerda — e aí
+  // cabe nele uma `nota` (que em pé fica no conteúdo, como sempre).
+  const Header = ({ title, subtitle, nota }: { title: string; subtitle?: string; nota?: string }) => (
+    <div className="bg-blue-600 px-6 py-5 text-white text-center deitado:flex deitado:flex-col deitado:justify-center">
+      <Clock className="w-10 h-10 mx-auto mb-2 opacity-90 deitado:w-14 deitado:h-14 deitado:mb-3" />
+      <h1 className="text-xl font-bold deitado:text-2xl">{title}</h1>
+      {subtitle && <p className="text-blue-100 text-sm mt-1 deitado:text-base">{subtitle}</p>}
+      {nota && <p className="hidden deitado:block text-blue-100 text-sm mt-4 leading-snug">{nota}</p>}
     </div>
   );
 
+  /*
+   * O cartão (30/09/2026, tela de ponto no tablet): cada passo põe DOIS filhos nele — o cabeçalho
+   * e o conteúdo. Em pé, um embaixo do outro, como sempre; deitado, lado a lado (grade de 2
+   * colunas), que é o que faz a tela da senha caber sem rolar num tablet de 7" deitado. O tamanho
+   * das letras e teclas no tablet vem do index.css (classe `tela-ponto`).
+   * Altura: no navegador do celular, `dvh` é a altura que se VÊ (sem a barra de endereço por
+   * cima). Vai com `supports-[...]` porque a ordem das classes no CSS gerado não segue a ordem
+   * escrita aqui — `min-h-screen min-h-dvh` deixava o `min-h-screen` ganhando (conferido no
+   * build). Navegador antigo que não conhece `dvh` fica no `min-h-screen`.
+   */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+    <div className="min-h-screen supports-[min-height:100dvh]:min-h-dvh bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden deitado:max-w-[48rem] deitado:grid deitado:grid-cols-[2fr_3fr]">
 
         {/* ── CARREGANDO: a tela ainda não sabe se começa no CPF ou na câmera (30/09/2026) ── */}
         {step === 'carregando' && (
@@ -1147,10 +1167,12 @@ export const EmployeeClockIn: React.FC = () => {
           const setActivePin = setupField === 'new' ? setNewPin : setConfirmPin;
           return (
             <>
-              <Header title={`Olá, ${employee.name.split(' ')[0]}!`} subtitle="Criar sua senha de acesso" />
+              {/* Deitado, a explicação vai pra coluna azul (30/09/2026): no tablet de 7" deitado
+                  (600px de altura) ela empurrava o "Próximo" pra fora da tela. */}
+              <Header title={`Olá, ${employee.name.split(' ')[0]}!`} subtitle="Criar sua senha de acesso" nota={TEXTO_DO_PRIMEIRO_ACESSO} />
               <div className="p-6 space-y-4">
-                <p className="text-sm text-gray-600 text-center">
-                  Este é seu primeiro acesso. Defina uma senha numérica de 4 a 6 dígitos para registrar seu ponto.
+                <p className="text-sm text-gray-600 text-center deitado:hidden">
+                  {TEXTO_DO_PRIMEIRO_ACESSO}
                 </p>
 
                 {/* Field switcher */}
@@ -1219,12 +1241,12 @@ export const EmployeeClockIn: React.FC = () => {
         {/* ── DASHBOARD ── */}
         {step === 'dashboard' && employee && (
           <>
-            {/* Header com nome e logout */}
-            <div className="bg-blue-600 px-5 py-4 text-white flex items-center justify-between">
+            {/* Header com nome e logout (deitado: coluna azul da esquerda, "Sair" embaixo do nome) */}
+            <div className="bg-blue-600 px-5 py-4 text-white flex items-center justify-between deitado:flex-col deitado:justify-center deitado:gap-6 deitado:text-center">
               <div>
-                <p className="text-xs text-blue-200">Olá,</p>
-                <p className="font-bold text-lg leading-tight">{employee.name.split(' ')[0]}</p>
-                <p className="text-xs text-blue-200">
+                <p className="text-xs text-blue-200 deitado:text-sm">Olá,</p>
+                <p className="font-bold text-lg leading-tight deitado:text-2xl">{employee.name.split(' ')[0]}</p>
+                <p className="text-xs text-blue-200 deitado:text-sm">
                   {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
                 </p>
               </div>
@@ -1496,10 +1518,13 @@ export const EmployeeClockIn: React.FC = () => {
         />
       )}
 
-      {/* ── CONFIRMAÇÃO DE SAÍDA RÁPIDA (trava anti-saída-fantasma) ── */}
+      {/* ── CONFIRMAÇÃO DE SAÍDA RÁPIDA (trava anti-saída-fantasma) ──
+           As 3 janelas por cima (30/09/2026): `overflow-y-auto` + `m-auto` em vez de
+           `items-center` — janela mais alta que a tela (celular deitado) ROLA em vez de cortar o
+           topo, e a que cabe continua no meio. */}
       {step === 'dashboard' && confirmExit && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4 text-center">
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex overflow-y-auto p-4">
+          <div className="m-auto w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4 text-center">
             <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto" />
             <h2 className="text-lg font-bold text-gray-900">Registrar SAÍDA agora?</h2>
             <p className="text-gray-600 text-sm">
@@ -1531,21 +1556,28 @@ export const EmployeeClockIn: React.FC = () => {
 
       {/* ── LOCALIZAÇÃO BLOQUEADA (instrução pra liberar o GPS) ── */}
       {step === 'dashboard' && geoBlocked && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex overflow-y-auto p-4">
+          <div className="m-auto w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4">
             <h2 className="text-lg font-bold text-gray-900 text-center">📍 Localização bloqueada</h2>
             <p className="text-gray-600 text-sm">
               Para bater o ponto, o sistema precisa da sua localização — e ela está{' '}
               <strong>bloqueada no navegador</strong>. Libere assim:
             </p>
-            <ol className="text-gray-700 text-sm space-y-2 list-decimal list-inside bg-gray-50 rounded-xl p-3">
-              <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
-              <li>Toque em <strong>Permissões</strong></li>
-              <li>Em <strong>Localização</strong>, escolha <strong>Permitir</strong></li>
-            </ol>
-            <p className="text-gray-500 text-xs">
-              Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Localização → Permitir.
-            </p>
+            {/* No app "Ponto" instalado não há cadeado nem endereço: o caminho é pelo Chrome (30/09/2026). */}
+            {abertoComoApp() ? (
+              <PassosNoAppDoPonto permissao="Localização" />
+            ) : (
+              <>
+                <ol className="text-gray-700 text-sm space-y-2 list-decimal list-inside bg-gray-50 rounded-xl p-3">
+                  <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
+                  <li>Toque em <strong>Permissões</strong></li>
+                  <li>Em <strong>Localização</strong>, escolha <strong>Permitir</strong></li>
+                </ol>
+                <p className="text-gray-500 text-xs">
+                  Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Localização → Permitir.
+                </p>
+              </>
+            )}
             <button
               onClick={() => setGeoBlocked(false)}
               className="w-full py-4 bg-blue-600 text-white text-base font-bold rounded-xl hover:bg-blue-700 transition-colors"
@@ -1558,25 +1590,31 @@ export const EmployeeClockIn: React.FC = () => {
 
       {/* ── CÂMERA BLOQUEADA (instrução pra liberar, 04/09/2026) ── */}
       {step === 'dashboard' && cameraBlocked && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex overflow-y-auto p-4">
+          <div className="m-auto w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4">
             <h2 className="text-lg font-bold text-gray-900 text-center">📷 Câmera bloqueada</h2>
             <p className="text-gray-600 text-sm">
               Para bater o ponto, o sistema precisa da sua câmera — e o navegador não está deixando
               este site usá-la. Libere assim:
             </p>
-            <ol className="text-gray-700 text-sm space-y-2 list-decimal list-inside bg-gray-50 rounded-xl p-3">
-              <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
-              <li>Toque em <strong>Permissões</strong> (ou "Configurações do site")</li>
-              <li>Em <strong>Câmera</strong>, escolha <strong>Permitir</strong></li>
-            </ol>
-            {/* 30/09/2026: "diz que está bloqueada mas não está" — o Chrome passa a recusar
-                sozinho quando o pedido de câmera é fechado algumas vezes, e nas configurações
-                continua aparecendo "Perguntar". Escolher "Permitir" resolve. */}
-            <p className="text-gray-500 text-xs">
-              Se lá aparecer <strong>"Perguntar"</strong>, mude mesmo assim para <strong>"Permitir"</strong>.
-              Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Câmera → Permitir.
-            </p>
+            {abertoComoApp() ? (
+              <PassosNoAppDoPonto permissao="Câmera" />
+            ) : (
+              <>
+                <ol className="text-gray-700 text-sm space-y-2 list-decimal list-inside bg-gray-50 rounded-xl p-3">
+                  <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
+                  <li>Toque em <strong>Permissões</strong> (ou "Configurações do site")</li>
+                  <li>Em <strong>Câmera</strong>, escolha <strong>Permitir</strong></li>
+                </ol>
+                {/* 30/09/2026: "diz que está bloqueada mas não está" — o Chrome passa a recusar
+                    sozinho quando o pedido de câmera é fechado algumas vezes, e nas configurações
+                    continua aparecendo "Perguntar". Escolher "Permitir" resolve. */}
+                <p className="text-gray-500 text-xs">
+                  Se lá aparecer <strong>"Perguntar"</strong>, mude mesmo assim para <strong>"Permitir"</strong>.
+                  Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Câmera → Permitir.
+                </p>
+              </>
+            )}
             <button
               onClick={() => setCameraBlocked(false)}
               className="w-full py-4 bg-blue-600 text-white text-base font-bold rounded-xl hover:bg-blue-700 transition-colors"

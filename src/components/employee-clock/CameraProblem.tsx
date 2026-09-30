@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ProblemaDeCamera } from './cameraAccess';
+import { abertoComoApp } from './useAppDoPonto';
 
 /**
  * O que a pessoa vê quando a câmera não abre (30/09/2026) — um texto por CAUSA, em vez do
@@ -25,6 +26,19 @@ const PASSOS_DO_SITE = (
   </ol>
 );
 
+/**
+ * No app "Ponto" instalado (tela cheia, 30/09/2026) não existe barra de endereço nem cadeado: a
+ * permissão do site mora no Chrome do aparelho. Usado aqui e nas janelas de câmera/localização
+ * bloqueada da tela de ponto.
+ */
+export const PassosNoAppDoPonto: React.FC<{ permissao: 'Câmera' | 'Localização' }> = ({ permissao }) => (
+  <ol className="text-sm text-gray-700 space-y-1.5 list-decimal list-inside bg-gray-50 rounded-xl p-3 text-left">
+    <li>Saia do app e abra o <strong>Chrome</strong> do aparelho</li>
+    <li>Toque em <strong>⋮</strong> → <strong>Configurações</strong> → <strong>Configurações do site</strong></li>
+    <li>Em <strong>{permissao}</strong>, toque no endereço do sistema de ponto e escolha <strong>Permitir</strong></li>
+  </ol>
+);
+
 const PASSOS_DO_APARELHO = (
   <ol className="text-sm text-gray-700 space-y-1.5 list-decimal list-inside bg-gray-50 rounded-xl p-3 text-left">
     <li>Abra as <strong>Configurações</strong> do aparelho</li>
@@ -47,7 +61,14 @@ export const CameraProblem: React.FC<CameraProblemProps> = ({
     case 'bloqueada-no-navegador':
       titulo = '📷 Câmera bloqueada';
       rotuloTentar = 'Já liberei — vou tentar de novo';
-      corpo = (
+      corpo = abertoComoApp() ? (
+        <>
+          <p className="text-sm text-gray-600 text-left">
+            Este aparelho não está deixando o app de ponto usar a câmera. Libere assim:
+          </p>
+          <PassosNoAppDoPonto permissao="Câmera" />
+        </>
+      ) : (
         <>
           <p className="text-sm text-gray-600 text-left">
             O navegador não está deixando este site usar a câmera. Libere assim:
@@ -119,10 +140,13 @@ export const CameraProblem: React.FC<CameraProblemProps> = ({
       );
   }
 
+  // `overflow-y-auto` + `m-auto` em vez de `items-center` (30/09/2026): no celular deitado esta
+  // janela é mais alta que a tela — centralizada, ela cortava o título em cima e o botão de CPF
+  // embaixo, sem ter como rolar. Agora rola; quando cabe, continua no meio.
   return (
-    <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 to-blue-800 flex overflow-y-auto p-4">
       <div
-        className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center space-y-3"
+        className="m-auto w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center space-y-3"
         data-testid="camera-problem"
         data-problema={problema}
       >

@@ -21,6 +21,12 @@ interface Props {
   visual: FaceScanVisual;
   countdown?: number;   // 0 → oculto
   confidence?: number;  // 0..1 — undefined → sem barra
+  /**
+   * Distância do aviso (o rótulo de baixo) até o fundo da tela, em CSS (30/09/2026). Padrão
+   * 28px. A tela sem CPF tem o botão "Prefere digitar CPF e senha?" no mesmo lugar — e ele
+   * ESCONDIA o aviso ("Aproxime o rosto", "Identificando...", "Não reconheci"); lá o aviso sobe.
+   */
+  labelBottom?: string;
 }
 
 const FRAME_WIDTH = 220;
@@ -72,7 +78,7 @@ const ensureKeyframes = () => {
   document.head.appendChild(style);
 };
 
-export const FaceScanFrame: React.FC<Props> = ({ visual, countdown = 0, confidence }) => {
+export const FaceScanFrame: React.FC<Props> = ({ visual, countdown = 0, confidence, labelBottom = '28px' }) => {
   React.useEffect(ensureKeyframes, []);
 
   const color = COLORS[visual.color];
@@ -205,14 +211,16 @@ export const FaceScanFrame: React.FC<Props> = ({ visual, countdown = 0, confiden
         ))}
       </div>
 
-      {/* Barra de confiança (verificação) */}
+      {/* Barra de confiança (verificação). Posição e letra em rem (30/09/2026), como o aviso de
+          baixo: no celular os mesmos 24/84/12px de antes; no tablet o aviso cresce e a barra sobe
+          junto — em px ela ficava encostada nele. */}
       {confPct != null && (
         <div
           style={{
             position: 'absolute',
-            left: 24,
-            right: 24,
-            bottom: 84,
+            left: '1.5rem',
+            right: '1.5rem',
+            bottom: '5.25rem',
             zIndex: 10,
           }}
         >
@@ -221,7 +229,7 @@ export const FaceScanFrame: React.FC<Props> = ({ visual, countdown = 0, confiden
               display: 'flex',
               justifyContent: 'space-between',
               color: '#fff',
-              fontSize: 12,
+              fontSize: '0.75rem',
               marginBottom: 4,
               textShadow: '0 1px 4px rgba(0,0,0,0.8)',
             }}
@@ -252,19 +260,21 @@ export const FaceScanFrame: React.FC<Props> = ({ visual, countdown = 0, confiden
         </div>
       )}
 
-      {/* Rótulo de status (pill com blur) */}
+      {/* Rótulo de status (pill com blur). Letra e espaço em rem (30/09/2026): no celular dá os
+          mesmos 15px e 10×22px de antes; no tablet cresce junto com o resto da tela de ponto. */}
       <div
+        data-testid="face-scan-label"
         style={{
           position: 'absolute',
           left: '50%',
-          bottom: 28,
+          bottom: labelBottom,
           transform: 'translateX(-50%)',
-          padding: '10px 22px',
+          padding: '0.625rem 1.375rem',
           borderRadius: 999,
           background: 'rgba(0,0,0,0.82)',
           border: `1.5px solid ${color}66`,
           color: '#fff',
-          fontSize: 15,
+          fontSize: '0.9375rem',
           fontWeight: 600,
           letterSpacing: 0.2,
           whiteSpace: 'nowrap',

@@ -101,4 +101,25 @@ describe('FaceScanFrame', () => {
       .filter(d => (d.getAttribute('style') || '').includes('rgba(34, 197, 94'));
     expect(flashes.length).toBe(0);
   });
+
+  // 30/09/2026 — na tela sem CPF o botão "Prefere digitar CPF e senha?" ficava EM CIMA do aviso.
+  it('9. aviso a 28px do fundo por padrão (verificação e cadastro do rosto: como sempre)', () => {
+    render(<FaceScanFrame visual={baseVisual} />);
+    expect(screen.getByTestId('face-scan-label').style.bottom).toBe('28px');
+  });
+
+  it('10. labelBottom sobe o aviso (tela sem CPF, com o botão de CPF embaixo)', () => {
+    render(<FaceScanFrame visual={baseVisual} labelBottom="calc(4rem + 12px)" />);
+    // O navegador reescreve o calc na forma dele ("calc(12px + 4rem)"): compara com a mesma escrita.
+    const referencia = document.createElement('div');
+    referencia.style.bottom = 'calc(4rem + 12px)';
+    expect(screen.getByTestId('face-scan-label').style.bottom).toBe(referencia.style.bottom);
+  });
+
+  it('11. letra do aviso em rem: 15px no celular (16px de base), cresce junto no tablet', () => {
+    render(<FaceScanFrame visual={baseVisual} />);
+    const aviso = screen.getByTestId('face-scan-label');
+    expect(aviso.style.fontSize).toBe('0.9375rem');
+    expect(aviso.style.padding).toBe('0.625rem 1.375rem');
+  });
 });

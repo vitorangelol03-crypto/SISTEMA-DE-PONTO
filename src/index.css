@@ -111,6 +111,45 @@
     background-color: #f3f4f6;
     color: #9ca3af;
   }
+
+  /*
+    ── TELA DE PONTO NO TABLET (30/09/2026, pedido do Victor: "encaixadinha na tela... sem nada
+       cortado ou com muito zoom") ──
+
+    A classe `tela-ponto` só existe enquanto a tela de ponto está aberta (useAppDoPonto.ts) — o
+    painel não muda nada.
+
+    1. Zoom: sem pinça e sem toque duplo (o `user-scalable=no` do viewport resolve no Android; o
+       iPhone ignora ele, e é aqui que ele obedece).
+
+    2. Tamanho: tudo da tela é medido em `rem` (letra, espaço, tecla, cartão), então aumentar a
+       letra BASE aumenta tudo junto, na mesma proporção — nada fica desencontrado. A base cresce
+       com o tamanho da tela, entre 16px (celular: igual a antes) e 20px (tablet de 10"), no maior
+       tamanho em que a tela mais alta do ponto (a da senha) ainda cabe sem rolar:
+         - em pé: o cartão ocupa ~72% da largura (2,6vw) e a tela da senha (~42rem de altura)
+           tem que caber na altura (2,35vh);
+         - deitado (cabeçalho ao lado do conteúdo, ver `deitado` no tailwind.config): o cartão
+           (48rem) cabe na largura (1,85vw) e a senha (~34rem) cabe na altura (2,94vh).
+       `svh` = a altura com as barras do navegador à vista (no app em tela cheia é a tela toda).
+       A linha com `vh` antes é a rede pra navegador que não conhece `svh`.
+  */
+  html.tela-ponto {
+    touch-action: pan-x pan-y;
+  }
+
+  @media (orientation: portrait) {
+    html.tela-ponto {
+      font-size: clamp(16px, min(2.6vw, 2.35vh), 20px);
+      font-size: clamp(16px, min(2.6vw, 2.35svh), 20px);
+    }
+  }
+
+  @media (orientation: landscape) {
+    html.tela-ponto {
+      font-size: clamp(16px, min(1.85vw, 2.94vh), 20px);
+      font-size: clamp(16px, min(1.85vw, 2.94svh), 20px);
+    }
+  }
 }
 
 @layer components {
