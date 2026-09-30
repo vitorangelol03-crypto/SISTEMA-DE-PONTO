@@ -10,7 +10,10 @@
 //
 // Actions (todas POST):
 //   lookup-companies-by-cpf  { cpf } → { companies: Company[] }
-//   lookup-employee          { cpf, companyId } → { employee: Employee | null }
+//   lookup-employee          { cpf, companyId } → { employee: (só os campos da tela pública) | null }
+//     30/09/2026 (segurança): devolvia `select('*')` — a FICHA INTEIRA (pin_hash, rosto,
+//     PIX, telefone...) de qualquer um só com o CPF. Agora só os 10 campos que as telas
+//     públicas usam (CAMPOS_PUBLICOS_DO_FUNCIONARIO).
 //   verify-pin               { employeeId, pin } → { valid: boolean }
 //     26/08 (fix): compara por bcrypt contra pin_hash quando existir (migração
 //     de 14/05 já converteu 70 funcionários pra hash e zerou o pin plain —
@@ -20,11 +23,19 @@
 //   set-pin                  { employeeId, newPin } → { ok: true }
 //     26/08 (fix): passa a gravar em pin_hash (bcrypt), não mais em pin plain
 //     — fecha o mesmo buraco pra quem configura o PIN a partir de agora.
+//     30/09/2026 (segurança): SÓ NO 1º ACESSO (sem PIN). Antes trocava o PIN de
+//     qualquer um sem login. O painel define/troca PIN pela RPC admin_set_employee_pin
+//     (confere employees.edit de quem está logado); o "Resetar PIN" do painel zera o PIN
+//     e a pessoa cria o novo aqui.
 //   today-attendance         { employeeId, companyId } → { attendance: Attendance | null }
 //   attendance-history       { employeeId, companyId, days } → { history: Attendance[] }
 //   face-config              { companyId } → { enabled: boolean }
-//   face-descriptor          { employeeId } → { descriptor: number[] | null }
-//   save-face                { employeeId, photoUrl, descriptor } → { ok: true }
+//   face-descriptor          { employeeId, pin } → { descriptor: number[] | null }
+//   save-face                { employeeId, pin, photoUrl, descriptor } → { ok: true }
+//     30/09/2026 (segurança): as duas exigem o PIN da própria pessoa (o mesmo que ela
+//     acabou de digitar pra entrar). Antes, com o id (que lookup-employee devolvia pelo
+//     CPF), qualquer um trocava o rosto de outra pessoa ou copiava o rosto cadastrado —
+//     e batia o ponto dela.
 //   identify-face            { companyId, descriptorNow, deviceToken? } → { matched, employeeId?, employeeName?, cpf?, faceDistance?, ambiguous?, deviceBlocked? }
 //     04/09/2026 — ponto SÓ pela facial, sem digitar CPF. Compara contra TODOS
 //     os rostos ativos da empresa (1:N) com margem mínima contra o 2º colocado
@@ -54,7 +65,7 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
+import { PIN_FORMATO, bcryptjs, pinConfere } from '../_shared/pin.ts';
 import { decidirIdentificacao, type CandidatoFacial } from '../_shared/faceIdentify.ts';
 import {
   MENSAGEM_APARELHO_NAO_AUTORIZADO,
@@ -248,6 +259,17 @@ async function registerEmployee(body: Body): Promise<Response> {
   return json({ employee: data });
 }
 
+/**
+ * O que as telas PÚBLICAS (/clock, /erros) usam da ficha — e nada mais (30/09/2026).
+ * Antes ia `select('*')`: pin_hash (um PIN de 4 dígitos em bcrypt se descobre por tentativa
+ * em minutos), o rosto cadastrado, PIX, telefone, dados da folha — de qualquer um, pelo CPF.
+ * Tela nova precisando de outro campo: acrescentar aqui, pensando se ele pode ser público.
+ */
+const CAMPOS_PUBLICOS_DO_FUNCIONARIO = [
+  'id', 'name', 'cpf', 'company_id', 'registration_status', 'pin_configured',
+  'face_registered', 'face_reset_requested', 'face_recognition_enabled', 'marking_count',
+].join(', ');
+
 async function lookupEmployee(body: Body): Promise<Response> {
   const cpf = String(body.cpf ?? '').replace(/\D/g, '');
   const companyId = String(body.companyId ?? '').trim();
@@ -255,7 +277,7 @@ async function lookupEmployee(body: Body): Promise<Response> {
 
   const { data, error } = await supabase
     .from('employees')
-    .select('*')
+    .select(CAMPOS_PUBLICOS_DO_FUNCIONARIO)
     .eq('cpf', cpf)
     .eq('company_id', companyId)
     .maybeSingle();
@@ -264,37 +286,38 @@ async function lookupEmployee(body: Body): Promise<Response> {
   return json({ employee: data ?? null });
 }
 
-async function verifyPin(body: Body): Promise<Response> {
-  const employeeId = String(body.employeeId ?? '').trim();
-  const pin = String(body.pin ?? '');
-  if (!employeeId || !pin) return json({ error: 'Invalid employeeId or pin' }, 400);
-
+/**
+ * O PIN do funcionário confere? 'ok' | 'invalido' (inclui funcionário inexistente — mesma
+ * resposta, pra não dizer se o id existe) | 'erro' (banco).
+ */
+async function conferirPinDoFuncionario(employeeId: string, pin: unknown): Promise<'ok' | 'invalido' | 'erro'> {
   const { data, error } = await supabase
     .from('employees')
     .select('pin, pin_hash')
     .eq('id', employeeId)
     .maybeSingle();
-  if (error) return json({ error: 'Database error', details: error.message }, 500);
-
-  let valid = false;
-  if (data?.pin_hash) {
-    try {
-      valid = await bcryptjs.compare(pin, data.pin_hash);
-    } catch (err) {
-      console.error('[employee-public-api] bcrypt compare error:', err);
-      valid = false;
-    }
-  } else {
-    valid = Boolean(data?.pin && data.pin === pin);
+  if (error) {
+    console.error('[employee-public-api] leitura do PIN falhou:', error.message);
+    return 'erro';
   }
-  return json({ valid });
+  return (await pinConfere(pin, data)) ? 'ok' : 'invalido';
+}
+
+async function verifyPin(body: Body): Promise<Response> {
+  const employeeId = String(body.employeeId ?? '').trim();
+  const pin = String(body.pin ?? '');
+  if (!employeeId || !pin) return json({ error: 'Invalid employeeId or pin' }, 400);
+
+  const resultado = await conferirPinDoFuncionario(employeeId, pin);
+  if (resultado === 'erro') return json({ error: 'Database error' }, 500);
+  return json({ valid: resultado === 'ok' });
 }
 
 async function setPin(body: Body): Promise<Response> {
   const employeeId = String(body.employeeId ?? '').trim();
   const newPin = String(body.newPin ?? '');
   if (!employeeId) return json({ error: 'Invalid employeeId' }, 400);
-  if (!/^\d{4,6}$/.test(newPin)) {
+  if (!PIN_FORMATO.test(newPin)) {
     return json({ error: 'PIN deve ser numérico com 4 a 6 dígitos' }, 400);
   }
 
@@ -304,11 +327,24 @@ async function setPin(body: Body): Promise<Response> {
   // (sem gerar salt, só reconfere) responde normal em <1s — por isso verify-pin
   // continua async. hashSync roda tudo síncrono, sem essa trava.
   const pinHash = bcryptjs.hashSync(newPin, 10);
-  const { error } = await supabase
+
+  // 30/09/2026: SÓ NO 1º ACESSO. A condição vai NO PRÓPRIO UPDATE (sem PIN configurado, sem
+  // hash, sem texto) — duas chamadas ao mesmo tempo não conseguem as duas gravar, e quem já
+  // tem PIN não tem o PIN trocado por ninguém. Trocar PIN de quem já tem = painel (RPC com login).
+  const { data, error } = await supabase
     .from('employees')
     .update({ pin: null, pin_hash: pinHash, pin_configured: true })
-    .eq('id', employeeId);
+    .eq('id', employeeId)
+    .eq('pin_configured', false)
+    .is('pin_hash', null)
+    .or('pin.is.null,pin.eq.')
+    .select('id');
   if (error) return json({ error: 'Database error', details: error.message }, 500);
+  if (!data || data.length === 0) {
+    return json({
+      error: 'Este funcionário já tem PIN. Para trocar, peça ao responsável para resetar o PIN.',
+    }, 409);
+  }
 
   return json({ ok: true });
 }
@@ -376,6 +412,11 @@ async function faceDescriptor(body: Body): Promise<Response> {
   const employeeId = String(body.employeeId ?? '').trim();
   if (!employeeId) return json({ error: 'Invalid employeeId' }, 400);
 
+  // 30/09/2026: o rosto cadastrado é dado biométrico — só com o PIN da própria pessoa.
+  const pin = await conferirPinDoFuncionario(employeeId, body.pin);
+  if (pin === 'erro') return json({ error: 'Database error' }, 500);
+  if (pin === 'invalido') return json({ error: 'PIN inválido' }, 401);
+
   const { data, error } = await supabase
     .from('employees')
     .select('face_descriptor')
@@ -405,6 +446,12 @@ async function saveFace(body: Body): Promise<Response> {
   if (!Array.isArray(descriptor)) {
     return json({ error: 'Invalid descriptor (expected array)' }, 400);
   }
+
+  // 30/09/2026: trocar o rosto exige o PIN da própria pessoa — antes, com o id, qualquer um
+  // punha o PRÓPRIO rosto na ficha de outro e batia o ponto dele.
+  const pin = await conferirPinDoFuncionario(employeeId, body.pin);
+  if (pin === 'erro') return json({ error: 'Database error' }, 500);
+  if (pin === 'invalido') return json({ error: 'PIN inválido' }, 401);
 
   const { error } = await supabase
     .from('employees')
@@ -739,17 +786,8 @@ async function employeeReceipts(body: Body): Promise<Response> {
   if (donoErr) return json({ error: 'Database error (pin)', details: donoErr.message }, 500);
   if (!dono) return json({ error: 'Funcionario nao encontrado' }, 404);
 
-  let pinOk = false;
-  if (dono.pin_hash) {
-    try {
-      pinOk = await bcryptjs.compare(pin, dono.pin_hash);
-    } catch (err) {
-      console.error('[employee-public-api] bcrypt compare error:', err);
-      pinOk = false;
-    }
-  } else {
-    pinOk = Boolean(dono.pin && dono.pin === pin);
-  }
+  // 30/09/2026: a mesma conferência de todas as ações (_shared/pin.ts).
+  const pinOk = await pinConfere(pin, dono);
   // Mensagem generica de proposito: nao diz se foi o PIN ou o id que nao bate.
   if (!pinOk) return json({ error: 'PIN invalido' }, 401);
 

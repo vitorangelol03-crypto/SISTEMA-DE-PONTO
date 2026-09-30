@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { LIMITE_FACIAL } from "../_shared/faceIdentify.ts";
+import { pinConfere } from "../_shared/pin.ts";
 import {
   MENSAGEM_APARELHO_NAO_AUTORIZADO,
   decidirAparelho,
@@ -194,6 +195,7 @@ Deno.serve(async (req: Request) => {
       marking_position: markingPositionRaw,
       face_descriptor_now: faceDescriptorNow,
       device_token: deviceToken,
+      pin: pinDoCorpo,
     } = await req.json();
 
     if (!employee_id || !cpf || !clock_type) {
@@ -379,6 +381,27 @@ Deno.serve(async (req: Request) => {
       if (!enrolled) {
         // 1ª vez de quem não tem rosto: cadastra o rosto enviado (uma vez) e segue.
         if (!fresh) {
+          return new Response(
+            JSON.stringify({ success: false, face_error: true, message: "Cadastre o rosto para bater ponto" }),
+            { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+          );
+        }
+        // 30/09/2026 (segurança): cadastrar o rosto por aqui exige o PIN da própria pessoa.
+        // Sem isso, quem soubesse o CPF de alguém SEM rosto cadastrava o PRÓPRIO rosto na ficha
+        // dele e passava a bater o ponto dele. A tela de ponto manda o PIN que a pessoa acabou
+        // de digitar; o caminho normal nem chega aqui (a tela cadastra o rosto antes, com PIN).
+        const { data: pinRow, error: pinErr } = await supabase
+          .from("employees")
+          .select("pin, pin_hash")
+          .eq("id", employee_id)
+          .maybeSingle();
+        if (pinErr) {
+          return new Response(
+            JSON.stringify({ error: pinErr.message }),
+            { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+          );
+        }
+        if (!(await pinConfere(pinDoCorpo, pinRow))) {
           return new Response(
             JSON.stringify({ success: false, face_error: true, message: "Cadastre o rosto para bater ponto" }),
             { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },

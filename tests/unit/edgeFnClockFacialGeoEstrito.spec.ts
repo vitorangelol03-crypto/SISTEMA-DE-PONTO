@@ -42,7 +42,10 @@ const ENV = { ...readDotEnv(), ...process.env };
 const SUPABASE_URL = ENV.VITE_SUPABASE_URL ?? '';
 const ANON_KEY = ENV.VITE_SUPABASE_ANON_KEY ?? '';
 const SERVICE_KEY = ENV.SUPABASE_SERVICE_ROLE_KEY ?? '';
-const FN_URL = `${SUPABASE_URL}/functions/v1/clock-in-validated`;
+// 30/09/2026: dá pra apontar pras funções de ENSAIO (código novo) antes de publicar as de produção.
+const FN_URL = ENV.CLOCK_FN_URL || `${SUPABASE_URL}/functions/v1/clock-in-validated`;
+const PUBLIC_FN_URL = ENV.EMPLOYEE_PUBLIC_FN_URL || `${SUPABASE_URL}/functions/v1/employee-public-api`;
+const PIN = '4821';
 
 const HAS_SERVICE_ROLE = Boolean(SERVICE_KEY && SUPABASE_URL && ANON_KEY);
 
@@ -170,6 +173,14 @@ describe.skipIf(!HAS_SERVICE_ROLE)(
         face_registered: false,
       });
       employeeId = String(employee.id);
+
+      // 30/09/2026: cadastrar o rosto pela batida exige o PIN — cria no 1º acesso, como na tela.
+      const pinRes = await fetch(PUBLIC_FN_URL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${ANON_KEY}`, apikey: ANON_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-pin', employeeId, newPin: PIN }),
+      });
+      expect(pinRes.status).toBe(200);
     }, 30_000);
 
     afterAll(async () => {
@@ -199,7 +210,29 @@ describe.skipIf(!HAS_SERVICE_ROLE)(
       expect(semRosto.body.success).toBe(false);
       expect(semRosto.body.face_error).toBe(true);
 
-      // ── 1ª marcação: manda o rosto pela 1ª vez → CADASTRA sozinho e deixa bater ──
+      // ── 30/09/2026: rosto pela 1ª vez SEM o PIN → recusa e NÃO cadastra (senão quem soubesse
+      //    o CPF de alguém sem rosto punha o PRÓPRIO rosto na ficha dele) ──
+      const semPin = await callClock({
+        employee_id: employeeId,
+        cpf,
+        company_id: companyId,
+        clock_type: 'entry',
+        marking_position: 1,
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LNG,
+        face_descriptor_now: OTHER_FACE,
+      });
+      expect(semPin.status).toBe(200);
+      expect(semPin.body.success).toBe(false);
+      expect(semPin.body.face_error).toBe(true);
+      const [empSemPin] = await supaSelect<{ face_registered: boolean; face_descriptor: unknown }>(
+        'employees',
+        `select=face_registered,face_descriptor&id=eq.${employeeId}`,
+      );
+      expect(empSemPin.face_registered).toBe(false);
+      expect(empSemPin.face_descriptor).toBeNull();
+
+      // ── 1ª marcação: manda o rosto pela 1ª vez COM o PIN → CADASTRA sozinho e deixa bater ──
       const cadastra = await callClock({
         employee_id: employeeId,
         cpf,
@@ -209,6 +242,7 @@ describe.skipIf(!HAS_SERVICE_ROLE)(
         latitude: COMPANY_LAT,
         longitude: COMPANY_LNG,
         face_descriptor_now: ENROLLED,
+        pin: PIN,
       });
       expect(cadastra.status).toBe(200);
       expect(cadastra.body.success).toBe(true);

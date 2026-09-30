@@ -41,7 +41,8 @@ const ENV = { ...readDotEnv(), ...process.env };
 const SUPABASE_URL = ENV.VITE_SUPABASE_URL ?? '';
 const ANON_KEY = ENV.VITE_SUPABASE_ANON_KEY ?? '';
 const SERVICE_KEY = ENV.SUPABASE_SERVICE_ROLE_KEY ?? '';
-const FN_URL = `${SUPABASE_URL}/functions/v1/employee-public-api`;
+// 30/09/2026: dá pra apontar pra uma função de ENSAIO (código novo) antes de publicar a de produção.
+const FN_URL = ENV.EMPLOYEE_PUBLIC_FN_URL || `${SUPABASE_URL}/functions/v1/employee-public-api`;
 const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 
 const HAS_SERVICE_ROLE = Boolean(SERVICE_KEY && SUPABASE_URL && ANON_KEY);
@@ -249,8 +250,10 @@ describe.skipIf(!HAS_SERVICE_ROLE)(
       expect(row.pin_configured).toBe(false);
     });
 
-    it('save-face: descriptor 128-float array + photoUrl → {ok:true} + DB face_registered=true', async () => {
+    it('save-face: descriptor 128-float array + photoUrl + PIN da pessoa → {ok:true} + DB face_registered=true', async () => {
       currentEmployee = await createFixtureEmployee('saveface');
+      // 30/09/2026: save-face exige o PIN da própria pessoa — cria no 1º acesso, como na tela.
+      expect((await callEdgeFn('set-pin', { employeeId: currentEmployee.id, newPin: '4821' })).status).toBe(200);
 
       // face-api.js gera descriptor de 128 floats no range [-1, 1].
       const descriptor: number[] = Array.from({ length: 128 }, () => Math.random() * 2 - 1);
@@ -258,6 +261,7 @@ describe.skipIf(!HAS_SERVICE_ROLE)(
 
       const { status, body } = await callEdgeFn('save-face', {
         employeeId: currentEmployee.id,
+        pin: '4821',
         descriptor,
         photoUrl,
       });
@@ -321,6 +325,65 @@ describe.skipIf(!HAS_SERVICE_ROLE)(
       // date é YYYY-MM-DD no fuso BRT — checa formato e dia razoável.
       expect(attempt.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(typeof attempt.attempted_at).toBe('string');
+    });
+
+    // ── Segurança (30/09/2026, "pode corrigir"): ninguém troca a senha nem o rosto de outro ──
+    // O caminho do golpe, provado antes da correção: lookup-employee (só o CPF) devolvia a FICHA
+    // inteira (id, pin_hash, rosto...); set-pin trocava o PIN de qualquer um; save-face trocava o
+    // rosto de qualquer um. Juntos: pôr o PRÓPRIO rosto na ficha de um colega e bater por ele.
+
+    it('lookup-employee devolve só os campos da tela pública — nada de pin_hash, rosto ou PIX', async () => {
+      currentEmployee = await createFixtureEmployee('lookup');
+      expect((await callEdgeFn('set-pin', { employeeId: currentEmployee.id, newPin: '4821' })).status).toBe(200);
+
+      const { status, body } = await callEdgeFn('lookup-employee', { cpf: currentEmployee.cpf, companyId: CARATINGA_ID });
+      expect(status).toBe(200);
+      const emp = body.employee as Record<string, unknown>;
+      expect(emp.id).toBe(currentEmployee.id);
+      expect(emp.pin_configured).toBe(true);
+      for (const segredo of ['pin', 'pin_hash', 'face_descriptor', 'face_photo_url', 'pix_key', 'phone']) {
+        expect(emp, `não pode vir ${segredo}`).not.toHaveProperty(segredo);
+      }
+    });
+
+    it('set-pin só no 1º acesso: quem já tem PIN não tem o PIN trocado (409) — e o antigo segue valendo', async () => {
+      currentEmployee = await createFixtureEmployee('setpin-2x');
+      expect((await callEdgeFn('set-pin', { employeeId: currentEmployee.id, newPin: '4821' })).status).toBe(200);
+
+      const troca = await callEdgeFn('set-pin', { employeeId: currentEmployee.id, newPin: '9999' });
+      expect(troca.status).toBe(409);
+      expect(String(troca.body.error)).toMatch(/já tem PIN/);
+
+      expect((await callEdgeFn('verify-pin', { employeeId: currentEmployee.id, pin: '4821' })).body).toEqual({ valid: true });
+      expect((await callEdgeFn('verify-pin', { employeeId: currentEmployee.id, pin: '9999' })).body).toEqual({ valid: false });
+    });
+
+    it('save-face sem PIN ou com PIN errado: 401 e o rosto NÃO muda', async () => {
+      currentEmployee = await createFixtureEmployee('saveface-sem-pin');
+      expect((await callEdgeFn('set-pin', { employeeId: currentEmployee.id, newPin: '4821' })).status).toBe(200);
+      const descriptor = Array.from({ length: 128 }, () => 0.5);
+
+      expect((await callEdgeFn('save-face', { employeeId: currentEmployee.id, descriptor })).status).toBe(401);
+      expect((await callEdgeFn('save-face', { employeeId: currentEmployee.id, pin: '0000', descriptor })).status).toBe(401);
+
+      const [row] = await supaSelect<{ face_registered: boolean; face_descriptor: unknown }>(
+        'employees', `select=face_registered,face_descriptor&id=eq.${currentEmployee.id}`,
+      );
+      expect(row.face_registered).toBe(false);
+      expect(row.face_descriptor).toBeNull();
+    });
+
+    it('face-descriptor (o rosto cadastrado) só com o PIN da pessoa', async () => {
+      currentEmployee = await createFixtureEmployee('facedesc');
+      expect((await callEdgeFn('set-pin', { employeeId: currentEmployee.id, newPin: '4821' })).status).toBe(200);
+      const descriptor = Array.from({ length: 128 }, (_, i) => i / 128);
+      expect((await callEdgeFn('save-face', { employeeId: currentEmployee.id, pin: '4821', descriptor })).status).toBe(200);
+
+      expect((await callEdgeFn('face-descriptor', { employeeId: currentEmployee.id })).status).toBe(401);
+      expect((await callEdgeFn('face-descriptor', { employeeId: currentEmployee.id, pin: '1111' })).status).toBe(401);
+      const certo = await callEdgeFn('face-descriptor', { employeeId: currentEmployee.id, pin: '4821' });
+      expect(certo.status).toBe(200);
+      expect(certo.body.descriptor).toHaveLength(128);
     });
   },
 );
