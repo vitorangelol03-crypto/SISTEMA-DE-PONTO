@@ -350,3 +350,38 @@ localização e zero bloqueio de bônus reais no dia; a cerca voltou a -19.80242
    ainda mexe na cerca real — o certo é refazer em empresa de teste).
 3. Pendências de antes continuam: trocar a senha da aba Admin (§10), ligar a trava quando quiser
    (§9), recadastrar 3 rostos "no limite" (§9).
+
+## 13. Noite — os testes desatualizados refeitos numa EMPRESA DE TESTE (`c8e8d5d`)
+
+**Victor:** *"sim pode com cuidado"* (§12, item 2 do "Precisa do Victor").
+
+- **08 (4 casos) e 62 "com GPS liberado" (2):** batiam ponto com funcionário SEM rosto em
+  Caratinga (facial obrigatória) → o servidor recusava; o mock da tela só engana o navegador. E o
+  08 TROCAVA a cerca real de Caratinga por ~3 min a cada rodada. Agora batem numa empresa nova, só
+  do teste, com a MESMA cerca de antes (08: centro VALID_LAT/LON, raio 200; 62: ponto do CD, raio
+  150) e sem facial obrigatória.
+- **78 e 80:** digitavam o CPF direto no /clock (Caratinga abre na câmera). Agora a empresa de
+  teste (que abre no CPF) recebe os cadastros; o 2626 a escolhe no login; o /clock passa pelo
+  `irAoCampoDeCpfDoPonto`. O 78 cria na empresa uma pessoa com "Triagem - Shopee" pro <select>
+  da página pública oferecer a função.
+- **Auxiliares novos** (`tests/integrity-helpers.ts`): `criarEmpresaDeTeste` / `apagarEmpresaDeTeste`
+  — este RECUSA empresa sem "PW Test " no nome e deixa o erro subir se sobrar algo ligado a ela (as
+  tabelas com company_id têm FK sem cascata: nada fica órfão em silêncio). `loginAs(..., { empresa })`
+  e `createTestEmployee({ companyId })` — aditivos, sem o parâmetro fica igual antes.
+
+### Validação
+| O quê | Resultado |
+|---|---|
+| Os 4 specs refeitos | **10/10** (antes: 8 vermelhos, iguais no código antigo) |
+| Amostra do login padrão (01 + 127) | 13/13 |
+| lint (projeto inteiro) | 0 |
+| Config real de Caratinga/Ponte Nova (md5 de empresas + cercas + facial + nº de funcionários) | **idêntica** antes × depois (`5479a3e7…`) |
+| Banco no fim | 0 empresa / funcionário / semana de pagamento / ponto de teste; 0 fraude de localização real no dia |
+| CI do `c8e8d5d` (run 36791057396) | tsc+eslint ✓ · vitest ✓ · playwright **rodando** às 20:36 (pausa pra reiniciar o PC) — conferir na volta |
+
+### ⏸️ 20:36 — PAUSA (Victor vai reiniciar o PC)
+Tudo commitado e enviado (`28b9d7d` app no ar, `c8e8d5d` testes, checkpoints). Nada rodando que
+dependa do PC (servidor de teste desligado; o CI roda no GitHub). **Ao voltar:** conferir o
+playwright do run **36791057396** (`gh run view 36791057396`) — o `c8e8d5d` só mexe em testes; se
+vier vermelho, mostrar pro Victor antes de mexer. Pendências dele: instalar o app no tablet (§12),
+trocar a senha da aba Admin (§10), ligar a trava quando quiser (§9), 3 rostos "no limite" (§9).
