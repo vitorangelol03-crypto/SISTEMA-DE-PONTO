@@ -281,3 +281,72 @@ sistema · tela cheia total · tela sempre acesa com o app de ponto aberto. **J�
 ### Como retomar
 1. Ler este §11. 2. As 3 decisões JÁ FORAM RESPONDIDAS ("sim nos três") — não perguntar de novo.
 3. Implementar 1→4, fotos DEPOIS nos 4 tamanhos, E2E, validar e publicar.
+
+## 12. Tarde (retomada ~13:15) — a tela de ponto virou o APLICATIVO "Ponto" (NO AR, `28b9d7d`)
+
+**Pedido (§11) + decisões "sim nos três":** nome "Ponto" + relógio azul · tela cheia total · tela
+sempre acesa com o app aberto. **Critério combinado (e conferido):** no tablet, em pé ou deitado,
+cada tela do ponto aparece INTEIRA (sem rolar, sem cortar, sem botão por cima de outro); o
+navegador lê o app "Ponto" só na tela de ponto; a pinça não dá zoom lá; aberto como app a tela
+não apaga.
+
+### O que mudou
+- **App:** `public/ponto.webmanifest` (id/start_url/scope `/clock`, `display: fullscreen`, azul
+  #2563eb, ícones 192/512 comum + "maskable"). O link do app entra SÓ enquanto a tela de ponto
+  está aberta (`src/components/employee-clock/useAppDoPonto.ts`) — o painel continua site.
+  - ⚠️ Sem `orientation` DE PROPÓSITO: com "any" o Chrome do Android ignora a trava de rotação
+    do aparelho (tablet na parede giraria com um esbarrão). Sem ela, gira junto com o tablet.
+  - ⚠️ Sem `viewport-fit=cover` DE PROPÓSITO: o aparelho mantém a tela fora do entalhe da câmera.
+  - ⚠️ Convite automático de instalar SEGURADO (`beforeinstallprompt`): o celular pessoal dos
+    funcionários não passa a ver "Adicionar Ponto à tela inicial". Instala-se pelo menu ⋮.
+- 🔴 **Ícones:** os 3 PNGs antigos (favicon-16/32 e apple-touch-icon, de out/2025) eram TEXTO
+  (base64 salvo como arquivo, e cortado) — nenhum aparelho abria. Refeitos + 4 novos pelo
+  `scripts/gerar-icones-do-ponto.mjs` (o Chromium desenha o `favicon.svg`; rodar de novo se o
+  desenho mudar). iPhone e "maskable" sem transparência.
+- **Encaixe:** a letra-base da tela de ponto vai de 16px (celular: IGUAL a antes) a 20px (tablet
+  10") pela largura/altura (`index.css`, `html.tela-ponto`); tudo em rem cresce junto — tecla da
+  senha 66→82px no tablet 10", 73px no 7" deitado. Deitado (≥640px) o cabeçalho azul vai pro
+  lado (`deitado:` no `tailwind.config`); no 1º acesso a explicação vai pra coluna azul, senão o
+  "Próximo" saía da tela no 7" deitado (o teste pegou: 642px numa tela de 600).
+- **Zoom** travado só no /clock (viewport `user-scalable=no` + `touch-action`), devolvido ao sair.
+- **Tela acesa** (Screen Wake Lock) só aberto como app; pedida de novo quando a tela volta.
+- 🔴 **Defeito ANTIGO achado pelo teste novo:** na câmera sem CPF (todas as larguras), o botão
+  "Prefere digitar CPF e senha?" ficava EM CIMA do aviso — "Aproxime o rosto", "Identificando..."
+  e "Não reconheci" não apareciam. O aviso sobe enquanto o botão está na tela.
+- **Janelas por cima** (câmera bloqueada, erro/carregando das 3 câmeras, saída rápida, GPS/câmera
+  bloqueados) rolam em vez de cortar (no celular deitado cortavam o título e o botão de CPF).
+- **No app instalado** não há cadeado/endereço: "câmera/localização bloqueada" ensina o caminho
+  pelo Chrome (⋮ → Configurações → Configurações do site). No navegador, o texto de sempre.
+- Aviso e barra de confiança da câmera em rem (celular: mesmos px; no tablet a barra sobe junto).
+
+### Validação
+| O quê | Resultado |
+|---|---|
+| typecheck · lint (projeto inteiro) · build | 0 · 0 · limpo |
+| Unit (133 arquivos) | **2.025 passaram**, 1 pulado (o de sempre); novos: `appDoPonto` (17), `iconesDoAppDoPonto` (6), `faceScanFrame` (+3) = 26 (1.999 → 2.025) |
+| A/B unit | ícones antigos → "não é um PNG de verdade" |
+| E2E novo `tests/128` (cliques reais, 6 tamanhos: tablet 800×1280/1280×800, 7" 600×1024/1024×600, celular 390×844/844×390) | **12/12**; no código antigo **10/10 VERMELHO** (aviso×botão em todos os tamanhos, senha que não cabia no 7" deitado, janela cortada no celular deitado, sem app, zoom 2x, tela apagando) |
+| E2E regressão | 02, 23, 38, 62 (guardas), 79, 100-K, 101, 107, 127 (rosto de verdade, 9 passos) **verdes** |
+| E2E que falham IGUAL no código antigo (provado A/B, não mexi) | 08 (4 casos) e 62 "GPS liberado" (2): criam gente SEM rosto em Caratinga → "Cadastre o rosto para bater ponto" (facial obrigatória ligada em produção); 78 e 80: digitam o CPF direto, mas Caratinga abre na câmera |
+| CSS do build × CSS no ar | nenhuma regra do painel mudou; 7 acrescentadas, todas da tela de ponto |
+| Produção (15:07) | index/JS/CSS/manifest/7 PNGs **idênticos byte a byte** ao build testado; tablet em pé/deitado: câmera pronta em 4–6s, aviso não encavala, app lido (tela cheia, 0 erro), pinça 1,00, 0 erro de página |
+| Banco no fim | 0 funcionário/empresa/tablet/ponto de teste; trava do tablet DESLIGADA nas 2 empresas |
+| CI do `28b9d7d` (run 36756235211) | **verde nos 3 jobs** às 15:18: tsc+eslint, vitest (unit, com os testes ao vivo das edge fns), playwright (e2e) |
+
+⚠️ Uma vez rodei a bateria unit JUNTO com a regressão B — contra a decisão de 20/07 ("nunca em
+paralelo com Playwright", carga = flake). Não interferiu: as 2 falhas daquela rodada (78/80)
+repetiram sozinhas, iguais, no código antigo, e o resto passou. Não repetir.
+
+### ⚠️ Lição (memória nova `reference_teste_08_mexe_na_cerca_real`)
+O `tests/08` troca a cerca REAL de Caratinga (`geolocation_config`, que o servidor usa) por ~3 min
+e só devolve no fim. Rodei 2x hoje sem saber; conferido: zero ponto fora do raio, zero fraude de
+localização e zero bloqueio de bônus reais no dia; a cerca voltou a -19.8024282/-42.1361237/150.
+
+### Precisa do Victor
+1. **Instalar no tablet** (passo a passo na resposta da sessão): Chrome → endereço do sistema +
+   `/clock` → ⋮ → **Instalar app** → abrir pelo ícone azul "Ponto" → permitir câmera e localização
+   na 1ª vez → (se for usar a trava) "Ativar este aparelho como tablet de ponto" com o código do 2626.
+2. **Decidir** se atualizo os testes 08/62/78/80 (hoje falham por estarem desatualizados; o 08
+   ainda mexe na cerca real — o certo é refazer em empresa de teste).
+3. Pendências de antes continuam: trocar a senha da aba Admin (§10), ligar a trava quando quiser
+   (§9), recadastrar 3 rostos "no limite" (§9).
