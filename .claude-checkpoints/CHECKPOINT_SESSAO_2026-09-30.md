@@ -229,3 +229,52 @@ Ele respondeu "pode seguir" ao plano com as recomendações — valem as 5:
 - Fica aberto (não pedido): `today-attendance`/`attendance-history` entregam o ponto (com
   latitude/longitude) de qualquer id; a batida confia nas coordenadas que o aparelho manda —
   só a trava do tablet fecha isso de verdade.
+
+## 11. ⏸️ PAUSA PRA REINICIAR O PC — RETOMAR EXATAMENTE DAQUI
+
+**Estado no momento da pausa (30/09 ~11:25):** tudo commitado e no ar (último código `1141fb6`,
+checkpoint `4b453dc`+este), CI verde, trava do tablet DESLIGADA nas 2 empresas, nenhum tablet
+cadastrado, banco sem resto de teste. Nada rodando que dependa do PC.
+
+### Pedido novo do Victor (ainda NÃO programado — esperando as 3 decisões dele)
+*"a tela do ponto vai ficar responsiva no touch, encaixadinha na tela... funções de mobile onde
+você vai no navegador e consegue instalar como se fosse um aplicativo... ocupando a tela certinho
+sem parecer que está aberto no navegador... na horizontal ou na vertical... sem nada cortado ou
+com muito zoom"*.
+
+**Plano apresentado (ele ainda não respondeu):**
+1. App instalável (PWA): `manifest.webmanifest` (nome, ícone, cor, `display: fullscreen` com
+   `display_override`, `orientation: any`, `start_url: /clock`, `scope: /clock` — assim só a tela
+   de ponto é instalável, o painel não), ícones 192/512 + maskable gerados a partir do
+   `public/favicon.svg` (relógio azul), e **consertar o `public/apple-touch-icon.png`, que está
+   CORROMPIDO** (PIL não abre). Metas do iOS (apple-mobile-web-app-*).
+2. Tela encaixada: cartão maior no tablet (`md:`/`lg:`), teclado e letras maiores pro dedo,
+   altura com `100dvh` (sem cortar embaixo), variantes `landscape:`/`portrait:` do Tailwind 3.4,
+   deitado usando melhor a largura, safe-area (`viewport-fit=cover` + `env(safe-area-inset-*)`).
+3. Zoom travado SÓ na tela de ponto (meta viewport trocado no mount do /clock e devolvido ao sair;
+   `touch-action: manipulation`) — o painel continua com zoom.
+4. Tela sempre acesa com o app de ponto aberto (Screen Wake Lock, re-pede ao voltar a tela).
+5. Testes: fotos em 4 tamanhos (tablet em pé 800×1280, deitado 1280×800, 7" deitado 1024×600,
+   celular 390×844) conferindo `scrollWidth ≤ innerWidth` e nada fora da tela + E2E 127.
+
+**As 3 decisões pendentes (com a minha recomendação):**
+1. Nome/ícone no tablet: **"Ponto" + o relógio azul do sistema** (ou ele manda o logo da empresa).
+2. Tela cheia total (some a barra de hora/bateria do Android): **sim**.
+3. Tela sempre acesa com o app de ponto aberto: **sim**.
+
+### O que já foi apurado (não refazer)
+- **Não precisa de service worker próprio:** o Chrome instala pelo menu ⋮ → "Instalar app" sem
+  SW desde a v108 no celular/tablet (fonte: developer.chrome.com/blog/update-install-criteria).
+  Só o banner automático exigiria fetch handler — dispensável (instala-se uma vez por tablet).
+  ⚠️ E um SW em `/` **derrubaria o `firebase-messaging-sw.js`** (registrado em `/` por
+  `src/lib/pushNotifications.ts:101`) — não criar SW no escopo `/`.
+- Fotos de ANTES em `~/projetos/shots/antes/` (disco do Linux, sobrevive ao reinício): no tablet a
+  tela é um cartão de 448px no meio (`max-w-md`), letras pequenas, muito espaço vazio; nada
+  cortado, `scrollWidth = innerWidth` nos 4 tamanhos.
+- Tailwind 3.4.1 (tem `landscape:`/`portrait:`).
+- Cópia de teste no Linux: `~/projetos/ponto-teste` (sincronizar com rsync antes de testar —
+  memória `reference_testar_em_copia_linux`). O Vite de screenshot que estava de pé foi derrubado.
+
+### Como retomar
+1. Ler este §11. 2. Perguntar ao Victor as 3 decisões (se ele não tiver respondido).
+3. Com o "pode seguir": implementar 1→4, fotos DEPOIS nos 4 tamanhos, E2E, validar e publicar.

@@ -1,5 +1,7 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **⏸️ PAROU AQUI (30/09 ~11:25, reinício do PC): tela de ponto como APLICATIVO INSTALÁVEL + responsiva no tablet** — plano pronto, **esperando 3 decisões do Victor** (nome/ícone "Ponto"+relógio azul · tela cheia total · tela sempre acesa). Nada programado ainda. Tudo o mais commitado, no ar e com CI verde. Retomar pelo **§11 de `CHECKPOINT_SESSAO_2026-09-30.md`**.
+
 > **📌 30/09 — PONTO SÓ NO TABLET (NO AR, TRAVA DESLIGADA) + A FACIAL SEM CPF QUE NÃO RECONHECIA.**
 > Commit `eba2e45` · edge fns `clock-in-validated` v17 / `employee-public-api` v18 · migrations
 > `20260930034644` + `20260930035209`.
