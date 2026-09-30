@@ -1,5 +1,23 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **📌 30/09 — PONTO SÓ NO TABLET (NO AR, TRAVA DESLIGADA) + A FACIAL SEM CPF QUE NÃO RECONHECIA.**
+> Commit `eba2e45` · edge fns `clock-in-validated` v17 / `employee-public-api` v18 · migrations
+> `20260930034644` + `20260930035209`.
+>
+> 🔴 **Trava DESLIGADA nas 2 empresas por ordem do Victor** (*"deixa tudo pronto pra ativar, mas
+> por enquanto ainda permite digitar o CPF... a gente tem que validar primeiro"*). **Não ligar sem
+> ordem dele.** Como ligar: Configurações → "Tablets de ponto" (só 2626).
+> 🔴 **Facial sem CPF recusava gente certa:** limite 0,42 × 0,50 do 1:1 — 250 de 597 batidas faciais
+> aceitas em 14 dias seriam recusadas. Agora o mesmo número (no ar desde 07:56).
+> 🔴 **Três defeitos antigos das telas de câmera:** detecções EMPILHADAS (56 ao mesmo tempo, rosto
+> aos 35s × 13s com guarda); `<video>` inexistente durante "Carregando câmera" (abria a câmera 2x);
+> "câmera bloqueada" pra QUALQUER recusa (agora a causa certa + erro registrado no servidor).
+> ✅ **Meta do Victor 5–7s:** nome na tela → ponto gravado **3,4s** no teste de cliques reais (antes,
+> mediana real 7,1s) — GPS pedido quando reconhece, consultas em paralelo.
+> ✅ **E2E com ROSTO de verdade** (câmera falsa com retrato NASA, domínio público): `tests/127`, 7/7.
+> Unit 1.995 · banco 17 passos · edge fns em produção · produção conferida por conteúdo.
+> ⚠️ Detalhe, os 3 erros MEUS que o teste pegou e as pendências de segurança: `CHECKPOINT_SESSAO_2026-09-30.md`.
+
 > **📌 22/09 (madrugada) — TRÊS COISAS ERRADAS NO DINHEIRO E NA OPERAÇÃO.** Commits `740f33f` + os desta leva.
 >
 > 🔴 **O TETO DO SALÁRIO FAMÍLIA ESTAVA ERRADO:** 1.906,04 no sistema × **1.980,38** oficial
@@ -2504,6 +2522,7 @@ janela). **Nada foi pro ar** — espera o OK dele.
 
 | Arquivo | O que cobre | Status |
 |---|---|---|
+| `CHECKPOINT_SESSAO_2026-09-30.md` | **Mais recente.** Ponto só no tablet (código de ativação do 2626, trava por empresa — NO AR DESLIGADA por ordem do Victor) + facial sem CPF (limite 0,42→0,50; detecções empilhadas; `<video>` que abria a câmera 2x; "câmera bloqueada" falso; GPS pedido cedo; nome→ponto 3,4s) + E2E com rosto de verdade (`tests/127`) + 3 erros meus pegos pelo teste + pendências de segurança (`save-face` sem senha, `admin_secret_password` legível). | ativo |
 | `CHECKPOINT_SESSAO_2026-09-21.md` | **Mais recente.** As tabelas de INSS e IRRF estavam ERRADAS e o metodo de calculo tambem. INSS: 3 das 4 faixas e o teto errados (so acima de R$ 2.902 — onde o gabarito de 11 recibos nao chegava). IRRF sem a reducao da Lei 15.270/2025, cobrando imposto de quem a lei isenta. 🎯 E o achado maior: trocar pela tabela oficial deixou o gabarito dos 11 recibos VERMELHO em 4 — a tabela publica dois metodos que discordam em 1 centavo, e a contabilidade usa `base x aliquota - parcela a deduzir` (0 erros em 11), nao a soma faixa a faixa. Isso explicou o `1.621,30`: era o limite ENTORTADO pra fazer o metodo errado imitar o certo. Corrigido com fonte oficial + 3 migrations; reducao so na folha do mes e so se quem chama pedir. Gabarito da Receita (Rita 6.000 -> 382,88) bate no centavo. 118 arquivos / 1.858 unitarios · E2E folha 37/37 · tsc · lint · build. Tabelas seguem NAO confirmadas: 3 perguntas afiadas pro contador. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-20.md` | (§8) 🔴 **EXCLUIR QUINZENA DO DRIVERPAY NUNCA FUNCIONOU** — botao so aparece em quinzena CONCLUIDA e o trigger recusa DELETE dos lancamentos dela (inclusive por CASCADE); provado pelo rastro de rede (HTTP 400), corrigido destravando por dentro com o `reopenPeriod` que ja existia, SEM migration, e devolvendo a trava se falhar no meio. Pedido do Victor: *"testa todo o sistema, o fluxo completo... se ele calcula os valores corretos e pode realmente confiar nessas folhas"*. Montado um **conferidor independente** (implementacao separada em Python, escrita da regra da lei) rodando o sistema sobre **431 casos**: **5.640 conferencias, 0 divergencias** — refaz INSS/IRRF/FGTS por fora E checa invariantes (liquido fecha, premiacao e salario familia fora de toda base, 1a parcela do 13o sem imposto, 1a+2a = unica, justa causa sem multa, art. 130 por periodo). 🔴 **Achou bug real: o centavo do truncamento** (`Math.floor(v*100)`, 5.06*100 = 505.99999999999994) em 5,34% dos salarios de mes nao cheio, sempre contra o funcionario; raiz era estar **copiado em 4 arquivos** → `utils/folha/dinheiro.ts`, teste vermelho primeiro. 🔴 **Risco maior que o bug: as tabelas estao `confirmado: false`** — so a 1a e 2a faixa do INSS foram provadas; 12%, 14%, teto e IRRF inteiro, nunca. 🔴 Duas armadilhas de ferramenta fizeram uma rodada mentir (`--reporter=basic` inexistente no vitest 4; `codigo=$?` com acento no bash). Tutorial ganhou a 10a pagina com a conta do INSS aberta. 1.833 unitarios / 115 arquivos · E2E folha 37/37 · build · tsc · lint. Producao intocada. | 🟢 ATIVO |
 | `CHECKPOINT_SESSAO_2026-09-19.md` | A FOLHA FICOU COMPLETA em 4 levas: (0+1) o recibo jogava os descontos da folha fora e a folha chegou ao relatorio e a tela; (2) 13o salario com as duas parcelas, avos e media do noturno, migration `20260919220837` aplicada e provada; (3) ferias por avos com o alerta de VENCIDA; (4) rescisao com os 4 motivos, aviso projetado e migration `20260920003533`; (5) 2a via do 13o e da rescisao (migration `20260920023702`), releitura e nunca recalculo; (6) 13o e rescisao no relatorio, por data e verba a verba; (7) desligado some das telas (regra em `utils/desligados.ts`), com a trava de bater ponto escrita mas NAO publicada. Tambem: o ponto do milhar voltou pro dinheiro das telas. 18 das 21 fichas sem data de admissao bloqueiam o uso real das ferias. O recibo de carteira assinada jogava os descontos da folha fora: `linhasDoRecibo` mandava TODAS as linhas pra *proventos*, então falta/INSS/IRRF saíam como "+ R$ 0,00", o total de descontos dava zero e o líquido ignorava o salário (provado gerando o PDF e lendo o texto de dentro). Passou porque os 9 testes do recibo só usavam folha sem falta e sem imposto. Consertado + `totaisDoRecibo` extraído; `utils/folha/folhaDaPessoa` novo (uma conta só pra recibo, relatório e tela); relatórios com salário/noturno/sal. família/férias/faltas/INSS/IRRF e FGTS como custo-empresa; tela do Financeiro mostra o salário. Folha só em MÊS FECHADO, com aviso no recorte menor. 4 decisões do Victor gravadas. 104 arquivos / 1.649 unitários + E2E 116 3/3. Produção inerte: 0 das 105 fichas tem salário. | 🟢 ATIVO |
@@ -2557,6 +2576,9 @@ janela). **Nada foi pro ar** — espera o OK dele.
 | `CHECKPOINT_PROXIMOS_PASSOS.md` | **Reescrito em 31/08/2026:** pendências fechadas, **decisões que o Victor precisa tomar** (segurança com SQL pronto, policy só-2626, filtro NF, travas do import, Dependabot npm), pendências técnicas abertas e o **roadmap** (facial+geo sem brecha, 4 batidas, tablet, facial sem CPF). A versão de 05/2026 (go-live/APK) está no git. | 🟢 ATIVO — ler ao retomar |
 
 ## ⚖️ Decisões ativas (não re-perguntar)
+
+- **Ponto só no tablet (Victor, 30/09/2026):** só o **2626** cadastra tablet e liga/desliga a trava; com a trava ligada **todo mundo** só bate no tablet (supervisor incluído); no tablet continua o **CPF + senha** (rosto sempre exigido); a trava **nasceu desligada e fica desligada até ele mandar ligar** ("validar primeiro, o pessoal batendo normal"). Um tablet pode atender as 2 empresas.
+- **Facial (Victor, 30/09/2026):** sem CPF (1:N) exige o **mesmo limite do 1:1 (0,50)**; meta de tempo **5–7s** da pessoa parar na frente até o ponto gravado; a contagem de 3s com o nome (04/09) continua.
 
 - **Cartão de print sem planilha (Victor, 22/09/2026):** enquanto a planilha da plataforma não é importada, o pedido "pra todos" só cobra print de quem **entregou naquela plataforma nas 2 últimas quinzenas**; **entregador novo (sem histórico) não é cobrado** — o pedido automático pós-importação pega quem tem pacote; quem fica de fora ganha **selo cinza "nunca entregou"** na grade. Pedido **individual** cobra sempre (escolha do operador). Com a planilha na mão, nada muda. A conta roda nos dois lados (painel e tela do entregador) travada por teste lado a lado.
 - **Salário família (22/09/2026, fonte oficial):** cota **R$ 67,54** por filho até o teto de **R$ 1.980,38** (Portaria Interministerial MPS/MF nº 13, de 09/01/2026). O valor antigo (1.906,04) vinha do recibo da contabilidade e **negava o benefício** de quem ganha entre 1.906,05 e 1.980,38. Regra que ficou: **valor de lei se confere na fonte, não no recibo** — recibo só prova o pedaço que ele cobre.
@@ -2626,6 +2648,21 @@ janela). **Nada foi pro ar** — espera o OK dele.
 - **Erros multi-por-dia (26/07, decisões do Victor):** vários erros no mesmo dia são permitidos (individuais E triagem), misturando unidade e valor; SEM confirmação ao lançar o 2º (só aviso informativo do que já existe); "Descontar Erros" agrupa por data e SOMA as quantidades; SEM limite por dia. Criar erro = insert puro; editar = por ID (nunca por funcionário+data). Migration `20260726120000` só entra em prod DEPOIS do deploy do frontend (upsert antigo quebra sem as constraints).
 
 ## ⚠️ Áreas frágeis / pendências abertas
+
+- 🔴 **`save-face` e `face-descriptor` sem senha (30/09)** — a função pública troca o rosto de
+  qualquer funcionário (só com o id, que `lookup-employee` devolve pelo CPF) e entrega o rosto
+  cadastrado. Com a trava ligada, um colega que sabe o CPF de outro poderia trocar o rosto dele e
+  bater por ele no tablet. Não mexido (muda o fluxo de cadastro do rosto) — recomendação: exigir o
+  PIN (ou só aceitar quando `face_reset_requested`/sem rosto).
+- 🔴 **`companies.admin_secret_password` legível pelo anon (30/09)** — conferido no catálogo:
+  `has_column_privilege('anon', ..., 'SELECT') = true` + policy de SELECT pública. A chave anon vai
+  no site. Não mexido; recomendação: REVOKE da coluna pro anon/authenticated + ler por RPC.
+- 🟡 **3 pessoas com rosto "no limite"** (distância média 1:1 ≥ 0,45, cadastradas em maio):
+  refazer o cadastro no tablet (nomes no checkpoint 30/09 §7).
+- 🟡 **`tests/62` "com GPS liberado" (2 testes)** falham IGUAL no código antigo — desligam a facial
+  só no navegador (mock), e o servidor de Caratinga exige rosto desde 31/08. Desatualizados.
+- 🟡 **Tela de ponto limpa a mensagem de erro no refresh de 30s** (`loadDashboard` zera `clockMsg`)
+  — quem olha depois não vê por que a batida foi recusada. Antigo, não mexido.
 
 - 🔴 **Folha sem dado: 18 pessoas sem salário e 15 sem data de admissão (22/09)** — a folha
   está pronta e validada, mas só sai pra quem tem salário na ficha. O cartão novo do

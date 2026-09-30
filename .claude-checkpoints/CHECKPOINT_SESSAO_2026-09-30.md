@@ -1,0 +1,193 @@
+# CHECKPOINT — Sessão 30/09/2026 (madrugada, Victor dormindo)
+
+> **Em uma frase:** facial sem CPF que recusa gente de verdade + "câmera bloqueada" falso +
+> ponto só no tablet da empresa. Trabalho autorizado pra noite inteira.
+
+> ⚠️ Autorização por escrito (30/09 ~00:30): *"pode seguir tem autorização para fazer tudo e
+> aplicar migratinha quero tudo validado com cliquees rais"* + *"fui dormi"* + *"trabalhe com
+> força maxima e tem permisão para implemneta e fazer tudo"*.
+
+---
+
+## 0. Decisões do Victor (não re-perguntar)
+
+Ele respondeu "pode seguir" ao plano com as recomendações — valem as 5:
+
+1. **Facial sem CPF (1:N) passa a exigir o MESMO nível da facial com CPF (1:1)** — continuam as
+   3 travas contra confusão (margem contra o 2º colocado, nome na tela com 3s + "Não sou eu",
+   reconferência 1:1 no servidor).
+2. **Só o 2626 cadastra tablet.** Se o tablet for formatado/limpar dados, cadastra de novo.
+3. **Todo mundo só bate no tablet, supervisor incluído, sem exceção.** Correção de ponto
+   segue pelo painel do 2626.
+4. **No tablet continua o "digitar CPF e senha" como plano B**, e ainda exige o rosto.
+5. **Tudo sobe com a trava DESLIGADA**; ele liga depois de cadastrar os tablets.
+6. Quantos tablets e de qual empresa: **não respondeu** — o desenho aceita N tablets por empresa.
+
+## 1. O que o banco mostrou antes de mexer (29/09, dados reais)
+
+- Limite do 1:N era **0,42** de distância; o do 1:1 é **0,50**. Das **597** batidas com facial
+  1:1 aceitas em 14 dias, **250 (42%)** seriam recusadas pelo 1:N → "Não reconheci" pra gente
+  de verdade.
+- Distância entre rostos cadastrados de pessoas DIFERENTES: Caratinga menor **0,463** (2 pares
+  abaixo de 0,50, 16 abaixo de 0,55); Ponte Nova menor **0,551**.
+- "Câmera bloqueada" sem estar: o código trata QUALQUER `NotAllowedError` como bloqueio do
+  usuário, e nenhum erro de câmera é registrado no servidor.
+
+## 2. Banco (APLICADO em produção, com a trava DESLIGADA nas duas empresas)
+
+- Migration `20260930034644_ponto_so_no_tablet`: `companies.require_clock_device` (nasce
+  false), tabelas `clock_devices` + `clock_device_companies` (RLS ligado, sem policy, sem grant
+  pra anon/authenticated — o banco guarda só sha256 do código e do segredo), funções do painel
+  `clock_device_list/create_pairing/revoke/set_lock` (conferem `sub = 2626`), funções da tela
+  `clock_device_activate/resolve` (só service_role), gatilho que recusa mudar a trava por UPDATE
+  direto, e colunas de diagnóstico em `face_auth_attempts` (`outcome`, `best_distance`,
+  `second_distance`).
+- 🔴 **O teste pegou um defeito meu** e ele virou a migration `20260930035209`: a "licença" que a
+  função do 2626 usava pra passar pelo gatilho (`set_config(..., true)`) vale até o fim da
+  TRANSAÇÃO — um UPDATE direto depois dela, na mesma transação, desligava a trava. Na operação
+  real não vazava (cada chamada da API é uma transação), mas saiu: o gatilho agora só olha
+  `current_user` (a função roda como `postgres`).
+- **Provado no banco (17 passos, transação desfeita no fim):** 9999 não gera código nem mexe na
+  trava; código tem 8 símbolos do alfabeto sem I/O/0/1 e vale 15 min; ligar a trava sem tablet
+  ativo é recusado; o código ativa UMA vez; segredo errado não resolve; UPDATE direto como
+  `authenticated` é recusado mesmo depois da função na mesma transação; o último tablet de uma
+  empresa com trava ligada não pode ser removido; código vencido não ativa; anon não executa nada.
+
+## 3. Servidor (edge functions) — código pronto, ensaiado em funções `-next`
+
+- `_shared/faceIdentify.ts`: `LIMITE_FACIAL = 0.5` (1:1 E 1:N) + `decidirIdentificacao`
+  (matched / no_match / ambiguous / no_candidates, margem 0,08 mantida).
+- `_shared/clockDevice.ts`: código de ativação, sha256 (bate com o `digest` do Postgres —
+  conferido com valor calculado no banco), segredo base64url, `decidirAparelho`, `resolverTablet`
+  (erro de banco LANÇA: trava ligada nunca libera no escuro).
+- `clock-in-validated`: trava do tablet ANTES de qualquer gravação (inclusive do cadastro do rosto
+  na 1ª vez); recusa com `device_error` + mensagem, sem bonus_block nem geo_fraud.
+- `employee-public-api`: `identify-face` com limite novo + desfecho/distâncias gravados + exige
+  tablet com a trava ligada; ações novas `clock-device-status`, `activate-clock-device`,
+  `log-clock-event` (erro de câmera → `error_logs`, texto truncado).
+- **Ensaio:** publicadas como `clock-in-validated-next` / `employee-public-api-next` e rodado
+  `tests/unit/edgeFnPontoSoNoTablet.spec.ts` contra elas → **6/6** (sem segredo / inválido /
+  removido / de outra empresa recusados sem gravar nada; tablet certo bate e a facial continua
+  valendo; identificação sem CPF exige tablet e reconhece a 0,46; código vira segredo uma vez;
+  erro de câmera vai pro error_logs). Limpeza conferida: zero resto no banco.
+
+## 4. Tela
+
+- **Achado grave e antigo (as 3 telas de câmera):** a tela de "Carregando câmera" era devolvida
+  SEM o `<video>`. A câmera abria sem ter onde mostrar a imagem, a tela ficava com vídeo PRETO e
+  só o vigia de "vídeo preto", 2s depois, fechava e abria a câmera DE NOVO — toda abertura
+  custava ~2,5s e dois pedidos de câmera seguidos (fechar e reabrir rápido é o que faz muito
+  Android responder "câmera ocupada"). Agora o vídeo fica sempre montado e o resto aparece por cima.
+- Câmera num lugar só (`useFrontCamera`): erro classificado pela causa (`cameraAccess.ts`) com um
+  texto por causa (`CameraProblem.tsx`) — "Falta liberar a câmera" (pedido fechado, o caso da
+  queixa: o Chrome recusa sozinho depois de 3 pedidos fechados e o site segue em "Perguntar"),
+  "Câmera bloqueada" (só quando está), "Câmera desligada no aparelho", "Câmera ocupada"; o
+  "tentar de novo" é pelo toque; câmera que morre com a tela apagada é reaberta quando a tela
+  volta; todo erro vai pro servidor.
+- Facial sem CPF: "Não reconheci" só depois de 3 recusas seguidas (antes: a cada quadro ruim).
+- Tela de ponto conhece o tablet: barra cedo o aparelho não autorizado, tela de ativação por
+  código, nome do tablet na tela; na verificação com CPF, câmera que não abre não diz mais
+  "reconhecimento falhou, procure o supervisor".
+- Painel: cartão "Tablets de ponto" em Configurações, só pro 2626.
+
+## 5. Validação até aqui
+
+- `npm run typecheck` 0 · eslint dos arquivos tocados 0 · `deno check` da clock-in-validated ok
+  (na employee-public-api o único erro é o import ANTIGO do bcryptjs, linha 57, que já estava lá).
+- Unitários novos: 25 (regra do tablet + decisão da facial) + 26 (câmera) + 3 (tablet na tela) +
+  o spec antigo da facial sem CPF adaptado (câmera falsa completada; o aviso vem após 3 recusas).
+- **A/B provado:** limite 0,42 de volta → 4 testes vermelhos; `FaceIdentifyClock` antigo → os 6
+  testes da câmera vermelhos (inclusive o do vídeo que abria duas vezes).
+
+## 6. Manhã (30/09) — o que mudou depois que o Victor acordou
+
+- ⚠️ O computador **parou de madrugada** (relógio saltou de 01:31 pra 07:54) — por isso a
+  publicação só saiu de manhã.
+- **Instrução nova do Victor (08:30):** *"deixa tudo pronto pra ativar, mas por enquanto ainda
+  permite digitar o CPF, deixa a trava DESLIGADA, a gente tem que validar isso primeiro, com os
+  testes, e o pessoal batendo o ponto normal"*. → Trava **desligada** nas 2 empresas (conferido);
+  o botão de CPF continua; testes só em empresa fixture.
+- **Meta do Victor (08:45):** *"a validação facial tem que ser feita em no máximo 5 a 7 segundos"*.
+
+### Edge functions em produção (07:56, janela quieta, trava desligada)
+- `employee-public-api` **v18** · `clock-in-validated` **v17** (o 1º deploy dela deu "erro interno
+  500" do Supabase e ficou na v16 intacta — a 2ª tentativa subiu). Antes: baixei as publicadas e
+  eram idênticas ao HEAD (ninguém publicou nada no meio).
+- Validado contra PRODUÇÃO: `edgeFnPontoSoNoTablet` 6/6 + regressão `edgeFnClockFacialGeoEstrito`,
+  `edgeFnClockFourMarkingsLunch`, `edgeFnEmployeePublicApi` (6 passaram, 1 pulado de propósito).
+  Funções de ensaio `-next` apagadas.
+- 🔑 A correção do limite da facial sem CPF (0,42 → 0,50) está **no ar desde 07:56** — avisado.
+
+### Três defeitos achados pelo teste de cliques reais (os três na TELA, nenhum publicado)
+1. 🔴 **Detecções empilhadas** (defeito ANTIGO, nas 3 telas de câmera): o laço disparava uma
+   detecção nova a cada 0,5–0,7s sem esperar a anterior. Medido no Chromium, com a mesma biblioteca
+   e modelos: sem guarda 56 detecções ao mesmo tempo e rosto achado aos 35s; com guarda 1 por vez e
+   rosto aos 13s. Era o "fica procurando o rosto e não reconhece" num aparelho fraco. Guarda
+   `detectInFlightRef` nas 3 telas + `tests/unit/umaDeteccaoPorVez.spec.tsx` (A/B: código antigo
+   2/2/3 detecções simultâneas, falha; novo 1, passa).
+2. 🔴 **Tela trocava de CPF pra câmera com a pessoa digitando** (corrida antiga que eu PIOREI ao
+   esperar a conferência do tablet): a tela nascia no CPF e trocava quando a empresa carregava.
+   Agora nasce em "Preparando..." e só mostra CPF ou câmera quando já sabe; conferência do tablet
+   com prazo de 5s (sem resposta = segue, e o servidor decide na batida).
+3. 🔴 **GPS "aquecido" com watchPosition** (erro MEU desta manhã): medido no Chromium, com o
+   acompanhamento ativo o pedido de posição nova da batida estoura os 10s → "Localização não
+   fornecida". Trocado por **GPS pedido mais cedo**: o pedido sai quando a pessoa é reconhecida (ou
+   aperta Registrar) e corre junto com a contagem/verificação; a posição continua nova.
+
+### Tempo (meta 5–7s)
+- Dado real (14 dias, sistema antigo): do rosto reconhecido ao ponto gravado, **mediana 7,1s**,
+  p90 8,6s, pior 13s (3s são a contagem com o nome — decisão de 04/09).
+- No teste de cliques reais depois das correções: **nome na tela → ponto gravado 3,4s** (3s de
+  contagem + 0,4s). "Câmera pronta → nome" deu 15s NESTA máquina (navegador sem placa de vídeo e
+  dividindo CPU com o robô da Shopee) — no tablet depende do aparelho; medir com o dado real
+  (`face_auth_attempts.outcome` + horário da batida) depois de publicar a tela.
+- Consultas depois do reconhecimento agora saem juntas (antes, uma esperava a outra).
+
+### E2E com cliques reais — `tests/127-ponto-so-no-tablet.spec.ts` (câmera falsa com ROSTO)
+- Rostos de domínio público (NASA) em `tests/fixtures/facial/*.y4m`.
+- **7/7 (9 passos)**: 2626 gera código → tablet ativa → trava liga (antes não deixa) → CPF+senha+
+  cadastro do rosto+ENTRADA com verificação facial → celular pessoal barrado (nem pelo CPF) →
+  SAÍDA só pelo rosto → outra pessoa "Não reconheci" → último tablet não sai com trava ligada,
+  desliga e remove, aparelho volta a ser comum → pedido de câmera fechado mostra "Falta liberar a
+  câmera" e o toque resolve.
+- Rodado a partir de uma **cópia no disco do Linux** (`~/projetos/ponto-teste`): nesta manhã ler
+  arquivos de /mnt/c ficou tão lento (robô da Shopee) que carregar o jsdom levou 200s e o vitest
+  não subia (limite fixo de 60s do vitest). Ver memória nova.
+
+## 7. Estado no fecho (conferido)
+
+- **No ar:** tela (Vercel serve `index-XR0v5Hlh.js`, o MESMO hash do build local; conferido por
+  CONTEÚDO: "clock-device-status", "Falta liberar a câmera", "Ponto só no tablet da empresa" no
+  bundle e o cartão no chunk de Configurações) + edge fns v17/v18 (baixadas e comparadas: iguais ao
+  repo) + migrations. Produção aberta só olhando: `/clock` abre em 1,4s na câmera, CPF disponível,
+  link de ativação visível, zero erro de página.
+- **Trava DESLIGADA** em Caratinga e Ponte Nova; **nenhum tablet cadastrado**; zero resto de teste.
+- **Ponto real intacto:** impressão (md5) dos 11 meses anteriores idêntica antes/depois das baterias;
+  hoje 18 batidas reais antes e depois.
+
+## 8. Validação final
+
+| O quê | Resultado |
+|---|---|
+| typecheck · lint (projeto inteiro) · build | 0 · 0 · limpo |
+| Unit (131 arquivos) | **1.995 passaram**, 1 pulado (o de sempre) |
+| A/B (vermelho no código antigo) | limite 0,42 → 4 falhas; câmera → 6; detecção empilhada → 3 |
+| Banco (17 passos, transação desfeita) | 17/17 |
+| Edge fns em produção | `edgeFnPontoSoNoTablet` 6/6 + regressão (facial obrigatória, 4 batidas, API pública) |
+| E2E cliques reais com rosto (`tests/127`) | **7/7** (9 passos) |
+| E2E regressão (02, 107, 48, 62, 101, 13) + (38, 100-K) | 41 + 12 passaram; os 2 do 62 "GPS liberado" falham IGUAL no código antigo |
+| **CI do `eba2e45`** (run 36717548687) | **verde nos 3 jobs**: tsc+eslint, vitest (unit, com o teste ao vivo das edge fns), playwright (e2e) |
+
+## 9. O que precisa do Victor (decisões dele — nada disto eu faço sozinho)
+
+1. **Ligar a trava** quando ele achar que a facial está validada no uso real (hoje: desligada).
+   Antes: cadastrar os tablets (Configurações → Tablets de ponto → gerar código → digitar no tablet).
+2. **Recadastrar o rosto de 3 pessoas "no limite"** (distância média 1:1 ≥ 0,45, cadastro de maio):
+   Sabrina Emiliana De Seixa Lana (0,465), Pablo Henrique Azevedo Goularte (0,457), Sergio Vinicius
+   Vidal Brandao filho (0,451) — de preferência NO TABLET, que é a câmera que vai usar.
+3. **Brecha `save-face` sem senha** (troca o rosto de qualquer um pelo id) — recomendo exigir o PIN.
+4. **`admin_secret_password` legível pelo anon** — recomendo tirar a coluna do alcance público.
+5. Contagem de 3s com o nome (decisão de 04/09): com ela o trecho final dá 3,4s; se ele quiser mais
+   folga pra meta de 5–7s, dá pra baixar pra 2s (decisão dele).
+6. Medir no tablet de verdade: depois de uns dias, `face_auth_attempts` (desfecho + distâncias) +
+   horário da batida dizem quanto tempo leva e quantas tentativas até reconhecer.
