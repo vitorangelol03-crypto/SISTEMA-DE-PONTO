@@ -1,6 +1,6 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
-> **⏸️ PAUSA 30/09 20:36 (reinício do PC):** tudo commitado e no ar. Ao voltar: conferir o playwright do CI run **36791057396** (`c8e8d5d`, só testes) — se vermelho, mostrar ao Victor antes de mexer. Detalhe no fim do §13 de `CHECKPOINT_SESSAO_2026-09-30.md`.
+> **⏸️ PAUSA 30/09 20:36 (reinício do PC):** tudo commitado, no ar e com **CI verde** (`28b9d7d` app + `c8e8d5d` testes, run 36791057396 verde às 20:39). Nada pendente de conferir. Detalhe no fim do §13 de `CHECKPOINT_SESSAO_2026-09-30.md`.
 
 > **📌 30/09 tarde — A TELA DE PONTO VIROU O APLICATIVO "PONTO" (NO AR, `28b9d7d`).** Instala no tablet pelo Chrome (⋮ → Instalar app), abre em tela cheia com o relógio azul, encaixa em pé e deitado (tecla da senha 66→82px no tablet 10"; celular IGUAL), sem zoom, tela acesa só aberto como app; só o `/clock` é app (o painel continua site). 🔴 Defeito antigo consertado: o botão "Prefere digitar CPF e senha?" ESCONDIA o aviso da câmera. 🔴 Os 3 ícones PNG eram TEXTO desde out/2025 — refeitos. E2E novo `tests/128` 12/12 (10/10 vermelho no código antigo) · unit 2.025 · produção idêntica byte a byte ao build testado · CI verde nos 3 jobs. 🟢 Noite (`c8e8d5d`, "sim pode com cuidado"): testes 08/62/78/80 refeitos numa EMPRESA DE TESTE — 10/10, config real idêntica (md5), zero sobra; o 08 não mexe mais na cerca real (§13). **Precisa do Victor:** instalar no tablet (passo a passo no §12). Detalhe: **§12 de `CHECKPOINT_SESSAO_2026-09-30.md`**.
 

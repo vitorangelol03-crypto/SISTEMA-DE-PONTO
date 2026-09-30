@@ -377,11 +377,10 @@ localização e zero bloqueio de bônus reais no dia; a cerca voltou a -19.80242
 | lint (projeto inteiro) | 0 |
 | Config real de Caratinga/Ponte Nova (md5 de empresas + cercas + facial + nº de funcionários) | **idêntica** antes × depois (`5479a3e7…`) |
 | Banco no fim | 0 empresa / funcionário / semana de pagamento / ponto de teste; 0 fraude de localização real no dia |
-| CI do `c8e8d5d` (run 36791057396) | tsc+eslint ✓ · vitest ✓ · playwright **rodando** às 20:36 (pausa pra reiniciar o PC) — conferir na volta |
+| CI do `c8e8d5d` (run 36791057396) | **verde nos 3 jobs** às 20:39: tsc+eslint, vitest, playwright (e2e) |
 
 ### ⏸️ 20:36 — PAUSA (Victor vai reiniciar o PC)
 Tudo commitado e enviado (`28b9d7d` app no ar, `c8e8d5d` testes, checkpoints). Nada rodando que
-dependa do PC (servidor de teste desligado; o CI roda no GitHub). **Ao voltar:** conferir o
-playwright do run **36791057396** (`gh run view 36791057396`) — o `c8e8d5d` só mexe em testes; se
-vier vermelho, mostrar pro Victor antes de mexer. Pendências dele: instalar o app no tablet (§12),
+dependa do PC (servidor de teste desligado; o CI roda no GitHub). **CI do `c8e8d5d` VERDE** (20:39, conferido antes do reinício) —
+nada a conferir na volta. Pendências dele: instalar o app no tablet (§12),
 trocar a senha da aba Admin (§10), ligar a trava quando quiser (§9), 3 rostos "no limite" (§9).
