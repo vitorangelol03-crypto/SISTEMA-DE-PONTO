@@ -218,6 +218,9 @@ test.describe.serial('ponto só no tablet — cliques reais', () => {
     await t.goto('/clock');
     const campo = await irAoCampoDeCpfDoPonto(t);
     await expect(t.getByTestId('clock-device-badge')).toContainText(TABLET_NOME);
+    // 30/09/2026 (roadmap item 5, decisão do Victor): no tablet NÃO tem o caminho da consulta —
+    // quem para pra consultar segura a fila.
+    await expect(t.getByTestId('link-da-consulta')).toHaveCount(0);
     await campo.fill(cpf);
     await t.getByRole('button', { name: 'Continuar' }).click();
     for (const d of PIN) await t.getByRole('button', { name: d, exact: true }).click();
@@ -249,6 +252,35 @@ test.describe.serial('ponto só no tablet — cliques reais', () => {
     await expect(celular.getByRole('button', { name: /Confirmar PIN/i })).toHaveCount(0);
   });
 
+  /**
+   * 30/09/2026 (roadmap item 5) — decisão do Victor: fora do tablet "pode ver tudo mas não bater o
+   * ponto de forma nenhuma". O celular barrado ganha o caminho da consulta (/erros): com CPF e
+   * senha, a pessoa vê os pontos dela (a ENTRADA do passo 4 aparece), erros e recibos — e não
+   * existe botão de bater ponto lá.
+   */
+  test('5b. celular barrado: "Ver meus erros, pontos e recibos" — vê a entrada de hoje, sem poder bater', async () => {
+    const { page: celular } = await aparelho(ROSTO_A);
+    await celular.goto('/clock');
+    await expect(celular.getByTestId('device-blocked')).toBeVisible({ timeout: 30_000 });
+
+    await celular.getByTestId('link-da-consulta').click();
+    await expect(celular).toHaveURL(/\/erros$/);
+    await celular.locator('#cpf').fill(cpf);
+    await celular.getByRole('button', { name: /^Continuar$/ }).click();
+    await celular.getByPlaceholder('••••').fill(PIN.join(''));
+    await celular.getByRole('button', { name: /^Entrar$/ }).click();
+
+    const pontos = celular.getByTestId('meus-pontos');
+    await expect(pontos.getByText(/Últimos 30 dias/)).toBeVisible({ timeout: 20_000 });
+    const [y, m, d] = hoje().split('-');
+    const linhaDeHoje = pontos.locator('tr', { hasText: `${d}/${m}/${y}` });
+    await expect(linhaDeHoje).toBeVisible();
+    // A ENTRADA do passo 4 está lá (a saída ainda não — ela é batida no passo 6).
+    await expect(linhaDeHoje.locator('td').nth(1)).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+    await expect(celular.getByText('Nenhum erro registrado')).toBeVisible();
+    await expect(celular.getByRole('button', { name: /REGISTRAR|Entrada|Saída/i })).toHaveCount(0);
+  });
+
   test('6. no tablet: SAÍDA só pelo rosto, sem digitar CPF', async () => {
     const t = tablet.page;
     await t.goto('/clock');
@@ -263,6 +295,10 @@ test.describe.serial('ponto só no tablet — cliques reais', () => {
     // Shopee, então o número daqui é pior que o do tablet — fica impresso pra acompanhar.
     console.log(`[tempo] câmera pronta → nome na tela: ${((reconheceu - cameraPronta) / 1000).toFixed(1)}s · `
       + `nome → ponto gravado: ${((Date.now() - reconheceu) / 1000).toFixed(1)}s`);
+
+    // Sem CPF não há PIN: o painel carrega o histórico com o COMPROVANTE do rosto (30/09/2026).
+    const [y, m, d] = hoje().split('-');
+    await expect(t.locator('tr', { hasText: `${d}/${m}/${y}` })).toBeVisible({ timeout: 20_000 });
 
     const s = getClient();
     const { data: att } = await s.from('attendance').select('exit_time_full').eq('employee_id', pessoaId).eq('date', hoje()).single();

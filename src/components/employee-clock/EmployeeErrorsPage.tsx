@@ -10,6 +10,7 @@ import {
 } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import { EmployeeErrorsView } from './EmployeeErrorsView';
+import { useAtualizacaoAutomatica } from './useAtualizacaoAutomatica';
 
 function formatCPFMask(value: string): string {
   const d = value.replace(/\D/g, '').slice(0, 11);
@@ -31,6 +32,9 @@ export const EmployeeErrorsPage: React.FC = () => {
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Versão nova publicada → recarrega sozinha, só na tela inicial sem CPF digitado (01/10/2026).
+  useAtualizacaoAutomatica({ podeRecarregar: step === 'cpf' && cpfInput === '' });
 
   const cpfDigits = cpfInput.replace(/\D/g, '');
   const cpfValid = cpfDigits.length === 11;

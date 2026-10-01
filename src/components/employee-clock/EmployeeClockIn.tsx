@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Clock, CheckCircle, XCircle, ChevronLeft, Loader2, LogOut, Moon, AlertCircle, Building2, Tablet } from 'lucide-react';
 import {
   getEmployeeByCpf,
@@ -14,6 +14,7 @@ import {
   Attendance,
   Company,
   ClockDevice,
+  ProvaDoFuncionario,
 } from '../../services/database';
 import {
   aparelhoBarradoNaEmpresa,
@@ -33,25 +34,30 @@ import {
 import { FaceIdentifyClock } from './FaceIdentifyClock';
 import { abertoComoApp, useAppDoPonto } from './useAppDoPonto';
 import { PassosNoAppDoPonto } from './CameraProblem';
+import { formatHours, formatTime } from './formatoDoPonto';
+import { MeusPontos } from './MeusPontos';
+import { useAtualizacaoAutomatica } from './useAtualizacaoAutomatica';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatTime(iso: string | null | undefined): string {
-  if (!iso) return '--:--:--';
-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
+// formatTime / formatHours: ./formatoDoPonto (30/09/2026 — os mesmos na tela /erros).
 
-function formatHours(h: number | null | undefined): string {
-  if (h == null) return '-';
-  const hrs = Math.floor(h);
-  const mins = Math.round((h - hrs) * 60);
-  return `${hrs}h ${mins.toString().padStart(2, '0')}min`;
-}
-
-function formatDateBR(d: string): string {
-  const [y, m, day] = d.split('-');
-  return `${day}/${m}/${y}`;
-}
+/**
+ * Caminho pra consulta (/erros) — erros, pontos e recibos da pessoa, sem bater ponto (30/09/2026,
+ * roadmap item 5). Decisão do Victor: aparece só FORA do tablet (no tablet, quem para pra
+ * consultar segura a fila de quem vai bater). Quem decide "fora do tablet" é quem renderiza.
+ */
+const LinkDaConsulta: React.FC<{ destaque?: boolean }> = ({ destaque = false }) => (
+  <a
+    href="/erros"
+    data-testid="link-da-consulta"
+    className={destaque
+      ? 'block w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 min-h-[44px] text-center'
+      : 'block w-full text-sm text-center text-blue-600 hover:text-blue-800 py-2'}
+  >
+    Ver meus erros, pontos e recibos
+  </a>
+);
 
 /* 🔴 O selo de aprovação saiu da tela do funcionário (12/09/2026).
    A aprovação de ponto foi removida do sistema a pedido do Victor, e o
@@ -197,6 +203,17 @@ export const EmployeeClockIn: React.FC = () => {
    * zera os dois). Na facial sem CPF não existe PIN — e ela nem usa essas ações.
    */
   const pinDaSessao = pin || newPin;
+  /** Comprovante do rosto reconhecido na facial sem CPF (30/09/2026) — lá não existe PIN. */
+  const [comprovanteFacial, setComprovanteFacial] = useState<string | undefined>(undefined);
+  /**
+   * Como esta sessão prova pro servidor que é a própria pessoa (30/09/2026, roadmap item 5): ponto
+   * do dia e histórico só saem com o PIN dela ou com o comprovante do rosto. Sem nenhum dos dois
+   * (não deveria acontecer) vai vazio, e o servidor decide.
+   */
+  const provaDaSessao = useMemo<ProvaDoFuncionario>(
+    () => (pinDaSessao ? { pin: pinDaSessao } : comprovanteFacial ? { comprovanteFacial } : {}),
+    [pinDaSessao, comprovanteFacial],
+  );
   const [setupError, setSetupError] = useState('');
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
@@ -225,6 +242,17 @@ export const EmployeeClockIn: React.FC = () => {
   const [deviceToken, setDeviceToken] = useState<string | null>(() => lerSegredoDoTablet());
   const [device, setDevice] = useState<ClockDevice | null>(null);
   const [deviceCheck, setDeviceCheck] = useState<ConferenciaDoAparelho>(() => (lerSegredoDoTablet() ? 'pendente' : 'conferido'));
+
+  /**
+   * Versão nova publicada → a tela se recarrega sozinha (01/10/2026, ver useAtualizacaoAutomatica),
+   * mas só com a tela LIVRE: na tela inicial sem CPF digitado, ou na câmera sem ninguém sendo
+   * reconhecido. Nunca no meio do PIN, do cadastro do rosto ou com o painel aberto.
+   */
+  const [cameraOcupada, setCameraOcupada] = useState(false);
+  useAtualizacaoAutomatica({
+    podeRecarregar: cpfInput === ''
+      && (step === 'cpf' || step === 'device-blocked' || (step === 'face-scan' && !cameraOcupada)),
+  });
   const [empresaBarrada, setEmpresaBarrada] = useState<string | null>(null);
   const [activationCode, setActivationCode] = useState('');
   const [activationError, setActivationError] = useState('');
@@ -261,8 +289,8 @@ export const EmployeeClockIn: React.FC = () => {
     setClockMsg(null);
     try {
       const [today, hist] = await Promise.all([
-        getEmployeeTodayAttendance(emp.id, company.id),
-        getEmployeeAttendanceHistory(emp.id, 30, company.id),
+        getEmployeeTodayAttendance(emp.id, company.id, provaDaSessao),
+        getEmployeeAttendanceHistory(emp.id, 30, company.id, provaDaSessao),
       ]);
       // Merge inteligente: só atualiza o state se houve mudança real
       setTodayRecord(prev => JSON.stringify(prev) === JSON.stringify(today) ? prev : today);
@@ -275,7 +303,7 @@ export const EmployeeClockIn: React.FC = () => {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [company?.id]);
+  }, [company?.id, provaDaSessao]);
 
   // Atualiza dashboard a cada 30s enquanto está na tela (silencioso — sem flash)
   useEffect(() => {
@@ -628,7 +656,7 @@ export const EmployeeClockIn: React.FC = () => {
     const verifyRegisteredInDb = async (): Promise<boolean> => {
       if (!company?.id) return false;
       try {
-        const today = await getEmployeeTodayAttendance(employee.id, company.id);
+        const today = await getEmployeeTodayAttendance(employee.id, company.id, provaDaSessao);
         if (markingPosition) {
           return !!getTimestampForPosition(today, markingPosition);
         }
@@ -685,7 +713,7 @@ export const EmployeeClockIn: React.FC = () => {
         setClockMsg('⏳ Conexão lenta. Verificando registro...');
         try {
           if (!company?.id) throw new Error('Empresa não selecionada');
-          const today = await getEmployeeTodayAttendance(employee.id, company.id);
+          const today = await getEmployeeTodayAttendance(employee.id, company.id, provaDaSessao);
           const registered = markingPosition
             ? !!getTimestampForPosition(today, markingPosition)
             : (type === 'entry' ? !!today?.entry_time : !!today?.exit_time_full);
@@ -851,8 +879,10 @@ export const EmployeeClockIn: React.FC = () => {
   // deixa o efeito (acima) disparar o registro assim que `employee` atualizar.
   const handleFaceIdentifyConfirmed = (
     emp: Employee, descriptor: number[], type: 'entry' | 'exit', markingPosition?: MarkingPosition,
+    comprovante?: string,
   ) => {
     pendingFaceIdentifyRef.current = { type, markingPosition, descriptor };
+    setComprovanteFacial(comprovante);
     setEmployee(emp);
     setStep('dashboard');
   };
@@ -868,6 +898,7 @@ export const EmployeeClockIn: React.FC = () => {
     setPin('');
     setNewPin('');
     setConfirmPin('');
+    setComprovanteFacial(undefined);
     setSetupError('');
     setEmployee(null);
     setAvailableCompanies([]);
@@ -881,21 +912,8 @@ export const EmployeeClockIn: React.FC = () => {
     setCameraBlocked(false);
   };
 
-  // ─── Resume do mês ────────────────────────────────────────────────────────
-
-  const monthSummary = () => {
-    const now = new Date();
-    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const monthRecords = history.filter(r => r.date.startsWith(monthStr) && r.status === 'present');
-    const totalDays = monthRecords.length;
-    const totalHours = monthRecords.reduce((s, r) => s + (r.hours_worked ?? 0), 0);
-    const totalNight = monthRecords.reduce((s, r) => s + (r.night_hours ?? 0), 0);
-    return { totalDays, totalHours, totalNight };
-  };
-
   const hasEntry = todayRecord?.entry_time != null;
   const hasExit = todayRecord?.exit_time_full != null;
-  const summary = step === 'dashboard' ? monthSummary() : null;
 
   // Sub-fase 2.10: 4 marcações. `marking_count` do funcionário manda; sem
   // valor próprio, herda o padrão da empresa (mesma semântica prometida pela
@@ -993,12 +1011,15 @@ export const EmployeeClockIn: React.FC = () => {
                   📟 Tablet autorizado: {device.name}
                 </p>
               ) : (
-                <button
-                  onClick={abrirAtivacaoDoTablet}
-                  className="w-full text-xs text-gray-400 hover:text-gray-600 py-1"
-                >
-                  Ativar este aparelho como tablet de ponto
-                </button>
+                <>
+                  <LinkDaConsulta />
+                  <button
+                    onClick={abrirAtivacaoDoTablet}
+                    className="w-full text-xs text-gray-400 hover:text-gray-600 py-1"
+                  >
+                    Ativar este aparelho como tablet de ponto
+                  </button>
+                </>
               )}
             </div>
           </>
@@ -1015,6 +1036,8 @@ export const EmployeeClockIn: React.FC = () => {
                 {empresaBarrada ? <> de <strong>{empresaBarrada}</strong></> : null}.
               </p>
               <p className="text-gray-600 text-sm">Use o <strong>tablet da empresa</strong>.</p>
+              {/* Fora do tablet dá pra CONSULTAR (decisão do Victor, 30/09/2026) — bater, não. */}
+              {!device && <LinkDaConsulta destaque />}
               <button
                 onClick={() => { setEmpresaBarrada(null); setCpfInput(''); setStep('cpf'); }}
                 className="w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 min-h-[44px]"
@@ -1399,70 +1422,7 @@ export const EmployeeClockIn: React.FC = () => {
                 )}
               </div>
 
-              {/* ── Resumo do mês ── */}
-              {summary && (
-                <div className="mx-4 mb-4 p-4 border border-gray-200 rounded-xl bg-white">
-                  <h2 className="font-semibold text-gray-700 text-sm uppercase tracking-wide mb-3">📊 Resumo do Mês</h2>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="bg-blue-50 rounded-lg p-3">
-                      <p className="text-2xl font-bold text-blue-700">{summary.totalDays}</p>
-                      <p className="text-xs text-blue-600 mt-0.5">Dias presentes</p>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-3">
-                      <p className="text-lg font-bold text-green-700">{formatHours(summary.totalHours)}</p>
-                      <p className="text-xs text-green-600 mt-0.5">Horas totais</p>
-                    </div>
-                    <div className="bg-indigo-50 rounded-lg p-3">
-                      <p className="text-lg font-bold text-indigo-700">{formatHours(summary.totalNight)}</p>
-                      <p className="text-xs text-indigo-600 mt-0.5">Hs noturnas</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Histórico 30 dias ── */}
-              <div className="mx-4">
-                <h2 className="font-semibold text-gray-700 text-sm uppercase tracking-wide mb-3">📋 Últimos 30 dias</h2>
-                {history.length === 0 ? (
-                  <div className="text-center py-6 text-gray-400 text-sm">
-                    <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    Nenhum registro encontrado
-                  </div>
-                ) : (
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-gray-500 font-medium">Data</th>
-                          <th className="px-3 py-2 text-left text-gray-500 font-medium">Entrada</th>
-                          <th className="px-3 py-2 text-left text-gray-500 font-medium">Saída</th>
-                          <th className="px-3 py-2 text-left text-gray-500 font-medium">Horas</th>
-                          <th className="px-3 py-2 text-left text-gray-500 font-medium">Adic. Not.</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {history.map(rec => {
-                          return (
-                            <tr key={rec.id} className={`${rec.status === 'absent' ? 'bg-red-50' : ''}`}>
-                              <td className="px-3 py-2 font-medium text-gray-800">{formatDateBR(rec.date)}</td>
-                              <td className="px-3 py-2 text-gray-600 font-mono">
-                                {rec.entry_time ? formatTime(rec.entry_time) : (rec.status === 'absent' ? <span className="text-red-500">Falta</span> : '-')}
-                              </td>
-                              <td className="px-3 py-2 text-gray-600 font-mono">{formatTime(rec.exit_time_full)}</td>
-                              <td className="px-3 py-2 text-gray-600">{formatHours(rec.hours_worked)}</td>
-                              <td className="px-3 py-2 text-gray-600">
-                                {rec.night_additional != null && rec.night_additional > 0
-                                  ? `R$${Number(rec.night_additional).toFixed(2)}`
-                                  : '-'}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+              <MeusPontos history={history} />
             </div>
           </>
         )}
@@ -1493,6 +1453,7 @@ export const EmployeeClockIn: React.FC = () => {
           deviceName={device?.name ?? null}
           onDeviceBlocked={() => mostrarAparelhoBarrado(company.display_name)}
           onRecognized={anteciparPosicao}
+          onOcupado={setCameraOcupada}
         />
       )}
 

@@ -2230,15 +2230,35 @@ export const autoCreateWeeklyPeriod = async (companyId: string): Promise<void> =
     }]);
 };
 
+/**
+ * Como o funcionário prova que é ele nas telas públicas (30/09/2026, roadmap item 5).
+ *
+ * Erros, ponto do dia e histórico só saem com esta prova: o PIN que ele digitou pra entrar,
+ * ou — no tablet, onde ninguém digita nada — o comprovante que o servidor devolve quando
+ * reconhece o rosto (`FaceIdentifyResult.comprovanteFacial`, vale 15 min). Antes, só o id
+ * bastava, e `lookup-employee` entrega o id de qualquer um a partir do CPF.
+ */
+export interface ProvaDoFuncionario {
+  pin?: string;
+  comprovanteFacial?: string;
+}
+
+/** Só os campos preenchidos — prova vazia não vai como `pin: ""` pro servidor. */
+const camposDaProva = (prova: ProvaDoFuncionario) => ({
+  ...(prova.pin ? { pin: prova.pin } : {}),
+  ...(prova.comprovanteFacial ? { comprovanteFacial: prova.comprovanteFacial } : {}),
+});
+
 // Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS).
 // Agrega payment_periods + error_records + triage_* server-side.
 export const getEmployeeErrorPeriods = async (
   employeeId: string,
-  companyId: string
+  companyId: string,
+  prova: ProvaDoFuncionario,
 ): Promise<Array<{ period: PaymentPeriod; has_errors: boolean; total_errors: number }>> => {
   const data = await callEmployeePublicApi<{
     periods: Array<{ period: PaymentPeriod; has_errors: boolean; total_errors: number }>;
-  }>('employee-error-periods', { employeeId, companyId });
+  }>('employee-error-periods', { employeeId, companyId, ...camposDaProva(prova) });
   return data.periods ?? [];
 };
 
@@ -2248,7 +2268,8 @@ export const getEmployeeErrorPeriods = async (
 export const getEmployeeErrorsByPeriod = async (
   employeeId: string,
   periodId: string,
-  companyId: string
+  companyId: string,
+  prova: ProvaDoFuncionario,
 ): Promise<{
   period: PaymentPeriod;
   individual_errors: Array<{ date: string; error_type: ErrorType; error_count: number; observations: string | null }>;
@@ -2260,6 +2281,7 @@ export const getEmployeeErrorsByPeriod = async (
     employeeId,
     periodId,
     companyId,
+    ...camposDaProva(prova),
   });
 };
 
@@ -4022,12 +4044,14 @@ async function recalcAttendance(attendanceId: string): Promise<void> {
 export const getEmployeeAttendanceHistory = async (
   employeeId: string,
   days: number,
-  companyId: string
+  companyId: string,
+  prova: ProvaDoFuncionario,
 ): Promise<Attendance[]> => {
   const data = await callEmployeePublicApi<{ history: Attendance[] }>('attendance-history', {
     employeeId,
     companyId,
     days,
+    ...camposDaProva(prova),
   });
   return data.history ?? [];
 };
@@ -4082,10 +4106,15 @@ export const getFunctionRolesPublic = async (companyId: string): Promise<string[
 
 /** Busca o registro de attendance de hoje para um funcionário específico.
  *  Sub-fase 11.8 — via edge fn employee-public-api (anon-friendly pós-RLS). */
-export const getEmployeeTodayAttendance = async (employeeId: string, companyId: string): Promise<Attendance | null> => {
+export const getEmployeeTodayAttendance = async (
+  employeeId: string,
+  companyId: string,
+  prova: ProvaDoFuncionario,
+): Promise<Attendance | null> => {
   const data = await callEmployeePublicApi<{ attendance: Attendance | null }>('today-attendance', {
     employeeId,
     companyId,
+    ...camposDaProva(prova),
   });
   return data.attendance ?? null;
 };
@@ -4131,12 +4160,13 @@ export const clockOut = async (
   employeeId: string,
   dailyRate: number | undefined,
   geoData: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number } | undefined,
-  companyId: string
+  companyId: string,
+  prova: ProvaDoFuncionario,
 ): Promise<Attendance> => {
   const today = getBrazilDateString();
   const now = new Date();
 
-  const existing = await getEmployeeTodayAttendance(employeeId, companyId);
+  const existing = await getEmployeeTodayAttendance(employeeId, companyId, prova);
   if (!existing || !existing.entry_time) {
     throw new Error('Nenhuma entrada registrada hoje para calcular a saída');
   }
@@ -5117,6 +5147,8 @@ export interface FaceIdentifyResult {
   employeeName?: string;
   cpf?: string;
   faceDistance?: number;
+  /** 30/09/2026: o rosto reconhecido vale como a senha dela por 15 min — ver ProvaDoFuncionario. */
+  comprovanteFacial?: string;
 }
 
 /**

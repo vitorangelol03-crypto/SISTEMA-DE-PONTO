@@ -27,8 +27,8 @@
 //     qualquer um sem login. O painel define/troca PIN pela RPC admin_set_employee_pin
 //     (confere employees.edit de quem está logado); o "Resetar PIN" do painel zera o PIN
 //     e a pessoa cria o novo aqui.
-//   today-attendance         { employeeId, companyId } → { attendance: Attendance | null }
-//   attendance-history       { employeeId, companyId, days } → { history: Attendance[] }
+//   today-attendance         { employeeId, companyId, pin? | comprovanteFacial? } → { attendance: Attendance | null }
+//   attendance-history       { employeeId, companyId, days, pin? | comprovanteFacial? } → { history: Attendance[] }
 //   face-config              { companyId } → { enabled: boolean }
 //   face-descriptor          { employeeId, pin } → { descriptor: number[] | null }
 //   save-face                { employeeId, pin, photoUrl, descriptor } → { ok: true }
@@ -36,7 +36,7 @@
 //     acabou de digitar pra entrar). Antes, com o id (que lookup-employee devolvia pelo
 //     CPF), qualquer um trocava o rosto de outra pessoa ou copiava o rosto cadastrado —
 //     e batia o ponto dela.
-//   identify-face            { companyId, descriptorNow, deviceToken? } → { matched, employeeId?, employeeName?, cpf?, faceDistance?, ambiguous?, deviceBlocked? }
+//   identify-face            { companyId, descriptorNow, deviceToken? } → { matched, employeeId?, employeeName?, cpf?, faceDistance?, comprovanteFacial?, ambiguous?, deviceBlocked? }
 //     04/09/2026 — ponto SÓ pela facial, sem digitar CPF. Compara contra TODOS
 //     os rostos ativos da empresa (1:N) com margem mínima contra o 2º colocado
 //     (0.08) — ambíguo ou sem certeza = não bate. Isto só IDENTIFICA; quem
@@ -53,8 +53,10 @@
 //   log-clock-event          { companyId, employeeId?, kind: 'camera_error', details, userAgent? } → { ok: true }
 //     30/09/2026 — "câmera bloqueada" sem estar: até aqui nenhum erro de câmera
 //     chegava ao servidor. Grava em error_logs (best-effort, texto truncado).
-//   employee-errors-by-period { employeeId, periodId, companyId } → { period, individual_errors, triage_errors, total_individual, total_triage }
-//   employee-error-periods    { employeeId, companyId } → { periods: Array<{ period, has_errors, total_errors }> }
+//   employee-errors-by-period { employeeId, periodId, companyId, pin? | comprovanteFacial? } → { period, individual_errors, triage_errors, total_individual, total_triage }
+//   employee-error-periods    { employeeId, companyId, pin? | comprovanteFacial? } → { periods: Array<{ period, has_errors, total_errors }> }
+//     30/09/2026: estas 4 (ponto do dia, histórico e os 2 de erros) pedem a prova da própria
+//     pessoa — PIN ou comprovante facial (ver recusaSemProva e EXIGIR_PROVA_DO_FUNCIONARIO).
 //   register-employee        { companyId, name, cpf, phone, pixKey, pixType, functionRole } → { employee: { id } }
 //     Sub-fase 26/08 — cadastro público de funcionário novo (link sem login,
 //     página /cadastro). Grava registration_status='pending', employment_type
@@ -67,6 +69,9 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { PIN_FORMATO, bcryptjs, pinConfere } from '../_shared/pin.ts';
 import { decidirIdentificacao, type CandidatoFacial } from '../_shared/faceIdentify.ts';
+import {
+  comprovanteFacialConfere, decidirProva, emitirComprovanteFacial, type ProvaDoFuncionario,
+} from '../_shared/acessoDoFuncionario.ts';
 import {
   MENSAGEM_APARELHO_NAO_AUTORIZADO,
   decidirAparelho,
@@ -303,6 +308,47 @@ async function conferirPinDoFuncionario(employeeId: string, pin: unknown): Promi
   return (await pinConfere(pin, data)) ? 'ok' : 'invalido';
 }
 
+/**
+ * TROCA EM DOIS PASSOS (30/09/2026, roadmap item 5 — ver _shared/acessoDoFuncionario.ts).
+ *
+ * Erros, ponto do dia e histórico passam a exigir a prova da própria pessoa (PIN ou comprovante
+ * facial). Mas há telas de ponto ABERTAS AGORA com o código de antes (a facial sem CPF roda todo
+ * dia em Caratinga) e elas não mandam prova nenhuma: exigir de uma vez travaria a batida na porta
+ * até alguém recarregar a página.
+ *   Passo 1 (false): prova ERRADA já é recusada; prova AUSENTE ainda passa, e cada uma fica
+ *                    anotada no log como `[prova-ausente] <ação>`.
+ *   Passo 2 (true):  quando o log ficar sem `[prova-ausente]` (as telas velhas sumiram), liga.
+ */
+const EXIGIR_PROVA_DO_FUNCIONARIO = false;
+
+/**
+ * null = pode seguir; senão, a resposta de recusa. Mensagem genérica de propósito: não diz se
+ * foi o PIN, o comprovante ou o id que não bateu.
+ */
+async function recusaSemProva(acao: string, employeeId: string, companyId: string, body: Body): Promise<Response | null> {
+  let prova: ProvaDoFuncionario;
+  try {
+    prova = await decidirProva({
+      pin: body.pin,
+      comprovante: body.comprovanteFacial,
+      pinConfere: async (pin) => {
+        const r = await conferirPinDoFuncionario(employeeId, pin);
+        if (r === 'erro') throw new Error('leitura do PIN falhou');
+        return r === 'ok';
+      },
+      comprovanteConfere: (c) => comprovanteFacialConfere(SRV, c, employeeId, companyId, Date.now()),
+    });
+  } catch (err) {
+    console.error(`[prova] ${acao}: conferência falhou:`, err);
+    return json({ error: 'Database error' }, 500);
+  }
+  if (prova === 'ok') return null;
+  if (prova === 'invalido') return json({ error: 'Acesso negado' }, 401);
+  if (EXIGIR_PROVA_DO_FUNCIONARIO) return json({ error: 'Acesso negado' }, 401);
+  console.warn(`[prova-ausente] ${acao}`);
+  return null;
+}
+
 async function verifyPin(body: Body): Promise<Response> {
   const employeeId = String(body.employeeId ?? '').trim();
   const pin = String(body.pin ?? '');
@@ -353,6 +399,8 @@ async function todayAttendance(body: Body): Promise<Response> {
   const employeeId = String(body.employeeId ?? '').trim();
   const companyId = String(body.companyId ?? '').trim();
   if (!employeeId || !companyId) return json({ error: 'Invalid employeeId or companyId' }, 400);
+  const recusa = await recusaSemProva('today-attendance', employeeId, companyId, body);
+  if (recusa) return recusa;
 
   const today = getBrazilDateString();
   const { data, error } = await supabase
@@ -375,6 +423,8 @@ async function attendanceHistory(body: Body): Promise<Response> {
   if (!Number.isFinite(days) || days < 1 || days > 365) {
     return json({ error: 'Invalid days range (1-365)' }, 400);
   }
+  const recusa = await recusaSemProva('attendance-history', employeeId, companyId, body);
+  if (recusa) return recusa;
 
   const endDate = getBrazilDateString();
   const startMs = new Date(endDate).getTime() - (days - 1) * 86_400_000;
@@ -543,6 +593,9 @@ async function identifyFace(body: Body): Promise<Response> {
     employeeName: best.name,
     cpf: best.cpf,
     faceDistance: best.distance,
+    // 30/09/2026: o rosto reconhecido vale como a senha dela por 15 min (ponto do dia e
+    // histórico no tablet, onde ninguém digita PIN).
+    comprovanteFacial: await emitirComprovanteFacial(SRV, best.id, companyId, Date.now()),
   });
 }
 
@@ -684,6 +737,8 @@ async function employeeErrorsByPeriod(body: Body): Promise<Response> {
   if (!employeeId || !periodId || !companyId) {
     return json({ error: 'Invalid employeeId, periodId or companyId' }, 400);
   }
+  const recusa = await recusaSemProva('employee-errors-by-period', employeeId, companyId, body);
+  if (recusa) return recusa;
 
   const { data: period, error: pErr } = await supabase
     .from('payment_periods')
@@ -843,6 +898,8 @@ async function employeeErrorPeriods(body: Body): Promise<Response> {
   const employeeId = String(body.employeeId ?? '').trim();
   const companyId = String(body.companyId ?? '').trim();
   if (!employeeId || !companyId) return json({ error: 'Invalid employeeId or companyId' }, 400);
+  const recusa = await recusaSemProva('employee-error-periods', employeeId, companyId, body);
+  if (recusa) return recusa;
 
   const { data: periods, error: pErr } = await supabase
     .from('payment_periods')

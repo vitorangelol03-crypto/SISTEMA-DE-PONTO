@@ -10,7 +10,11 @@ import { CameraProblem } from './CameraProblem';
 interface FaceIdentifyClockProps {
   company: Company;
   /** Depois de "NOME, confirma?" contar CONFIRM_COUNTDOWN_SECONDS sem cancelar — o pai faz o registro de fato. */
-  onConfirmed: (employee: Employee, descriptor: number[], type: 'entry' | 'exit', markingPosition?: MarkingPosition) => void;
+  onConfirmed: (
+    employee: Employee, descriptor: number[], type: 'entry' | 'exit', markingPosition?: MarkingPosition,
+    /** 30/09/2026: o comprovante do rosto reconhecido — é a "senha" da sessão no tablet. */
+    comprovanteFacial?: string,
+  ) => void;
   onUseCpf: () => void;
   /** Segredo do tablet (30/09/2026) — com a trava da empresa ligada, o servidor só identifica em tablet autorizado. */
   deviceToken?: string | null;
@@ -23,6 +27,11 @@ interface FaceIdentifyClockProps {
    * aproveita pra pedir o GPS já, em paralelo com a contagem, em vez de depois dela.
    */
   onRecognized?: () => void;
+  /**
+   * true enquanto alguém está sendo reconhecido/confirmado (01/10/2026) — o pai não recarrega a
+   * tela pra versão nova nesse meio (useAtualizacaoAutomatica).
+   */
+  onOcupado?: (ocupado: boolean) => void;
 }
 
 type Phase =
@@ -73,7 +82,7 @@ const NO_MATCH_BEFORE_WARNING = 3;
  */
 
 export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
-  company, onConfirmed, onUseCpf, deviceToken = null, deviceName = null, onDeviceBlocked, onRecognized,
+  company, onConfirmed, onUseCpf, deviceToken = null, deviceName = null, onDeviceBlocked, onRecognized, onOcupado,
 }) => {
   const { loading: modelsLoading, ready: modelsReady, error: modelsError, detectFace } = useFaceApi();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -140,6 +149,10 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
 
   useEffect(() => () => { clearTimers(); }, []);
 
+  useEffect(() => {
+    onOcupado?.(phase === 'identifying' || phase === 'identified' || phase === 'already-done');
+  }, [phase, onOcupado]);
+
   // Volta a escanear depois de um resultado (identificado/recusado/já completo)
   const resumeScanning = useCallback(() => {
     clearTimers();
@@ -150,6 +163,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
 
   const startConfirmCountdown = useCallback((
     employee: Employee, descriptor: number[], type: 'entry' | 'exit', markingPosition: MarkingPosition | undefined, label: string,
+    comprovanteFacial?: string,
   ) => {
     setIdentified({ employee, descriptor, type, markingPosition, label });
     setPhase('identified');
@@ -160,7 +174,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
       setCountdown(left);
       if (left <= 0) {
         if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; }
-        onConfirmed(employee, descriptor, type, markingPosition);
+        onConfirmed(employee, descriptor, type, markingPosition, comprovanteFacial);
       }
     }, 1000);
   }, [onConfirmed]);
@@ -268,7 +282,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         // ao servidor em fila custava ~0,5s no caminho.
         const [emp, today] = await Promise.all([
           getEmployeeByCpf(result.cpf!, company.id),
-          getEmployeeTodayAttendance(result.employeeId, company.id),
+          getEmployeeTodayAttendance(result.employeeId, company.id, { comprovanteFacial: result.comprovanteFacial }),
         ]);
         if (!mounted) return;
         if (!emp) { setPhase('scanning'); return; }
@@ -284,7 +298,9 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         }
 
         onRecognizedRef.current?.();
-        startConfirmRef.current?.(emp, Array.from(descriptor), action.type, action.markingPosition, action.label);
+        startConfirmRef.current?.(
+          emp, Array.from(descriptor), action.type, action.markingPosition, action.label, result.comprovanteFacial,
+        );
       } catch (err) {
         console.error('Erro no reconhecimento sem CPF:', err);
         setPhase('scanning');

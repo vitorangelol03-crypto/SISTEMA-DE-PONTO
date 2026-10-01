@@ -8,3 +8,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** Etiqueta única deste build (vite.config.ts → etiquetaDaVersao). Não existe nos testes unitários. */
+declare const __VERSAO_DO_APP__: string;

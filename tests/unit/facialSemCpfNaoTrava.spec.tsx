@@ -159,6 +159,24 @@ describe('facial sem CPF (o fluxo do tablet)', () => {
     expect(onConfirmed).not.toHaveBeenCalled();
   }, 20_000);
 
+  /**
+   * 30/09/2026 (roadmap item 5): o ponto do dia só sai do servidor com a prova da pessoa. No
+   * tablet não há PIN — a prova é o comprovante que o servidor devolve ao reconhecer o rosto.
+   * Ele tem que ir na consulta do ponto do dia E chegar ao pai (que carrega o painel com ele).
+   */
+  it('comprovante do rosto: vai na consulta do ponto do dia e chega ao pai', async () => {
+    identifyFace.mockImplementation(() => comAtraso({
+      matched: true, employeeId: 'f-1', cpf: '12345678901', comprovanteFacial: 'comprovante-da-maria',
+    }));
+    const onConfirmed = vi.fn();
+
+    render(<FaceIdentifyClock company={EMPRESA} onConfirmed={onConfirmed} onUseCpf={vi.fn()} />);
+
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1), { timeout: 8000 });
+    expect(getEmployeeTodayAttendance).toHaveBeenCalledWith('f-1', 'emp-1', { comprovanteFacial: 'comprovante-da-maria' });
+    expect(onConfirmed.mock.calls[0][4]).toBe('comprovante-da-maria');
+  }, 20_000);
+
   it('servidor lento: a saída manual continua na tela (ninguém fica preso)', async () => {
     // Resposta que nunca chega — o pior caso do galpão com rede ruim.
     identifyFace.mockReturnValue(new Promise(() => {}));

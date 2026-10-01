@@ -1,12 +1,44 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
 import path from 'node:path';
 
+/**
+ * ETIQUETA DA VERSÃO (01/10/2026). Cada build ganha uma etiqueta única, gravada no bundle
+ * (`__VERSAO_DO_APP__`) e publicada em `/version.json`. As telas do funcionário comparam as duas e
+ * se recarregam sozinhas quando sai versão nova (ver useAtualizacaoAutomatica).
+ *
+ * Por quê: o Safari do iPhone guarda a aba aberta e não busca a página de novo. Em 01/10 o
+ * Washington bateu ponto às 02:08 numa tela de ANTES de 30/09 — o servidor já exigia o PIN pro
+ * rosto, a tela velha não mandava, e ela disse "Não foi possível acessar a câmera".
+ */
+const VERSAO_DO_APP = `${(process.env.VERCEL_GIT_COMMIT_SHA ?? 'local').slice(0, 12)}-${Date.now()}`;
+
+function etiquetaDaVersao(): Plugin {
+  const corpo = JSON.stringify({ versao: VERSAO_DO_APP });
+  return {
+    name: 'etiqueta-da-versao',
+    configureServer(server) {
+      server.middlewares.use('/version.json', (_req, res) => {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(corpo);
+      });
+    },
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: corpo });
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: {
+    __VERSAO_DO_APP__: JSON.stringify(VERSAO_DO_APP),
+  },
   plugins: [
     react(),
+    etiquetaDaVersao(),
     visualizer({
       open: false,
       gzipSize: true,
