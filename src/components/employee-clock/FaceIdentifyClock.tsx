@@ -9,7 +9,7 @@ import { CameraProblem } from './CameraProblem';
 
 interface FaceIdentifyClockProps {
   company: Company;
-  /** Depois de "NOME, confirma?" contar 3s sem cancelar — o pai faz o registro de fato. */
+  /** Depois de "NOME, confirma?" contar CONFIRM_COUNTDOWN_SECONDS sem cancelar — o pai faz o registro de fato. */
   onConfirmed: (employee: Employee, descriptor: number[], type: 'entry' | 'exit', markingPosition?: MarkingPosition) => void;
   onUseCpf: () => void;
   /** Segredo do tablet (30/09/2026) — com a trava da empresa ligada, o servidor só identifica em tablet autorizado. */
@@ -35,9 +35,9 @@ type Phase =
 
 // Pedido do Victor (04/09/2026): "não pode confundir, tem que ser robusta" —
 // nunca gravamos ponto sem a pessoa ver o próprio nome e ter uma chance real
-// de cancelar. 3s é o mesmo tipo de janela que o app já usa noutros lugares
-// (ex.: auto-logout), curto o bastante pra não travar a fila de gente.
-const CONFIRM_COUNTDOWN_SECONDS = 3;
+// de cancelar. Era 3s; baixado pra 2s em 30/09/2026 por decisão do Victor, pra dar folga
+// na meta de 5–7s (rosto na câmera → ponto gravado). O nome e o "Não sou eu" continuam.
+const CONFIRM_COUNTDOWN_SECONDS = 2;
 // Depois de identificado (confirmado OU cancelado), ignora esta pessoa por um
 // tempo — evita reconhecer a mesma pessoa de novo enquanto ela ainda está
 // saindo de frente da câmera.

@@ -82,8 +82,8 @@ type ConferenciaDoAparelho = 'pendente' | 'conferido' | 'falhou';
 /**
  * GPS PEDIDO MAIS CEDO (30/09/2026). Meta do Victor: da pessoa parar na frente do tablet até o
  * ponto gravado, 5 a 7 segundos. Medido no banco (14 dias): do rosto reconhecido ao ponto
- * gravado a mediana era 7,1s (pior 13s) — 3s são a contagem com o nome na tela (decisão de
- * 04/09) e boa parte do resto era o GPS: a posição só era pedida DEPOIS da contagem/da facial, e
+ * gravado a mediana era 7,1s (pior 13s) — 3s eram a contagem com o nome na tela (decisão de
+ * 04/09; 2s desde 30/09) e boa parte do resto era o GPS: a posição só era pedida DEPOIS da contagem/da facial, e
  * a batida esperava o aparelho achar o satélite (16 batidas em 14 dias morreram em "Localização
  * não fornecida").
  *

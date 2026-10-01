@@ -21,7 +21,7 @@
  * Roda com: npx vitest run facialSemCpfNaoTrava
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 
 const identifyFace = vi.fn();
 const getEmployeeByCpf = vi.fn();
@@ -110,12 +110,53 @@ describe('facial sem CPF (o fluxo do tablet)', () => {
     );
     expect(screen.getByText(/Registrando/i)).toBeTruthy();
 
-    // E o registro acontece sozinho depois da contagem de 3s (o pai é quem grava).
+    // E o registro acontece sozinho depois da contagem (o pai é quem grava).
     await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1), { timeout: 8000 });
     const [emp, descriptor, tipo] = onConfirmed.mock.calls[0];
     expect((emp as { id: string }).id).toBe('f-1');
     expect(tipo).toBe('entry');
     expect((descriptor as number[]).length).toBe(128);
+  }, 20_000);
+
+  /**
+   * 30/09/2026 — contagem com o nome baixada de 3s pra 2s (decisão do Victor, meta 5–7s).
+   * Trava as duas pontas: NÃO grava antes dos 2s (a pessoa ainda tem tempo de ver o nome) e
+   * grava logo depois deles; e o "Não sou eu" dentro da janela impede a gravação.
+   */
+  it('contagem de 2s: mostra "em 2s", não grava antes e grava logo depois', async () => {
+    identifyFace.mockResolvedValue({ matched: true, employeeId: 'f-1', cpf: '12345678901' });
+    const onConfirmed = vi.fn();
+
+    render(<FaceIdentifyClock company={EMPRESA} onConfirmed={onConfirmed} onUseCpf={vi.fn()} />);
+
+    // Mede a partir do NOME na tela (não do texto "em 2s": na contagem antiga de 3s, esse texto
+    // também aparece — 1s depois do nome — e o teste passava igual; o A/B pegou).
+    await waitFor(() => expect(screen.getByText('MARIA APARECIDA DOS SANTOS')).toBeTruthy(), { timeout: 8000 });
+    const nomeNaTela = Date.now();
+    expect(screen.getByText(/Registrando/).textContent).toMatch(/em 2s/);
+    expect(onConfirmed).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1), { timeout: 5000 });
+    const decorrido = Date.now() - nomeNaTela;
+    // Não pode gravar antes da janela (~2s; folga de 150ms pro intervalo do jsdom)...
+    expect(decorrido).toBeGreaterThanOrEqual(1850);
+    // ...nem esperar a contagem antiga de 3s.
+    expect(decorrido).toBeLessThan(2900);
+  }, 20_000);
+
+  it('"Não sou eu" dentro dos 2s: não grava', async () => {
+    identifyFace.mockResolvedValue({ matched: true, employeeId: 'f-1', cpf: '12345678901' });
+    const onConfirmed = vi.fn();
+
+    render(<FaceIdentifyClock company={EMPRESA} onConfirmed={onConfirmed} onUseCpf={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText('MARIA APARECIDA DOS SANTOS')).toBeTruthy(), { timeout: 8000 });
+    fireEvent.click(screen.getByRole('button', { name: /Não sou eu/i }));
+
+    // Provar que algo NÃO acontece exige deixar a janela passar: 2s da contagem + folga.
+    // (A mesma pessoa ainda está na câmera, mas o cooldown de 6s impede reconhecê-la de novo.)
+    await new Promise((r) => setTimeout(r, 2600));
+    expect(onConfirmed).not.toHaveBeenCalled();
   }, 20_000);
 
   it('servidor lento: a saída manual continua na tela (ninguém fica preso)', async () => {
