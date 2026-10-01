@@ -445,3 +445,39 @@ bloqueou o deploy em produção — versão no ar v19, conferida IGUAL ao HEAD a
 corrigir a asserção do 5b (conferir a ENTRADA preenchida em vez de "nenhum --:--:--").
 **Ordem quando liberar:** deploy → `edgeFnConsultaComProva` ao vivo → E2E 127 inteiro → commit +
 push do código → CI → checkpoint. Depois de 1–2 dias: log sem `[prova-ausente]` → passo 2.
+
+## 16. 01/10 madrugada/manhã — item 5 + ATUALIZAÇÃO AUTOMÁTICA NO AR (`c5261b2`)
+
+**Victor:** *"sim para os dois"* — (a) liberou o deploy da edge fn + OK pra corrigir a asserção do
+5b; (b) fazer a atualização automática.
+
+### Relato do Washington (01/10 02:08, iPhone/Safari) — causa provada
+"Erro na verificação — Não foi possível acessar a câmera" → "Reconhecimento facial falhou. Procure o
+supervisor". **Não era câmera:** o texto só existe no código de ANTES de `eba2e45` (30/09 09:48) — o
+Safari manteve a aba velha. A tela velha pedia `face-descriptor` sem PIN; desde a v19 (30/09 10:46)
+o servidor exige → 401 às **02:08:12** (log da edge fn) → o código antigo chamava qualquer falha de
+"câmera". Outras 401 reais prováveis: 30/09 11:31 (5x) e 14:00 (2x). Washington sem ponto em 01/10
+(decisão do Victor lançar). Não reproduzido localmente com o código velho — prova = log + texto.
+
+### Entregue (no ar)
+- edge fn `employee-public-api` **v20** (deploy com OK; baixada e conferida = repo, 5 arquivos).
+  Passo 1: prova ERRADA → 401; AUSENTE passa e loga `[prova-ausente]`.
+- Atualização automática (`useAtualizacaoAutomatica` + `/version.json` por build, sem cache):
+  /clock e /erros recarregam sozinhas quando sai versão nova, só com a tela livre (sem CPF
+  digitado, câmera sem ninguém sendo reconhecido); 1x por versão e 1x a cada 2 min (o E2E pegou
+  círculo com etiqueta instável — erro do meu teste, mas a trava ficou). ⚠️ Quem JÁ tem tela velha
+  aberta precisa recarregar à mão UMA vez; daí em diante atualiza sozinho.
+- Produção conferida: version.json `c5261b268c8f-…` (JSON, no-store) = etiqueta dentro do bundle
+  `index--Trucr4R.js`, que tem o link da consulta e o comprovante.
+
+### Validação
+typecheck 0 · lint 0 · build · deno check · unit **2.056** (137 arq., 0 falha) · edge fn ao vivo
+17/17 · E2E 127/128/31/109/130 **31/31** (nome→ponto 2,3s) · A/B: 6 de tela + 3 do servidor
+(contra a v19) + 3 do E2E 130 vermelhos no código antigo · banco limpo, trava desligada nas 2 ·
+**CI do `c5261b2` (run 36849875196) verde nos 3 jobs**.
+
+### Pendências
+1. **Passo 2** (exigir prova sempre): quando o log da edge fn ficar sem `[prova-ausente]` — virar
+   `EXIGIR_PROVA_DO_FUNCIONARIO = true` + `EXIGINDO_PROVA = true` no teste ao vivo, deploy (pedir OK).
+2. Avisar o pessoal: quem tiver a tela de ponto aberta há dias, recarregar uma vez.
+3. Ponto do Washington em 01/10 (lançar à mão, decisão do Victor). `clockOut` = código morto (avisado).

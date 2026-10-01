@@ -1,5 +1,7 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **📌 01/10 — ITEM 5 DO ROADMAP + TELA QUE SE ATUALIZA SOZINHA (NO AR, `c5261b2`, edge fn v20).** Fora do tablet: "Ver meus erros, pontos e recibos" (consulta, sem bater). Servidor exige PIN ou comprovante facial (passo 1: errada=401, ausente só loga `[prova-ausente]`). Relato do Washington (02:08) = aba velha do Safari + servidor novo → agora /clock e /erros recarregam sozinhas quando sai versão. Unit 2.056 · E2E 31/31 · ao vivo 17/17 · CI verde. **Pendente:** passo 2 quando o log zerar; Washington sem ponto 01/10. Detalhe: §16 de `CHECKPOINT_SESSAO_2026-09-30.md`.
+
 > **⏸️ 01/10 ~01:00 — ROADMAP ITEM 5 PROGRAMADO, SEM COMMIT, esperando o Victor** (liberar o deploy da edge fn, que o Claude Code bloqueou, + OK pra corrigir 1 asserção errada MINHA no E2E 127/5b). Consulta fora do tablet (erros+pontos+recibos), comprovante facial, servidor exigindo prova em 2 passos. Detalhe e ordem de retomada: §15 de `CHECKPOINT_SESSAO_2026-09-30.md`.
 
 > **📌 30/09 ~22:20 — CONTAGEM COM O NOME 3s → 2s (NO AR, `5c0ea54`).** Pedido do Victor. Unit 2.027 · E2E 127+128 38/38 · nome → ponto gravado 2,9s (era 3,4s) · produção idêntica byte a byte · CI verde nos 3 jobs. **Roadmap item 5 ("fora da empresa só meus erros"): investigado, plano com o Victor** — `/erros` já existe; falta caminho até ele na tela de aparelho barrado e o servidor entregar erros/ponto SEM PIN (só com o CPF). Detalhe: §14 de `CHECKPOINT_SESSAO_2026-09-30.md`.
