@@ -481,3 +481,9 @@ typecheck 0 · lint 0 · build · deno check · unit **2.056** (137 arq., 0 falh
    `EXIGIR_PROVA_DO_FUNCIONARIO = true` + `EXIGINDO_PROVA = true` no teste ao vivo, deploy (pedir OK).
 2. Avisar o pessoal: quem tiver a tela de ponto aberta há dias, recarregar uma vez.
 3. Ponto do Washington em 01/10 (lançar à mão, decisão do Victor). `clockOut` = código morto (avisado).
+
+### 01/10 08:15 — ponto do Washington lançado (ordem do Victor: "a mesma média do pessoal")
+Entrada **02:12** (média dos 17 de Caratinga que entraram 00:00–04:30 em 01/10), `clock_source
+manual`, `marked_by 2626`, INSERT direto como postgres (o gatilho `enforce_ponto_master_only` libera
+postgres). Saída EM ABERTO: o turno não tinha acabado (1 de 17 saiu) — ele bate a saída normal
+depois de recarregar a tela; se não bater, lançar a saída pela média do turno quando fechar.
