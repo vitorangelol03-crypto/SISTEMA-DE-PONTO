@@ -384,3 +384,31 @@ Tudo commitado e enviado (`28b9d7d` app no ar, `c8e8d5d` testes, checkpoints). N
 dependa do PC (servidor de teste desligado; o CI roda no GitHub). **CI do `c8e8d5d` VERDE** (20:39, conferido antes do reinício) —
 nada a conferir na volta. Pendências dele: instalar o app no tablet (§12),
 trocar a senha da aba Admin (§10), ligar a trava quando quiser (§9), 3 rostos "no limite" (§9).
+
+## 14. Noite (~21:45, depois do reinício) — contagem 3s → 2s (NO AR, `5c0ea54`) + investigação do roadmap item 5
+
+**Victor:** *"poe fazer os dois"* — (A) baixar a contagem com o nome de 3s pra 2s (§9 item 5) e (B)
+roadmap item 5 "fora da empresa o funcionário só vê os próprios erros".
+
+### A — contagem 2s (feito)
+- `FaceIdentifyClock.tsx`: `CONFIRM_COUNTDOWN_SECONDS = 2`. Nome na tela e "Não sou eu" continuam.
+- 2 testes novos em `facialSemCpfNaoTrava.spec.tsx` (começa em 2s, não grava antes, grava logo
+  depois; "Não sou eu" impede). 🔴 **A 1ª versão do teste passava com 3s também** (esperava o texto
+  "em 2s", que na contagem de 3s aparece 1s depois do nome) — o A/B pegou; agora mede a partir do
+  NOME. A/B final: com 3s falha ("em 3s"), com 2s passa.
+- Validação: typecheck 0 · lint 0 · build limpo · unit **2.027** (133 arquivos, 12 lotes, 0 worker
+  morto) · E2E 127 (rosto de verdade) + 128 **38/38** (chromium + pixel5; firefox/webkit pulam de
+  propósito) · nome → ponto gravado **2,9s** (antes 3,4s — caiu 0,5s, não 1s: o resto é GPS/servidor
+  que já corriam junto com a contagem) · banco limpo (0 empresa de teste, 0 tablet, trava desligada
+  nas 2) · produção: `index-6Io_VlZ8.js` **idêntico byte a byte** ao build testado · **CI do `5c0ea54` (run 36800599886) verde nos 3 jobs**.
+
+### B — o que a investigação achou (nada programado ainda; plano entregue ao Victor)
+- **`/erros` já existe** (desde 21/04): CPF + PIN → só os erros por período + recibos publicados.
+  Funciona de qualquer lugar, sem GPS.
+- Celular pessoal no `/clock`: com a trava DESLIGADA (hoje) entra e vê painel do dia + resumo do
+  mês + 30 dias; com a trava LIGADA cai em "Ponto só no tablet da empresa" — **sem caminho pros
+  erros** nessa tela.
+- 🔴 **Servidor:** `employee-errors-by-period`, `employee-error-periods`, `today-attendance` e
+  `attendance-history` **não pedem PIN** — só o id, que `lookup-employee` entrega com o CPF. Ou
+  seja: com o CPF de alguém dá pra ver os erros (e o ponto com lat/long) dele. Recibos já pedem PIN
+  (63eaf04).
