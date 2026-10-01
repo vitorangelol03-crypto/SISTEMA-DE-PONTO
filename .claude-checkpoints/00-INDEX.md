@@ -1,5 +1,7 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **📌 01/10 manhã — pendências técnicas:** `clockIn/clockOut` apagados (`799e205`, CI verde); 10a obsoleto; 10c não reproduz. 🔴 **tests/34 caso 8 regrava a config REAL de Caratinga** (números iguais, mas 3 `updated_by` viraram "9999") e 🔴 **banco de horas de Caratinga com saldo 0 em 475/495 dias de setembro** (batida não grava os minutos). Esperando o Victor nas 2 decisões. Detalhe: §17 de `CHECKPOINT_SESSAO_2026-09-30.md`.
+
 > **📌 01/10 — ITEM 5 DO ROADMAP + TELA QUE SE ATUALIZA SOZINHA (NO AR, `c5261b2`, edge fn v20).** Fora do tablet: "Ver meus erros, pontos e recibos" (consulta, sem bater). Servidor exige PIN ou comprovante facial (passo 1: errada=401, ausente só loga `[prova-ausente]`). Relato do Washington (02:08) = aba velha do Safari + servidor novo → agora /clock e /erros recarregam sozinhas quando sai versão. Unit 2.056 · E2E 31/31 · ao vivo 17/17 · CI verde. **Pendente:** passo 2 quando o log zerar; Washington sem ponto 01/10. Detalhe: §16 de `CHECKPOINT_SESSAO_2026-09-30.md`.
 
 > **⏸️ 01/10 ~01:00 — ROADMAP ITEM 5 PROGRAMADO, SEM COMMIT, esperando o Victor** (liberar o deploy da edge fn, que o Claude Code bloqueou, + OK pra corrigir 1 asserção errada MINHA no E2E 127/5b). Consulta fora do tablet (erros+pontos+recibos), comprovante facial, servidor exigindo prova em 2 passos. Detalhe e ordem de retomada: §15 de `CHECKPOINT_SESSAO_2026-09-30.md`.

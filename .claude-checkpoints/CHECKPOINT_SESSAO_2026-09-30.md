@@ -487,3 +487,27 @@ Entrada **02:12** (média dos 17 de Caratinga que entraram 00:00–04:30 em 01/1
 manual`, `marked_by 2626`, INSERT direto como postgres (o gatilho `enforce_ponto_master_only` libera
 postgres). Saída EM ABERTO: o turno não tinha acabado (1 de 17 saiu) — ele bate a saída normal
 depois de recarregar a tela; se não bater, lançar a saída pela média do turno quando fechar.
+
+## 17. 01/10 manhã — pendências técnicas 9 e 10 ("te dou meu ok")
+
+- **9 FEITO (`799e205`, CI verde):** `clockIn`/`clockOut` apagados do database.ts (código morto). O comentário
+  do `folhaCalc` dizia que o adicional noturno do diarista "vive no clockOut" — vive na edge fn
+  `clock-in-validated` (mesma fórmula). typecheck/lint/build + 145 unit da folha.
+- **10a (tests/15 lento com fila de aprovações):** OBSOLETO — os testes de aprovação saíram com a
+  função em 12/09 (`7f2e2df`).
+- **10b (tests/34):** 2 falhas, as duas do TESTE:
+  - caso 3 (troca CT→PN): corrida no `goToTab` (helpers) — logo após montar, a barra mostra TODAS
+    as abas e só depois o `TabNavigation` mede e manda o excedente pro "Mais"; o helper vê "Admin"
+    visível, o clique espera um botão que foi pro menu.
+  - 🔴 caso 8 ("Salvar Cidade"): aperta Salvar na CARATINGA REAL — o botão regrava cerca, empresa,
+    payroll_config e as tabelas INSS/IRRF. Rodado hoje 09:39: números IDÊNTICOS às migrations
+    (conferido), cidade devolvida; mas `updated_by` (a anotação de origem) virou "9999" em 3 linhas:
+    payroll_config de Caratinga (era 'Portaria Interministerial MPS/MF 13 de 09/01/2026 (fonte
+    oficial)', mig. 20260922060204), INSS e IRRF (eram 'migration 21/09 - parcela a deduzir…',
+    mig. 20260921095508). O CI não roda o 34 (só rodada manual).
+- **10c (edgeFnClockFacialGeoEstrito flaky):** não reproduz — 3/3 aqui; o job vitest do main falhou só
+  em 12/09 e 18/09 (logs expirados), nenhuma desde então. Sem mudança (sem retry às cegas).
+- **10d (duas contas de horas):** costuradas em 12/09 (espelho/financeiro usam a hora legado quando
+  falta o minuto), MAS crédito/débito do **banco de horas** não têm substituto: a batida pela edge fn
+  não grava os minutos → Caratinga (banco de horas LIGADO, sem efeito no pagamento) tem 475 de 495
+  dias de setembro com saldo 0 no espelho. Decisão do Victor pendente.
