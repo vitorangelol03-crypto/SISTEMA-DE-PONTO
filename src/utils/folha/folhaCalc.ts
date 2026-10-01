@@ -262,7 +262,9 @@ export const HORAS_MENSAIS_CLT = 220;
  * Adicional noturno em R$ para MENSALISTA: 20% sobre a hora, nas horas noturnas.
  *
  * Só carteira assinada usa isto (decisão do Victor, 18/09/2026). O diarista continua
- * como sempre — a conta dele vive no `clockOut`, a partir da diária, e não foi tocada.
+ * como sempre — a conta dele vive na edge function `clock-in-validated` (na SAÍDA), a partir
+ * da diária, e não foi tocada. (Até 01/10/2026 este comentário apontava pro `clockOut` do
+ * database.ts — uma cópia antiga que ninguém chamava e foi apagada.)
  *
  * Por que não dava pra reaproveitar a conta do diarista: lá a hora sai da DIÁRIA dividida
  * pelas horas do dia; aqui sai do salário do mês dividido pela jornada mensal. São duas

@@ -3941,7 +3941,7 @@ const FALLBACK_SCHEDULE: ExpectedSchedule = [0, 480, 480, 480, 480, 480, 240];
  * permanece com os valores anteriores intactos (não derrubar aprovação por bug aqui).
  *
  * Chamado após markAttendance e setManualTime.
- * NÃO chamado em fluxos self-clock (clockIn/clockOut/edge function).
+ * NÃO chamado na batida do funcionário — essa conta roda na edge function clock-in-validated.
  */
 async function recalcAttendance(attendanceId: string): Promise<void> {
   try {
@@ -4117,94 +4117,6 @@ export const getEmployeeTodayAttendance = async (
     ...camposDaProva(prova),
   });
   return data.attendance ?? null;
-};
-
-/** Funcionário registra entrada. */
-export const clockIn = async (
-  employeeId: string,
-  geoData: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number } | undefined,
-  companyId: string
-): Promise<Attendance> => {
-  const today = getBrazilDateString();
-  const now = new Date().toISOString();
-
-  const record: Record<string, unknown> = {
-    employee_id: employeeId,
-    date: today,
-    status: 'present',
-    entry_time: now,
-    clock_source: 'employee_self',
-    company_id: companyId,
-  };
-
-  if (geoData) {
-    record.entry_latitude = geoData.latitude;
-    record.entry_longitude = geoData.longitude;
-    record.entry_accuracy = geoData.accuracy;
-    record.geo_valid = geoData.geo_valid;
-    record.geo_distance_meters = geoData.geo_distance_meters;
-  }
-
-  const { data, error } = await supabase
-    .from('attendance')
-    .upsert([record], { onConflict: 'employee_id,date' })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
-};
-
-/** Funcionário registra saída. Calcula horas trabalhadas e horas noturnas. */
-export const clockOut = async (
-  employeeId: string,
-  dailyRate: number | undefined,
-  geoData: { latitude: number; longitude: number; accuracy: number; geo_valid: boolean; geo_distance_meters: number } | undefined,
-  companyId: string,
-  prova: ProvaDoFuncionario,
-): Promise<Attendance> => {
-  const today = getBrazilDateString();
-  const now = new Date();
-
-  const existing = await getEmployeeTodayAttendance(employeeId, companyId, prova);
-  if (!existing || !existing.entry_time) {
-    throw new Error('Nenhuma entrada registrada hoje para calcular a saída');
-  }
-
-  const entry = new Date(existing.entry_time);
-  const { hoursWorked, nightHours } = calcHours(entry, now);
-
-  let nightAdditional = 0;
-  if (nightHours > 0 && hoursWorked > 0 && dailyRate && dailyRate > 0) {
-    const hourlyRate = dailyRate / hoursWorked;
-    nightAdditional = Math.round(nightHours * hourlyRate * 0.2 * 100) / 100;
-  }
-
-  const updateRecord: Record<string, unknown> = {
-    exit_time_full: now.toISOString(),
-    hours_worked: hoursWorked,
-    night_hours: nightHours,
-    night_additional: nightAdditional,
-  };
-
-  if (geoData) {
-    updateRecord.exit_latitude = geoData.latitude;
-    updateRecord.exit_longitude = geoData.longitude;
-    updateRecord.geo_valid = geoData.geo_valid;
-    updateRecord.geo_distance_meters = geoData.geo_distance_meters;
-  }
-
-  const { data, error } = await supabase
-    .from('attendance')
-    .update(updateRecord)
-    .eq('employee_id', employeeId)
-    .eq('date', today)
-    .eq('company_id', companyId)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
 };
 
 /**
