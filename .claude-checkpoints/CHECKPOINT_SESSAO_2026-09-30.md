@@ -412,3 +412,36 @@ roadmap item 5 "fora da empresa o funcionário só vê os próprios erros".
   `attendance-history` **não pedem PIN** — só o id, que `lookup-employee` entrega com o CPF. Ou
   seja: com o CPF de alguém dá pra ver os erros (e o ponto com lat/long) dele. Recibos já pedem PIN
   (63eaf04).
+
+## 15. Madrugada 01/10 — roadmap item 5 PROGRAMADO, NÃO commitado (parado em 2 pontos do Victor)
+
+**Decisões do Victor (não re-perguntar):** (1) fora do tablet *"pode ver tudo mas não bater o ponto
+de forma nenhuma se não tiver liberado"* — erros + recibos + PONTOS; (2) o caminho da consulta
+aparece *"fora do tablet"*; (3) *"sim"* pra fechar a brecha do servidor.
+
+**O que está na árvore (sem commit):**
+- `_shared/acessoDoFuncionario.ts`: COMPROVANTE FACIAL (HMAC, 15 min, por pessoa+empresa) que
+  `identify-face` devolve ao reconhecer — no tablet não há PIN, o rosto vira a senha.
+- `employee-public-api`: today-attendance, attendance-history e os 2 de erros conferem PIN OU
+  comprovante. **Troca em 2 passos** (`EXIGIR_PROVA_DO_FUNCIONARIO = false`): prova errada já é
+  401; prova AUSENTE ainda passa e fica no log como `[prova-ausente] <ação>` — porque a facial sem
+  CPF roda todo dia em Caratinga em telas ABERTAS com o código velho (exigir de uma vez travaria a
+  batida na porta). Passo 2 = virar true quando o log zerar (+ `EXIGINDO_PROVA` no teste ao vivo).
+- Tela: `/clock` manda PIN ou comprovante; `/erros` ganhou "Meus pontos" (`MeusPontos.tsx`, saiu do
+  EmployeeClockIn) e manda o PIN; link "Ver meus erros, pontos e recibos" no CPF e no aparelho
+  barrado, só quando NÃO é tablet. 🔴 Defeito antigo consertado: falha ao buscar os erros mostrava
+  "Nenhum erro registrado — continue assim!".
+- `clockOut` (database.ts) é código morto (ninguém chama) — só recebeu o parâmetro; avisar.
+
+**Validação:** typecheck 0 · lint 0 · build · deno check ok · unit 2.046 (136 arq.) — as 2 falhas
+são `edgeFnConsultaComProva` contra o servidor AINDA velho (A/B: PIN errado devolve 200 hoje) ·
+A/B front: 6 testes novos vermelhos no código antigo · E2E 128/31/109 verdes; **127: o passo 5b
+novo falhou por erro MEU no teste** (esperei a linha de hoje sem "--:--:--", mas a SAÍDA só é batida
+no passo 6 — a tela está certa: entrada 00:06:52, saída vazia). Passos 6–9 não rodaram por isso.
+Banco limpo, trava desligada nas 2.
+
+**Parado esperando o Victor:** (a) liberar a publicação da edge fn (o classificador do Claude Code
+bloqueou o deploy em produção — versão no ar v19, conferida IGUAL ao HEAD antes); (b) OK pra
+corrigir a asserção do 5b (conferir a ENTRADA preenchida em vez de "nenhum --:--:--").
+**Ordem quando liberar:** deploy → `edgeFnConsultaComProva` ao vivo → E2E 127 inteiro → commit +
+push do código → CI → checkpoint. Depois de 1–2 dias: log sem `[prova-ausente]` → passo 2.

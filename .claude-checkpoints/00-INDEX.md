@@ -1,5 +1,7 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **⏸️ 01/10 ~01:00 — ROADMAP ITEM 5 PROGRAMADO, SEM COMMIT, esperando o Victor** (liberar o deploy da edge fn, que o Claude Code bloqueou, + OK pra corrigir 1 asserção errada MINHA no E2E 127/5b). Consulta fora do tablet (erros+pontos+recibos), comprovante facial, servidor exigindo prova em 2 passos. Detalhe e ordem de retomada: §15 de `CHECKPOINT_SESSAO_2026-09-30.md`.
+
 > **📌 30/09 ~22:20 — CONTAGEM COM O NOME 3s → 2s (NO AR, `5c0ea54`).** Pedido do Victor. Unit 2.027 · E2E 127+128 38/38 · nome → ponto gravado 2,9s (era 3,4s) · produção idêntica byte a byte · CI verde nos 3 jobs. **Roadmap item 5 ("fora da empresa só meus erros"): investigado, plano com o Victor** — `/erros` já existe; falta caminho até ele na tela de aparelho barrado e o servidor entregar erros/ponto SEM PIN (só com o CPF). Detalhe: §14 de `CHECKPOINT_SESSAO_2026-09-30.md`.
 
 > **⏸️ PAUSA 30/09 20:36 (reinício do PC):** tudo commitado, no ar e com **CI verde** (`28b9d7d` app + `c8e8d5d` testes, run 36791057396 verde às 20:39). Nada pendente de conferir. Detalhe no fim do §13 de `CHECKPOINT_SESSAO_2026-09-30.md`.
