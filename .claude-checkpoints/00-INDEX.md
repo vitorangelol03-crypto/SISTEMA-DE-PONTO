@@ -1,5 +1,7 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **⏸️ 01/10 — PAUSA (reinício do PC).** Tudo no ar e commitado. Na volta: (1) criar empresa "TESTE TABLET" se o Victor der OK (localização desligada SÓ nela); (2) "Salvar" das Configurações só grava o que mudou + tests/34; (3) confirmar desligar banco de horas de Caratinga ("não usamos ainda"); (4) saída do Washington; (5) passo 2. Detalhe: §18 de `CHECKPOINT_SESSAO_2026-09-30.md`.
+
 > **📌 01/10 manhã — pendências técnicas:** `clockIn/clockOut` apagados (`799e205`, CI verde); 10a obsoleto; 10c não reproduz. 🔴 **tests/34 caso 8 regrava a config REAL de Caratinga** (números iguais, mas 3 `updated_by` viraram "9999") e 🔴 **banco de horas de Caratinga com saldo 0 em 475/495 dias de setembro** (batida não grava os minutos). Esperando o Victor nas 2 decisões. Detalhe: §17 de `CHECKPOINT_SESSAO_2026-09-30.md`.
 
 > **📌 01/10 — ITEM 5 DO ROADMAP + TELA QUE SE ATUALIZA SOZINHA (NO AR, `c5261b2`, edge fn v20).** Fora do tablet: "Ver meus erros, pontos e recibos" (consulta, sem bater). Servidor exige PIN ou comprovante facial (passo 1: errada=401, ausente só loga `[prova-ausente]`). Relato do Washington (02:08) = aba velha do Safari + servidor novo → agora /clock e /erros recarregam sozinhas quando sai versão. Unit 2.056 · E2E 31/31 · ao vivo 17/17 · CI verde. **Pendente:** passo 2 quando o log zerar; Washington sem ponto 01/10. Detalhe: §16 de `CHECKPOINT_SESSAO_2026-09-30.md`.

@@ -511,3 +511,28 @@ depois de recarregar a tela; se não bater, lançar a saída pela média do turn
   falta o minuto), MAS crédito/débito do **banco de horas** não têm substituto: a batida pela edge fn
   não grava os minutos → Caratinga (banco de horas LIGADO, sem efeito no pagamento) tem 475 de 495
   dias de setembro com saldo 0 no espelho. Decisão do Victor pendente.
+
+## 18. ⏸️ 01/10 — PAUSA (Victor vai reiniciar o PC). RETOMAR DAQUI.
+
+Nada de código pendente na árvore (tudo commitado e no ar; CI verde até `799e205`).
+
+**Respostas do Victor (não re-perguntar):** tests/34 — *"pode"* corrigir; banco de horas — *"não usamos
+ainda"* (eu recomendei DESLIGAR em Caratinga enquanto não usa; **ainda NÃO desliguei** — confirmar com
+ele na volta, é config de produção).
+
+**Em andamento / próximos passos, na ordem:**
+1. **Empresa "TESTE TABLET" pro teste dele em casa — ESPERANDO o OK dele.** Igual a Caratinga
+   (facial obrigatória, abre na câmera), com localização DESLIGADA só nela (`geolocation_config.
+   block_outside = false` → o servidor ainda exige GPS mas não barra distância; conferido em
+   clock-in-validated ~linha 535/626) e trava ligada por ele no meio do teste. ⚠️ NÃO desligar geo nem
+   ligar trava em Caratinga (afeta todo mundo). Tutorial já entregue (11 passos: código no painel 2626 →
+   ativar no tablet → instalar app → cadastro pelo link → 1ª batida com CPF → ligar trava → testar
+   facial sem CPF, "Não sou eu", celular barrado + consulta, desligar trava). Conferir antes:
+   `updateGeoLocation` (Salvar das Configurações) não pode religar o `block_outside`.
+2. **"Salvar" das Configurações só grava o que MUDOU** (achado: o Salvar regrava payroll_config e as
+   tabelas FEDERAIS de INSS/IRRF a cada clique, apagando a anotação "fonte oficial" — vale pra gente de
+   verdade, não só pro teste). Depois: tests/34 caso 8 numa empresa de teste + conferir que as tabelas
+   não mudam; caso 3 = corrida do `goToTab` (barra mostra tudo antes de medir o "Mais"); devolver os 3
+   `updated_by` (textos nas migrations 20260922060204 e 20260921095508).
+3. Saída do Washington 01/10 (se ele não bater, lançar pela média do turno).
+4. Passo 2 da prova (log `[prova-ausente]` — até 01/10 manhã só os meus testes).
