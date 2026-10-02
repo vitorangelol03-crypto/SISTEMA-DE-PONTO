@@ -1,5 +1,7 @@
 # 00-INDEX — Índice mestre dos checkpoints (LER PRIMEIRO ao abrir o projeto)
 
+> **📌 02/10 tarde — DESCONTOS iMILE + ROMBO DA 2ª DE AGOSTO + PRINTS.** Feito: 14 descontos iMile na 1ª de setembro (R$ 1.234,00, coluna S, multa só nos PNR) · pedidos de print 99/99 (Geisilaine e Diendrel entraram no grupo depois do pedido automático) · senha do app do Adriano resetada. 🔴 **PARADO:** relançar a dívida da 2ª de agosto (16 drivers, 30 pacotes, R$ 1.274,79) como desconto normal — ensaio OK, migration `20261002190000` escrita e NÃO aplicada (classificador barrou o `apply_migration`; precisa do Victor pedir). Achado: espelho PDF não mostra "saldo herdado". Detalhe: `CHECKPOINT_SESSAO_2026-10-02.md`.
+
 > **⏸️ 01/10 — PAUSA (reinício do PC).** Tudo no ar e commitado. Na volta: (1) criar empresa "TESTE TABLET" se o Victor der OK (localização desligada SÓ nela); (2) "Salvar" das Configurações só grava o que mudou + tests/34; (3) confirmar desligar banco de horas de Caratinga ("não usamos ainda"); (4) saída do Washington; (5) passo 2. Detalhe: §18 de `CHECKPOINT_SESSAO_2026-09-30.md`.
 
 > **📌 01/10 manhã — pendências técnicas:** `clockIn/clockOut` apagados (`799e205`, CI verde); 10a obsoleto; 10c não reproduz. 🔴 **tests/34 caso 8 regrava a config REAL de Caratinga** (números iguais, mas 3 `updated_by` viraram "9999") e 🔴 **banco de horas de Caratinga com saldo 0 em 475/495 dias de setembro** (batida não grava os minutos). Esperando o Victor nas 2 decisões. Detalhe: §17 de `CHECKPOINT_SESSAO_2026-09-30.md`.
