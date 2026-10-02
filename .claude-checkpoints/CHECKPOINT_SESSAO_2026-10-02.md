@@ -1,8 +1,9 @@
 # CHECKPOINT — Sessão 02/10/2026 (tarde) — descontos da iMile + rombo da 2ª de agosto + prints
 
-> **Em uma frase:** 14 descontos da iMile lançados; relançar a dívida da 2ª de agosto está
-> ENSAIADO e parado na migration (o classificador barrou o `apply_migration`); pedidos de
-> print completos (99/99); senha do app do Adriano resetada.
+> **Em uma frase:** TUDO FEITO E NO AR. 14 descontos da iMile + 30 pacotes da 2ª de agosto
+> relançados como desconto normal na 1ª de setembro (44 descontos, R$ 2.508,79); migration
+> `20261002205549` aplicada com pedido explícito do Victor (`6ec32f0`); prints 99/99; senha do
+> app do Adriano resetada. ⏸️ Victor foi reiniciar o PC — retomar pelo §4.
 
 ## 0. Decisões do Victor (não re-perguntar)
 
@@ -36,7 +37,20 @@
 - **Senha do app do Adriano Furtunato** resetada pela RPC do painel (pedido dele, urgente): estava
   travado (7 erros); volta pro **1234 com troca obrigatória**. Não loguei na conta dele.
 
-## 2. PARADO — relançar a 2ª de agosto como desconto normal
+## 2. ✅ FEITO (fim da tarde) — 2ª de agosto relançada como desconto normal
+
+- Victor: *"pode aplicar a migration da 2ª de agosto"* → `apply_migration` passou, versão registrada
+  **`20261002205549`** (arquivo renomeado pra ela). Conferido: coluna `modo` (padrão 'saldo', CHECK),
+  função nova, GRANTs iguais (authenticated/postgres/service_role), anon sem EXECUTE.
+- Dado (1ª tentativa caiu por erro de conexão do MCP e NÃO gravou — conferido antes de repetir):
+  **30 pacotes / R$ 1.274,79 em 16 drivers**, observação `Ref. 2ª quinzena de agosto — <obs original>`,
+  `created_by 2626`; 16 linhas de carryover `modo='descontos'`. Conferência real: RPC pelo destino 0
+  linhas (painel não soma em dobro), origem 16 / R$ 1.274,79, 2ª ago pendente só os 4 (R$ 651,10),
+  0 contas sem fechar, 0 diferença entre gravado e a view. Quinzena aberta: **44 descontos, R$ 2.508,79**.
+- Código: comentário em `listCarryoverTo` (`6ec32f0`). typecheck 0 · eslint 0 · build · unit
+  `driverPayCarryover` 7/7. CI do `6ec32f0`: conferir na volta.
+
+## 2a. (histórico) como estava antes do OK
 
 - **16 drivers, 30 pacotes, R$ 1.274,79** (nenhum com foto/vídeo de prova).
 - Sem marca na ORIGEM, a tela "Saldo de quinzenas fechadas" seguiria mostrando os 16 como
@@ -64,3 +78,18 @@
   na mão) depois fica sem pedido (caso Geisilaine/Diendrel).
 - Ficam pendentes no "Saldo de quinzenas fechadas" por decisão (não cobrar agora): 1ª ago 22 pessoas
   R$ 2.080,88 · 2ª jul 14 R$ 983,81 · 2ª jun Cicero R$ 7,79 · 2ª ago os 4 acima.
+
+## 4. ⏸️ RETOMAR DAQUI (Victor reiniciou o PC no fim da tarde de 02/10)
+
+1. Conferir o **CI do `6ec32f0`** (3 jobs).
+2. **Prints da Shopee** da 1ª de setembro: às ~16:40 eram 45 mandados / 54 faltando (vem chegando
+   pelo app). Casos que ele perguntou: **Claudio Carlos de Paula** (Caratinga) — o líder Fabrício
+   mandou às 15:53 o print da quinzena ERRADA (16/08–31/08), recusado na hora, precisa reenviar
+   com 01/09–15/09; **Claudiomar** (Pingo d'Água) — nada mandado (ele + Adão, Cleber, Diego
+   Domingos, Elenicia). Mensagens de WhatsApp prontas foram entregues ao Victor.
+3. **Quando a ANJUN da 1ª de setembro for importada:** reconferir quem estava com R$ 0 a receber
+   (Fabricio Maia, João Victor Cassimiro com desconto iMile; Fernando e Othon ficaram com a dívida
+   de agosto guardada na origem).
+4. **Antes de publicar os espelhos da 1ª de setembro:** está tudo lançado — pode publicar.
+5. Pendências antigas seguem no §18 de `CHECKPOINT_SESSAO_2026-09-30.md` (TESTE TABLET, Salvar das
+   Configurações + tests/34, banco de horas de Caratinga, passo 2 da prova).
