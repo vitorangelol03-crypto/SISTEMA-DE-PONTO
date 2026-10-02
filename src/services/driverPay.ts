@@ -3349,6 +3349,10 @@ export const listCarryoverFrom = async (companyId: string, fromPeriodId: string)
   return somaPorDriver((data ?? []) as { driver_id: unknown; amount: unknown }[]);
 };
 
+// ⚠️ Pelo DESTINO a RPC devolve só `modo = 'saldo'` (migration 20261002205549): dívida
+// relançada como descontos normais (`modo = 'descontos'`) já está em driverpay_discounts
+// do destino — somar aqui de novo cobraria em dobro. Pela ORIGEM (`listCarryoverFrom`)
+// vêm os dois modos, porque nos dois a dívida saiu da quinzena fechada.
 export const listCarryoverTo = async (companyId: string, toPeriodId: string): Promise<Map<string, number>> => {
   const { data, error } = await supabase.rpc('get_driverpay_deduction_carryover_masked', {
     p_company_id: companyId,
