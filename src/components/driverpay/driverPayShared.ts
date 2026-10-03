@@ -1037,8 +1037,24 @@ export function statusPorQuantidade(
 }
 
 /**
+ * Alcance de um pedido para a DISPENSA do espelho — mais largo que o `pedidoAlcanca` de
+ * propósito (03/10/2026).
+ *
+ * Pra COBRAR print, pedido individual alcança só aquela pessoa. Pra DISPENSAR, o que conta é
+ * a PLATAFORMA ter sido cobrada nesta quinzena: qualquer pedido dela alcança todo mundo em
+ * grupo, igual ao "pra todos". 🔴 Bug real: o pedido automático de depois da planilha grava
+ * pedido INDIVIDUAL só de quem tem pacote (`requestProofForDrivers`) — então, numa quinzena
+ * sem o clique manual em "pra todos", quem ficou com 0 nunca era alcançado e o espelho dele
+ * nunca era marcado (1ª quinzena de setembro: 40 pessoas em grupo, caso da Celita).
+ */
+function plataformaCobradaAlcanca(req: ProofRequest, row: DriverRowData): boolean {
+  return row.groupName !== null || req.driverId === row.driverId;
+}
+
+/**
  * Plataformas em que ele foi cobrado mas, **com a planilha já importada, não tem pacote** —
  * ou seja, não entregou naquela plataforma nesta quinzena e **não precisa mandar print**.
+ * "Cobrado" é pela plataforma da quinzena, não pelo pedido dele (ver `plataformaCobradaAlcanca`).
  *
  * Pedido do Victor (04/08): assim que a planilha entra, a pendência dessa gente some sozinha
  * (o líder para de caçar print de quem não roda Shopee), mas em vez de virar um traço mudo o
@@ -1052,10 +1068,34 @@ export function proofDispensadoSemPacote(
 ): string[] {
   const nomes = new Set<string>();
   for (const req of requests) {
-    if (!pedidoAlcanca(req, row)) continue;
+    if (!plataformaCobradaAlcanca(req, row)) continue;
     // Planilha ainda não chegou: ele continua pendente, não dispensado.
     if (semPlanilha?.has(req.platformName)) continue;
     if (platformPackages(row, req.platformName) <= 0) nomes.add(req.platformName);
+  }
+  return [...nomes];
+}
+
+/**
+ * O espelho de quais plataformas ele DEVE, pra varredura da dispensa (03/10/2026): o que os
+ * pedidos cobram dele (`expectedProofPlatforms`) **mais** as plataformas cobradas na quinzena
+ * em que ele está no alcance e TEM pacote.
+ *
+ * O segundo pedaço é o espelho da dispensa nova: quem foi marcado por estar com 0 e depois
+ * ganhou pacote (reimportação, célula editada) tem que voltar a dever — senão a marca 'auto'
+ * ficaria de pé sem conferência nenhuma, porque o pedido automático só alcança quem tinha
+ * pacote na hora da importação.
+ */
+export function plataformasDevidasNaVarredura(
+  row: DriverRowData,
+  requests: readonly ProofRequest[],
+  semPlanilha?: ReadonlySet<string>,
+  historicoPorDriver?: HistoricoDePlataforma,
+): string[] {
+  const nomes = new Set(expectedProofPlatforms(row, requests, semPlanilha, historicoPorDriver));
+  for (const req of requests) {
+    if (!plataformaCobradaAlcanca(req, row)) continue;
+    if (platformPackages(row, req.platformName) > 0) nomes.add(req.platformName);
   }
   return [...nomes];
 }

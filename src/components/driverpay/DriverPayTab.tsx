@@ -66,7 +66,11 @@ import {
   type DeliveryProofRow,
 } from '../../services/driverPay';
 import { contemSemAcento } from '../../utils/buscaTexto';
-import { pagamentosParaMarcarPorDispensa, pagamentosParaDesmarcarPorDispensa } from '../../utils/espelhoDispensa';
+import {
+  pagamentosParaMarcarPorDispensa,
+  pagamentosParaDesmarcarPorDispensa,
+  pedidosQueFaltamAoDesmarcar,
+} from '../../utils/espelhoDispensa';
 import { driversParaPedirPrint, plataformasQuePedemPrint } from '../../utils/proofAuto';
 import { linhasForaDaConfig, diferencaEmReais } from '../../utils/rateSync';
 import { abaterAgora, type ModoDesconto, type PessoaDesconto } from '../../utils/descontoSaldo';
@@ -116,6 +120,7 @@ import {
   proofForaPorSemHistorico,
   quinzenasDeHistorico,
   proofDispensadoSemPacote,
+  plataformasDevidasNaVarredura,
   printsParaRecusarAoDesmarcar,
   platformPackages,
   expectedProofPlatforms,
@@ -324,6 +329,16 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   /** Força a varredura de "espelho conferido por dispensa" (mais abaixo) a reavaliar
    *  depois do cooldown de edição local, mesmo se `rows` não mudar de novo sozinho. */
   const [varreduraTick, setVarreduraTick] = useState(0);
+  /**
+   * De QUAL quinzena é o que está carregado agora (03/10/2026). Ao trocar de quinzena, as
+   * linhas e os pedidos de print chegam em chamadas separadas — por um instante a grade fica
+   * com as linhas de uma e os pedidos de outra. A varredura do espelho só age quando os três
+   * são da quinzena escolhida. Achado no E2E: ela marcou 32 de 40 na quinzena real usando o
+   * pedido de eMile da quinzena de TESTE (pulou exatamente os 8 que rodam eMile).
+   */
+  const [rowsPeriodId, setRowsPeriodId] = useState<string | null>(null);
+  const [proofsPeriodId, setProofsPeriodId] = useState<string | null>(null);
+  const [historicoPeriodId, setHistoricoPeriodId] = useState<string | null>(null);
 
   useEffect(() => {
     driversRef.current = drivers;
@@ -374,6 +389,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     async (periodId: string | null) => {
       if (!company?.id || !periodId) {
         setRows([]);
+        setRowsPeriodId(null);
         return;
       }
       const [pays, gmap, carryoverIn] = await Promise.all([
@@ -383,6 +399,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       ]);
       const frozen = periodsRef.current.find((p) => p.id === periodId)?.status === 'concluido';
       setRows(buildRows(pays, driversRef.current, platformsRef.current, gmap, driverRatesRef.current, frozen, carryoverIn));
+      setRowsPeriodId(periodId);
     },
     [company?.id],
   );
@@ -419,8 +436,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         const [pays, gmap] = await Promise.all([getPayments(chosen, company.id), getDriverGroupMap(company.id)]);
         const frozen = per.find((p) => p.id === chosen)?.status === 'concluido';
         setRows(buildRows(pays, drv, plat, gmap, dRates, frozen));
+        setRowsPeriodId(chosen);
       } else {
         setRows([]);
+        setRowsPeriodId(null);
       }
     } catch (e) {
       console.error('Erro ao carregar Pagamentos Driver:', e);
@@ -505,6 +524,8 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         setProofRows([]);
         setProofStates(new Map());
         setHistoricoPlataformas(undefined);
+        setProofsPeriodId(null);
+        setHistoricoPeriodId(null);
         return;
       }
       try {
@@ -522,6 +543,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         setProofRequests(solicitadas);
         setProofRows(prints);
         setProofStates(new Map([...porSlot].map(([k, v]) => [k, melhorEstado(v)])));
+        setProofsPeriodId(periodId);
       } catch (e) {
         console.error('Erro ao carregar os espelhos do app:', e);
       }
@@ -536,9 +558,11 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         setHistoricoPlataformas(
           anteriores === null ? undefined : await driverPlatformHistory(company.id, anteriores),
         );
+        setHistoricoPeriodId(periodId);
       } catch (e) {
         console.error('Erro ao carregar o histórico de entregas por plataforma:', e);
         setHistoricoPlataformas(undefined);
+        setHistoricoPeriodId(periodId);
         toast.error(
           'Não consegui ler o histórico de entregas. Até recarregar, o painel cobra print de todo mundo do grupo.',
           { duration: 9000 },
@@ -689,6 +713,7 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     setPlatforms([]);
     setGroups([]);
     setRows([]);
+    setRowsPeriodId(null);
     setSelectedPeriodId(null);
     selectedPeriodIdRef.current = null;
     setSearch('');
@@ -1668,6 +1693,10 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
   useEffect(() => {
     if (!company?.id || !selectedPeriod || isReadOnly) return;
     if (!hasPermission('driverpay.editDriver')) return;
+    // Linhas, pedidos e histórico têm que ser TODOS da quinzena escolhida — no meio de uma
+    // troca de quinzena, um pedido da outra marcaria gente que ninguém cobrou (03/10/2026).
+    if (rowsPeriodId !== selectedPeriod.id || proofsPeriodId !== selectedPeriod.id
+      || historicoPeriodId !== selectedPeriod.id) return;
     // Edição local muito recente (pacotes/taxa/rota, ainda não salva): não recarrega por
     // cima agora — o `reloadPayments()` no fim desta varredura troca a grade INTEIRA pelo
     // servidor, e se cair no meio de uma edição apaga o que a pessoa acabou de digitar sem
@@ -1684,37 +1713,52 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
     const linhasDaVarredura = rows.filter(
       (r) => !r.espelhoConferidoBy || r.espelhoConferidoBy === 'auto',
     );
+    // "Deve print" pela plataforma cobrada na quinzena, não só pelo pedido dele — o
+    // automático só pede de quem tem pacote (03/10/2026, ver `plataformaCobradaAlcanca`).
+    const devidasDe = (row: DriverRowData) =>
+      plataformasDevidasNaVarredura(row, proofRequests, semPlanilha, historicoPlataformas);
+    const alcancadasDe = (row: DriverRowData) =>
+      expectedProofPlatforms(row, proofRequests, semPlanilha, historicoPlataformas);
     const paraMarcar = pagamentosParaMarcarPorDispensa(
       linhasDaVarredura,
-      (row) => expectedProofPlatforms(row, proofRequests, semPlanilha, historicoPlataformas),
+      devidasDe,
       (row) => proofDispensadoSemPacote(row, proofRequests, semPlanilha),
     );
     const paraDesmarcar = pagamentosParaDesmarcarPorDispensa(
       linhasDaVarredura,
-      (row) => expectedProofPlatforms(row, proofRequests, semPlanilha, historicoPlataformas),
+      devidasDe,
       (row) => proofProgressByPayment.get(row.paymentId)?.complete === true,
     );
     if (paraMarcar.length === 0 && paraDesmarcar.length === 0) return;
     if (varreduraEspelhoBusyRef.current) return;
     varreduraEspelhoBusyRef.current = true;
+    const periodId = selectedPeriod.id;
     void (async () => {
       try {
         const marcados = await marcarEspelhoPorDispensa(company.id, paraMarcar, userId);
         const desmarcados = await desmarcarEspelhoPorDispensa(company.id, paraDesmarcar, userId);
+        // "...e solicita o espelho" (19/08): quem foi desmarcado e não tem pedido que o
+        // alcance ganha o pedido individual, senão o app dele nunca pede o print.
+        let pedidosCriados = 0;
+        const faltam = pedidosQueFaltamAoDesmarcar(rows, desmarcados, devidasDe, alcancadasDe);
+        for (const [plataforma, driverIds] of faltam) {
+          pedidosCriados += await requestProofForDrivers(company.id, periodId, plataforma, driverIds, userId);
+        }
         if (marcados > 0) {
           toast.success(`${marcados} entregador(es) sem entrega na plataforma — espelho marcado sozinho.`, { duration: 7000 });
         }
-        if (desmarcados > 0) {
-          toast(`${desmarcados} entregador(es) ganharam pacote na plataforma cobrada — espelho desmarcado, o app volta a pedir o print.`, { icon: '⚠️', duration: 9000 });
+        if (desmarcados.length > 0) {
+          toast(`${desmarcados.length} entregador(es) ganharam pacote na plataforma cobrada — espelho desmarcado, o app volta a pedir o print.`, { icon: '⚠️', duration: 9000 });
         }
-        if (marcados > 0 || desmarcados > 0) await reloadPayments();
+        if (marcados > 0 || desmarcados.length > 0) await reloadPayments();
+        if (pedidosCriados > 0) await reloadProofs(periodId);
       } catch (e) {
         console.error('[varredura espelho] falhou:', e);
       } finally {
         varreduraEspelhoBusyRef.current = false;
       }
     })();
-  }, [rows, proofRequests, semPlanilha, historicoPlataformas, proofProgressByPayment, company?.id, selectedPeriod, isReadOnly, hasPermission, userId, reloadPayments, varreduraTick]);
+  }, [rows, proofRequests, semPlanilha, historicoPlataformas, proofProgressByPayment, company?.id, selectedPeriod, isReadOnly, hasPermission, userId, reloadPayments, reloadProofs, varreduraTick, rowsPeriodId, proofsPeriodId, historicoPeriodId]);
 
   /**
    * Quem tem pacote numa plataforma pedida "pra todos" mas ficou de fora **por não estar em

@@ -1666,8 +1666,9 @@ export const marcarEspelhoPorDispensa = async (
  *
  * O caso real: reimportação (ou edição de célula) dá pacote na plataforma cobrada a
  * alguém que tinha sido marcado por dispensa — sem isto ele ficaria "conferido" sem
- * conferência nenhuma. O pedido de print não precisa ser recriado: com pacote > 0 e o
- * pedido da quinzena de pé, o portal do entregador volta a cobrar sozinho.
+ * conferência nenhuma. Com pedido "pra todos" o portal volta a cobrar sozinho; com só os
+ * pedidos individuais do automático, quem chama cria o pedido que falta
+ * (`pedidosQueFaltamAoDesmarcar`, 03/10/2026) — por isso devolve QUEM foi desmarcado.
  *
  * Só desfaz marcação `'auto'` — quem um humano marcou nunca é desmarcado por aqui
  * (mesma trava, no sentido inverso, da `marcarEspelhoPorDispensa`). Grava `'auto'`
@@ -1688,8 +1689,8 @@ export const desmarcarEspelhoPorDispensa = async (
   companyId: string,
   paymentIds: readonly string[],
   userId: string,
-): Promise<number> => {
-  if (paymentIds.length === 0) return 0;
+): Promise<string[]> => {
+  if (paymentIds.length === 0) return [];
   await ensurePerm(userId, 'driverpay.editDriver');
 
   // Mesma chave liga/desliga da confirmação automática: desligada, nada automático roda.
@@ -1698,7 +1699,7 @@ export const desmarcarEspelhoPorDispensa = async (
     .select('proof_auto_confirm')
     .eq('company_id', companyId)
     .maybeSingle();
-  if (settings?.proof_auto_confirm === false) return 0; // sem linha = ligado (padrão)
+  if (settings?.proof_auto_confirm === false) return []; // sem linha = ligado (padrão)
 
   const { data: atuais } = await supabase
     .from('driverpay_payments')
@@ -1708,7 +1709,7 @@ export const desmarcarEspelhoPorDispensa = async (
   const candidatos = (atuais ?? [])
     .filter((p) => p.espelho_conferido)
     .filter((p) => p.espelho_conferido_by === 'auto');
-  if (candidatos.length === 0) return 0;
+  if (candidatos.length === 0) return [];
 
   // Reconferência contra o banco: quem já tem print validado E batendo (qtd e
   // período) pro driver/período deste pagamento não é desmarcado — a tela que mandou
@@ -1731,7 +1732,7 @@ export const desmarcarEspelhoPorDispensa = async (
   const alvos = candidatos
     .filter((p) => !temProvaBatendo.has(`${p.driver_id}|${p.period_id}`))
     .map((p) => p.id as string);
-  if (alvos.length === 0) return 0;
+  if (alvos.length === 0) return [];
 
   const { error } = await supabase
     .from('driverpay_payments')
@@ -1743,7 +1744,7 @@ export const desmarcarEspelhoPorDispensa = async (
     .eq('company_id', companyId)
     .in('id', alvos);
   if (error) throwDbError(error);
-  return alvos.length;
+  return alvos;
 };
 
 export const setEspelhoConferido = async (

@@ -7,8 +7,12 @@
  * um. Decisão dele: **isso conta como validado**, senão vira trabalho manual toda quinzena.
  *
  * A regra é a MESMA do selo "não entrega" (`proofDispensadoSemPacote` +
- * `expectedProofPlatforms`), de propósito: se divergissem, o painel diria "não entrega" e
- * mesmo assim cobraria o espelho.
+ * `plataformasDevidasNaVarredura`), de propósito: se divergissem, o painel diria "não
+ * entrega" e mesmo assim cobraria o espelho.
+ *
+ * 🔴 03/10/2026: "cobrado" é a PLATAFORMA ter pedido na quinzena, não a pessoa ter pedido
+ * próprio — o automático de depois da planilha só pede de quem tem pacote, e por isso a 1ª
+ * quinzena de setembro ficou com 40 pessoas sem pacote e sem a marca.
  *
  * ⚠️ Dispensado é diferente de "não foi pedido": quem nunca foi cobrado não entra aqui —
  * não há nada a dispensar, e marcar espelho de quem ninguém pediu seria inventar conferência.
@@ -94,4 +98,37 @@ export function pagamentosParaDesmarcarPorDispensa<R extends DesmarcaRowLike>(
     ids.push(row.paymentId);
   }
   return ids;
+}
+
+/**
+ * Pedidos de print que FALTAM pra quem a varredura acabou de desmarcar (03/10/2026) — a
+ * metade "e solicita o espelho" da decisão de 19/08.
+ *
+ * Com pedido "pra todos" o app voltava a pedir sozinho. Com só os pedidos individuais do
+ * automático, quem estava com 0 na importação não tem pedido nenhum: desmarcado e sem
+ * pedido, ficaria devendo um print que o app dele nunca pede.
+ *
+ * `devidasDe` = o que ele deve (`plataformasDevidasNaVarredura`); `alcancadasDe` = o que os
+ * pedidos de hoje já cobram dele (`expectedProofPlatforms`). Falta a diferença.
+ * Devolve plataforma → entregadores.
+ */
+export function pedidosQueFaltamAoDesmarcar<R extends { paymentId: string; driverId: string }>(
+  rows: readonly R[],
+  desmarcados: readonly string[],
+  devidasDe: (row: R) => readonly string[],
+  alcancadasDe: (row: R) => readonly string[],
+): Map<string, string[]> {
+  const ids = new Set(desmarcados);
+  const faltam = new Map<string, string[]>();
+  for (const row of rows) {
+    if (!ids.has(row.paymentId)) continue;
+    const alcancadas = new Set(alcancadasDe(row));
+    for (const plataforma of devidasDe(row)) {
+      if (alcancadas.has(plataforma)) continue;
+      const lista = faltam.get(plataforma) ?? [];
+      if (!lista.includes(row.driverId)) lista.push(row.driverId);
+      faltam.set(plataforma, lista);
+    }
+  }
+  return faltam;
 }
