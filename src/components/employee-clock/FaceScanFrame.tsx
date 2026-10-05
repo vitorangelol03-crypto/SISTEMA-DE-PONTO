@@ -149,9 +149,12 @@ const ensureStyles = () => {
     .fsf2-root[data-phase="procurando"] .fsf2-ponto, .fsf2-root[data-phase="procurando"] .fsf2-linha { transition: none; }
     .fsf2-root[data-phase="confirmado"] .fsf2-ponto, .fsf2-root[data-phase="falhou"] .fsf2-ponto,
     .fsf2-root[data-phase="confirmado"] .fsf2-linha, .fsf2-root[data-phase="falhou"] .fsf2-linha { opacity: 0; }
+    /* ✓ invisível fora do "confirmado": só o tracejado 100/100 não basta — no Chrome do Android a
+       ponta redonda do traço de comprimento zero aparecia como uma bolinha verde (foto, 05/10). */
     .fsf2-certo { fill: none; stroke: #35F59B; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round;
       stroke-dasharray: 100; stroke-dashoffset: 100; }
-    .fsf2-root[data-phase="confirmado"] .fsf2-certo { animation: fsf2-desenha 450ms 250ms ease-out forwards; }
+    .fsf2-certo { visibility: hidden; }
+    .fsf2-root[data-phase="confirmado"] .fsf2-certo { visibility: visible; animation: fsf2-desenha 450ms 250ms ease-out forwards; }
     .fsf2-anel { fill: none; stroke: var(--fsf2-b); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 100;
       stroke-dashoffset: 100; animation: fsf2-desenha 1s linear forwards; }
     .fsf2-numero { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;

@@ -103,6 +103,36 @@ describe('FaceScanFrame', () => {
   });
 });
 
+// 05/10/2026 (tarde) — foto do Victor no tablet: uma BOLINHA VERDE parada à direita do centro,
+// enquanto procurava o rosto. Era a ponta redonda do ✓ "escondido" (tracejado 100/100): o Chrome
+// do Android desenha a ponta de um traço de comprimento zero; o do computador não (por isso o E2E
+// não viu). O ✓ só pode existir na tela na fase "confirmado".
+describe('✓ de confirmado só aparece na hora certa', () => {
+  beforeEach(() => cleanup());
+
+  it('procurando / parado / contagem / falhou: o ✓ fica invisível (nada de bolinha verde)', () => {
+    const casos: Array<[FaceScanVisual, number]> = [
+      [{ color: 'blue', pulse: true, showScanLine: true, label: 'procurando' }, 0],
+      [{ color: 'blue', label: 'parado' }, 0],
+      [{ color: 'green', flash: 'success', label: 'contagem' }, 2],
+      [{ color: 'red', shake: true, label: 'falhou' }, 0],
+    ];
+    for (const [visual, contagem] of casos) {
+      const { container, unmount } = render(<FaceScanFrame visual={visual} countdown={contagem} />);
+      const certo = container.querySelector('path.fsf2-certo') as SVGPathElement;
+      expect(certo, visual.label).not.toBeNull();
+      expect(getComputedStyle(certo).visibility, visual.label).toBe('hidden');
+      unmount();
+    }
+  });
+
+  it('confirmado (identidade confirmada / rosto cadastrado): o ✓ aparece', () => {
+    const { container } = render(<FaceScanFrame visual={{ color: 'green', flash: 'success', label: 'ok' }} />);
+    const certo = container.querySelector('path.fsf2-certo') as SVGPathElement;
+    expect(getComputedStyle(certo).visibility).toBe('visible');
+  });
+});
+
 // 05/10/2026 — a fase da moldura sai do mesmo `visual` + contagem que as 3 telas já mandam.
 describe('faseDaMoldura (visual Malha neon)', () => {
   it('procurando rosto (varredura ligada) → procurando', () => {
