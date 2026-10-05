@@ -54,3 +54,30 @@ quadro ao ponto, distância 0,265). GPS do tablet: precisão 24–67 m.
   Validar: unit (faceScanFrame, umaDeteccaoPorVez, facialSemCpfNaoTrava) + E2E 127/128 (depois do
   achado 2) + deploy de PRÉVIA pro Victor testar no tablet antes da produção.
 - Decisões pendentes: as 3 telas (recomendado sim), bipe ao registrar, consertar a limpeza do E2E antes.
+
+## 5. ✅ Manhã 05/10 — visual "Malha neon" IMPLEMENTADO, na PRÉVIA (produção sem mudança)
+
+Victor (antes de dormir): *"pode implementar e ele deve ser responsivo"* + *"deixe tudo pronto para eu
+validar quando acordar"* + *"tem minha permissão para rodar o que precisar"*.
+
+- **Código:** commit `f10e452` no ramo **`feature/visual-malha-neon`** (NÃO está no main). `FaceScanFrame.tsx`
+  refeito (mesmas props → as 3 telas de câmera mudam juntas), `faseDaMoldura.ts` novo, cartão "Não sou eu"
+  e botão de CPF no estilo, `tests/unit/faceScanFrame.spec.tsx` (cenários do desenho antigo → comportamento).
+- **Prévia (só teste):** https://sistema-ponto-i0k887bek-vitorangelol03-4967s-projects.vercel.app — feita com
+  `vercel deploy --prebuilt` na cópia Linux (a Vercel só tem as chaves do banco em Production e as prévias
+  pedem login Vercel). A prévia automática do ramo no GitHub sai QUEBRADA (sem chaves) — ignorar.
+- **Trava da TESTE TABLET DESLIGADA** (pra prévia funcionar sem ativar o tablet de novo nesse endereço).
+- **Página pro Victor** (fotos reais + passo a passo): https://claude.ai/artifact/LoLMYAAUJAwBGo78r9qw4z
+- **Validação:** typecheck 0 · lint 0 · build · unit **138 arquivos / 2.080** (12 lotes, 0 worker morto, +6
+  novos) · E2E 127+128 **20/20** (1ª rodada 19 + 1 flaky na limpeza; 2ª rodada, depois da revisão, 15 + o
+  "primeiro acesso" falhou 2× por TEMPO com a máquina em carga 27 — robô Shopee + outro projeto — e passou
+  sozinho em 1,1 min; os 4 que não rodaram passaram) · nome → ponto gravado **2,5s** (igual antes) ·
+  revisão adversarial (correção/peso/encaixe) aplicada · banco: config real e tabelas de imposto **md5
+  idênticos** antes/depois, zero resto "PW Test" (os restos da 1ª rodada foram apagados).
+- E2E rodado com `playwright.semlimpeza.config.ts` (SÓ na cópia Linux, sem globalTeardown) — a limpeza
+  global apaga bloqueios/recusas reais de todas as empresas (achado 2 do §3).
+
+**Falta:** Victor validar no tablet (passo a passo na página) → "pode publicar" → merge do ramo no main +
+push (= produção; CI roda) → conferir produção por conteúdo. Decisões dele (sem pressa): cartão do lado
+com o tablet deitado; malha roxa até confirmar na verificação com CPF; barra de confiança × limite 0,50.
+Depois: limpar a TESTE TABLET (§1).
