@@ -288,13 +288,21 @@ test.describe.serial('ponto só no tablet — cliques reais', () => {
     const cameraPronta = Date.now();
     await expect(t.getByTestId('clock-device-badge')).toContainText(TABLET_NOME);
     await expect(t.getByText(PESSOA_NOME)).toBeVisible({ timeout: 90_000 });
+    // 05/10/2026 (decisão do Victor): saída pelo rosto a menos de 10 min da entrada PERGUNTA antes
+    // (quem ficava parado na frente ganhava uma saída falsa). Aqui a saída vem ~1–2 min depois da
+    // entrada do passo 4, então a pergunta aparece — e só grava com o "Sim".
+    const pergunta = t.getByTestId('confirmar-saida-rapida');
+    await expect(pergunta).toBeVisible({ timeout: 30_000 });
+    await expect(pergunta).toContainText('Você bateu a entrada há');
+    await expect(t.getByText(/Saída registrada/)).toHaveCount(0); // nada gravado sem resposta
+    await pergunta.getByRole('button', { name: /Sim, registrar/ }).click();
     const reconheceu = Date.now();
     await expect(t.getByText(/Saída registrada/)).toBeVisible({ timeout: 60_000 });
     // Meta do Victor: 5–7s da pessoa parar na frente até o ponto gravado (NO TABLET). Nesta
     // máquina de teste o navegador roda sem placa de vídeo e dividindo CPU com o robô da
     // Shopee, então o número daqui é pior que o do tablet — fica impresso pra acompanhar.
-    console.log(`[tempo] câmera pronta → nome na tela: ${((reconheceu - cameraPronta) / 1000).toFixed(1)}s · `
-      + `nome → ponto gravado: ${((Date.now() - reconheceu) / 1000).toFixed(1)}s`);
+    console.log(`[tempo] câmera pronta → nome + confirmação: ${((reconheceu - cameraPronta) / 1000).toFixed(1)}s · `
+      + `"Sim" → ponto gravado: ${((Date.now() - reconheceu) / 1000).toFixed(1)}s`);
 
     // Sem CPF não há PIN: o painel carrega o histórico com o COMPROVANTE do rosto (30/09/2026).
     const [y, m, d] = hoje().split('-');

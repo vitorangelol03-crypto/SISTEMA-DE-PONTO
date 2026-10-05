@@ -3,9 +3,20 @@ import { ScanFace, Loader2, UserCircle2, X } from 'lucide-react';
 import { identifyFace, getEmployeeTodayAttendance, getEmployeeByCpf, Employee, Company } from '../../services/database';
 import { useFaceApi } from '../../hooks/useFaceApi';
 import { FaceScanFrame, FaceScanVisual } from './FaceScanFrame';
-import { MarkingPosition, resolveMarkingCount, resolveNextClockAction } from './clockGuards';
+import {
+  CAMERA_DESCANSA_APOS_MS, FACE_MATCH_THRESHOLD, MarkingPosition, marcacaoAnterior, nomeDaMarcacaoAnterior,
+  quickExitMinutes, resolveMarkingCount, resolveNextClockAction,
+} from './clockGuards';
 import { useFrontCamera } from './useFrontCamera';
 import { CameraProblem } from './CameraProblem';
+
+/** Alguém que a câmera deve ignorar até `ate` (ms): quem acabou de bater, ou disse "Não" à pergunta. */
+export interface RecemBatido {
+  employeeId: string;
+  /** O rosto da batida (quando houve) — deixa ignorar sem nem consultar o servidor. */
+  descriptor?: number[];
+  ate: number;
+}
 
 interface FaceIdentifyClockProps {
   company: Company;
@@ -32,6 +43,17 @@ interface FaceIdentifyClockProps {
    * tela pra versão nova nesse meio (useAtualizacaoAutomatica).
    */
   onOcupado?: (ocupado: boolean) => void;
+  /**
+   * Quem acabou de bater (05/10/2026), mantido pelo pai porque esta tela desmonta a cada batida.
+   * Com a tela voltando em 8s no tablet, quem bateu e continua na frente era reconhecido de novo.
+   */
+  recemBatidos?: React.MutableRefObject<RecemBatido[]>;
+  /**
+   * Câmera descansa sem ninguém na frente (05/10/2026, pedido do Victor PRO TABLET): sem rosto por
+   * CAMERA_DESCANSA_APOS_MS ela desliga e a tela mostra "Toque para bater o ponto". Quem decide é o
+   * pai: só no tablet — no celular de cada um a câmera segue ligada, como sempre.
+   */
+  descansaSemNinguem?: boolean;
 }
 
 type Phase =
@@ -39,6 +61,7 @@ type Phase =
   | 'scanning'
   | 'identifying'
   | 'identified'
+  | 'confirm-exit'
   | 'no-match'
   | 'already-done';
 
@@ -72,6 +95,15 @@ const IDENTIFY_TIMEOUT_MS = 9000;
  * silêncio e o aviso só aparece se 3 seguidos (≈4s de rosto na câmera) não baterem.
  */
 const NO_MATCH_BEFORE_WARNING = 3;
+/**
+ * 05/10/2026 — batida pelo rosto logo depois da anterior pede confirmação (como o botão de saída já
+ * pedia). Quem continuava parado na frente do tablet depois de bater a entrada era reconhecido de
+ * novo e ganhava uma SAÍDA automática com 0h trabalhada (aconteceu 2 vezes em 03/10); com 4
+ * marcações, o mesmo daria uma volta do almoço com almoço de 0 min (ver marcacaoAnterior). Sem
+ * resposta neste tempo, a pergunta some e a pessoa não é perguntada de novo por SAIDA_RAPIDA_ADIADA_MS.
+ */
+const SAIDA_RAPIDA_SEM_RESPOSTA_MS = 10_000;
+const SAIDA_RAPIDA_ADIADA_MS = 60_000;
 /*
  * 🔴 30/09/2026 — UMA DETECÇÃO POR VEZ (as 3 telas de câmera tinham o mesmo defeito).
  * O intervalo disparava uma detecção nova a cada volta SEM esperar a anterior terminar. Em
@@ -81,16 +113,82 @@ const NO_MATCH_BEFORE_WARNING = 3;
  * tablet isso é "fica procurando o rosto e não reconhece". Por isso o `detectInFlightRef`.
  */
 
+/**
+ * Tela de descanso do tablet (05/10/2026): fundo escuro, relógio grande e "Toque para bater o ponto".
+ * Nada anima por quadro além do relógio (1x por segundo) — o objetivo é o tablet esfriar.
+ */
+const TelaDeDescanso: React.FC<{ onAcordar: () => void; onUseCpf: () => void }> = ({ onAcordar, onUseCpf }) => {
+  const [agora, setAgora] = useState(() => new Date());
+  useEffect(() => {
+    const relogio = setInterval(() => setAgora(new Date()), 1000);
+    return () => clearInterval(relogio);
+  }, []);
+  const hora = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const dia = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label="Toque para bater o ponto"
+      data-testid="camera-descanso"
+      // Toque (click), não "encostar" (pointerdown): sumir no encostar deixaria o resto do toque cair
+      // no botão que estava embaixo (ex.: "Prefere digitar CPF") — o toque fantasma.
+      onClick={onAcordar}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAcordar(); } }}
+      className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-6 px-6 text-center cursor-pointer select-none outline-none"
+      style={{ background: 'radial-gradient(120% 90% at 50% 40%, #0E0B22 0%, #05060D 70%)' }}
+    >
+      <div>
+        <p className="font-extrabold text-[#F4EEFF] leading-none tabular-nums" style={{ fontSize: 'clamp(64px, 18vmin, 160px)' }}>{hora}</p>
+        <p className="mt-2 text-white/60 capitalize">{dia}</p>
+      </div>
+      <div
+        className="rounded-2xl px-8 py-5 border border-transparent shadow-2xl"
+        style={{ background: 'linear-gradient(rgba(10,8,22,0.9), rgba(10,8,22,0.9)) padding-box, linear-gradient(110deg, #A879FF, #39E6FF) border-box' }}
+      >
+        <p className="text-3xl font-bold text-[#F1E9FF]">👆 Toque para bater o ponto</p>
+        {/* Texto neutro: o descanso vale também no celular de quem abriu o ponto e esqueceu. */}
+        <p className="mt-2 text-sm text-white/60">A câmera desligou pra poupar o aparelho. Ela liga na hora.</p>
+      </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); onUseCpf(); }}
+        className="px-5 py-2.5 bg-[rgba(10,8,22,0.82)] text-[#F1E9FF] text-sm font-semibold rounded-full shadow-lg ring-1 ring-inset ring-white/25 hover:bg-[rgba(10,8,22,0.95)] transition-colors"
+      >
+        Prefere digitar CPF e senha?
+      </button>
+    </div>
+  );
+};
+
 export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   company, onConfirmed, onUseCpf, deviceToken = null, deviceName = null, onDeviceBlocked, onRecognized, onOcupado,
+  recemBatidos, descansaSemNinguem = false,
 }) => {
-  const { loading: modelsLoading, ready: modelsReady, error: modelsError, detectFace } = useFaceApi();
+  const { loading: modelsLoading, ready: modelsReady, error: modelsError, detectFace, compareFaces } = useFaceApi();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const camera = useFrontCamera({ videoRef, habilitada: modelsReady, componente: 'FaceIdentifyClock', companyId: company.id });
+  /**
+   * Câmera descansando (05/10/2026, pedido do Victor): sem ninguém na frente da câmera por
+   * CAMERA_DESCANSA_APOS_MS, ela desliga (o tablet não esquenta 24h) e a tela mostra "Toque para
+   * bater o ponto". O toque reabre só a câmera — o reconhecimento fica carregado na memória.
+   */
+  const [descansando, setDescansando] = useState(false);
+  const descansandoRef = useRef(false);
+  const ultimaAtividadeRef = useRef(Date.now());
+  // Descansando, a câmera fica DESLIGADA (o hook fecha a trilha) e reabre ao acordar.
+  const camera = useFrontCamera({ videoRef, habilitada: modelsReady && !descansando, componente: 'FaceIdentifyClock', companyId: company.id });
   const lastIdentifyAtRef = useRef(0);
   const identifyInFlightRef = useRef(false);
   const detectInFlightRef = useRef(false);
   const recentRef = useRef<Map<string, number>>(new Map()); // employeeId -> timestamp do último resultado
+  /** Disse "Não" (ou não respondeu) à pergunta de saída rápida: ignorada por SAIDA_RAPIDA_ADIADA_MS. */
+  const adiadosRef = useRef<RecemBatido[]>([]);
+  /** Número da identificação em curso: resposta de uma identificação velha (estourou os 9s, a tela
+   *  voltou a procurar ou descansou) é jogada fora — não pode abrir pergunta/contagem fora de hora. */
+  const vezRef = useRef(0);
+  const cameraAbertaRef = useRef(false);
+  const compareFacesRef = useRef(compareFaces);
+  const recemBatidosRef = useRef(recemBatidos);
+  const descansaSemNinguemRef = useRef(descansaSemNinguem);
   const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noMatchStreakRef = useRef(0);
@@ -104,6 +202,9 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
     label: string;
   } | null>(null);
   const [countdown, setCountdown] = useState(0);
+  /** Batida a menos de 10 min da anterior, esperando a pessoa confirmar (ver SAIDA_RAPIDA_*). */
+  const [minutosDesdeAnterior, setMinutosDesdeAnterior] = useState<number | null>(null);
+  const [comprovantePendente, setComprovantePendente] = useState<string | undefined>(undefined);
 
   /**
    * 🔴 ACHADO EM 22/09/2026 — POR QUE A FACIAL SEM CPF "NÃO ENTRAVA".
@@ -150,14 +251,34 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   useEffect(() => () => { clearTimers(); }, []);
 
   useEffect(() => {
-    onOcupado?.(phase === 'identifying' || phase === 'identified' || phase === 'already-done');
+    onOcupado?.(phase === 'identifying' || phase === 'identified' || phase === 'confirm-exit' || phase === 'already-done');
   }, [phase, onOcupado]);
+
+  // Qualquer coisa acontecendo na câmera conta como "tem gente": adia o descanso.
+  useEffect(() => { ultimaAtividadeRef.current = Date.now(); }, [phase]);
+
+  // Voltou pra esta tela (outro app; tela do aparelho apagou e acendeu): conta como atividade — o
+  // minuto recomeça, em vez de quem volta cair direto na tela escura (05/10/2026).
+  useEffect(() => {
+    const aoVoltar = () => { if (document.visibilityState === 'visible') ultimaAtividadeRef.current = Date.now(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => document.removeEventListener('visibilitychange', aoVoltar);
+  }, []);
+
+  const acordar = useCallback(() => {
+    ultimaAtividadeRef.current = Date.now();
+    descansandoRef.current = false;
+    setDescansando(false);
+  }, []);
 
   // Volta a escanear depois de um resultado (identificado/recusado/já completo)
   const resumeScanning = useCallback(() => {
+    vezRef.current += 1;
     clearTimers();
     setIdentified(null);
     setCountdown(0);
+    setMinutosDesdeAnterior(null);
+    setComprovantePendente(undefined);
     setPhase('scanning');
   }, []);
 
@@ -165,6 +286,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
     employee: Employee, descriptor: number[], type: 'entry' | 'exit', markingPosition: MarkingPosition | undefined, label: string,
     comprovanteFacial?: string,
   ) => {
+    clearTimers();
     setIdentified({ employee, descriptor, type, markingPosition, label });
     setPhase('identified');
     setCountdown(CONFIRM_COUNTDOWN_SECONDS);
@@ -179,6 +301,24 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
     }, 1000);
   }, [onConfirmed]);
 
+  /** Batida logo depois da anterior: pergunta em vez de contar sozinho (ver SAIDA_RAPIDA_SEM_RESPOSTA_MS). */
+  const askQuickExit = useCallback((
+    employee: Employee, descriptor: number[], markingPosition: MarkingPosition | undefined, label: string,
+    minutos: number, comprovanteFacial?: string,
+  ) => {
+    clearTimers();
+    setIdentified({ employee, descriptor, type: 'exit', markingPosition, label });
+    setMinutosDesdeAnterior(minutos);
+    setComprovantePendente(comprovanteFacial);
+    setPhase('confirm-exit');
+    resumeTimerRef.current = setTimeout(() => {
+      // Ninguém respondeu (a pessoa foi embora): não pergunta de novo tão cedo.
+      adiadosRef.current.push({ employeeId: employee.id, descriptor, ate: Date.now() + SAIDA_RAPIDA_ADIADA_MS });
+      resumeRef.current?.();
+    }, SAIDA_RAPIDA_SEM_RESPOSTA_MS);
+  }, []);
+  const askQuickExitRef = useRef<typeof askQuickExit | null>(null);
+
   // As refs que o loop lê. Um efeito sem lista de dependências roda em TODO render, que é
   // exatamente o que se quer aqui: o loop nunca fica com uma versão velha e também nunca
   // é derrubado por causa de uma função nova.
@@ -191,10 +331,31 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
     onRecognizedRef.current = onRecognized;
     startConfirmRef.current = startConfirmCountdown;
     resumeRef.current = resumeScanning;
+    askQuickExitRef.current = askQuickExit;
+    cameraAbertaRef.current = camera.estado === 'aberta';
+    compareFacesRef.current = compareFaces;
+    recemBatidosRef.current = recemBatidos;
+    descansaSemNinguemRef.current = descansaSemNinguem;
   });
 
   const cancelConfirm = () => {
     if (identified) recentRef.current.set(identified.employee.id, Date.now());
+    resumeScanning();
+  };
+
+  const confirmarSaidaRapida = () => {
+    if (!identified) return;
+    const { employee, descriptor, markingPosition } = identified;
+    const comprovante = comprovantePendente;
+    clearTimers();
+    onRecognized?.();
+    onConfirmed(employee, descriptor, 'exit', markingPosition, comprovante);
+  };
+
+  const recusarSaidaRapida = () => {
+    if (identified) {
+      adiadosRef.current.push({ employeeId: identified.employee.id, descriptor: identified.descriptor, ate: Date.now() + SAIDA_RAPIDA_ADIADA_MS });
+    }
     resumeScanning();
   };
 
@@ -217,12 +378,24 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
           && Date.now() - identifyStartedAtRef.current > IDENTIFY_TIMEOUT_MS) {
         identifyInFlightRef.current = false;
         identifyStartedAtRef.current = 0;
-        resumeRef.current?.();
+        resumeRef.current?.(); // também invalida a resposta que ainda vier (vezRef)
         return;
       }
 
+      if (descansandoRef.current) return; // câmera desligada: nada pra olhar
       if (phaseRef.current !== 'scanning' || identifyInFlightRef.current || detectInFlightRef.current) return;
       const now = Date.now();
+      // O minuto sem ninguém só conta com a câmera ABERTA: abrindo ou com problema não descansa
+      // (descansar uma câmera que não abriu deixava o "Tentar de novo" sem efeito).
+      if (!cameraAbertaRef.current) {
+        ultimaAtividadeRef.current = now;
+      } else if (descansaSemNinguemRef.current && now - ultimaAtividadeRef.current > CAMERA_DESCANSA_APOS_MS) {
+        // Ninguém na frente da câmera há CAMERA_DESCANSA_APOS_MS (só no tablet): desliga a câmera.
+        vezRef.current += 1;
+        descansandoRef.current = true;
+        setDescansando(true);
+        return;
+      }
       if (now - lastIdentifyAtRef.current < IDENTIFY_COOLDOWN_MS) return;
 
       try {
@@ -239,15 +412,26 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
           noMatchStreakRef.current = 0;
           return;
         }
+        ultimaAtividadeRef.current = Date.now();
+
+        // Quem acabou de bater (ou disse "Não" à pergunta) e continua na frente: o rosto bate aqui
+        // mesmo no tablet — nem consulta o servidor.
+        const ignorados = [...(recemBatidosRef.current?.current ?? []), ...adiadosRef.current]
+          .filter((r) => r.ate > now && r.descriptor);
+        if (ignorados.some((r) => compareFacesRef.current(descriptor, r.descriptor as number[]) < FACE_MATCH_THRESHOLD)) {
+          lastIdentifyAtRef.current = now;
+          return;
+        }
 
         lastIdentifyAtRef.current = now;
         identifyInFlightRef.current = true;
         identifyStartedAtRef.current = Date.now();
+        const minhaVez = ++vezRef.current;
         setPhase('identifying');
 
         const company = companyRef.current;
         const result = await identifyFace(company.id, Array.from(descriptor), deviceTokenRef.current);
-        if (!mounted) return;
+        if (!mounted || vezRef.current !== minhaVez) return;
 
         if (result.deviceBlocked) {
           onDeviceBlockedRef.current?.();
@@ -270,6 +454,15 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         // Cooldown: acabou de ser identificado/recusado agora mesmo — ignora
         // pra não reconhecer a mesma pessoa de novo enquanto ela some da tela.
         const lastSeen = recentRef.current.get(result.employeeId);
+        const ignorada = [...(recemBatidosRef.current?.current ?? []), ...adiadosRef.current]
+          .find((r) => r.ate > now && r.employeeId === result.employeeId);
+        if (ignorada) {
+          // Bateu sem rosto (pelo CPF) e continua na frente: o servidor reconheceu — guarda este rosto
+          // pra, até o prazo acabar, nem consultar o servidor de novo (05/10/2026).
+          if (!ignorada.descriptor) ignorada.descriptor = Array.from(descriptor);
+          setPhase('scanning');
+          return;
+        }
         if (lastSeen && now - lastSeen < SAME_PERSON_COOLDOWN_MS) {
           setPhase('scanning');
           return;
@@ -284,7 +477,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
           getEmployeeByCpf(result.cpf!, company.id),
           getEmployeeTodayAttendance(result.employeeId, company.id, { comprovanteFacial: result.comprovanteFacial }),
         ]);
-        if (!mounted) return;
+        if (!mounted || vezRef.current !== minhaVez) return;
         if (!emp) { setPhase('scanning'); return; }
 
         const markingCount = resolveMarkingCount(emp, company);
@@ -295,6 +488,14 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
           setIdentified({ employee: emp, descriptor: Array.from(descriptor), type: 'entry', label: emp.name.split(' ')[0] });
           resumeTimerRef.current = setTimeout(() => { if (mounted) resumeRef.current?.(); }, 2500);
           return;
+        }
+
+        if (action.type === 'exit') {
+          const minutos = quickExitMinutes(marcacaoAnterior(today, action.markingPosition));
+          if (minutos != null) {
+            askQuickExitRef.current?.(emp, Array.from(descriptor), action.markingPosition, action.label, minutos, result.comprovanteFacial);
+            return;
+          }
         }
 
         onRecognizedRef.current?.();
@@ -353,12 +554,16 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         </div>
       </div>
     ) : null;
-  const telaDaCamera = sobreposicao === null;
+  const telaDaCamera = sobreposicao === null && !descansando;
   const botaoDeCpfNaTela = telaDaCamera && (phase === 'scanning' || phase === 'no-match' || phase === 'identifying');
+  // Acordou do descanso: a câmera leva ~1s pra reabrir — avisa em vez de mostrar tela preta muda.
+  const reabrindoCamera = phase === 'scanning' && camera.estado === 'abrindo';
 
   const visual: FaceScanVisual =
-    phase === 'scanning'      ? { color: 'blue',  pulse: true, showScanLine: true, label: '🔍 Aproxime o rosto da câmera' }
+    reabrindoCamera           ? { color: 'blue',  pulse: true, showScanLine: true, label: '📷 Abrindo a câmera...' }
+  : phase === 'scanning'      ? { color: 'blue',  pulse: true, showScanLine: true, label: '🔍 Aproxime o rosto da câmera' }
   : phase === 'identifying'   ? { color: 'blue',  pulse: true,                     label: '🔎 Identificando...' }
+  : phase === 'confirm-exit'  ? { color: 'blue',                                   label: `⚠️ ${identified?.employee.name.split(' ')[0]} — ${identified?.label} agora?` }
   : phase === 'identified'    ? { color: 'green', flash: 'success',                label: `👋 ${identified?.employee.name.split(' ')[0]} — ${identified?.label}` }
   : phase === 'already-done'  ? { color: 'green',                                  label: `✅ ${identified?.employee.name.split(' ')[0]}, ponto completo hoje!` }
   : phase === 'no-match'      ? { color: 'red',   shake: true,                     label: '❌ Não reconheci. Tente de novo.' }
@@ -390,11 +595,13 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         {/* 🔴 30/09/2026: o botão de CPF (abaixo) ficava EM CIMA do aviso — "Aproxime o rosto",
             "Identificando..." e "Não reconheci" não apareciam. Com o botão na tela, o aviso sobe
             pra cima dele: botão a 1,5rem do fundo + 2,5rem de altura = 4rem, e 12px de folga. */}
-        <FaceScanFrame
-          visual={visual}
-          countdown={phase === 'identified' ? countdown : 0}
-          labelBottom={botaoDeCpfNaTela ? 'calc(4rem + 12px)' : undefined}
-        />
+        {!descansando && (
+          <FaceScanFrame
+            visual={visual}
+            countdown={phase === 'identified' ? countdown : 0}
+            labelBottom={botaoDeCpfNaTela ? 'calc(4rem + 12px)' : undefined}
+          />
+        )}
       </div>
 
       {/* ── Confirmação (cancelável) ── visual "Malha neon" (05/10/2026), mesmos textos e botão */}
@@ -416,6 +623,42 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
           </div>
         </div>
       )}
+
+      {/* ── Batida logo depois da anterior (05/10/2026): pergunta, não conta sozinho ── */}
+      {telaDaCamera && phase === 'confirm-exit' && identified && (
+        <div className="absolute bottom-24 left-0 right-0 z-30 flex justify-center px-4">
+          <div
+            className="rounded-2xl shadow-2xl p-4 w-full max-w-sm text-center space-y-3 border border-transparent"
+            style={{ background: 'linear-gradient(rgba(10,8,22,0.94), rgba(10,8,22,0.94)) padding-box, linear-gradient(110deg, #FFC85A, #A879FF) border-box' }}
+            data-testid="confirmar-saida-rapida"
+          >
+            <UserCircle2 className="w-10 h-10 mx-auto text-[#FFC85A]" />
+            <p className="text-white font-bold">{identified.employee.name}</p>
+            <p className="text-sm text-white/80">
+              Você bateu {nomeDaMarcacaoAnterior(identified.markingPosition)} há{' '}
+              <strong className="text-[#FFC85A]">{minutosDesdeAnterior === 0 ? 'menos de 1 minuto' : `${minutosDesdeAnterior} min`}</strong>
+              {' '}— ela já está registrada. Se foi só isso, toque em "Não".
+            </p>
+            {/* O "Não" é o botão principal (como no aviso do botão): quem só queria confirmar a
+                batida anterior não pode ganhar uma saída sem querer. */}
+            <button
+              onClick={recusarSaidaRapida}
+              className="w-full py-4 text-base font-bold rounded-xl min-h-[52px] text-[#0A0816] bg-[#FFC85A] hover:bg-[#FFD57F]"
+            >
+              Não, foi engano
+            </button>
+            <button
+              onClick={confirmarSaidaRapida}
+              className="w-full py-3 text-sm font-semibold rounded-xl min-h-[44px] text-[#F1E9FF] bg-[rgba(168,121,255,0.16)] border border-[rgba(168,121,255,0.5)] hover:bg-[rgba(168,121,255,0.28)]"
+            >
+              Sim, registrar {identified.label} agora
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Câmera descansando (05/10/2026): toque em qualquer lugar acorda ── */}
+      {descansando && sobreposicao === null && <TelaDeDescanso onAcordar={acordar} onUseCpf={onUseCpf} />}
 
       {/* ── Alternativa manual (sempre disponível) ──
            'identifying' entrou em 22/09/2026: sem ele, a pessoa que caía nessa fase ficava

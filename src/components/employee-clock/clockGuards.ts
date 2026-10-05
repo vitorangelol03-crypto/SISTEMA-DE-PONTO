@@ -14,6 +14,37 @@ export const QUICK_EXIT_CONFIRM_MINUTES = 10;
 export const AUTO_LOGOUT_SECONDS = 35;
 
 /**
+ * Tablet de ponto (05/10/2026, decisões do Victor). No tablet a fila espera a tela voltar pra
+ * câmera: com 35s, 5 pessoas chegando juntas esperavam quase 3 minutos. No TABLET ATIVO a tela
+ * volta em 8s depois de gravar (dá pra ver o ✅ e a hora) e em 15s depois de um erro (antes, depois
+ * de um erro ela NUNCA voltava: o painel da pessoa ficava aberto pro próximo da fila). No celular
+ * de cada um continua AUTO_LOGOUT_SECONDS e sem volta automática no erro, como sempre.
+ */
+export const TABLET_VOLTA_APOS_SUCESSO_SEGUNDOS = 8;
+export const TABLET_VOLTA_APOS_FALHA_SEGUNDOS = 15;
+
+/**
+ * Tablet de ponto (05/10/2026, pedido do Victor): câmera e leitura do rosto ligadas 24h esquentam
+ * o aparelho. Sem ninguém na frente da câmera por este tempo, a câmera desliga e a tela mostra
+ * "Toque para bater o ponto"; o toque reabre a câmera na hora (o reconhecimento continua carregado).
+ */
+export const CAMERA_DESCANSA_APOS_MS = 60_000;
+
+/**
+ * Tablet (05/10/2026): quem acabou de bater é ignorado pela câmera por este tempo. Com a tela
+ * voltando em 8s, quem bateu e continua na frente era reconhecido de novo e caía na pergunta de
+ * saída — travando a fila.
+ */
+export const RECEM_BATIDO_MS = 60_000;
+
+/**
+ * Tablet (05/10/2026): CPF, senha, escolha de empresa, erro ou painel abertos SEM nenhum toque por
+ * este tempo voltam sozinhos pro início — quem começou e foi embora não deixa a tela presa (com a
+ * câmera desligada) pro próximo da fila.
+ */
+export const TABLET_TELA_LARGADA_SEGUNDOS = 45;
+
+/**
  * Distância máxima (exclusiva) pra facial 1:1 no navegador considerar "é a mesma pessoa".
  * O servidor reconfere com o MESMO número (LIMITE_FACIAL em
  * supabase/functions/_shared/faceIdentify.ts, que desde 30/09/2026 vale também pro 1:N sem
@@ -46,6 +77,34 @@ export function getNextMarkingPosition(att: Attendance | null): MarkingPosition 
     if (!getTimestampForPosition(att, p)) return p;
   }
   return null;
+}
+
+/** Timestamp da marcação ANTERIOR a uma saída (pra trava de saída rápida no botão):
+ *  saída almoço (2) confere contra a entrada (1); saída final (4) contra a
+ *  volta do almoço (3); saída simples (2 marcações) contra a entrada.
+ *  05/10/2026: veio do EmployeeClockIn (sem mudar nada) — o painel do celular continua usando. */
+export function marcacaoAnteriorDaSaida(att: Attendance | null, pos?: MarkingPosition): string | null {
+  if (pos === 2) return getTimestampForPosition(att, 1);
+  if (pos === 4) return getTimestampForPosition(att, 3);
+  return att?.entry_time ?? null;
+}
+
+/**
+ * Timestamp da marcação imediatamente anterior — ponto pelo ROSTO (tablet, 05/10/2026). Ali
+ * QUALQUER batida a menos de QUICK_EXIT_CONFIRM_MINUTES da anterior pergunta antes, inclusive a
+ * volta do almoço (3, contra a saída do almoço): sem botão, a câmera bateria sozinha a volta em quem
+ * ficou na frente depois da saída do almoço — almoço de 0 min.
+ */
+export function marcacaoAnterior(att: Attendance | null, pos?: MarkingPosition): string | null {
+  if (pos === 2 || pos === 3 || pos === 4) return getTimestampForPosition(att, (pos - 1) as MarkingPosition);
+  return att?.entry_time ?? null;
+}
+
+/** Como a tela chama a marcação anterior, pra pergunta de "logo depois de...". */
+export function nomeDaMarcacaoAnterior(pos?: MarkingPosition): string {
+  if (pos === 3) return 'a saída do almoço';
+  if (pos === 4) return 'a volta do almoço';
+  return 'a entrada';
 }
 
 /** `marking_count` do funcionário manda; sem valor próprio, herda o padrão da

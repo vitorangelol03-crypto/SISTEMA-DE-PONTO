@@ -14,8 +14,10 @@ export interface CompanyContextValue {
   company: Company | null;
   // Lista de empresas disponíveis (apenas usado por admin)
   availableCompanies: Company[];
-  // Trocar empresa (apenas admin pode chamar)
-  setCompany: (companyId: string) => Promise<void>;
+  // Trocar empresa (apenas admin pode chamar). `persistir: false` (05/10/2026): troca só a tela,
+  // sem gravar no aparelho — o tablet de ponto que atende 2 empresas troca pela sessão de quem
+  // entrou pelo CPF, mas a empresa "de casa" dele continua a gravada (recarga volta pra ela).
+  setCompany: (companyId: string, opts?: { persistir?: boolean }) => Promise<void>;
   // Loading state
   loading: boolean;
   // Indica se está pronto para uso

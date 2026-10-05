@@ -24,14 +24,16 @@ import {
 } from './clockDeviceStorage';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
 import { useCompany } from '../../contexts/useCompany';
+import { getCurrentCompanyId } from '../../contexts/companyHelpers';
 import { FaceRegistration } from './FaceRegistration';
 import { FaceVerification } from './FaceVerification';
 import { clockFailureMessage } from './clockMessages';
 import {
-  AUTO_LOGOUT_SECONDS, quickExitMinutes,
+  AUTO_LOGOUT_SECONDS, quickExitMinutes, marcacaoAnteriorDaSaida,
+  TABLET_VOLTA_APOS_SUCESSO_SEGUNDOS, TABLET_VOLTA_APOS_FALHA_SEGUNDOS, RECEM_BATIDO_MS, TABLET_TELA_LARGADA_SEGUNDOS,
   MarkingPosition, MARKING_LABELS, getTimestampForPosition, getNextMarkingPosition,
 } from './clockGuards';
-import { FaceIdentifyClock } from './FaceIdentifyClock';
+import { FaceIdentifyClock, type RecemBatido } from './FaceIdentifyClock';
 import { abertoComoApp, useAppDoPonto } from './useAppDoPonto';
 import { PassosNoAppDoPonto } from './CameraProblem';
 import { formatHours, formatTime } from './formatoDoPonto';
@@ -125,15 +127,6 @@ function formatCPFMask(value: string): string {
   if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
   if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-}
-
-/** Timestamp da marcação ANTERIOR a uma saída (pra trava de saída rápida):
- *  saída almoço (2) confere contra a entrada (1); saída final (4) contra a
- *  volta do almoço (3); saída simples (2 marcações) contra a entrada. */
-function getPrevMarkingForExit(att: Attendance | null, pos?: MarkingPosition): string | null {
-  if (pos === 2) return getTimestampForPosition(att, 1);
-  if (pos === 4) return getTimestampForPosition(att, 3);
-  return att?.entry_time ?? null;
 }
 
 /** Permissão de localização BLOQUEADA no navegador? (bloqueada ≠ nunca pedida:
@@ -259,6 +252,68 @@ export const EmployeeClockIn: React.FC = () => {
   const [activating, setActivating] = useState(false);
   const [activated, setActivated] = useState<ClockDevice | null>(null);
 
+  /**
+   * Aparelho compartilhado (tablet) — 05/10/2026: tem o segredo do tablet guardado. Vale também com
+   * a conferência no servidor pendente ou que FALHOU (rede): um soluço de rede ao abrir não pode fazer
+   * o tablet agir como celular (volta em 35s, sem volta no erro, troca de empresa gravada, link da
+   * consulta à mostra). Segredo que o servidor recusa é apagado na conferência (aí vira celular).
+   */
+  const ehTablet = !!device || !!deviceToken;
+
+  /**
+   * Tablet que atende 2 empresas (Caratinga e Ponte Nova no mesmo galpão): quem entra pelo CPF troca
+   * a empresa da TELA só pra sessão dele — no tablet a troca NÃO é gravada no aparelho. A empresa "de
+   * casa" do tablet é sempre a gravada: recarga no meio da sessão, rede caindo na hora da volta ou o
+   * próximo CPF não mudam a casa. Ao voltar pro início a tela volta pra ela (senão a câmera passaria a
+   * procurar só o pessoal da outra empresa). No celular a escolha é gravada, como sempre.
+   */
+  const trocarEmpresaDaTela = (empresaId: string) => setCompany(empresaId, { persistir: !ehTablet });
+  /** Pede SEMPRE (mesmo já parecendo estar em casa): uma troca pelo CPF ainda a caminho perde pro
+   *  pedido mais novo (setCompany: o último pedido ganha) — sem isto, ela chegava depois e deixava a
+   *  tela inicial na outra empresa. */
+  const voltarPraEmpresaDoTablet = () => {
+    if (!ehTablet) return;
+    setCompany(getCurrentCompanyId(), { persistir: false }).catch((err: unknown) => {
+      // A casa continua gravada: a próxima volta tenta de novo.
+      console.error('Tablet: não consegui voltar a tela pra empresa dele:', err);
+    });
+  };
+  /** No tablet a tela volta mais rápido (fila) — ver TABLET_VOLTA_APOS_SUCESSO_SEGUNDOS. */
+  const segundosParaVoltar = (deuErro: boolean): number | null =>
+    ehTablet ? (deuErro ? TABLET_VOLTA_APOS_FALHA_SEGUNDOS : TABLET_VOLTA_APOS_SUCESSO_SEGUNDOS)
+      : (deuErro ? null : AUTO_LOGOUT_SECONDS);
+  const voltarSozinhoEm = (segundos: number) => {
+    if (autoLogoutRef.current) clearTimeout(autoLogoutRef.current);
+    autoLogoutRef.current = setTimeout(() => {
+      autoLogoutRef.current = null;
+      handleLogout();
+    }, segundos * 1000);
+  };
+  /** Falha no tablet: a tela volta sozinha (antes ficava parada no painel da pessoa, sem prazo). */
+  const avisarFalha = (mensagem: string) => {
+    const segundos = segundosParaVoltar(true);
+    if (segundos == null) { setClockMsg(mensagem); return; }
+    setClockMsg(`${mensagem} · a tela volta ao início em ${segundos}s`);
+    voltarSozinhoEm(segundos);
+  };
+  /** Fechou um aviso SEM bater ("Não! Foi engano", "Já liberei"): no tablet a tela volta sozinha. */
+  const rearmarVoltaNoTablet = () => {
+    if (ehTablet) voltarSozinhoEm(TABLET_VOLTA_APOS_FALHA_SEGUNDOS);
+  };
+  /**
+   * Dono da batida em andamento (05/10/2026): sobe a cada batida nova e a cada "voltar ao início".
+   * Uma batida que perdeu a vez — a pessoa tocou "Sair" no meio, ou tentou de novo depois do
+   * "Tempo esgotado" — ao responder não escreve no painel, não agenda a volta da tela e não mexe no
+   * "Registrando..." nem na trava de duplo clique, que já são da sessão/batida nova.
+   */
+  const batidaDaVezRef = useRef(0);
+  /**
+   * Quem acabou de bater (05/10/2026): com a tela voltando em 8s, quem bateu e continua na frente do
+   * tablet era reconhecido de novo e caía na pergunta de saída (travando a fila). A câmera ignora
+   * essas pessoas por RECEM_BATIDO_MS — e nem consulta o servidor quando o rosto bate no próprio tablet.
+   */
+  const recemBatidosRef = useRef<RecemBatido[]>([]);
+
   // GPS pedido mais cedo (30/09/2026 — ver GPS_ANTECIPADO_VALIDO_MS).
   const posicaoAntecipadaRef = useRef<{ promessa: Promise<GeolocationPosition>; pedidaEm: number } | null>(null);
   /** Dispara agora o pedido de posição da batida que vem nos próximos segundos. */
@@ -308,7 +363,9 @@ export const EmployeeClockIn: React.FC = () => {
   // Atualiza dashboard a cada 30s enquanto está na tela (silencioso — sem flash)
   useEffect(() => {
     if (step !== 'dashboard' || !employee) return;
-    const interval = setInterval(() => loadDashboard(employee, true), 30000);
+    // Com uma volta da tela pendente (mensagem de ✅/⚠️/❌ na tela) não recarrega: o recarregamento
+    // apaga a mensagem antes de a pessoa ler (05/10/2026).
+    const interval = setInterval(() => { if (!autoLogoutRef.current) void loadDashboard(employee, true); }, 30000);
     return () => clearInterval(interval);
   }, [step, employee, loadDashboard]);
 
@@ -381,6 +438,29 @@ export const EmployeeClockIn: React.FC = () => {
     setEmpresaBarrada(nomeDaEmpresa);
     setStep('device-blocked');
   };
+
+  // Voltou pro passo inicial por QUALQUER caminho (ex.: alguém da outra empresa desistiu na tela da
+  // senha e tocou "Voltar pro reconhecimento facial"; no tablet que abre no CPF, o "Tentar novamente"
+  // do erro): a tela volta pra empresa do tablet. Sem isto, só o fim da sessão (handleLogout)
+  // devolvia a empresa. Só a TROCA de tela dispara — a empresa mudando pelo CPF na própria tela
+  // inicial não pode disparar a volta (desfaria a troca no meio).
+  useEffect(() => {
+    if (step === defaultStep) voltarPraEmpresaDoTablet();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só a troca de tela importa
+  }, [step]);
+
+  // Conferência do tablet que falhou (rede): tenta de novo quando a rede volta ou a tela volta a
+  // aparecer (05/10/2026). Antes, falhou uma vez ao abrir, falhava o dia todo.
+  useEffect(() => {
+    if (deviceCheck !== 'falhou' || !deviceToken) return;
+    const tentarDeNovo = () => { if (document.visibilityState === 'visible') setDeviceCheck('pendente'); };
+    window.addEventListener('online', tentarDeNovo);
+    document.addEventListener('visibilitychange', tentarDeNovo);
+    return () => {
+      window.removeEventListener('online', tentarDeNovo);
+      document.removeEventListener('visibilitychange', tentarDeNovo);
+    };
+  }, [deviceCheck, deviceToken]);
 
   // Dispara o registro assim que `employee` (state) realmente virar a pessoa
   // identificada pela câmera sem CPF (ver comentário no ref, acima).
@@ -459,7 +539,7 @@ export const EmployeeClockIn: React.FC = () => {
         return;
       }
       if (companies.length === 1) {
-        await setCompany(companies[0].id);
+        await trocarEmpresaDaTela(companies[0].id);
         // Trava do tablet: avisa ANTES da senha (o servidor recusaria a batida no fim).
         if (barradoNaEmpresa(companies[0])) {
           mostrarAparelhoBarrado(companies[0].display_name);
@@ -488,7 +568,7 @@ export const EmployeeClockIn: React.FC = () => {
   const handleCompanyPick = async (company: Company) => {
     setLoading(true);
     try {
-      await setCompany(company.id);
+      await trocarEmpresaDaTela(company.id);
       if (barradoNaEmpresa(company)) {
         mostrarAparelhoBarrado(company.display_name);
         return;
@@ -631,6 +711,9 @@ export const EmployeeClockIn: React.FC = () => {
     // setClockLoading, mas o ref é atualizado imediatamente.
     if (inFlightClockRef.current) return;
     inFlightClockRef.current = true;
+    // Esta batida é a da vez (ver batidaDaVezRef)? Perdeu a vez, a resposta não mexe mais na tela.
+    const minhaVez = ++batidaDaVezRef.current;
+    const daVez = () => batidaDaVezRef.current === minhaVez;
 
     setClockLoading(true);
     setClockMsg(null);
@@ -639,41 +722,76 @@ export const EmployeeClockIn: React.FC = () => {
     const controller = new AbortController();
     const abortTimer = setTimeout(() => controller.abort(), 30_000);
 
-    // Watchdog extra (35s): segurança se o try/catch não chegar a rodar.
+    // Watchdog extra (35s): segurança se o try/catch não chegar a rodar. No tablet, a tela volta
+    // sozinha também neste caso (05/10/2026 — antes ficava parada com o "Tempo esgotado").
     if (clockWatchdogRef.current) clearTimeout(clockWatchdogRef.current);
+    // (O vigia é sempre da batida da vez: a batida nova e o "Sair" desligam o anterior.)
     clockWatchdogRef.current = setTimeout(() => {
       setClockLoading(false);
-      setClockMsg('❌ Tempo esgotado. Verifique sua conexão e tente novamente.');
       inFlightClockRef.current = false;
       clockWatchdogRef.current = null;
+      avisarFalha('❌ Tempo esgotado. Verifique sua conexão e tente novamente.');
     }, 35_000);
 
     const now = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    // Helper: verifica no banco se o ponto já foi registrado. Usado em
-    // success=false e AbortError — o servidor pode ter gravado mesmo quando
-    // respondeu com erro / timeout.
-    const verifyRegisteredInDb = async (): Promise<boolean> => {
-      if (!company?.id) return false;
+    /** O ponto desta batida já está no banco? Devolve o registro do dia (ou null) — o servidor pode
+     *  ter gravado mesmo respondendo erro ou estourando o tempo. */
+    const conferirNoBanco = async (): Promise<Attendance | null> => {
+      if (!company?.id) return null;
       try {
         const today = await getEmployeeTodayAttendance(employee.id, company.id, provaDaSessao);
-        if (markingPosition) {
-          return !!getTimestampForPosition(today, markingPosition);
-        }
-        return type === 'entry' ? !!today?.entry_time : !!today?.exit_time_full;
+        const gravado = markingPosition
+          ? !!getTimestampForPosition(today, markingPosition)
+          : (type === 'entry' ? !!today?.entry_time : !!today?.exit_time_full);
+        return gravado ? today : null;
       } catch {
-        return false;
+        return null;
       }
     };
+    /** 1ª entrada gravada FORA da área: pela resposta (`fraud`) ou — quando a resposta se perdeu —
+     *  pelo próprio registro do dia (geo_valid = false). */
+    const foraDaAreaDe = (
+      gravado: Attendance | null | undefined,
+      resposta?: { fraud?: boolean; distance_meters?: number | null },
+    ): { distancia: number | null } | undefined => {
+      if (resposta?.fraud && resposta.distance_meters != null) return { distancia: resposta.distance_meters };
+      const primeiraEntrada = type === 'entry' && (!markingPosition || markingPosition === 1);
+      if (primeiraEntrada && gravado?.geo_valid === false) return { distancia: gravado.geo_distance_meters ?? null };
+      return undefined;
+    };
 
-    const setSuccessMsg = async (att?: Attendance | null) => {
+    /**
+     * `foraDaArea` (05/10/2026): o servidor GRAVA a 1ª entrada do dia mesmo fora da cerca (e marca
+     * fraude + bloqueio de bônus) e responde success=false — a tela conferia no banco, achava a
+     * entrada e mostrava "✅ registrada". A pessoa nunca ficava sabendo (uma bateu 12 noites seguidas
+     * assim). Agora o aviso diz que foi gravada FORA da área e pede pra avisar o supervisor.
+     */
+    const setSuccessMsg = async (att?: Attendance | null, foraDaArea?: { distancia: number | null }) => {
+      if (!daVez()) return;
+      const segundos = segundosParaVoltar(!!foraDaArea) ?? AUTO_LOGOUT_SECONDS;
+      // Aparelho compartilhado: a tela volta ao início sozinha pra sessão deste funcionário não sobrar
+      // logada pro próximo da fila. Armada ANTES de recarregar o painel: se a rede travar no
+      // recarregamento, a tela volta mesmo assim (05/10/2026).
+      voltarSozinhoEm(segundos);
+      // Quem acabou de bater: a câmera não o reconhece de novo logo em seguida (ver recemBatidosRef).
+      const agora = Date.now();
+      recemBatidosRef.current = [
+        ...recemBatidosRef.current.filter((r) => r.ate > agora && r.employeeId !== employee.id),
+        { employeeId: employee.id, descriptor: faceDescriptor ?? undefined, ate: agora + RECEM_BATIDO_MS },
+      ];
       // 1) Limpa qualquer erro residual ANTES de recarregar o dashboard
       setClockMsg(null);
       // 2) Recarrega dados (loadDashboard também reseta clockMsg)
       await loadDashboard(employee, true);
+      if (!daVez()) return;
       // 3) Define a mensagem de sucesso como estado final, após o reload
-      const autoNote = ` · a tela volta ao início em ${AUTO_LOGOUT_SECONDS}s`;
-      if (markingPosition) {
+      const autoNote = ` · a tela volta ao início em ${segundos}s`;
+      if (foraDaArea) {
+        const nome = markingPosition ? MARKING_LABELS[markingPosition] : (type === 'entry' ? 'Entrada' : 'Saída');
+        const metros = foraDaArea.distancia != null ? ` (${Math.round(foraDaArea.distancia)} m)` : '';
+        setClockMsg(`⚠️ ${nome} registrada às ${now()} FORA da área permitida${metros} — avise o supervisor${autoNote}`);
+      } else if (markingPosition) {
         const label = MARKING_LABELS[markingPosition];
         const extra = markingPosition === 4 && att?.hours_worked != null
           ? ` — ${formatHours(att.hours_worked)}`
@@ -684,62 +802,51 @@ export const EmployeeClockIn: React.FC = () => {
       } else {
         setClockMsg(`✅ Saída registrada às ${now()}${att ? ` — ${formatHours(att.hours_worked)}` : ''}${autoNote}`);
       }
-      // Aparelho compartilhado: a tela volta ao início sozinha pra sessão
-      // deste funcionário não sobrar logada pro próximo da fila.
-      if (autoLogoutRef.current) clearTimeout(autoLogoutRef.current);
-      autoLogoutRef.current = setTimeout(() => {
-        autoLogoutRef.current = null;
-        handleLogout();
-      }, AUTO_LOGOUT_SECONDS * 1000);
     };
 
     try {
       const result = await callClockValidated(type, controller.signal, markingPosition, faceDescriptor);
+      if (!daVez()) return;
       if (!result.success) {
-        // Mesmo com success=false, o servidor pode ter gravado. Confirma.
-        if (await verifyRegisteredInDb()) {
-          await setSuccessMsg(result.attendance);
+        // Mesmo com success=false, o servidor pode ter gravado. Confirma — e, se gravou com
+        // `fraud`, foi FORA da área (ver setSuccessMsg).
+        const gravado = await conferirNoBanco();
+        if (!daVez()) return;
+        if (gravado) {
+          await setSuccessMsg(result.attendance ?? gravado, foraDaAreaDe(gravado, result));
           return;
         }
-        setClockMsg(clockFailureMessage(result));
+        avisarFalha(clockFailureMessage(result));
         return;
       }
       await setSuccessMsg(result.attendance);
     } catch (err) {
-      // Timeout (AbortError) → o servidor pode ter registrado mesmo assim.
+      if (!daVez()) return;
+      // Timeout (AbortError) ou erro genérico → o servidor pode ter registrado mesmo assim.
       // Consultamos o estado atual antes de declarar falha.
       const isAbort = err instanceof DOMException && err.name === 'AbortError';
-      if (isAbort) {
-        setClockMsg('⏳ Conexão lenta. Verificando registro...');
-        try {
-          if (!company?.id) throw new Error('Empresa não selecionada');
-          const today = await getEmployeeTodayAttendance(employee.id, company.id, provaDaSessao);
-          const registered = markingPosition
-            ? !!getTimestampForPosition(today, markingPosition)
-            : (type === 'entry' ? !!today?.entry_time : !!today?.exit_time_full);
-          if (registered) {
-            await setSuccessMsg(today);
-            return;
-          }
-        } catch { /* sem internet — cai na mensagem final */ }
-        setClockMsg('❌ Tempo esgotado. Verifique sua conexão e tente novamente.');
-      } else {
-        // Erro genérico → verifica uma última vez no DB antes de declarar falha
-        if (await verifyRegisteredInDb()) {
-          await setSuccessMsg();
-          return;
-        }
-        setClockMsg('❌ Erro ao registrar ponto. Tente novamente.');
+      if (isAbort) setClockMsg('⏳ Conexão lenta. Verificando registro...');
+      const gravado = await conferirNoBanco();
+      if (!daVez()) return;
+      if (gravado) {
+        await setSuccessMsg(gravado, foraDaAreaDe(gravado));
+        return;
       }
+      avisarFalha(isAbort
+        ? '❌ Tempo esgotado. Verifique sua conexão e tente novamente.'
+        : '❌ Erro ao registrar ponto. Tente novamente.');
     } finally {
       clearTimeout(abortTimer);
-      if (clockWatchdogRef.current) {
-        clearTimeout(clockWatchdogRef.current);
-        clockWatchdogRef.current = null;
+      // Perdeu a vez: o vigia, o "Registrando..." e a trava já são da sessão/batida nova.
+      if (daVez()) {
+        if (clockWatchdogRef.current) {
+          clearTimeout(clockWatchdogRef.current);
+          clockWatchdogRef.current = null;
+        }
+        setClockLoading(false);
+        // Debounce de 3s — evita duplo clique mesmo que o usuário insista
+        setTimeout(() => { if (daVez()) inFlightClockRef.current = false; }, 3000);
       }
-      setClockLoading(false);
-      // Debounce de 3s — evita duplo clique mesmo que o usuário insista
-      setTimeout(() => { inFlightClockRef.current = false; }, 3000);
     }
   };
 
@@ -783,7 +890,7 @@ export const EmployeeClockIn: React.FC = () => {
     anteciparPosicao();
 
     if (type === 'exit') {
-      const minutesAgo = quickExitMinutes(getPrevMarkingForExit(todayRecord, markingPosition));
+      const minutesAgo = quickExitMinutes(marcacaoAnteriorDaSaida(todayRecord, markingPosition));
       if (minutesAgo != null) {
         setConfirmExit({ markingPosition, minutesAgo });
         return;
@@ -828,14 +935,14 @@ export const EmployeeClockIn: React.FC = () => {
   const handleFaceClockVerifyFail = () => {
     setPendingClockType(null);
     pendingMarkingPositionRef.current = null;
-    setClockMsg('❌ Reconhecimento facial falhou. Procure o supervisor.');
+    avisarFalha('❌ Reconhecimento facial falhou. Procure o supervisor.');
   };
 
   // 30/09/2026: a câmera nem abriu — "reconhecimento falhou" seria mentira (o rosto não foi olhado).
   const handleFaceClockCameraExit = () => {
     setPendingClockType(null);
     pendingMarkingPositionRef.current = null;
-    setClockMsg('❌ A câmera não abriu — o ponto NÃO foi registrado. Tente de novo.');
+    avisarFalha('❌ A câmera não abriu — o ponto NÃO foi registrado. Tente de novo.');
   };
 
   // ─── Tablet de ponto: ativação (30/09/2026) ───────────────────────────────
@@ -888,7 +995,16 @@ export const EmployeeClockIn: React.FC = () => {
   };
 
   const handleLogout = () => {
+    // Batida em andamento perde a vez (ver batidaDaVezRef) e a tela fica livre pro próximo — antes,
+    // a batida dele saía em silêncio até a anterior terminar (trava de duplo clique presa).
+    batidaDaVezRef.current += 1;
+    if (clockWatchdogRef.current) { clearTimeout(clockWatchdogRef.current); clockWatchdogRef.current = null; }
+    inFlightClockRef.current = false;
+    setClockLoading(false);
+    // Tablet cuja conferência no servidor falhou (rede): tenta de novo a cada volta ao início.
+    if (deviceCheck === 'falhou' && deviceToken) setDeviceCheck('pendente');
     if (autoLogoutRef.current) { clearTimeout(autoLogoutRef.current); autoLogoutRef.current = null; }
+    voltarPraEmpresaDoTablet();
     if (barradoNaEmpresa(company)) {
       mostrarAparelhoBarrado(company?.display_name ?? null);
     } else {
@@ -911,6 +1027,32 @@ export const EmployeeClockIn: React.FC = () => {
     setGeoBlocked(false);
     setCameraBlocked(false);
   };
+
+  /**
+   * Tablet: tela LARGADA no meio (05/10/2026) — alguém começou pelo CPF, ficou na senha ou abriu o
+   * painel e foi embora (com a câmera desligada atrás). Sem nenhum toque por
+   * TABLET_TELA_LARGADA_SEGUNDOS, volta pro início pelo mesmo caminho do "Sair" (limpa CPF e senha,
+   * a empresa volta pra casa). Toque ou tecla recomeçam a contagem. Não conta enquanto a tela espera
+   * o servidor (CPF, senha, batida) nem na verificação do rosto (a pessoa só olha, sem tocar).
+   */
+  const handleLogoutRef = useRef(handleLogout);
+  useEffect(() => { handleLogoutRef.current = handleLogout; });
+  useEffect(() => {
+    const largaveis: Step[] = ['cpf', 'pin', 'setup-pin', 'company-select', 'error', 'dashboard'];
+    if (!ehTablet || !largaveis.includes(step) || loading || clockLoading || pendingClockType) return;
+    let prazo = setTimeout(() => handleLogoutRef.current(), TABLET_TELA_LARGADA_SEGUNDOS * 1000);
+    const aoTocar = () => {
+      clearTimeout(prazo);
+      prazo = setTimeout(() => handleLogoutRef.current(), TABLET_TELA_LARGADA_SEGUNDOS * 1000);
+    };
+    window.addEventListener('pointerdown', aoTocar);
+    window.addEventListener('keydown', aoTocar);
+    return () => {
+      clearTimeout(prazo);
+      window.removeEventListener('pointerdown', aoTocar);
+      window.removeEventListener('keydown', aoTocar);
+    };
+  }, [ehTablet, step, loading, clockLoading, pendingClockType]);
 
   const hasEntry = todayRecord?.entry_time != null;
   const hasExit = todayRecord?.exit_time_full != null;
@@ -949,7 +1091,13 @@ export const EmployeeClockIn: React.FC = () => {
    * build). Navegador antigo que não conhece `dvh` fica no `min-h-screen`.
    */
   return (
-    <div className="min-h-screen supports-[min-height:100dvh]:min-h-dvh bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+    <div
+      className="min-h-screen supports-[min-height:100dvh]:min-h-dvh bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4"
+      data-testid="tela-de-ponto"
+      // Empresa que a tela está usando agora (no tablet, a da sessão — pode diferir da gravada no
+      // aparelho; ver trocarEmpresaDaTela). Só pra conferência (testes / suporte).
+      data-empresa={company?.id ?? ''}
+    >
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden deitado:max-w-[48rem] deitado:grid deitado:grid-cols-[2fr_3fr]">
 
         {/* ── CARREGANDO: a tela ainda não sabe se começa no CPF ou na câmera (30/09/2026) ── */}
@@ -1010,7 +1158,7 @@ export const EmployeeClockIn: React.FC = () => {
                 <p className="text-xs text-center text-green-700" data-testid="clock-device-badge">
                   📟 Tablet autorizado: {device.name}
                 </p>
-              ) : (
+              ) : ehTablet ? null : (
                 <>
                   <LinkDaConsulta />
                   <button
@@ -1327,7 +1475,7 @@ export const EmployeeClockIn: React.FC = () => {
                     )}
 
                     {clockMsg && (
-                      <div className={`rounded-lg px-3 py-2 text-sm font-medium ${clockMsg.startsWith('✅') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      <div className={`rounded-lg px-3 py-2 text-sm font-medium ${clockMsg.startsWith('✅') ? 'bg-green-100 text-green-800' : clockMsg.startsWith('⚠️') ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-800'}`}>
                         {clockMsg}
                       </div>
                     )}
@@ -1382,7 +1530,7 @@ export const EmployeeClockIn: React.FC = () => {
 
                     {/* Mensagem de ação */}
                     {clockMsg && (
-                      <div className={`rounded-lg px-3 py-2 text-sm font-medium ${clockMsg.startsWith('✅') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      <div className={`rounded-lg px-3 py-2 text-sm font-medium ${clockMsg.startsWith('✅') ? 'bg-green-100 text-green-800' : clockMsg.startsWith('⚠️') ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-800'}`}>
                         {clockMsg}
                       </div>
                     )}
@@ -1454,6 +1602,8 @@ export const EmployeeClockIn: React.FC = () => {
           onDeviceBlocked={() => mostrarAparelhoBarrado(company.display_name)}
           onRecognized={anteciparPosicao}
           onOcupado={setCameraOcupada}
+          recemBatidos={recemBatidosRef}
+          descansaSemNinguem={ehTablet}
         />
       )}
 
@@ -1496,7 +1646,7 @@ export const EmployeeClockIn: React.FC = () => {
               Se você acabou de bater a entrada, <strong>não precisa confirmar nada</strong> — ela já está registrada.
             </p>
             <button
-              onClick={() => setConfirmExit(null)}
+              onClick={() => { setConfirmExit(null); rearmarVoltaNoTablet(); }}
               className="w-full py-4 bg-blue-600 text-white text-base font-bold rounded-xl hover:bg-blue-700 transition-colors"
             >
               Não! Foi engano
@@ -1540,7 +1690,7 @@ export const EmployeeClockIn: React.FC = () => {
               </>
             )}
             <button
-              onClick={() => setGeoBlocked(false)}
+              onClick={() => { setGeoBlocked(false); rearmarVoltaNoTablet(); }}
               className="w-full py-4 bg-blue-600 text-white text-base font-bold rounded-xl hover:bg-blue-700 transition-colors"
             >
               Já liberei — vou tentar de novo
@@ -1577,7 +1727,7 @@ export const EmployeeClockIn: React.FC = () => {
               </>
             )}
             <button
-              onClick={() => setCameraBlocked(false)}
+              onClick={() => { setCameraBlocked(false); rearmarVoltaNoTablet(); }}
               className="w-full py-4 bg-blue-600 text-white text-base font-bold rounded-xl hover:bg-blue-700 transition-colors"
             >
               Já liberei — vou tentar de novo

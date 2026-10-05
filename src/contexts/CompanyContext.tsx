@@ -1,4 +1,4 @@
-import { useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect, useRef, ReactNode } from 'react';
 import { getCompanyById, getCompanies, DEFAULT_COMPANY_ID, type Company } from '../services/database';
 import { COMPANY_STORAGE_KEY } from './companyHelpers';
 import { CompanyContext } from './useCompany';
@@ -67,11 +67,20 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     init();
   }, []);
 
-  const setCompany = async (companyId: string) => {
+  /**
+   * Troca a empresa da tela. `persistir: false` (05/10/2026, tablet): troca só a tela, sem gravar no
+   * aparelho — a empresa gravada continua sendo a "de casa" do tablet.
+   * O ÚLTIMO pedido ganha: dois pedidos seguidos (ex.: o tablet voltando pra empresa dele + o CPF do
+   * próximo da fila) podem responder fora de ordem — antes ficava a resposta que chegasse por último.
+   */
+  const ultimoPedidoRef = useRef(0);
+  const setCompany = async (companyId: string, opts?: { persistir?: boolean }) => {
+    const pedido = ++ultimoPedidoRef.current;
     const c = await getCompanyById(companyId);
+    if (pedido !== ultimoPedidoRef.current) return; // um pedido mais novo já decide
     if (c) {
       setCompanyState(c);
-      localStorage.setItem(STORAGE_KEY, c.id);
+      if (opts?.persistir !== false) localStorage.setItem(STORAGE_KEY, c.id);
     }
   };
 

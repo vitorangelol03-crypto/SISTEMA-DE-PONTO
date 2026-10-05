@@ -138,7 +138,10 @@ test.describe('Geolocalização (/clock)', () => {
     }, { timeout: 10_000 }).toBe(true);
   });
 
-  test('fora do raio: ponto registrado silenciosamente, fraude registrada server-side', async ({ page }) => {
+  // 05/10/2026 (decisão do Victor): antes a tela mostrava "✅ Entrada registrada" — a pessoa nunca
+  // ficava sabendo que bateu fora da área (uma bateu 12 noites seguidas assim). Agora o ponto
+  // continua gravado (e a fraude anotada no servidor), mas a tela AVISA em amarelo.
+  test('fora do raio: ponto registrado COM AVISO de fora da área, fraude registrada server-side', async ({ page }) => {
     await page.addInitScript(({ lat, lon }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock de navigator.geolocation requer cast (typing readonly)
       (navigator as any).geolocation.getCurrentPosition = (success: PositionCallback) => {
@@ -155,9 +158,11 @@ test.describe('Geolocalização (/clock)', () => {
     await loginEmployee(page);
     await page.getByRole('button', { name: /REGISTRAR ENTRADA/ }).click();
 
-    // No red modal — only generic message (success or error)
+    // Sem modal vermelho; o aviso diz que foi gravada FORA da área (e não um "✅" de tudo certo).
     await expect(page.getByText(/Clayton/i)).not.toBeVisible();
-    await expect(page.getByText(/Entrada registrada|Erro ao registrar/)).toBeVisible({ timeout: 15_000 });
+    // No CELULAR (este teste não é tablet) a tela volta em 35s, como sempre — só o tablet volta mais rápido.
+    await expect(page.getByText(/⚠️ Entrada registrada às \d{2}:\d{2} FORA da área permitida \(\d+ m\) — avise o supervisor · a tela volta ao início em 35s/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/^✅ Entrada registrada/)).toHaveCount(0);
 
     // Fraud attempt still logged server-side
     await expect.poll(async () => {
@@ -193,6 +198,8 @@ test.describe('Geolocalização (/clock)', () => {
     // real da recusa (antes era "Erro ao registrar" genérico)
     await expect(page.getByText(/Clayton/i)).not.toBeVisible();
     await expect(page.getByText(/Localização não fornecida/)).toBeVisible({ timeout: 15_000 });
+    // No CELULAR o erro continua SEM volta automática (05/10/2026: só o tablet volta sozinho no erro).
+    await expect(page.getByText(/a tela volta ao início/)).toHaveCount(0);
   });
 
   test('erro técnico GPS: envia ao servidor com coords null, sem modal', async ({ page }) => {
