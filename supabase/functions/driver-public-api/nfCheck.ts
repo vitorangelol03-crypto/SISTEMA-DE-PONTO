@@ -61,6 +61,62 @@ export function mirrorExpectedValue(i: MirrorExpectedValueInput): number {
   return round2(i.grossInScope - i.deductions);
 }
 
+/** Uma plataforma dentro do escopo de um espelho (pra achar a parte de cada CNPJ nele). */
+export interface PlataformaNoEspelho {
+  /** CNPJ tomador da plataforma (id do emissor); null = plataforma sem CNPJ vinculado. */
+  emitterId: string | null;
+  /** Sai em "valor separado" no espelho (faixa amarela própria, fora do TOTAL A RECEBER)? */
+  separada: boolean;
+  /** Bruto dela no escopo do espelho (pacotes × taxa). */
+  valor: number;
+}
+
+/**
+ * O valor de UM CNPJ num espelho que mostra mais de um (05/10/2026).
+ *
+ * ACHADO REAL — nota do GUSTAVO (líder do grupo Mutum, 1ª quinzena de setembro): o espelho do
+ * grupo traz Shopee E eMile, com a eMile em "valor separado". O PDF imprime:
+ *  - TOTAL A RECEBER (faixa verde) = total impresso − as plataformas de valor separado;
+ *  - uma faixa amarela por plataforma separada, com o bruto dela.
+ * O total impresso GRAVADO (`printed_total`) é o de ANTES de tirar as separadas — o combinado
+ * —, então a conferência pulava esse espelho. Sobrava a soma do CNPJ com TODOS os vales/perdas
+ * abatidos, que ignora a regra do saldo (07/08, "nunca abate mais do que a pessoa recebe"): o
+ * PNR de R$ 104,79 de um membro SEM pacote nenhum ficou guardado pra depois no espelho (verde
+ * R$ 16.024,64), a conferência cobrava R$ 15.919,85 e recusava a nota CERTA.
+ *
+ * Aqui o valor sai do PAPEL, como manda a regra da nota:
+ *  - a faixa verde é deste CNPJ quando TODAS as plataformas não separadas (com valor) são dele;
+ *  - a(s) faixa(s) amarela(s) são dele quando TODAS as plataformas dele saem separadas.
+ * Qualquer outra mistura não dá pra separar com certeza → null (sem candidato, como antes).
+ */
+export function valorDoCnpjNoEspelhoMisto(i: {
+  /** O `printed_total` da publicação (null = publicação anterior a 07/08). */
+  printedTotal: number | null;
+  plataformas: readonly PlataformaNoEspelho[];
+  emitterId: string;
+}): number | null {
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  if (typeof i.printedTotal !== 'number' || !Number.isFinite(i.printedTotal) || i.printedTotal <= 0) return null;
+  const comValor = i.plataformas.filter((p) => Number.isFinite(p.valor) && p.valor > 0);
+  const doCnpj = comValor.filter((p) => p.emitterId === i.emitterId);
+  if (doCnpj.length === 0) return null;
+
+  const naoSeparadas = comValor.filter((p) => !p.separada);
+  // Faixa verde: o que não é separado é TODO deste CNPJ (plataforma sem CNPJ no verde = não dá
+  // pra saber de quem é o dinheiro → sem candidato).
+  if (doCnpj.every((p) => !p.separada) && naoSeparadas.every((p) => p.emitterId === i.emitterId)) {
+    const separadas = comValor.filter((p) => p.separada).reduce((s, p) => s + p.valor, 0);
+    const verde = round2(i.printedTotal - separadas);
+    return verde > 0 ? verde : null;
+  }
+  // Faixa(s) amarela(s): tudo deste CNPJ sai separado — a nota é o bruto delas.
+  if (doCnpj.every((p) => p.separada)) {
+    const amarela = round2(doCnpj.reduce((s, p) => s + p.valor, 0));
+    return amarela > 0 ? amarela : null;
+  }
+  return null;
+}
+
 export interface NfCheckInput {
   /** Texto extraído do PDF ('' ou curto demais = ilegível). */
   text: string;

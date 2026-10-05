@@ -14,6 +14,7 @@ import {
   escolherTotalDoCnpj,
   fatiasDaParte1,
   nfSplitSlices,
+  valorDoCnpjNoEspelhoMisto,
 } from '../../supabase/functions/driver-public-api/nfCheck';
 
 const CNPJ_CD = '11802464000138';
@@ -537,5 +538,88 @@ describe('fatiasDaParte1 — os valores que a 1ª nota pode ter', () => {
       { somaCnpj_grupo: 0, liquido_grupo: Number.NaN, espelho_group_cheio: 100 }, slices,
     );
     expect(Object.keys(candidatos)).toEqual(['espelho_group_cheio_parte1']);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ESPELHO COM 2 CNPJs (Shopee + eMile "pago separado") — 05/10/2026, achado real:
+// a nota da Shopee do GUSTAVO (líder do grupo Mutum, 1ª quinzena de setembro) foi recusada
+// com o valor CERTO do espelho. Números reais da publicação de 03/10 13:41.
+// ════════════════════════════════════════════════════════════════════════════
+describe('valorDoCnpjNoEspelhoMisto — a parte de cada CNPJ, tirada do PAPEL', () => {
+  const SHOPEE = 'tomador-shopee';
+  const IMILE = 'tomador-imile';
+  // 7.661 pacotes Shopee e 876 eMile, a R$ 2,15. Impresso gravado: R$ 17.908,04 (combinado).
+  const mutum = [
+    { emitterId: SHOPEE, separada: false, valor: 16471.15 },
+    { emitterId: IMILE, separada: true, valor: 1883.4 },
+  ];
+
+  it('Mutum: a faixa verde (TOTAL A RECEBER) é da Shopee — R$ 16.024,64, igual ao PDF', () => {
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 17908.04, plataformas: mutum, emitterId: SHOPEE })).toBe(16024.64);
+  });
+
+  it('Mutum: a faixa amarela (eMile, pago separado) é da iMile — R$ 1.883,40', () => {
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 17908.04, plataformas: mutum, emitterId: IMILE })).toBe(1883.4);
+  });
+
+  it('a conferência da nota: o valor do papel PASSA (antes recusava cobrando o abate cheio)', () => {
+    const texto = danfse({ valor: '16.024,64', emitente: 'GUSTAVO HENRIQUE DE OLIVEIRA VIANA' });
+    const base = {
+      text: texto, expectedCnpj: CNPJ_CD, expectedCnpjLabel: 'Shopee/Anjun/Loggi',
+      driverName: 'Gustavo Henrique de Oliveira Viana', recebedorNome: null,
+    };
+    // O que existia antes: só as somas do CNPJ (a com abate cheio tira o PNR do membro sem pacote).
+    const antes = runNfCheck({ ...base, valueCandidates: { somaCnpj_grupo: 16471.15, somaCnpj_grupo_abatido: 15919.85 } });
+    expect(antes.status).toBe('divergente');
+    // (a mensagem sai sem ponto de milhar, igual ao print do Gustavo: "esperado: R$ 15919,85")
+    expect(antes.reasons.join(' ')).toContain('O valor da nota (R$ 16024,64) não bate');
+    expect(antes.reasons.join(' ')).toContain('esperado: R$ 15919,85');
+    // Agora o espelho do grupo entra com a parte deste CNPJ.
+    const espelho = valorDoCnpjNoEspelhoMisto({ printedTotal: 17908.04, plataformas: mutum, emitterId: SHOPEE });
+    const agora = runNfCheck({
+      ...base,
+      valueCandidates: { somaCnpj_grupo: 16471.15, somaCnpj_grupo_abatido: 15919.85, espelho_group_cheio: espelho as number },
+    });
+    expect(agora.valorOk).toBe(true);
+    expect(agora.matchedCandidates).toEqual(['espelho_group_cheio']);
+  });
+
+  it('publicação antiga (sem total impresso gravado) → sem candidato, como antes', () => {
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: null, plataformas: mutum, emitterId: SHOPEE })).toBeNull();
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 0, plataformas: mutum, emitterId: SHOPEE })).toBeNull();
+  });
+
+  it('plataforma SEM CNPJ dentro da faixa verde → não dá pra saber de quem é o dinheiro → sem candidato', () => {
+    const comSemCnpj = [...mutum, { emitterId: null, separada: false, valor: 50 }];
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 17958.04, plataformas: comSemCnpj, emitterId: SHOPEE })).toBeNull();
+  });
+
+  it('dois CNPJs na faixa verde (nada separado) → total combinado → sem candidato', () => {
+    const misturado = [
+      { emitterId: SHOPEE, separada: false, valor: 1000 },
+      { emitterId: IMILE, separada: false, valor: 500 },
+    ];
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 1500, plataformas: misturado, emitterId: SHOPEE })).toBeNull();
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 1500, plataformas: misturado, emitterId: IMILE })).toBeNull();
+  });
+
+  it('CNPJ com uma plataforma separada E outra não → sem candidato', () => {
+    const meio = [
+      { emitterId: SHOPEE, separada: false, valor: 1000 },
+      { emitterId: SHOPEE, separada: true, valor: 200 },
+      { emitterId: IMILE, separada: true, valor: 300 },
+    ];
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 1500, plataformas: meio, emitterId: SHOPEE })).toBeNull();
+  });
+
+  it('plataforma sem pacote não atrapalha; CNPJ fora do espelho → sem candidato', () => {
+    const comZerada = [...mutum, { emitterId: null, separada: false, valor: 0 }];
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 17908.04, plataformas: comZerada, emitterId: SHOPEE })).toBe(16024.64);
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 17908.04, plataformas: mutum, emitterId: 'outro' })).toBeNull();
+  });
+
+  it('faixa verde zerada ou negativa (os descontos comeram tudo) → sem candidato (não existe nota de R$ 0)', () => {
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 1883.4, plataformas: mutum, emitterId: SHOPEE })).toBeNull();
   });
 });

@@ -26,8 +26,8 @@ import bcryptjs from 'https://esm.sh/bcryptjs@2.4.3';
 import { extractText, getDocumentProxy } from 'npm:unpdf@1.8.0';
 import {
   runNfCheck, mirrorExpectedValue, nfTextoIlegivel, notasQueOcupamVaga, nfSplitSlices,
-  formatCnpj, escolherTotalDoCnpj, fatiasDaParte1, repartirLiquidoPorTomador,
-  type NfCheckResult, type NfSplitForm,
+  formatCnpj, escolherTotalDoCnpj, fatiasDaParte1, repartirLiquidoPorTomador, valorDoCnpjNoEspelhoMisto,
+  type NfCheckResult, type NfSplitForm, type PlataformaNoEspelho,
 } from './nfCheck.ts';
 import {
   proofContarDataErrada,
@@ -651,8 +651,10 @@ async function buildValueCandidates(
     : { data: [] as never[] };
 
   const { data: plats } = await supabase.from('driverpay_platforms')
-    .select('name, nota_emitter_id').eq('company_id', companyId);
+    .select('name, nota_emitter_id, mirror_separate_value').eq('company_id', companyId);
   const emitterByPlatform = new Map((plats ?? []).map((p) => [p.name as string, p.nota_emitter_id as string | null]));
+  /** Plataforma em "valor separado" no espelho (faixa amarela, fora do TOTAL A RECEBER). */
+  const separadaPorPlataforma = new Map((plats ?? []).map((p) => [p.name as string, p.mirror_separate_value === true]));
 
   const driverOf = new Map(payList.map((p) => [p.id as string, p.driver_id as string]));
   const platformSum = (ids: string[], filter: string[] | null, onlyEmitter: boolean): number => {
@@ -702,6 +704,23 @@ async function buildValueCandidates(
    * de `espelho_*` — subiu antes por ser usada só embaixo; movida pra cima porque
    * `liquido_*` agora também depende dela.)
    */
+  /** Bruto de cada plataforma no escopo de um espelho — pra achar a parte de cada CNPJ nele. */
+  const plataformasNoEscopo = (ids: string[], filter: string[] | null): PlataformaNoEspelho[] => {
+    const brutoPorNome = new Map<string, number>();
+    for (const pk of packs ?? []) {
+      const dId = driverOf.get(pk.payment_id as string);
+      if (!dId || !ids.includes(dId)) continue;
+      const nome = pk.platform_name as string;
+      if (filter && !filter.includes(nome)) continue;
+      brutoPorNome.set(nome, (brutoPorNome.get(nome) ?? 0) + (pk.packages ?? 0) * Number(pk.rate_snapshot ?? 0));
+    }
+    return [...brutoPorNome].map(([nome, bruto]) => ({
+      emitterId: emitterByPlatform.get(nome) ?? null,
+      separada: separadaPorPlataforma.get(nome) === true,
+      valor: round2(bruto),
+    }));
+  };
+
   const hasOtherEmitterInScope = (ids: string[], filter: string[] | null): boolean => {
     for (const pk of packs ?? []) {
       const dId = driverOf.get(pk.payment_id as string);
@@ -799,10 +818,6 @@ async function buildValueCandidates(
       ? (pub.platform_filter as string[])
       : null;
     const ids = pub.scope === 'group' && groupIds.length > 1 ? groupIds : [driverId];
-    // Espelho cobre CNPJ diferente do que esta nota é pra este: o total
-    // impresso é combinado, não confiável pra ESTE CNPJ — pula o candidato
-    // (sobra somaCnpj_*/liquido_* abaixo, sempre filtrado por CNPJ certo).
-    if (hasOtherEmitterInScope(ids, filter)) continue;
     // include_deductions=false (pagamento parcial por plataforma): o espelho lista os
     // vales/perdas mas NÃO abate — a nota vem pelo bruto. Coluna nova (default true):
     // publicação antiga/sem a coluna segue como sempre.
@@ -813,6 +828,24 @@ async function buildValueCandidates(
     const printedTotal = pub.printed_total === null || pub.printed_total === undefined
       ? null
       : Number(pub.printed_total);
+    const key = `espelho_${pub.scope}${filter ? '_' + filter.join('+') : '_cheio'}${
+      includeDeductions ? '' : '_sem_abate'
+    }`;
+    // Espelho cobre CNPJ diferente do que esta nota é pra este: o total impresso GRAVADO é
+    // o combinado, não serve pra ESTE CNPJ. 05/10/2026: antes pulava o espelho inteiro —
+    // agora tira do PAPEL a parte deste CNPJ (faixa verde ou amarela, ver
+    // `valorDoCnpjNoEspelhoMisto`); sem dar pra separar com certeza, segue pulando (sobram
+    // somaCnpj_*/liquido_* abaixo, sempre filtrados pelo CNPJ certo).
+    if (hasOtherEmitterInScope(ids, filter)) {
+      const parteDoCnpj = valorDoCnpjNoEspelhoMisto({
+        printedTotal, plataformas: plataformasNoEscopo(ids, filter), emitterId,
+      });
+      if (parteDoCnpj !== null) {
+        cands[key] = parteDoCnpj;
+        porEspelho[(pub.platform_key as string) ?? ''] = parteDoCnpj;
+      }
+      continue;
+    }
     const value = mirrorExpectedValue({
       grossInScope: round2(platformSum(ids, filter, false) + zapexSum(ids, filter)),
       deductions: deductionsSum(ids),
@@ -821,9 +854,6 @@ async function buildValueCandidates(
       includeDeductions,
       printedTotal,
     });
-    const key = `espelho_${pub.scope}${filter ? '_' + filter.join('+') : '_cheio'}${
-      includeDeductions ? '' : '_sem_abate'
-    }`;
     cands[key] = value;
     porEspelho[(pub.platform_key as string) ?? ''] = value;
   }
