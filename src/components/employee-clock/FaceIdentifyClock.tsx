@@ -397,16 +397,19 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         />
       </div>
 
-      {/* ── Confirmação (cancelável) ── */}
+      {/* ── Confirmação (cancelável) ── visual "Malha neon" (05/10/2026), mesmos textos e botão */}
       {telaDaCamera && phase === 'identified' && identified && (
         <div className="absolute bottom-24 left-0 right-0 z-30 flex justify-center px-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-4 w-full max-w-sm text-center space-y-3">
-            <UserCircle2 className="w-10 h-10 mx-auto text-green-600" />
-            <p className="text-gray-900 font-bold">{identified.employee.name}</p>
-            <p className="text-sm text-gray-500">Registrando <strong>{identified.label}</strong> em {countdown}s...</p>
+          <div
+            className="rounded-2xl shadow-2xl p-4 w-full max-w-sm text-center space-y-3 border border-transparent"
+            style={{ background: 'linear-gradient(rgba(10,8,22,0.92), rgba(10,8,22,0.92)) padding-box, linear-gradient(110deg, #A879FF, #39E6FF) border-box' }}
+          >
+            <UserCircle2 className="w-10 h-10 mx-auto text-[#35F59B]" />
+            <p className="text-white font-bold">{identified.employee.name}</p>
+            <p className="text-sm text-white/75">Registrando <strong className="text-[#39E6FF]">{identified.label}</strong> em {countdown}s...</p>
             <button
               onClick={cancelConfirm}
-              className="w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 min-h-[44px]"
+              className="w-full py-3 font-semibold rounded-xl min-h-[44px] text-[#F1E9FF] bg-[rgba(168,121,255,0.16)] border border-[rgba(168,121,255,0.5)] hover:bg-[rgba(168,121,255,0.28)]"
             >
               Não sou eu / Cancelar
             </button>
@@ -422,7 +425,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         <div className="absolute bottom-6 left-0 right-0 z-20 flex justify-center px-4">
           <button
             onClick={onUseCpf}
-            className="px-5 py-2.5 bg-white/90 text-gray-800 text-sm font-semibold rounded-full shadow-lg hover:bg-white transition-colors"
+            className="px-5 py-2.5 bg-[rgba(10,8,22,0.82)] text-[#F1E9FF] text-sm font-semibold rounded-full shadow-lg ring-1 ring-inset ring-white/25 hover:bg-[rgba(10,8,22,0.95)] transition-colors"
           >
             Prefere digitar CPF e senha?
           </button>
