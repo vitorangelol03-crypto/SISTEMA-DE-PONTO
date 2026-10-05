@@ -101,3 +101,51 @@ Depois: limpar a TESTE TABLET (§1).
 trava dela está DESLIGADA) · decisões sem pressa (cartão do lado com o tablet deitado; malha roxa até
 confirmar na verificação com CPF) · achados abertos (limpeza do E2E apaga dado real; 1ª batida sem GPS
 bloqueia bônus) · o ramo `feature/visual-malha-neon` pode ser apagado (já está no main).
+
+## 7. ✅ Tarde 05/10 — pacote do TABLET no ar (`d7664d3`)
+
+Decisões do Victor: câmera descansa com 1 min sem ninguém + tela escura "Toque para bater o ponto" (só
+TABLET); tablet volta em 8s após gravar / 15s após erro; Caratinga + Ponte Nova no MESMO tablet com a
+tela voltando pra empresa do tablet; + ajustes da revisão ("pode seguir", permissão pra aplicar o que
+precisar). Revisão adversarial: 30 achados, todos confirmados — corrigidos os técnicos.
+
+- **Tablet** = tem o segredo guardado (vale com a conferência pendente/falha; re-tenta na rede, ao voltar
+  a tela e a cada volta). Troca de empresa pelo CPF NÃO é gravada no tablet: a "casa" é a empresa gravada
+  (`setCompany(id, { persistir: false })`; `setCompany` agora: último pedido ganha). Tela largada
+  (CPF/senha/painel/erro) volta com 45s sem toque. Consulta e "Ativar" escondidos no tablet.
+- **Rosto:** quem acabou de bater é ignorado 60s (rosto comparado no próprio aparelho); batida a < 10 min
+  da anterior pergunta ("Não, foi engano" é o principal) — inclusive a volta do almoço, SÓ no rosto (botão
+  do celular igual a antes); descanso só com câmera aberta; resposta velha descartada.
+- **Celular:** igual ao de antes, fora o aprovado (pergunta no rosto, aviso amarelo FORA da área) — sem descanso.
+- **Validação:** typecheck · lint · build · unit 140/2.104 + reexecuções (113 + 29) · 3 provas inversas ·
+  E2E (config sem limpeza global): **132 9/9** (8,0s · 0,2s · 45,8s · 15,3s), **128 12/12**, **127+62+08
+  16/16** · banco: recusas de GPS (985) e bloqueios (160) com md5 idênticos antes/depois · produção
+  conferida por conteúdo (version.json `d7664d3` + 4 textos novos no pacote) · CI run 37356295657 (rodando
+  quando escrevi).
+- **Lições:** 132/6 falhou por erro MEU (pessoa que já tinha batido); 132/7 "voltava em 40–41s" = relógio
+  de PAREDE do WSL salta pra trás (provado: −2,2s em 50s; [diag] armou→disparou 40,49s pelo Date.now da
+  página) → teste mede com `performance.now()` → 45,8s. Memória `reference_relogio_wsl_salta.md`. 128 caiu
+  2× por CARGA (robô Shopee, carga 35) e passou sozinho.
+
+**Decisões pendentes do Victor:** (1) descanso da câmera também no CELULAR (rec.: sim); (2) GPS do tablet
+dentro do galpão pode dar "FORA da área" pra todos — bater 1 ponto de teste lá antes de valer; (3) 1ª
+batida sem GPS bloqueia bônus da semana; (4) limpeza do E2E (roda no CI a cada push) apaga recusas/
+bloqueios REAIS da janela — consertar (30 dias: 0 casos em dia útil 15h–18h, madrugada concentra; publicar
+de tarde é o mais seguro até lá).
+**Go-live:** limpar a TESTE TABLET (trava → remover tablet → clock_devices (os 2) → filhos → empresa); no
+galpão, código novo com "Atende: Caratinga + Ponte Nova" — o tablet abre na Caratinga (empresa apagada
+cai na padrão); recadastrar os 4 rostos limítrofes. Trava "ponto só no tablet" continua DESLIGADA.
+
+## 8. ✅ Tarde 05/10 — nota do GUSTAVO (Mutum) recusada com o valor CERTO — consertado (`4dd8c9f`, edge fn v48)
+
+- "O valor da nota (R$ 16024,64) não bate com o valor do seu espelho (esperado: R$ 15919,85)". O espelho do
+  grupo traz Shopee + eMile "pago separado"; o `printed_total` gravado é o combinado (17.908,04) e a
+  conferência pulava o espelho — sobrava a soma com abate CHEIO, que tirava o PNR de R$ 104,79 do João
+  Victor (sem pacote; pela regra do saldo ficou pra depois). Espelho e relatório de pagamento (modo padrão)
+  = **17.908,04**; a grade do painel mostra 17.803,25 (conta crua com o −104,79) → pagar pelo relatório.
+- Conserto: `valorDoCnpjNoEspelhoMisto` (verde = impresso − separadas; amarelo = bruto das separadas;
+  outra mistura → sem candidato). Aditivo. Só o Gustavo estava afetado na quinzena.
+- Deploy: o classificador barrou o meu; **o Victor rodou** `npx supabase functions deploy driver-public-api
+  --no-verify-jwt --project-ref flcncdidxmmornkgkfbb` → v48 conferida (código igual, verify_jwt=false,
+  sonda 401 "Sessao invalida"); com os números do banco a parte da Shopee dá R$ 16.024,64.
+- **Pendente:** o Gustavo reenviar o MESMO PDF (às 15:2x ainda não tinha) e conferir que entrou validada.
