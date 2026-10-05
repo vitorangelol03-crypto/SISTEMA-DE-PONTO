@@ -149,3 +149,47 @@ cai na padrão); recadastrar os 4 rostos limítrofes. Trava "ponto só no tablet
   --no-verify-jwt --project-ref flcncdidxmmornkgkfbb` → v48 conferida (código igual, verify_jwt=false,
   sonda 401 "Sessao invalida"); com os números do banco a parte da Shopee dá R$ 16.024,64.
 - **Pendente:** o Gustavo reenviar o MESMO PDF (às 15:2x ainda não tinha) e conferir que entrou validada.
+
+## 9. Fim da tarde 05/10 — respostas do Victor aos 4 itens + plano do tablet SEM TOQUE (aprovado, não começado)
+
+Victor desligou o PC (~17:00). Respostas dele: *"1, não será mais permitido bater no celular, mas essa
+configuração é só para aparelhos fixos 2: o gps deve ser preciso 3: vamos tirar e desabilitar essa função
+4: pode resolver"*.
+- **Item 1 (descanso da câmera):** já é só no tablet (`descansaSemNinguem={ehTablet}`) — nada a fazer.
+  Trava "ponto só no tablet" continua DESLIGADA (o "não será mais permitido" é futuro; não ligar sem ordem).
+- **Item 2 (GPS preciso):** já é — app pede alta precisão, leitura nova, 10 s. Dados de 14 dias: Caratinga
+  231 batidas, margem mediana 19 m, 90% até 40 m (cerca 150 m), 1 fora da área; PN 52 batidas, 0 fora.
+  Sem mudança de código; conferir a 1ª batida real do tablet no galpão.
+- **Item 3 (bônus sem GPS):** FEITO e testado, **NÃO commitado de propósito, NÃO publicado**:
+  `supabase/functions/clock-in-validated/index.ts` (tira o upsert de bonus_blocks no caso sem coordenada da
+  1ª batida; a recusa e o geo_fraud_attempts continuam; fora da cerca continua bloqueando) +
+  `tests/unit/edgeFnSemGpsNaoBloqueiaBonus.spec.ts` (ao vivo, 3 casos; contra a v18 os casos 1 e 2 FALHAM —
+  prova A/B feita). Deno check sem erro. Falta: **Victor rodar**
+  `npx supabase functions deploy clock-in-validated --project-ref flcncdidxmmornkgkfbb` (SEM --no-verify-jwt:
+  essa função exige login) → conferir versão 19 + rodar o teste ao vivo (3/3) → commit + push. Não commitar o
+  teste antes do deploy (o CI roda o vitest contra a função no ar e quebraria).
+  Pergunta aberta: tirar algum dos 14 bloqueios antigos "Localização não fornecida" (31/08–04/10; semana
+  28/09: Diendrel, Maria Aline, Mikaely — Caratinga; Vittor Antonio — PN)? Rec.: só os da semana passada se o
+  bônus dela não foi pago, conferindo antes se a pessoa também bateu fora da cerca naquela semana.
+- **Item 4 (limpeza do E2E):** FEITO e no ar (`b53ca7a`). Varredura dos 118 specs (workflow 7 agentes): tudo
+  o que os testes gravam nas 7 tabelas tem dono de teste → `limparLinhasDeTeste()` só apaga linha de
+  funcionário/empresa "PW Test" (nunca por horário; nunca UPDATE em pagamento; exige service_role); triagem
+  do `cleanupByPrefix` só de teste (antes apagava TODA a triagem de hoje/ontem de qualquer empresa — specs
+  100/101 no CI a cada push). Validado: E2E 02+03+05 (22/22, 13/13), prova direta (lixo de teste apagado),
+  md5 das tabelas reais idênticos antes/depois. Bug meu pego na validação: conferia a chave antes de abrir o
+  cliente (corrigido). **CI do `b53ca7a`: conferir.**
+  **Achados NÃO consertados (specs que mexem em dado real por conta própria — decisões do Victor):** 40
+  ("Remover Todas" zera bônus real da Caratinga), 04 (apaga bonificação de PN), 09/99/100 (B=10 pra todo
+  presente real; 100 roda no CI), 10 (lança erro no Victor Angelo real e apaga todo erro de 29/04/2026 +
+  triagem de ontem), 114 (erro no 1º nome da lista), 101 ("Demo PN" sem prefixo), 25 ("PWTest_isol_"),
+  limpeza automática da aba Admin disparada pelos testes; e o índice único de `bonuses` sem empresa (B de PN
+  tira o B da Caratinga do mesmo dia — bug do produto). Hoje `bonuses` tem ZERO linhas em 120 dias (função
+  não usada) → estrago real zero até agora. Triagem: nenhum registro com data ≥ 27/09 (o último criado em
+  29/09) — compatível com apagamento pelos testes, mas não provado.
+- **Feature nova — tablet SEM TOQUE + QR do supervisor:** plano completo APROVADO (*"sim pode seguir com as
+  recomendações, mas guarda esse plano no check point"*) em **`PLANO_TABLET_SEM_TOQUE_2026-10-05.md`** (pedido,
+  critério de sucesso, 14 decisões, entregas, desenho técnico com evidência). **Nada programado ainda** —
+  Victor: *"vamos fazer ele depois"*. Próximo passo: entrega A (modo galpão) + B (spike do QR no tablet real).
+- Lição registrada: *"cuidado com agentes rodando loop gastando token à toa"* → memória
+  `feedback_nao_gastar_token_atoa.md` atualizada (programar direto; fan-out fixo e pequeno só quando a leitura
+  é larga, dizendo o tamanho antes; nunca workflow com laço).
