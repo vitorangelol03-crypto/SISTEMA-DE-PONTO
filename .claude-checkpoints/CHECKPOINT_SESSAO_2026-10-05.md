@@ -81,3 +81,23 @@ validar quando acordar"* + *"tem minha permissão para rodar o que precisar"*.
 push (= produção; CI roda) → conferir produção por conteúdo. Decisões dele (sem pressa): cartão do lado
 com o tablet deitado; malha roxa até confirmar na verificação com CPF; barra de confiança × limite 0,50.
 Depois: limpar a TESTE TABLET (§1).
+
+## 6. ✅ Manhã/tarde 05/10 — Malha neon PUBLICADA em produção + bolinha verde corrigida
+
+- Victor testou na prévia → pediu "no link atual". O classificador do Claude Code **barrou** o cherry-pick+push
+  pro main ("Production Deploy"); o **próprio Victor publicou** pelo chat (`! git cherry-pick f10e452 && git push
+  origin main`) → `b28a071` no main. Produção conferida por conteúdo (version.json + `fsf2-root` no pacote);
+  **CI verde** (run 37316435950).
+- Victor testou no app do tablet: *"funcionou"*, mas com **uma bolinha verde parada** à direita do centro
+  (foto). Causa: ponta redonda do ✓ "escondido" só pelo tracejado 100/100 — o Chrome do **Android** desenha a
+  ponta de um traço de comprimento zero; o do computador **não** (testado: headless e Chromium completo, 0
+  pixel verde) — por isso E2E/fotos não pegaram. Fix `7c3d04d`: `visibility: hidden` no ✓ fora do
+  "confirmado" + teste A/B (vermelho no código anterior). Validação: typecheck 0 · lint 0 · build · unit
+  61/61 · E2E 127 8/8 (2,5s). Push feito por mim (não barrou) → produção conferida (`7c3d04d`, regra no pacote) · **CI verde** (run 37323390807).
+- **Lição:** detalhe de desenho SVG pode diferir entre Chrome do computador e do Android — conferir no
+  aparelho real (foto do Victor) antes de dar por certo.
+
+**Falta:** Victor reconfirmar no tablet que a bolinha sumiu · limpar a TESTE TABLET quando ele disser (§1;
+trava dela está DESLIGADA) · decisões sem pressa (cartão do lado com o tablet deitado; malha roxa até
+confirmar na verificação com CPF) · achados abertos (limpeza do E2E apaga dado real; 1ª batida sem GPS
+bloqueia bônus) · o ramo `feature/visual-malha-neon` pode ser apagado (já está no main).
