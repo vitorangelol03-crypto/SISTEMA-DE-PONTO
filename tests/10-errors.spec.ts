@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { ADMIN, loginAs, goToTab } from './helpers';
-import { cleanupAllTestArtifacts, readSuiteStart, getClient } from './cleanup';
+import { cleanupAllTestArtifacts, getClient } from './cleanup';
 
 /**
  * Testes da aba ERROS — tipos quantidade/valor + sub-aba Triagem.
@@ -55,7 +55,7 @@ test.describe('Erros — individuais e triagem', () => {
 
   test.afterAll(async () => {
     await deleteTestErrorData();
-    await cleanupAllTestArtifacts(readSuiteStart());
+    await cleanupAllTestArtifacts();
   });
 
   test('sub-abas "Erros Individuais" e "Triagem" visíveis', async ({ page }) => {

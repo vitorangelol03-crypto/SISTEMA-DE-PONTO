@@ -236,20 +236,15 @@ export async function cleanupByPrefix(prefix: string, dates: string[] = []): Pro
   const { data: emps } = await s.from('employees').select('id').like('name', `${prefix}%`);
   const empIds = (emps || []).map((e: { id: string }) => e.id);
 
-  // Triage distributions cobrindo dates seguros
-  let distIds: string[] = [];
-  if (dates.length > 0) {
-    const { data } = await s
-      .from('triage_error_distributions')
-      .select('id')
-      .in('period_start', dates);
-    distIds = (data || []).map((d: { id: string }) => d.id);
-  }
-
-  if (distIds.length > 0) {
-    await s.from('triage_distribution_employees').delete().in('distribution_id', distIds);
-  }
+  // 🔴 05/10/2026: antes apagava TODA distribuição de triagem que começava nas datas pedidas e TODO
+  // erro de triagem dessas datas, DE QUALQUER EMPRESA — os specs 100 e 101 chamam com hoje/ontem e
+  // rodam no CI a cada push no main. Agora só sai triagem de TESTE: distribuição ligada às fichas
+  // de teste (e só quando não sobra ninguém real nela) e erro com observação de teste ('PW …').
+  let distDeTeste: string[] = [];
   if (empIds.length > 0) {
+    const { data: vinculos } = await s.from('triage_distribution_employees')
+      .select('distribution_id').in('employee_id', empIds);
+    distDeTeste = [...new Set((vinculos || []).map((v: { distribution_id: string }) => v.distribution_id))];
     await s.from('triage_distribution_employees').delete().in('employee_id', empIds);
     await s.from('error_records').delete().in('employee_id', empIds);
     await s.from('attendance').delete().in('employee_id', empIds);
@@ -258,14 +253,17 @@ export async function cleanupByPrefix(prefix: string, dates: string[] = []): Pro
     await s.from('bonus_blocks').delete().in('employee_id', empIds);
     await s.from('geo_fraud_attempts').delete().in('employee_id', empIds);
   }
-  if (distIds.length > 0) {
-    await s.from('triage_error_distributions').delete().in('id', distIds);
+  for (const id of distDeTeste) {
+    // Distribuição REAL que incluía a ficha de teste continua (só perdeu a linha da ficha).
+    const { count } = await s.from('triage_distribution_employees')
+      .select('distribution_id', { count: 'exact', head: true }).eq('distribution_id', id);
+    if (!count) await s.from('triage_error_distributions').delete().eq('id', id);
   }
   if (empIds.length > 0) {
     await s.from('employees').delete().in('id', empIds);
   }
   if (dates.length > 0) {
-    await s.from('triage_errors').delete().in('date', dates);
+    await s.from('triage_errors').delete().in('date', dates).ilike('observations', 'PW %');
   }
 }
 

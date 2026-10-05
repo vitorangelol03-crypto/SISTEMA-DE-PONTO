@@ -4,13 +4,10 @@
  * These helpers connect directly to Supabase (anon key, no RLS on this DB)
  * to remove any rows that tests might have left behind.
  *
- * Strategy: every cleanup helper is SCOPED — it only removes rows that are
- * clearly owned by tests:
- *   - `bonus_removals` with the known test observation string
+ * Strategy: every cleanup helper is SCOPED BY OWNER — it only removes rows that
+ * belong to test entities (05/10/2026: nunca por horário/data — ver limparLinhasDeTeste):
  *   - employees with name starting with `PW Test ` (test marker)
- *   - `bonuses`, `attendance` and `payments` rows created AT/AFTER a given
- *     timestamp AND dated today (so real data from yesterday or earlier
- *     is never touched).
+ *   - companies with display_name starting with `PW Test ` (and their employees).
  *
  * The whole suite should ideally run against a separate test DB. Until then,
  * these cleanups keep the production DB free of dirty test data.
@@ -25,9 +22,6 @@ import path from 'node:path';
 export const TEST_BONUS_REMOVAL_OBSERVATION = 'Limpeza automatizada dos testes Playwright';
 export const TEST_EMPLOYEE_NAME_PREFIX = 'PW Test ';
 
-// Arquivo temporário usado por globalSetup/globalTeardown para trocar o
-// timestamp de início da suíte.
-export const SUITE_START_FILE = path.join(process.cwd(), 'tests', '.suite-start.tmp');
 
 function readDotEnv(): Record<string, string> {
   const envPath = path.join(process.cwd(), '.env');
@@ -83,18 +77,6 @@ export function isUsingServiceRole(): boolean {
   return _usingServiceRole;
 }
 
-function todayIso(): string {
-  // Mesmo formato que a app usa (YYYY-MM-DD no fuso de São Paulo).
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-}
-
-function yesterdayIso(): string {
-  // Dia anterior no mesmo fuso — usado para proteger contra suítes que
-  // iniciam antes da meia-noite e terminam depois (janela 23:58 → 00:02).
-  const yesterday = new Date(Date.now() - 86_400_000);
-  return yesterday.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-}
-
 /**
  * Garante um funcionário de TESTE (prefixo PW Test) na empresa cuja cidade/nome
  * contém `companyMatch`. Retorna o id. Idempotente: reusa se já existir pelo CPF.
@@ -145,21 +127,6 @@ export async function deleteAttendanceForEmployee(employeeId: string, date?: str
 }
 
 /**
- * Remove todas as linhas de auditoria (`bonus_removals`) que foram geradas
- * pelos testes, identificadas pelo texto fixo em `observation`.
- */
-export async function deleteTestBonusRemovals(): Promise<number> {
-  const supabase = getClient();
-  const { data, error } = await supabase
-    .from('bonus_removals')
-    .delete()
-    .eq('observation', TEST_BONUS_REMOVAL_OBSERVATION)
-    .select('id');
-  if (error) throw error;
-  return (data || []).length;
-}
-
-/**
  * Remove funcionários criados por testes (prefixo `PW Test `).
  * Antes de apagar, também remove qualquer attendance/payment vinculado —
  * se houver FK sem cascade, a deleção do employee falharia.
@@ -186,115 +153,94 @@ export async function deleteTestEmployees(): Promise<number> {
 }
 
 /**
- * Limpa artefatos de testes criados em/depois de `sinceIso`.
- *
- * ⚠️ PROTEÇÃO: NUNCA deleta/modifica registros cuja `date` seja o dia atual
- * em BRT. Um incidente anterior apagou dados reais de hoje quando o filtro
- * por `created_at >= sinceIso` coincidiu com a janela de uso real do app.
- * A limpeza de artefatos de teste do dia atual é feita via
- * `deleteTestEmployees()`, que escopa por funcionários com prefixo PW Test.
+ * Lê TODOS os ids de uma consulta, em páginas (sem limite silencioso de linhas).
  */
-export async function cleanupTodaySince(sinceIso: string): Promise<{
-  bonuses: number;
-  attendance: number;
-  paymentsReset: number;
-}> {
+async function lerIds(
+  consulta: (de: number, ate: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await consulta(de, de + 999);
+    if (error) throw new Error(`Limpeza: leitura falhou — ${error.message}`);
+    const linhas = (data ?? []) as { id: string }[];
+    ids.push(...linhas.map((l) => l.id));
+    if (linhas.length < 1000) return ids;
+  }
+}
+
+/** Fatias de até 100 ids (lista grande num `.in()` estoura o tamanho da URL). */
+function emFatias<T>(lista: T[], tamanho = 100): T[][] {
+  const fatias: T[][] = [];
+  for (let i = 0; i < lista.length; i += tamanho) fatias.push(lista.slice(i, i + tamanho));
+  return fatias;
+}
+
+/**
+ * LIMPEZA SÓ DO QUE É DE TESTE (05/10/2026).
+ *
+ * 🔴 Antes (`cleanupTodaySince`) a limpeza apagava POR HORÁRIO: tudo criado/atualizado desde o
+ * início da rodada, de TODAS as empresas. Rodando no CI a cada push no main, ela apagava recusas
+ * de GPS e bloqueios de bônus de quem batia ponto durante a rodada, ZERAVA o bônus de pagamento
+ * real corrigido no intervalo e apagava ponto/erro/bônus de data antiga lançado nele. A varredura
+ * dos 118 specs (05/10) mostrou que tudo o que os testes gravam nessas 7 tabelas tem DONO de teste.
+ *
+ * Agora: só linhas de funcionário de teste (nome 'PW Test …' ou de empresa de teste) ou de empresa
+ * de teste (display_name 'PW Test …'). Nunca por data, nunca por horário, nunca UPDATE em
+ * pagamento. Pega também a sobra de rodada MORTA (CI cancelado), que a janela nunca pegava.
+ * `bonuses` (sem funcionário) só sai de empresa de teste — a linha que um teste cria na
+ * Caratinga é igual à real, e quem a desfaz é o próprio spec.
+ */
+export async function limparLinhasDeTeste(): Promise<Record<string, number>> {
+  // getClient() ANTES da conferência: é ele que descobre qual chave está em uso.
   const supabase = getClient();
-  const today = todayIso();
-  const yesterday = yesterdayIso();
-
-   
-  console.warn(
-    `PROTEÇÃO: cleanup preservando registros com date=${today} (hoje) e date=${yesterday} (ontem — cobre suítes que atravessam meia-noite).`,
-  );
-
-  // attendance: apaga apenas de datas passadas (≤ anteontem), dentro da
-  // janela da suíte.
-  const { data: delAttendance } = await supabase
-    .from('attendance')
-    .delete()
-    .neq('date', today)
-    .neq('date', yesterday)
-    .gte('created_at', sinceIso)
-    .select('id');
-
-  // bonuses: mesmo tratamento — protege hoje e ontem.
-  const { data: delBonuses } = await supabase
-    .from('bonuses')
-    .delete()
-    .neq('date', today)
-    .neq('date', yesterday)
-    .gte('created_at', sinceIso)
-    .select('id');
-
-  // payments: nunca deletamos; zeramos bônus em linhas que NÃO são hoje/ontem.
-  // Tripla defesa:
-  //  1) SELECT filtra por .neq(today).neq(yesterday)
-  //  2) Loop testa p.date e emite log se bater com protegida
-  //  3) UPDATE repete .neq(today).neq(yesterday) (belt-and-suspenders contra
-  //     race entre SELECT e UPDATE)
-  const { data: touchedPayments } = await supabase
-    .from('payments')
-    .select('id, bonus, bonus_b, bonus_c1, bonus_c2, daily_rate, updated_at, date')
-    .neq('date', today)
-    .neq('date', yesterday)
-    .gte('updated_at', sinceIso);
-
-  let paymentsReset = 0;
-  for (const p of touchedPayments || []) {
-    if (p.date === today || p.date === yesterday) {
-       
-      console.warn(`PROTEÇÃO: payment de ${p.date} preservado (hoje ou ontem).`);
-      continue;
-    }
-    const dailyRate = Number(p.daily_rate) || 0;
-    await supabase
-      .from('payments')
-      .update({
-        bonus: 0,
-        bonus_b: 0,
-        bonus_c1: 0,
-        bonus_c2: 0,
-        total: dailyRate,
-      })
-      .eq('id', p.id)
-      .neq('date', today)
-      .neq('date', yesterday);
-    paymentsReset++;
+  if (!isUsingServiceRole()) {
+    // Com a chave anon a RLS faz cada DELETE apagar 0 linhas EM SILÊNCIO.
+    throw new Error('Limpeza: precisa da SUPABASE_SERVICE_ROLE_KEY no .env — com a chave anon nada seria apagado.');
   }
 
-  await supabase
-    .from('bonus_removals')
-    .delete()
-    .neq('date', today)
-    .neq('date', yesterday)
-    .gte('created_at', sinceIso);
+  const { data: empresas, error: erroEmpresas } = await supabase.from('companies').select('id, display_name')
+    .like('display_name', `${TEST_EMPLOYEE_NAME_PREFIX}%`);
+  if (erroEmpresas) throw new Error(`Limpeza: leitura das empresas falhou — ${erroEmpresas.message}`);
+  // Confere o prefixo de novo no JS (igual ao apagarEmpresaDeTeste): o LIKE trata '_' como curinga.
+  const E = (empresas ?? [])
+    .filter((c) => String(c.display_name).startsWith(TEST_EMPLOYEE_NAME_PREFIX))
+    .map((c) => String(c.id));
 
-  // error_records tem coluna `date`: protege tambem.
-  await supabase
-    .from('error_records')
-    .delete()
-    .neq('date', today)
-    .neq('date', yesterday)
-    .gte('created_at', sinceIso);
+  const porNome = await lerIds((de, ate) => supabase.from('employees').select('id')
+    .like('name', `${TEST_EMPLOYEE_NAME_PREFIX}%`).range(de, ate));
+  const porEmpresa: string[] = [];
+  for (const fatia of emFatias(E)) {
+    porEmpresa.push(...await lerIds((de, ate) => supabase.from('employees').select('id').in('company_id', fatia).range(de, ate)));
+  }
+  const F = [...new Set([...porNome, ...porEmpresa])];
 
-  // Tabelas sem coluna `date` (apenas created_at/attempted_at): mantemos
-  // scoping pela janela da suíte.
-  await supabase
-    .from('geo_fraud_attempts')
-    .delete()
-    .gte('created_at', sinceIso);
-
-  await supabase
-    .from('bonus_blocks')
-    .delete()
-    .gte('created_at', sinceIso);
-
-  return {
-    bonuses: (delBonuses || []).length,
-    attendance: (delAttendance || []).length,
-    paymentsReset,
+  const apagadas: Record<string, number> = {};
+  const falhas: string[] = [];
+  const apagar = async (tabela: string, coluna: 'employee_id' | 'company_id', ids: string[]) => {
+    for (const fatia of emFatias(ids)) {
+      const { data, error } = await supabase.from(tabela).delete().in(coluna, fatia).select('id');
+      if (error) { falhas.push(`${tabela}.${coluna}: ${error.message}`); continue; }
+      apagadas[tabela] = (apagadas[tabela] ?? 0) + (data ?? []).length;
+    }
   };
+  for (const tabela of ['attendance', 'payments', 'bonus_removals', 'error_records', 'geo_fraud_attempts', 'bonus_blocks']) {
+    await apagar(tabela, 'employee_id', F);
+    await apagar(tabela, 'company_id', E);
+  }
+  await apagar('bonuses', 'company_id', E);
+
+  // Alarme (não apaga): texto de teste gravado em gente REAL = algum spec mexeu em dado real.
+  const { data: remocoes } = await supabase.from('bonus_removals').select('employee_id')
+    .eq('observation', TEST_BONUS_REMOVAL_OBSERVATION);
+  const { data: erros } = await supabase.from('error_records').select('employee_id').ilike('observations', 'PW Test%');
+  const deTeste = new Set(F);
+  const emGenteReal = [...(remocoes ?? []), ...(erros ?? [])].filter((l) => !deTeste.has(String(l.employee_id)));
+  if (emGenteReal.length > 0) {
+    console.warn(`[cleanup] ⚠️ ${emGenteReal.length} linha(s) com texto de TESTE em funcionário REAL (bonus_removals/error_records) — algum spec mexeu em dado real; nada foi apagado.`);
+  }
+
+  if (falhas.length > 0) throw new Error(`Limpeza: ${falhas.length} exclusão(ões) falharam — ${falhas.join(' | ')}`);
+  return apagadas;
 }
 
 /**
@@ -340,22 +286,11 @@ export async function deleteDriverpayTestArtifacts(): Promise<void> {
   await supabase.from('driverpay_groups').delete().like('name', like);
 }
 
-export async function cleanupAllTestArtifacts(sinceIso: string): Promise<void> {
-  await deleteTestBonusRemovals();
+export async function cleanupAllTestArtifacts(): Promise<Record<string, number>> {
+  // Linhas das 7 tabelas ANTES das fichas: com a ficha apagada, a linha dela não seria mais
+  // achada como "de teste".
+  const apagadas = await limparLinhasDeTeste();
   await deleteTestEmployees();
   await deleteDriverpayTestArtifacts();
-  await cleanupTodaySince(sinceIso);
-}
-
-/**
- * Lê o timestamp escrito pelo globalSetup. Se não existir, usa agora (fallback
- * conservador — pega janela pequena).
- */
-export function readSuiteStart(): string {
-  try {
-    if (fs.existsSync(SUITE_START_FILE)) {
-      return fs.readFileSync(SUITE_START_FILE, 'utf8').trim();
-    }
-  } catch { /* noop */ }
-  return new Date().toISOString();
+  return apagadas;
 }

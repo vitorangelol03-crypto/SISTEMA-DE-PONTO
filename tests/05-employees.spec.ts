@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { ADMIN, loginAs, goToTab } from './helpers';
-import { cleanupAllTestArtifacts, readSuiteStart } from './cleanup';
+import { cleanupAllTestArtifacts } from './cleanup';
 
 /**
  * Testes do CRUD de funcionários.
@@ -40,7 +40,7 @@ test.describe('Funcionários', () => {
   // Remove qualquer PW Test employee remanescente (caso o "exclui" do teste
   // tenha falhado no meio).
   test.afterAll(async () => {
-    await cleanupAllTestArtifacts(readSuiteStart());
+    await cleanupAllTestArtifacts();
   });
 
   /**

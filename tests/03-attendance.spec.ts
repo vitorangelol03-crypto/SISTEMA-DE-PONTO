@@ -2,7 +2,6 @@ import { test, expect, Page, Locator } from '@playwright/test';
 import { ADMIN, MASTER_2626, loginAs } from './helpers';
 import {
   cleanupAllTestArtifacts,
-  readSuiteStart,
   ensureTestEmployee,
   deleteAttendanceForEmployee,
 } from './cleanup';
@@ -55,7 +54,7 @@ test.describe('Controle de Ponto', () => {
   });
 
   test.afterAll(async () => {
-    await cleanupAllTestArtifacts(readSuiteStart());
+    await cleanupAllTestArtifacts();
   });
 
   test('marcar Presente (como 2626) → linha vira "Presente" e contador incrementa', async ({ page }) => {

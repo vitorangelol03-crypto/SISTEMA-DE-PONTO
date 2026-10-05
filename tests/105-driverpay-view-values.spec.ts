@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { MASTER_2626, loginAs, goToTab } from './helpers';
-import { getClient, cleanupAllTestArtifacts, readSuiteStart, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
+import { getClient, cleanupAllTestArtifacts, TEST_EMPLOYEE_NAME_PREFIX } from './cleanup';
 
 /**
  * E2E — permissão nova `driverpay.viewValues` (02/09/2026, pedido do Victor: "tenho um
@@ -54,7 +54,7 @@ test.describe('Pagamentos Driver — permissão "Ver valores" (02/09/2026)', () 
 
   test.afterAll(async () => {
     await cleanupSupervisor();
-    await cleanupAllTestArtifacts(readSuiteStart());
+    await cleanupAllTestArtifacts();
   });
 
   test('2626 cria driver de teste e lança um desconto de R$ 25,00', async ({ page }) => {

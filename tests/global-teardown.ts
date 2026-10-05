@@ -1,28 +1,18 @@
-import fs from 'node:fs';
-import { cleanupAllTestArtifacts, readSuiteStart, SUITE_START_FILE } from './cleanup';
+import { cleanupAllTestArtifacts } from './cleanup';
 
 /**
- * Ao final da suíte inteira, apaga TODO e qualquer dado sujo que tenha sido
- * criado pelos testes. Redundante com afterAll dos specs — é um seguro extra.
+ * Ao final da suíte inteira, apaga o que sobrou de TESTE (redundante com os afterAll dos specs —
+ * é um seguro extra, que pega também a sobra de rodada morta).
  *
- * ⚠️ PROTEÇÃO: os registros cuja coluna `date` seja o dia atual em BRT são
- * sempre preservados. A limpeza de dados do dia atual pertencentes a
- * funcionários de teste é feita via deleteTestEmployees() (escopada por
- * prefixo PW Test).
+ * 05/10/2026: a limpeza é SÓ por dono de teste (funcionário/empresa 'PW Test …') — antes ela
+ * apagava por horário e levava dado real de todas as empresas junto (ver limparLinhasDeTeste).
  */
 export default async function globalTeardown() {
-  const since = readSuiteStart();
-  const today = new Date().toLocaleDateString('pt-BR');
   try {
-    await cleanupAllTestArtifacts(since);
-     
-    console.log(`\n[cleanup] Artefatos de teste removidos (desde ${since})`);
-     
-    console.log(`[cleanup] Cleanup executado. Dados de ${today} foram PRESERVADOS.`);
+    const apagadas = await cleanupAllTestArtifacts();
+    const resumo = Object.entries(apagadas).map(([tabela, n]) => `${tabela}=${n}`).join(' ') || 'nada';
+    console.log(`\n[cleanup] Linhas de TESTE removidas: ${resumo}. Dado real não é tocado.`);
   } catch (err) {
-     
     console.error('[cleanup] Falha ao limpar artefatos de teste:', err);
-  } finally {
-    try { fs.unlinkSync(SUITE_START_FILE); } catch { /* noop */ }
   }
 }

@@ -2,7 +2,6 @@ import { test, expect, Page, Locator } from '@playwright/test';
 import { ADMIN, MASTER_2626, loginAs, switchCompany } from './helpers';
 import {
   cleanupAllTestArtifacts,
-  readSuiteStart,
   ensureTestEmployee,
   deleteAttendanceForEmployee,
   getClient,
@@ -188,7 +187,7 @@ test.describe('Bonificações (B / C1 / C2) — em Ponte Nova, isolado', () => {
 
   test.afterAll(async () => {
     await wipePnDayState();
-    await cleanupAllTestArtifacts(readSuiteStart());
+    await cleanupAllTestArtifacts();
   });
 
   test('modal de Bonificação abre com 3 campos (B, C1, C2)', async ({ page }) => {
