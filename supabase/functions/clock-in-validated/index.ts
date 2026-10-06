@@ -134,7 +134,7 @@ function calcHoursFourMarkings(
 }
 
 // v6 (sub-fase 8.4 / TECH_DEBT 6.12): logger best-effort para writes silenciosos.
-// Cada um dos 4 writes auxiliares (geo_fraud_attempts + bonus_blocks) capturava
+// Cada um dos writes auxiliares (geo_fraud_attempts + bonus_blocks) capturava
 // erros silenciosamente. Agora persistimos em error_logs (que ganhou company_id
 // na sub-fase 7.4), permitindo auditoria multi-empresa de falhas. O log é
 // best-effort: não interrompe o fluxo (o write original era auxiliar pra
@@ -448,7 +448,8 @@ Deno.serve(async (req: Request) => {
     const hasCoords =
       latitude != null && longitude != null && isFinite(latitude) && isFinite(longitude);
 
-    // É a PRIMEIRA marcação do dia? Decide bloqueio de bônus + criação inicial do attendance.
+    // É a PRIMEIRA marcação do dia? Decide a recusa sem GPS, o bloqueio de bônus fora da cerca
+    // e a criação inicial do attendance.
     // - Cliente legacy: clock_type === 'entry' (sem marking_position)
     // - Cliente novo: marking_position === 1
     const isFirstEntry = markingPosition == null
@@ -486,31 +487,12 @@ Deno.serve(async (req: Request) => {
       }
 
       if (isFirstEntry) {
-        const { weekStart, weekEnd } = getWeekBounds();
-        // v6 (sub-fase 8.4): captura erro do UPSERT em bonus_blocks.
-        const { error: bbErr1 } = await supabase.from("bonus_blocks").upsert(
-          [
-            {
-              employee_id,
-              company_id: effectiveCompanyId,
-              week_start: weekStart,
-              week_end: weekEnd,
-              reason: "Localização não fornecida",
-            },
-          ],
-          { onConflict: "employee_id,week_start" },
-        );
-        if (bbErr1) {
-          await logEdgeError(supabase, {
-            message: "bonus_blocks UPSERT failed (no coords case)",
-            company_id: effectiveCompanyId,
-            employee_id,
-            db_error_message: bbErr1.message,
-            db_error_code: bbErr1.code,
-            context: { case: "no_coords", clock_type, week_start: weekStart, week_end: weekEnd },
-          });
-        }
-
+        // 05/10/2026 — SEM GPS NÃO BLOQUEIA MAIS O BÔNUS (decisão do Victor: "vamos tirar e
+        // desabilitar essa função"). Uma falha passageira do GPS na 1ª batida do dia bloqueava o
+        // bônus da SEMANA inteira, mesmo a pessoa batendo de novo 16s depois (14 bloqueios assim
+        // entre 31/08 e 04/10; aconteceu na 1ª batida do tablet novo). A batida continua sem
+        // valer (pede pra tentar de novo — o ponto exige localização) e a tentativa continua
+        // anotada acima, em geo_fraud_attempts. O bloqueio por estar FORA da cerca segue igual.
         return new Response(
           JSON.stringify({
             success: false,
@@ -624,7 +606,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Trava dura: sob require_facial_clock, geo inválida recusa em QUALQUER batida.
-    // A 1ª entrada já foi recusada acima (bloqueio + bonus_block); aqui pega as
+    // A 1ª entrada já foi recusada acima (sem GPS; ou fora da cerca, com bonus_block); aqui pega as
     // posições 2/3/4 e a saída legacy, que no modo legado "deixavam passar".
     if (strictFacial && !geoValid) {
       return new Response(
