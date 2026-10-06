@@ -157,11 +157,21 @@ function parseBRL(text: string): number {
   return Number(m![0].replace(/\./g, '').replace(',', '.'));
 }
 
-/** Valor da faixa verde "TOTAL A RECEBER" na prévia do espelho. */
+/**
+ * O que o espelho INTEIRO paga: o TOTAL A RECEBER (faixa verde) + as faixas amarelas do valor
+ * separado.
+ *
+ * 06/10/2026: desde o caso ANDRE o vale/perda sai da faixa de MAIOR valor (regra de 10/09, a mesma
+ * da nota). Aqui a 1ª coluna da grade é a eMile (separada) e o AMBOS tem R$ 200 nela contra R$ 100
+ * na outra — então os R$ 60 saem da faixa AMARELA e o verde sozinho não muda entre os modos. A soma
+ * das faixas é o que não depende de onde o desconto caiu (era a intenção desta prova desde o início).
+ */
 async function mirrorTotal(page: Page): Promise<number> {
   const banner = modal(page).locator('div.bg-green-700').filter({ hasText: 'TOTAL A RECEBER' }).first();
   await expect(banner).toBeVisible({ timeout: 10_000 });
-  return parseBRL(await banner.locator('span').last().innerText());
+  const verde = parseBRL(await banner.locator('span').last().innerText());
+  const amarelas = await modal(page).getByTestId('separated-band-amount').allInnerTexts();
+  return verde + amarelas.reduce((soma, texto) => soma + parseBRL(texto), 0);
 }
 
 test.describe.configure({ mode: 'serial' });

@@ -168,7 +168,9 @@ const SeparatedValueBannerPreview: React.FC<{ label: string; band: SeparatedBand
     <div className="border-2 border-yellow-400 bg-yellow-100 rounded-md px-4 py-2.5">
       <div className="flex items-center justify-between gap-2">
         <span className="font-bold text-sm text-gray-900">{label}</span>
-        <span className="font-extrabold text-lg tabular-nums text-gray-900">{formatBRLIf(band.amount, canView)}</span>
+        <span className="font-extrabold text-lg tabular-nums text-gray-900" data-testid="separated-band-amount">
+          {formatBRLIf(band.amount, canView)}
+        </span>
       </div>
       {conta && (
         <p className="text-[11px] text-gray-900 mt-0.5" data-testid="separated-band-breakdown">
