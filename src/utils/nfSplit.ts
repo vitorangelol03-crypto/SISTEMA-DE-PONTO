@@ -71,3 +71,10 @@ export interface BrutoDoTomador {
  * Uma função só fecha essa porta.
  */
 export { repartirLiquidoPorTomador } from '../../supabase/functions/driver-public-api/nfCheck';
+
+/**
+ * As faixas do ESPELHO (verde + amarelas) com o vale/perda na faixa de maior bruto
+ * (06/10/2026, caso ANDRE). Mesma origem e mesmo motivo do reexport acima: o papel que o
+ * entregador recebe e o robô que confere a nota dele dividem com UMA função só.
+ */
+export { faixasDoEspelho } from '../../supabase/functions/driver-public-api/nfCheck';

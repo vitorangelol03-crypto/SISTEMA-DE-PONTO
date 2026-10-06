@@ -69,6 +69,45 @@ export interface PlataformaNoEspelho {
   separada: boolean;
   /** Bruto dela no escopo do espelho (pacotes × taxa). */
   valor: number;
+  /**
+   * Nome da plataforma — chave da faixa amarela dela em `faixasDoEspelho`, o mesmo nome que o
+   * PDF usa (06/10/2026). Ausente = chave pela posição na lista.
+   */
+  nome?: string;
+}
+
+/**
+ * AS FAIXAS DO ESPELHO, com o vale/perda na faixa CERTA (06/10/2026).
+ *
+ * ACHADO REAL — ANDRE (Ubaporanga, 1ª quinzena de setembro): só eMile (R$ 1.244,00) e
+ * R$ 225,50 de descontos da iMile. O papel tirava TODO vale/perda da faixa verde (a das
+ * plataformas não separadas) — que no caso dele não existe: imprimiu verde −R$ 225,50 e a
+ * faixa amarela da eMile CHEIA, R$ 1.244,00, e ele emitiu a nota de R$ 1.244,00. O pagamento e
+ * a nota já seguiam a regra do Victor de 10/09 ("desconta no que tem o maior valor",
+ * `repartirLiquidoPorTomador`); só o papel seguia outra conta.
+ *
+ * Agora o papel usa a MESMA conta: cada faixa entra com o bruto dela — a verde (chave '') e uma
+ * amarela por plataforma separada (chave = nome da plataforma) —, o maior bruto absorve o
+ * vale/perda e, não cabendo, transborda pro próximo. A soma das faixas é sempre Σbruto − abatido.
+ *
+ * ⚠️ Usada pelo PDF e pela prévia (via `src/utils/nfSplit.ts`) E pela conferência da nota
+ * (`valorDoCnpjNoEspelhoMisto`): o papel e o robô não podem dividir de jeitos diferentes.
+ * Chaves repetidas não são suportadas (cada faixa é uma só).
+ */
+export function faixasDoEspelho(
+  blocos: ReadonlyArray<{ chave: string; bruto: number }>,
+  abatido: number,
+): Array<{ chave: string; total: number }> {
+  if (blocos.length === 0) return [];
+  const somaCents = blocos.reduce((s, b) => s + Math.round(b.bruto * 100), 0);
+  const liquido = (somaCents - Math.round(abatido * 100)) / 100;
+  const porChave = new Map(
+    repartirLiquidoPorTomador(
+      blocos.map((b) => ({ emitterId: b.chave, bruto: b.bruto })),
+      liquido,
+    ).map((r) => [r.emitterId, r.total]),
+  );
+  return blocos.map((b) => ({ chave: b.chave, total: porChave.get(b.chave) ?? 0 }));
 }
 
 /**
@@ -88,12 +127,19 @@ export interface PlataformaNoEspelho {
  *  - a faixa verde é deste CNPJ quando TODAS as plataformas não separadas (com valor) são dele;
  *  - a(s) faixa(s) amarela(s) são dele quando TODAS as plataformas dele saem separadas.
  * Qualquer outra mistura não dá pra separar com certeza → null (sem candidato, como antes).
+ *
+ * 06/10/2026 — as faixas saem de `faixasDoEspelho`, a MESMA conta do PDF: o vale/perda que o
+ * espelho abateu (Σbruto + Zapex − total impresso) sai da faixa de maior bruto, não sempre da
+ * verde. Antes a amarela era sempre o bruto — caso ANDRE: a nota de R$ 1.244,00 (bruto da eMile)
+ * batia com o papel errado, quando o certo era R$ 1.018,50.
  */
 export function valorDoCnpjNoEspelhoMisto(i: {
   /** O `printed_total` da publicação (null = publicação anterior a 07/08). */
   printedTotal: number | null;
   plataformas: readonly PlataformaNoEspelho[];
   emitterId: string;
+  /** Ganho Zapex no escopo, em R$ — no papel ele fica na faixa verde (06/10/2026). */
+  zapex?: number;
 }): number | null {
   const round2 = (v: number) => Math.round(v * 100) / 100;
   if (typeof i.printedTotal !== 'number' || !Number.isFinite(i.printedTotal) || i.printedTotal <= 0) return null;
@@ -102,16 +148,35 @@ export function valorDoCnpjNoEspelhoMisto(i: {
   if (doCnpj.length === 0) return null;
 
   const naoSeparadas = comValor.filter((p) => !p.separada);
+  const separadas = comValor.filter((p) => p.separada);
+  const zapex = typeof i.zapex === 'number' && Number.isFinite(i.zapex) && i.zapex > 0 ? i.zapex : 0;
+
+  // As faixas como o PAPEL as imprime: a verde (não separadas + Zapex) e uma amarela por
+  // plataforma separada, com o vale/perda abatido na de maior bruto.
+  const chaveDa = (p: PlataformaNoEspelho, idx: number): string => p.nome ?? `#${idx}`;
+  const blocos = [
+    { chave: '', bruto: round2(naoSeparadas.reduce((s, p) => s + p.valor, 0) + zapex) },
+    ...separadas.map((p, idx) => ({ chave: chaveDa(p, idx), bruto: p.valor })),
+  ];
+  const somaBrutos = round2(blocos.reduce((s, b) => s + b.bruto, 0));
+  const faixa = new Map(
+    faixasDoEspelho(blocos, round2(somaBrutos - i.printedTotal)).map((f) => [f.chave, f.total]),
+  );
+
   // Faixa verde: o que não é separado é TODO deste CNPJ (plataforma sem CNPJ no verde = não dá
   // pra saber de quem é o dinheiro → sem candidato).
   if (doCnpj.every((p) => !p.separada) && naoSeparadas.every((p) => p.emitterId === i.emitterId)) {
-    const separadas = comValor.filter((p) => p.separada).reduce((s, p) => s + p.valor, 0);
-    const verde = round2(i.printedTotal - separadas);
+    const verde = round2(faixa.get('') ?? 0);
     return verde > 0 ? verde : null;
   }
-  // Faixa(s) amarela(s): tudo deste CNPJ sai separado — a nota é o bruto delas.
+  // Faixa(s) amarela(s): tudo deste CNPJ sai separado — a nota é a soma das faixas dele.
   if (doCnpj.every((p) => p.separada)) {
-    const amarela = round2(doCnpj.reduce((s, p) => s + p.valor, 0));
+    const amarela = round2(
+      separadas.reduce(
+        (s, p, idx) => (p.emitterId === i.emitterId ? s + (faixa.get(chaveDa(p, idx)) ?? 0) : s),
+        0,
+      ),
+    );
     return amarela > 0 ? amarela : null;
   }
   return null;

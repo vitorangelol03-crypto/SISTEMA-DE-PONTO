@@ -52,11 +52,11 @@ async function deleteCurrentPeriod(page: Page): Promise<void> {
 }
 
 /** Cria uma plataforma "Só um driver" pelo modal Plataformas (já aberto). */
-async function createPlatformForDriver(page: Page, name: string, rate: string): Promise<void> {
+async function createPlatformForDriver(page: Page, name: string, rate: string, driver = DRIVER): Promise<void> {
   await modal(page).getByPlaceholder(/Ex\.: Shopee, Mercado Livre/).fill(name);
   await modal(page).locator('input[inputmode="decimal"]').last().fill(rate);
   await modal(page).getByRole('button', { name: /Só um driver/ }).click();
-  const opt = modal(page).locator('select option').filter({ hasText: DRIVER }).first();
+  const opt = modal(page).locator('select option').filter({ hasText: driver }).first();
   await expect(opt).toBeAttached({ timeout: 10_000 });
   await modal(page).locator('select').selectOption((await opt.getAttribute('value'))!);
   await modal(page).getByRole('button', { name: 'Adicionar plataforma' }).click();
@@ -77,6 +77,9 @@ async function startEditPlatform(page: Page, name: string): Promise<void> {
   await row.getByTitle('Editar plataforma').click();
 }
 
+// 06/10/2026: as janelas ganharam o X do canto (aria-label "Fechar") além do botão "Fechar" do
+// rodapé — `getByRole('button', { name: 'Fechar' })` passou a achar os DOIS e o teste morria antes
+// do espelho. Mesmo jeito do teste 57: o do rodapé é o que tem o TEXTO "Fechar".
 test.describe('Pagamentos Driver — multi-rota sem média + valor separado do total', () => {
   test.beforeEach(async ({ page }) => {
     page.on('dialog', (d) => d.accept());
@@ -122,7 +125,7 @@ test.describe('Pagamentos Driver — multi-rota sem média + valor separado do t
       .check();
     await modal(page).getByRole('button', { name: 'Salvar' }).click();
     await expect(modal(page).getByText('💰 à parte').first()).toBeVisible({ timeout: 10_000 });
-    await modal(page).getByRole('button', { name: 'Fechar' }).click();
+    await modal(page).getByRole('button', { name: 'Fechar' }).filter({ hasText: 'Fechar' }).click();
     await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 5_000 });
 
     // ── Quinzena + pacotes ──
@@ -241,7 +244,7 @@ test.describe('Pagamentos Driver — multi-rota sem média + valor separado do t
     const memberRow = card.locator('label').filter({ hasText: DRIVER }).first();
     await memberRow.locator('input[type="checkbox"]').click();
     await expect(memberRow.locator('input[type="checkbox"]')).toBeChecked({ timeout: 10_000 });
-    await modal(page).getByRole('button', { name: 'Fechar' }).click();
+    await modal(page).getByRole('button', { name: 'Fechar' }).filter({ hasText: 'Fechar' }).click();
     await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 5_000 });
 
     await page.getByRole('button', { name: /^Grupos$/ }).click();
@@ -287,7 +290,7 @@ test.describe('Pagamentos Driver — multi-rota sem média + valor separado do t
       .last();
     await expect(rowA).toBeVisible({ timeout: 15_000 });
     await expect(rowA.getByText('💰 à parte')).toHaveCount(0, { timeout: 15_000 });
-    await modal(page).getByRole('button', { name: 'Fechar' }).click();
+    await modal(page).getByRole('button', { name: 'Fechar' }).filter({ hasText: 'Fechar' }).click();
     await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 5_000 });
 
     await page.getByPlaceholder(/Nome do driver/).fill(DRIVER);
@@ -299,7 +302,7 @@ test.describe('Pagamentos Driver — multi-rota sem média + valor separado do t
     await expect(modal(page).getByText(`${PLAT_A} — ${ROTA_2}`).first()).toBeVisible();
     const greenTotal2 = modal(page).locator('div.bg-green-700').filter({ hasText: 'TOTAL A RECEBER' }).first();
     await expect(greenTotal2).toContainText('R$ 36,00');
-    await modal(page).getByRole('button', { name: /Fechar/ }).click();
+    await modal(page).getByRole('button', { name: 'Fechar' }).filter({ hasText: 'Fechar' }).click();
     await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 5_000 });
 
     // ── limpeza: grupo + quinzena (driver/plataformas varridos pela limpeza global) ──
@@ -307,7 +310,128 @@ test.describe('Pagamentos Driver — multi-rota sem média + valor separado do t
     const delCard = modal(page).locator('div.border.rounded-lg.overflow-hidden').filter({ hasText: GROUP }).first();
     await delCard.getByTitle('Excluir grupo').click();
     await expect(delCard).toHaveCount(0, { timeout: 10_000 });
-    await modal(page).getByRole('button', { name: 'Fechar' }).click();
+    await modal(page).getByRole('button', { name: 'Fechar' }).filter({ hasText: 'Fechar' }).click();
+    await deleteCurrentPeriod(page);
+  });
+
+  /**
+   * 06/10/2026 — ACHADO REAL (ANDRE, Ubaporanga, 1ª quinzena de setembro): só eMile (separada) e
+   * R$ 225,50 de descontos da iMile → o espelho imprimiu TOTAL A RECEBER −R$ 225,50 e a faixa
+   * amarela CHEIA; ele emitiu a nota no valor cheio. Agora o desconto sai da faixa de MAIOR valor
+   * (regra de 10/09, a mesma da nota) e, sem nada fora da separada, o espelho sai normal.
+   */
+  test('desconto sai da faixa de MAIOR valor — só a separada (caso ANDRE) e separada maior', async ({ page }) => {
+    test.setTimeout(300_000);
+    const DRIVER_B = `${TEST_EMPLOYEE_NAME_PREFIX}Driver M61B ${RUN}`;
+    const PLAT_SEP = `${TEST_EMPLOYEE_NAME_PREFIX}PlatM61S ${RUN}`;
+    const PLAT_NOR = `${TEST_EMPLOYEE_NAME_PREFIX}PlatM61N ${RUN}`;
+    const PERIOD_B = `${TEST_EMPLOYEE_NAME_PREFIX}QuinzM61B ${RUN}`;
+    const rowB = (): Locator => page.locator('tbody tr').filter({ hasText: DRIVER_B }).first();
+
+    // ── Massa: driver + plataforma SEPARADA + plataforma normal (só pra ele) ──
+    await page.getByRole('button', { name: /Novo driver/ }).click();
+    await modal(page).getByPlaceholder('Nome completo do driver').fill(DRIVER_B);
+    await modal(page).getByPlaceholder('Ex.: Caratinga').fill(ROTA_1);
+    await modal(page).getByRole('button', { name: 'Cadastrar driver' }).click();
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 10_000 });
+
+    await page.getByRole('button', { name: /Adicionar plataforma/ }).first().click();
+    await expect(modal(page).getByText('Plataformas ativas')).toBeVisible({ timeout: 10_000 });
+    await createPlatformForDriver(page, PLAT_SEP, '2,00', DRIVER_B);
+    await createPlatformForDriver(page, PLAT_NOR, '2,00', DRIVER_B);
+    await startEditPlatform(page, PLAT_SEP);
+    await modal(page)
+      .locator('label')
+      .filter({ hasText: 'Destacar no espelho' })
+      .locator('input[type="checkbox"]')
+      .check();
+    await modal(page)
+      .locator('label')
+      .filter({ hasText: 'Separar o valor do total no espelho' })
+      .locator('input[type="checkbox"]')
+      .check();
+    await modal(page).getByRole('button', { name: 'Salvar' }).click();
+    await expect(modal(page).getByText('💰 à parte').first()).toBeVisible({ timeout: 10_000 });
+    await modal(page).getByRole('button', { name: 'Fechar' }).filter({ hasText: 'Fechar' }).click();
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 5_000 });
+
+    // ── Quinzena descartável ──
+    await page.getByRole('button', { name: /Novo período/ }).click();
+    await modal(page).getByPlaceholder(/1ª Quinzena de Junho/).fill(PERIOD_B);
+    await modal(page).getByRole('button', { name: 'Criar período' }).click();
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 15_000 });
+    await periodSelect(page, PERIOD_B).selectOption({ label: PERIOD_B });
+    await expect(page.getByText('Aberto').first()).toBeVisible({ timeout: 10_000 });
+    await page.getByPlaceholder(/Nome do driver/).fill(DRIVER_B);
+    await expect(rowB()).toBeVisible({ timeout: 10_000 });
+
+    const headers = page.locator('thead th');
+    const nHeaders = await headers.count();
+    let idxSep = -1;
+    let idxNor = -1;
+    for (let i = 0; i < nHeaders; i++) {
+      const txt = await headers.nth(i).innerText();
+      if (txt.includes(PLAT_SEP)) idxSep = i;
+      if (txt.includes(PLAT_NOR)) idxNor = i;
+    }
+    expect(idxSep, 'coluna da plataforma separada').toBeGreaterThan(-1);
+    expect(idxNor, 'coluna da plataforma normal').toBeGreaterThan(-1);
+
+    // 10 pacotes da separada (R$ 20,00) e um desconto LOST de R$ 5,00.
+    const pkgSep = rowB().locator('td').nth(idxSep).locator('input').first();
+    await pkgSep.fill('10');
+    await pkgSep.blur();
+    await expect(rowB()).toContainText('R$ 20,00', { timeout: 10_000 });
+    await rowB().getByTitle('Lançar desconto').click();
+    await expect(modal(page).getByText('Descontos')).toBeVisible({ timeout: 10_000 });
+    await modal(page).getByPlaceholder('0,00').first().fill('5,00');
+    await modal(page).getByPlaceholder(/741412525252/).fill('PWPKG61B');
+    await modal(page).getByPlaceholder('Motivo do desconto').fill('pacote perdido');
+    await modal(page).getByRole('button', { name: 'LOST', exact: true }).click();
+    await modal(page).getByRole('button', { name: 'Lançar desconto' }).click();
+    await expect(modal(page).getByText('PWPKG61B')).toBeVisible({ timeout: 10_000 });
+    await modal(page).getByRole('button', { name: 'Fechar' }).filter({ hasText: 'Fechar' }).click();
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 5_000 });
+    await expect(rowB()).toContainText('R$ 15,00', { timeout: 10_000 });
+
+    // ── Caso ANDRE: só a separada → espelho NORMAL, desconto abatido e listado ──
+    await rowB().getByTitle('Ver / gerar espelho').click();
+    await expect(modal(page).getByText('Espelho individual')).toBeVisible({ timeout: 10_000 });
+    await expect(modal(page).getByText(/PAGO SEPARADO/)).toHaveCount(0);
+    await expect(modal(page).getByText('PWPKG61B').first()).toBeVisible();
+    const verde1 = modal(page).locator('div.bg-green-700').filter({ hasText: 'TOTAL A RECEBER' }).first();
+    await expect(verde1).toContainText('R$ 15,00');
+    await expect(verde1).not.toContainText('-R$');
+    await page.screenshot({ path: 'prints-espelhos/05-so-separada-com-desconto.png', fullPage: false });
+    await modal(page).getByRole('button', { name: 'Fechar' }).filter({ hasText: 'Fechar' }).click();
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 5_000 });
+
+    // ── + 3 pacotes da normal (R$ 6,00): a separada (R$ 20,00) é a MAIOR e absorve o desconto ──
+    const pkgNor = rowB().locator('td').nth(idxNor).locator('input').first();
+    await pkgNor.fill('3');
+    await pkgNor.blur();
+    await expect(rowB()).toContainText('R$ 21,00', { timeout: 10_000 });
+    await rowB().getByTitle('Ver / gerar espelho').click();
+    await expect(modal(page).getByText('Espelho individual')).toBeVisible({ timeout: 10_000 });
+    const verde2 = modal(page).locator('div.bg-green-700').filter({ hasText: 'TOTAL A RECEBER' }).first();
+    await expect(verde2).toContainText('R$ 6,00'); // antes: 21,00 − 20,00 = R$ 1,00 (desconto no lugar errado)
+    await expect(modal(page).getByText(`TOTAL ${PLAT_SEP.toUpperCase()} (10 pacotes)`).first()).toBeVisible();
+    await expect(modal(page).getByTestId('separated-band-breakdown').first()).toContainText(
+      'R$ 20,00 em pacotes - R$ 5,00 de descontos e vales',
+    );
+    await expect(
+      modal(page).getByText(`Abatido do total ${PLAT_SEP.toUpperCase()} (faixa amarela abaixo)`).first(),
+    ).toBeVisible();
+    await page.screenshot({ path: 'prints-espelhos/06-separada-maior-com-desconto.png', fullPage: false });
+    const dl = page.waitForEvent('download', { timeout: 30_000 });
+    await modal(page).getByRole('button', { name: 'Gerar PDF' }).click();
+    const pdf = await dl;
+    expect(pdf.suggestedFilename()).toMatch(/^espelho-driver-.*\.pdf$/);
+    await pdf.saveAs(`prints-espelhos/espelho-separada-maior-${RUN}.pdf`);
+    await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 15_000 });
+
+    // ── limpeza: quinzena (driver/plataformas varridos pela limpeza global) ──
     await deleteCurrentPeriod(page);
   });
 });
+

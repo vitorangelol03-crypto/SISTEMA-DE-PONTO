@@ -21,6 +21,7 @@ import type {
   DriverPeriodStatus,
 } from '../services/driverPay';
 import { formatDateBR, formatCnpj } from './mirrorGenerator';
+import { faixasDoEspelho } from './nfSplit';
 
 // Reexport dos helpers de data (fonte única — não reimplementa).
 export { formatDateBR, formatCnpj };
@@ -485,9 +486,212 @@ export function separatedPlatformTotals(platforms: DriverPlatformLine[]): Separa
   return order.map((name) => acc.get(name)!);
 }
 
-/** Soma (R$) de tudo que sai separado do total exibido nos espelhos. */
-export function separatedAmount(platforms: DriverPlatformLine[]): number {
-  return platforms.reduce((s, p) => (p.separateValue ? s + p.subtotal : s), 0);
+/**
+ * Uma faixa amarela do espelho (06/10/2026): a plataforma separada JÁ com o vale/perda que a
+ * regra de 10/09 pôs nela. `amount` é o que a faixa IMPRIME.
+ */
+export interface SeparatedBand extends SeparatedPlatformTotal {
+  /** Pacotes × taxa da plataforma — o que a tabela de valores mostra. */
+  gross: number;
+  /** Vale/perda abatido DESTA faixa (0 = nenhum). */
+  deducted: number;
+}
+
+/** O que as faixas do espelho imprimem (06/10/2026). */
+export interface MirrorBands {
+  /** Bruto da faixa verde: plataformas não separadas + Zapex. */
+  greenGross: number;
+  /** Vale/perda abatido da faixa verde. */
+  greenDeducted: number;
+  /** O "TOTAL A RECEBER" impresso na faixa verde. */
+  green: number;
+  /** Faixas amarelas, uma por plataforma separada (vazio = espelho sem separação). */
+  separated: SeparatedBand[];
+  /** Vale/perda abatido no espelho inteiro (todas as faixas). */
+  deductedTotal: number;
+}
+
+/** Centavos inteiros — dinheiro nas faixas nunca carrega resto de float. */
+const toCents = (v: number): number => Math.round(v * 100);
+
+/**
+ * As faixas de um conjunto de linhas de plataforma com o total já abatido.
+ *
+ * ACHADO REAL (06/10/2026, ANDRE — só eMile, R$ 225,50 de descontos da iMile): o papel fazia
+ * "verde = total − bruto separado", ou seja, TODO vale/perda saía da faixa verde. Sem verde, ela
+ * ficou −R$ 225,50 e a amarela saiu com o bruto cheio (R$ 1.244,00) — e foi esse o valor da nota
+ * dele. Agora as faixas saem de `faixasDoEspelho`, a mesma conta da conferência da nota e do
+ * relatório (regra do Victor de 10/09: o vale/perda sai da faixa de MAIOR valor).
+ *
+ * Sem nenhuma linha fora da plataforma separada (só eMile, como o André), não há o que separar:
+ * o espelho sai como um espelho normal, com o desconto abatido no TOTAL A RECEBER (decisão do
+ * Victor, 06/10/2026).
+ */
+function bandsFromLines(lines: DriverPlatformLine[], packagesValue: number, toReceive: number): MirrorBands {
+  const deductedCents = toCents(packagesValue) - toCents(toReceive);
+  const sep = separatedPlatformTotals(lines);
+  const temVerde = lines.some((p) => !p.separateValue);
+  if (sep.length === 0 || (!temVerde && sep.length === 1)) {
+    return {
+      greenGross: packagesValue,
+      greenDeducted: deductedCents / 100,
+      green: toReceive,
+      separated: [],
+      deductedTotal: deductedCents / 100,
+    };
+  }
+  const greenGrossCents = toCents(packagesValue) - sep.reduce((s, x) => s + toCents(x.amount), 0);
+  const faixa = new Map(
+    faixasDoEspelho(
+      [
+        { chave: '', bruto: greenGrossCents / 100 },
+        ...sep.map((s) => ({ chave: s.platform, bruto: s.amount })),
+      ],
+      deductedCents / 100,
+    ).map((f) => [f.chave, toCents(f.total)]),
+  );
+  const greenCents = faixa.get('') ?? greenGrossCents;
+  return {
+    greenGross: greenGrossCents / 100,
+    greenDeducted: (greenGrossCents - greenCents) / 100,
+    green: greenCents / 100,
+    separated: sep.map((s) => {
+      const amountCents = faixa.get(s.platform) ?? toCents(s.amount);
+      return {
+        platform: s.platform,
+        packages: s.packages,
+        gross: s.amount,
+        deducted: (toCents(s.amount) - amountCents) / 100,
+        amount: amountCents / 100,
+      };
+    }),
+    deductedTotal: deductedCents / 100,
+  };
+}
+
+/** As faixas de um espelho individual (06/10/2026). */
+export function mirrorBands(data: Pick<DriverMirrorData, 'platforms' | 'totals'>): MirrorBands {
+  return bandsFromLines(data.platforms, data.totals.packagesValue, data.totals.toReceive);
+}
+
+/** "EMILE" / "EMILE + X" — o nome das faixas separadas como os rótulos do espelho escrevem. */
+export function separatedNames(bands: MirrorBands): string {
+  return bands.separated.map((s) => s.platform.toUpperCase()).join(' + ');
+}
+
+/**
+ * A conta de uma faixa amarela que teve vale/perda abatido (06/10/2026, caso ANDRE): sem ela o
+ * entregador vê um número menor que o da tabela de valores e não sabe de onde veio.
+ * null = a faixa não teve abate (sai só o valor, como sempre). PDF e prévia usam esta frase;
+ * `fmt` deixa a prévia esconder os valores de quem não tem permissão de vê-los.
+ */
+export function separatedBandBreakdown(
+  band: SeparatedBand,
+  fmt: (valor: number) => string = fmtBRL,
+): string | null {
+  if (toCents(band.deducted) <= 0) return null;
+  // Hífen comum de propósito: a fonte padrão do PDF (WinAnsi) não tem o sinal de menos "−".
+  return `${fmt(band.gross)} em pacotes - ${fmt(band.deducted)} de descontos e vales (listados acima)`;
+}
+
+/** Uma linha do resumo do espelho individual: soma, informação neutra ou abate (vermelho). */
+export interface MirrorSummaryLine {
+  rotulo: string;
+  valor: number;
+  tipo: 'soma' | 'info' | 'abate';
+}
+
+/**
+ * O resumo quando o vale/perda NÃO saiu todo da faixa verde (06/10/2026): a regra de 10/09 tirou
+ * tudo ou um pedaço dele de uma faixa amarela. O resumo de sempre ("pacotes − descontos − vales")
+ * não fecharia com o TOTAL A RECEBER, então ele diz de onde saiu cada parte.
+ *
+ * null = o verde absorveu tudo (ou não há separação): o resumo é o de sempre.
+ */
+export function resumoComAbateNasFaixas(
+  bands: MirrorBands,
+  totals: Pick<DriverMirrorTotals, 'discountsValue' | 'valesValue'>,
+): MirrorSummaryLine[] | null {
+  if (bands.separated.length === 0 || toCents(bands.greenDeducted) === toCents(bands.deductedTotal)) {
+    return null;
+  }
+  const linhas: MirrorSummaryLine[] = [
+    { rotulo: `Total de pacotes (sem ${separatedNames(bands)})`, valor: bands.greenGross, tipo: 'soma' },
+    { rotulo: 'Vales e perdas da quinzena', valor: totals.discountsValue + totals.valesValue, tipo: 'info' },
+  ];
+  for (const s of bands.separated) {
+    if (toCents(s.deducted) > 0) {
+      linhas.push({
+        rotulo: `Abatido do total ${s.platform.toUpperCase()} (faixa amarela abaixo)`,
+        valor: s.deducted,
+        tipo: 'info',
+      });
+    }
+  }
+  if (toCents(bands.greenDeducted) !== 0) {
+    linhas.push({ rotulo: 'Abatido neste total', valor: bands.greenDeducted, tipo: 'abate' });
+  }
+  return linhas;
+}
+
+/** Faixas do espelho de GRUPO + a parte de cada membro na faixa verde. */
+export interface GroupMirrorBands extends MirrorBands {
+  /** Bruto de cada membro na faixa verde, na ordem de `drivers`. */
+  memberGreenGross: number[];
+  /** "A Receber" de cada membro na tabela do resumo (a parte dele na faixa verde). */
+  memberGreen: number[];
+}
+
+/**
+ * As faixas do espelho de GRUPO (06/10/2026). A regra vale pro GRUPO inteiro, igual à
+ * conferência da nota (o líder emite uma nota por CNPJ pelo grupo) e ao relatório.
+ *
+ * A coluna "A Receber" de cada membro é a parte dele na faixa verde: o bruto verde dele menos a
+ * parte do vale/perda que a regra pôs no verde, repartida na proporção do que cada um teve
+ * abatido. Quando o verde absorve tudo (o caso comum), é exatamente o abate de cada um — igual
+ * a sempre; quando nada sai do verde, ninguém tem abate na coluna. A soma da coluna fecha
+ * sempre, centavo por centavo, com o TOTAL A RECEBER do grupo.
+ */
+export function groupMirrorBands(data: Pick<DriverGroupMirrorData, 'drivers'>): GroupMirrorBands {
+  const { drivers } = data;
+  const bands = bandsFromLines(
+    drivers.flatMap((d) => d.platforms),
+    drivers.reduce((s, d) => s + d.totals.packagesValue, 0),
+    drivers.reduce((s, d) => s + d.totals.toReceive, 0),
+  );
+  const separa = bands.separated.length > 0;
+  const grossCents = drivers.map(
+    (d) => toCents(d.totals.packagesValue) - (separa ? toCents(separatedPlatformTotals(d.platforms).reduce((s, x) => s + x.amount, 0)) : 0),
+  );
+  const pesos = drivers.map((d) => Math.max(0, toCents(d.totals.packagesValue) - toCents(d.totals.toReceive)));
+  const somaPesos = pesos.reduce((s, p) => s + p, 0);
+  const noVerdeCents = toCents(bands.greenDeducted);
+
+  // Repartição proporcional em centavos (maior resto): a soma bate exata com o abatido no verde.
+  const quotas = pesos.map((p) => (somaPesos > 0 && noVerdeCents > 0 ? (noVerdeCents * p) / somaPesos : 0));
+  const abate = quotas.map((q) => Math.floor(q));
+  let sobra = (noVerdeCents > 0 ? noVerdeCents : 0) - abate.reduce((s, a) => s + a, 0);
+  const porResto = quotas
+    .map((q, i) => ({ i, resto: q - Math.floor(q) }))
+    .sort((a, b) => b.resto - a.resto || a.i - b.i);
+  for (const { i } of porResto) {
+    if (sobra <= 0) break;
+    abate[i] += 1;
+    sobra -= 1;
+  }
+  // O que não coube na proporção (abate negativo ou sem peso) fica no maior bruto verde, pra
+  // coluna nunca deixar de somar o TOTAL A RECEBER impresso.
+  const restoCents = toCents(bands.green) - grossCents.reduce((s, g, i) => s + g - abate[i], 0);
+  if (restoCents !== 0 && drivers.length > 0) {
+    const maior = grossCents.reduce((m, g, i) => (g > grossCents[m] ? i : m), 0);
+    abate[maior] -= restoCents;
+  }
+
+  return {
+    ...bands,
+    memberGreenGross: grossCents.map((g) => g / 100),
+    memberGreen: grossCents.map((g, i) => (g - abate[i]) / 100),
+  };
 }
 
 /** União ordenada dos nomes de plataforma presentes num conjunto de espelhos. */

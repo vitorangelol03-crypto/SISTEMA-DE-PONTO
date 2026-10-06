@@ -21,7 +21,10 @@ import {
   packagesForPlatform,
   platformLineLabel,
   separatedPlatformTotals,
-  separatedAmount,
+  mirrorBands,
+  groupMirrorBands,
+  separatedBandBreakdown,
+  resumoComAbateNasFaixas,
 } from '../../src/utils/driverMirrorGenerator';
 import type { Company } from '../../src/services/database';
 import type { DriverPlatform, DriverPaymentPeriod } from '../../src/services/driverPay';
@@ -149,7 +152,7 @@ describe('valor separado do total — mirror_separate_value (2026-07-20)', () =>
     expect(data.platforms.find((p) => p.platform === 'SHOPEE')?.separateValue).toBe(false);
     const sep = separatedPlatformTotals(data.platforms);
     expect(sep).toEqual([{ platform: 'eMile', packages: 157, amount: 314 }]);
-    expect(separatedAmount(data.platforms)).toBe(314);
+    expect(mirrorBands(data).separated.map((b) => b.gross)).toEqual([314]);
     // O total persistido continua CHEIO — a subtração é só na apresentação.
     expect(data.totals.packagesValue).toBe(314 + 200);
   });
@@ -161,7 +164,7 @@ describe('valor separado do total — mirror_separate_value (2026-07-20)', () =>
       plats, company, period,
     );
     expect(data.platforms[0].separateValue).toBe(false);
-    expect(separatedAmount(data.platforms)).toBe(0);
+    expect(mirrorBands(data).separated).toEqual([]);
   });
 
   it('plataforma ARQUIVADA não separa valor (mesmo marcada)', () => {
@@ -201,7 +204,156 @@ describe('valor separado do total — mirror_separate_value (2026-07-20)', () =>
     // Persistido: cheio (200 + 100) + (60) = 360.
     expect(group.groupTotals.packagesValue).toBe(360);
     // Separado do grupo (apresentação): 200 + 60 = 260.
-    const sepDoGrupo = group.drivers.reduce((s, d) => s + separatedAmount(d.platforms), 0);
+    const sepDoGrupo = group.drivers.reduce(
+      (s, d) => s + separatedPlatformTotals(d.platforms).reduce((t, x) => t + x.amount, 0),
+      0,
+    );
     expect(sepDoGrupo).toBe(260);
+    expect(groupMirrorBands(group).separated.map((b) => b.gross)).toEqual([260]);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 06/10/2026 — ACHADO REAL: o espelho do ANDRE (Ubaporanga, só eMile) saiu com o TOTAL A RECEBER
+// −R$ 225,50 e a faixa amarela da eMile CHEIA (R$ 1.244,00): o papel tirava TODO vale/perda da
+// faixa verde. Agora as faixas seguem a regra de 10/09 (o vale/perda sai da de MAIOR valor), a
+// mesma da conferência da nota e do relatório.
+// ════════════════════════════════════════════════════════════════════════════
+type Discount = DriverRowData['discounts'][number];
+function desconto(amount: number, code: string, status: 'PNR' | 'LOST'): Discount {
+  return {
+    id: `d-${code}`, company_id: 'c1', payment_id: 'pay', amount, package_code: code, observation: null,
+    package_status: status, proof1_path: null, proof2_path: null, proof_video_path: null,
+    created_by: '2626', created_at: '',
+  };
+}
+const EMILE = platform('eMile', { highlight_mirror: true, mirror_separate_value: true, mirror_notice: 'A NOTA FISCAL DEVE SER GERADA NO CNPJ 53.824.315/0001-10' });
+const SHOPEE = platform('SHOPEE');
+const LOGGI = platform('LOGGI');
+const comDescontos = (row: DriverRowData, ...ds: Discount[]): DriverRowData => ({ ...row, discounts: ds });
+
+describe('faixas do espelho — o desconto sai da faixa de MAIOR valor (caso ANDRE, 06/10/2026)', () => {
+  const andre = comDescontos(
+    rowWithRoutes('ANDRE', [route('Ubaporanga', { eMile: 622 }, { eMile: 2 })]),
+    desconto(113.9, '3320009829591', 'LOST'),
+    desconto(111.6, '3320094790122', 'PNR'),
+  );
+
+  it('ANDRE individual: só eMile → espelho NORMAL, TOTAL A RECEBER R$ 1.018,50, nada negativo', () => {
+    const data = buildDriverMirrorData(andre, [EMILE], company, period);
+    expect(data.totals.toReceive).toBe(1018.5);
+    const b = mirrorBands(data);
+    expect(b.separated).toEqual([]); // nada pra separar: é tudo eMile
+    expect(b.green).toBe(1018.5);
+    expect(b.greenGross).toBe(1244);
+    expect(b.greenDeducted).toBe(225.5);
+    // O desconto continua APARECENDO (pedido do Victor): lista e resumo de sempre.
+    expect(data.discounts.map((d) => d.value)).toEqual([113.9, 111.6]);
+    expect(resumoComAbateNasFaixas(b, data.totals)).toBeNull();
+  });
+
+  it('ANDRE no espelho de GRUPO (1 membro): total do grupo R$ 1.018,50 e a linha dele também', () => {
+    const g = buildGroupMirrorData('Andre Luis - UBAPORANGA', [andre], [EMILE], company, period);
+    const b = groupMirrorBands(g);
+    expect(b.separated).toEqual([]);
+    expect(b.green).toBe(1018.5);
+    expect(b.memberGreen).toEqual([1018.5]);
+  });
+
+  it('ANDRE com os 77 da LOGGI: eMile (maior) absorve o desconto — Loggi R$ 154,00 e eMile R$ 1.018,50', () => {
+    const comLoggi = comDescontos(
+      rowWithRoutes('ANDRE', [route('Ubaporanga', { eMile: 622, LOGGI: 77 }, { eMile: 2, LOGGI: 2 })]),
+      desconto(113.9, '3320009829591', 'LOST'),
+      desconto(111.6, '3320094790122', 'PNR'),
+    );
+    const g = buildGroupMirrorData('Andre Luis - UBAPORANGA', [comLoggi], [EMILE, LOGGI], company, period);
+    const b = groupMirrorBands(g);
+    // ANTES: verde = 1.172,50 − 1.244,00 = −71,50 (negativo de novo) e amarela 1.244,00.
+    expect(b.green).toBe(154);
+    expect(b.memberGreen).toEqual([154]);
+    expect(b.separated).toEqual([{ platform: 'eMile', packages: 622, gross: 1244, deducted: 225.5, amount: 1018.5 }]);
+    expect(separatedBandBreakdown(b.separated[0])).toContain('225,50 de descontos e vales');
+    // O resumo individual diz de qual faixa saiu o desconto.
+    const linhas = resumoComAbateNasFaixas(mirrorBands(g.drivers[0]), g.drivers[0].totals);
+    expect(linhas?.map((l) => [l.rotulo, l.valor, l.tipo])).toEqual([
+      ['Total de pacotes (sem EMILE)', 154, 'soma'],
+      ['Vales e perdas da quinzena', 225.5, 'info'],
+      ['Abatido do total EMILE (faixa amarela abaixo)', 225.5, 'info'],
+    ]);
+  });
+
+  it('Shopee MAIOR que a eMile (todo mundo hoje): o papel continua EXATAMENTE como antes', () => {
+    const rogerio = comDescontos(
+      rowWithRoutes('ROGERIO', [route('Vermelho Novo', { eMile: 408, SHOPEE: 3245 }, { eMile: 2.2, SHOPEE: 2.2 })]),
+      desconto(205.9, 'X1', 'PNR'),
+    );
+    const data = buildDriverMirrorData(rogerio, [EMILE, SHOPEE], company, period);
+    const b = mirrorBands(data);
+    const antigoVerde = data.totals.toReceive - 408 * 2.2; // a conta de antes
+    expect(b.green).toBeCloseTo(antigoVerde, 2);
+    expect(b.separated[0]).toMatchObject({ gross: 897.6, deducted: 0, amount: 897.6 });
+    expect(separatedBandBreakdown(b.separated[0])).toBeNull(); // faixa amarela sem linha nova
+    expect(resumoComAbateNasFaixas(b, data.totals)).toBeNull(); // resumo de sempre
+  });
+
+  it('desconto maior que o verde (transborda): verde zera e o resto sai da eMile — nada negativo', () => {
+    const r = comDescontos(
+      rowWithRoutes('X', [route('C', { eMile: 100, SHOPEE: 500 }, { eMile: 2, SHOPEE: 2 })]),
+      desconto(1100, 'Y', 'LOST'),
+    );
+    const b = mirrorBands(buildDriverMirrorData(r, [EMILE, SHOPEE], company, period));
+    expect(b.green).toBe(0);
+    expect(b.separated[0]).toMatchObject({ gross: 200, deducted: 100, amount: 100 });
+  });
+
+  it('pagamento parcial (não abate): faixas no bruto e o desconto fica só listado', () => {
+    const data = buildDriverMirrorData(andre, [EMILE, LOGGI], company, period, undefined, false);
+    const b = mirrorBands(data);
+    expect(b.deductedTotal).toBe(0);
+    expect(b.green).toBe(1244);
+    expect(data.deductionsApplied).toBe(false);
+  });
+
+  it('regra do saldo (abate só um pedaço): a faixa usa o que foi abatido de verdade', () => {
+    const data = buildDriverMirrorData(andre, [EMILE], company, period, undefined, true, 100);
+    const b = mirrorBands(data);
+    expect(b.green).toBe(1144);
+    expect(b.deductedTotal).toBe(100);
+  });
+});
+
+describe('espelho de GRUPO — a coluna "A Receber" fecha com o total, centavo por centavo', () => {
+  it('grupo com Shopee maior: cada membro tem o PRÓPRIO desconto abatido (igual a sempre)', () => {
+    const a = comDescontos(rowWithRoutes('A', [route('C', { eMile: 300 }, { eMile: 2 })]), desconto(50, 'A1', 'PNR'));
+    const b = rowWithRoutes('B', [route('C', { SHOPEE: 3000 }, { SHOPEE: 2 })]);
+    const g = buildGroupMirrorData('G', [a, b], [EMILE, SHOPEE], company, period);
+    const bands = groupMirrorBands(g);
+    // Regra do GRUPO (a da nota do líder): a Shopee do grupo é a maior → o desconto sai do verde.
+    expect(bands.green).toBe(5950);
+    expect(bands.separated[0]).toMatchObject({ gross: 600, deducted: 0, amount: 600 });
+    expect(bands.memberGreen).toEqual([-50, 6000]); // o mesmo que a coluna sempre mostrou
+    expect(bands.memberGreen.reduce((s, v) => s + v, 0)).toBe(bands.green);
+  });
+
+  it('grupo com eMile maior: o desconto sai da faixa amarela e a coluna não abate ninguém', () => {
+    const a = comDescontos(rowWithRoutes('A', [route('C', { eMile: 1000, SHOPEE: 50 }, { eMile: 2, SHOPEE: 2 })]), desconto(80, 'A1', 'PNR'));
+    const b = comDescontos(rowWithRoutes('B', [route('C', { eMile: 500, SHOPEE: 100 }, { eMile: 2, SHOPEE: 2 })]), desconto(20, 'B1', 'LOST'));
+    const g = buildGroupMirrorData('G', [a, b], [EMILE, SHOPEE], company, period);
+    const bands = groupMirrorBands(g);
+    expect(bands.green).toBe(300);
+    expect(bands.separated[0]).toMatchObject({ gross: 3000, deducted: 100, amount: 2900 });
+    expect(bands.memberGreen).toEqual([100, 200]);
+  });
+
+  it('transbordo no grupo com centavos quebrados: a coluna soma EXATAMENTE o total verde', () => {
+    const a = comDescontos(rowWithRoutes('A', [route('C', { SHOPEE: 10, eMile: 3 }, { SHOPEE: 1.01, eMile: 2 })]), desconto(9.99, 'A1', 'PNR'));
+    const b = comDescontos(rowWithRoutes('B', [route('C', { SHOPEE: 7, eMile: 2 }, { SHOPEE: 1.01, eMile: 2 })]), desconto(7.33, 'B1', 'LOST'));
+    const c = comDescontos(rowWithRoutes('C', [route('C', { SHOPEE: 1, eMile: 1 }, { SHOPEE: 1.01, eMile: 2 })]), desconto(1.01, 'C1', 'LOST'));
+    const g = buildGroupMirrorData('G', [a, b, c], [EMILE, SHOPEE], company, period);
+    const bands = groupMirrorBands(g);
+    const cents = (v: number) => Math.round(v * 100);
+    expect(bands.memberGreen.reduce((s, v) => s + cents(v), 0)).toBe(cents(bands.green));
+    const somaFaixas = cents(bands.green) + bands.separated.reduce((s, x) => s + cents(x.amount), 0);
+    expect(somaFaixas).toBe(cents(g.groupTotals.toReceive));
   });
 });

@@ -15,6 +15,8 @@ import {
   fatiasDaParte1,
   nfSplitSlices,
   valorDoCnpjNoEspelhoMisto,
+  faixasDoEspelho,
+  repartirLiquidoPorTomador,
 } from '../../supabase/functions/driver-public-api/nfCheck';
 
 const CNPJ_CD = '11802464000138';
@@ -621,5 +623,104 @@ describe('valorDoCnpjNoEspelhoMisto — a parte de cada CNPJ, tirada do PAPEL', 
 
   it('faixa verde zerada ou negativa (os descontos comeram tudo) → sem candidato (não existe nota de R$ 0)', () => {
     expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 1883.4, plataformas: mutum, emitterId: SHOPEE })).toBeNull();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// AS FAIXAS DO ESPELHO COM O DESCONTO NO LUGAR CERTO — 06/10/2026, achado real:
+// o ANDRE (Ubaporanga, 1ª quinzena de setembro) só tem eMile (622 × R$ 2,00 = R$ 1.244,00) e
+// teve R$ 225,50 de descontos da iMile. O papel tirava todo desconto da faixa VERDE (que ele não
+// tem): verde −R$ 225,50 e amarela R$ 1.244,00 cheia — ele emitiu a nota de R$ 1.244,00.
+// Pagamento e nota seguiam a regra de 10/09 ("desconta no que tem o maior valor"); o papel não.
+// ════════════════════════════════════════════════════════════════════════════
+describe('faixasDoEspelho — o vale/perda sai da faixa de MAIOR bruto (regra de 10/09)', () => {
+  const total = (fs: Array<{ chave: string; total: number }>, chave: string) =>
+    fs.find((f) => f.chave === chave)?.total;
+
+  it('ANDRE: só eMile — o desconto sai da eMile (R$ 1.018,50), nunca vira verde negativo', () => {
+    const fs = faixasDoEspelho([{ chave: '', bruto: 0 }, { chave: 'eMile', bruto: 1244 }], 225.5);
+    expect(total(fs, 'eMile')).toBe(1018.5);
+    expect(total(fs, '')).toBe(0);
+  });
+
+  it('Mutum (Shopee maior): continua tudo no verde — o papel de quem já estava certo NÃO muda', () => {
+    const fs = faixasDoEspelho([{ chave: '', bruto: 16471.15 }, { chave: 'eMile', bruto: 1883.4 }], 446.51);
+    expect(total(fs, '')).toBe(16024.64);
+    expect(total(fs, 'eMile')).toBe(1883.4);
+  });
+
+  it('eMile maior que a Shopee: o desconto sai da eMile e o verde fica cheio', () => {
+    const fs = faixasDoEspelho([{ chave: '', bruto: 300 }, { chave: 'eMile', bruto: 1000 }], 120);
+    expect(total(fs, '')).toBe(300);
+    expect(total(fs, 'eMile')).toBe(880);
+  });
+
+  it('não cabe no maior: transborda pro próximo e nenhuma faixa fica negativa', () => {
+    const fs = faixasDoEspelho([{ chave: '', bruto: 1000 }, { chave: 'eMile', bruto: 100 }], 1030);
+    expect(total(fs, '')).toBe(0);
+    expect(total(fs, 'eMile')).toBe(70);
+  });
+
+  it('sem abate: cada faixa é o próprio bruto', () => {
+    const fs = faixasDoEspelho([{ chave: '', bruto: 500.1 }, { chave: 'eMile', bruto: 99.9 }], 0);
+    expect(fs).toEqual([{ chave: '', total: 500.1 }, { chave: 'eMile', total: 99.9 }]);
+  });
+
+  it('empate de bruto: o verde absorve (mesma ordem do relatório)', () => {
+    const fs = faixasDoEspelho([{ chave: '', bruto: 500 }, { chave: 'eMile', bruto: 500 }], 10);
+    expect(total(fs, '')).toBe(490);
+    expect(total(fs, 'eMile')).toBe(500);
+  });
+
+  it('é a MESMA conta do relatório/nota (repartirLiquidoPorTomador) e a soma fecha no centavo', () => {
+    const casos: Array<[number, number, number]> = [
+      [0, 1244, 225.5], [16471.15, 1883.4, 446.51], [300, 1000, 120], [1000, 100, 1030],
+      [123.45, 678.9, 0.01], [7.77, 7.78, 15.55], [2991, 159, 167.9],
+    ];
+    for (const [verde, emile, abatido] of casos) {
+      const fs = faixasDoEspelho([{ chave: '', bruto: verde }, { chave: 'eMile', bruto: emile }], abatido);
+      const rel = repartirLiquidoPorTomador(
+        [{ emitterId: '', bruto: verde }, { emitterId: 'eMile', bruto: emile }],
+        Math.round((verde + emile - abatido) * 100) / 100,
+      );
+      expect(total(fs, '')).toBe(rel.find((r) => r.emitterId === '')?.total);
+      expect(total(fs, 'eMile')).toBe(rel.find((r) => r.emitterId === 'eMile')?.total);
+      const somaCents = fs.reduce((s, f) => s + Math.round(f.total * 100), 0);
+      expect(somaCents).toBe(Math.round(verde * 100) + Math.round(emile * 100) - Math.round(abatido * 100));
+    }
+  });
+});
+
+describe('valorDoCnpjNoEspelhoMisto — a amarela agora sai do PAPEL novo (06/10/2026)', () => {
+  const SHOPEE = 'tomador-shopee';
+  const IMILE = 'tomador-imile';
+
+  it('eMile maior que a Shopee: a nota da iMile é o líquido da faixa (antes cobrava o bruto)', () => {
+    const plataformas = [
+      { emitterId: SHOPEE, separada: false, valor: 300, nome: 'SHOPEE' },
+      { emitterId: IMILE, separada: true, valor: 1000, nome: 'eMile' },
+    ];
+    // Impresso gravado (combinado): 1.300 − 120 = 1.180.
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 1180, plataformas, emitterId: IMILE })).toBe(880);
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 1180, plataformas, emitterId: SHOPEE })).toBe(300);
+  });
+
+  it('com Zapex: ele fica na faixa verde, igual ao PDF', () => {
+    const plataformas = [
+      { emitterId: SHOPEE, separada: false, valor: 300, nome: 'SHOPEE' },
+      { emitterId: IMILE, separada: true, valor: 1000, nome: 'eMile' },
+    ];
+    // 300 + 1.000 + 50 de Zapex − 120 abatidos (da eMile, a maior) = 1.230 impresso.
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 1230, plataformas, emitterId: SHOPEE, zapex: 50 })).toBe(350);
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 1230, plataformas, emitterId: IMILE, zapex: 50 })).toBe(880);
+  });
+
+  it('a nota de R$ 1.244,00 (bruto) não bate mais com o papel de um espelho que abateu da eMile', () => {
+    const plataformas = [
+      { emitterId: SHOPEE, separada: false, valor: 300, nome: 'SHOPEE' },
+      { emitterId: IMILE, separada: true, valor: 1244, nome: 'eMile' },
+    ];
+    // 1.544 − 225,50 = 1.318,50 impresso; a eMile (maior) absorve.
+    expect(valorDoCnpjNoEspelhoMisto({ printedTotal: 1318.5, plataformas, emitterId: IMILE })).toBe(1018.5);
   });
 });

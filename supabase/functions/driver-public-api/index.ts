@@ -718,6 +718,7 @@ async function buildValueCandidates(
       emitterId: emitterByPlatform.get(nome) ?? null,
       separada: separadaPorPlataforma.get(nome) === true,
       valor: round2(bruto),
+      nome,
     }));
   };
 
@@ -839,6 +840,7 @@ async function buildValueCandidates(
     if (hasOtherEmitterInScope(ids, filter)) {
       const parteDoCnpj = valorDoCnpjNoEspelhoMisto({
         printedTotal, plataformas: plataformasNoEscopo(ids, filter), emitterId,
+        zapex: zapexSum(ids, filter),
       });
       if (parteDoCnpj !== null) {
         cands[key] = parteDoCnpj;
@@ -856,6 +858,25 @@ async function buildValueCandidates(
     });
     cands[key] = value;
     porEspelho[(pub.platform_key as string) ?? ''] = value;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 06/10/2026 — O VALOR CHEIO SÓ PASSA SE O PAPEL DA PESSOA NÃO TINHA O DESCONTO.
+  //
+  // Decisão do Victor: "o valor cheio só passa se o espelho que a pessoa recebeu ainda não
+  // tinha o desconto". ACHADO REAL (1ª quinzena de setembro): o ANDRE (R$ 1.244,00) e o
+  // ADRIANO FURTUNATO (R$ 2.991,00) tiveram notas no BRUTO validadas sozinhas por
+  // `somaCnpj_*` — com o espelho deles já abatendo R$ 225,50 e R$ 167,90.
+  //
+  // A tolerância nasceu em 05/08 pra quem baixou o espelho ANTES do desconto entrar. Hoje esse
+  // caso já está coberto pelo candidato do PRÓPRIO papel (`espelho_*`, que lê o total impresso
+  // gravado): espelho que saiu sem o desconto vale o bruto. Então, quando existe valor do papel
+  // pra este CNPJ e há vale/perda abatido, o bruto solto sai. Sem papel nenhum (ou sem desconto,
+  // quando bruto e abatido são o mesmo número) nada muda.
+  // ══════════════════════════════════════════════════════════════════════════
+  const temValorDoPapel = Object.keys(cands).some((k) => k.startsWith('espelho_'));
+  if (temValorDoPapel && typeof abatido === 'number' && abatido !== cands[chaveBruta]) {
+    delete cands[chaveBruta];
   }
   return { cands, porEspelho };
 }
@@ -1223,7 +1244,8 @@ async function nfUpload(req: Request, body: Body): Promise<Response> {
       // CNPJ (ex.: "SOMENTE LOGGI" e "SOMENTE SHOPEE"), aceitar a metade do outro
       // espelho deixaria a nota cair no cartão errado — e o `splitTotal` levaria o
       // erro pra segunda nota. A tolerância que importa (espelho baixado antes do
-      // desconto entrar) segue viva: `somaCnpj_*` com e sem abate continuam valendo.
+      // desconto entrar) segue viva: o `espelho_*` lê o total impresso, e `somaCnpj_*`
+      // sem abate só sai quando existe esse papel (06/10/2026, ver buildValueCandidates).
       const doOutroEspelho = new Set(
         Object.keys(porEspelhoDoUpload)
           .filter((k) => k !== (mirrorPlatformKey ?? ''))

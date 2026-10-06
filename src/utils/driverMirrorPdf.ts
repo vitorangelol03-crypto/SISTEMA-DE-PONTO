@@ -25,7 +25,7 @@ import {
   type DriverMirrorData,
   type DriverGroupMirrorData,
   type MirrorCutoffLine,
-  type SeparatedPlatformTotal,
+  type SeparatedBand,
   fmtBRL,
   fmtQty,
   formatDateBR,
@@ -34,8 +34,11 @@ import {
   packagesForPlatform,
   collectPlatformNames,
   platformLineLabel,
-  separatedPlatformTotals,
-  separatedAmount,
+  mirrorBands,
+  groupMirrorBands,
+  separatedNames,
+  separatedBandBreakdown,
+  resumoComAbateNasFaixas,
   areDeductionsApplied,
   partialDeduction,
 } from './driverMirrorGenerator';
@@ -377,14 +380,18 @@ function drawColumnArrow(doc: jsPDF, centerX: number, headTopY: number): void {
  * sai FORA do TOTAL A RECEBER. O texto é explícito de propósito — os drivers
  * são leigos e não podem achar que vão receber o valor duas vezes (nem que
  * ele "sumiu" do total).
+ *
+ * 06/10/2026: o valor impresso é o LÍQUIDO da faixa (a regra de 10/09 pode tirar o vale/perda
+ * daqui); quando teve abate, uma linha a mais mostra a conta.
  */
 function drawSeparatedValueBanner(
   doc: jsPDF,
   label: string,
-  sepItem: SeparatedPlatformTotal,
+  band: SeparatedBand,
   y: number,
 ): number {
-  const h = 44;
+  const breakdown = separatedBandBreakdown(band);
+  const h = breakdown ? 58 : 44;
   doc.setFillColor(...COLOR_NOTICE_BG);
   doc.rect(X_LEFT, y, CONTENT_W, h, 'F');
   doc.setDrawColor(...COLOR_NOTICE_BORDER).setLineWidth(1.2);
@@ -393,7 +400,7 @@ function drawSeparatedValueBanner(
   // Auto-fit (aprendizado 19/07): rótulo e aviso NUNCA vazam da faixa nem
   // encostam no valor — reduz a fonte até caber (simetria garantida).
   doc.setFont('helvetica', 'bold').setFontSize(14);
-  const valueW = doc.getTextWidth(fmtBRL(sepItem.amount));
+  const valueW = doc.getTextWidth(fmtBRL(band.amount));
   const maxLabelW = CONTENT_W - 28 - valueW - 12;
   let labelSize = 11;
   doc.setFontSize(labelSize).setTextColor(...COLOR_INK);
@@ -403,7 +410,19 @@ function drawSeparatedValueBanner(
   }
   doc.text(label, X_LEFT + 14, y + 18);
   doc.setFontSize(14);
-  doc.text(fmtBRL(sepItem.amount), X_RIGHT - 14, y + 19, { align: 'right' });
+  doc.text(fmtBRL(band.amount), X_RIGHT - 14, y + 19, { align: 'right' });
+
+  let warnY = y + 34;
+  if (breakdown) {
+    let breakdownSize = 8.5;
+    doc.setFont('helvetica', 'normal').setFontSize(breakdownSize).setTextColor(...COLOR_INK);
+    for (let i = 0; i < 6 && doc.getTextWidth(breakdown) > CONTENT_W - 28; i++) {
+      breakdownSize = Math.max(6.5, breakdownSize * 0.93);
+      doc.setFontSize(breakdownSize);
+    }
+    doc.text(breakdown, X_LEFT + 14, y + 33);
+    warnY = y + 48;
+  }
 
   const warn = 'ESTE VALOR É PAGO SEPARADO — ELE NÃO ESTÁ SOMADO NO "TOTAL A RECEBER" ACIMA.';
   let warnSize = 8.5;
@@ -412,7 +431,7 @@ function drawSeparatedValueBanner(
     warnSize = Math.max(6.5, warnSize * 0.93);
     doc.setFontSize(warnSize);
   }
-  doc.text(warn, X_LEFT + 14, y + 34);
+  doc.text(warn, X_LEFT + 14, warnY);
   doc.setTextColor(0);
   return y + h;
 }
@@ -630,9 +649,11 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
 
   // Valor separado (2026-07-20): plataformas marcadas saem do total exibido e
   // ganham linha própria no rodapé + faixa amarela junto do TOTAL A RECEBER.
-  const sep = separatedPlatformTotals(platforms);
-  const sepTotal = sep.reduce((s, x) => s + x.amount, 0);
-  const sepNames = sep.map((s) => s.platform.toUpperCase()).join(' + ');
+  // 06/10/2026: as faixas — e de qual delas sai o vale/perda — vêm prontas de `mirrorBands`
+  // (regra de 10/09, a mesma da nota). Só eMile (caso ANDRE) = sem separação.
+  const bands = mirrorBands(data);
+  const sep = bands.separated;
+  const sepNames = separatedNames(bands);
 
   const platHead: RowInput[] = [['Plataforma', 'Pacotes', 'Valor/Pacote', 'Subtotal (R$)']];
   // Multi-rota (2026-07-20): pode haver mais de uma linha da mesma plataforma
@@ -650,7 +671,7 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
         colSpan: 3,
         styles: { halign: 'left' },
       },
-      { content: fmtBRL(s.amount), styles: { halign: 'right' } },
+      { content: fmtBRL(s.gross), styles: { halign: 'right' } },
     ]),
     [
       {
@@ -658,7 +679,7 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
         colSpan: 3,
         styles: { halign: 'left' },
       },
-      { content: fmtBRL(totals.packagesValue - sepTotal), styles: { halign: 'right' } },
+      { content: fmtBRL(bands.greenGross), styles: { halign: 'right' } },
     ],
   ];
 
@@ -813,10 +834,13 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   // Cada linha declara se o valor dela sai do total (vira vermelho com sinal de menos).
   // No abate PARCIAL (19/08/2026) a dívida aparece neutra e só a linha "Abatido neste
   // pagamento" subtrai — é a única conta que fecha com o TOTAL A RECEBER.
-  const resumoLinhas: { rotulo: string; valor: string; abate: boolean }[] = [
+  // 06/10/2026: vale/perda que saiu (todo ou em parte) de uma faixa amarela muda o resumo — ele
+  // diz de qual faixa saiu cada parte (`resumoComAbateNasFaixas`), senão a conta não fecha.
+  type LinhaResumo = { rotulo: string; valor: string; abate: boolean };
+  const resumoDeSempre: LinhaResumo[] = [
     {
       rotulo: sep.length > 0 ? `Total de pacotes (sem ${sepNames})` : 'Total de pacotes',
-      valor: `+ ${fmtBRL(totals.packagesValue - sepTotal)}`,
+      valor: `+ ${fmtBRL(bands.greenGross)}`,
       abate: false,
     },
     ...(parcial
@@ -841,6 +865,14 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
             : { rotulo: 'Vales / adiantamentos (não abatidos neste pagamento)', valor: fmtBRL(totals.valesValue), abate: false },
         ]),
   ];
+  const resumoNasFaixas = resumoComAbateNasFaixas(bands, totals);
+  const resumoLinhas: LinhaResumo[] = resumoNasFaixas
+    ? resumoNasFaixas.map((l) => ({
+        rotulo: l.rotulo,
+        valor: l.tipo === 'soma' ? `+ ${fmtBRL(l.valor)}` : l.tipo === 'abate' ? `- ${fmtBRL(l.valor)}` : fmtBRL(l.valor),
+        abate: l.tipo === 'abate',
+      }))
+    : resumoDeSempre;
   const resumoBody: RowInput[] = resumoLinhas.map((l) => [l.rotulo, l.valor]);
 
   autoTable(doc, {
@@ -887,13 +919,14 @@ function drawDriverMirrorPage(doc: jsPDF, data: DriverMirrorData): void {
   }
 
   y = ensureSpace(doc, y, 60);
-  y = drawGreenBanner(doc, 'TOTAL A RECEBER', fmtBRL(totals.toReceive - sepTotal), y);
+  y = drawGreenBanner(doc, 'TOTAL A RECEBER', fmtBRL(bands.green), y);
 
   // Valor separado (2026-07-20): faixa amarela POR plataforma marcada, colada no
   // total verde, com aviso explícito de que o valor é pago à parte — e o aviso da
   // plataforma (ex.: CNPJ da nota) logo embaixo, no mesmo bloco.
   for (const s of sep) {
-    y = ensureSpace(doc, y + 8, 54);
+    // Faixa com a conta do abate é mais alta (58 em vez de 44).
+    y = ensureSpace(doc, y + 8, separatedBandBreakdown(s) ? 68 : 54);
     y = drawSeparatedValueBanner(
       doc,
       `TOTAL ${s.platform.toUpperCase()} (${fmtQty(s.packages)} pacotes)`,
@@ -960,22 +993,11 @@ function drawGroupSummaryPage(
   // Valor separado (2026-07-20): soma por plataforma marcada em TODO o grupo.
   // O "A Receber" de cada driver e o total verde saem SEM esse valor; ele ganha
   // faixa amarela própria junto do total do grupo.
-  const groupSepMap = new Map<string, SeparatedPlatformTotal>();
-  const groupSepOrder: string[] = [];
-  for (const d of drivers) {
-    for (const s of separatedPlatformTotals(d.platforms)) {
-      let entry = groupSepMap.get(s.platform);
-      if (!entry) {
-        entry = { platform: s.platform, packages: 0, amount: 0 };
-        groupSepMap.set(s.platform, entry);
-        groupSepOrder.push(s.platform);
-      }
-      entry.packages += s.packages;
-      entry.amount += s.amount;
-    }
-  }
-  const groupSep = groupSepOrder.map((name) => groupSepMap.get(name)!);
-  const groupSepTotal = groupSep.reduce((s, x) => s + x.amount, 0);
+  // 06/10/2026: as faixas do GRUPO (e de qual delas sai o vale/perda, regra de 10/09) e a
+  // parte de cada membro na verde vêm prontas de `groupMirrorBands`. Grupo só de eMile
+  // (caso ANDRE) = sem separação: total normal, com o desconto abatido.
+  const gBands = groupMirrorBands(data);
+  const groupSep = gBands.separated;
 
   // Box compacto do grupo.
   const boxY = topY + 2;
@@ -1034,7 +1056,7 @@ function drawGroupSummaryPage(
       'A Receber',
     ],
   ];
-  const body: RowInput[] = drivers.map((d) => {
+  const body: RowInput[] = drivers.map((d, i) => {
     const platCols = platformNames.map((name) => fmtQty(packagesForPlatform(d, name)));
     const zapexCol = hasZapex ? [zapexValueOf(d) > 0 ? `+ ${fmtBRL(zapexValueOf(d))}` : '—'] : [];
     return [
@@ -1045,7 +1067,7 @@ function drawGroupSummaryPage(
       signedFor(d, d.totals.discountsValue),
       signedFor(d, d.totals.valesValue),
       // Valor separado fica FORA do "A Receber" exibido (sai na faixa amarela).
-      fmtBRL(d.totals.toReceive - separatedAmount(d.platforms)),
+      fmtBRL(gBands.memberGreen[i]),
     ];
   });
   const footPlatSums = platformNames.map((name) =>
@@ -1058,7 +1080,7 @@ function drawGroupSummaryPage(
       ...(hasZapex ? [{ content: `+ ${fmtBRL(zapexTotal)}` }] : []),
       { content: signedAgg(groupTotals.discountsValue) },
       { content: signedAgg(groupTotals.valesValue) },
-      { content: fmtBRL(groupTotals.toReceive - groupSepTotal) },
+      { content: fmtBRL(gBands.green) },
     ],
   ];
 
@@ -1227,14 +1249,15 @@ function drawGroupSummaryPage(
   y = drawGreenBanner(
     doc,
     `TOTAL A RECEBER — ${groupName.toUpperCase()}`,
-    fmtBRL(groupTotals.toReceive - groupSepTotal),
+    fmtBRL(gBands.green),
     y,
   );
 
   // Valor separado (2026-07-20): faixa amarela com a soma da plataforma no grupo,
   // com o aviso da plataforma (ex.: CNPJ da nota) colado logo embaixo.
   for (const s of groupSep) {
-    y = ensureSpace(doc, y + 8, 54);
+    // Faixa com a conta do abate é mais alta (58 em vez de 44).
+    y = ensureSpace(doc, y + 8, separatedBandBreakdown(s) ? 68 : 54);
     y = drawSeparatedValueBanner(
       doc,
       `TOTAL ${s.platform.toUpperCase()} DO GRUPO (${fmtQty(s.packages)} pacotes)`,
