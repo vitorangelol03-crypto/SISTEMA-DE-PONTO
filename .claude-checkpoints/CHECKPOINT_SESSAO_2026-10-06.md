@@ -245,3 +245,60 @@ password_hash dos outros da MESMA empresa (users: SELECT da coluna liberado pro 
 2626 e o 9999 estão em Caratinga; (2) senhas do 9999, 2626, 01 e 04 escritas nos testes (tests/11,
 22, 37, 111, helpers.ts) — trocar as senhas e passar pros segredos do CI; (3) _test_create_supervisor_
 with_perms liberado pro authenticated em produção (sem security definer — limitado pelas travas).
+
+## 18. ✅ Entrega E NO AR (`72fe9da`, CI verde 3/3, Vercel conferida): o celular do supervisor
+
+`/clock?supervisor=1` (link "Sou supervisor" na tela de CPF do CELULAR — nunca no tablet): login com
+código + senha do painel (mestre escolhe a empresa; trava/recusas vêm do servidor da D) → QR de
+conectar (2 min, contagem, tela acesa) → "Lido pelo tablet X" → lista da empresa (selos sem rosto /
+pendente) → cadastrar novo (nome, CPF com dígito, telefone, função) ou "refazer rosto" → QR do rosto
+com "Bater o ponto agora" → foto pequena → Confirmar / Tirar de novo → "Rosto cadastrado ✓ — Entrada
+registrada às HH:MM". Sessão de 20 min com contagem e "Sair". Validado: 11 testes de tela, E2E 136
+(tablet simulado pela API), suíte unit 152, commit só com os arquivos da E (cópia só-E conferida).
+
+## 19. ✅ Entrega F NO AR (`be14811`): o tablet lê o QR do supervisor e tira o rosto
+
+O tablet do galpão procura o QR do sistema em cada volta da câmera, antes do rosto (jsQR, quadro
+inteiro, só com modo galpão + segredo de tablet); QR na contagem do nome cancela a contagem.
+QR1 → "Celular de X conectado ✓" 3 s, funcionário do supervisor ignorado 2 min. QR2 → "X, olhe para a
+câmera" (1 pessoa só, 4 fotos) → faixa "aguardando o supervisor" enquanto bate o ponto dos outros →
+"✓ Rosto … cadastrado/refeito" → com "bater o ponto agora" a pessoa bate pelo caminho de sempre.
+Sem "bater o ponto agora": ignorada durante a espera (no refazer o rosto ANTIGO vale até confirmar) e
+2 min depois — nunca pra sempre.
+🔴 Achados e consertados na raiz: (1) a leitura do QR (1 uso) rodava 2x (efeito do React) e a leitura
+descartada "gastava" o QR → o tablet levava "já usado" — provado pelo registro de rede do E2E;
+(2) o celular gerava 2 QRs de conectar pelo mesmo motivo; (3) aviso "fique parado" sumia na hora;
+(4) corrida "tirar de novo" × reconhecimento; (5) pessoa podia bater na espera do "refazer".
+Decisão técnica minha: QR lido no quadro INTEIRO (o plano dizia "recorte"): o supervisor não mira.
+O tempo do jsQR no tablet REAL não foi medido — é o que a /qr-teste mede (pendência do Victor).
+Validado: unit do tablet 13 + celular 12 com prova A/B (cada regra quebrada derruba o teste certo);
+E2E 137: 2 navegadores, a câmera falsa lê a FOTO do QR do celular (arquivo de cena reescrito ao vivo),
+rosto real, servidor real — cadastra, confirma, o tablet bate a entrada sozinho, QR repetido recusado,
+refazer sem bater não bate, ZERO toques no tablet; regressão 08/62/127/128/132/133/134/136 (44/44);
+dados reais iguais antes/depois (md5); zero sobra. CI do `be14811`: E2E ✓ 13m21s, tsc+eslint ✓, unit ✗
+SÓ no teste ao vivo da D (ver §20); Vercel servindo `be14811`.
+
+## 20. ✅ Entrega G NO AR (`e0acdd1` + conserto de teste `e92b70c`): histórico diz quem fez + PIN no /erros
+
+Auditoria: "03 — Nome (funcionário Fulano)" na tabela, no filtro de usuário e na planilha. HOJE os 7
+usuários reais estão SEM nome e SEM vínculo → aparece só o código até o Victor vincular cada supervisor
+(Permissões → Funcionário vinculado). Filtro de módulo ganhou "Tablet (modo supervisor)" (+ rótulos de
+Pagamentos Driver e Aprovação de Cadastro). O histórico real hoje só tem 803 linhas do Financeiro.
+/erros (decisão 12): sem PIN → "É o seu primeiro acesso" → nova senha + repetir (4–6 números) → entra
+direto. Mesma ação do terminal (set-pin: só grava se não houver PIN nenhum; só o hash). E2E 36 caso 8
+reescrito (a regra mudou por decisão sua — não é teste ajustado pra passar).
+⚠️ AVISO 4 de segurança (decidir): Caratinga tem 28 de 104 ativos SEM PIN. Quem souber o CPF de um deles
+pode criar o PIN antes da pessoa (já dava pelo terminal e pela API pública; o /erros só deixa mais fácil)
+e ver "Meus erros"/recibos — e a pessoa fica travada até alguém resetar o PIN no painel. Hoje erros e
+recibos já saem só com o CPF pela API (EXIGIR_PROVA_DO_FUNCIONARIO=false, aviso 5 do plano). Recomendo:
+2ª prova no 1º acesso (ex.: o telefone cadastrado) + ligar o EXIGIR_PROVA.
+🔴 CI do `be14811` vermelho no unit — causa provada e consertada (`e92b70c`): o teste ao vivo da D rodou
+na máquina e no CI no MESMO minuto (local 07:52:19–07:52:44 UTC; CI estourou o preparo às 07:52:34),
+mesmos códigos 97971–97975, e a criação do supervisor de teste APAGA e recria o código; + ~20 idas ao
+banco em fila perto dos 10 s padrão. Agora: 60 s (igual ao outro teste ao vivo) e 9797x no CI / 9795x
+local. Nenhuma linha do sistema mudou. Falso alarme na foto md5 da G: 114 → 144 funcionários = os 30
+"Demo PN" que o E2E 101 do CI cria e apaga sozinho (created_by 9999, 04:56); refeita depois → iguais.
+Memória nova: reference_ci_e_local_ao_mesmo_tempo.
+Validado (G): tipos, estilo, build; telas com A/B; unit 155 arquivos; E2E 31/36/45/109/130 (26/26);
+dados reais iguais; zero sobra. CI do `e92b70c`: ✓ 3/3 (unit 2m27s com o teste ao vivo, E2E 12m0s, tsc 38s); Vercel servindo
+`e92b70c`; produção conferida no navegador (login do supervisor, link na tela de CPF, /erros).
