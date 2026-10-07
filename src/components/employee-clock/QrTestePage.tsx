@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
-import QRCode from 'qrcode';
 import { abrirCameraFrontal } from './cameraAccess';
+import { desenharQrNitido } from './supervisor/desenharQrNitido';
 import { useFaceApi } from '../../hooks/useFaceApi';
 import {
   MEDICOES_ZERADAS,
@@ -38,10 +38,10 @@ const TAMANHOS = [
 ] as const;
 
 /**
- * 07/10/2026: o tablet REAL não leu o QR "Médio" — o QR passa a ocupar a tela do celular inteira
- * (o tamanho que a gente puder), e é o que abre primeiro. Os outros ficam pra comparar.
+ * 07/10/2026: o tablet REAL não leu o QR "Médio" — o QR passa a ocupar a tela do celular de PONTA A
+ * PONTA (o fundo branco da página é o respiro), e é o que abre primeiro. Os outros ficam pra comparar.
  */
-const tamanhoDaTelaCheia = () => Math.max(180, Math.floor(Math.min(window.innerWidth - 16, window.innerHeight * 0.7)));
+const tamanhoDaTelaCheia = () => Math.max(180, Math.floor(Math.min(window.innerWidth, window.innerHeight * 0.7)));
 
 const TROCA_A_CADA_S = 10;
 
@@ -64,18 +64,18 @@ const CelularMostraQr: React.FC = () => {
 
   useEffect(() => {
     if (!canvasRef.current) return;
-    QRCode.toCanvas(canvasRef.current, codigo, { errorCorrectionLevel: 'L', margin: 2, width: tamanho }).catch(
+    desenharQrNitido(canvasRef.current, codigo, tamanho, { margem: 2, correcao: 'L' }).catch(
       (e: unknown) => console.error('Falha ao desenhar o QR de teste:', e),
     );
   }, [codigo, tamanho]);
 
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center gap-4 p-4 text-center">
-      <p className="text-lg font-bold text-gray-900">Mostre este QR para a câmera do tablet</p>
-      <canvas ref={canvasRef} data-testid="qr-teste-canvas" className="border border-gray-200" />
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center gap-4 py-4 text-center overflow-x-hidden">
+      <p className="px-4 text-lg font-bold text-gray-900">Mostre este QR para a câmera do tablet</p>
+      <canvas ref={canvasRef} data-testid="qr-teste-canvas" className="block" />
       <p className="text-3xl font-extrabold tracking-widest text-gray-900" data-testid="qr-teste-codigo">{codigo}</p>
-      <p className="text-sm text-gray-600">Troca em {faltam} s · deixe o brilho da tela no máximo</p>
-      <div className="flex gap-2">
+      <p className="px-4 text-sm text-gray-600">Troca em {faltam} s · deixe o brilho da tela no máximo</p>
+      <div className="flex flex-wrap justify-center gap-2 px-4">
         {[...TAMANHOS, { rotulo: 'Tela cheia', px: tamanhoDaTelaCheia() }].map((t) => (
           <button
             key={t.rotulo}
