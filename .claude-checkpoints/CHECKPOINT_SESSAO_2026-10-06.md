@@ -318,5 +318,14 @@ CI do `cc82686`: E2E ✓, tsc ✓; unit ✗ em `publicApiV1.spec.ts` "GET /healt
 padrão de 5 s; a função respondeu em 0,2–0,5 s logo depois) → repeti só o job: 155/155 ✓ — passageiro, sem
 relação com o QR. ⚠️ Aviso (não mexi, não é meu): testes ao vivo com o prazo padrão quebram quando a função
 "acorda" devagar. Vercel servindo `cc82686`.
-PRÓXIMO: o Victor mede na /qr-teste (tela cheia × câmera normal/alta). Se só a alta ler, o tablet do
-galpão precisa abrir a câmera mais alta (ou ler um recorte no meio) — medir calor e velocidade antes.
+Resultado da /qr-teste com o QR "Tela cheia": "deu certo" (Victor) — falta ele dizer se foi com a câmera
+NORMAL (a do ponto) ou só a alta. Pedido seguinte: "aumente o tamanho do QR mesmo assim" → `cc415eb`: o QR do
+supervisor ABRE EM TELA CHEIA (ponta a ponta; "Fechar"/"Ampliar o QR") e é desenhado na nitidez real da tela
+(antes saía esticado, bordas borradas); /qr-teste "Tela cheia" de ponta a ponta. Validado: 20 testes de tela,
+E2E 133/136/137 5/5, CI ✓ 3/3, Vercel servindo `cc415eb`.
+🟢 MODO GALPÃO LIGADO no tablet "TESTE TABLET" (o ATIVO, só empresa TESTE TABLET) — pedido explícito do
+Victor ("liga aí o modo galpão, liga pra mim"), 11:13 de 07/10, pelo mesmo UPDATE do botão do painel
+(clock_device_set_modo_galpao; não grava histórico). O "TESTE TABLET" pendente e os tablets reais: intocados.
+Desligar = o botão do painel (2626). Victor vai criar um usuário supervisor na TESTE TABLET (avisado: senha
+provisória é recusada — trocar no painel antes; vincular ao TESTE Victor = ele fica ignorado 2 min depois do
+QR de conectar; "cadastrar novo" com o rosto dele = recusado, é a trava).
