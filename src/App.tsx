@@ -33,6 +33,11 @@ const EmployeePublicRegister = lazy(() =>
 const QrTestePage = lazy(() =>
   import('./components/employee-clock/QrTestePage').then(m => ({ default: m.QrTestePage })),
 );
+// Modo supervisor do tablet no CELULAR (/clock?supervisor=1, 07/10/2026, entrega E) — só baixa
+// quando alguém abre (traz o gerador de QR junto).
+const SupervisorTabletPage = lazy(() =>
+  import('./components/employee-clock/supervisor/SupervisorTabletPage').then(m => ({ default: m.SupervisorTabletPage })),
+);
 
 const AttendanceTab = lazy(() => import('./components/attendance/AttendanceTab').then(m => ({ default: m.AttendanceTab })));
 const EmployeesTab = lazy(() => import('./components/employees/EmployeesTab').then(m => ({ default: m.EmployeesTab })));
@@ -97,6 +102,23 @@ function App() {
     if (!company?.id) return;
     autoCreateWeeklyPeriod(company.id).catch(err => console.error('autoCreateWeeklyPeriod falhou:', err));
   }, [company?.id]);
+
+  // Modo supervisor do tablet, no celular do supervisor (dentro do app "Ponto": escopo /clock).
+  // Parâmetro e não '/clock/supervisor': o app só reconhece o caminho '/clock' exato.
+  if (isClockMode && new URLSearchParams(window.location.search).get('supervisor') === '1') {
+    return (
+      <>
+        <Suspense fallback={
+          <div className="min-h-screen bg-indigo-800 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          </div>
+        }>
+          <SupervisorTabletPage />
+        </Suspense>
+        <Toaster position="top-right" />
+      </>
+    );
+  }
 
   // Tela de registro de ponto — não exige login de supervisor
   if (isClockMode) {

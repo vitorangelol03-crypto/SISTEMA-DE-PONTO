@@ -65,6 +65,17 @@ const LinkDaConsulta: React.FC<{ destaque?: boolean }> = ({ destaque = false }) 
   </a>
 );
 
+/** Entrada do MODO SUPERVISOR do tablet (07/10/2026, entrega E) — no celular, nunca no tablet. */
+const LinkDoSupervisor: React.FC = () => (
+  <a
+    href="/clock?supervisor=1"
+    data-testid="link-do-supervisor"
+    className="block w-full text-xs text-center text-indigo-500 hover:text-indigo-700 py-1"
+  >
+    Sou supervisor — cadastrar funcionário pelo tablet
+  </a>
+);
+
 /* 🔴 O selo de aprovação saiu da tela do funcionário (12/09/2026).
    A aprovação de ponto foi removida do sistema a pedido do Victor, e o
    funcionário via um "🟡 Aguardando aprovação" que não esperava nada: aprovar
@@ -1298,6 +1309,7 @@ export const EmployeeClockIn: React.FC = () => {
               ) : ehTablet ? null : (
                 <>
                   <LinkDaConsulta />
+                  <LinkDoSupervisor />
                   <button
                     onClick={abrirAtivacaoDoTablet}
                     className="w-full text-xs text-gray-400 hover:text-gray-600 py-1"
@@ -1336,6 +1348,7 @@ export const EmployeeClockIn: React.FC = () => {
               )}
               {/* Fora do tablet dá pra CONSULTAR (decisão do Victor, 30/09/2026) — bater, não. */}
               {!device && !modoGalpao && <LinkDaConsulta destaque />}
+              {!device && !modoGalpao && <LinkDoSupervisor />}
               {!modoGalpao && (
                 <button
                   onClick={() => { setEmpresaBarrada(null); setCpfInput(''); setStep('cpf'); }}
