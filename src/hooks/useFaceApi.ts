@@ -54,6 +54,11 @@ export interface UseFaceApi {
   /** Tenta carregar de novo depois de um erro (06/10/2026 — o tablet sem toque se recupera sozinho). */
   tentarDeNovo: () => void;
   detectFace: (video: HTMLVideoElement) => Promise<Float32Array | null>;
+  /**
+   * Quantos rostos há no quadro agora (07/10/2026, modo supervisor do tablet: o rosto de quem está
+   * sendo cadastrado só vale com UMA pessoa na frente — detectFace pega só o maior).
+   */
+  contarRostos: (video: HTMLVideoElement) => Promise<number>;
   compareFaces: (a: Float32Array | number[], b: Float32Array | number[]) => number;
   faceapi: typeof faceapi;
 }
@@ -107,6 +112,13 @@ export function useFaceApi(): UseFaceApi {
     []
   );
 
+  const contarRostos = useCallback(async (video: HTMLVideoElement): Promise<number> => {
+    if (!modelsLoaded) return 0;
+    if (video.readyState < 2 || video.videoWidth === 0) return 0;
+    const deteccoes = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }));
+    return deteccoes.length;
+  }, []);
+
   const compareFaces = useCallback(
     (a: Float32Array | number[], b: Float32Array | number[]): number => {
       const arrA = a instanceof Float32Array ? a : new Float32Array(a);
@@ -116,5 +128,5 @@ export function useFaceApi(): UseFaceApi {
     []
   );
 
-  return { loading, ready, error, tentarDeNovo, detectFace, compareFaces, faceapi };
+  return { loading, ready, error, tentarDeNovo, detectFace, contarRostos, compareFaces, faceapi };
 }

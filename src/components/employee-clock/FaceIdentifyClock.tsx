@@ -7,11 +7,19 @@ import {
   CAMERA_DESCANSA_APOS_MS, FACE_MATCH_THRESHOLD, MarkingPosition, marcacaoAnterior, nomeDaMarcacaoAnterior,
   quickExitMinutes, resolveMarkingCount, resolveNextClockAction,
   GALPAO_AVISO_MS, GALPAO_ECONOMIA_OLHA_A_CADA_MS, GALPAO_IGNORA_APOS_AVISO_MS, GALPAO_SEGUNDA_FOTO_TENTATIVAS,
-  GALPAO_TENTA_DE_NOVO_MS, decidirSegundaFoto, horaDaMarcacao,
+  GALPAO_TENTA_DE_NOVO_MS, decidirSegundaFoto, horaDaMarcacao, GALPAO_IGNORA_SUPERVISOR_MS, QR_REPETIDO_IGNORA_MS,
 } from './clockGuards';
 import { useFrontCamera } from './useFrontCamera';
 import { CameraProblem } from './CameraProblem';
 import { abertoComoApp } from './useAppDoPonto';
+import { ErroDoSupervisor, tabletEstadoDoQr } from '../../services/supervisorTablet';
+import { lerQrDoQuadro } from './tabletSupervisor/leitorDeQr';
+import { TabletModoSupervisor, type FimDoSupervisor, type LeituraDoRosto } from './tabletSupervisor/TabletModoSupervisor';
+
+/** Enquanto o supervisor confirma o rosto no celular, o tablet pergunta o resultado neste ritmo. */
+const AGUARDA_CONFIRMACAO_A_CADA_MS = 2000;
+/** Faixas do modo supervisor ("✓ rosto cadastrado") somem sozinhas. */
+const FAIXA_DO_SUPERVISOR_MS = 4000;
 
 /** Alguém que a câmera deve ignorar até `ate` (ms): quem acabou de bater, ou disse "Não" à pergunta. */
 export interface RecemBatido {
@@ -83,7 +91,9 @@ type Phase =
   | 'already-done'
   // Modo galpão (06/10/2026): avisos sem botão, que somem sozinhos em GALPAO_AVISO_MS.
   | 'recent-beat'
-  | 'not-recorded';
+  | 'not-recorded'
+  // Modo supervisor (07/10/2026, entrega F): o tablet viu o QR do celular do supervisor.
+  | 'supervisor';
 
 // Pedido do Victor (04/09/2026): "não pode confundir, tem que ser robusta" —
 // nunca gravamos ponto sem a pessoa ver o próprio nome e ter uma chance real
@@ -197,7 +207,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
 }) => {
   const {
     loading: modelsLoading, ready: modelsReady, error: modelsError, detectFace, compareFaces,
-    tentarDeNovo: tentarCarregarDeNovo,
+    tentarDeNovo: tentarCarregarDeNovo, contarRostos,
   } = useFaceApi();
   const videoRef = useRef<HTMLVideoElement>(null);
   /**
@@ -251,6 +261,23 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   const [avisoRecente, setAvisoRecente] = useState<{ nome: string; texto: string } | null>(null);
   /** Modo galpão: por que a 2ª foto não deixou gravar. */
   const [naoRegistrado, setNaoRegistrado] = useState<'saiu' | 'outra-pessoa' | null>(null);
+  /** Modo supervisor (entrega F): o QR que o tablet viu — ou o rosto que o supervisor mandou tirar de novo. */
+  const [fluxoSupervisor, setFluxoSupervisor] = useState<{ qrText: string } | { rosto: LeituraDoRosto } | null>(null);
+  /** Rosto enviado, esperando o supervisor confirmar no celular (a câmera segue batendo o ponto dos outros). */
+  const [aguardandoRosto, setAguardandoRosto] = useState<LeituraDoRosto | null>(null);
+  const aguardandoRostoRef = useRef<LeituraDoRosto | null>(null);
+  const [faixaSupervisor, setFaixaSupervisor] = useState<string | null>(null);
+  /**
+   * Rosto enviado SEM "bater o ponto agora": a pessoa fica ignorada enquanto o supervisor decide (no
+   * "refazer", o rosto ANTIGO vale até a confirmação — ela seria reconhecida e bateria fora de hora)
+   * e por GALPAO_IGNORA_SUPERVISOR_MS depois que a espera acaba — confirmado, recusado ou vencido: ela
+   * ainda está na frente do tablet, e o supervisor disse "não bater agora". É a MESMA entrada da lista
+   * de ignorados: o prazo dela é acertado quando a espera acaba (nunca fica ignorada pra sempre).
+   */
+  const ignoradoNaEsperaRef = useRef<RecemBatido | null>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const ultimoQrRef = useRef<{ texto: string; em: number } | null>(null);
+  const identifiedRef = useRef<{ employee: Employee } | null>(null);
 
   /**
    * 🔴 ACHADO EM 22/09/2026 — POR QUE A FACIAL SEM CPF "NÃO ENTRAVA".
@@ -298,9 +325,11 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   useEffect(() => () => { clearTimers(); }, []);
 
   useEffect(() => {
+    // Esperando o supervisor confirmar um rosto também: recarregar agora perderia o "ignorar por 2 min"
+    // de quem teve o rosto confirmado sem "bater o ponto agora".
     onOcupado?.(phase === 'identifying' || phase === 'identified' || phase === 'confirm-exit' || phase === 'already-done'
-      || phase === 'recent-beat' || phase === 'not-recorded');
-  }, [phase, onOcupado]);
+      || phase === 'recent-beat' || phase === 'not-recorded' || phase === 'supervisor' || aguardandoRosto !== null);
+  }, [phase, onOcupado, aguardandoRosto]);
 
   // Qualquer coisa acontecendo na câmera conta como "tem gente": adia o descanso.
   useEffect(() => { ultimaAtividadeRef.current = Date.now(); }, [phase]);
@@ -422,6 +451,116 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   }, []);
   const avisarRecenteRef = useRef<typeof avisarBatidaRecente | null>(null);
 
+  /**
+   * Modo supervisor (07/10/2026, entrega F): o tablet viu o QR do celular do supervisor (ou o
+   * supervisor mandou tirar o rosto de novo). Pausa o reconhecimento só enquanto o cartão do
+   * supervisor está na tela. QR durante a contagem do nome CANCELA a contagem — quem mostra o QR é
+   * o supervisor, que não pode ganhar uma batida sem querer.
+   */
+  const iniciarSupervisor = useCallback((inicio: { qrText: string } | { rosto: LeituraDoRosto }) => {
+    vezRef.current += 1; // identificação que ainda vier não vale mais
+    clearTimers();
+    if (identifiedRef.current) recentRef.current.set(identifiedRef.current.employee.id, Date.now());
+    setIdentified(null);
+    setCountdown(0);
+    setMinutosDesdeAnterior(null);
+    setComprovantePendente(undefined);
+    setAvisoRecente(null);
+    setNaoRegistrado(null);
+    if (economiaRef.current) {
+      economiaRef.current = false;
+      setEconomia(false);
+    }
+    ultimaAtividadeRef.current = Date.now();
+    setFluxoSupervisor(inicio);
+    // Na hora, não só no próximo render: a próxima volta do laço já tem que ver o reconhecimento pausado.
+    phaseRef.current = 'supervisor';
+    setPhase('supervisor');
+  }, []);
+  const iniciarSupervisorRef = useRef<typeof iniciarSupervisor | null>(null);
+
+  /** Acabou a espera do rosto sem "bater o ponto agora": a pessoa fica ignorada só mais GALPAO_IGNORA_SUPERVISOR_MS. */
+  const soltarIgnoradoNaEspera = () => {
+    const ignorado = ignoradoNaEsperaRef.current;
+    if (!ignorado) return;
+    ignorado.ate = Date.now() + GALPAO_IGNORA_SUPERVISOR_MS;
+    ignoradoNaEsperaRef.current = null;
+  };
+
+  const terminarSupervisor = useCallback((fim: FimDoSupervisor) => {
+    setFluxoSupervisor(null);
+    if (fim.tipo === 'parear' && fim.ignorarFuncionario) {
+      // O supervisor está na frente do tablet com o celular: o ponto dele não bate sozinho.
+      adiadosRef.current.push({ employeeId: fim.ignorarFuncionario, ate: Date.now() + GALPAO_IGNORA_SUPERVISOR_MS });
+    }
+    if (fim.tipo === 'rosto-enviado') {
+      if (!fim.leitura.baterPonto && ignoradoNaEsperaRef.current?.employeeId !== fim.leitura.employeeId) {
+        soltarIgnoradoNaEspera();
+        ignoradoNaEsperaRef.current = { employeeId: fim.leitura.employeeId, ate: Number.MAX_SAFE_INTEGER };
+        adiadosRef.current.push(ignoradoNaEsperaRef.current);
+      }
+      aguardandoRostoRef.current = fim.leitura;
+      setAguardandoRosto(fim.leitura);
+    }
+    // A captura de novo ("tirar outra foto") falhou: a espera acabou sem rosto novo.
+    if (fim.tipo === 'erro' && !aguardandoRostoRef.current) soltarIgnoradoNaEspera();
+    resumeRef.current?.();
+  }, []);
+
+  // Esperando o supervisor confirmar o rosto: pergunta ao servidor até ele decidir.
+  useEffect(() => {
+    if (!aguardandoRosto || !deviceToken) return;
+    let cancelado = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const encerrar = (faixa: string | null) => {
+      aguardandoRostoRef.current = null;
+      setAguardandoRosto(null);
+      if (faixa) setFaixaSupervisor(faixa);
+    };
+    const perguntar = async () => {
+      try {
+        const st = await tabletEstadoDoQr(deviceToken, aguardandoRosto.qrId);
+        if (cancelado) return;
+        if (st.status === 'confirmado') {
+          soltarIgnoradoNaEspera();
+          encerrar(`✓ Rosto de ${aguardandoRosto.primeiroNome} ${aguardandoRosto.modo === 'refazer' ? 'refeito' : 'cadastrado'}`);
+          return;
+        }
+        if (st.status === 'lido') {
+          // O supervisor pediu outra foto: tira de novo assim que a câmera estiver LIVRE (procurando,
+          // sem detecção nem identificação no meio — senão o resultado delas passaria por cima).
+          // Quem estava ignorado na espera continua ignorado (vai ser fotografado de novo).
+          if (phaseRef.current === 'scanning' && !detectInFlightRef.current && !identifyInFlightRef.current) {
+            const leitura = aguardandoRosto;
+            encerrar(null);
+            iniciarSupervisorRef.current?.({ rosto: { ...leitura } });
+            return;
+          }
+        } else if (st.status !== 'capturado') {
+          soltarIgnoradoNaEspera();
+          encerrar(`O rosto de ${aguardandoRosto.primeiroNome} não foi cadastrado — veja no celular do supervisor.`);
+          return;
+        }
+      } catch (err) {
+        if (cancelado) return;
+        if (err instanceof ErroDoSupervisor && err.status === 404) { soltarIgnoradoNaEspera(); encerrar(null); return; }
+        console.warn('Modo supervisor: não deu pra saber se o rosto foi confirmado (tenta de novo):', err);
+      }
+      if (!cancelado) timer = setTimeout(() => { void perguntar(); }, AGUARDA_CONFIRMACAO_A_CADA_MS);
+    };
+    void perguntar();
+    return () => {
+      cancelado = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [aguardandoRosto, deviceToken]);
+
+  useEffect(() => {
+    if (!faixaSupervisor) return;
+    const t = setTimeout(() => setFaixaSupervisor(null), FAIXA_DO_SUPERVISOR_MS);
+    return () => clearTimeout(t);
+  }, [faixaSupervisor]);
+
   /** Batida logo depois da anterior: pergunta em vez de contar sozinho (ver SAIDA_RAPIDA_SEM_RESPOSTA_MS). */
   const askQuickExit = useCallback((
     employee: Employee, descriptor: number[], markingPosition: MarkingPosition | undefined, label: string,
@@ -459,6 +598,8 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
     descansaSemNinguemRef.current = descansaSemNinguem;
     modoGalpaoRef.current = modoGalpao;
     onConfirmedRef.current = onConfirmed;
+    iniciarSupervisorRef.current = iniciarSupervisor;
+    identifiedRef.current = identified;
     segundaFotoRef.current = conferirSegundaFoto;
     avisarRecenteRef.current = avisarBatidaRecente;
   });
@@ -527,6 +668,24 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
       }
 
       if (descansandoRef.current) return; // câmera desligada: nada pra olhar
+
+      // Modo supervisor (07/10/2026, entrega F): o QR do celular é procurado ANTES do rosto — e
+      // também durante a contagem do nome (o supervisor mostrando o QR não bate o próprio ponto).
+      // No modo econômico, no mesmo ritmo lento do rosto.
+      if (modoGalpaoRef.current && deviceTokenRef.current && !identifyInFlightRef.current && !detectInFlightRef.current
+          && (phaseRef.current === 'scanning' || phaseRef.current === 'identified')
+          && (!economiaRef.current || Date.now() - ultimaOlhadaRef.current >= GALPAO_ECONOMIA_OLHA_A_CADA_MS)) {
+        qrCanvasRef.current ??= document.createElement('canvas');
+        const texto = lerQrDoQuadro(video, qrCanvasRef.current);
+        const agora = Date.now();
+        const visto = ultimoQrRef.current;
+        if (texto && !(visto && visto.texto === texto && agora - visto.em < QR_REPETIDO_IGNORA_MS)) {
+          ultimoQrRef.current = { texto, em: agora };
+          iniciarSupervisorRef.current?.({ qrText: texto });
+          return;
+        }
+      }
+
       if (phaseRef.current !== 'scanning' || identifyInFlightRef.current || detectInFlightRef.current) return;
       const now = Date.now();
       // O minuto sem ninguém só conta com a câmera ABERTA: abrindo ou com problema não descansa
@@ -564,7 +723,9 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         } finally {
           detectInFlightRef.current = false;
         }
-        if (!mounted) return;
+        // A tela saiu de "procurando" durante a detecção (o supervisor mandou tirar o rosto de novo):
+        // esta volta não identifica ninguém.
+        if (!mounted || phaseRef.current !== 'scanning') return;
         if (!descriptor) {
           // Sem rosto na câmera: quem chegar agora começa a contagem de recusas do zero.
           noMatchStreakRef.current = 0;
@@ -607,6 +768,13 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         }
 
         if (!result.matched || !result.employeeId) {
+          // Esperando o supervisor confirmar um rosto: quem ainda não tem rosto está na frente —
+          // não pisca "Não reconheci" (o plano: a fila segue, sem aviso falso).
+          if (aguardandoRostoRef.current) {
+            noMatchStreakRef.current = 0;
+            setPhase('scanning');
+            return;
+          }
           noMatchStreakRef.current += 1;
           if (noMatchStreakRef.current < NO_MATCH_BEFORE_WARNING) {
             setPhase('scanning');
@@ -752,6 +920,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   : phase === 'already-done'  ? { color: 'green',                                  label: `✅ ${identified?.employee.name.split(' ')[0]}, ponto completo hoje!` }
   : phase === 'no-match'      ? { color: 'red',   shake: true,                     label: modoGalpao ? '❌ Não reconheci — chame o supervisor' : '❌ Não reconheci. Tente de novo.' }
   : phase === 'recent-beat'   ? { color: 'green',                                  label: `✅ ${avisoRecente?.nome}, você ${avisoRecente?.texto}` }
+  : phase === 'supervisor'    ? { color: 'blue',                                   label: '📱 Modo supervisor' }
   : phase === 'not-recorded'  ? { color: 'red',   shake: true,                     label: naoRegistrado === 'outra-pessoa'
                                                                                      ? '⚠️ Trocou a pessoa na frente — ponto NÃO registrado'
                                                                                      : '⚠️ Saiu da frente antes do fim — ponto NÃO registrado' }
@@ -872,6 +1041,29 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
 
       {/* ── Câmera descansando (05/10/2026): toque em qualquer lugar acorda ── */}
       {descansando && sobreposicao === null && <TelaDeDescanso onAcordar={acordar} onUseCpf={onUseCpf} />}
+
+      {/* ── Modo supervisor (07/10/2026, entrega F): o cartão do QR/rosto por cima da câmera ── */}
+      {telaDaCamera && phase === 'supervisor' && fluxoSupervisor && deviceToken && (
+        <TabletModoSupervisor
+          key={'qrText' in fluxoSupervisor ? fluxoSupervisor.qrText : `rosto:${fluxoSupervisor.rosto.qrId}`}
+          videoRef={videoRef}
+          deviceToken={deviceToken}
+          inicio={fluxoSupervisor}
+          detectFace={detectFace}
+          contarRostos={contarRostos}
+          onFim={terminarSupervisor}
+        />
+      )}
+      {telaDaCamera && (aguardandoRosto || faixaSupervisor) && (
+        <div className="absolute top-16 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
+          <p
+            className="rounded-full px-4 py-2 text-sm font-semibold shadow-lg bg-[rgba(10,8,22,0.85)] text-[#F1E9FF] ring-1 ring-inset ring-white/25"
+            data-testid={aguardandoRosto ? 'tablet-aguardando-confirmacao' : 'tablet-faixa-supervisor'}
+          >
+            {aguardandoRosto ? `⏳ Aguardando o supervisor confirmar o rosto de ${aguardandoRosto.primeiroNome}` : faixaSupervisor}
+          </p>
+        </div>
+      )}
 
       {/* ── Modo econômico (modo galpão, 06/10/2026): câmera ligada, a tela acorda sozinha com rosto ── */}
       {economia && sobreposicao === null && <TelaDeDescanso semToque onAcordar={sairDaEconomia} onUseCpf={onUseCpf} />}

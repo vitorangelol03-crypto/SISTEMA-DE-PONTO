@@ -226,6 +226,17 @@ export function decidirSegundaFoto(distancia: number | null | undefined): Decisa
   return distancia < FACE_MATCH_THRESHOLD ? 'mesma-pessoa' : 'outra-pessoa';
 }
 
+/**
+ * Modo supervisor do tablet (07/10/2026, entrega F): o MESMO QR visto de novo (já lido — usado ou
+ * vencido) é ignorado por este tempo, pra não ficar mostrando "código vencido" enquanto o celular
+ * continua na frente da câmera.
+ */
+export const QR_REPETIDO_IGNORA_MS = 15_000;
+/** Depois do QR de conectar, o funcionário ligado ao supervisor não bate o ponto sozinho por este tempo
+ *  (ele está na frente do tablet com o celular — plano, "brechas"). Vale também pra quem teve o rosto
+ *  confirmado SEM "bater o ponto agora". */
+export const GALPAO_IGNORA_SUPERVISOR_MS = 2 * 60_000;
+
 /** Quantas vezes a 2ª foto procura o rosto antes de concluir "saiu da frente" (um quadro tremido
  *  sozinho não pode cancelar a batida de quem continua parado ali). */
 export const GALPAO_SEGUNDA_FOTO_TENTATIVAS = 3;

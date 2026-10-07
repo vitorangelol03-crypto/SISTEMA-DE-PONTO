@@ -6,6 +6,7 @@
  * Roda com: npx vitest run supervisorCelularTela
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { StrictMode } from 'react';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 
 const srv = {
@@ -98,6 +99,15 @@ describe('login do supervisor', () => {
 });
 
 describe('conectar ao tablet', () => {
+  it('o QR de conectar nasce UMA vez mesmo com o efeito rodando 2 vezes (modo estrito do React)', async () => {
+    // Cada QR novo cancela o anterior no servidor: 2 QRs deixavam o celular podendo mostrar o cancelado.
+    srv.gerarQrDeConectar.mockResolvedValue(QR);
+    srv.estadoDoQr.mockResolvedValue({ status: 'pendente', tipo: 'parear', tablet: null, tentativas: 0 });
+    render(<StrictMode><ConectarAoTablet session="s" onConectado={vi.fn()} onSessaoAcabou={vi.fn()} /></StrictMode>);
+    await waitFor(() => expect(screen.getByTestId('qr-na-tela').getAttribute('data-qr')).toBe(QR.qrText));
+    expect(srv.gerarQrDeConectar).toHaveBeenCalledTimes(1);
+  });
+
   it('mostra o QR e, quando o tablet lê, avisa e segue', async () => {
     srv.gerarQrDeConectar.mockResolvedValue(QR);
     srv.estadoDoQr.mockResolvedValueOnce({ status: 'pendente', tipo: 'parear', tablet: null, tentativas: 0 })
