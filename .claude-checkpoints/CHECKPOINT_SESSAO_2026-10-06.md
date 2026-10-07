@@ -329,3 +329,41 @@ Victor ("liga aí o modo galpão, liga pra mim"), 11:13 de 07/10, pelo mesmo UPD
 Desligar = o botão do painel (2626). Victor vai criar um usuário supervisor na TESTE TABLET (avisado: senha
 provisória é recusada — trocar no painel antes; vincular ao TESTE Victor = ele fica ignorado 2 min depois do
 QR de conectar; "cadastrar novo" com o rosto dele = recusado, é a trava).
+
+## 22. ✅ 07/10 12:40–12:50 — TESTE REAL NO TABLET (empresa TESTE TABLET): o fluxo inteiro funcionou
+
+Tudo conferido no banco (vigia só-leitura) — horários de Brasília:
+- Supervisor 2626 (TESTE TABLET) → o tablet REAL leu o QR de conectar do celular em 9–11 s (12:40:26).
+- Refazer rosto do TESTE Victor ("bater o ponto" ligado): QR lido 12:41:43, fotos 12:41:55 (variação 0,13;
+  distância do rosto antigo 0,43), confirmado 12:42:16; biometria temporária apagada; histórico gravado.
+- Funcionário NOVO "lavinia" pelo celular (12:42:52, pendente, criada pelo 2626) → QR lido 12:43:01 → fotos
+  12:43:31 (0,24) → confirmado 12:44:20 → reconhecida (0,25) → ENTRADA 12:44:29, GPS dentro da área. ✅
+- TESTE Victor reconhecido com o rosto novo (0,22–0,30) mas SEM batida enquanto andava (a 2ª foto no fim da
+  contagem não o achou — de propósito: quem passa andando não ganha batida); parado: ENTRADA 12:50:42, GPS
+  dentro (5 s do reconhecimento à gravação). Rostos desconhecidos: 0,65–0,86 (limite 0,50) — ninguém confundido.
+Achados: (1) login do 2626 caiu 2× na CARATINGA — o campo "Empresa" vinha DEPOIS da senha, já marcado em "A
+empresa do meu usuário", e o "Ir" do teclado entrava direto → consertado em `d962a43` (empresa obrigatória
+pro mestre, campo antes da senha; A/B + E2E 136/137); (2) quem passava andando não sabia por que não batia →
+`72ccf29`: "✋ Fique parado olhando para a câmera" grande na contagem, só no modo galpão (pedido do Victor;
+A/B + E2E 134/137 com 0 toques); (3) quando a 2ª foto barra, o tablet não registra o motivo no banco (só erro
+de câmera vai pro error_logs) — o diagnóstico remoto depende do Victor contar o que viu. Sugestão em aberto
+(não feita): registrar "ponto não registrado" com o motivo.
+Criados a pedido do Victor na TESTE TABLET: usuário 7777 "Supervisor Teste" (senha de teste combinada no chat,
+2 permissões do tablet) ligado ao funcionário "SUPERVISOR TESTE" (sem rosto) — login provado no servidor.
+Limpeza a pedido ("pode limpar os dados de teste", ~13:10): saíram lavinia (+ entrada + 2 tentativas de rosto),
+usuário 7777 (+ permissões, sessões, meu login de prova) e SUPERVISOR TESTE; cópia antes de apagar no scratchpad.
+Na TESTE TABLET ficou só o TESTE Victor (rosto novo, entrada 12:50); histórico do 2626 mantido; modo galpão
+continua LIGADO no TESTE TABLET.
+🔴 CI do `72ccf29` vermelho no E2E 02 ("CPF válido pede PIN" / "PIN errado") — causa PROVADA: a lavinia foi
+cadastrada com o CPF do Victor (122.326.256-13 = TEST_EMPLOYEE_CPF dos testes, ficha "Victor Angelo…" na
+Caratinga); com o CPF em 2 empresas a tela perguntou "Em qual empresa?" em vez do PIN (CI 13:04–13:06; a lavinia
+existiu 12:42→~13:10). Não é defeito do código; a limpeza tirou a causa → repeti só o job de E2E: ✓ (CI
+verde 3/3). Vercel servindo `72ccf29`.
+FALTA pro galpão (Victor): não existe tablet ATIVO da Caratinga/Ponte Nova — remover o "TESTE TABLET" ativo
+(se for o mesmo aparelho), gerar código novo SÓ Caratinga + Ponte Nova (sem a TESTE TABLET: o rosto dele está no
+TESTE Victor e na ficha da Caratinga), ativar no tablet, ligar o modo galpão; vincular 01–04 (e 8888 pra PN) às
+fichas deles + as 2 permissões. Ofereci deixar os usuários prontos se ele disser quem é quem.
+⚠️ Observação pro Victor (regra de negócio, não mexi): o cadastro pelo tablet aceita um CPF que já é de uma
+pessoa ATIVA de OUTRA empresa (de propósito: a mesma pessoa pode estar em Caratinga e Ponte Nova), mesmo com
+NOME diferente — provável erro de digitação. Sugestão: avisar o supervisor quando o CPF existe em outra empresa
+com outro nome.
