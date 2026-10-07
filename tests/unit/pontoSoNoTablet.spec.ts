@@ -26,10 +26,11 @@ const CARATINGA = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
 const PONTE_NOVA = '2b2abc4b-084c-4cf0-b5f1-02792513241d';
 
 const tabletCaratinga: TabletAtivo = {
-  id: 'dev-1', name: 'Tablet portaria', companyIds: [CARATINGA], companyNames: ['Caratinga'],
+  id: 'dev-1', name: 'Tablet portaria', companyIds: [CARATINGA], companyNames: ['Caratinga'], modoGalpao: false,
 };
 const tabletDasDuas: TabletAtivo = {
   id: 'dev-2', name: 'Tablet galpão', companyIds: [CARATINGA, PONTE_NOVA], companyNames: ['Caratinga', 'Ponte Nova'],
+  modoGalpao: false,
 };
 
 describe('código de ativação', () => {
@@ -110,7 +111,15 @@ describe('decidirAparelho — a regra', () => {
 describe('tabletDaLinha', () => {
   it('converte a linha da função do banco', () => {
     expect(tabletDaLinha({ id: 'd', name: 'T', company_ids: [CARATINGA], company_names: ['Caratinga'] }))
-      .toEqual({ id: 'd', name: 'T', companyIds: [CARATINGA], companyNames: ['Caratinga'] });
+      .toEqual({ id: 'd', name: 'T', companyIds: [CARATINGA], companyNames: ['Caratinga'], modoGalpao: false });
+  });
+
+  it('modo galpão (06/10/2026): só true quando a linha diz true — sem a coluna, ou lixo, é false', () => {
+    const base = { id: 'd', name: 'T', company_ids: [CARATINGA], company_names: ['Caratinga'] };
+    expect(tabletDaLinha({ ...base, modo_galpao: true })?.modoGalpao).toBe(true);
+    expect(tabletDaLinha({ ...base, modo_galpao: false })?.modoGalpao).toBe(false);
+    expect(tabletDaLinha({ ...base, modo_galpao: 'true' })?.modoGalpao).toBe(false);
+    expect(tabletDaLinha(base)?.modoGalpao).toBe(false);
   });
 
   it('linha vazia, sem empresa ou lixo = não é tablet', () => {

@@ -5090,6 +5090,11 @@ export interface ClockDevice {
   name: string;
   companyIds: string[];
   companyNames: string[];
+  /**
+   * Modo galpão — o tablet SEM TOQUE (06/10/2026). Opcional de propósito: servidor antigo não
+   * manda, e ausente vale DESLIGADO (a tela fica exatamente como sempre foi).
+   */
+  modoGalpao?: boolean;
 }
 
 /** Quem é este aparelho? null = não é um tablet ativo (nunca ativado, removido ou segredo inválido). */
@@ -5140,6 +5145,8 @@ export interface ClockDeviceRow {
   revoked_by: string | null;
   company_ids: string[];
   company_names: string[];
+  /** Modo galpão (tablet sem toque, 06/10/2026). Ausente (banco antigo) = desligado. */
+  modo_galpao?: boolean;
 }
 
 export const listClockDevices = async (): Promise<ClockDeviceRow[]> => {
@@ -5166,6 +5173,19 @@ export const createClockDevicePairing = async (
 export const revokeClockDevice = async (deviceId: string): Promise<void> => {
   const { error } = await supabase.rpc('clock_device_revoke', { p_device_id: deviceId });
   if (error) throw error;
+};
+
+/**
+ * Liga/desliga o MODO GALPÃO de um tablet (06/10/2026, plano do tablet sem toque): com ele ligado
+ * a tela daquele tablet não pede toque nenhum. Só o 2626 (o banco confere).
+ */
+export const setClockDeviceModoGalpao = async (deviceId: string, enabled: boolean): Promise<boolean> => {
+  const { data, error } = await supabase.rpc('clock_device_set_modo_galpao', {
+    p_device_id: deviceId,
+    p_enabled: enabled,
+  });
+  if (error) throw error;
+  return data === true;
 };
 
 /** Liga/desliga "ponto só no tablet" de uma empresa. Ligar exige pelo menos um tablet ativo dela. */

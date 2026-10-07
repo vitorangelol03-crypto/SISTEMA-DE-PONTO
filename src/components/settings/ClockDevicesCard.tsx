@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Tablet, KeyRound, ShieldCheck, Trash2, RefreshCw, Loader2 } from 'lucide-react';
+import { Tablet, KeyRound, ShieldCheck, Trash2, RefreshCw, Loader2, Hand } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getCompanies,
@@ -7,6 +7,7 @@ import {
   createClockDevicePairing,
   revokeClockDevice,
   setClockDeviceLock,
+  setClockDeviceModoGalpao,
   type ClockDeviceRow,
   type Company,
 } from '../../services/database';
@@ -22,7 +23,9 @@ import { mensagemDeErro } from '../../utils/mensagemDeErro';
  *      na tela de ponto ("Ativar este aparelho como tablet de ponto");
  *   2. ver os tablets (ativos, aguardando ativação, removidos) e remover um;
  *   3. ligar/desligar "ponto só no tablet" por empresa — ligar exige um tablet ativo dela, e o
- *      banco recusa remover o último tablet de uma empresa com a trava ligada.
+ *      banco recusa remover o último tablet de uma empresa com a trava ligada;
+ *   4. (06/10/2026) ligar/desligar o MODO GALPÃO de um tablet ativo — a tela dele deixa de pedir
+ *      toque (plano do tablet sem toque, decisões do Victor de 05/10). Nasce desligado.
  * Quem garante tudo isso é o banco (funções clock_device_*, conferem sub = 2626); a tela só
  * mostra e confirma.
  */
@@ -58,6 +61,8 @@ export const ClockDevicesCard: React.FC = () => {
   const [mudandoTrava, setMudandoTrava] = useState(false);
   const [confirmarRemocao, setConfirmarRemocao] = useState<ClockDeviceRow | null>(null);
   const [removendo, setRemovendo] = useState(false);
+  const [confirmarGalpao, setConfirmarGalpao] = useState<{ device: ClockDeviceRow; ligar: boolean } | null>(null);
+  const [mudandoGalpao, setMudandoGalpao] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -127,6 +132,21 @@ export const ClockDevicesCard: React.FC = () => {
       toast.error(mensagemDeErro(err, 'Não foi possível remover o tablet'));
     } finally {
       setRemovendo(false);
+    }
+  };
+
+  const aplicarGalpao = async () => {
+    if (!confirmarGalpao) return;
+    setMudandoGalpao(true);
+    try {
+      await setClockDeviceModoGalpao(confirmarGalpao.device.id, confirmarGalpao.ligar);
+      toast.success(`${confirmarGalpao.device.name}: modo galpão ${confirmarGalpao.ligar ? 'LIGADO' : 'desligado'}.`);
+      setConfirmarGalpao(null);
+      await carregar();
+    } catch (err) {
+      toast.error(mensagemDeErro(err, 'Não foi possível mudar o modo galpão'));
+    } finally {
+      setMudandoGalpao(false);
     }
   };
 
@@ -297,6 +317,18 @@ export const ClockDevicesCard: React.FC = () => {
                         </p>
                       </div>
                       <span className={`text-xs font-semibold px-2 py-1 rounded ${status.classe}`}>{status.texto}</span>
+                      {d.status === 'active' && d.modo_galpao === true && (
+                        <span className="text-xs font-semibold px-2 py-1 rounded bg-indigo-100 text-indigo-800">Modo galpão</span>
+                      )}
+                      {d.status === 'active' && (
+                        <button
+                          onClick={() => setConfirmarGalpao({ device: d, ligar: d.modo_galpao !== true })}
+                          className="inline-flex items-center gap-1 px-3 py-2 text-sm text-indigo-700 hover:bg-indigo-50 rounded-md min-h-[40px]"
+                          data-testid={`modo-galpao-${d.name}`}
+                        >
+                          <Hand className="w-4 h-4" /> {d.modo_galpao === true ? 'Desligar modo galpão' : 'Ligar modo galpão'}
+                        </button>
+                      )}
                       {(d.status === 'active' || d.status === 'pending') && (
                         <button
                           onClick={() => setConfirmarRemocao(d)}
@@ -309,6 +341,37 @@ export const ClockDevicesCard: React.FC = () => {
                   );
                 })}
               </ul>
+            )}
+
+            {confirmarGalpao && (
+              <div className="border-2 border-indigo-300 bg-indigo-50 rounded-md p-3 space-y-2" role="alertdialog" aria-label="Confirmar modo galpão">
+                {confirmarGalpao.ligar ? (
+                  <p className="text-sm text-indigo-900">
+                    Ligar o <strong>modo galpão</strong> em <strong>{confirmarGalpao.device.name}</strong>? A tela dele passa a
+                    não pedir toque nenhum: a câmera fica sempre olhando (tela escura com relógio quando não tem ninguém),
+                    quem bate de novo em menos de 10 minutos só vê o aviso e o ponto não é gravado, e quem não é
+                    reconhecido vê &quot;chame o supervisor&quot;. Vale só pra este tablet.
+                  </p>
+                ) : (
+                  <p className="text-sm text-indigo-900">
+                    Desligar o modo galpão em <strong>{confirmarGalpao.device.name}</strong>? A tela volta a ser a de sempre
+                    (descansa a câmera e pede toque pra voltar).
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => void aplicarGalpao()}
+                    disabled={mudandoGalpao}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                    data-testid="confirmar-modo-galpao"
+                  >
+                    {mudandoGalpao ? 'Salvando...' : confirmarGalpao.ligar ? 'Confirmar: ligar modo galpão' : 'Confirmar: desligar modo galpão'}
+                  </button>
+                  <button onClick={() => setConfirmarGalpao(null)} className="px-4 py-2 bg-white border border-gray-300 rounded-md text-sm">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
             )}
 
             {confirmarRemocao && (

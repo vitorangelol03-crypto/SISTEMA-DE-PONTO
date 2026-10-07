@@ -53,6 +53,12 @@ export interface TabletAtivo {
   name: string;
   companyIds: string[];
   companyNames: string[];
+  /**
+   * Modo galpão — o tablet SEM TOQUE (06/10/2026, migration 20261007022446): a tela não pede
+   * toque nenhum. Nasce false; só o 2626 liga no cartão "Tablets de ponto". Linha sem a coluna
+   * (ex.: a da ativação) = false.
+   */
+  modoGalpao: boolean;
 }
 
 /** Converte a linha das funções clock_device_resolve/clock_device_activate. */
@@ -63,7 +69,7 @@ export function tabletDaLinha(linha: unknown): TabletAtivo | null {
   const ids = Array.isArray(r.company_ids) ? r.company_ids.filter((x): x is string => typeof x === 'string') : [];
   const nomes = Array.isArray(r.company_names) ? r.company_names.filter((x): x is string => typeof x === 'string') : [];
   if (ids.length === 0) return null;
-  return { id: r.id, name: r.name, companyIds: ids, companyNames: nomes };
+  return { id: r.id, name: r.name, companyIds: ids, companyNames: nomes, modoGalpao: r.modo_galpao === true };
 }
 
 export type DecisaoDoAparelho =
