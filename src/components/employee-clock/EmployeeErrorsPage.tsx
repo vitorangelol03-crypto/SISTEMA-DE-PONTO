@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import {
   getEmployeeByCpf,
   verifyEmployeePin,
+  setEmployeePin,
   getCompaniesByEmployeeCpf,
   Employee,
   Company,
@@ -20,7 +21,10 @@ function formatCPFMask(value: string): string {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 }
 
-type Step = 'cpf' | 'company-select' | 'pin' | 'dashboard' | 'error';
+type Step = 'cpf' | 'company-select' | 'pin' | 'criar-pin' | 'dashboard' | 'error';
+
+/** PIN: só números, de 4 a 6 (a mesma regra do servidor e do terminal). */
+const PIN_VALIDO = /^\d{4,6}$/;
 
 export const EmployeeErrorsPage: React.FC = () => {
   const { setCompany } = useCompany();
@@ -32,6 +36,10 @@ export const EmployeeErrorsPage: React.FC = () => {
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  /** 1º acesso sem PIN (decisão 12 do plano do tablet sem toque, 07/10/2026): cria o PIN aqui. */
+  const [novoPin, setNovoPin] = useState('');
+  const [confirmaPin, setConfirmaPin] = useState('');
+  const [erroDoPin, setErroDoPin] = useState('');
 
   // Versão nova publicada → recarrega sozinha, só na tela inicial sem CPF digitado (01/10/2026).
   useAtualizacaoAutomatica({ podeRecarregar: step === 'cpf' && cpfInput === '' });
@@ -48,8 +56,14 @@ export const EmployeeErrorsPage: React.FC = () => {
       return;
     }
     if (!emp.pin_configured) {
-      setErrorMsg('PIN não configurado. Acesse "Registrar Ponto" no terminal do trabalho primeiro para configurar seu PIN.');
-      setStep('error');
+      // 1º acesso (decisão 12 do Victor, 05/10/2026): quem foi cadastrado pelo supervisor no tablet
+      // nunca digitou um PIN — cria aqui, no celular dele, em vez de ir ao terminal. O servidor só
+      // grava se ainda não houver PIN nenhum (set-pin, a mesma ação do terminal).
+      setEmployee(emp);
+      setNovoPin('');
+      setConfirmaPin('');
+      setErroDoPin('');
+      setStep('criar-pin');
       return;
     }
     setEmployee(emp);
@@ -118,6 +132,44 @@ export const EmployeeErrorsPage: React.FC = () => {
     }
   };
 
+  const handleCriarPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!employee) return;
+    if (!PIN_VALIDO.test(novoPin)) {
+      setErroDoPin('O PIN tem de 4 a 6 números.');
+      return;
+    }
+    if (novoPin !== confirmaPin) {
+      setErroDoPin('As duas senhas não conferem. Digite de novo.');
+      setConfirmaPin('');
+      return;
+    }
+    setLoading(true);
+    setErroDoPin('');
+    try {
+      await setEmployeePin(employee.id, novoPin);
+      // Acabou de criar: entra com ele (o painel manda o PIN como prova em cada consulta).
+      setPin(novoPin);
+      setNovoPin('');
+      setConfirmaPin('');
+      setStep('dashboard');
+    } catch (err) {
+      const mensagem = err instanceof Error ? err.message : '';
+      if (/já tem PIN/i.test(mensagem)) {
+        // Alguém (ou ele mesmo, noutra tela) criou o PIN agora: segue pelo caminho de quem já tem.
+        toast.error('Você já tem um PIN. Digite o seu PIN para entrar.');
+        setNovoPin('');
+        setConfirmaPin('');
+        setStep('pin');
+        return;
+      }
+      console.error('Criar PIN no /erros falhou:', err);
+      setErroDoPin('Não deu pra salvar o PIN. Confira a internet e tente de novo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     setEmployee(null);
     setPin('');
@@ -129,6 +181,9 @@ export const EmployeeErrorsPage: React.FC = () => {
   const goBackToCpf = () => {
     setEmployee(null);
     setPin('');
+    setNovoPin('');
+    setConfirmaPin('');
+    setErroDoPin('');
     setAvailableCompanies([]);
     setStep('cpf');
   };
@@ -247,6 +302,72 @@ export const EmployeeErrorsPage: React.FC = () => {
               <ChevronLeft className="w-4 h-4" /> Voltar
             </button>
           </div>
+        )}
+
+        {step === 'criar-pin' && employee && (
+          <form onSubmit={handleCriarPin} className="p-6 space-y-4" data-testid="criar-pin">
+            <div className="text-center space-y-1">
+              <p className="text-gray-800">
+                Olá, <strong>{employee.name.split(' ')[0]}</strong>! É o seu primeiro acesso.
+              </p>
+              <p className="text-sm text-gray-600">
+                Crie sua senha (PIN) de 4 a 6 números. Ela vale aqui e no ponto do trabalho — não conte pra ninguém.
+              </p>
+            </div>
+            <div className="space-y-3">
+              <label className="block">
+                <span className="block text-sm font-medium text-gray-700 mb-1">Nova senha (PIN)</span>
+                <input
+                  type={showPin ? 'text' : 'password'}
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  value={novoPin}
+                  onChange={e => { setNovoPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setErroDoPin(''); }}
+                  placeholder="••••"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-2xl font-mono text-center tracking-widest"
+                  required
+                  autoFocus
+                />
+              </label>
+              <label className="block">
+                <span className="block text-sm font-medium text-gray-700 mb-1">Repita a senha</span>
+                <input
+                  type={showPin ? 'text' : 'password'}
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  value={confirmaPin}
+                  onChange={e => { setConfirmaPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setErroDoPin(''); }}
+                  placeholder="••••"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-2xl font-mono text-center tracking-widest"
+                  required
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowPin(v => !v)}
+                className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mx-auto"
+              >
+                {showPin ? <><EyeOff className="w-4 h-4" /> Esconder</> : <><Eye className="w-4 h-4" /> Mostrar</>}
+              </button>
+            </div>
+            {erroDoPin && <p className="text-sm text-red-600 text-center font-medium" role="alert">{erroDoPin}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={goBackToCpf}
+                className="flex-1 py-3 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50"
+              >
+                Voltar
+              </button>
+              <button
+                type="submit"
+                disabled={novoPin.length < 4 || confirmaPin.length < 4 || loading}
+                className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> ...</> : 'Criar senha e entrar'}
+              </button>
+            </div>
+          </form>
         )}
 
         {step === 'pin' && employee && (

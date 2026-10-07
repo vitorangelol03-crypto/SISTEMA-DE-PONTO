@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { ADMIN, loginAs, goToTab } from './helpers';
 import { getClient } from './cleanup';
+import { createTestEmployee, cleanupByPrefix, TEST_EMPLOYEE_NAME_PREFIX } from './integrity-helpers';
 
 /**
  * Sub-fase 14.6 — AuditLogsTab (Section 10 dentro do AdminTab).
@@ -17,6 +18,8 @@ import { getClient } from './cleanup';
  *  - Tabela renderiza linhas (audit_logs já tem 390+ rows reais)
  *  - Aplicar filtro de módulo "auth" → tabela só mostra logs do módulo Autenticação
  *  - Inserir um audit_log via SQL → aparece na UI após reload da tab
+ *  - (07/10/2026, entrega G do tablet sem toque) quem fez aparece com o funcionário vinculado, e o
+ *    módulo "Tablet (modo supervisor)" existe no filtro
  *
  * Cleanup: linhas inseridas via SQL (description prefixada com
  * "PW Test audit ") são removidas em afterEach.
@@ -166,6 +169,57 @@ test.describe('AuditLogsTab — Section 10 do AdminTab', () => {
     } else {
       // Sem rows com esse módulo na janela atual — ok, "Nenhum log encontrado"
       await expect(page.getByText(/Nenhum log encontrado/i)).toBeVisible();
+    }
+  });
+
+  test('g. quem fez: código + funcionário vinculado; módulo "Tablet (modo supervisor)" (entrega G)', async ({ page }) => {
+    // Fixture: supervisor 97983 em Caratinga (a empresa do 9999 que olha), ligado a um funcionário de teste.
+    const s = getClient();
+    const USUARIO = '97983';
+    const NOME = `${TEST_EMPLOYEE_NAME_PREFIX}Auditoria Vinculo ${Date.now()}`;
+    const limpar = async () => {
+      for (const [nome, passo] of [
+        ['permission_logs', () => s.from('permission_logs').delete().eq('user_id', USUARIO)],
+        ['permission_logs (quem mudou)', () => s.from('permission_logs').delete().eq('changed_by', USUARIO)],
+        ['audit_logs', () => s.from('audit_logs').delete().eq('user_id', USUARIO)],
+        ['user_permissions', () => s.from('user_permissions').delete().eq('user_id', USUARIO)],
+        ['users', () => s.from('users').delete().eq('id', USUARIO)],
+      ] as Array<[string, () => PromiseLike<{ error: { message: string } | null }>]>) {
+        const { error } = await passo();
+        if (error) throw new Error(`limpar ${nome}: ${error.message}`);
+      }
+      await cleanupByPrefix(`${TEST_EMPLOYEE_NAME_PREFIX}Auditoria Vinculo `);
+    };
+    await limpar();
+    try {
+      const funcionarioId = await createTestEmployee({ name: NOME });
+      const { data: emp } = await s.from('employees').select('company_id').eq('id', funcionarioId).single();
+      const { error: e1 } = await s.rpc('_test_create_supervisor_with_perms', {
+        sup_id: USUARIO, plain_pass: 'teste12345', perms_json: { employees: { view: true } },
+        company_uuid: (emp as { company_id: string }).company_id, created_by_id: '2626',
+      });
+      if (e1) throw e1;
+      const { error: e2 } = await s.from('users').update({ employee_id: funcionarioId }).eq('id', USUARIO);
+      if (e2) throw e2;
+      const uniqueTag = `${Date.now()}`;
+      const description = `${TEST_DESCRIPTION_PREFIX}tablet ${uniqueTag}`;
+      const { error: e3 } = await s.from('audit_logs').insert([{ user_id: USUARIO, action_type: 'login', module: 'tablet', description }]);
+      if (e3) throw e3;
+
+      await unlockAdmin(page);
+      await page.getByRole('heading', { name: /Logs de Auditoria/i }).scrollIntoViewIfNeeded();
+      const moduloSelect = page.locator('label:has-text("Módulo")').locator('xpath=following-sibling::select').first();
+      await moduloSelect.selectOption({ label: 'Tablet (modo supervisor)' });
+      await page.getByPlaceholder(/Buscar por descrição, módulo ou ação/i).fill(uniqueTag);
+      const linha = page.locator('tr').filter({ hasText: description });
+      await expect(linha).toBeVisible({ timeout: 15_000 });
+      await expect(linha.getByTestId('auditoria-usuario')).toHaveText(`${USUARIO} (funcionário ${NOME})`);
+      await expect(linha).toContainText('Tablet (modo supervisor)');
+      // O filtro de usuário também mostra quem é.
+      const usuarioSelect = page.locator('label:has-text("Usuário")').locator('xpath=following-sibling::select').first();
+      await expect(usuarioSelect.locator('option', { hasText: `${USUARIO} (funcionário ${NOME})` })).toHaveCount(1);
+    } finally {
+      await limpar();
     }
   });
 

@@ -22,7 +22,8 @@ import {
  *   - Botão "Voltar" do company-select → step 'cpf'
  *   - PIN < 4 → botão Entrar disabled
  *   - Logout do dashboard → reset pra 'cpf'
- *   - Funcionário sem pin_configured → step 'error' com mensagem específica
+ *   - Funcionário sem pin_configured → cria o PIN ali mesmo e entra (07/10/2026, decisão 12 do
+ *     plano do tablet sem toque; antes era a mensagem "PIN não configurado — vá ao terminal")
  */
 
 const CARATINGA_ID = '6583bb2a-e334-41a7-b69c-7d98f3b46dfc';
@@ -181,8 +182,10 @@ test.describe('EmployeeErrorsPage state machine (sub-fase 10.6)', () => {
     await expect(enterBtn).toBeEnabled();
   });
 
-  test('8. Funcionário sem pin_configured → step "error" com msg específica', async ({ page }) => {
-    // createTestEmployee SEM passar pin → pin_configured=false (default)
+  test('8. Funcionário SEM PIN (1º acesso) → cria o PIN ali mesmo e entra; depois entra com ele', async ({ page }) => {
+    // createTestEmployee SEM passar pin → pin_configured=false (default) — como quem o supervisor
+    // cadastrou pelo tablet. 07/10/2026 (decisão 12): em vez de "PIN não configurado — vá ao
+    // terminal", o /erros cria o PIN no celular dele (a mesma ação set-pin do terminal).
     const empId = await createTestEmployee({ name: `${PREFIX}NoPin` });
     const cpf = await getCpf(empId);
 
@@ -190,7 +193,32 @@ test.describe('EmployeeErrorsPage state machine (sub-fase 10.6)', () => {
     await page.locator('#cpf').fill(cpf);
     await page.getByRole('button', { name: /^Continuar$/ }).click();
 
-    await expect(page.getByText(/PIN não configurado/i)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('button', { name: /Tentar novamente/i })).toBeVisible();
+    await expect(page.getByTestId('criar-pin')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/PIN não configurado/i)).toHaveCount(0);
+    await page.getByLabel('Nova senha (PIN)').fill('4826');
+    await page.getByLabel('Repita a senha').fill('4862');
+    await page.getByRole('button', { name: 'Criar senha e entrar' }).click();
+    await expect(page.getByRole('alert')).toHaveText('As duas senhas não conferem. Digite de novo.');
+    await page.getByLabel('Repita a senha').fill('4826');
+    await page.getByRole('button', { name: 'Criar senha e entrar' }).click();
+    const sair = page.getByRole('button', { name: /Sair/ });
+    await expect(sair).toBeVisible({ timeout: 15_000 }); // dentro do "Meus Erros"
+
+    // No banco: o PIN entrou SÓ como hash, nunca em texto.
+    const s = getClient();
+    const { data } = await s.from('employees').select('pin, pin_hash, pin_configured').eq('id', empId).single();
+    const r = data as { pin: string | null; pin_hash: string | null; pin_configured: boolean };
+    expect([r.pin_configured, r.pin]).toEqual([true, null]);
+    expect(r.pin_hash).toMatch(/^\$2[aby]\$/);
+
+    // Sai e volta: agora pede o PIN (não oferece criar outro) — e o PIN novo vale no servidor.
+    await sair.click();
+    await page.locator('#cpf').fill(cpf);
+    await page.getByRole('button', { name: /^Continuar$/ }).click();
+    await expect(page.getByPlaceholder('••••')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('criar-pin')).toHaveCount(0);
+    await page.getByPlaceholder('••••').fill('4826');
+    await page.getByRole('button', { name: /^Entrar$/ }).click();
+    await expect(page.getByRole('button', { name: /Sair/ })).toBeVisible({ timeout: 15_000 });
   });
 });

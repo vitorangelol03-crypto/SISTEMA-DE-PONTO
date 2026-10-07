@@ -7,6 +7,8 @@ import { ptBR } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
+import { getNomesDosFuncionarios } from '../../services/database';
+import { rotuloDoUsuario } from './rotuloDoUsuario';
 
 // Sub-fase 10.3 (resolvida 2026-05-12): exposto sob AdminTab (master only).
 // audit_logs é global (sem company_id) — admin master vê tudo via RLS bypass.
@@ -23,6 +25,9 @@ interface AuditLogRow {
 interface AuditUserRow {
   id: string;
   role: 'admin' | 'supervisor';
+  /** 07/10/2026 (entrega G): nome e funcionário vinculado, pra o histórico dizer QUEM foi. */
+  name: string | null;
+  employee_id: string | null;
 }
 
 interface AuditStats {
@@ -54,12 +59,18 @@ const MODULE_LABELS: Record<string, string> = {
   auth: 'Autenticação',
   c6payment: 'Arquivo de pagamento',
   datamanagement: 'Gerenciamento de Dados',
+  // 07/10/2026 (plano do tablet sem toque, entrega G): o modo supervisor grava 'tablet' (entrar/sair).
+  tablet: 'Tablet (modo supervisor)',
+  driverpay: 'Pagamentos Driver',
+  employeeapproval: 'Aprovação de Cadastro',
 };
 
 export function AuditLogsTab() {
   const [logs, setLogs] = useState<AuditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<AuditUserRow[]>([]);
+  /** Nome do funcionário vinculado a cada usuário (id do funcionário → nome). */
+  const [nomesDosFuncionarios, setNomesDosFuncionarios] = useState<Record<string, string>>({});
   const [stats, setStats] = useState<AuditStats | null>(null);
 
   const [filters, setFilters] = useState({
@@ -78,10 +89,13 @@ export function AuditLogsTab() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, role')
+        .select('id, role, name, employee_id')
         .order('id', { ascending: true });
       if (error) throw error;
-      setUsers((data ?? []) as AuditUserRow[]);
+      const lista = (data ?? []) as AuditUserRow[];
+      setUsers(lista);
+      const vinculados = lista.map((u) => u.employee_id).filter((id): id is string => !!id);
+      setNomesDosFuncionarios(await getNomesDosFuncionarios(vinculados));
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
     }
@@ -132,7 +146,7 @@ export function AuditLogsTab() {
   const handleExport = () => {
     const exportData = filteredLogs.map((log) => ({
       'Data/Hora': format(new Date(log.created_at), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR }),
-      Usuário: users.find((u) => u.id === log.user_id)?.id || 'Desconhecido',
+      Usuário: rotuloDoUsuario(log.user_id, users, nomesDosFuncionarios),
       Ação: ACTION_TYPE_LABELS[log.action_type as ActionType] || log.action_type,
       Módulo: MODULE_LABELS[log.module] || log.module,
       Descrição: log.description,
@@ -143,7 +157,7 @@ export function AuditLogsTab() {
 
     ws['!cols'] = [
       { wch: 20 },
-      { wch: 20 },
+      { wch: 40 }, // usuário com nome e funcionário vinculado
       { wch: 15 },
       { wch: 20 },
       { wch: 50 },
@@ -228,7 +242,7 @@ export function AuditLogsTab() {
               <option value="">Todos</option>
               {users.map((user) => (
                 <option key={user.id} value={user.id}>
-                  {user.id}
+                  {rotuloDoUsuario(user.id, users, nomesDosFuncionarios)}
                 </option>
               ))}
             </select>
@@ -323,8 +337,8 @@ export function AuditLogsTab() {
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {format(new Date(log.created_at), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR })}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {users.find((u) => u.id === log.user_id)?.id || 'Desconhecido'}
+                    <td className="px-4 py-3 text-sm text-gray-900" data-testid="auditoria-usuario">
+                      {rotuloDoUsuario(log.user_id, users, nomesDosFuncionarios)}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
