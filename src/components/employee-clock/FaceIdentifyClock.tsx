@@ -979,6 +979,13 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
             <UserCircle2 className="w-10 h-10 mx-auto text-[#35F59B]" />
             {/* Modo galpão (decisão 14): nome GRANDE — ninguém chega perto pra ler. */}
             <p className={`text-white font-bold ${modoGalpao ? 'text-3xl leading-tight' : ''}`}>{identified.employee.name}</p>
+            {/* Modo galpão (07/10/2026, pedido do Victor no teste do tablet real): no fim da contagem vem a
+                2ª foto — quem sai andando antes NÃO ganha a batida. Aviso grande pra esperar parado. */}
+            {modoGalpao && (
+              <p className="text-2xl font-extrabold leading-tight text-[#FFC85A]" data-testid="galpao-fique-parado">
+                ✋ Fique parado olhando para a câmera
+              </p>
+            )}
             <p className="text-sm text-white/75">Registrando <strong className="text-[#39E6FF]">{identified.label}</strong> em {countdown}s...</p>
             <button
               onClick={cancelConfirm}

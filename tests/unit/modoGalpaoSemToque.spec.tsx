@@ -197,6 +197,19 @@ describe('quem não é reconhecido (decisão 11)', () => {
 });
 
 describe('a 2ª foto no fim da contagem segura a batida errada', () => {
+  it('durante a contagem, "Fique parado olhando para a câmera" (07/10: quem andava não batia sem entender); fora do modo galpão, não', async () => {
+    detectFace.mockResolvedValue(ROSTO);
+    identifyFace.mockResolvedValue(RECONHECIDA);
+    renderGalpao();
+    expect(await esperarAte(naTela(/Registrando/), 5000)).toBe(true);
+    expect(screen.getByTestId('galpao-fique-parado').textContent).toContain('Fique parado olhando para a câmera');
+    cleanup();
+
+    render(<FaceIdentifyClock company={EMPRESA} onConfirmed={vi.fn()} onUseCpf={vi.fn()} descansaSemNinguem />);
+    expect(await esperarAte(naTela(/Registrando/), 5000)).toBe(true);
+    expect(screen.queryByTestId('galpao-fique-parado')).toBeNull(); // o tablet de sempre fica igual
+  });
+
   it('TROCOU a pessoa na frente durante a contagem → o ponto NÃO é gravado', async () => {
     detectFace.mockResolvedValueOnce(ROSTO).mockResolvedValue(OUTRO_ROSTO);
     identifyFace.mockResolvedValue(RECONHECIDA);
