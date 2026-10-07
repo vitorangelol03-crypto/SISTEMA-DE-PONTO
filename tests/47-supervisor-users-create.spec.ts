@@ -21,12 +21,27 @@ const SUP_TEST_PASS = 'sup7770pass';
 const NEW_USER_ID = '7771';
 const NEW_USER_PASS = 'newuser7771';
 
+/**
+ * 🔴 07/10/2026: a ordem antiga apagava o 7770 ANTES do 7771 — mas o 7771 é criado PELO 7770
+ * (users.created_by aponta pra ele, sem "on delete") e o DELETE do 7770 falhava calado. Toda rodada
+ * deixava em PRODUÇÃO um supervisor de Caratinga com "criar usuários" e a senha escrita neste
+ * arquivo. Agora: o histórico e as permissões primeiro, o 7771 antes do 7770, e cada passo confere.
+ */
 async function cleanup() {
   const s = getClient();
-  await s.from('user_permissions').delete().eq('user_id', SUP_TEST_ID);
-  await s.from('user_permissions').delete().eq('user_id', NEW_USER_ID);
-  await s.from('users').delete().eq('id', SUP_TEST_ID);
-  await s.from('users').delete().eq('id', NEW_USER_ID);
+  const ids = [SUP_TEST_ID, NEW_USER_ID];
+  const passos = [
+    ['permission_logs', () => s.from('permission_logs').delete().in('user_id', ids)],
+    ['permission_logs (quem mudou)', () => s.from('permission_logs').delete().in('changed_by', ids)],
+    ['audit_logs', () => s.from('audit_logs').delete().in('user_id', ids)],
+    ['user_permissions', () => s.from('user_permissions').delete().in('user_id', ids)],
+    ['users 7771', () => s.from('users').delete().eq('id', NEW_USER_ID)],
+    ['users 7770', () => s.from('users').delete().eq('id', SUP_TEST_ID)],
+  ] as const;
+  for (const [nome, passo] of passos) {
+    const { error } = await passo();
+    if (error) throw new Error(`limpar ${nome}: ${error.message}`);
+  }
 }
 
 test.describe('Supervisor com users.create perm (sub-fase 16.3)', () => {
