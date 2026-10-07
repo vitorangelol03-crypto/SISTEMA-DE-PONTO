@@ -208,3 +208,40 @@ liberar câmera + localização uma vez; medir a temperatura 1–2 h (decisão 2
 **Próximas entregas (uma por vez):** C (vínculo usuário↔funcionário + 2 permissões — PRECISA de migration
 → pedir OK), D (ponto-supervisor-api), E (página do supervisor), F (QR no tablet + captura), G (histórico +
 PIN no 1º acesso).
+
+## 16. ✅ Entrega C NO AR (`2a15965`, 07/10 ~03:30): vínculo usuário ↔ funcionário + 2 permissões
+
+Migration `20261007055122` (OK do Victor): users.employee_id (vazio pra todos; excluir o funcionário
+desfaz), índice único (1↔1), guarda (só a função muda — nem o 2626 por UPDATE direto),
+admin_link_user_employee (2626 ou "Gerenciar permissões", só a própria empresa; 9999/8888/2626 só
+pelo 2626; funcionário da mesma empresa, não recusado, não desligado; histórico 'vinculo').
+Painel: "Funcionário vinculado" no topo de Permissões; Usuários com coluna "Funcionário" (⚠️ sem
+vínculo pra quem tem permissão do tablet); 2 permissões em Funcionários ("Cadastrar funcionário
+novo pelo tablet", "Refazer o rosto pelo tablet") desligadas pra todos (o modelo "Acesso Total" liga).
+Validado: unit 149/2.197 · E2E 135 NOVO 3/3 (cliques do 2626 + 9 recusas do banco com login real) +
+11/37/47/102/104/111 (28/28) · permissões reais idênticas (md5) · CI verde nos 3 jobs · Vercel ok.
+⚠️ Sobra achada e LIMPA: 8 usuários de teste e 2 empresas "PW Test Vinculo" — o histórico de
+permissões (permission_logs, sem "on delete") travava o DELETE; o 135 agora limpa na ordem certa.
+O rehearsal pelo MCP (execute_sql com escrita) não roda ("Invalid or expired requestState": pede
+confirmação do Victor) — testes de banco agora são pela API real com login de usuários de teste.
+
+## 17. ✅ Entrega D NO AR (`66097c1`): servidor do modo supervisor (edge fn NOVA ponto-supervisor-api)
+
+Migration `20261007060926` (OK do Victor; 1ª tentativa falhou no `create extension pg_cron` —
+"dependent privileges exist", nada aplicado; o pg_cron já existe, linha removida): 3 tabelas (sessões
+20 min, QRs de uso único, trava de login) com RLS sem policy + job `tablet-qr-limpa-rosto` (*/10).
+Função (sem JWT; deploy meu): login código+senha do painel (5 erros → 15 min; provisória/sem
+permissão/sem vínculo recusados), QR parear (empresa do tablet), lista/funções/cadastro (CPF pelos
+dígitos no servidor, diarista nos 2 campos, pendente, sem PIX, CPF repetido devolve a ficha), QR do
+rosto (só o tablet pareado; 'fique parado'; recusa rosto de outra pessoa dizendo com quem; confirma
+ou tira de novo até 3x; biometria temporária zerada), permissão reconferida a cada chamada, histórico.
+Tablet só lê QR com MODO GALPÃO ligado. Validado: deno check · unit 151/2.220 · teste ao vivo 6/6 ·
+zero sobra.
+🔴 Achado e CONSERTADO (`399707e`): o teste 47 deixava em PRODUÇÃO o supervisor 7770 (Caratinga,
+"criar usuários", senha escrita no teste) a cada rodada — inclusive no CI (era a "sobra" 7770 que já
+existia). Ordem da limpeza invertida; rodado 2/2, só os 7 usuários reais ficaram.
+⚠️ Avisos de segurança pro Victor (NÃO consertados — decidir): (1) qualquer usuário logado lê o
+password_hash dos outros da MESMA empresa (users: SELECT da coluna liberado pro authenticated) — o
+2626 e o 9999 estão em Caratinga; (2) senhas do 9999, 2626, 01 e 04 escritas nos testes (tests/11,
+22, 37, 111, helpers.ts) — trocar as senhas e passar pros segredos do CI; (3) _test_create_supervisor_
+with_perms liberado pro authenticated em produção (sem security definer — limitado pelas travas).
