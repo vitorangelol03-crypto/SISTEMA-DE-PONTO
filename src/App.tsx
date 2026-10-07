@@ -28,6 +28,12 @@ const EmployeePublicRegister = lazy(() =>
   import('./components/employee-clock/EmployeePublicRegister').then(m => ({ default: m.EmployeePublicRegister })),
 );
 
+// Teste do QR no tablet (rota publica /qr-teste, 06/10/2026) — sem banco e sem login; só baixa
+// o leitor de QR quando alguém abre esta página.
+const QrTestePage = lazy(() =>
+  import('./components/employee-clock/QrTestePage').then(m => ({ default: m.QrTestePage })),
+);
+
 const AttendanceTab = lazy(() => import('./components/attendance/AttendanceTab').then(m => ({ default: m.AttendanceTab })));
 const EmployeesTab = lazy(() => import('./components/employees/EmployeesTab').then(m => ({ default: m.EmployeesTab })));
 const SettingsTab = lazy(() => import('./components/settings/SettingsTab').then(m => ({ default: m.SettingsTab })));
@@ -79,6 +85,9 @@ function App() {
     window.location.pathname === '/driver' ||
     new URLSearchParams(window.location.search).get('mode') === 'driver';
 
+  // Teste do QR no tablet (plano do tablet sem toque, entrega B) — não grava nada
+  const isQrTesteMode = window.location.pathname === '/qr-teste';
+
   // Cadastro público de funcionário novo — não exige login (link ?empresa=...)
   const isRegisterMode =
     window.location.pathname === '/cadastro' ||
@@ -128,6 +137,19 @@ function App() {
         </Suspense>
         <Toaster position="top-right" />
       </>
+    );
+  }
+
+  // Teste do QR no tablet — tela pública própria, sem banco
+  if (isQrTesteMode) {
+    return (
+      <Suspense fallback={
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+        </div>
+      }>
+        <QrTestePage />
+      </Suspense>
     );
   }
 
