@@ -108,8 +108,13 @@ export function nomeDaMarcacaoAnterior(pos?: MarkingPosition): string {
 }
 
 /** `marking_count` do funcionário manda; sem valor próprio, herda o padrão da
- *  empresa (mesma regra usada em EmployeeClockIn.tsx e recalcAttendance). */
-export function resolveMarkingCount(employee: Employee | null, company: Company | null): 2 | 4 {
+ *  empresa (mesma regra usada em EmployeeClockIn.tsx e recalcAttendance).
+ *  06/10/2026: a empresa pode vir só com o padrão — no modo galpão a ficha pode ser da OUTRA
+ *  empresa do tablet, e o servidor manda o padrão dela junto com a identificação. */
+export function resolveMarkingCount(
+  employee: Employee | null,
+  company: Pick<Company, 'default_marking_count'> | { default_marking_count?: number | null } | null,
+): 2 | 4 {
   const resolved = employee?.marking_count ?? company?.default_marking_count ?? 2;
   return resolved === 4 ? 4 : 2;
 }
@@ -153,3 +158,74 @@ export function quickExitMinutes(
   if (mins == null) return null;
   return mins < QUICK_EXIT_CONFIRM_MINUTES ? mins : null;
 }
+
+// ─── MODO GALPÃO — o tablet SEM TOQUE (06/10/2026) ───────────────────────────────────────────
+// Plano aprovado em 05/10 (.claude-checkpoints/PLANO_TABLET_SEM_TOQUE_2026-10-05.md §2). Tudo
+// aqui só vale com o modo galpão LIGADO no tablet (cartão "Tablets de ponto", 2626); desligado,
+// a tela segue exatamente como antes.
+
+/**
+ * Decisão 2 — "modo econômico" no lugar do descanso com toque: sem ninguém por
+ * CAMERA_DESCANSA_APOS_MS a tela escurece (relógio), mas a câmera NÃO desliga — ela olha a cada
+ * este tanto e volta ao ritmo normal sozinha quando aparece um rosto. Nenhum toque.
+ */
+export const GALPAO_ECONOMIA_OLHA_A_CADA_MS = 2_000;
+
+/**
+ * Decisão 3 — batida a menos de QUICK_EXIT_CONFIRM_MINUTES da anterior, sem toque: NÃO grava,
+ * mostra "Você já bateu ... às HH:MM" por GALPAO_AVISO_MS e ignora a pessoa por
+ * GALPAO_IGNORA_APOS_AVISO_MS. Saída real em < 10 min o supervisor ajusta no painel.
+ * GALPAO_AVISO_MS vale pros avisos SEM botão do modo galpão (esse e o "ponto NÃO registrado" da
+ * 2ª foto): ficam na tela e somem sozinhos.
+ */
+export const GALPAO_AVISO_MS = 3_000;
+export const GALPAO_IGNORA_APOS_AVISO_MS = 60_000;
+
+/** Recuperação sozinha (câmera que não abriu, arquivos do reconhecimento que falharam). */
+export const GALPAO_TENTA_DE_NOVO_MS = 30_000;
+
+/**
+ * Decisão 8 — GPS do tablet FIXO: aceita uma posição de até 5 min (o tablet não se move) e tenta
+ * de novo sozinho uma vez. No galpão a precisão medida foi 24–67 m e a 1ª leitura às vezes falha.
+ */
+export const GALPAO_GPS_POSICAO_ATE_MS = 5 * 60_000;
+
+/**
+ * Tablet (06/10/2026): de quanto em quanto tempo ele reconfere quem é, com a tela LIVRE. É como um
+ * tablet que ninguém toca fica sabendo que o 2626 ligou/desligou o modo galpão (antes: só ao
+ * recarregar a página).
+ */
+export const TABLET_RECONFERE_A_CADA_MS = 5 * 60_000;
+
+/** Tablet barrado pelo servidor (removido, ou a empresa saiu dele): reconfere sozinho neste ritmo. */
+export const TABLET_BARRADO_RECONFERE_MS = 60_000;
+
+/** "07:42" de um horário ISO (aviso da batida recente). null se não der pra ler. */
+export function horaDaMarcacao(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * A 2ª foto, tirada no FIM da contagem (modo galpão — plano §4 "Batida sem toque": "no fim da
+ * contagem uma 2ª foto é conferida no próprio tablet (saiu da frente ou trocou de pessoa →
+ * cancela)"). Sem o toque do "Não sou eu", é ela que segura a batida errada:
+ *  - 'mesma-pessoa' → grava, e é ESTA foto que vai pro 1:1 do servidor (uma amostra NOVA,
+ *    independente da que fez o 1:N — antes o servidor reconferia a mesma foto);
+ *  - 'outra-pessoa' → trocou quem está na frente durante a contagem: NÃO grava;
+ *  - 'sem-rosto'    → a pessoa saiu da frente antes do fim: NÃO grava (ela não viu o ✅; se
+ *    continuar ali, é reconhecida de novo na hora).
+ * `distancia` = distância entre a 2ª e a 1ª foto (null = nenhum rosto na 2ª).
+ */
+export type DecisaoDaSegundaFoto = 'mesma-pessoa' | 'outra-pessoa' | 'sem-rosto';
+
+export function decidirSegundaFoto(distancia: number | null | undefined): DecisaoDaSegundaFoto {
+  if (distancia == null || !Number.isFinite(distancia)) return 'sem-rosto';
+  return distancia < FACE_MATCH_THRESHOLD ? 'mesma-pessoa' : 'outra-pessoa';
+}
+
+/** Quantas vezes a 2ª foto procura o rosto antes de concluir "saiu da frente" (um quadro tremido
+ *  sozinho não pode cancelar a batida de quem continua parado ali). */
+export const GALPAO_SEGUNDA_FOTO_TENTATIVAS = 3;

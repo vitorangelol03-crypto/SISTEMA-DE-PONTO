@@ -350,12 +350,13 @@ export const ClockDevicesCard: React.FC = () => {
                     Ligar o <strong>modo galpão</strong> em <strong>{confirmarGalpao.device.name}</strong>? A tela dele passa a
                     não pedir toque nenhum: a câmera fica sempre olhando (tela escura com relógio quando não tem ninguém),
                     quem bate de novo em menos de 10 minutos só vê o aviso e o ponto não é gravado, e quem não é
-                    reconhecido vê &quot;chame o supervisor&quot;. Vale só pra este tablet.
+                    reconhecido vê &quot;chame o supervisor&quot;. A tela sempre abre na câmera e dá um bipe quando o ponto
+                    entra. Vale só pra este tablet — ele fica sabendo sozinho em até 5 minutos.
                   </p>
                 ) : (
                   <p className="text-sm text-indigo-900">
                     Desligar o modo galpão em <strong>{confirmarGalpao.device.name}</strong>? A tela volta a ser a de sempre
-                    (descansa a câmera e pede toque pra voltar).
+                    (descansa a câmera e pede toque pra voltar). Ele fica sabendo sozinho em até 5 minutos.
                   </p>
                 )}
                 <div className="flex gap-2">

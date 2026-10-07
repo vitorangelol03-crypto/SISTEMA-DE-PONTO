@@ -38,6 +38,32 @@ export function esquecerSegredoDoTablet(): void {
   }
 }
 
+/**
+ * O último "modo galpão" que o servidor disse pra este tablet (06/10/2026). Só vale enquanto a tela
+ * NÃO sabe a resposta de agora (conferência ainda pendente ou que falhou por rede): sem isto, um
+ * soluço de internet ao abrir fazia o tablet do galpão — onde ninguém toca — voltar pro descanso
+ * que pede toque. Fica de propósito mesmo quando o segredo é apagado (tablet removido): a tela
+ * continua dizendo "Tablet desconectado — chame o responsável", e não o aviso de celular comum.
+ */
+const CHAVE_MODO_GALPAO = 'clock_device_modo_galpao_v1';
+
+export function lerModoGalpaoLembrado(): boolean {
+  try {
+    return localStorage.getItem(CHAVE_MODO_GALPAO) === '1';
+  } catch (err) {
+    console.warn('Tablet de ponto: armazenamento indisponível — modo galpão lembrado tratado como desligado.', err);
+    return false;
+  }
+}
+
+export function lembrarModoGalpao(ligado: boolean): void {
+  try {
+    localStorage.setItem(CHAVE_MODO_GALPAO, ligado ? '1' : '0');
+  } catch (err) {
+    console.warn('Tablet de ponto: não foi possível lembrar o modo galpão (vale só nesta abertura).', err);
+  }
+}
+
 /** Este tablet atende a empresa? (null = não é tablet). */
 export function tabletAtendeEmpresa(tablet: ClockDevice | null, companyId: string | null | undefined): boolean {
   return !!tablet && !!companyId && tablet.companyIds.includes(companyId);

@@ -5061,6 +5061,13 @@ export interface FaceIdentifyResult {
   faceDistance?: number;
   /** 30/09/2026: o rosto reconhecido vale como a senha dela por 15 min — ver ProvaDoFuncionario. */
   comprovanteFacial?: string;
+  /**
+   * Modo galpão (06/10/2026): a empresa da ficha reconhecida — pode ser a OUTRA empresa do tablet
+   * (Caratinga e Ponte Nova no mesmo galpão). Ausente = a empresa pedida.
+   */
+  companyId?: string;
+  /** Padrão de marcações (2 ou 4) da empresa da ficha — só vem junto com `companyId`. */
+  defaultMarkingCount?: number | null;
 }
 
 /**
@@ -5074,11 +5081,17 @@ export const identifyFace = async (
   companyId: string,
   descriptorNow: number[],
   deviceToken?: string | null,
+  /**
+   * Modo galpão (06/10/2026, decisão 7): procura o rosto em TODAS as empresas do tablet (só vale
+   * com segredo de tablet ativo — o servidor confere). Sem a opção, o pedido é idêntico ao de antes.
+   */
+  opcoes?: { todasAsEmpresasDoTablet?: boolean },
 ): Promise<FaceIdentifyResult> => {
   return await callEmployeePublicApi<FaceIdentifyResult>('identify-face', {
     companyId,
     descriptorNow,
     ...(deviceToken ? { deviceToken } : {}),
+    ...(opcoes?.todasAsEmpresasDoTablet ? { todasAsEmpresasDoTablet: true } : {}),
   });
 };
 

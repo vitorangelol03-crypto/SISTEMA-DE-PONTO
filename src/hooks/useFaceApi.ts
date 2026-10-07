@@ -9,7 +9,7 @@ let modelsLoaded = false;
 async function loadModelsOnce(): Promise<void> {
   if (modelsLoaded) return;
   if (modelsLoadingPromise) return modelsLoadingPromise;
-  modelsLoadingPromise = (async () => {
+  const tentativa = (async () => {
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL),
       faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODELS_URL),
@@ -37,6 +37,13 @@ async function loadModelsOnce(): Promise<void> {
     }
     modelsLoaded = true;
   })();
+  // 06/10/2026 (plano do tablet sem toque): falhou o download (rede caiu no galpão)? Esquece a
+  // tentativa. Antes a promessa REJEITADA ficava guardada pra sempre e nenhuma tela conseguia
+  // carregar de novo sem recarregar a página — no tablet sem toque, ninguém recarrega.
+  modelsLoadingPromise = tentativa.catch((err: unknown) => {
+    modelsLoadingPromise = null;
+    throw err;
+  });
   return modelsLoadingPromise;
 }
 
@@ -44,6 +51,8 @@ export interface UseFaceApi {
   loading: boolean;
   ready: boolean;
   error: string | null;
+  /** Tenta carregar de novo depois de um erro (06/10/2026 — o tablet sem toque se recupera sozinho). */
+  tentarDeNovo: () => void;
   detectFace: (video: HTMLVideoElement) => Promise<Float32Array | null>;
   compareFaces: (a: Float32Array | number[], b: Float32Array | number[]) => number;
   faceapi: typeof faceapi;
@@ -53,6 +62,8 @@ export function useFaceApi(): UseFaceApi {
   const [loading, setLoading] = useState(!modelsLoaded);
   const [ready, setReady] = useState(modelsLoaded);
   const [error, setError] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
+  const tentarDeNovo = useCallback(() => setTentativa((n) => n + 1), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +92,7 @@ export function useFaceApi(): UseFaceApi {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [tentativa]);
 
   const detectFace = useCallback(
     async (video: HTMLVideoElement): Promise<Float32Array | null> => {
@@ -105,5 +116,5 @@ export function useFaceApi(): UseFaceApi {
     []
   );
 
-  return { loading, ready, error, detectFace, compareFaces, faceapi };
+  return { loading, ready, error, tentarDeNovo, detectFace, compareFaces, faceapi };
 }

@@ -12,6 +12,15 @@ import {
   marcacaoAnteriorDaSaida,
   marcacaoAnterior,
   nomeDaMarcacaoAnterior,
+  FACE_MATCH_THRESHOLD,
+  GALPAO_ECONOMIA_OLHA_A_CADA_MS,
+  GALPAO_AVISO_MS,
+  GALPAO_IGNORA_APOS_AVISO_MS,
+  GALPAO_TENTA_DE_NOVO_MS,
+  GALPAO_GPS_POSICAO_ATE_MS,
+  GALPAO_SEGUNDA_FOTO_TENTATIVAS,
+  horaDaMarcacao,
+  decidirSegundaFoto,
 } from '../../src/components/employee-clock/clockGuards';
 import type { Attendance } from '../../src/services/database';
 
@@ -112,3 +121,42 @@ describe('marcação anterior — botão (celular) x rosto (tablet)', () => {
     expect(nomeDaMarcacaoAnterior(undefined)).toBe('a entrada');
   });
 });
+
+// ─── Modo galpão (06/10/2026) — decisões do Victor de 05/10 (plano do tablet sem toque) ───
+describe('modo galpão — números decididos', () => {
+  it('econômico olha a cada 2 s; aviso de batida recente 3 s e ignora 60 s; recupera a cada 30 s; GPS de até 5 min', () => {
+    expect(GALPAO_ECONOMIA_OLHA_A_CADA_MS).toBe(2_000);
+    expect(GALPAO_AVISO_MS).toBe(3_000);
+    expect(GALPAO_IGNORA_APOS_AVISO_MS).toBe(60_000);
+    expect(GALPAO_TENTA_DE_NOVO_MS).toBe(30_000);
+    expect(GALPAO_GPS_POSICAO_ATE_MS).toBe(300_000);
+    expect(GALPAO_SEGUNDA_FOTO_TENTATIVAS).toBe(3);
+  });
+});
+
+describe('horaDaMarcacao — o "às HH:MM" do aviso de batida recente', () => {
+  it('formata a hora local e recusa vazio/lixo', () => {
+    const iso = new Date(2026, 9, 6, 7, 42, 13).toISOString();
+    expect(horaDaMarcacao(iso)).toBe('07:42');
+    expect(horaDaMarcacao(null)).toBeNull();
+    expect(horaDaMarcacao(undefined)).toBeNull();
+    expect(horaDaMarcacao('não é data')).toBeNull();
+  });
+});
+
+describe('decidirSegundaFoto — a 2ª foto no fim da contagem (sem o toque do "Não sou eu")', () => {
+  it('mesma pessoa (abaixo do limite da facial) → grava com a foto NOVA', () => {
+    expect(decidirSegundaFoto(0)).toBe('mesma-pessoa');
+    expect(decidirSegundaFoto(FACE_MATCH_THRESHOLD - 0.001)).toBe('mesma-pessoa');
+  });
+  it('outra pessoa (no limite ou acima) → NÃO grava', () => {
+    expect(decidirSegundaFoto(FACE_MATCH_THRESHOLD)).toBe('outra-pessoa');
+    expect(decidirSegundaFoto(0.9)).toBe('outra-pessoa');
+  });
+  it('nenhum rosto na 2ª foto (saiu da frente) → NÃO grava', () => {
+    expect(decidirSegundaFoto(null)).toBe('sem-rosto');
+    expect(decidirSegundaFoto(undefined)).toBe('sem-rosto');
+    expect(decidirSegundaFoto(Number.NaN)).toBe('sem-rosto');
+  });
+});
+

@@ -36,7 +36,7 @@
 //     acabou de digitar pra entrar). Antes, com o id (que lookup-employee devolvia pelo
 //     CPF), qualquer um trocava o rosto de outra pessoa ou copiava o rosto cadastrado —
 //     e batia o ponto dela.
-//   identify-face            { companyId, descriptorNow, deviceToken? } → { matched, employeeId?, employeeName?, cpf?, faceDistance?, comprovanteFacial?, ambiguous?, deviceBlocked? }
+//   identify-face            { companyId, descriptorNow, deviceToken?, todasAsEmpresasDoTablet? } → { matched, employeeId?, employeeName?, cpf?, faceDistance?, comprovanteFacial?, ambiguous?, deviceBlocked?, companyId?, defaultMarkingCount? }
 //     04/09/2026 — ponto SÓ pela facial, sem digitar CPF. Compara contra TODOS
 //     os rostos ativos da empresa (1:N) com margem mínima contra o 2º colocado
 //     (0.08) — ambíguo ou sem certeza = não bate. Isto só IDENTIFICA; quem
@@ -68,7 +68,10 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { PIN_FORMATO, bcryptjs, pinConfere } from '../_shared/pin.ts';
-import { decidirIdentificacao, type CandidatoFacial } from '../_shared/faceIdentify.ts';
+import {
+  decidirIdentificacao, escolherFichaDaPessoa, fichasDaPessoa, juntarCandidatosPorCpf, pontoAbertoNoDia,
+  type CandidatoFacialComEmpresa,
+} from '../_shared/faceIdentify.ts';
 import {
   comprovanteFacialConfere, decidirProva, emitirComprovanteFacial, type ProvaDoFuncionario,
 } from '../_shared/acessoDoFuncionario.ts';
@@ -546,56 +549,109 @@ async function identifyFace(body: Body): Promise<Response> {
     return json({ matched: false, deviceBlocked: true, message: MENSAGEM_APARELHO_NAO_AUTORIZADO });
   }
 
+  // MODO GALPÃO (06/10/2026, decisão 7 do plano do tablet sem toque): com `todasAsEmpresasDoTablet`
+  // E o segredo de um tablet ATIVO, em modo galpão, que atende a empresa pedida, o rosto é procurado
+  // em TODAS as empresas dele (Caratinga e Ponte Nova no mesmo galpão). Não expõe nada novo: esse
+  // tablet já podia identificar em cada uma delas trocando a empresa da tela. Sem isso, só a empresa
+  // pedida — exatamente o caminho de antes.
+  let empresas = [companyId];
+  if (body.todasAsEmpresasDoTablet === true) {
+    try {
+      const tablet = await resolverTablet(supabase, body.deviceToken);
+      if (tablet && tablet.modoGalpao && tablet.companyIds.includes(companyId)) empresas = tablet.companyIds;
+    } catch (err) {
+      console.error('[identify-face] resolução do tablet (modo galpão) falhou:', err);
+      return json({ error: 'Database error' }, 500);
+    }
+  }
+  const variasEmpresas = empresas.length > 1;
+
   // employees não tem coluna "active" (diferente de driverpay_drivers/platforms) —
   // quem sai da empresa hoje é excluído da tabela, não desativado. `registration_status`
   // é o único filtro de elegibilidade que existe (fora abaixo).
-  const { data, error } = await supabase
+  const consulta = supabase
     .from('employees')
-    .select('id, name, cpf, face_descriptor, registration_status')
-    .eq('company_id', companyId)
+    .select('id, name, cpf, company_id, face_descriptor, registration_status')
     .not('face_descriptor', 'is', null);
+  const { data, error } = await (variasEmpresas ? consulta.in('company_id', empresas) : consulta.eq('company_id', companyId));
   if (error) return json({ error: 'Database error', details: error.message }, 500);
 
-  const candidates: CandidatoFacial[] = [];
+  const candidates: CandidatoFacialComEmpresa[] = [];
   for (const emp of data ?? []) {
     if (emp.registration_status === 'rejected') continue;
     const enrolled = parseDescriptor(emp.face_descriptor);
     if (!enrolled) continue;
-    candidates.push({ id: emp.id, name: emp.name, cpf: emp.cpf, distance: euclideanDistance(now, enrolled) });
+    candidates.push({
+      id: emp.id, name: emp.name, cpf: emp.cpf, companyId: emp.company_id, distance: euclideanDistance(now, enrolled),
+    });
   }
 
-  const { outcome, best, second } = decidirIdentificacao(candidates);
+  // Várias empresas: a mesma pessoa com ficha nas duas conta UMA vez (senão daria sempre "ambíguo").
+  const { outcome, best, second } = decidirIdentificacao(variasEmpresas ? juntarCandidatosPorCpf(candidates) : candidates);
   const matched = outcome === 'matched' && best !== null;
+
+  // Qual ficha bate o ponto (decisão 7): a que já tem ponto aberto hoje; senão a da empresa de casa
+  // (a pedida); senão a mais parecida. Uma ficha só (o caso comum) = ela mesma, sem consulta a mais.
+  let escolhida: CandidatoFacialComEmpresa | null = matched ? best : null;
+  if (matched && variasEmpresas) {
+    const fichas = fichasDaPessoa(candidates, best);
+    let comPontoAberto = new Set<string>();
+    if (fichas.length > 1) {
+      const { data: dias, error: diasErr } = await supabase
+        .from('attendance')
+        .select('employee_id, entry_time, entry_1_time, exit_time_full, exit_2_time')
+        .eq('date', getBrazilDateString())
+        .in('employee_id', fichas.map((f) => f.id));
+      if (diasErr) return json({ error: 'Database error', details: diasErr.message }, 500);
+      comPontoAberto = new Set((dias ?? []).filter((d) => pontoAbertoNoDia(d)).map((d) => String(d.employee_id)));
+    }
+    escolhida = escolherFichaDaPessoa(fichas, companyId, comPontoAberto) ?? best;
+  }
 
   // Log da tentativa — sem employee_id quando não deu pra confirmar (não
   // registra um "quase" como se fosse a pessoa certa). Desde 30/09 grava também o
   // desfecho e as duas distâncias: é o que permite calibrar com dado real.
   const { error: logErr } = await supabase.from('face_auth_attempts').insert([{
-    employee_id: matched ? best.id : null,
+    employee_id: escolhida ? escolhida.id : null,
     date: getBrazilDateString(),
     attempted_at: new Date().toISOString(),
     success: matched,
     confidence: best ? Math.max(0, 1 - best.distance) : null,
     clock_type: null,
-    company_id: companyId,
+    company_id: escolhida ? escolhida.companyId : companyId,
     outcome,
     best_distance: best ? best.distance : null,
     second_distance: second ? second.distance : null,
   }]);
   if (logErr) console.error('[identify-face] log da tentativa falhou:', logErr.message);
 
-  if (!matched) {
+  if (!matched || !escolhida) {
     return json({ matched: false, ambiguous: outcome === 'ambiguous' });
   }
+
+  // Modo galpão: a tela precisa saber a empresa da ficha e o padrão de marcações dela (a ficha pode
+  // ser da OUTRA empresa do tablet). Fora dele a resposta é a de sempre, sem campo a mais.
+  let empresaDaFicha: { companyId: string; defaultMarkingCount: number | null } | null = null;
+  if (variasEmpresas) {
+    const { data: emp, error: empErr } = await supabase
+      .from('companies')
+      .select('default_marking_count')
+      .eq('id', escolhida.companyId)
+      .maybeSingle();
+    if (empErr) return json({ error: 'Database error', details: empErr.message }, 500);
+    empresaDaFicha = { companyId: escolhida.companyId, defaultMarkingCount: emp?.default_marking_count ?? null };
+  }
+
   return json({
     matched: true,
-    employeeId: best.id,
-    employeeName: best.name,
-    cpf: best.cpf,
-    faceDistance: best.distance,
+    employeeId: escolhida.id,
+    employeeName: escolhida.name,
+    cpf: escolhida.cpf,
+    faceDistance: escolhida.distance,
     // 30/09/2026: o rosto reconhecido vale como a senha dela por 15 min (ponto do dia e
-    // histórico no tablet, onde ninguém digita PIN).
-    comprovanteFacial: await emitirComprovanteFacial(SRV, best.id, companyId, Date.now()),
+    // histórico no tablet, onde ninguém digita PIN). Emitido pra empresa DA FICHA.
+    comprovanteFacial: await emitirComprovanteFacial(SRV, escolhida.id, escolhida.companyId, Date.now()),
+    ...(empresaDaFicha ?? {}),
   });
 }
 

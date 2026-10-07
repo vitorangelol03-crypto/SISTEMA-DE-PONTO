@@ -20,6 +20,8 @@ import {
   aparelhoBarradoNaEmpresa,
   esquecerSegredoDoTablet,
   guardarSegredoDoTablet,
+  lembrarModoGalpao,
+  lerModoGalpaoLembrado,
   lerSegredoDoTablet,
 } from './clockDeviceStorage';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
@@ -27,12 +29,14 @@ import { useCompany } from '../../contexts/useCompany';
 import { getCurrentCompanyId } from '../../contexts/companyHelpers';
 import { FaceRegistration } from './FaceRegistration';
 import { FaceVerification } from './FaceVerification';
-import { clockFailureMessage } from './clockMessages';
+import { RecusaDoServidor, clockErrorMessage, clockFailureMessage } from './clockMessages';
 import {
   AUTO_LOGOUT_SECONDS, quickExitMinutes, marcacaoAnteriorDaSaida,
   TABLET_VOLTA_APOS_SUCESSO_SEGUNDOS, TABLET_VOLTA_APOS_FALHA_SEGUNDOS, RECEM_BATIDO_MS, TABLET_TELA_LARGADA_SEGUNDOS,
   MarkingPosition, MARKING_LABELS, getTimestampForPosition, getNextMarkingPosition,
+  GALPAO_GPS_POSICAO_ATE_MS, TABLET_BARRADO_RECONFERE_MS, TABLET_RECONFERE_A_CADA_MS,
 } from './clockGuards';
+import { tocarBipe } from './bipe';
 import { FaceIdentifyClock, type RecemBatido } from './FaceIdentifyClock';
 import { abertoComoApp, useAppDoPonto } from './useAppDoPonto';
 import { PassosNoAppDoPonto } from './CameraProblem';
@@ -106,8 +110,9 @@ type ConferenciaDoAparelho = 'pendente' | 'conferido' | 'falhou';
  */
 const GPS_ANTECIPADO_VALIDO_MS = 20_000;
 
-/** Solicita geolocalização. Resolve com a position, ou rejeita com o código do erro. */
-function requestGeolocation(): Promise<GeolocationPosition> {
+/** Solicita geolocalização. Resolve com a position, ou rejeita com o código do erro.
+ *  `maximumAge` 0 (padrão) = posição NOVA; o tablet fixo do galpão aceita uma recente. */
+function requestGeolocation(maximumAge = 0): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject({ code: 2 }); // POSITION_UNAVAILABLE
@@ -116,9 +121,26 @@ function requestGeolocation(): Promise<GeolocationPosition> {
     navigator.geolocation.getCurrentPosition(resolve, reject, {
       enableHighAccuracy: true,
       timeout: 10_000,
-      maximumAge: 0,
+      maximumAge,
     });
   });
+}
+
+/**
+ * GPS do tablet FIXO no modo galpão (06/10/2026, decisão 8 do plano do tablet sem toque): aceita uma
+ * posição de até GALPAO_GPS_POSICAO_ATE_MS (o tablet não sai do lugar) e, se o GPS falhar, tenta de
+ * novo sozinho UMA vez — no galpão a 1ª leitura às vezes falha, e a 1ª batida do dia sem posição é
+ * recusada ("Localização não fornecida"). Permissão NEGADA não tenta de novo: não adianta (a tela da
+ * câmera avisa o responsável).
+ */
+async function requestGeolocationDoTabletFixo(): Promise<GeolocationPosition> {
+  try {
+    return await requestGeolocation(GALPAO_GPS_POSICAO_ATE_MS);
+  } catch (err) {
+    const negada = typeof err === 'object' && err !== null && 'code' in err && err.code === 1;
+    if (negada) throw err;
+    return await requestGeolocation(GALPAO_GPS_POSICAO_ATE_MS);
+  }
 }
 
 function formatCPFMask(value: string): string {
@@ -157,6 +179,20 @@ async function isCameraPermissionDenied(): Promise<boolean> {
     return false;
   }
 }
+
+/** Como liberar a Localização no navegador comum (aviso do painel e, no modo galpão, da câmera). */
+const PassosDaLocalizacaoNoNavegador: React.FC = () => (
+  <>
+    <ol className="text-gray-700 text-sm space-y-2 list-decimal list-inside bg-gray-50 rounded-xl p-3">
+      <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
+      <li>Toque em <strong>Permissões</strong></li>
+      <li>Em <strong>Localização</strong>, escolha <strong>Permitir</strong></li>
+    </ol>
+    <p className="text-gray-500 text-xs">
+      Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Localização → Permitir.
+    </p>
+  </>
+);
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -235,6 +271,21 @@ export const EmployeeClockIn: React.FC = () => {
   const [deviceToken, setDeviceToken] = useState<string | null>(() => lerSegredoDoTablet());
   const [device, setDevice] = useState<ClockDevice | null>(null);
   const [deviceCheck, setDeviceCheck] = useState<ConferenciaDoAparelho>(() => (lerSegredoDoTablet() ? 'pendente' : 'conferido'));
+  /**
+   * MODO GALPÃO — o tablet SEM TOQUE (06/10/2026, plano do tablet sem toque; o 2626 liga por tablet).
+   * Quem manda é a resposta do servidor (`device`); sem ela (conferência pendente/que falhou, ou
+   * tablet removido) vale o último que o servidor disse — ver lerModoGalpaoLembrado.
+   */
+  const [modoGalpaoLembrado, setModoGalpaoLembrado] = useState<boolean>(() => lerModoGalpaoLembrado());
+  const modoGalpao = device ? device.modoGalpao === true : modoGalpaoLembrado;
+  useEffect(() => {
+    if (!device) return;
+    const ligado = device.modoGalpao === true;
+    lembrarModoGalpao(ligado);
+    setModoGalpaoLembrado(ligado);
+  }, [device]);
+  /** Modo galpão: a batida em andamento veio do rosto (a tela mostra o resultado GRANDE, sem botão). */
+  const [batidaPeloRosto, setBatidaPeloRosto] = useState(false);
 
   /**
    * Versão nova publicada → a tela se recarrega sozinha (01/10/2026, ver useAtualizacaoAutomatica),
@@ -242,10 +293,9 @@ export const EmployeeClockIn: React.FC = () => {
    * reconhecido. Nunca no meio do PIN, do cadastro do rosto ou com o painel aberto.
    */
   const [cameraOcupada, setCameraOcupada] = useState(false);
-  useAtualizacaoAutomatica({
-    podeRecarregar: cpfInput === ''
-      && (step === 'cpf' || step === 'device-blocked' || (step === 'face-scan' && !cameraOcupada)),
-  });
+  const telaLivre = cpfInput === ''
+    && (step === 'cpf' || step === 'device-blocked' || (step === 'face-scan' && !cameraOcupada));
+  useAtualizacaoAutomatica({ podeRecarregar: telaLivre });
   const [empresaBarrada, setEmpresaBarrada] = useState<string | null>(null);
   const [activationCode, setActivationCode] = useState('');
   const [activationError, setActivationError] = useState('');
@@ -316,11 +366,14 @@ export const EmployeeClockIn: React.FC = () => {
 
   // GPS pedido mais cedo (30/09/2026 — ver GPS_ANTECIPADO_VALIDO_MS).
   const posicaoAntecipadaRef = useRef<{ promessa: Promise<GeolocationPosition>; pedidaEm: number } | null>(null);
+  // Modo galpão lido na hora (o pedido antecipado é um callback estável).
+  const modoGalpaoRef = useRef(modoGalpao);
+  useEffect(() => { modoGalpaoRef.current = modoGalpao; });
   /** Dispara agora o pedido de posição da batida que vem nos próximos segundos. */
   const anteciparPosicao = useCallback(() => {
     const atual = posicaoAntecipadaRef.current;
     if (atual && Date.now() - atual.pedidaEm <= GPS_ANTECIPADO_VALIDO_MS) return; // já tem pedido recente
-    const promessa = requestGeolocation();
+    const promessa = modoGalpaoRef.current ? requestGeolocationDoTabletFixo() : requestGeolocation();
     // Quem decide o que fazer com a falha é a batida (vira "sem localização", como sempre foi);
     // aqui só fica registrado, pra rejeição não ficar solta.
     promessa.catch((err: unknown) => {
@@ -390,12 +443,22 @@ export const EmployeeClockIn: React.FC = () => {
     // o CPF resolve a empresa sozinho, como sempre.
     if (!company?.id && companyLoading) return;
     defaultStepResolvedRef.current = true;
-    const resolved: Step = company?.face_identify_default === true ? 'face-scan' : 'cpf';
+    // Modo galpão (06/10/2026): o tablet SEMPRE abre na câmera — ninguém vai tocar pra chegar nela.
+    const resolved: Step = company?.face_identify_default === true || modoGalpao ? 'face-scan' : 'cpf';
     setDefaultStep(resolved);
     const barrado = deviceCheck === 'conferido' && aparelhoBarradoNaEmpresa(company, device);
     if (barrado) setEmpresaBarrada(company?.display_name ?? null);
     setStep((prev) => (prev === 'carregando' ? (barrado ? 'device-blocked' : resolved) : prev));
-  }, [company, companyLoading, deviceCheck, device]);
+  }, [company, companyLoading, deviceCheck, device, modoGalpao]);
+
+  // Modo galpão ligado com a tela já aberta (a conferência que falhou ao abrir deu certo depois, ou o
+  // 2626 ligou agora): a tela passa a começar na câmera — e vai pra ela já, se estiver parada no CPF
+  // vazio. Desligar não troca nada no meio: vale na próxima abertura da tela.
+  useEffect(() => {
+    if (!modoGalpao || !defaultStepResolvedRef.current || defaultStep === 'face-scan') return;
+    setDefaultStep('face-scan');
+    setStep((prev) => (prev === 'cpf' && cpfInput === '' ? 'face-scan' : prev));
+  }, [modoGalpao, defaultStep, cpfInput]);
 
   // Quem é este aparelho? (só pergunta quando há um segredo guardado)
   // Com PRAZO: resposta que não chega não pode prender a tela em "carregando" — passa a valer
@@ -461,6 +524,29 @@ export const EmployeeClockIn: React.FC = () => {
       document.removeEventListener('visibilitychange', tentarDeNovo);
     };
   }, [deviceCheck, deviceToken]);
+
+  // Tablet: reconfere quem é a cada TABLET_RECONFERE_A_CADA_MS, SÓ com a tela livre (06/10/2026). É
+  // assim que um tablet que ninguém toca fica sabendo que o 2626 ligou/desligou o modo galpão — antes,
+  // só recarregando a página. Só atualiza o que a tela sabe: quem decide a batida é o servidor.
+  const telaLivreRef = useRef(telaLivre);
+  useEffect(() => { telaLivreRef.current = telaLivre; });
+  useEffect(() => {
+    if (!deviceToken || deviceCheck === 'pendente') return;
+    const ritmo = setInterval(() => {
+      if (telaLivreRef.current) setDeviceCheck('pendente');
+    }, TABLET_RECONFERE_A_CADA_MS);
+    return () => clearInterval(ritmo);
+  }, [deviceToken, deviceCheck]);
+
+  // Tablet BARRADO pelo servidor (removido no painel, ou a empresa saiu dele): reconfere sozinho a
+  // cada TABLET_BARRADO_RECONFERE_MS (06/10/2026 — antes a tela ficava parada até alguém tocar).
+  useEffect(() => {
+    if (step !== 'device-blocked' || !deviceToken) return;
+    const ritmo = setInterval(() => {
+      setDeviceCheck((atual) => (atual === 'pendente' ? atual : 'pendente'));
+    }, TABLET_BARRADO_RECONFERE_MS);
+    return () => clearInterval(ritmo);
+  }, [step, deviceToken]);
 
   // Dispara o registro assim que `employee` (state) realmente virar a pessoa
   // identificada pela câmera sem CPF (ver comentário no ref, acima).
@@ -657,7 +743,7 @@ export const EmployeeClockIn: React.FC = () => {
       posicaoAntecipadaRef.current = null;
       const position = antecipada && Date.now() - antecipada.pedidaEm <= GPS_ANTECIPADO_VALIDO_MS
         ? await antecipada.promessa
-        : await requestGeolocation();
+        : await (modoGalpao ? requestGeolocationDoTabletFixo() : requestGeolocation());
       latitude = position.coords.latitude;
       longitude = position.coords.longitude;
       accuracy = position.coords.accuracy;
@@ -697,7 +783,8 @@ export const EmployeeClockIn: React.FC = () => {
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Erro no servidor');
+    // 06/10/2026: a recusa leva o MOTIVO do servidor até a tela (ver RecusaDoServidor).
+    if (!res.ok) throw new RecusaDoServidor(data.error || 'Erro no servidor', res.status);
     return data;
   };
 
@@ -769,6 +856,8 @@ export const EmployeeClockIn: React.FC = () => {
      */
     const setSuccessMsg = async (att?: Attendance | null, foraDaArea?: { distancia: number | null }) => {
       if (!daVez()) return;
+      // Modo galpão (decisão 14): bipe curto quando o ponto entra.
+      if (modoGalpao) tocarBipe();
       const segundos = segundosParaVoltar(!!foraDaArea) ?? AUTO_LOGOUT_SECONDS;
       // Aparelho compartilhado: a tela volta ao início sozinha pra sessão deste funcionário não sobrar
       // logada pro próximo da fila. Armada ANTES de recarregar o painel: se a rede travar no
@@ -832,9 +921,9 @@ export const EmployeeClockIn: React.FC = () => {
         await setSuccessMsg(gravado, foraDaAreaDe(gravado));
         return;
       }
-      avisarFalha(isAbort
-        ? '❌ Tempo esgotado. Verifique sua conexão e tente novamente.'
-        : '❌ Erro ao registrar ponto. Tente novamente.');
+      // O motivo de verdade (06/10/2026): recusa do servidor ("cadastro encerrado", "CPF não confere"...)
+      // aparece com o texto dele; rede e prazo seguem com as mensagens de sempre.
+      avisarFalha(clockErrorMessage(err));
     } finally {
       clearTimeout(abortTimer);
       // Perdeu a vez: o vigia, o "Registrando..." e a trava já são da sessão/batida nova.
@@ -984,12 +1073,27 @@ export const EmployeeClockIn: React.FC = () => {
   // Ponto sem CPF (04/09/2026): a câmera já identificou a pessoa, mostrou o
   // nome com 3s pra cancelar, e ninguém cancelou — troca pra essa pessoa e
   // deixa o efeito (acima) disparar o registro assim que `employee` atualizar.
-  const handleFaceIdentifyConfirmed = (
+  const handleFaceIdentifyConfirmed = async (
     emp: Employee, descriptor: number[], type: 'entry' | 'exit', markingPosition?: MarkingPosition,
     comprovante?: string,
   ) => {
+    // Modo galpão (06/10/2026): a ficha reconhecida pode ser da OUTRA empresa do tablet — a tela
+    // troca pra ela SÓ nesta sessão (como no CPF), antes da batida: o painel, a conferência no banco
+    // e a volta ao início usam a empresa da tela.
+    if (company && emp.company_id && emp.company_id !== company.id) {
+      try {
+        await trocarEmpresaDaTela(emp.company_id);
+      } catch (err) {
+        console.error('Tablet: não consegui abrir a empresa da pessoa reconhecida:', err);
+        setErrorMsg('Não consegui abrir o seu cadastro agora (conexão). O ponto NÃO foi registrado — tente de novo.');
+        setStep('error');
+        if (ehTablet) voltarSozinhoEm(TABLET_VOLTA_APOS_FALHA_SEGUNDOS);
+        return;
+      }
+    }
     pendingFaceIdentifyRef.current = { type, markingPosition, descriptor };
     setComprovanteFacial(comprovante);
+    setBatidaPeloRosto(true);
     setEmployee(emp);
     setStep('dashboard');
   };
@@ -1015,6 +1119,7 @@ export const EmployeeClockIn: React.FC = () => {
     setNewPin('');
     setConfirmPin('');
     setComprovanteFacial(undefined);
+    setBatidaPeloRosto(false);
     setSetupError('');
     setEmployee(null);
     setAvailableCompanies([]);
@@ -1037,6 +1142,38 @@ export const EmployeeClockIn: React.FC = () => {
    */
   const handleLogoutRef = useRef(handleLogout);
   useEffect(() => { handleLogoutRef.current = handleLogout; });
+
+  // Tablet barrado que voltou a valer na reconferência (ver TABLET_BARRADO_RECONFERE_MS): volta pro
+  // início sozinho, pelo mesmo caminho do "Sair".
+  useEffect(() => {
+    if (step !== 'device-blocked' || deviceCheck !== 'conferido' || !device) return;
+    if (!aparelhoBarradoNaEmpresa(company, device)) handleLogoutRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só a resposta da reconferência importa
+  }, [device, deviceCheck]);
+
+  // Modo galpão: Localização NEGADA neste tablet (06/10/2026) — sem ela a 1ª batida do dia é recusada
+  // e o rosto cairia na recusa em loop. A tela da câmera ganha um aviso FIXO pro responsável, que
+  // some sozinho quando a permissão é liberada (o navegador avisa a mudança).
+  const [localizacaoNegada, setLocalizacaoNegada] = useState(false);
+  useEffect(() => {
+    if (!modoGalpao || step !== 'face-scan' || !navigator.permissions?.query) return;
+    let cancelado = false;
+    let permissao: PermissionStatus | null = null;
+    const atualizar = () => { if (!cancelado && permissao) setLocalizacaoNegada(permissao.state === 'denied'); };
+    navigator.permissions.query({ name: 'geolocation' as PermissionName })
+      .then((p) => {
+        if (cancelado) return;
+        permissao = p;
+        atualizar();
+        p.addEventListener('change', atualizar);
+      })
+      .catch((err: unknown) => console.warn('Modo galpão: não deu pra ler a permissão de localização:', err));
+    return () => {
+      cancelado = true;
+      permissao?.removeEventListener('change', atualizar);
+    };
+  }, [modoGalpao, step]);
+  const avisarLocalizacaoNegada = modoGalpao && step === 'face-scan' && localizacaoNegada;
   useEffect(() => {
     const largaveis: Step[] = ['cpf', 'pin', 'setup-pin', 'company-select', 'error', 'dashboard'];
     if (!ehTablet || !largaveis.includes(step) || loading || clockLoading || pendingClockType) return;
@@ -1176,22 +1313,37 @@ export const EmployeeClockIn: React.FC = () => {
         {/* ── APARELHO NÃO AUTORIZADO (trava "ponto só no tablet", 30/09/2026) ── */}
         {step === 'device-blocked' && (
           <>
-            <Header title="Ponto só no tablet da empresa" />
+            <Header title={modoGalpao ? 'Tablet desconectado' : 'Ponto só no tablet da empresa'} />
             <div className="p-6 text-center space-y-4" data-testid="device-blocked">
               <Tablet className="w-14 h-14 text-blue-600 mx-auto" />
-              <p className="text-gray-700">
-                Este aparelho não está autorizado a registrar ponto
-                {empresaBarrada ? <> de <strong>{empresaBarrada}</strong></> : null}.
-              </p>
-              <p className="text-gray-600 text-sm">Use o <strong>tablet da empresa</strong>.</p>
+              {modoGalpao ? (
+                // Modo galpão (06/10/2026): quem está na frente não resolve isto — só o responsável.
+                // Sem botão pro funcionário; a tela reconfere sozinha (TABLET_BARRADO_RECONFERE_MS).
+                <>
+                  <p className="text-gray-900 text-lg font-semibold" data-testid="tablet-desconectado">
+                    Tablet desconectado — chame o responsável.
+                  </p>
+                  <p className="text-gray-600 text-sm">Ele confere sozinho a cada minuto e volta assim que for liberado.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-700">
+                    Este aparelho não está autorizado a registrar ponto
+                    {empresaBarrada ? <> de <strong>{empresaBarrada}</strong></> : null}.
+                  </p>
+                  <p className="text-gray-600 text-sm">Use o <strong>tablet da empresa</strong>.</p>
+                </>
+              )}
               {/* Fora do tablet dá pra CONSULTAR (decisão do Victor, 30/09/2026) — bater, não. */}
-              {!device && <LinkDaConsulta destaque />}
-              <button
-                onClick={() => { setEmpresaBarrada(null); setCpfInput(''); setStep('cpf'); }}
-                className="w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 min-h-[44px]"
-              >
-                Sou de outra empresa — digitar CPF
-              </button>
+              {!device && !modoGalpao && <LinkDaConsulta destaque />}
+              {!modoGalpao && (
+                <button
+                  onClick={() => { setEmpresaBarrada(null); setCpfInput(''); setStep('cpf'); }}
+                  className="w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 min-h-[44px]"
+                >
+                  Sou de outra empresa — digitar CPF
+                </button>
+              )}
               <button
                 onClick={abrirAtivacaoDoTablet}
                 className="w-full text-xs text-gray-400 hover:text-gray-600 py-1"
@@ -1604,7 +1756,55 @@ export const EmployeeClockIn: React.FC = () => {
           onOcupado={setCameraOcupada}
           recemBatidos={recemBatidosRef}
           descansaSemNinguem={ehTablet}
+          modoGalpao={modoGalpao}
         />
+      )}
+
+      {/* ── Modo galpão: Localização negada neste tablet — aviso FIXO pro responsável (06/10/2026) ── */}
+      {avisarLocalizacaoNegada && (
+        <div className="fixed inset-0 z-[60] bg-black/70 flex overflow-y-auto p-4" data-testid="galpao-localizacao-negada">
+          <div className="m-auto w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+            <h2 className="text-lg font-bold text-gray-900 text-center">📍 Chame o responsável</h2>
+            <p className="text-gray-600 text-sm">
+              A <strong>Localização</strong> está bloqueada neste tablet — sem ela o ponto não é aceito. O
+              responsável libera assim:
+            </p>
+            {abertoComoApp() ? <PassosNoAppDoPonto permissao="Localização" /> : <PassosDaLocalizacaoNoNavegador />}
+            <p className="text-gray-500 text-xs">Liberou? Este aviso some sozinho.</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modo galpão: o resultado da batida PELO ROSTO, grande e sem botão (decisão 14) ── */}
+      {step === 'dashboard' && modoGalpao && batidaPeloRosto && employee && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center p-6 text-center"
+          style={{ background: 'radial-gradient(120% 90% at 50% 40%, #0E0B22 0%, #05060D 70%)' }}
+          data-testid="galpao-resultado"
+        >
+          <div className="space-y-4 max-w-xl w-full">
+            <p className="text-white font-extrabold leading-tight" style={{ fontSize: 'clamp(40px, 10vmin, 96px)' }}>
+              {employee.name.split(' ')[0]}
+            </p>
+            <p className="text-white/60 text-lg">{employee.name}</p>
+            {clockLoading || !clockMsg ? (
+              <p className="text-white/80 text-2xl flex items-center justify-center gap-3">
+                <Loader2 className="w-7 h-7 animate-spin" /> Registrando...
+              </p>
+            ) : (
+              <p
+                className={`text-2xl font-bold rounded-2xl px-5 py-4 ${
+                  clockMsg.startsWith('✅') ? 'bg-green-500/20 text-green-300'
+                    : clockMsg.startsWith('⚠️') ? 'bg-amber-500/20 text-amber-200'
+                    : 'bg-red-500/20 text-red-300'
+                }`}
+                data-testid="galpao-resultado-mensagem"
+              >
+                {clockMsg}
+              </p>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ── FACE REGISTRATION (overlay full-screen — primeiro acesso) ── */}
@@ -1675,20 +1875,7 @@ export const EmployeeClockIn: React.FC = () => {
               <strong>bloqueada no navegador</strong>. Libere assim:
             </p>
             {/* No app "Ponto" instalado não há cadeado nem endereço: o caminho é pelo Chrome (30/09/2026). */}
-            {abertoComoApp() ? (
-              <PassosNoAppDoPonto permissao="Localização" />
-            ) : (
-              <>
-                <ol className="text-gray-700 text-sm space-y-2 list-decimal list-inside bg-gray-50 rounded-xl p-3">
-                  <li>Toque no <strong>cadeado</strong> (ou ⓘ) ao lado do endereço do site</li>
-                  <li>Toque em <strong>Permissões</strong></li>
-                  <li>Em <strong>Localização</strong>, escolha <strong>Permitir</strong></li>
-                </ol>
-                <p className="text-gray-500 text-xs">
-                  Se não aparecer, vá nas Configurações do celular → Aplicativos → seu navegador → Permissões → Localização → Permitir.
-                </p>
-              </>
-            )}
+            {abertoComoApp() ? <PassosNoAppDoPonto permissao="Localização" /> : <PassosDaLocalizacaoNoNavegador />}
             <button
               onClick={() => { setGeoBlocked(false); rearmarVoltaNoTablet(); }}
               className="w-full py-4 bg-blue-600 text-white text-base font-bold rounded-xl hover:bg-blue-700 transition-colors"

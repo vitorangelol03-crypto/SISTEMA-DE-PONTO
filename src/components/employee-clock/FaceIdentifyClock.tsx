@@ -6,9 +6,12 @@ import { FaceScanFrame, FaceScanVisual } from './FaceScanFrame';
 import {
   CAMERA_DESCANSA_APOS_MS, FACE_MATCH_THRESHOLD, MarkingPosition, marcacaoAnterior, nomeDaMarcacaoAnterior,
   quickExitMinutes, resolveMarkingCount, resolveNextClockAction,
+  GALPAO_AVISO_MS, GALPAO_ECONOMIA_OLHA_A_CADA_MS, GALPAO_IGNORA_APOS_AVISO_MS, GALPAO_SEGUNDA_FOTO_TENTATIVAS,
+  GALPAO_TENTA_DE_NOVO_MS, decidirSegundaFoto, horaDaMarcacao,
 } from './clockGuards';
 import { useFrontCamera } from './useFrontCamera';
 import { CameraProblem } from './CameraProblem';
+import { abertoComoApp } from './useAppDoPonto';
 
 /** Alguém que a câmera deve ignorar até `ate` (ms): quem acabou de bater, ou disse "Não" à pergunta. */
 export interface RecemBatido {
@@ -54,6 +57,20 @@ interface FaceIdentifyClockProps {
    * pai: só no tablet — no celular de cada um a câmera segue ligada, como sempre.
    */
   descansaSemNinguem?: boolean;
+  /**
+   * MODO GALPÃO — o tablet SEM TOQUE (06/10/2026, plano do tablet sem toque, entrega A; o 2626 liga
+   * por tablet no cartão "Tablets de ponto"). Ligado:
+   *  - no lugar do descanso com toque, o MODO ECONÔMICO: tela escura, câmera LIGADA olhando a cada
+   *    GALPAO_ECONOMIA_OLHA_A_CADA_MS, e a tela acorda sozinha quando aparece um rosto;
+   *  - batida a menos de 10 min da anterior vira AVISO sem botão ("você já bateu ... às HH:MM");
+   *  - "Não reconheci — chame o supervisor";
+   *  - no fim da contagem, a 2ª FOTO (saiu da frente ou trocou de pessoa → não grava; é ela que
+   *    vai pro 1:1 do servidor);
+   *  - câmera com problema e reconhecimento que não carregou tentam de novo sozinhos;
+   *  - o rosto é procurado em TODAS as empresas do tablet.
+   * Desligado (padrão): tudo exatamente como antes.
+   */
+  modoGalpao?: boolean;
 }
 
 type Phase =
@@ -63,7 +80,10 @@ type Phase =
   | 'identified'
   | 'confirm-exit'
   | 'no-match'
-  | 'already-done';
+  | 'already-done'
+  // Modo galpão (06/10/2026): avisos sem botão, que somem sozinhos em GALPAO_AVISO_MS.
+  | 'recent-beat'
+  | 'not-recorded';
 
 // Pedido do Victor (04/09/2026): "não pode confundir, tem que ser robusta" —
 // nunca gravamos ponto sem a pessoa ver o próprio nome e ter uma chance real
@@ -116,8 +136,15 @@ const SAIDA_RAPIDA_ADIADA_MS = 60_000;
 /**
  * Tela de descanso do tablet (05/10/2026): fundo escuro, relógio grande e "Toque para bater o ponto".
  * Nada anima por quadro além do relógio (1x por segundo) — o objetivo é o tablet esfriar.
+ *
+ * `semToque` (06/10/2026, modo galpão): é o MODO ECONÔMICO — a mesma tela escura, mas a câmera
+ * continua ligada e a tela acorda SOZINHA quando aparece um rosto, então o texto pede pra olhar, não
+ * pra tocar. Tocar também acorda (quem toca por costume não fica sem resposta).
  */
-const TelaDeDescanso: React.FC<{ onAcordar: () => void; onUseCpf: () => void }> = ({ onAcordar, onUseCpf }) => {
+const TelaDeDescanso: React.FC<{ onAcordar: () => void; onUseCpf: () => void; semToque?: boolean }> = ({
+  onAcordar, onUseCpf, semToque = false,
+}) => {
+  const chamada = semToque ? 'Olhe para a câmera para bater o ponto' : 'Toque para bater o ponto';
   const [agora, setAgora] = useState(() => new Date());
   useEffect(() => {
     const relogio = setInterval(() => setAgora(new Date()), 1000);
@@ -129,8 +156,8 @@ const TelaDeDescanso: React.FC<{ onAcordar: () => void; onUseCpf: () => void }> 
     <div
       role="button"
       tabIndex={0}
-      aria-label="Toque para bater o ponto"
-      data-testid="camera-descanso"
+      aria-label={chamada}
+      data-testid={semToque ? 'camera-economia' : 'camera-descanso'}
       // Toque (click), não "encostar" (pointerdown): sumir no encostar deixaria o resto do toque cair
       // no botão que estava embaixo (ex.: "Prefere digitar CPF") — o toque fantasma.
       onClick={onAcordar}
@@ -146,9 +173,13 @@ const TelaDeDescanso: React.FC<{ onAcordar: () => void; onUseCpf: () => void }> 
         className="rounded-2xl px-8 py-5 border border-transparent shadow-2xl"
         style={{ background: 'linear-gradient(rgba(10,8,22,0.9), rgba(10,8,22,0.9)) padding-box, linear-gradient(110deg, #A879FF, #39E6FF) border-box' }}
       >
-        <p className="text-3xl font-bold text-[#F1E9FF]">👆 Toque para bater o ponto</p>
-        {/* Texto neutro: o descanso vale também no celular de quem abriu o ponto e esqueceu. */}
-        <p className="mt-2 text-sm text-white/60">A câmera desligou pra poupar o aparelho. Ela liga na hora.</p>
+        <p className="text-3xl font-bold text-[#F1E9FF]">{semToque ? '🙂' : '👆'} {chamada}</p>
+        {semToque ? (
+          <p className="mt-2 text-sm text-white/60">Pare na frente do tablet por uns segundos — a tela acende sozinha.</p>
+        ) : (
+          // Texto neutro: o descanso vale também no celular de quem abriu o ponto e esqueceu.
+          <p className="mt-2 text-sm text-white/60">A câmera desligou pra poupar o aparelho. Ela liga na hora.</p>
+        )}
       </div>
       <button
         onClick={(e) => { e.stopPropagation(); onUseCpf(); }}
@@ -162,9 +193,12 @@ const TelaDeDescanso: React.FC<{ onAcordar: () => void; onUseCpf: () => void }> 
 
 export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   company, onConfirmed, onUseCpf, deviceToken = null, deviceName = null, onDeviceBlocked, onRecognized, onOcupado,
-  recemBatidos, descansaSemNinguem = false,
+  recemBatidos, descansaSemNinguem = false, modoGalpao = false,
 }) => {
-  const { loading: modelsLoading, ready: modelsReady, error: modelsError, detectFace, compareFaces } = useFaceApi();
+  const {
+    loading: modelsLoading, ready: modelsReady, error: modelsError, detectFace, compareFaces,
+    tentarDeNovo: tentarCarregarDeNovo,
+  } = useFaceApi();
   const videoRef = useRef<HTMLVideoElement>(null);
   /**
    * Câmera descansando (05/10/2026, pedido do Victor): sem ninguém na frente da câmera por
@@ -174,6 +208,14 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   const [descansando, setDescansando] = useState(false);
   const descansandoRef = useRef(false);
   const ultimaAtividadeRef = useRef(Date.now());
+  /**
+   * Modo econômico (modo galpão, 06/10/2026): no lugar do descanso, a tela escurece mas a câmera
+   * SEGUE ligada, olhando só a cada GALPAO_ECONOMIA_OLHA_A_CADA_MS; rosto na frente → volta sozinha.
+   */
+  const [economia, setEconomia] = useState(false);
+  const economiaRef = useRef(false);
+  const ultimaOlhadaRef = useRef(0);
+  const modoGalpaoRef = useRef(modoGalpao);
   // Descansando, a câmera fica DESLIGADA (o hook fecha a trilha) e reabre ao acordar.
   const camera = useFrontCamera({ videoRef, habilitada: modelsReady && !descansando, componente: 'FaceIdentifyClock', companyId: company.id });
   const lastIdentifyAtRef = useRef(0);
@@ -205,6 +247,10 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   /** Batida a menos de 10 min da anterior, esperando a pessoa confirmar (ver SAIDA_RAPIDA_*). */
   const [minutosDesdeAnterior, setMinutosDesdeAnterior] = useState<number | null>(null);
   const [comprovantePendente, setComprovantePendente] = useState<string | undefined>(undefined);
+  /** Modo galpão: o aviso de batida recente ("Maria" + "já bateu a entrada às 07:42"). */
+  const [avisoRecente, setAvisoRecente] = useState<{ nome: string; texto: string } | null>(null);
+  /** Modo galpão: por que a 2ª foto não deixou gravar. */
+  const [naoRegistrado, setNaoRegistrado] = useState<'saiu' | 'outra-pessoa' | null>(null);
 
   /**
    * 🔴 ACHADO EM 22/09/2026 — POR QUE A FACIAL SEM CPF "NÃO ENTRAVA".
@@ -236,6 +282,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   const onRecognizedRef = useRef(onRecognized);
   const startConfirmRef = useRef<typeof startConfirmCountdown | null>(null);
   const resumeRef = useRef<typeof resumeScanning | null>(null);
+  const onConfirmedRef = useRef(onConfirmed);
 
   const clearTimers = () => {
     if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; }
@@ -251,7 +298,8 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   useEffect(() => () => { clearTimers(); }, []);
 
   useEffect(() => {
-    onOcupado?.(phase === 'identifying' || phase === 'identified' || phase === 'confirm-exit' || phase === 'already-done');
+    onOcupado?.(phase === 'identifying' || phase === 'identified' || phase === 'confirm-exit' || phase === 'already-done'
+      || phase === 'recent-beat' || phase === 'not-recorded');
   }, [phase, onOcupado]);
 
   // Qualquer coisa acontecendo na câmera conta como "tem gente": adia o descanso.
@@ -271,6 +319,13 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
     setDescansando(false);
   }, []);
 
+  /** Sai do modo econômico (rosto na frente, ou alguém tocou): volta ao ritmo normal. */
+  const sairDaEconomia = useCallback(() => {
+    ultimaAtividadeRef.current = Date.now();
+    economiaRef.current = false;
+    setEconomia(false);
+  }, []);
+
   // Volta a escanear depois de um resultado (identificado/recusado/já completo)
   const resumeScanning = useCallback(() => {
     vezRef.current += 1;
@@ -279,6 +334,8 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
     setCountdown(0);
     setMinutosDesdeAnterior(null);
     setComprovantePendente(undefined);
+    setAvisoRecente(null);
+    setNaoRegistrado(null);
     setPhase('scanning');
   }, []);
 
@@ -296,10 +353,74 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
       setCountdown(left);
       if (left <= 0) {
         if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; }
+        if (modoGalpaoRef.current) {
+          // Modo galpão: antes de gravar, a 2ª foto (ver conferirSegundaFoto).
+          void segundaFotoRef.current?.(employee, descriptor, type, markingPosition, comprovanteFacial);
+          return;
+        }
         onConfirmed(employee, descriptor, type, markingPosition, comprovanteFacial);
       }
     }, 1000);
   }, [onConfirmed]);
+
+  /**
+   * Modo galpão (06/10/2026): a 2ª FOTO no fim da contagem — sem o toque do "Não sou eu", é ela que
+   * segura a batida errada (ver decidirSegundaFoto). Procura o rosto até
+   * GALPAO_SEGUNDA_FOTO_TENTATIVAS vezes seguidas (cada procura pega um quadro novo da câmera): um
+   * quadro tremido sozinho não cancela a batida de quem continua parado ali.
+   */
+  const conferirSegundaFoto = useCallback(async (
+    employee: Employee, primeira: number[], type: 'entry' | 'exit', markingPosition: MarkingPosition | undefined,
+    comprovanteFacial?: string,
+  ) => {
+    const minhaVez = vezRef.current;
+    const video = videoRef.current;
+    let segunda: Float32Array | null = null;
+    for (let tentativa = 0; video && !segunda && tentativa < GALPAO_SEGUNDA_FOTO_TENTATIVAS; tentativa++) {
+      detectInFlightRef.current = true;
+      try {
+        segunda = await detectFaceRef.current(video);
+      } catch (err) {
+        console.error('Modo galpão: a 2ª foto falhou:', err);
+      } finally {
+        detectInFlightRef.current = false;
+      }
+      // "Não sou eu" tocado no meio, ou a tela já voltou a procurar: esta conferência não vale mais.
+      if (vezRef.current !== minhaVez) return;
+    }
+    const decisao = decidirSegundaFoto(segunda ? compareFacesRef.current(segunda, primeira) : null);
+    if (decisao === 'mesma-pessoa' && segunda) {
+      // É ESTA foto (nova) que vai pro 1:1 do servidor — não a mesma que fez o 1:N.
+      onConfirmedRef.current(employee, Array.from(segunda), type, markingPosition, comprovanteFacial);
+      return;
+    }
+    setNaoRegistrado(decisao === 'outra-pessoa' ? 'outra-pessoa' : 'saiu');
+    setPhase('not-recorded');
+    // A pessoa NÃO fica ignorada: se continuar na frente, é reconhecida de novo na hora.
+    resumeTimerRef.current = setTimeout(() => resumeRef.current?.(), GALPAO_AVISO_MS);
+  }, []);
+  const segundaFotoRef = useRef<typeof conferirSegundaFoto | null>(null);
+
+  /**
+   * Modo galpão (06/10/2026, decisão 3): batida a menos de QUICK_EXIT_CONFIRM_MINUTES da anterior
+   * NÃO grava e não pergunta (ninguém toca no tablet): mostra "você já bateu ... às HH:MM" por
+   * GALPAO_AVISO_MS e ignora a pessoa por GALPAO_IGNORA_APOS_AVISO_MS. Saída de verdade em menos de
+   * 10 min, o supervisor ajusta no painel.
+   */
+  const avisarBatidaRecente = useCallback((
+    employee: Employee, descriptor: number[], markingPosition: MarkingPosition | undefined, anteriorIso: string | null,
+  ) => {
+    clearTimers();
+    adiadosRef.current.push({ employeeId: employee.id, descriptor, ate: Date.now() + GALPAO_IGNORA_APOS_AVISO_MS });
+    const hora = horaDaMarcacao(anteriorIso);
+    setAvisoRecente({
+      nome: employee.name.split(' ')[0],
+      texto: `já bateu ${nomeDaMarcacaoAnterior(markingPosition)}${hora ? ` às ${hora}` : ''}`,
+    });
+    setPhase('recent-beat');
+    resumeTimerRef.current = setTimeout(() => resumeRef.current?.(), GALPAO_AVISO_MS);
+  }, []);
+  const avisarRecenteRef = useRef<typeof avisarBatidaRecente | null>(null);
 
   /** Batida logo depois da anterior: pergunta em vez de contar sozinho (ver SAIDA_RAPIDA_SEM_RESPOSTA_MS). */
   const askQuickExit = useCallback((
@@ -336,7 +457,30 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
     compareFacesRef.current = compareFaces;
     recemBatidosRef.current = recemBatidos;
     descansaSemNinguemRef.current = descansaSemNinguem;
+    modoGalpaoRef.current = modoGalpao;
+    onConfirmedRef.current = onConfirmed;
+    segundaFotoRef.current = conferirSegundaFoto;
+    avisarRecenteRef.current = avisarBatidaRecente;
   });
+
+  // Modo galpão desligado com a tela aberta (o 2626 desligou): sai do modo econômico na hora.
+  useEffect(() => {
+    if (!modoGalpao && economiaRef.current) sairDaEconomia();
+  }, [modoGalpao, sairDaEconomia]);
+
+  // Modo galpão: ninguém toca no "Tentar de novo" — câmera com problema e reconhecimento que não
+  // carregou tentam de novo SOZINHOS a cada GALPAO_TENTA_DE_NOVO_MS (cada falha arma a próxima).
+  const { tentarSozinho: tentarCameraSozinho } = camera;
+  useEffect(() => {
+    if (!modoGalpao || camera.estado !== 'problema') return;
+    const proxima = setTimeout(tentarCameraSozinho, GALPAO_TENTA_DE_NOVO_MS);
+    return () => clearTimeout(proxima);
+  }, [modoGalpao, camera.estado, tentarCameraSozinho]);
+  useEffect(() => {
+    if (!modoGalpao || !modelsError) return;
+    const proxima = setTimeout(tentarCarregarDeNovo, GALPAO_TENTA_DE_NOVO_MS);
+    return () => clearTimeout(proxima);
+  }, [modoGalpao, modelsError, tentarCarregarDeNovo]);
 
   const cancelConfirm = () => {
     if (identified) recentRef.current.set(identified.employee.id, Date.now());
@@ -390,11 +534,25 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
       if (!cameraAbertaRef.current) {
         ultimaAtividadeRef.current = now;
       } else if (descansaSemNinguemRef.current && now - ultimaAtividadeRef.current > CAMERA_DESCANSA_APOS_MS) {
-        // Ninguém na frente da câmera há CAMERA_DESCANSA_APOS_MS (só no tablet): desliga a câmera.
-        vezRef.current += 1;
-        descansandoRef.current = true;
-        setDescansando(true);
-        return;
+        if (modoGalpaoRef.current) {
+          // Modo galpão: a câmera NÃO desliga (ninguém vai tocar pra religar) — a tela escurece e a
+          // câmera passa a olhar devagar (modo econômico, decisão 2).
+          if (!economiaRef.current) {
+            economiaRef.current = true;
+            setEconomia(true);
+          }
+        } else {
+          // Ninguém na frente da câmera há CAMERA_DESCANSA_APOS_MS (só no tablet): desliga a câmera.
+          vezRef.current += 1;
+          descansandoRef.current = true;
+          setDescansando(true);
+          return;
+        }
+      }
+      // Modo econômico: olha só a cada GALPAO_ECONOMIA_OLHA_A_CADA_MS (é o que esfria o tablet).
+      if (economiaRef.current) {
+        if (now - ultimaOlhadaRef.current < GALPAO_ECONOMIA_OLHA_A_CADA_MS) return;
+        ultimaOlhadaRef.current = now;
       }
       if (now - lastIdentifyAtRef.current < IDENTIFY_COOLDOWN_MS) return;
 
@@ -413,6 +571,11 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
           return;
         }
         ultimaAtividadeRef.current = Date.now();
+        // Rosto na frente no modo econômico: a tela acende sozinha e segue reconhecendo já.
+        if (economiaRef.current) {
+          economiaRef.current = false;
+          setEconomia(false);
+        }
 
         // Quem acabou de bater (ou disse "Não" à pergunta) e continua na frente: o rosto bate aqui
         // mesmo no tablet — nem consulta o servidor.
@@ -430,7 +593,12 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         setPhase('identifying');
 
         const company = companyRef.current;
-        const result = await identifyFace(company.id, Array.from(descriptor), deviceTokenRef.current);
+        // Modo galpão: procura em TODAS as empresas do tablet (decisão 7 — Caratinga e Ponte Nova no
+        // mesmo galpão); a resposta diz de qual empresa é a ficha reconhecida.
+        const result = await identifyFace(
+          company.id, Array.from(descriptor), deviceTokenRef.current,
+          modoGalpaoRef.current ? { todasAsEmpresasDoTablet: true } : undefined,
+        );
         if (!mounted || vezRef.current !== minhaVez) return;
 
         if (result.deviceBlocked) {
@@ -473,14 +641,19 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         // 30/09/2026: as duas consultas saem JUNTAS (antes, uma esperava a outra). Meta do
         // Victor: da pessoa parar na frente até o ponto gravado, 5 a 7 segundos — e cada ida
         // ao servidor em fila custava ~0,5s no caminho.
+        // A ficha pode ser da OUTRA empresa do tablet (modo galpão); sem a informação, é a da tela.
+        const empresaDaFicha = result.companyId ?? company.id;
         const [emp, today] = await Promise.all([
-          getEmployeeByCpf(result.cpf!, company.id),
-          getEmployeeTodayAttendance(result.employeeId, company.id, { comprovanteFacial: result.comprovanteFacial }),
+          getEmployeeByCpf(result.cpf!, empresaDaFicha),
+          getEmployeeTodayAttendance(result.employeeId, empresaDaFicha, { comprovanteFacial: result.comprovanteFacial }),
         ]);
         if (!mounted || vezRef.current !== minhaVez) return;
         if (!emp) { setPhase('scanning'); return; }
 
-        const markingCount = resolveMarkingCount(emp, company);
+        const markingCount = resolveMarkingCount(
+          emp,
+          empresaDaFicha === company.id ? company : { default_marking_count: result.defaultMarkingCount ?? null },
+        );
         const action = resolveNextClockAction(today, markingCount);
         if (!action) {
           recentRef.current.set(emp.id, now);
@@ -491,8 +664,14 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         }
 
         if (action.type === 'exit') {
-          const minutos = quickExitMinutes(marcacaoAnterior(today, action.markingPosition));
+          const anterior = marcacaoAnterior(today, action.markingPosition);
+          const minutos = quickExitMinutes(anterior);
           if (minutos != null) {
+            if (modoGalpaoRef.current) {
+              // Modo galpão: sem botão pra responder — avisa e NÃO grava (decisão 3).
+              avisarRecenteRef.current?.(emp, Array.from(descriptor), action.markingPosition, anterior);
+              return;
+            }
             askQuickExitRef.current?.(emp, Array.from(descriptor), action.markingPosition, action.label, minutos, result.comprovanteFacial);
             return;
           }
@@ -534,6 +713,11 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
           <X className="w-12 h-12 mx-auto text-red-600" />
           <h2 className="text-lg font-bold text-gray-800">Erro na câmera</h2>
           <p className="text-sm text-gray-600">{modelsError}</p>
+          {modoGalpao && (
+            <p className="text-sm text-gray-500" data-testid="galpao-tentando-de-novo">
+              Tentando de novo sozinho a cada {GALPAO_TENTA_DE_NOVO_MS / 1000} s.
+            </p>
+          )}
           <button onClick={onUseCpf} className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 min-h-[48px]">
             Entrar com CPF e senha
           </button>
@@ -554,7 +738,7 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         </div>
       </div>
     ) : null;
-  const telaDaCamera = sobreposicao === null && !descansando;
+  const telaDaCamera = sobreposicao === null && !descansando && !economia;
   const botaoDeCpfNaTela = telaDaCamera && (phase === 'scanning' || phase === 'no-match' || phase === 'identifying');
   // Acordou do descanso: a câmera leva ~1s pra reabrir — avisa em vez de mostrar tela preta muda.
   const reabrindoCamera = phase === 'scanning' && camera.estado === 'abrindo';
@@ -566,7 +750,11 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
   : phase === 'confirm-exit'  ? { color: 'blue',                                   label: `⚠️ ${identified?.employee.name.split(' ')[0]} — ${identified?.label} agora?` }
   : phase === 'identified'    ? { color: 'green', flash: 'success',                label: `👋 ${identified?.employee.name.split(' ')[0]} — ${identified?.label}` }
   : phase === 'already-done'  ? { color: 'green',                                  label: `✅ ${identified?.employee.name.split(' ')[0]}, ponto completo hoje!` }
-  : phase === 'no-match'      ? { color: 'red',   shake: true,                     label: '❌ Não reconheci. Tente de novo.' }
+  : phase === 'no-match'      ? { color: 'red',   shake: true,                     label: modoGalpao ? '❌ Não reconheci — chame o supervisor' : '❌ Não reconheci. Tente de novo.' }
+  : phase === 'recent-beat'   ? { color: 'green',                                  label: `✅ ${avisoRecente?.nome}, você ${avisoRecente?.texto}` }
+  : phase === 'not-recorded'  ? { color: 'red',   shake: true,                     label: naoRegistrado === 'outra-pessoa'
+                                                                                     ? '⚠️ Trocou a pessoa na frente — ponto NÃO registrado'
+                                                                                     : '⚠️ Saiu da frente antes do fim — ponto NÃO registrado' }
                                : { color: 'blue',  pulse: true, showScanLine: true, label: '🔍 Aproxime o rosto da câmera' };
 
   return (
@@ -576,9 +764,17 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
           <ScanFace className="w-5 h-5" />
           <p className="text-sm font-semibold">Reconhecimento facial — Registro de Ponto</p>
         </div>
-        {deviceName && (
-          <p className="text-xs text-white/80 truncate max-w-[45%]" data-testid="clock-device-badge">📟 {deviceName}</p>
-        )}
+        <div className="flex flex-col items-end gap-0.5 max-w-[45%]">
+          {deviceName && (
+            <p className="text-xs text-white/80 truncate max-w-full" data-testid="clock-device-badge">📟 {deviceName}</p>
+          )}
+          {/* Modo galpão: aberto no navegador comum a tela do tablet apaga sozinha — aviso pro responsável. */}
+          {modoGalpao && !abertoComoApp() && (
+            <p className="text-[11px] text-amber-300 truncate max-w-full" data-testid="aviso-abrir-pelo-app">
+              ⚠️ Abra pelo app "Ponto" (aqui a tela pode apagar)
+            </p>
+          )}
+        </div>
       </div>
 
       <div style={{ position: 'relative', flex: '1 1 auto', width: '100%', background: '#000' }}>
@@ -612,7 +808,8 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
             style={{ background: 'linear-gradient(rgba(10,8,22,0.92), rgba(10,8,22,0.92)) padding-box, linear-gradient(110deg, #A879FF, #39E6FF) border-box' }}
           >
             <UserCircle2 className="w-10 h-10 mx-auto text-[#35F59B]" />
-            <p className="text-white font-bold">{identified.employee.name}</p>
+            {/* Modo galpão (decisão 14): nome GRANDE — ninguém chega perto pra ler. */}
+            <p className={`text-white font-bold ${modoGalpao ? 'text-3xl leading-tight' : ''}`}>{identified.employee.name}</p>
             <p className="text-sm text-white/75">Registrando <strong className="text-[#39E6FF]">{identified.label}</strong> em {countdown}s...</p>
             <button
               onClick={cancelConfirm}
@@ -657,8 +854,27 @@ export const FaceIdentifyClock: React.FC<FaceIdentifyClockProps> = ({
         </div>
       )}
 
+      {/* ── Modo galpão: batida a menos de 10 min — AVISO sem botão, some sozinho (decisão 3) ── */}
+      {telaDaCamera && phase === 'recent-beat' && avisoRecente && (
+        <div className="absolute bottom-24 left-0 right-0 z-30 flex justify-center px-4">
+          <div
+            className="rounded-2xl shadow-2xl p-4 w-full max-w-sm text-center space-y-2 border border-transparent"
+            style={{ background: 'linear-gradient(rgba(10,8,22,0.94), rgba(10,8,22,0.94)) padding-box, linear-gradient(110deg, #35F59B, #39E6FF) border-box' }}
+            data-testid="aviso-batida-recente"
+          >
+            <UserCircle2 className="w-10 h-10 mx-auto text-[#35F59B]" />
+            <p className="text-white text-3xl font-bold leading-tight">{avisoRecente.nome}</p>
+            <p className="text-white/85">Você {avisoRecente.texto}.</p>
+            <p className="text-sm text-white/60">Nada foi registrado agora. Precisa sair antes de 10 min? Fale com o supervisor.</p>
+          </div>
+        </div>
+      )}
+
       {/* ── Câmera descansando (05/10/2026): toque em qualquer lugar acorda ── */}
       {descansando && sobreposicao === null && <TelaDeDescanso onAcordar={acordar} onUseCpf={onUseCpf} />}
+
+      {/* ── Modo econômico (modo galpão, 06/10/2026): câmera ligada, a tela acorda sozinha com rosto ── */}
+      {economia && sobreposicao === null && <TelaDeDescanso semToque onAcordar={sairDaEconomia} onUseCpf={onUseCpf} />}
 
       {/* ── Alternativa manual (sempre disponível) ──
            'identifying' entrou em 22/09/2026: sem ele, a pessoa que caía nessa fase ficava

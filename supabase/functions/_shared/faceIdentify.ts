@@ -39,16 +39,17 @@ export interface CandidatoFacial {
 
 export type DesfechoDaIdentificacao = 'matched' | 'no_match' | 'ambiguous' | 'no_candidates';
 
-export interface ResultadoDaIdentificacao {
+export interface ResultadoDaIdentificacao<T extends CandidatoFacial = CandidatoFacial> {
   outcome: DesfechoDaIdentificacao;
   /** O mais parecido (null só quando não há ninguém cadastrado). */
-  best: CandidatoFacial | null;
+  best: T | null;
   /** O 2º mais parecido (null quando há um só cadastrado). */
-  second: CandidatoFacial | null;
+  second: T | null;
 }
 
-/** Decide QUEM é o rosto do momento, entre os candidatos já medidos (qualquer ordem). */
-export function decidirIdentificacao(candidatos: readonly CandidatoFacial[]): ResultadoDaIdentificacao {
+/** Decide QUEM é o rosto do momento, entre os candidatos já medidos (qualquer ordem).
+ *  Genérico (06/10/2026): devolve o candidato do MESMO tipo que entrou (ex.: com a empresa). */
+export function decidirIdentificacao<T extends CandidatoFacial>(candidatos: readonly T[]): ResultadoDaIdentificacao<T> {
   const ordenados = [...candidatos]
     .filter((c) => Number.isFinite(c.distance))
     .sort((a, b) => a.distance - b.distance);
@@ -61,4 +62,73 @@ export function decidirIdentificacao(candidatos: readonly CandidatoFacial[]): Re
     return { outcome: 'ambiguous', best, second };
   }
   return { outcome: 'matched', best, second };
+}
+
+// ─── MODO GALPÃO — o rosto procurado em TODAS as empresas do tablet (06/10/2026) ──────────────
+// Decisão 7 do plano do tablet sem toque (.claude-checkpoints/PLANO_TABLET_SEM_TOQUE_2026-10-05.md):
+// Caratinga e Ponte Nova no MESMO galpão, um tablet só; reconhecer as duas pelo rosto.
+
+/** Um candidato com a empresa da ficha (cada ficha é de uma empresa só). */
+export interface CandidatoFacialComEmpresa extends CandidatoFacial {
+  companyId: string;
+}
+
+/**
+ * A mesma pessoa pode ter ficha nas DUAS empresas do tablet (mesmo CPF, um rosto cadastrado em
+ * cada). Sem juntar, as duas fichas seriam 1º e 2º colocados quase empatados e o 1:N recusaria
+ * como "ambíguo" TODA vez. Junta por CPF (só os dígitos) e fica, por pessoa, com a ficha MAIS
+ * PARECIDA — a decisão de QUAL ficha bate o ponto vem depois (escolherFichaDaPessoa). Ficha sem
+ * CPF fica como está (sem como saber se é a mesma pessoa).
+ */
+export function juntarCandidatosPorCpf<T extends CandidatoFacial>(candidatos: readonly T[]): T[] {
+  const melhorPorCpf = new Map<string, T>();
+  const semCpf: T[] = [];
+  for (const c of candidatos) {
+    const chave = String(c.cpf ?? '').replace(/\D/g, '');
+    if (!chave) {
+      semCpf.push(c);
+      continue;
+    }
+    const atual = melhorPorCpf.get(chave);
+    if (!atual || c.distance < atual.distance) melhorPorCpf.set(chave, c);
+  }
+  return [...melhorPorCpf.values(), ...semCpf];
+}
+
+/** As fichas da mesma pessoa (mesmo CPF) que TAMBÉM batem com o rosto — só elas podem bater o
+ *  ponto: o 1:1 do clock-in-validated confere o rosto contra a ficha escolhida. */
+export function fichasDaPessoa<T extends CandidatoFacial>(candidatos: readonly T[], escolhido: T): T[] {
+  const cpf = String(escolhido.cpf ?? '').replace(/\D/g, '');
+  if (!cpf) return [escolhido];
+  return candidatos.filter((c) => String(c.cpf ?? '').replace(/\D/g, '') === cpf && c.distance < LIMITE_FACIAL);
+}
+
+/** O dia tem ponto ABERTO? (entrou e ainda não deu a saída final — 2 ou 4 marcações). */
+export function pontoAbertoNoDia(att: {
+  entry_time?: string | null;
+  entry_1_time?: string | null;
+  exit_time_full?: string | null;
+  exit_2_time?: string | null;
+} | null | undefined): boolean {
+  if (!att) return false;
+  const entrou = !!(att.entry_1_time ?? att.entry_time);
+  const saiu = !!(att.exit_2_time ?? att.exit_time_full);
+  return entrou && !saiu;
+}
+
+/**
+ * Decisão 7: quem tem ficha nas duas empresas bate onde JÁ TEM PONTO ABERTO no dia; sem ponto
+ * aberto, na empresa "de casa" do tablet (a da tela); sem ficha na de casa, na mais parecida.
+ */
+export function escolherFichaDaPessoa<T extends CandidatoFacialComEmpresa>(
+  fichas: readonly T[],
+  empresaDeCasa: string,
+  comPontoAberto: ReadonlySet<string>,
+): T | null {
+  if (fichas.length === 0) return null;
+  const aberta = fichas.find((f) => comPontoAberto.has(f.id));
+  if (aberta) return aberta;
+  const deCasa = fichas.find((f) => f.companyId === empresaDeCasa);
+  if (deCasa) return deCasa;
+  return [...fichas].sort((a, b) => a.distance - b.distance)[0];
 }

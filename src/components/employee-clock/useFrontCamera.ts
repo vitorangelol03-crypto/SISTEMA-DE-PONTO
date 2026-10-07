@@ -28,6 +28,11 @@ export interface UseFrontCamera {
   problema: ProblemaDeCamera | null;
   /** Tentar de novo a partir de um TOQUE da pessoa. */
   reabrir: () => void;
+  /**
+   * Tentar de novo SEM toque (06/10/2026, modo galpão: o tablet sem toque se recupera sozinho).
+   * Não conta como toque — o registro do erro no servidor continua dizendo a verdade.
+   */
+  tentarSozinho: () => void;
   /** Para a câmera (ex.: rosto confirmado). */
   parar: () => void;
   streamRef: RefObject<MediaStream | null>;
@@ -60,6 +65,11 @@ export function useFrontCamera(opts: {
 
   const reabrir = useCallback(() => {
     pediuComToqueRef.current = true;
+    setPedido((n) => n + 1);
+  }, []);
+
+  const tentarSozinho = useCallback(() => {
+    pediuComToqueRef.current = false;
     setPedido((n) => n + 1);
   }, []);
 
@@ -178,5 +188,5 @@ export function useFrontCamera(opts: {
     };
   }, [habilitada, pedido, videoRef, parar]);
 
-  return { estado, problema, reabrir, parar, streamRef, reaberturasPorVideoPreto };
+  return { estado, problema, reabrir, tentarSozinho, parar, streamRef, reaberturasPorVideoPreto };
 }
