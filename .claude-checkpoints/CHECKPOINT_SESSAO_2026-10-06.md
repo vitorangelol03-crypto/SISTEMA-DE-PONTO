@@ -193,8 +193,8 @@ ao vivo das edge fns contra a v22: 6 arquivos / 22 · **E2E 134 NOVO 2/2** (rost
 pessoa SÓ da vizinha com 4 marcações: abriu na câmera, gravou "Entrada manhã" NA empresa dela, aviso sem
 botão na saída rápida, **0 toques medidos na página**; aberto → gravado 14,8 s nesta máquina) · regressão
 127/128/132/133 **31/31** sem repetição · md5 de tablets/empresas/fichas reais idêntico antes/depois,
-zero sobra "PW Test" · Vercel conferida pelo `/version.json` (75cda01c0977) · CI do 75cda01: tsc+lint e unit
-verdes (e2e rodando na hora deste registro).
+zero sobra "PW Test" · Vercel conferida pelo `/version.json` (75cda01c0977) · **CI do 75cda01 VERDE nos 3 jobs**
+(tsc+lint, unit, e2e — run 37566975321).
 ⚠️ CI do `60394a1` (parte 1) ficou VERMELHO e eu não tinha visto: os testes AO VIVO das edge fns deram 500
 e timeout entre 02:31 e 02:35 UTC — 2 min depois do deploy da v21/v20 —, inclusive na public-api-v1 que
 nem foi mexida. Os mesmos passaram aqui (contra v21 e v22) e no CI do 75cda01: tratado como soluço do
