@@ -6,7 +6,7 @@ import { gerarSegredoDoTablet, sha256Hex } from '../../supabase/functions/_share
 /**
  * MODO SUPERVISOR DO TABLET — contra a edge function PUBLICADA `ponto-supervisor-api` (07/10/2026,
  * plano do tablet sem toque, entrega D). Nada de mock: empresa, tablets, funcionários e supervisores
- * FIXTURE ("PW Test", ids 9797x), criados aqui e apagados no fim.
+ * FIXTURE ("PW Test", ids 9797x no CI e 9795x na máquina local), criados aqui e apagados no fim.
  *
  * O caminho de verdade, na ordem:
  *   1. login do supervisor (código + senha do painel): trava de 5 erros; senha provisória, sem
@@ -96,7 +96,12 @@ const FOTO = `data:image/jpeg;base64,${'A'.repeat(400)}`;
 describe.skipIf(!HAS_SERVICE_ROLE)('modo supervisor do tablet — edge function publicada', { timeout: 120_000 }, () => {
   const stamp = Date.now();
   const SENHA = 'teste12345'; // senha dos supervisores DE TESTE (criados e apagados aqui)
-  const SUP = { ok: '97971', semVinculo: '97972', semPerm: '97973', provisoria: '97974', trava: '97975' };
+  // Códigos FIXOS (a criação de teste apaga e recria o código — sobra de rodada que caiu se limpa
+  // sozinha), mas SEPARADOS entre o CI e a máquina local: em 07/10/2026 as duas rodaram este teste no
+  // mesmo minuto, no mesmo banco, com os mesmos códigos — uma apagava os usuários da outra e o
+  // preparo estourou o prazo no CI. 9797x = CI; 9795x = local (9796x é do E2E 135).
+  const BASE = process.env.CI ? '9797' : '9795';
+  const SUP = { ok: `${BASE}1`, semVinculo: `${BASE}2`, semPerm: `${BASE}3`, provisoria: `${BASE}4`, trava: `${BASE}5` };
   const USUARIOS = Object.values(SUP);
   let empresaA = '';
   let empresaB = '';
@@ -182,9 +187,11 @@ describe.skipIf(!HAS_SERVICE_ROLE)('modo supervisor do tablet — edge function 
     await atualizar('users', `id=eq.${SUP.ok}`, { employee_id: funcSupervisor });
     await atualizar('users', `id=eq.${SUP.semPerm}`, { employee_id: funcJoao });
     await atualizar('users', `id=eq.${SUP.provisoria}`, { must_change_password: true });
-  });
+    // ~20 idas ao banco de produção em fila: do servidor do CI isso beira os 10 s do padrão (o mesmo
+    // prazo do outro teste ao vivo, edgeFnPontoSoNoTablet).
+  }, 60_000);
 
-  afterAll(async () => { await limpar(); });
+  afterAll(async () => { await limpar(); }, 60_000);
 
   it('login: 5 senhas erradas travam; senha provisória, sem permissão e sem vínculo não entram', async () => {
     for (let i = 1; i <= 5; i++) {
