@@ -7,6 +7,7 @@ import { useCompany } from '../../contexts/useCompany';
 import { PONTO_EDITOR_ID, isConfigurablePrivileged, canEditPrivilegedUserPermissions } from '../../config/masters';
 import toast from 'react-hot-toast';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
+import { VinculoDoFuncionario, type VinculoAtual } from './VinculoDoFuncionario';
 
 const FALLBACK_BONUS_TYPES: BonusTypeRecord[] = [
   { id: 'fallback-B',  company_id: '', code: 'B',  name: 'Bônus B',  default_value: 0, order_index: 1, active: true, created_at: '', updated_at: '' },
@@ -22,6 +23,14 @@ interface PermissionsModalProps {
   currentPermissions: UserPermissions | null;
   currentUserId: string;
   onSaved: () => void;
+  /**
+   * Vínculo com funcionário (07/10/2026, entrega C do tablet sem toque): a empresa DO USUÁRIO
+   * configurado (a lista de funcionários é dela), o vínculo de agora e o aviso de mudança pro pai
+   * atualizar a linha da aba Usuários. Sem `userCompanyId` o campo não aparece.
+   */
+  userCompanyId?: string | null;
+  linkedEmployee?: VinculoAtual | null;
+  onLinkChanged?: (vinculo: VinculoAtual | null) => void;
 }
 
 export function PermissionsModal({
@@ -31,9 +40,23 @@ export function PermissionsModal({
   userName,
   currentPermissions,
   currentUserId,
-  onSaved
+  onSaved,
+  userCompanyId,
+  linkedEmployee = null,
+  onLinkChanged,
 }: PermissionsModalProps) {
   const { company } = useCompany();
+  const [vinculo, setVinculo] = useState<VinculoAtual | null>(linkedEmployee);
+  // Pelos valores (não pelo objeto): o pai pode montar um objeto novo a cada render.
+  const vinculoId = linkedEmployee?.id ?? null;
+  const vinculoNome = linkedEmployee?.nome ?? null;
+  useEffect(() => {
+    setVinculo(vinculoId && vinculoNome ? { id: vinculoId, nome: vinculoNome } : null);
+  }, [vinculoId, vinculoNome, userId]);
+  const mudarVinculo = (novo: VinculoAtual | null) => {
+    setVinculo(novo);
+    onLinkChanged?.(novo);
+  };
   const [permissions, setPermissions] = useState<UserPermissions>(
     currentPermissions || DEFAULT_READONLY_PERMISSIONS
   );
@@ -178,7 +201,9 @@ export function PermissionsModal({
               <Shield className="w-6 h-6 text-blue-600 flex-shrink-0" />
               <div className="min-w-0">
                 <h2 className="text-base sm:text-xl font-bold text-gray-900 truncate">Gerenciar Permissões</h2>
-                <p className="text-xs sm:text-sm text-gray-600 truncate">{userName}</p>
+                <p className="text-xs sm:text-sm text-gray-600 truncate" data-testid="permissoes-cabecalho">
+                  {userName}{vinculo ? ` · ${vinculo.nome}` : ''}
+                </p>
               </div>
             </div>
             <button
@@ -231,6 +256,9 @@ export function PermissionsModal({
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="space-y-3">
+            {userCompanyId !== undefined && (
+              <VinculoDoFuncionario userId={userId} companyId={userCompanyId} vinculo={vinculo} onMudou={mudarVinculo} />
+            )}
             {filteredSections.map(section => {
               const sectionKey = section as keyof UserPermissions;
               const labels = PERMISSION_LABELS[sectionKey];

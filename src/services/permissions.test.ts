@@ -46,6 +46,8 @@ describe('permissions.ts - Sistema de Permissões', () => {
           import: false,
           viewPayroll: false,
           editPayroll: false,
+          tabletCreate: false,
+          tabletFaceReset: false,
         },
         financial: {
           view: false,

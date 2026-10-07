@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { UserCog, Plus, Trash2, Eye, EyeOff, RefreshCw, Shield, Pencil, KeyRound } from 'lucide-react';
-import { getAllUsers, createUser, updateUser, resetUserPassword, deleteUser, User } from '../../services/database';
+import { getAllUsers, createUser, updateUser, resetUserPassword, deleteUser, getNomesDosFuncionarios, User } from '../../services/database';
 import { useCompany } from '../../contexts/useCompany';
 import { isValidPassword, isNumericString } from '../../utils/validation';
-import { getUserPermissions } from '../../services/permissions';
+import { getAllUserPermissions, getUserPermissions } from '../../services/permissions';
 import { UserPermissions } from '../../types/permissions';
 import { PermissionsModal } from '../permissions/PermissionsModal';
+import type { VinculoAtual } from '../permissions/VinculoDoFuncionario';
+import { temPermissaoDoTablet } from '../permissions/vinculoFuncionario';
 import { isMaster, PONTO_EDITOR_ID, isConfigurablePrivileged, canEditPrivilegedUserPermissions } from '../../config/masters';
 import toast from 'react-hot-toast';
 import { mensagemDeErro } from '../../utils/mensagemDeErro';
@@ -19,6 +21,10 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
   const { company } = useCompany();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  /** Vínculo com funcionário (07/10/2026, entrega C do tablet sem toque): nome de quem está ligado
+   *  e quem tem permissão do tablet (sem vínculo, a linha avisa). */
+  const [nomesDosFuncionarios, setNomesDosFuncionarios] = useState<Record<string, string>>({});
+  const [usuariosComTablet, setUsuariosComTablet] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -43,6 +49,17 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
       setLoading(true);
       const data = await getAllUsers(company.id);
       setUsers(data);
+      // A coluna "Funcionário" é complemento: se falhar, a lista de usuários continua de pé.
+      const ligados = data.map((u) => u.employee_id).filter((id): id is string => !!id);
+      const [nomes, permissoes] = await Promise.all([
+        getNomesDosFuncionarios(ligados).catch((err: unknown) => {
+          console.error('Erro ao carregar o nome dos funcionários vinculados:', err);
+          return {} as Record<string, string>;
+        }),
+        getAllUserPermissions(),
+      ]);
+      setNomesDosFuncionarios(nomes);
+      setUsuariosComTablet(new Set(permissoes.filter((p) => temPermissaoDoTablet(p.permissions)).map((p) => p.user_id)));
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
       toast.error(mensagemDeErro(error, 'Erro ao carregar usuários'));
@@ -241,6 +258,41 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
     setShowPermissionsModal(false);
     setSelectedUser(null);
     setUserPermissions(null);
+    loadUsers(); // o aviso "sem vínculo" depende das permissões do tablet
+  };
+
+  /** O vínculo mudou dentro de Permissões: a linha da aba já mostra o nome novo. */
+  const handleLinkChanged = (usuarioId: string, vinculo: VinculoAtual | null) => {
+    setUsers((prev) => prev.map((u) => (u.id === usuarioId ? { ...u, employee_id: vinculo?.id ?? null } : u)));
+    setSelectedUser((prev) => (prev && prev.id === usuarioId ? { ...prev, employee_id: vinculo?.id ?? null } : prev));
+    if (vinculo) setNomesDosFuncionarios((prev) => ({ ...prev, [vinculo.id]: vinculo.nome }));
+  };
+
+  /** "Criado por": o nome de quem criou, quando é um usuário desta lista; senão o código. */
+  const nomeDoCriador = (createdBy: string | null): string => {
+    if (!createdBy) return 'Sistema';
+    const criador = users.find((u) => u.id === createdBy);
+    return criador?.name ? `${criador.name} (${createdBy})` : createdBy;
+  };
+
+  /** A coluna "Funcionário": nome de quem está ligado, ou "sem vínculo" (com aviso se precisar). */
+  const funcionarioDoUsuario = (user: User) => {
+    if (user.employee_id) {
+      return (
+        <span className="text-sm text-gray-900" data-testid="user-funcionario">
+          {nomesDosFuncionarios[user.employee_id] ?? 'Funcionário ligado'}
+        </span>
+      );
+    }
+    if (usuariosComTablet.has(user.id)) {
+      return (
+        <span className="text-xs font-semibold text-amber-800 bg-amber-100 rounded px-2 py-1" data-testid="user-funcionario"
+          title="Tem permissão do tablet: ligue a um funcionário em Permissões">
+          ⚠️ sem vínculo
+        </span>
+      );
+    }
+    return <span className="text-sm text-gray-400" data-testid="user-funcionario">sem vínculo</span>;
   };
 
   if (loading) {
@@ -429,6 +481,9 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                   Nome
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Funcionário
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Telefone
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -454,6 +509,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{user.name || <span className="text-gray-400">—</span>}</div>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap">{funcionarioDoUsuario(user)}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">{user.phone || <span className="text-gray-400">—</span>}</div>
                   </td>
@@ -476,7 +532,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">
-                      {user.created_by || 'Sistema'}
+                      {nomeDoCriador(user.created_by)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
@@ -544,11 +600,12 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
                   </div>
                   {user.name && <p className="text-xs text-gray-500">ID: {user.id}</p>}
                   {user.phone && <p className="text-xs text-gray-500">Telefone: {user.phone}</p>}
+                  <p className="text-xs text-gray-500 flex items-center gap-1 flex-wrap">Funcionário: {funcionarioDoUsuario(user)}</p>
                   <p className="text-xs text-gray-500">
                     Criado em: {isMaster(user.id) ? 'Sistema' : new Date(user.created_at).toLocaleDateString('pt-BR')}
                   </p>
                   <p className="text-xs text-gray-500">
-                    Criado por: {user.created_by || 'Sistema'}
+                    Criado por: {nomeDoCriador(user.created_by)}
                   </p>
                 </div>
               </div>
@@ -680,6 +737,11 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userId, hasPermission }) => 
           currentPermissions={userPermissions}
           currentUserId={userId}
           onSaved={handlePermissionsSaved}
+          userCompanyId={selectedUser.company_id ?? null}
+          linkedEmployee={selectedUser.employee_id
+            ? { id: selectedUser.employee_id, nome: nomesDosFuncionarios[selectedUser.employee_id] ?? 'Funcionário ligado' }
+            : null}
+          onLinkChanged={(vinculo) => handleLinkChanged(selectedUser.id, vinculo)}
         />
       )}
     </div>

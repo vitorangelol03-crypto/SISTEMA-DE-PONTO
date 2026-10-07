@@ -53,6 +53,12 @@ export interface User {
   name: string | null;
   phone: string | null;
   must_change_password: boolean;
+  /**
+   * Funcionário ligado a este usuário (07/10/2026, modo supervisor do tablet — plano do tablet
+   * sem toque, entrega C). Só muda por `linkUserEmployee` (o banco recusa UPDATE direto).
+   * Opcional: banco antigo não manda.
+   */
+  employee_id?: string | null;
 }
 
 export interface Employee {
@@ -531,6 +537,53 @@ export const loginUser = async (id: string, password: string): Promise<User> => 
 };
 
 // User functions
+/** Um funcionário na lista do vínculo (07/10/2026) — só o que o campo de escolha mostra. */
+export interface FuncionarioParaVinculo {
+  id: string;
+  name: string;
+  cpf: string | null;
+  termination_date: string | null;
+  registration_status: string | null;
+}
+
+/**
+ * Funcionários de UMA empresa pro campo "Funcionário vinculado" (Permissões). Consulta enxuta de
+ * propósito (não o getAllEmployees com select('*')): é uma lista pra escolher um nome.
+ */
+export const getFuncionariosParaVinculo = async (companyId: string): Promise<FuncionarioParaVinculo[]> => {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('id, name, cpf, termination_date, registration_status')
+    .eq('company_id', companyId)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as FuncionarioParaVinculo[];
+};
+
+/** Nome dos funcionários ligados (coluna "Funcionário" da aba Usuários). */
+export const getNomesDosFuncionarios = async (ids: string[]): Promise<Record<string, string>> => {
+  if (ids.length === 0) return {};
+  const { data, error } = await supabase.from('employees').select('id, name').in('id', ids);
+  if (error) throw error;
+  return Object.fromEntries((data ?? []).map((e: { id: string; name: string }) => [e.id, e.name]));
+};
+
+/**
+ * Liga um usuário do painel a um funcionário (`null` desfaz) — 07/10/2026, plano do tablet sem
+ * toque, entrega C. Quem decide é o banco (`admin_link_user_employee`): o 2626 ou quem tem
+ * "Gerenciar permissões", só usuário da própria empresa; funcionário da mesma empresa, não recusado,
+ * não desligado e não ligado a outro usuário; 9999/8888/2626 só pelo 2626. Grava no histórico.
+ * A recusa chega com o motivo do banco ("Esse funcionário já está ligado ao usuário 03.").
+ */
+export const linkUserEmployee = async (userId: string, employeeId: string | null): Promise<string | null> => {
+  const { data, error } = await supabase.rpc('admin_link_user_employee', {
+    p_user_id: userId,
+    p_employee_id: employeeId,
+  });
+  if (error) throw new Error(error.message || 'Não foi possível salvar o vínculo.');
+  return (data as string | null) ?? null;
+};
+
 export const getAllUsers = async (companyId: string): Promise<User[]> => {
   const { data, error } = await supabase
     .from('users')
