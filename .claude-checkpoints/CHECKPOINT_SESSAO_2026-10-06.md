@@ -302,3 +302,21 @@ Memória nova: reference_ci_e_local_ao_mesmo_tempo.
 Validado (G): tipos, estilo, build; telas com A/B; unit 155 arquivos; E2E 31/36/45/109/130 (26/26);
 dados reais iguais; zero sobra. CI do `e92b70c`: ✓ 3/3 (unit 2m27s com o teste ao vivo, E2E 12m0s, tsc 38s); Vercel servindo
 `e92b70c`; produção conferida no navegador (login do supervisor, link na tela de CPF, /erros).
+
+## 21. ▶️ 07/10 manhã — 1º teste no TABLET REAL (empresa TESTE TABLET): o QR não foi lido → QR maior (`cc82686`)
+
+Victor decidiu validar primeiro na empresa TESTE TABLET (cerca = a de Caratinga, 2 marcações, rosto
+obrigatório; tablet "TESTE TABLET" ATIVO atende só ela; único funcionário "TESTE Victor"). Como o rosto do
+Victor já está no TESTE Victor, "cadastrar novo" com ele na frente TEM que ser recusado (trava); o caminho
+feliz sozinho é "Refazer rosto" no TESTE Victor (o 2626 pode tudo, sem vínculo nem permissão — conferido
+no servidor). Vigia só-leitura do banco: scratchpad/vigia_teste_tablet.mjs (Monitor, 30 min).
+Resultado do passo 0: o tablet NÃO leu o QR da /qr-teste (tamanho "Médio", ~5 cm, câmera a 640×480 → 2–3
+pontos por quadradinho a ~30 cm). Resposta (`cc82686`, aditiva): QR "Tela cheia" por padrão na /qr-teste,
+escolha de câmera normal/alta (1280×720) no tablet da /qr-teste, e o QR do modo supervisor maior (largura
+da tela, borda 2). Validado: tipos/estilo/build, 76 testes de tela, E2E 127/133/136/137 13/13, zero sobra.
+CI do `cc82686`: E2E ✓, tsc ✓; unit ✗ em `publicApiV1.spec.ts` "GET /health" (teste ANTIGO, ao vivo, prazo
+padrão de 5 s; a função respondeu em 0,2–0,5 s logo depois) → repeti só o job: 155/155 ✓ — passageiro, sem
+relação com o QR. ⚠️ Aviso (não mexi, não é meu): testes ao vivo com o prazo padrão quebram quando a função
+"acorda" devagar. Vercel servindo `cc82686`.
+PRÓXIMO: o Victor mede na /qr-teste (tela cheia × câmera normal/alta). Se só a alta ler, o tablet do
+galpão precisa abrir a câmera mais alta (ou ler um recorte no meio) — medir calor e velocidade antes.
