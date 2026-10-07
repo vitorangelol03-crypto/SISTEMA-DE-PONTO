@@ -83,16 +83,28 @@ describe('login do supervisor', () => {
     fireEvent.click(screen.getByRole('button', { name: /Entrar como supervisor/ }));
     await waitFor(() => expect(screen.getByTestId('supervisor-login-erro').textContent).toContain('15 minutos'));
   });
-  it('mestre (2626) escolhe a empresa; os outros, não', async () => {
+  it('mestre (2626) TEM que escolher a empresa — nada marcado sozinho; os outros nem veem o campo', async () => {
     srv.entrarComoSupervisor.mockResolvedValue({ sessionToken: 's' });
     const onEntrou = vi.fn();
     render(<EntrarComoSupervisor aviso={null} onEntrou={onEntrou} />);
     fireEvent.change(screen.getByLabelText('Seu código do painel'), { target: { value: '03' } });
     expect(screen.queryByLabelText('Empresa')).toBeNull();
     fireEvent.change(screen.getByLabelText('Seu código do painel'), { target: { value: '2626' } });
-    fireEvent.change(screen.getByLabelText('Empresa'), { target: { value: 'emp-pn' } });
-    fireEvent.change(screen.getByLabelText('Senha do painel'), { target: { value: 'segredo' } });
-    fireEvent.click(screen.getByRole('button', { name: /Entrar como supervisor/ }));
+    // O campo vem ANTES da senha (07/10: depois da senha, o "Ir" do teclado entrava sem ver o campo).
+    const empresa = screen.getByLabelText('Empresa') as HTMLSelectElement;
+    const senha = screen.getByLabelText('Senha do painel');
+    expect(empresa.compareDocumentPosition(senha) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(empresa.value).toBe(''); // nada escolhido sozinho
+    fireEvent.change(senha, { target: { value: 'segredo' } });
+    const entrar = screen.getByRole('button', { name: /Entrar como supervisor/ }) as HTMLButtonElement;
+    expect(entrar.disabled).toBe(true);
+    expect(screen.getByTestId('supervisor-escolha-empresa').textContent).toContain('Escolha a empresa');
+    fireEvent.submit(senha.closest('form') as HTMLFormElement); // o "Ir" do teclado
+    expect(srv.entrarComoSupervisor).not.toHaveBeenCalled();
+
+    fireEvent.change(empresa, { target: { value: 'emp-pn' } });
+    expect(entrar.disabled).toBe(false);
+    fireEvent.click(entrar);
     await waitFor(() => expect(onEntrou).toHaveBeenCalled());
     expect(srv.entrarComoSupervisor).toHaveBeenCalledWith('2626', 'segredo', 'emp-pn');
   });

@@ -20,12 +20,16 @@ export function EntrarComoSupervisor({ onEntrou, aviso }: { onEntrou: (s: Sessao
   const [entrando, setEntrando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const ehMestre = MESTRES.includes(codigo.trim());
+  // Mestre ESCOLHE a empresa — nada marcado sozinho (07/10/2026, 1º teste no tablet real: o "A empresa do
+  // meu usuário" aparecia DEPOIS da senha, o "Ir" do teclado entrava direto e o 2626 caiu 2 vezes na
+  // Caratinga em vez da TESTE TABLET). O campo vem logo abaixo do código, antes da senha.
+  const faltaEmpresa = ehMestre && !empresa;
 
   const entrar = async () => {
     setEntrando(true);
     setErro(null);
     try {
-      const sessao = await entrarComoSupervisor(codigo.trim(), senha, ehMestre && empresa ? empresa : undefined);
+      const sessao = await entrarComoSupervisor(codigo.trim(), senha, ehMestre ? empresa : undefined);
       setSenha('');
       onEntrou(sessao);
     } catch (err) {
@@ -38,7 +42,7 @@ export function EntrarComoSupervisor({ onEntrou, aviso }: { onEntrou: (s: Sessao
   return (
     <form
       className="space-y-4"
-      onSubmit={(e) => { e.preventDefault(); if (codigo.trim() && senha) void entrar(); }}
+      onSubmit={(e) => { e.preventDefault(); if (codigo.trim() && senha && !faltaEmpresa) void entrar(); }}
       data-testid="supervisor-login"
     >
       {aviso && <p className="text-sm text-amber-800 bg-amber-100 rounded-lg px-3 py-2">{aviso}</p>}
@@ -53,6 +57,22 @@ export function EntrarComoSupervisor({ onEntrou, aviso }: { onEntrou: (s: Sessao
           className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-lg focus:border-blue-500 focus:outline-none"
         />
       </div>
+      {ehMestre && (
+        <div>
+          <label htmlFor="sup-empresa" className="block text-sm font-semibold text-gray-700 mb-1">Empresa</label>
+          <select
+            id="sup-empresa"
+            value={empresa}
+            onChange={(e) => setEmpresa(e.target.value)}
+            required
+            className={`w-full px-4 py-3 border-2 rounded-xl bg-white focus:border-blue-500 focus:outline-none ${faltaEmpresa ? 'border-amber-400' : 'border-gray-300'}`}
+          >
+            <option value="" disabled>Escolha a empresa…</option>
+            {availableCompanies.map((c) => <option key={c.id} value={c.id}>{c.display_name}</option>)}
+          </select>
+          {faltaEmpresa && <p className="mt-1 text-sm text-amber-800" data-testid="supervisor-escolha-empresa">Escolha a empresa antes de entrar.</p>}
+        </div>
+      )}
       <div>
         <label htmlFor="sup-senha" className="block text-sm font-semibold text-gray-700 mb-1">Senha do painel</label>
         <input
@@ -64,24 +84,10 @@ export function EntrarComoSupervisor({ onEntrou, aviso }: { onEntrou: (s: Sessao
           className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-lg focus:border-blue-500 focus:outline-none"
         />
       </div>
-      {ehMestre && (
-        <div>
-          <label htmlFor="sup-empresa" className="block text-sm font-semibold text-gray-700 mb-1">Empresa</label>
-          <select
-            id="sup-empresa"
-            value={empresa}
-            onChange={(e) => setEmpresa(e.target.value)}
-            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl bg-white focus:border-blue-500 focus:outline-none"
-          >
-            <option value="">A empresa do meu usuário</option>
-            {availableCompanies.map((c) => <option key={c.id} value={c.id}>{c.display_name}</option>)}
-          </select>
-        </div>
-      )}
       {erro && <p className="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" role="alert" data-testid="supervisor-login-erro">{erro}</p>}
       <button
         type="submit"
-        disabled={!codigo.trim() || !senha || entrando}
+        disabled={!codigo.trim() || !senha || entrando || faltaEmpresa}
         className="w-full py-4 bg-blue-600 text-white text-lg font-bold rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 min-h-[52px]"
       >
         {entrando ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
