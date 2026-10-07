@@ -3,9 +3,11 @@ import QRCode from 'qrcode';
 import { formatarContagem, segundosRestantes } from './supervisorUi';
 
 /**
- * O QR GRANDE na tela do celular do supervisor (07/10/2026, entrega E). Fundo branco, margem de
- * respiro, correção de erro "M" — a câmera FRONTAL do tablet lê a uns 30 cm. O texto do QR também
- * vai em `data-qr` (é o mesmo conteúdo da imagem; serve aos testes e ao suporte).
+ * O QR GRANDE na tela do celular do supervisor (07/10/2026, entrega E). Fundo branco, correção de
+ * erro "M". Ocupa a largura da tela, com a borda do QR fina (2 quadradinhos + o fundo branco em
+ * volta): o tablet REAL não leu o QR de teste de ~5 cm a 640×480 (07/10) — cada quadradinho maior
+ * vira mais pontos na câmera dele. O texto do QR também vai em `data-qr` (é o mesmo conteúdo da
+ * imagem; serve aos testes e ao suporte).
  *
  * Enquanto o QR aparece, pede pra tela NÃO APAGAR (Wake Lock, quando o navegador tem); se não tiver,
  * nada quebra — a tela só pode apagar sozinha no tempo normal do celular.
@@ -16,8 +18,8 @@ export function QrNaTela({ texto, expiraEm, legenda }: { texto: string; expiraEm
 
   useEffect(() => {
     if (!canvasRef.current) return;
-    const lado = Math.min(360, Math.floor(window.innerWidth * 0.8));
-    QRCode.toCanvas(canvasRef.current, texto, { errorCorrectionLevel: 'M', margin: 4, width: lado }).catch(
+    const lado = Math.floor(Math.min(window.innerWidth - 40, window.innerHeight * 0.6, 520));
+    QRCode.toCanvas(canvasRef.current, texto, { errorCorrectionLevel: 'M', margin: 2, width: lado }).catch(
       (err: unknown) => console.error('Não foi possível desenhar o QR:', err),
     );
   }, [texto]);

@@ -37,12 +37,18 @@ const TAMANHOS = [
   { rotulo: 'Grande', px: 340 },
 ] as const;
 
+/**
+ * 07/10/2026: o tablet REAL não leu o QR "Médio" — o QR passa a ocupar a tela do celular inteira
+ * (o tamanho que a gente puder), e é o que abre primeiro. Os outros ficam pra comparar.
+ */
+const tamanhoDaTelaCheia = () => Math.max(180, Math.floor(Math.min(window.innerWidth - 16, window.innerHeight * 0.7)));
+
 const TROCA_A_CADA_S = 10;
 
 const CelularMostraQr: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [codigo, setCodigo] = useState(() => gerarCodigoDeTeste());
-  const [tamanho, setTamanho] = useState<number>(TAMANHOS[1].px);
+  const [tamanho, setTamanho] = useState<number>(tamanhoDaTelaCheia);
   const [faltam, setFaltam] = useState(TROCA_A_CADA_S);
 
   useEffect(() => {
@@ -70,9 +76,9 @@ const CelularMostraQr: React.FC = () => {
       <p className="text-3xl font-extrabold tracking-widest text-gray-900" data-testid="qr-teste-codigo">{codigo}</p>
       <p className="text-sm text-gray-600">Troca em {faltam} s · deixe o brilho da tela no máximo</p>
       <div className="flex gap-2">
-        {TAMANHOS.map((t) => (
+        {[...TAMANHOS, { rotulo: 'Tela cheia', px: tamanhoDaTelaCheia() }].map((t) => (
           <button
-            key={t.px}
+            key={t.rotulo}
             type="button"
             onClick={() => setTamanho(t.px)}
             className={`px-3 py-2 rounded-md border text-sm font-semibold ${
@@ -91,6 +97,12 @@ type EstadoDaCamera = 'abrindo' | 'aberta' | 'erro';
 
 const LEITURA_A_CADA_MS = 250;
 
+/** Câmera do tablet: a do ponto (640×480) ou mais alta — mais pontos por quadradinho do QR. */
+const RESOLUCOES = {
+  normal: { largura: 640, altura: 480, rotulo: 'Câmera normal (640×480, igual ao ponto)' },
+  alta: { largura: 1280, altura: 720, rotulo: 'Câmera alta (1280×720)' },
+} as const;
+
 const TabletLeQr: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -101,12 +113,14 @@ const TabletLeQr: React.FC = () => {
   const [lidos, setLidos] = useState<Array<{ codigo: string; hora: string }>>([]);
   const [comRosto, setComRosto] = useState(false);
   const [medRosto, setMedRosto] = useState<Medicoes>(MEDICOES_ZERADAS);
+  const [qualidade, setQualidade] = useState<keyof typeof RESOLUCOES>('normal');
 
-  // Câmera frontal — a MESMA abertura da tela de ponto (640×480, câmera do usuário).
+  // Câmera frontal — a MESMA abertura da tela de ponto (640×480) ou a alta, pra comparar.
   useEffect(() => {
     let cancelado = false;
     let stream: MediaStream | null = null;
-    abrirCameraFrontal()
+    setEstado('abrindo');
+    abrirCameraFrontal(RESOLUCOES[qualidade])
       .then(async (s) => {
         if (cancelado) {
           s.getTracks().forEach((t) => t.stop());
@@ -128,7 +142,7 @@ const TabletLeQr: React.FC = () => {
       cancelado = true;
       stream?.getTracks().forEach((t) => t.stop());
     };
-  }, []);
+  }, [qualidade]);
 
   // Laço do QR: a cada 250 ms, um quadro do vídeo vai pro jsQR.
   useEffect(() => {
@@ -190,6 +204,24 @@ const TabletLeQr: React.FC = () => {
       </div>
       {estado === 'abrindo' && <p className="text-yellow-300">Abrindo a câmera…</p>}
       {estado === 'erro' && <p className="text-red-400" data-testid="qr-teste-erro">Câmera não abriu: {erro}</p>}
+      <div className="flex flex-wrap gap-2" data-testid="qr-teste-resolucoes">
+        {(Object.keys(RESOLUCOES) as Array<keyof typeof RESOLUCOES>).map((chave) => (
+          <button
+            key={chave}
+            type="button"
+            data-testid={`qr-teste-camera-${chave}`}
+            onClick={() => {
+              if (chave === qualidade) return;
+              setMedQr(MEDICOES_ZERADAS);
+              setMedRosto(MEDICOES_ZERADAS);
+              setQualidade(chave);
+            }}
+            className={`px-3 py-2 rounded-lg text-sm font-semibold ${qualidade === chave ? 'bg-green-600' : 'bg-gray-700'}`}
+          >
+            {RESOLUCOES[chave].rotulo}
+          </button>
+        ))}
+      </div>
       <div className="grid grid-cols-2 gap-2 text-sm" data-testid="qr-teste-medicoes">
         <Info rotulo="Câmera" valor={resolucao || '—'} />
         <Info rotulo="Leituras de QR certas" valor={`${medQr.acertos} de ${medQr.tentativas}`} />

@@ -103,14 +103,19 @@ export class CameraIndisponivelError extends Error {
 /**
  * Abre a câmera frontal. Se o aparelho não tiver uma câmera que satisfaça o pedido ideal
  * (frontal 640×480), tenta de novo com "qualquer câmera" antes de desistir.
+ *
+ * `resolucao` (07/10/2026): a página /qr-teste mede o QR também com a câmera em 1280×720 — o
+ * tablet real não leu o QR do celular a 640×480. Sem o parâmetro, o pedido é idêntico ao de antes.
  */
-export async function abrirCameraFrontal(): Promise<MediaStream> {
+export async function abrirCameraFrontal(
+  resolucao: { largura: number; altura: number } = { largura: 640, altura: 480 },
+): Promise<MediaStream> {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
     throw new CameraIndisponivelError();
   }
   try {
     return await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'user' }, width: { ideal: 640 }, height: { ideal: 480 } },
+      video: { facingMode: { ideal: 'user' }, width: { ideal: resolucao.largura }, height: { ideal: resolucao.altura } },
       audio: false,
     });
   } catch (err) {
