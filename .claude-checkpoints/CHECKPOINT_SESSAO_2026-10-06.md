@@ -367,3 +367,17 @@ fichas deles + as 2 permissões. Ofereci deixar os usuários prontos se ele diss
 pessoa ATIVA de OUTRA empresa (de propósito: a mesma pessoa pode estar em Caratinga e Ponte Nova), mesmo com
 NOME diferente — provável erro de digitação. Sugestão: avisar o supervisor quando o CPF existe em outra empresa
 com outro nome.
+
+## 23. ▶️ 07/10 tarde — DEMO do Pagamentos Driver pra apresentação (decisões do Victor — NÃO re-perguntar)
+
+Pedido: empresa de teste com 100+ drivers fictícios, pacotes de várias plataformas, espelhos publicados e não
+publicados, pagos e não pagos + PDF bonito pra LEIGO, com prints reais (painel + app do driver), dados fictícios,
+SÓ sobre pagamento de driver. Decisões (Victor aprovou as recomendações, "Ju é J&T"):
+1. Plataformas: Shopee, Amazon, J&T Express, iMile + Coleta Shopee (igual Caratinga).
+2. Público do PDF: donos de transportadora (tom de apresentação comercial).
+3. 2 quinzenas: a anterior FECHADA (todos os espelhos publicados, ~70% pagos) + a atual ABERTA (~metade dos
+   espelhos publicados, nada pago).
+4. A DEMO fica até ele mandar apagar (só 2626/9999 veem, trocando de empresa). Nome: "Transportes Exemplo
+   (DEMO)". Só drivers (sem funcionários comuns).
+Método: o próprio sistema sempre que der (import de planilha, publicar espelho e marcar pago pelo painel) →
+prints e PDFs de espelho reais. CPFs fictícios conferidos como inexistentes; PIX fictício (@exemplo.com).
