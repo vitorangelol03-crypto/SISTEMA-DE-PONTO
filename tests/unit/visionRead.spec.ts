@@ -9,10 +9,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   attemptOrder,
+  buildAnthropicBody,
   buildGeminiBody,
+  DEFAULT_CLAUDE_MODELS,
   DEFAULT_GEMINI_MODELS,
+  parseAnthropicResponse,
   parseGeminiResponse,
   PROOF_PROMPT,
+  PROOF_TOOL,
   readingIsComplete,
   readingIsUsable,
   RECUSAS_ATE_DESISTIR,
@@ -60,6 +64,48 @@ describe('visionConfigFromEnv — o sistema nunca depende da IA pra rodar', () =
     // Foi o que salvou quando o gemini-2.5 saiu do ar pra contas novas (HTTP 404).
     const cfg = visionConfigFromEnv({ GOOGLE_AI_API_KEY: 'k1', PROOF_VISION_MODELS: 'modelo-novo, outro' });
     expect(cfg.models).toEqual(['modelo-novo', 'outro']);
+  });
+
+  // ── Claude/Anthropic (19/10/2026): depois que o Google bloqueou o projeto Gemini. ──
+  it('PROOF_VISION_PROVIDER=claude liga o Claude com a chave da Anthropic', () => {
+    const cfg = visionConfigFromEnv({ ANTHROPIC_API_KEY: 'ak1', PROOF_VISION_PROVIDER: 'claude' });
+    expect(cfg.provider).toBe('anthropic');
+    expect(cfg.apiKeys).toEqual(['ak1']);
+    expect(cfg.models).toEqual(DEFAULT_CLAUDE_MODELS);
+    expect(cfg.models).toEqual(['claude-haiku-5-5']);
+  });
+
+  it('"anthropic" tambem vale como nome do provedor', () => {
+    expect(visionConfigFromEnv({ ANTHROPIC_API_KEY: 'ak', PROOF_VISION_PROVIDER: 'anthropic' }).provider).toBe('anthropic');
+  });
+
+  it('pediu Claude mas sem chave -> volta pro manual (nao quebra)', () => {
+    expect(visionConfigFromEnv({ PROOF_VISION_PROVIDER: 'claude' }).provider).toBe('none');
+  });
+
+  it('pediu Claude ignora a chave do Gemini (usa so a da Anthropic)', () => {
+    const cfg = visionConfigFromEnv({ GOOGLE_AI_API_KEY: 'g1', ANTHROPIC_API_KEY: 'a1', PROOF_VISION_PROVIDER: 'claude' });
+    expect(cfg.provider).toBe('anthropic');
+    expect(cfg.apiKeys).toEqual(['a1']);
+  });
+
+  it('sem provedor explicito, so a chave da Anthropic liga o Claude sozinho', () => {
+    const cfg = visionConfigFromEnv({ ANTHROPIC_API_KEY: 'a1, a2' });
+    expect(cfg.provider).toBe('anthropic');
+    expect(cfg.apiKeys).toEqual(['a1', 'a2']);
+  });
+
+  it('com as DUAS chaves e sem provedor, o Gemini continua na frente (comportamento antigo)', () => {
+    const cfg = visionConfigFromEnv({ GOOGLE_AI_API_KEY: 'g1', ANTHROPIC_API_KEY: 'a1' });
+    expect(cfg.provider).toBe('gemini');
+    expect(cfg.apiKeys).toEqual(['g1']);
+  });
+
+  it('da pra trocar o modelo do Claude sem tocar em codigo', () => {
+    const cfg = visionConfigFromEnv({
+      ANTHROPIC_API_KEY: 'a1', PROOF_VISION_PROVIDER: 'claude', PROOF_VISION_MODELS: 'claude-sonnet-5-5',
+    });
+    expect(cfg.models).toEqual(['claude-sonnet-5-5']);
   });
 });
 
@@ -146,6 +192,79 @@ describe('parseGeminiResponse', () => {
     expect(parseGeminiResponse({ error: { code: 429 } })).toBeNull();
     expect(parseGeminiResponse(null)).toBeNull();
     expect(parseGeminiResponse(undefined)).toBeNull();
+  });
+});
+
+/** Forma do corpo que o Claude (Messages API) espera — só o que os testes leem. */
+interface AnthropicBody {
+  model: string;
+  max_tokens: number;
+  temperature?: number;
+  tool_choice: { type: string; name: string };
+  messages: Array<{
+    role: string;
+    content: Array<{
+      type: string;
+      source?: { type: string; media_type: string; data: string };
+      text?: string;
+    }>;
+  }>;
+}
+
+describe('buildAnthropicBody', () => {
+  it('manda a imagem (base64), o pedido, e FORCA o formato de resposta via tool', () => {
+    const body = buildAnthropicBody('claude-haiku-5-5', 'QUJD', 'image/png') as AnthropicBody;
+    expect(body.model).toBe('claude-haiku-5-5');
+    // NAO manda `temperature`: a familia Claude 5 recusa esse parametro (HTTP 400).
+    expect(body.temperature).toBeUndefined();
+    expect(body.max_tokens).toBeGreaterThan(0);
+    const partes = body.messages[0].content;
+    expect(partes[0].source).toEqual({ type: 'base64', media_type: 'image/png', data: 'QUJD' });
+    expect(partes[1].text).toBe(PROOF_PROMPT);
+    // tool_choice forcado = a resposta vem sempre como tool_use, com o JSON travado.
+    expect(body.tool_choice).toEqual({ type: 'tool', name: PROOF_TOOL.name });
+  });
+
+  it('tipo de imagem estranho cai pra JPEG (o print e foto do celular)', () => {
+    const body = buildAnthropicBody('claude-haiku-5-5', 'QUJD', 'application/octet-stream') as AnthropicBody;
+    expect(body.messages[0].content[0].source?.media_type).toBe('image/jpeg');
+  });
+
+  it('o schema da ferramenta exige "legivel" e aceita numero/datas nulos', () => {
+    expect(PROOF_TOOL.input_schema.required).toContain('legivel');
+    expect(Object.keys(PROOF_TOOL.input_schema.properties)).toEqual(
+      ['legivel', 'entregues', 'periodoInicio', 'periodoFim'],
+    );
+  });
+});
+
+describe('parseAnthropicResponse', () => {
+  const respostaTool = (input: unknown) => ({
+    content: [{ type: 'tool_use', name: 'registrar_leitura', input }],
+  });
+
+  it('le a leitura boa de dentro do bloco tool_use', () => {
+    const r = parseAnthropicResponse(respostaTool(
+      { legivel: true, entregues: 1808, periodoInicio: '2026-07-01', periodoFim: '2026-07-15' },
+    ));
+    expect(r).toEqual({ legivel: true, entregues: 1808, periodoInicio: '2026-07-01', periodoFim: '2026-07-15' });
+  });
+
+  it('le o teste negativo (nao deu pra ler)', () => {
+    const r = parseAnthropicResponse(respostaTool(
+      { legivel: false, entregues: null, periodoInicio: null, periodoFim: null },
+    ));
+    expect(r?.legivel).toBe(false);
+    expect(r?.entregues).toBeNull();
+  });
+
+  it('resposta torta vira null em vez de explodir', () => {
+    expect(parseAnthropicResponse({ content: [{ type: 'text', text: 'oi' }] })).toBeNull();
+    expect(parseAnthropicResponse({ content: [] })).toBeNull();
+    expect(parseAnthropicResponse({ error: { type: 'authentication_error' } })).toBeNull();
+    expect(parseAnthropicResponse(null)).toBeNull();
+    expect(parseAnthropicResponse(undefined)).toBeNull();
+    expect(parseAnthropicResponse('nao e objeto')).toBeNull();
   });
 });
 

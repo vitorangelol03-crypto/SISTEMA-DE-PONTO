@@ -30,7 +30,7 @@ import type { ProofReadingRaw } from './proofCheck.ts';
 
 // ─── Configuração ────────────────────────────────────────────────────────────
 
-export type VisionProvider = 'gemini' | 'none';
+export type VisionProvider = 'gemini' | 'anthropic' | 'none';
 
 export interface VisionConfig {
   provider: VisionProvider;
@@ -61,6 +61,18 @@ export const DEFAULT_GEMINI_MODELS = [
   'gemini-2.0-flash-lite',
 ];
 
+/**
+ * Modelos padrão do Claude (Anthropic) — usados quando `PROOF_VISION_PROVIDER=claude`
+ * e `PROOF_VISION_MODELS` não foi definido. Decisão do Victor (19/10/2026): depois que
+ * o Google bloqueou o projeto da chave Gemini (HTTP 403 "project denied access"),
+ * trocamos a leitora pro Claude. Começa no Haiku (o mais barato/rápido que lê imagem);
+ * se precisar de mais acerto em foto ruim, é só pôr um modelo mais forte em
+ * `PROOF_VISION_MODELS` — é configuração, não código.
+ */
+export const DEFAULT_CLAUDE_MODELS = [
+  'claude-haiku-5-5',
+];
+
 const splitList = (v: string | undefined): string[] =>
   (v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 
@@ -69,22 +81,38 @@ const splitList = (v: string | undefined): string[] =>
  * -> modo manual, e o sistema roda igual.
  *
  * Variáveis (secrets do Supabase):
- *   GOOGLE_AI_API_KEY     uma chave, ou várias separadas por vírgula
- *   PROOF_VISION_PROVIDER 'gemini' | 'none'   (padrão: 'gemini' se houver chave)
- *   PROOF_VISION_MODELS   lista separada por vírgula (padrão: DEFAULT_GEMINI_MODELS)
+ *   GOOGLE_AI_API_KEY     chave(s) do Gemini — uma, ou várias separadas por vírgula
+ *   ANTHROPIC_API_KEY     chave(s) do Claude — uma, ou várias separadas por vírgula
+ *   PROOF_VISION_PROVIDER 'gemini' | 'claude' | 'none'
+ *                         (vazio: liga sozinho pela chave que existir — Gemini na frente,
+ *                          pra não mudar o comportamento antigo)
+ *   PROOF_VISION_MODELS   lista separada por vírgula
+ *                         (padrão: DEFAULT_GEMINI_MODELS ou DEFAULT_CLAUDE_MODELS)
  */
 export function visionConfigFromEnv(env: Record<string, string | undefined>): VisionConfig {
-  const apiKeys = splitList(env.GOOGLE_AI_API_KEY);
   const pedido = (env.PROOF_VISION_PROVIDER ?? '').trim().toLowerCase();
-  const provider: VisionProvider =
-    pedido === 'none' || (pedido === '' && apiKeys.length === 0) ? 'none'
-      : pedido === 'gemini' || pedido === '' ? 'gemini'
-      : 'none';
+  const geminiKeys = splitList(env.GOOGLE_AI_API_KEY);
+  const claudeKeys = splitList(env.ANTHROPIC_API_KEY);
+
+  // Qual provedor? Explícito manda; vazio escolhe pela chave (Gemini na frente, pra não
+  // mudar o comportamento antigo); nome desconhecido NÃO vira nada por engano (vai pro manual).
+  let provider: VisionProvider;
+  if (pedido === 'none') provider = 'none';
+  else if (pedido === 'claude' || pedido === 'anthropic') provider = 'anthropic';
+  else if (pedido === 'gemini') provider = 'gemini';
+  else if (pedido === '') provider = geminiKeys.length ? 'gemini' : claudeKeys.length ? 'anthropic' : 'none';
+  else provider = 'none';
+
+  const apiKeys = provider === 'anthropic' ? claudeKeys : provider === 'gemini' ? geminiKeys : [];
+  // Provedor pedido mas sem chave -> volta pro manual (o sistema nunca quebra por falta de IA).
+  const provFinal: VisionProvider = provider !== 'none' && apiKeys.length === 0 ? 'none' : provider;
+
   const models = splitList(env.PROOF_VISION_MODELS);
+  const defaults = provFinal === 'anthropic' ? DEFAULT_CLAUDE_MODELS : DEFAULT_GEMINI_MODELS;
   return {
-    provider: provider === 'gemini' && apiKeys.length === 0 ? 'none' : provider,
+    provider: provFinal,
     apiKeys,
-    models: models.length ? models : DEFAULT_GEMINI_MODELS,
+    models: models.length ? models : defaults,
     maxAttempts: Number(env.PROOF_VISION_MAX_ATTEMPTS ?? 4) || 4,
   };
 }
@@ -193,6 +221,77 @@ export function parseGeminiResponse(payload: unknown): ProofReadingRaw | null {
   }
 }
 
+// ─── Claude / Anthropic (a mesma leitura, outra "tomada") ───────────────────
+
+export const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+export const ANTHROPIC_VERSION = '2023-06-01';
+export const ANTHROPIC_MAX_TOKENS = 1024;
+
+/** Tipos de imagem que o Claude aceita. Qualquer outro cai pra JPEG (o print é foto). */
+const ANTHROPIC_MIME_OK = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+/**
+ * A "ferramenta" que OBRIGA o Claude a devolver o JSON no formato fixo — o mesmo que o
+ * `responseSchema` faz no Gemini. Sem isso o modelo responde texto solto e a leitura fica
+ * frágil. Com `tool_choice` forçado, a resposta vem sempre como um bloco `tool_use`.
+ */
+export const PROOF_TOOL = {
+  name: 'registrar_leitura',
+  description: 'Registra exatamente o que foi lido no print da tela do app de entregas.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      legivel: { type: 'boolean' },
+      entregues: { type: ['integer', 'null'] },
+      periodoInicio: { type: ['string', 'null'] },
+      periodoFim: { type: ['string', 'null'] },
+    },
+    required: ['legivel'],
+  },
+} as const;
+
+/** Corpo do POST do Claude (Messages API). Puro: dá pra testar sem rede. */
+export function buildAnthropicBody(model: string, imageBase64: string, mimeType: string): unknown {
+  const media = ANTHROPIC_MIME_OK.has(mimeType) ? mimeType : 'image/jpeg';
+  return {
+    // Sem `temperature`: a família Claude 5 (Haiku 5.5) a RECUSA com HTTP 400
+    // ("temperature is deprecated for this model"). O determinismo vem do tool_choice
+    // forçado + do schema fixo, não do temperature.
+    model,
+    max_tokens: ANTHROPIC_MAX_TOKENS,
+    tools: [PROOF_TOOL],
+    tool_choice: { type: 'tool', name: PROOF_TOOL.name },
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: media, data: imageBase64 } },
+        { type: 'text', text: PROOF_PROMPT },
+      ],
+    }],
+  };
+}
+
+/**
+ * Tira a leitura de dentro da resposta do Claude. Puro e blindado: qualquer formato
+ * inesperado vira `null` em vez de exceção (igual ao `parseGeminiResponse`).
+ */
+export function parseAnthropicResponse(payload: unknown): ProofReadingRaw | null {
+  try {
+    const p = payload as { content?: Array<{ type?: string; input?: Record<string, unknown> }> };
+    const bloco = p?.content?.find((c) => c?.type === 'tool_use' && c.input && typeof c.input === 'object');
+    const obj = bloco?.input;
+    if (!obj || typeof obj !== 'object') return null;
+    return {
+      legivel: obj.legivel,
+      entregues: obj.entregues,
+      periodoInicio: obj.periodoInicio,
+      periodoFim: obj.periodoFim,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** A leitura veio COMPLETA (número + as duas datas)? É o que encerra o rodízio. */
 export function readingIsComplete(r: ProofReadingRaw | null): boolean {
   if (r === null) return false;
@@ -259,7 +358,6 @@ export async function readProofImage(
     return null;
   }
 
-  const body = JSON.stringify(buildGeminiBody(imageBase64, mimeType));
   const tentativas = attemptOrder(cfg).slice(0, Math.max(1, cfg.maxAttempts));
 
   /** Última recusa vista. Se ninguém ler, é ela que volta (e não `null`). */
@@ -268,19 +366,27 @@ export async function readProofImage(
 
   for (const { apiKey, model } of tentativas) {
     try {
-      const resp = await fetch(GEMINI_URL(model), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-        body,
-      });
+      // A "tomada" trocável: Gemini e Claude têm URL/headers/corpo diferentes, mas o
+      // rodízio, as recusas e o veredito abaixo são os MESMOS pros dois provedores.
+      const anthropic = cfg.provider === 'anthropic';
+      const url = anthropic ? ANTHROPIC_URL : GEMINI_URL(model);
+      const headers = anthropic
+        ? { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': ANTHROPIC_VERSION }
+        : { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey };
+      const body = JSON.stringify(
+        anthropic ? buildAnthropicBody(model, imageBase64, mimeType) : buildGeminiBody(imageBase64, mimeType),
+      );
+      const resp = await fetch(url, { method: 'POST', headers, body });
 
       if (!resp.ok) {
-        // 429 cota · 503 pico · 404 modelo aposentado -> próximo da fila.
+        // 429 cota · 503 pico · 404 modelo aposentado · 403 projeto bloqueado -> próximo.
         log(`[vision] ${model}: HTTP ${resp.status}, tentando o próximo`);
         continue;
       }
 
-      const leitura = parseGeminiResponse(await resp.json());
+      const leitura = anthropic
+        ? parseAnthropicResponse(await resp.json())
+        : parseGeminiResponse(await resp.json());
       if (readingIsComplete(leitura)) {
         log(`[vision] ${model}: leitura ok${recusas > 0 ? ` (na ${recusas + 1}ª tentativa — ${recusas} recusa(s) antes)` : ''}`);
         return leitura;

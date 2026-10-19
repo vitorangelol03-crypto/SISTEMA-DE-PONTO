@@ -109,8 +109,13 @@ export async function readNotaFiscalTexto(
   cfg: VisionConfig,
   log: (msg: string) => void = () => {},
 ): Promise<string | null> {
-  if (cfg.provider === 'none' || cfg.apiKeys.length === 0) {
-    log('[nf-ocr] sem provedor configurado — nota segue para conferência manual');
+  // Esta leitura é só do Gemini (URL/headers do Google, logo abaixo). Se o provedor
+  // de visão foi trocado (ex.: PROOF_VISION_PROVIDER=claude pro espelho do app, a
+  // partir de 19/10/2026), a NF NÃO pode mandar a chave do outro provedor pro Google —
+  // vai direto pra conferência manual, como já faria sem chave. A leitura da NF pelo
+  // Claude, se for preciso, é mudança à parte (ainda não pedida).
+  if (cfg.provider !== 'gemini' || cfg.apiKeys.length === 0) {
+    log('[nf-ocr] sem provedor Gemini configurado — nota segue para conferência manual');
     return null;
   }
 
