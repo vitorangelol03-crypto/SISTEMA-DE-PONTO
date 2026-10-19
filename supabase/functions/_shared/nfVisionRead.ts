@@ -17,6 +17,8 @@
  * Reusa o rodízio de chaves/modelos do `visionRead` — mesma cota, mesmos 429/404/503.
  */
 import {
+  ANTHROPIC_URL,
+  ANTHROPIC_VERSION,
   attemptOrder,
   GEMINI_URL,
   type VisionConfig,
@@ -73,6 +75,78 @@ export function buildNfOcrBody(base64: string, mimeType: string): unknown {
   };
 }
 
+// ── Claude (Anthropic) — mesmo trabalho, outra "tomada" (19/10/2026) ──────────
+//
+// A NF segue o MESMO provedor que o espelho do app (`visionConfigFromEnv`): com
+// PROOF_VISION_PROVIDER=claude, a transcrição da nota passa a ser feita pelo Claude,
+// igual ao print da Shopee. A família Claude 5 recusa `temperature` (HTTP 400); o
+// determinismo vem do `tool_choice` forçado + schema fixo, não do temperature.
+
+/** Transcrição da NF pode ser LONGA (todo o texto da nota) — bem acima do print. */
+export const NF_OCR_ANTHROPIC_MAX_TOKENS = 4096;
+
+/** Imagens que o Claude aceita; o resto (ou PDF) é tratado à parte. */
+const NF_ANTHROPIC_IMAGE_OK = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+/**
+ * A "ferramenta" que OBRIGA o Claude a devolver `{legivel, texto}` — o mesmo papel do
+ * `responseSchema` no Gemini. Sem ela o modelo responde texto solto e a transcrição fica
+ * frágil; com `tool_choice` forçado, a resposta vem sempre como bloco `tool_use`.
+ */
+export const NF_OCR_TOOL = {
+  name: 'transcrever_nota',
+  description: 'Registra a transcrição literal da nota fiscal, sem interpretar nem resumir.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      legivel: { type: 'boolean' },
+      texto: { type: ['string', 'null'] },
+    },
+    required: ['legivel'],
+  },
+} as const;
+
+/**
+ * Corpo do POST do Claude (Messages API). PDF vai como bloco `document`; imagem como
+ * `image`. Puro: dá pra testar sem rede. O caller real sempre manda PDF.
+ */
+export function buildNfOcrAnthropicBody(model: string, base64: string, mimeType: string): unknown {
+  const doc = mimeType === 'application/pdf'
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+    : {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: NF_ANTHROPIC_IMAGE_OK.has(mimeType) ? mimeType : 'image/jpeg',
+          data: base64,
+        },
+      };
+  return {
+    // Sem `temperature`: a família Claude 5 a recusa com HTTP 400.
+    model,
+    max_tokens: NF_OCR_ANTHROPIC_MAX_TOKENS,
+    tools: [NF_OCR_TOOL],
+    tool_choice: { type: 'tool', name: NF_OCR_TOOL.name },
+    messages: [{
+      role: 'user',
+      content: [doc, { type: 'text', text: NF_OCR_PROMPT }],
+    }],
+  };
+}
+
+/** Tira a transcrição do bloco `tool_use` do Claude. Blindado: formato estranho vira `null`. */
+export function parseNfOcrAnthropicResponse(payload: unknown): NfOcrRaw | null {
+  try {
+    const p = payload as { content?: Array<{ type?: string; input?: Record<string, unknown> }> };
+    const bloco = p?.content?.find((c) => c?.type === 'tool_use' && c.input && typeof c.input === 'object');
+    const obj = bloco?.input;
+    if (!obj || typeof obj.legivel !== 'boolean') return null;
+    return { legivel: obj.legivel, texto: typeof obj.texto === 'string' ? obj.texto : null };
+  } catch {
+    return null;
+  }
+}
+
 /** Tira a transcrição da resposta. Blindado: formato inesperado vira `null`. */
 export function parseNfOcrResponse(payload: unknown): NfOcrRaw | null {
   try {
@@ -109,32 +183,35 @@ export async function readNotaFiscalTexto(
   cfg: VisionConfig,
   log: (msg: string) => void = () => {},
 ): Promise<string | null> {
-  // Esta leitura é só do Gemini (URL/headers do Google, logo abaixo). Se o provedor
-  // de visão foi trocado (ex.: PROOF_VISION_PROVIDER=claude pro espelho do app, a
-  // partir de 19/10/2026), a NF NÃO pode mandar a chave do outro provedor pro Google —
-  // vai direto pra conferência manual, como já faria sem chave. A leitura da NF pelo
-  // Claude, se for preciso, é mudança à parte (ainda não pedida).
-  if (cfg.provider !== 'gemini' || cfg.apiKeys.length === 0) {
-    log('[nf-ocr] sem provedor Gemini configurado — nota segue para conferência manual');
+  // A NF segue o MESMO provedor do espelho (`visionConfigFromEnv`): desde 19/10/2026,
+  // com PROOF_VISION_PROVIDER=claude, a transcrição é feita pelo Claude; se voltar pro
+  // Gemini, idem. Sem provedor nenhum (ou sem chave), vai direto pra conferência manual —
+  // nunca manda a chave de um provedor pro endpoint do outro.
+  if (cfg.provider === 'none' || cfg.apiKeys.length === 0) {
+    log('[nf-ocr] sem provedor de visão configurado — nota segue para conferência manual');
     return null;
   }
 
-  const body = JSON.stringify(buildNfOcrBody(base64, mimeType));
+  const anthropic = cfg.provider === 'anthropic';
   const tentativas = attemptOrder(cfg).slice(0, Math.max(1, cfg.maxAttempts));
 
   for (const { apiKey, model } of tentativas) {
     try {
-      const resp = await fetch(GEMINI_URL(model), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-        body,
-      });
+      const url = anthropic ? ANTHROPIC_URL : GEMINI_URL(model);
+      const headers = anthropic
+        ? { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': ANTHROPIC_VERSION }
+        : { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey };
+      const body = JSON.stringify(anthropic
+        ? buildNfOcrAnthropicBody(model, base64, mimeType)
+        : buildNfOcrBody(base64, mimeType));
+      const resp = await fetch(url, { method: 'POST', headers, body });
       if (!resp.ok) {
-        // 429 cota · 503 pico · 404 modelo aposentado -> próximo da fila.
+        // 429 cota · 503 pico · 404 modelo aposentado · 400 -> próximo da fila.
         log(`[nf-ocr] ${model}: HTTP ${resp.status}, tentando o próximo`);
         continue;
       }
-      const lido = parseNfOcrResponse(await resp.json());
+      const payload = await resp.json();
+      const lido = anthropic ? parseNfOcrAnthropicResponse(payload) : parseNfOcrResponse(payload);
       if (nfOcrUsavel(lido)) {
         log(`[nf-ocr] ${model}: transcrição ok (${lido!.texto!.length} caracteres)`);
         return lido!.texto;

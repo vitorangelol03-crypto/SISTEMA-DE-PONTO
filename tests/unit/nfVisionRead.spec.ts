@@ -15,14 +15,23 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildNfOcrBody,
+  buildNfOcrAnthropicBody,
   parseNfOcrResponse,
+  parseNfOcrAnthropicResponse,
   nfOcrUsavel,
   NF_OCR_PROMPT,
+  NF_OCR_TOOL,
+  NF_OCR_ANTHROPIC_MAX_TOKENS,
 } from '../../supabase/functions/_shared/nfVisionRead';
 import { nfTextoIlegivel } from '../../supabase/functions/driver-public-api/nfCheck';
 
 const respostaGemini = (obj: unknown) => ({
   candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }],
+});
+
+/** Resposta do Claude: a transcrição vem num bloco `tool_use`. */
+const respostaClaude = (input: unknown) => ({
+  content: [{ type: 'tool_use', name: NF_OCR_TOOL.name, input }],
 });
 
 describe('nfTextoIlegivel — o gatilho da IA', () => {
@@ -69,6 +78,65 @@ describe('buildNfOcrBody — o pedido ao modelo', () => {
   it('o pedido proíbe inventar número — é a trava contra valor errado', () => {
     expect(NF_OCR_PROMPT).toMatch(/NUNCA invente/i);
     expect(NF_OCR_PROMPT).toMatch(/NAO resuma|NAO interprete/i);
+  });
+});
+
+describe('buildNfOcrAnthropicBody — o pedido ao Claude (19/10/2026)', () => {
+  it('PDF vai como bloco DOCUMENT (não vira imagem)', () => {
+    const body = buildNfOcrAnthropicBody('claude-haiku-5-5', 'QUFB', 'application/pdf') as {
+      messages: Array<{ content: Array<Record<string, unknown>> }>;
+    };
+    const doc = body.messages[0].content[0] as { type: string; source: { type: string; media_type: string; data: string } };
+    expect(doc.type).toBe('document');
+    expect(doc.source).toMatchObject({ type: 'base64', media_type: 'application/pdf', data: 'QUFB' });
+  });
+
+  it('imagem vai como bloco IMAGE; tipo exótico cai pra jpeg', () => {
+    const png = buildNfOcrAnthropicBody('m', 'x', 'image/png') as { messages: Array<{ content: Array<{ type: string; source: { media_type: string } }> }> };
+    expect(png.messages[0].content[0].type).toBe('image');
+    expect(png.messages[0].content[0].source.media_type).toBe('image/png');
+    const bmp = buildNfOcrAnthropicBody('m', 'x', 'image/bmp') as { messages: Array<{ content: Array<{ source: { media_type: string } }> }> };
+    expect(bmp.messages[0].content[0].source.media_type).toBe('image/jpeg');
+  });
+
+  it('🔴 NÃO manda temperature — a família Claude 5 recusa (HTTP 400)', () => {
+    const body = buildNfOcrAnthropicBody('m', 'x', 'application/pdf') as Record<string, unknown>;
+    expect('temperature' in body).toBe(false);
+  });
+
+  it('força o tool_use (transcrição estruturada, não texto solto) e dá teto alto de tokens', () => {
+    const body = buildNfOcrAnthropicBody('m', 'x', 'application/pdf') as {
+      tool_choice: { type: string; name: string };
+      tools: Array<{ name: string }>;
+      max_tokens: number;
+    };
+    expect(body.tool_choice).toEqual({ type: 'tool', name: NF_OCR_TOOL.name });
+    expect(body.tools[0].name).toBe(NF_OCR_TOOL.name);
+    // A NF é texto longo: o teto precisa ser bem maior que o do print.
+    expect(body.max_tokens).toBe(NF_OCR_ANTHROPIC_MAX_TOKENS);
+    expect(NF_OCR_ANTHROPIC_MAX_TOKENS).toBeGreaterThanOrEqual(4096);
+  });
+});
+
+describe('parseNfOcrAnthropicResponse — blindagem do tool_use', () => {
+  it('lê a transcrição do bloco tool_use', () => {
+    const r = parseNfOcrAnthropicResponse(respostaClaude({ legivel: true, texto: 'VALOR TOTAL 1.234,56' }));
+    expect(r).toEqual({ legivel: true, texto: 'VALOR TOTAL 1.234,56' });
+  });
+
+  it('legivel=false vira recusa, mesmo com texto', () => {
+    expect(parseNfOcrAnthropicResponse(respostaClaude({ legivel: false, texto: null })))
+      .toEqual({ legivel: false, texto: null });
+  });
+
+  it('resposta estranha vira null em vez de explodir', () => {
+    expect(parseNfOcrAnthropicResponse(null)).toBeNull();
+    expect(parseNfOcrAnthropicResponse({})).toBeNull();
+    expect(parseNfOcrAnthropicResponse({ content: [] })).toBeNull();
+    // bloco de texto puro (sem tool_use) não serve
+    expect(parseNfOcrAnthropicResponse({ content: [{ type: 'text', text: 'oi' }] })).toBeNull();
+    // sem o campo legivel
+    expect(parseNfOcrAnthropicResponse(respostaClaude({ texto: 'sem legivel' }))).toBeNull();
   });
 });
 
