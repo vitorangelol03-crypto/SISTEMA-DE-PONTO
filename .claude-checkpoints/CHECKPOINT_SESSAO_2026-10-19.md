@@ -158,3 +158,26 @@ pra restaurar. Lição: NÃO rodar deno check com auto node_modules nesta árvor
 ## Pendência operacional (do Victor, não é código)
 Publicar os **espelhos de pagamento da 2ª de setembro** — sem isso ninguém (Adriano, Filipe…) consegue anexar
 a NOTA da quinzena atual (a nota só é cobrada após o espelho publicado). Só 2 de 145 publicados.
+
+---
+
+# CONTINUAÇÃO 2026-10-19 (parte 5) — estado "Analisando" no envio do print (`57c3e84`, v55)
+
+**Motivo (perguntas do Victor):** confirmei que a tela atualiza sozinha sem recarregar (`acompanharConferencia`
+poda de 5 em 5s por ~1 min). Mas achei um incômodo real: o print recém-enviado já aparecia como "enviado"
+(recebido conta como enviado) ANTES de a IA ler — e se desse ruim virava "recusado" segundos depois, parecendo
+um "enviado" que voltou atrás. Victor pediu um estado **"Analisando..."** nesses segundos. Escolheu a **opção A**
+(jeito certo, com flag no servidor) em vez da B (só front, 6s fixos).
+
+**Feito (decisão A):**
+- **Backend `proof-slots` (v55):** cada cartão devolve `lendo` = último print não-recusado está `recebido` +
+  `check_status='pendente'` (na fila da IA). validado(ok)/divergente = leitura concluída → não é lendo.
+- **Frontend (`DriverApp.tsx` + `ProofSlot.lendo` em `driverApp.ts`):** 3 estados no cartão, no placar e no botão
+  da home → 🔵 "Analisando…" (rodinha) · 🟢 "enviado" · 🔴 "recusado, envie outro". `acompanharConferencia` só
+  para quando recusa OU é lido e aceito (`sent>0 && !lendo`); enquanto `lendo`, continua esperando (antes parava
+  no 1º poll porque recebido já contava como sent). **Trava anti-travamento:** se a janela (~1 min) acaba ainda
+  lendo, o cartão vira "conferindo…" calmo (`analiseEmFila`) — nunca fica girando; o cron relê em até 15 min.
+  Toast do envio virou "Print recebido — analisando…".
+**Validação:** typecheck 0; build 0; **129 testes** (mesma leva). Push `e8ce09c..57c3e84` → Vercel.
+Edge v55 pelo Victor via CLI; sonda `my-mirrors` sem token → **401 `{"error":"Sessao invalida"}`** (bootou).
+⚠️ NÃO rodei deno check (quebra o node_modules); o `lendo` é type-safe e o bundler do deploy pega sintaxe.
