@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import {
   computeProofProgressByPayment,
   expectedProofPlatforms,
+  previaDeQuemAindaDeve,
   proofForaPorSemGrupo,
   melhorEstado,
   proofStateFromRow,
@@ -243,5 +244,75 @@ describe('computeProofProgressByPayment', () => {
       const p = computeProofProgressByPayment(grupo, solicitadas, todos);
       expect(grupo.every((r) => p.get(r.paymentId)!.complete)).toBe(true);
     });
+  });
+});
+
+// ── Previa honesta do botao "Solicitar espelho" (19/10/2026, decisao do Victor) ──
+// "Ainda deve" = faltando (nunca mandou) OU recusado (data errada). Quem ja mandou
+// (pendente/divergente) e quem esta verde NAO conta — o botao nao re-pede deles.
+describe('previaDeQuemAindaDeve', () => {
+  const solicitadas = paraTodos('SHOPEE');
+  const conferido = (driverId: string, pacotes: Record<string, number>, grupo?: string): DriverRowData =>
+    ({ ...row(driverId, pacotes, grupo), espelhoConferido: true });
+
+  it('quem nunca mandou (faltando) conta', () => {
+    const p = previaDeQuemAindaDeve([row('caio', { SHOPEE: 1808 }, 'G')], solicitadas, new Map());
+    expect(p).toMatchObject({ drivers: 1, prints: 1 });
+  });
+
+  it('quem foi RECUSADO conta (precisa reenviar)', () => {
+    const estados = new Map<string, ProofState>([['caio|SHOPEE', 'recusado']]);
+    const p = previaDeQuemAindaDeve([row('caio', { SHOPEE: 1808 }, 'G')], solicitadas, estados);
+    expect(p.drivers).toBe(1);
+  });
+
+  it('🎯 quem JA MANDOU (pendente ou divergente) NAO conta', () => {
+    const estados = new Map<string, ProofState>([
+      ['ana|SHOPEE', 'pendente'],
+      ['bia|SHOPEE', 'divergente'],
+    ]);
+    const rows = [row('ana', { SHOPEE: 100 }, 'G'), row('bia', { SHOPEE: 200 }, 'G')];
+    expect(previaDeQuemAindaDeve(rows, solicitadas, estados)).toMatchObject({ drivers: 0, prints: 0 });
+  });
+
+  it('🎯 quem esta CONFIRMADO (verde pelo print) NAO conta', () => {
+    const estados = new Map<string, ProofState>([['caio|SHOPEE', 'confirmado']]);
+    const p = previaDeQuemAindaDeve([row('caio', { SHOPEE: 1808 }, 'G')], solicitadas, estados);
+    expect(p).toMatchObject({ drivers: 0, prints: 0 });
+  });
+
+  it('🎯 espelho conferido NA MAO (verde sem print) NAO conta', () => {
+    // espelhoConferido=true, mas sem linha de print (estado faltando) — nao pode re-pedir.
+    const p = previaDeQuemAindaDeve([conferido('caio', { SHOPEE: 1808 }, 'G')], solicitadas, new Map());
+    expect(p).toMatchObject({ drivers: 0, prints: 0 });
+  });
+
+  it('conta so quem ainda deve, numa mistura real', () => {
+    const rows = [
+      row('falta', { SHOPEE: 100 }, 'G'),              // faltando  -> conta
+      row('recusa', { SHOPEE: 100 }, 'G'),             // recusado  -> conta
+      row('mandou', { SHOPEE: 100 }, 'G'),             // pendente  -> fora
+      row('verde', { SHOPEE: 100 }, 'G'),              // confirmado-> fora
+      conferido('maovalid', { SHOPEE: 100 }, 'G'),     // verde mao -> fora
+    ];
+    const estados = new Map<string, ProofState>([
+      ['recusa|SHOPEE', 'recusado'],
+      ['mandou|SHOPEE', 'pendente'],
+      ['verde|SHOPEE', 'confirmado'],
+    ]);
+    expect(previaDeQuemAindaDeve(rows, solicitadas, estados)).toMatchObject({ drivers: 2, prints: 2 });
+  });
+
+  it('separa em-grupo de avulso (contadores da tela)', () => {
+    // Pedido INDIVIDUAL do avulso (senao o "pra todos" nem o alcanca).
+    const rows = [row('ingrupo', { SHOPEE: 100 }, 'G'), row('avulso', { SHOPEE: 100 })];
+    const reqs = [...paraTodos('SHOPEE'), ...soDe('avulso', 'SHOPEE')];
+    const p = previaDeQuemAindaDeve(rows, reqs, new Map());
+    expect(p).toMatchObject({ drivers: 2, emGrupo: 1, avulsos: 1, grupos: 1 });
+  });
+
+  it('sem ninguem pedido, a previa e zero', () => {
+    expect(previaDeQuemAindaDeve([row('caio', { SHOPEE: 100 }, 'G')], [], new Map()))
+      .toMatchObject({ drivers: 0, prints: 0 });
   });
 });

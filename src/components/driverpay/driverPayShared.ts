@@ -1209,6 +1209,68 @@ export function computeProofProgressByPayment(
   return out;
 }
 
+/** Prévia honesta do botão "Solicitar espelho" — quem AINDA DEVE o print. */
+export interface PreviaPrintDevido {
+  /** entregadores que ainda devem pelo menos 1 print */
+  drivers: number;
+  /** total de prints ainda devidos (1 por plataforma devida) */
+  prints: number;
+  /** destes, quantos estão em grupo */
+  emGrupo: number;
+  /** quantos grupos distintos esses em-grupo formam */
+  grupos: number;
+  /** destes, quantos NÃO estão em grupo */
+  avulsos: number;
+}
+
+/**
+ * Quem o botão "Solicitar espelho" AINDA vai cobrar de verdade (19/10/2026, decisão do
+ * Victor: *"o botão é só pra quem não tiver enviado o espelho … quem já enviou, não solicita
+ * de novo"*).
+ *
+ * 🔴 EXISTE PORQUE A PRÉVIA MENTIA: ela contava todo mundo com pacote (`expectedProofPlatforms`),
+ * sem olhar quem já mandou nem quem está verde — então dizia "67 entregadores, 67 prints" com
+ * 84 já conferidos, e dava a impressão de que o botão ia pedir de todo mundo de novo. O app do
+ * entregador e o pedido automático já pulam quem mandou/está verde; aqui a CONTA mostrada passa
+ * a bater com isso.
+ *
+ * "Ainda deve" = **faltando** (nunca mandou) ou **recusado** (data errada, reenvia) — a decisão
+ * dele. Quem já mandou e aguarda conferência (`pendente`), quem está `divergente` (conferência
+ * sua na mão) e quem tem o **espelho conferido** (verde, inclusive marcado na mão sem print)
+ * ficam de FORA. É a mesma conta de `computeProofProgressByPayment` (`missing + rejected`), com
+ * o verde por cima.
+ *
+ * Isto é só a PRÉVIA: o pedido gravado continua sendo a "torneira" por plataforma (o alcance
+ * não muda), porque quem é novo na quinzena ou teve o print recusado tem que continuar coberto.
+ */
+export function previaDeQuemAindaDeve(
+  rows: readonly DriverRowData[],
+  requests: readonly ProofRequest[],
+  stateByDriverPlatform: ReadonlyMap<string, ProofState>,
+  semPlanilha?: ReadonlySet<string>,
+  historicoPorDriver?: HistoricoDePlataforma,
+): PreviaPrintDevido {
+  const progresso = computeProofProgressByPayment(
+    rows, requests, stateByDriverPlatform, semPlanilha, historicoPorDriver,
+  );
+  const aindaDeve = (r: DriverRowData): number => {
+    if (r.espelhoConferido) return 0; // já validado — já passou dessa etapa
+    const p = progresso.get(r.paymentId);
+    return p ? p.missing + p.rejected : 0;
+  };
+  const cobrados = rows.filter((r) => aindaDeve(r) > 0);
+  const prints = cobrados.reduce((s, r) => s + aindaDeve(r), 0);
+  const emGrupo = cobrados.filter((r) => r.groupName);
+  const grupos = new Set(emGrupo.map((r) => r.groupName as string));
+  return {
+    drivers: cobrados.length,
+    prints,
+    emGrupo: emGrupo.length,
+    grupos: grupos.size,
+    avulsos: cobrados.length - emGrupo.length,
+  };
+}
+
 /**
  * Traduz a linha do banco (`driverpay_delivery_proofs`) pro estado que a tela usa.
  *

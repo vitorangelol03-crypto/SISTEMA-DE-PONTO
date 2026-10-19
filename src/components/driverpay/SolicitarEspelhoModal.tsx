@@ -21,7 +21,7 @@ import {
   updatePeriod,
 } from '../../services/driverPay';
 import {
-  expectedProofPlatforms, proofForaPorSemGrupo, proofForaPorSemHistorico, quemParaDeSerCobrado,
+  previaDeQuemAindaDeve, proofForaPorSemGrupo, proofForaPorSemHistorico, quemParaDeSerCobrado,
   type DriverRowData, type ProofRequest, type ProofState,
 } from './driverPayShared';
 import { ModalShell } from './ModalShell';
@@ -185,24 +185,18 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
     [rows, pedidosDesejados, semPlanilha, historicoPlataformas],
   );
 
-  /** Quem vai ser cobrado — mesma funcao que a coluna "Print" da grade usa. */
-  const previa = useMemo(() => {
-    const cobrados = rows.filter(
-      (r) => expectedProofPlatforms(r, pedidosDesejados, semPlanilha, historicoPlataformas).length > 0,
-    );
-    const prints = cobrados.reduce(
-      (s, r) => s + expectedProofPlatforms(r, pedidosDesejados, semPlanilha, historicoPlataformas).length, 0,
-    );
-    const emGrupo = cobrados.filter((r) => r.groupName);
-    const grupos = new Set(emGrupo.map((r) => r.groupName as string));
-    return {
-      drivers: cobrados.length,
-      prints,
-      emGrupo: emGrupo.length,
-      grupos: grupos.size,
-      avulsos: cobrados.length - emGrupo.length,
-    };
-  }, [rows, pedidosDesejados, semPlanilha, historicoPlataformas]);
+  /**
+   * Quem o botão AINDA vai cobrar de verdade (19/10/2026, decisão do Victor): só quem DEVE o
+   * print — faltando (nunca mandou) ou recusado (data errada). Quem já mandou, está divergente
+   * ou verde NAO entra, porque o botão "não solicita de novo" deles. A prévia antiga contava
+   * todo mundo com pacote e parecia que ia pedir da quinzena inteira de novo.
+   */
+  const previa = useMemo(
+    () => previaDeQuemAindaDeve(
+      rows, pedidosDesejados, proofStates ?? new Map<string, ProofState>(), semPlanilha, historicoPlataformas,
+    ),
+    [rows, pedidosDesejados, proofStates, semPlanilha, historicoPlataformas],
+  );
 
   /**
    * 🔴 Quem PARA de ser cobrado se ele salvar assim (21/09/2026).
@@ -601,13 +595,16 @@ export const SolicitarEspelhoModal: React.FC<SolicitarEspelhoModalProps> = ({
               <div className="text-sm text-gray-700">
                 {previa.drivers === 0 ? (
                   <span>
-                    Ninguem tem pacote nas plataformas escolhidas nesta quinzena — <strong>nenhum print
-                    sera pedido</strong>.
+                    Ninguem esta devendo print nas plataformas escolhidas — quem ja mandou ou ja
+                    esta conferido nao e pedido de novo. <strong>Nenhum print novo sera pedido</strong>.
                   </span>
                 ) : (
                   <>
-                    <strong>{previa.drivers}</strong> entregador(es) com pacote,{' '}
-                    <strong>{previa.prints}</strong> print(s) no total.
+                    <strong>{previa.drivers}</strong> entregador(es) ainda devem o print,{' '}
+                    <strong>{previa.prints}</strong> print(s) no total.{' '}
+                    <span className="text-xs text-gray-500">
+                      (quem ja mandou ou ja esta conferido fica de fora)
+                    </span>
                     {previa.grupos > 0 && (
                       <div className="text-xs text-gray-600 mt-1">
                         {previa.emGrupo} deles estao em {previa.grupos} grupo(s): quem anexa e o{' '}

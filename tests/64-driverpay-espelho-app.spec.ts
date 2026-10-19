@@ -198,8 +198,8 @@ test.describe('Espelho do app da Shopee — painel (04/08/2026)', () => {
         if (!marcado) await meuChip.click();
       }
 
-      // A prévia diz quem vai ser cobrado (1 driver com pacote).
-      await expect(modal(page).getByText(/entregador\(es\) com pacote/)).toBeVisible({ timeout: 10_000 });
+      // A prévia diz quem AINDA DEVE o print (1 driver, ainda não mandou).
+      await expect(modal(page).getByText(/ainda devem o print/)).toBeVisible({ timeout: 10_000 });
 
       await botaoSolicitar.click();
       await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 15_000 });

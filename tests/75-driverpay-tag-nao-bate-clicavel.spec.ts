@@ -154,7 +154,7 @@ test.describe('Tag "não bate" clicável na grade (19/08/2026)', () => {
         const marcado = await meuChip.evaluate((el) => el.className.includes('bg-blue-600'));
         if (!marcado) await meuChip.click();
       }
-      await expect(modal(page).getByText(/entregador\(es\) com pacote/)).toBeVisible({ timeout: 10_000 });
+      await expect(modal(page).getByText(/ainda devem o print/)).toBeVisible({ timeout: 10_000 });
       await modal(page).getByRole('button', { name: /Solicitar espelho|Parar de pedir/ }).click();
       await expect(page.locator(MODAL)).toHaveCount(0, { timeout: 15_000 });
 
