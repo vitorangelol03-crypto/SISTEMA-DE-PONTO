@@ -77,3 +77,22 @@ chamou o Claude com bloco PDF → **HTTP 200**, `legivel:true`, **3.217 caracter
 - Frontend (tarefa 1) no `main` → Vercel. Edge `driver-public-api` **v53** (espelho + NF pelo
   Claude). Secrets inalterados (NF reaproveita os do espelho).
 - Push agrupado: `9ffea97..1336ffd`.
+
+## Conferência da prévia na Caratinga (pedido do Victor, ao vivo)
+Reproduzi `previaDeQuemAindaDeve` em SQL sobre a quinzena aberta (`9b8fd48b`, SHOPEE, 93 pedidos
+individuais, todos com pacote): prévia **ANTES = 93** → **AGORA = 21** (todos "faltando"; 0
+recusado). Os 93 = 40 verdes + 32 divergentes + 21 ainda devem. Bate. Conserto provado em dado real.
+
+## 💤 FILA — NF conferida SEM IA e SEM humano (ideia do Victor 19/10, NÃO mexer hoje)
+Contexto que motivou: só **5% das notas** usam IA (20 de 393 PDFs desde ago); 95% já conferem
+sozinhas lendo o TEXTO embutido no PDF digital (`extractText` + `runNfCheck`, sem IA, sem humano).
+A IA (Claude, hoje) só entra na nota **escaneada/fotografada** (imagem sem texto — caso Lucas Aredes).
+Caminho limpo pra tirar a IA desses 5% (quando o Victor quiser):
+- **Opção recomendada:** ler a **chave de acesso (44 díg.) / QR code** da nota (biblioteca de QR,
+  NÃO é IA) e **consultar o portal oficial** → valor/CNPJ direto do governo (verdade absoluta,
+  mais confiável que qualquer leitura). Caratinga usa **DANFSe v2.0 (padrão nacional)** — vi a
+  "CHAVE DE ACESSO DA NFS-e" no PDF de teste. Precisa de plano curto: confirmar como o portal
+  (nacional/municipal) deixa consultar; pode exigir certificado.
+- Apoio: incentivar/obrigar o **PDF ORIGINAL** da prefeitura (não foto) — aí nem cai no scan.
+- Descartado: OCR local (Tesseract) — erra número em scan ruim; dinheiro errado é pior que o Claude.
+Enquanto isso: **Claude cobre os 5%** (v53, provado). Nada a fazer até o Victor pedir.
