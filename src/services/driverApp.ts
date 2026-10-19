@@ -247,6 +247,10 @@ export interface ProofSlot {
   rejected: number;
   /** motivo da última recusa — é a única coisa que o driver fica sabendo. */
   rejectReason: string | null;
+  /** O print enviado AINDA está sendo lido (recebido + conferência pendente). Serve
+   *  pra tela mostrar "Analisando..." em vez de "enviado" antes da hora (19/10/2026).
+   *  `undefined` = edge fn antiga: a tela trata como não-lendo (volta ao de sempre). */
+  lendo?: boolean;
 }
 
 export interface ProofFile {

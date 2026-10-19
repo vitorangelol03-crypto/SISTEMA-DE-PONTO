@@ -1973,13 +1973,18 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
   const nomeDe = new Map((drivers ?? []).map((d) => [d.id as string, d.name as string]));
 
   const { data: proofs } = await supabase.from('driverpay_delivery_proofs')
-    .select('period_id, driver_id, platform_name, status, reject_reason, uploaded_at')
+    .select('period_id, driver_id, platform_name, status, check_status, reject_reason, uploaded_at')
     .in('period_id', [...periodosComPedido]).in('driver_id', driverIds)
     .order('uploaded_at', { ascending: true });
 
   const enviados: Record<string, number> = {};
   const recusados: Record<string, number> = {};
   const motivo: Record<string, string | null> = {};
+  // LENDO (19/10/2026): o print foi recebido mas a conferência ainda não terminou
+  // (`status='recebido'` + `check_status='pendente'` — na fila da IA). A tela mostra
+  // "Analisando..." em vez de "enviado" antes da hora, pra a recusa não parecer um
+  // "enviado" que volta atrás. validado(ok)/divergente já são leitura CONCLUÍDA.
+  const lendo: Record<string, boolean> = {};
   for (const p of proofs ?? []) {
     const k = `${p.period_id}|${p.driver_id}|${p.platform_name}`;
     if (p.status === 'rejeitado') {
@@ -1987,6 +1992,8 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
       motivo[k] = (p.reject_reason as string | null) ?? null; // asc -> fica o mais recente
     } else {
       enviados[k] = (enviados[k] ?? 0) + 1;
+      // asc -> o último não-recusado deste slot manda no estado "lendo".
+      lendo[k] = p.status === 'recebido' && p.check_status === 'pendente';
     }
   }
 
@@ -2003,6 +2010,8 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
       sent: enviados[k] ?? 0,
       rejected: recusados[k] ?? 0,
       rejectReason: motivo[k] ?? null,
+      /** O print enviado ainda está sendo lido (na fila da IA) — tela mostra "Analisando". */
+      lendo: lendo[k] ?? false,
     };
   }).sort((a, b) => (a.doGrupo === b.doGrupo ? a.driverName.localeCompare(b.driverName) : a.doGrupo ? 1 : -1));
 

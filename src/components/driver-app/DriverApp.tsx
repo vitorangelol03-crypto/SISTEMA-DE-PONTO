@@ -187,6 +187,11 @@ export function DriverApp() {
   const [proofTotal, setProofTotal] = useState(0);
   /** Quantos deram errado (recusado, precisa reenviar) — pinta o botão de vermelho. */
   const [proofErros, setProofErros] = useState(0);
+  /** Quantos ainda estão sendo lidos (fila da IA) — a home mostra "Analisando". */
+  const [proofAnalisando, setProofAnalisando] = useState(0);
+  /** Cartões cuja janela de acompanhamento (~1 min) acabou AINDA "lendo": a tela troca
+   *  o "Analisando" (girando) por "conferindo…" calmo, pra nunca ficar preso girando. */
+  const [analiseEmFila, setAnaliseEmFila] = useState<Set<string>>(new Set());
   /** De QUAL app é o print pedido (05/08) — a faixa precisa dizer, não só contar. */
   const [proofApp, setProofApp] = useState<string | null>(null);
   const [proofSlots, setProofSlots] = useState<ProofSlot[] | null>(null);
@@ -213,10 +218,11 @@ export function DriverApp() {
           // "Deu errado" = recusado esperando reenvio (decisão do Victor 19/10: só recusado,
           // divergente conta como enviado — reenviar o mesmo não conserta divergência).
           setProofErros(faltando.filter((s) => s.rejected > 0).length);
+          setProofAnalisando(slots.filter((s) => s.lendo === true).length);
           const apps = [...new Set(faltando.map((s) => s.platformName).filter(Boolean))];
           setProofApp(apps.length === 1 ? apps[0] : null);
         })
-        .catch(() => { setProofPendentes(0); setProofTotal(0); setProofErros(0); setProofApp(null); });
+        .catch(() => { setProofPendentes(0); setProofTotal(0); setProofErros(0); setProofAnalisando(0); setProofApp(null); });
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else { setMirrors([]); toast.error(errMsg(e, 'Nao consegui carregar os espelhos.')); }
@@ -377,6 +383,10 @@ export function DriverApp() {
    * batendo no servidor a toa no 4G do entregador.
    */
   function acompanharConferencia(chave: string) {
+    const tiraDaFila = () => setAnaliseEmFila((prev) => {
+      if (!prev.has(chave)) return prev;
+      const n = new Set(prev); n.delete(chave); return n;
+    });
     let tentativas = 0;
     const bater = async () => {
       tentativas += 1;
@@ -385,13 +395,19 @@ export function DriverApp() {
         setProofSlots(novos);
         setProofPendentes(novos.filter((x) => x.sent === 0).length);
         const s = novos.find((x) => chaveDoCartaoDePrint(x) === chave);
-        // Recusado ou ja contabilizado como enviado: acabou, nao precisa insistir.
-        if (!s || s.rejected > 0 || s.sent > 0) return;
+        // Acabou quando: recusou, OU foi lido e aceito (sent>0 e NAO esta mais `lendo`).
+        // Enquanto estiver `lendo` (recebido+pendente na fila da IA) continua esperando —
+        // senao a tela cairia em "enviado" ANTES de a leitura terminar (o problema que
+        // o "Analisando" resolve, 19/10/2026).
+        if (!s || s.rejected > 0 || (s.sent > 0 && s.lendo !== true)) { tiraDaFila(); return; }
       } catch {
         // Sem rede ou sessao caindo: nao vale insistir nem incomodar com aviso.
         return;
       }
       if (tentativas < 12) setTimeout(bater, 5000);
+      // Janela acabou e ainda esta lendo (fila lenta): acalma o cartao pra nao ficar
+      // girando pra sempre. O cron rele em ate 15 min e numa proxima abertura resolve.
+      else setAnaliseEmFila((prev) => { const n = new Set(prev); n.add(chave); return n; });
     };
     setTimeout(bater, 5000);
   }
@@ -417,14 +433,14 @@ export function DriverApp() {
         },
         token,
       );
-      // Mensagem PROPOSITALMENTE simples: o driver nao pode saber se a quantidade
-      // bateu. Print divergente chega aqui igualzinho a um print certo.
-      toast.success('Espelho enviado!');
+      // Print RECEBIDO — a leitura acontece POR TRAS (04/08): o servidor responde assim
+      // que guarda o print, pra ele nao ficar ~40s parado. A tela mostra "Analisando"
+      // (o slot vem `lendo`) ate sair o veredito, em vez de dizer "enviado" antes da hora
+      // e depois voltar atras (19/10/2026). Mensagem simples de proposito: o driver nao
+      // pode saber se a quantidade bateu — divergente chega igualzinho a um print certo.
+      toast.success('Print recebido — analisando…');
+      setAnaliseEmFila((prev) => { if (!prev.has(chave)) return prev; const n = new Set(prev); n.delete(chave); return n; });
       await loadProof();
-      // A conferencia agora acontece POR TRAS (04/08): o servidor responde assim que
-      // guarda o print, pra ele nao ficar ~40s parado. A recusa por data errada chega
-      // alguns segundos depois — entao a tela se atualiza sozinha por um tempinho pra
-      // ele ver o motivo sem precisar mexer em nada.
       acompanharConferencia(chave);
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
@@ -586,6 +602,11 @@ export function DriverApp() {
     const todos = proofSlots ?? [];
     const faltam = todos.filter((s) => s.sent === 0);
     const prontos = todos.filter((s) => s.sent > 0);
+    // Dentro dos "prontos": os que ainda estão sendo LIDOS (fila da IA) aparecem como
+    // "Analisando"; os já lidos como "enviado". Separados pra os títulos não mentirem
+    // ("Já enviados" não pode incluir um que ainda está analisando). (19/10/2026)
+    const analisando = prontos.filter((s) => s.lendo === true);
+    const enviados = prontos.filter((s) => s.lendo !== true);
     const urgencia = (s: ProofSlot) => (s.rejected > 0 ? 0 : 1);
     const meusFaltam = faltam.filter((s) => !s.doGrupo);
     const grupoFaltam = faltam.filter((s) => s.doGrupo).sort((a, b) => urgencia(a) - urgencia(b));
@@ -654,23 +675,36 @@ export function DriverApp() {
      */
     const cartaoPronto = (s: ProofSlot) => {
       const chave = chaveDoCartaoDePrint(s);
+      // Ainda lendo o print (fila da IA): "Analisando" girando. Se a janela de
+      // acompanhamento acabou sem resolver, "conferindo…" calmo (não gira pra sempre).
+      const analisandoAgora = s.lendo === true && !analiseEmFila.has(chave);
+      const conferindo = s.lendo === true && analiseEmFila.has(chave);
       return (
-        <div key={chave} className="bg-white/60 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+        <div
+          key={chave}
+          className={`rounded-xl px-4 py-3 flex items-center justify-between gap-3 ${
+            analisandoAgora ? 'bg-blue-50 border border-blue-200' : 'bg-white/60'
+          }`}
+        >
           <div className="min-w-0 flex items-center gap-2">
-            <CheckCircle2 size={18} className="text-green-600 flex-shrink-0" />
+            {analisandoAgora
+              ? <Spinner />
+              : <CheckCircle2 size={18} className="text-green-600 flex-shrink-0" />}
             <div className="min-w-0">
-              <span className="text-sm text-gray-600 break-words">{s.driverName}</span>
               {/* 21/09/2026: quem enviou print em duas quinzenas via o proprio nome
                   repetido, sem nada diferenciando as linhas, e entendia que tinha
                   mandado o mesmo espelho duas vezes. O cartao de quem FALTA ja dizia
                   a quinzena; este nao dizia nunca. */}
+              <span className={`text-sm break-words ${analisandoAgora ? 'text-blue-900 font-medium' : 'text-gray-600'}`}>
+                {s.driverName}
+              </span>
               {!umaQuinzenaSo && (
                 <div className="text-[11px] text-gray-500 break-words">{s.periodLabel}</div>
               )}
             </div>
           </div>
-          <span className="text-xs text-gray-500 whitespace-nowrap flex-shrink-0">
-            enviado
+          <span className={`text-xs whitespace-nowrap flex-shrink-0 ${analisandoAgora ? 'text-blue-700 font-medium' : 'text-gray-500'}`}>
+            {analisandoAgora ? 'Analisando…' : conferindo ? 'conferindo…' : 'enviado'}
           </span>
         </div>
       );
@@ -709,12 +743,24 @@ export function DriverApp() {
                   cartão por cartão pra saber quanto falta. */}
               <div
                 className={`rounded-xl p-4 text-center ${
-                  faltam.length === 0
-                    ? 'bg-green-50 border border-green-300'
-                    : 'bg-amber-50 border border-amber-300'
+                  faltam.length > 0
+                    ? 'bg-amber-50 border border-amber-300'
+                    : analisando.length > 0
+                      ? 'bg-blue-50 border border-blue-200'
+                      : 'bg-green-50 border border-green-300'
                 }`}
               >
                 {faltam.length === 0 ? (
+                  analisando.length > 0 ? (
+                    <>
+                      <div className="text-blue-800 font-bold text-lg flex items-center justify-center gap-2">
+                        <Spinner /> Analisando…
+                      </div>
+                      <div className="text-blue-700 text-xs mt-0.5">
+                        {analisando.length === 1 ? 'O sistema está lendo o print.' : `O sistema está lendo ${analisando.length} prints.`}
+                      </div>
+                    </>
+                  ) : (
                   <>
                     <div className="text-green-800 font-bold text-lg flex items-center justify-center gap-2">
                       <CheckCircle2 size={20} /> Tudo enviado!
@@ -723,6 +769,7 @@ export function DriverApp() {
                       {todos.length === 1 ? 'Seu espelho já chegou na CD.' : `Os ${todos.length} espelhos já chegaram na CD.`}
                     </div>
                   </>
+                  )
                 ) : (
                   <>
                     <div className="text-amber-900 font-bold text-lg">
@@ -785,12 +832,21 @@ export function DriverApp() {
                 </>
               )}
 
-              {prontos.length > 0 && (
+              {analisando.length > 0 && (
+                <>
+                  <div className="pt-3 text-xs font-semibold text-blue-500 uppercase tracking-wide">
+                    Analisando ({analisando.length})
+                  </div>
+                  <div className="space-y-1.5">{analisando.map(cartaoPronto)}</div>
+                </>
+              )}
+
+              {enviados.length > 0 && (
                 <>
                   <div className="pt-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                    Já enviados ({prontos.length})
+                    Já enviados ({enviados.length})
                   </div>
-                  <div className="space-y-1.5">{prontos.map(cartaoPronto)}</div>
+                  <div className="space-y-1.5">{enviados.map(cartaoPronto)}</div>
                 </>
               )}
             </>
@@ -1085,6 +1141,23 @@ export function DriverApp() {
                       : proofApp
                         ? `Toque aqui pra enviar o print da tela do app da ${proofApp} — só de quem entrega ${proofApp}.`
                         : 'Toque aqui pra enviar o print da tela do aplicativo de entregas.'}
+                  </div>
+                </div>
+              </div>
+            </button>
+          ) : proofAnalisando > 0 ? (
+            <button
+              onClick={openProof}
+              className="w-full bg-blue-50 border border-blue-200 rounded-xl p-4 text-left hover:bg-blue-100"
+            >
+              <div className="flex items-center gap-3">
+                <Spinner />
+                <div className="min-w-0">
+                  <div className="font-semibold text-blue-900 text-sm">
+                    {proofAnalisando === 1 ? 'Analisando o print…' : `Analisando ${proofAnalisando} prints…`}
+                  </div>
+                  <div className="text-xs text-blue-800 mt-0.5">
+                    O sistema está lendo. Toque pra acompanhar.
                   </div>
                 </div>
               </div>
