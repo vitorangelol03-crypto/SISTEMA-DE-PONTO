@@ -10,11 +10,19 @@
  * subir a planilha da iMile não dispara cobrança de print da Shopee.
  */
 import { describe, it, expect } from 'vitest';
-import { driversParaPedirPrint, plataformasQuePedemPrint } from '../../src/utils/proofAuto';
+import {
+  driversParaCompletarPrint,
+  driversParaPedirPrint,
+  plataformasQuePedemPrint,
+} from '../../src/utils/proofAuto';
 
 const linha = (driverId: string, espelhoConferido = false) => ({ driverId, espelhoConferido });
 const nunca = () => false;
 const sempre = () => true;
+
+/** Linha com grupo, pro completar (o que a varredura do painel enxerga). */
+const linhaG = (driverId: string, groupName: string | null, espelhoConferido = false) =>
+  ({ driverId, groupName, espelhoConferido });
 
 describe('driversParaPedirPrint', () => {
   it('🎯 tem pacote e não mandou print: entra no pedido', () => {
@@ -56,6 +64,80 @@ describe('driversParaPedirPrint', () => {
 
   it('lista vazia devolve vazio', () => {
     expect(driversParaPedirPrint([], sempre, nunca, nunca)).toEqual([]);
+  });
+});
+
+// ── Completar pedido de quem entrou no grupo depois (19/10/2026, caso Bruno) ──
+describe('driversParaCompletarPrint', () => {
+  // Helpers no formato (row, plataforma). Cenário base: SHOPEE, planilha importada.
+  const temPacoteSempre = () => true;
+  const semGeral = () => false;
+  const semIndividual = () => false;
+  const semPrint = () => false;
+
+  it('🎯 CASO BRUNO: em grupo, com pacote, sem pedido, sem print, não-verde → entra', () => {
+    const rows = [linhaG('bruno', 'Ipanema, MG FILIPE')];
+    const r = driversParaCompletarPrint(rows, ['SHOPEE'], temPacoteSempre, semGeral, semIndividual, semPrint);
+    expect(r.get('SHOPEE')).toEqual(['bruno']);
+  });
+
+  it('🔴 avulso (sem grupo) NÃO é completado — mesma regra do "pra todos"', () => {
+    const rows = [linhaG('avulso', null)];
+    const r = driversParaCompletarPrint(rows, ['SHOPEE'], temPacoteSempre, semGeral, semIndividual, semPrint);
+    expect(r.size).toBe(0);
+  });
+
+  it('quem JÁ tem pedido individual não ganha outro', () => {
+    const rows = [linhaG('bruno', 'G')];
+    const r = driversParaCompletarPrint(rows, ['SHOPEE'], temPacoteSempre, semGeral,
+      (row) => row.driverId === 'bruno', semPrint);
+    expect(r.size).toBe(0);
+  });
+
+  it('com pedido GERAL no ar, quem está em grupo já está coberto → não completa', () => {
+    const rows = [linhaG('bruno', 'G')];
+    const r = driversParaCompletarPrint(rows, ['SHOPEE'], temPacoteSempre, sempre, semIndividual, semPrint);
+    expect(r.size).toBe(0);
+  });
+
+  it('quem já mandou o print não é cobrado de novo', () => {
+    const rows = [linhaG('bruno', 'G')];
+    const r = driversParaCompletarPrint(rows, ['SHOPEE'], temPacoteSempre, semGeral, semIndividual, sempre);
+    expect(r.size).toBe(0);
+  });
+
+  it('quem está verde (espelho conferido) não é cobrado', () => {
+    const rows = [linhaG('bruno', 'G', true)];
+    const r = driversParaCompletarPrint(rows, ['SHOPEE'], temPacoteSempre, semGeral, semIndividual, semPrint);
+    expect(r.size).toBe(0);
+  });
+
+  it('sem pacote na plataforma, não entra', () => {
+    const rows = [linhaG('bruno', 'G')];
+    const r = driversParaCompletarPrint(rows, ['SHOPEE'], () => false, semGeral, semIndividual, semPrint);
+    expect(r.size).toBe(0);
+  });
+
+  it('mistura real: só o Bruno (novo no grupo) entra', () => {
+    const rows = [
+      linhaG('bruno', 'G'),            // novo no grupo → entra
+      linhaG('comPedido', 'G'),        // já tem pedido
+      linhaG('mandou', 'G'),           // já mandou
+      linhaG('verde', 'G', true),      // conferido
+      linhaG('avulso', null),          // sem grupo
+    ];
+    const r = driversParaCompletarPrint(
+      rows, ['SHOPEE'], temPacoteSempre, semGeral,
+      (row) => row.driverId === 'comPedido',
+      (row) => row.driverId === 'mandou',
+    );
+    expect(r.get('SHOPEE')).toEqual(['bruno']);
+  });
+
+  it('nada a completar → Map vazio (abrir o painel não escreve)', () => {
+    const rows = [linhaG('a', 'G')];
+    const r = driversParaCompletarPrint(rows, ['SHOPEE'], temPacoteSempre, semGeral, sempre, semPrint);
+    expect(r.size).toBe(0);
   });
 });
 

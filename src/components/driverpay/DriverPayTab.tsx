@@ -71,7 +71,7 @@ import {
   pagamentosParaDesmarcarPorDispensa,
   pedidosQueFaltamAoDesmarcar,
 } from '../../utils/espelhoDispensa';
-import { driversParaPedirPrint, plataformasQuePedemPrint } from '../../utils/proofAuto';
+import { driversParaCompletarPrint, driversParaPedirPrint, plataformasQuePedemPrint } from '../../utils/proofAuto';
 import { linhasForaDaConfig, diferencaEmReais } from '../../utils/rateSync';
 import { abaterAgora, type ModoDesconto, type PessoaDesconto } from '../../utils/descontoSaldo';
 import { exportDriverGeneralReportExcel, exportDriverSimpleReportExcel } from '../../utils/driverReport';
@@ -1729,7 +1729,20 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
       devidasDe,
       (row) => proofProgressByPayment.get(row.paymentId)?.complete === true,
     );
-    if (paraMarcar.length === 0 && paraDesmarcar.length === 0) return;
+    // COMPLETAR pedidos de quem entrou no grupo (ou ganhou pacote) DEPOIS da importação
+    // (19/10/2026): o automático só roda na importação, então latecomer fica sem pedido e o app
+    // do líder não mostra o cartão dele (caso Bruno). Mesma regra do automático, só adiciona.
+    const platsPedidasComPlanilha = [...new Set(proofRequests.map((r) => r.platformName))]
+      .filter((plat) => !semPlanilha.has(plat));
+    const completarPedidos = driversParaCompletarPrint(
+      rows,
+      platsPedidasComPlanilha,
+      (row, plat) => platformPackages(row, plat) > 0,
+      (plat) => proofRequests.some((r) => r.platformName === plat && r.driverId === null),
+      (row, plat) => proofRequests.some((r) => r.platformName === plat && r.driverId === row.driverId),
+      (row, plat) => proofStates.has(`${row.driverId}|${plat}`),
+    );
+    if (paraMarcar.length === 0 && paraDesmarcar.length === 0 && completarPedidos.size === 0) return;
     if (varreduraEspelhoBusyRef.current) return;
     varreduraEspelhoBusyRef.current = true;
     const periodId = selectedPeriod.id;
@@ -1744,21 +1757,29 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
         for (const [plataforma, driverIds] of faltam) {
           pedidosCriados += await requestProofForDrivers(company.id, periodId, plataforma, driverIds, userId);
         }
+        // Completar quem entrou no grupo / ganhou pacote depois da importação (19/10/2026).
+        let completados = 0;
+        for (const [plataforma, driverIds] of completarPedidos) {
+          completados += await requestProofForDrivers(company.id, periodId, plataforma, driverIds, userId);
+        }
         if (marcados > 0) {
           toast.success(`${marcados} entregador(es) sem entrega na plataforma — espelho marcado sozinho.`, { duration: 7000 });
         }
         if (desmarcados.length > 0) {
           toast(`${desmarcados.length} entregador(es) ganharam pacote na plataforma cobrada — espelho desmarcado, o app volta a pedir o print.`, { icon: '⚠️', duration: 9000 });
         }
+        if (completados > 0) {
+          toast.success(`${completados} entregador(es) entraram no grupo depois — o app já está pedindo o espelho deles.`, { duration: 8000 });
+        }
         if (marcados > 0 || desmarcados.length > 0) await reloadPayments();
-        if (pedidosCriados > 0) await reloadProofs(periodId);
+        if (pedidosCriados > 0 || completados > 0) await reloadProofs(periodId);
       } catch (e) {
         console.error('[varredura espelho] falhou:', e);
       } finally {
         varreduraEspelhoBusyRef.current = false;
       }
     })();
-  }, [rows, proofRequests, semPlanilha, historicoPlataformas, proofProgressByPayment, company?.id, selectedPeriod, isReadOnly, hasPermission, userId, reloadPayments, reloadProofs, varreduraTick, rowsPeriodId, proofsPeriodId, historicoPeriodId]);
+  }, [rows, proofRequests, proofStates, semPlanilha, historicoPlataformas, proofProgressByPayment, company?.id, selectedPeriod, isReadOnly, hasPermission, userId, reloadPayments, reloadProofs, varreduraTick, rowsPeriodId, proofsPeriodId, historicoPeriodId]);
 
   /**
    * Quem tem pacote numa plataforma pedida "pra todos" mas ficou de fora **por não estar em

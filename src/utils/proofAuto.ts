@@ -46,6 +46,46 @@ export function driversParaPedirPrint<R extends AutoProofRowLike>(
 }
 
 /**
+ * COMPLETAR pedidos de print no painel (19/10/2026, decisão do Victor: "qualquer driver que
+ * for chegando, a gente não tem esse problema").
+ *
+ * 🔴 EXISTE POR UM CASO REAL: o pedido automático (`driversParaPedirPrint`) só roda NA
+ * IMPORTAÇÃO. Quem entra num grupo (ou ganha pacote) DEPOIS fica sem pedido — foi o Bruno, que
+ * entrou no grupo do Filipe **3 dias** após a importação: na hora da importação ele estava sem
+ * grupo (pulado, certo, pela regra "pra todos só cobra quem está em grupo"), e nada re-pediu
+ * quando ele entrou no grupo. O app do líder não mostrava o cartão dele.
+ *
+ * Esta função roda na varredura do painel (que já recarrega a cada mudança da grade) e acha,
+ * por plataforma JÁ pedida na quinzena, quem AINDA precisa do pedido — a MESMA regra do
+ * automático: em grupo, com pacote, não-verde, sem print e sem pedido que o alcance. Só
+ * ADICIONA: nunca apaga, nunca mexe em quem já tem pedido.
+ */
+export function driversParaCompletarPrint<R extends AutoProofRowLike & { groupName: string | null }>(
+  rows: readonly R[],
+  /** Plataformas pedidas na quinzena E com planilha (pacote manda quem deve). */
+  platforms: readonly string[],
+  temPacote: (row: R, plataforma: string) => boolean,
+  temPedidoGeral: (plataforma: string) => boolean,
+  jaPedidoIndividual: (row: R, plataforma: string) => boolean,
+  jaMandou: (row: R, plataforma: string) => boolean,
+): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const plat of platforms) {
+    const ids = driversParaPedirPrint(
+      rows,
+      (row) => temPacote(row, plat),
+      // Mesma trava do automático: avulso (sem grupo) fica de fora; com pedido geral, estar em
+      // grupo já basta; senão, pula quem já tem pedido individual.
+      (row) => row.groupName === null
+        || (temPedidoGeral(plat) ? row.groupName !== null : jaPedidoIndividual(row, plat)),
+      (row) => jaMandou(row, plat),
+    );
+    if (ids.length > 0) out.set(plat, ids);
+  }
+  return out;
+}
+
+/**
  * Em quais plataformas faz sentido pedir print sozinho.
  *
  * 🔑 NÃO é uma lista fixa com "SHOPEE" escrito no código: é a plataforma que **já tem
