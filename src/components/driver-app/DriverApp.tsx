@@ -182,6 +182,11 @@ export function DriverApp() {
   // ⚠️ Nada aqui guarda quantidade: o driver so anexa a foto.
   /** Quantos prints ainda faltam — alimenta a faixa no topo da lista. */
   const [proofPendentes, setProofPendentes] = useState(0);
+  /** Total de prints que o login deve/mandou (líder vê o grupo todo) — o botão da home
+   *  aparece mesmo com 0 pendentes pra mostrar "todos enviados" em vez de tela vazia. */
+  const [proofTotal, setProofTotal] = useState(0);
+  /** Quantos deram errado (recusado, precisa reenviar) — pinta o botão de vermelho. */
+  const [proofErros, setProofErros] = useState(0);
   /** De QUAL app é o print pedido (05/08) — a faixa precisa dizer, não só contar. */
   const [proofApp, setProofApp] = useState<string | null>(null);
   const [proofSlots, setProofSlots] = useState<ProofSlot[] | null>(null);
@@ -204,10 +209,14 @@ export function DriverApp() {
         .then(({ slots }) => {
           const faltando = slots.filter((s) => s.sent === 0);
           setProofPendentes(faltando.length);
+          setProofTotal(slots.length);
+          // "Deu errado" = recusado esperando reenvio (decisão do Victor 19/10: só recusado,
+          // divergente conta como enviado — reenviar o mesmo não conserta divergência).
+          setProofErros(faltando.filter((s) => s.rejected > 0).length);
           const apps = [...new Set(faltando.map((s) => s.platformName).filter(Boolean))];
           setProofApp(apps.length === 1 ? apps[0] : null);
         })
-        .catch(() => { setProofPendentes(0); setProofApp(null); });
+        .catch(() => { setProofPendentes(0); setProofTotal(0); setProofErros(0); setProofApp(null); });
     } catch (e) {
       if (errStatus(e) === 401) { logout(); toast.error('Sua sessao expirou. Entre de novo.'); }
       else { setMirrors([]); toast.error(errMsg(e, 'Nao consegui carregar os espelhos.')); }
@@ -1046,34 +1055,65 @@ export function DriverApp() {
             print ANTES de publicar o pagamento (a conferência é o que libera o
             pagamento). Se este botão dependesse de um espelho publicado, o driver
             não teria por onde enviar — foi o que o E2E do portal pegou. */}
-        {proofPendentes > 0 && (
-          <button
-            onClick={openProof}
-            className="w-full bg-amber-50 border border-amber-300 rounded-xl p-4 text-left hover:bg-amber-100"
-          >
-            <div className="flex items-center gap-3">
-              <Upload size={20} className="text-amber-700 flex-shrink-0" />
-              <div className="min-w-0">
-                <div className="font-semibold text-amber-900 text-sm">
-                  {proofPendentes === 1
-                    ? `A CD está esperando 1 espelho do app${proofApp ? ` ${proofApp}` : ''}`
-                    : `A CD está esperando ${proofPendentes} espelhos do app${proofApp ? ` ${proofApp}` : ''}`}
-                </div>
-                <div className="text-xs text-amber-800 mt-0.5">
-                  {proofApp
-                    ? `Toque aqui pra enviar o print da tela do app da ${proofApp} — só de quem entrega ${proofApp}.`
-                    : 'Toque aqui pra enviar o print da tela do aplicativo de entregas.'}
+        {/* Faixa da situação dos espelhos do app. 19/10/2026 (pedido do Victor): aparece
+            MESMO com 0 pendentes — antes sumia e o líder (ex.: Adriano) abria o app e via
+            uma tela vazia, achando que "não apareceu nada". Agora:
+            • falta algo  -> âmbar "a CD está esperando N" (+ vermelho se algum deu errado);
+            • tudo certo  -> verde "todos enviados, toque pra conferir".
+            Toca em qualquer caso e abre a lista 🟢 enviado / 🟡 falta / 🔴 reenviar. */}
+        {proofTotal > 0 && (
+          proofPendentes > 0 ? (
+            <button
+              onClick={openProof}
+              className={`w-full rounded-xl p-4 text-left ${
+                proofErros > 0
+                  ? 'bg-red-50 border border-red-300 hover:bg-red-100'
+                  : 'bg-amber-50 border border-amber-300 hover:bg-amber-100'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Upload size={20} className={`${proofErros > 0 ? 'text-red-700' : 'text-amber-700'} flex-shrink-0`} />
+                <div className="min-w-0">
+                  <div className={`font-semibold text-sm ${proofErros > 0 ? 'text-red-900' : 'text-amber-900'}`}>
+                    {proofPendentes === 1
+                      ? `A CD está esperando 1 espelho do app${proofApp ? ` ${proofApp}` : ''}`
+                      : `A CD está esperando ${proofPendentes} espelhos do app${proofApp ? ` ${proofApp}` : ''}`}
+                  </div>
+                  <div className={`text-xs mt-0.5 ${proofErros > 0 ? 'text-red-800' : 'text-amber-800'}`}>
+                    {proofErros > 0
+                      ? `${proofErros === 1 ? '1 deu erro na leitura' : `${proofErros} deram erro na leitura`} — toque pra reenviar o print certo.`
+                      : proofApp
+                        ? `Toque aqui pra enviar o print da tela do app da ${proofApp} — só de quem entrega ${proofApp}.`
+                        : 'Toque aqui pra enviar o print da tela do aplicativo de entregas.'}
+                  </div>
                 </div>
               </div>
-            </div>
-          </button>
+            </button>
+          ) : (
+            <button
+              onClick={openProof}
+              className="w-full bg-green-50 border border-green-300 rounded-xl p-4 text-left hover:bg-green-100"
+            >
+              <div className="flex items-center gap-3">
+                <CheckCircle2 size={20} className="text-green-700 flex-shrink-0" />
+                <div className="min-w-0">
+                  <div className="font-semibold text-green-900 text-sm">
+                    {proofTotal === 1 ? 'Espelho do app enviado' : 'Espelhos do app: todos enviados'}
+                  </div>
+                  <div className="text-xs text-green-800 mt-0.5">
+                    Toque pra conferir a situação{proofTotal > 1 ? ' do grupo' : ''}.
+                  </div>
+                </div>
+              </div>
+            </button>
+          )
         )}
 
         {mirrors === null && (
           <div className="flex items-center justify-center py-16"><Spinner /></div>
         )}
 
-        {mirrors !== null && mirrors.length === 0 && proofPendentes === 0 && (
+        {mirrors !== null && mirrors.length === 0 && proofTotal === 0 && (
           <div className="text-center py-16 text-gray-500">
             <FileText size={40} className="mx-auto mb-3 text-gray-300" />
             <p className="font-medium">Nenhum espelho por aqui ainda.</p>

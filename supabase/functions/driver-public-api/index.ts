@@ -2188,6 +2188,33 @@ async function proofUpload(req: Request, body: Body): Promise<Response> {
     }).eq('id', proofId).eq('company_id', claims.company_id);
     if (updErr) console.error('[proof-check] nao gravei o resultado (segue na fila):', updErr);
 
+    // ILEGIVEL NAO ACUMULA (19/10/2026, pedido do Victor — caso do grupo do Filipe,
+    // em que uma imagem PRETA foi reenviada 13 vezes e empilhou 13 recusados na tela).
+    // Mantem SO o ultimo ilegivel (este), pra CD conseguir ver o que a pessoa mandou,
+    // e apaga os ilegiveis ANTERIORES do mesmo entregador/quinzena/plataforma — arquivo
+    // + registro. Escopo trava em status='rejeitado' + check_status='ilegivel': um print
+    // valido/recebido/divergente (status != rejeitado) nunca e tocado. A vaga ja fica
+    // livre (recusado nao bloqueia o reenvio), entao o card volta sozinho na hora.
+    if (check !== null && recusar && check.status === 'ilegivel') {
+      const { data: antigos } = await supabase.from('driverpay_delivery_proofs')
+        .select('id, file_path')
+        .eq('company_id', claims.company_id)
+        .eq('driver_id', alvoId)
+        .eq('period_id', periodId)
+        .eq('platform_name', platformName)
+        .eq('status', 'rejeitado')
+        .eq('check_status', 'ilegivel')
+        .neq('id', proofId);
+      for (const a of antigos ?? []) {
+        if (a.file_path) await supabase.storage.from(PROOF_BUCKET).remove([a.file_path as string]);
+        await supabase.from('driverpay_delivery_proofs').delete()
+          .eq('id', a.id).eq('company_id', claims.company_id);
+      }
+      if ((antigos ?? []).length > 0) {
+        console.log(`[ilegivel] ${antigos!.length} print(s) ilegivel(is) antigo(s) apagado(s) de ${alvoId} (${platformName})`);
+      }
+    }
+
     if (confirmado && pay?.id) await marcarEspelhoConferido(pay.id, claims.company_id);
 
     // Reprocessamento OPORTUNISTA: este envio aproveita e tenta limpar alguns da
