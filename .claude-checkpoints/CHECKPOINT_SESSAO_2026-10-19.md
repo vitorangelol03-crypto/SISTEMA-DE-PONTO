@@ -118,3 +118,43 @@ quem falta** (o clique vira no-op). A prévia (tarefa 1) mexeu só no número ex
    Só adiciona, nunca apaga; sem candidato não escreve (abrir o painel não gera escrita).
 **Validação:** typecheck 0; `proofAuto` 22/22; 5 specs vizinhos 97/97; build OK. Push `17729ab..b2116b1`
 → Vercel. ⚠️ E2E não rodados ao vivo (abrem quinzena real).
+
+---
+
+# CONTINUAÇÃO 2026-10-19 (parte 3) — Adriano/Ilha, grupo do Filipe (print preto) + aviso do líder
+
+## Verificação pedida: ADRIANO FURTUNATO (líder "Ilha - ADRIANO", grupo só dele)
+Queixa: "quinzena atual não aparece, só a passada / nem pra anexar". **Não era bug.**
+- O app lista uma quinzena pelo **espelho de PAGAMENTO publicado** (`my-mirrors` → `driverpay_mirror_publications`).
+  O card de PRINT é separado (`proof-slots`, independe de espelho publicado) e some quando já enviou.
+- Adriano: print SHOPEE pedido 16/10 → **ele mesmo enviou pelo app** 19/10 → **validado auto 🟢** (860/860).
+  Nada pendente. O espelho de pagamento da 2ª set **não foi publicado** (só 2 de 145 na empresa) → quinzena
+  atual não aparece. Vai aparecer quando publicar os espelhos da 2ª de setembro.
+
+## Grupo "Ipanema, MG FILIPE" (líder Filipe; membros Bruno, Elias) — print "não aceita"
+**Causa (vista com os olhos, baixei as imagens):** não é outro app nem o leitor. Todos SHOPEE, `src=app`.
+- Filipe: print REAL, lido **3347** (vs 3346 planilha = divergência de 1, ok).
+- Bruno e Elias: **imagem TODA PRETA** (7.507 B, byte a byte idêntica → o MESMO arquivo preto) reenviada
+  (Elias 13x). Leitor acertou em recusar "ilegível". Filipe precisa pegar o print real de cada um.
+- **Limpeza feita (produção, SQL):** apagados os 16 registros rejeitado/ilegível do grupo (Bruno 1, Elias 13,
+  Filipe 2). Bruno/Elias voltaram a "falta enviar"; print bom do Filipe intacto. (16 blobs órfãos de 7,5KB no
+  storage — classificador barrou apagar em massa via shell; inofensivos; a automação v54 limpa daqui pra frente.)
+
+## Feature implementada (commit `9c24ba2`) — decisões do Victor: "só recusado" + "guardar só o último"
+1. **Frontend `DriverApp.tsx`:** a faixa de situação dos espelhos do app aparece MESMO com 0 pendentes
+   (antes sumia → tela vazia do Adriano). Verde "todos enviados", âmbar "a CD espera N", **vermelho** quando
+   algum deu erro na leitura. Estado novo: `proofTotal`, `proofErros`. Abre a lista 🟢/🟡/🔴 que já existia.
+2. **Backend `driver-public-api` (v54):** print ILEGÍVEL não acumula — mantém só o último (pra CD ver o que
+   mandaram) e apaga os ilegíveis anteriores do mesmo entregador/quinzena/plataforma (arquivo + registro).
+   Escopo trava em `status='rejeitado' AND check_status='ilegivel'` (print válido nunca é tocado). Dentro de
+   `conferir()`, após gravar. O reabrir automático do card já existia (recusado libera a vaga).
+**Validação:** typecheck 0; build 0; **129 testes** (driverAppCartaoPrint, proofRecusaEApagar, proofCheck,
+proofAuto, driverPayProofProgress). deno check = 7 erros PRÉ-EXISTENTES (baseline, fora do meu diff).
+**Deploy:** front push `8956f49..9c24ba2` → Vercel. Edge v54 pelo Victor via CLI (classificador barrou o meu);
+sonda `my-mirrors` sem token → **401 `{"error":"Sessao invalida"}`** (bootou ok).
+⚠️ Percalço: `deno check --node-modules-dir=auto` quebrou o node_modules do npm (vite/jsdom) → `npm ci` (9min)
+pra restaurar. Lição: NÃO rodar deno check com auto node_modules nesta árvore; validar edge fn de outro jeito.
+
+## Pendência operacional (do Victor, não é código)
+Publicar os **espelhos de pagamento da 2ª de setembro** — sem isso ninguém (Adriano, Filipe…) consegue anexar
+a NOTA da quinzena atual (a nota só é cobrada após o espelho publicado). Só 2 de 145 publicados.
