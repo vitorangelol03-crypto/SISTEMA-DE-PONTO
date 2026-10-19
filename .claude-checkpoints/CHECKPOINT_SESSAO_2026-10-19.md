@@ -96,3 +96,25 @@ Caminho limpo pra tirar a IA desses 5% (quando o Victor quiser):
 - Apoio: incentivar/obrigar o **PDF ORIGINAL** da prefeitura (não foto) — aí nem cai no scan.
 - Descartado: OCR local (Tesseract) — erra número em scan ruim; dinheiro errado é pior que o Claude.
 Enquanto isso: **Claude cobre os 5%** (v53, provado). Nada a fazer até o Victor pedir.
+
+## Tarefa 3 — Furo do print de quem entra no grupo DEPOIS (caso Bruno, commit `b2116b1`)
+**Relato (Victor, print do grupo "Ipanema, MG FILIPE", líder Filipe):** o espelho do **Bruno Bacelar**
+não estava sendo solicitado no app, mesmo clicando "solicitar de todos".
+**Diagnóstico (provado pela linha do tempo):**
+- 16/10 13:46 — Bruno entra na planilha (importação) já com 69 SHOPEE.
+- 16/10 13:51 — pedido automático cria 93 pedidos individuais, mas **Bruno ainda estava SEM grupo**
+  → pulado certo (regra 04/08: "pra todos" só cobra quem está em grupo, quem anexa é o líder).
+- 19/10 10:41 — Bruno **adicionado ao grupo** do Filipe (3 dias depois). Nada re-pediu.
+Causa raiz: **o pedido automático só roda NA IMPORTAÇÃO**; entrar num grupo depois não dispara nada.
+E o botão "Solicitar espelho", com 93 pedidos já gravados, abre em "Manter os 93" e **não completa
+quem falta** (o clique vira no-op). A prévia (tarefa 1) mexeu só no número exibido — NÃO é a causa.
+**Correções:**
+1. **Bruno já (SQL, produção):** inserido pedido individual SHOPEE pro Bruno (`driverpay_proof_requests`,
+   requested_by '2626'). Cartão passa a aparecer no app do Filipe. Conferido: 0 ficaram sem pedido.
+2. **Raiz (código, decisão do Victor = "varredura do painel pega"):** a varredura automática do
+   painel (que já roda a cada recarga da grade) agora **COMPLETA** os pedidos — `driversParaCompletarPrint`
+   (`proofAuto.ts`, reusa `driversParaPedirPrint`): por plataforma pedida e com planilha, cria pedido
+   individual de quem está em grupo, com pacote, não-verde, sem print e sem pedido que o alcance.
+   Só adiciona, nunca apaga; sem candidato não escreve (abrir o painel não gera escrita).
+**Validação:** typecheck 0; `proofAuto` 22/22; 5 specs vizinhos 97/97; build OK. Push `17729ab..b2116b1`
+→ Vercel. ⚠️ E2E não rodados ao vivo (abrem quinzena real).
