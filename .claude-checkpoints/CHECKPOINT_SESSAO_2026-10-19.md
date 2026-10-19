@@ -30,7 +30,50 @@ Trocar a leitora do espelho pro **Claude**, modelo **Haiku** (`claude-haiku-5-5`
 - Requeue de parados: `update driverpay_delivery_proofs set next_check_at=now(), check_attempts=0 where ... status='recebido' and check_status='pendente'`.
 - Trocar modelo/provedor = **secret**, não código (`PROOF_VISION_MODELS`, `PROOF_VISION_PROVIDER`).
 
-## Pendências
-1. **BOTÃO "Solicitar espelho"** (regra do Victor, ainda NÃO feito): ao clicar, só criar pedido pra quem **tem pacote E não enviou o espelho E não foi solicitado ainda**. Nunca duplicar, nunca re-pedir de quem mandou/está verde. Não apagar ninguém. Cruza `SolicitarEspelhoModal.tsx`, `expectedProofPlatforms`/prévia e `proofAuto.ts`. Precisa plano curto + teste.
-2. **Nota fiscal pro Claude** (Victor decide): hoje em manual pelo mesmo bloqueio do Google. `nfVisionRead` é Gemini-only; trocar é mudança à parte.
-3. Diags `vision-diag`/`vision-diag2`: criados e **apagados** (não sobraram no ar).
+## Pendências — RESOLVIDAS na continuação do mesmo dia (ver abaixo)
+~~1. BOTÃO "Solicitar espelho"~~ · ~~2. Nota fiscal pro Claude~~ — feitas.
+3. Diags `vision-diag`/`vision-diag2`/`nf-diag`: criados e **apagados** (não sobraram no ar).
+
+---
+
+# CONTINUAÇÃO 2026-10-19 (parte 2) — prévia honesta do espelho + NF pro Claude
+
+Victor respondeu **"1 2 sim"** (fazer as duas pendências) + decisão de produto.
+
+## Tarefa 1 — prévia do "Solicitar espelho" (commit `7e98130`)
+**Investigação (ponta a ponta, conferida no código):** a regra "não re-pedir de quem já
+mandou/validou" JÁ valia no app do entregador (`DriverApp.tsx` 578-601: enviado→"Já enviados",
+recusado→"reenviar"), no pedido automático (`proofAuto.ts` 38-43) e na grade (`DriverRow.tsx`).
+O ÚNICO lugar errado era a **prévia do modal**: contava todo mundo com pacote
+(`expectedProofPlatforms`, que ignora quem mandou/está verde) → dizia "67 entregadores" com 84
+conferidos, parecendo que ia pedir da quinzena inteira de novo.
+**Conserto:** função pura `previaDeQuemAindaDeve` (`driverPayShared.ts`), reusando
+`computeProofProgressByPayment`. Conta só quem **ainda deve** = `missing + rejected`, pulando
+quem tem `espelhoConferido` (verde). Modal passou a usá-la + textos honestos ("ainda devem o
+print"). **O pedido gravado NÃO mudou** (segue a torneira por plataforma — cobre quem é novo na
+quinzena ou teve print recusado); só a conta exibida ficou honesta.
+**Decisão do Victor (19/10):** "ainda deve" = **faltando + recusado**. Pendente/divergente/verde
+ficam de fora.
+**Validação:** typecheck 0; `driverPayProofProgress` 36/36; lote vizinho 98/98; build OK. E2E 64 e
+75 tiveram a asserção de texto atualizada ("ainda devem o print") — NÃO rodados ao vivo (abrem a
+quinzena real, gravam em produção).
+
+## Tarefa 2 — NF (nota fiscal) pro Claude (commit `1336ffd`, deploy v53)
+`nfVisionRead.ts` ganhou ramo **Anthropic**: segue o MESMO provedor do espelho
+(`visionConfigFromEnv`), então com `PROOF_VISION_PROVIDER=claude` a NF é lida pelo Claude Haiku.
+- PDF vai como bloco **`document`** (imagem como `image`); `tool_use` forçado pro mesmo
+  `{legivel, texto}`; **sem `temperature`** (Claude 5 recusa, HTTP 400); `max_tokens 4096`
+  (transcrição de nota é texto longo, bem acima do print).
+- Trava antiga relaxada: só vai pra manual se **não houver provedor/chave**; nunca manda a chave
+  de um provedor pro endpoint do outro. **Fallback seguro:** Claude falhou → manual, como hoje.
+**Validação:** typecheck 0; `nfVisionRead` +testes (57/57 com o espelho); build OK.
+**Teste AO VIVO (diag `nf-diag`, apagada depois):** baixou uma NFS-e real de Caratinga (86 KB) e
+chamou o Claude com bloco PDF → **HTTP 200**, `legivel:true`, **3.217 caracteres transcritos** em
+6,6s. Confirma: Haiku aceita PDF (sem 400) e lê a nota.
+> Obs.: NFs-PDF recentes têm texto extraível (não acionam a IA); a IA só entra em nota escaneada
+> sem texto (caso Lucas Aredes) — mesmo caminho/modelo já provado aqui.
+
+## Estado final
+- Frontend (tarefa 1) no `main` → Vercel. Edge `driver-public-api` **v53** (espelho + NF pelo
+  Claude). Secrets inalterados (NF reaproveita os do espelho).
+- Push agrupado: `9ffea97..1336ffd`.
