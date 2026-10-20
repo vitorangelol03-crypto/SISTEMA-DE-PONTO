@@ -47,6 +47,29 @@ export interface EntradaDoCartaoDePrint {
  */
 export const QUINZENAS_DE_HISTORICO = 2;
 
+/**
+ * Espelho marcado "na mão" por um HUMANO (não pelo automático) — 20/10/2026, decisão do
+ * Victor: *"não pedir dela"*.
+ *
+ * 🔴 EXISTE POR UM CASO REAL (fotos de 20/10): o Luis Fernando estava com **0 pacote de
+ * Shopee** e o espelho **conferido na mão (2/2)** no painel, e mesmo assim o app do líder
+ * pedia o print da Shopee dele ("Falta 1"). O montador de cartões (`proofSlots` +
+ * `deveCobrarPrint`) nunca olhava o `espelho_conferido` — então a marcação manual não tirava
+ * o cartão travado da tela do entregador.
+ *
+ * `'auto'` NÃO conta: ali existe um print de verdade validado, que aparece verde em "Já
+ * enviados" — tirá-lo sumiria com a confirmação. Só a marcação de um humano (que gravou o
+ * próprio `userId` em `espelho_conferido_by`) é ponto final e faz o cartão não ser pedido.
+ */
+export function espelhoMarcadoNaMao(p: {
+  espelho_conferido: boolean | null;
+  espelho_conferido_by: string | null;
+}): boolean {
+  return p.espelho_conferido === true
+    && p.espelho_conferido_by != null
+    && p.espelho_conferido_by !== 'auto';
+}
+
 /** Ele deve mandar print desta plataforma nesta quinzena? */
 export function deveCobrarPrint(e: EntradaDoCartaoDePrint): boolean {
   if (!e.praTodos && !e.soPraEle) return false; // ninguém pediu dele

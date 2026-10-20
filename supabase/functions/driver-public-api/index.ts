@@ -39,7 +39,7 @@ import {
   runProofCheck,
   type ProofCheckResult,
 } from '../_shared/proofCheck.ts';
-import { deveCobrarPrint, QUINZENAS_DE_HISTORICO } from '../_shared/proofCards.ts';
+import { deveCobrarPrint, espelhoMarcadoNaMao, QUINZENAS_DE_HISTORICO } from '../_shared/proofCards.ts';
 import { readProofImage, visionConfigFromEnv } from '../_shared/visionRead.ts';
 import { readNotaFiscalTexto } from '../_shared/nfVisionRead.ts';
 
@@ -1856,7 +1856,8 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
 
   const driverIds = await driversQuePossoEnviar(claims);
   const { data: pays } = await supabase.from('driverpay_payments')
-    .select('id, driver_id, period_id').in('period_id', [...periodosComPedido]).in('driver_id', driverIds);
+    .select('id, driver_id, period_id, espelho_conferido, espelho_conferido_by')
+    .in('period_id', [...periodosComPedido]).in('driver_id', driverIds);
   const payList = pays ?? [];
   if (payList.length === 0) return json({ slots: [] });
 
@@ -1950,6 +1951,13 @@ async function proofSlots(req: Request, body: Body): Promise<Response> {
     const payId = pay.id as string;
     const dId = pay.driver_id as string;
     const perId = pay.period_id as string;
+    // Espelho marcado NA MÃO por um humano = ponto final: não pede o print dele de novo,
+    // mesmo com pedido "pra todos" no ar (20/10/2026, decisão do Victor "não pedir dela").
+    // 'auto' não entra aqui — ali há print validado, que segue aparecendo verde em "enviados".
+    if (espelhoMarcadoNaMao({
+      espelho_conferido: (pay.espelho_conferido as boolean | null) ?? null,
+      espelho_conferido_by: (pay.espelho_conferido_by as string | null) ?? null,
+    })) continue;
     const plats = new Set<string>([
       ...(platsTodos.get(perId) ?? []),
       ...(platsDoDriver.get(`${perId}|${dId}`) ?? []),
