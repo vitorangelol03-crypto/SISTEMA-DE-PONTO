@@ -37,10 +37,10 @@ validado de verdade, que segue aparecendo verde em "Já enviados").
   real): 5 erros, **todos pré-existentes** (bcryptjs, Uint8Array/BufferSource, 3× SlotOut
   cast); **0 citam a mudança**.
 
-## Pendência (bloqueio)
-⚠️ A correção é no **edge function** → **não vale pelo push/Vercel**. Falta o Victor rodar:
-`! npx supabase functions deploy driver-public-api --no-verify-jwt --project-ref flcncdidxmmornkgkfbb`
-Depois: confirmar a versão nova (MCP `list_edge_functions`) + sonda na rota.
+## Deploy (feito)
+✅ Victor rodou `npx supabase functions deploy driver-public-api` → **v56 ACTIVE**.
+Sonda `POST .../driver-public-api {"action":"my-mirrors"}` → HTTP 401 "Sessao invalida" (boot ok).
+Já está valendo no app do entregador.
 
 ## Fora do sistema (pedido do Victor, não entra no repo)
 Montei um PDF "Vibe Coding — Guia de Estudo" (9 páginas, reportlab) e mandei pelo chat.
