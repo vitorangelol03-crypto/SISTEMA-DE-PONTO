@@ -974,7 +974,7 @@ export function DriverApp() {
                     })()}
                   </div>
                   <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === k ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer'}`}>
-                    {nfUploading === k ? <Spinner /> : <><Upload size={16} /> Enviar 2ª nota{s.splitOpen.remaining !== null ? ` (${fmtBRL(s.splitOpen.remaining)})` : ''}</>}
+                    {nfUploading === k ? <><Spinner /> Analisando a nota…</> : <><Upload size={16} /> Enviar 2ª nota{s.splitOpen.remaining !== null ? ` (${fmtBRL(s.splitOpen.remaining)})` : ''}</>}
                     <input
                       type="file" accept="application/pdf" className="hidden"
                       disabled={nfUploading === k}
@@ -1049,7 +1049,7 @@ export function DriverApp() {
                         </div>
                       )}
                       <label className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${nfUploading === k ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'}`}>
-                        {nfUploading === k ? <Spinner /> : (
+                        {nfUploading === k ? <><Spinner /> Analisando a nota…</> : (
                           <><Upload size={16} /> {dividindo ? `Enviar 1ª nota de ${fmtBRL(info!.slices[0])}` : 'Enviar PDF da nota'}</>
                         )}
                         <input
