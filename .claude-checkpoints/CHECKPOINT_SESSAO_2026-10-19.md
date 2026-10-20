@@ -181,3 +181,21 @@ um "enviado" que voltou atrás. Victor pediu um estado **"Analisando..."** nesse
 **Validação:** typecheck 0; build 0; **129 testes** (mesma leva). Push `e8ce09c..57c3e84` → Vercel.
 Edge v55 pelo Victor via CLI; sonda `my-mirrors` sem token → **401 `{"error":"Sessao invalida"}`** (bootou).
 ⚠️ NÃO rodei deno check (quebra o node_modules); o `lendo` é type-safe e o bundler do deploy pega sintaxe.
+
+---
+
+# CONTINUAÇÃO 2026-10-19 (parte 6) — "Analisando a nota…" + descoberta: NF já valida sozinha (`b71be5c`)
+
+Victor pediu pra "implementar o mesmo tipo de validação automática na NOTA (recusar se nome/valor/CNPJ
+do tomador e de quem emitiu não bater; tela analisando; recusar na hora com o problema)". **INVESTIGUEI
+antes de codar e descobri que JÁ ESTÁ FEITO e em produção** (desde ~05–09/09):
+- `nfUpload` (edge fn) chama `readNotaFiscalTexto` + `runNfCheck` (`nfCheck.ts`) **SÍNCRONO** e
+  **`autoReject = check.status !== 'ok'`** → qualquer divergência recusa na hora (HTTP 422) com o motivo,
+  apaga o arquivo e libera a vaga. Mensagens já prontas: CNPJ do tomador errado; valor ≠ espelho; nome/CNPJ
+  de quem emitiu errado; ilegível; "é o espelho, não a nota". 3 verdes → auto-valida.
+- **Ressalvas (contei ao Victor):** só recusa o que CONSEGUE conferir — valor exige espelho publicado;
+  CNPJ do emissor exige cadastro na ficha. Sem isso, não recusa "no escuro" → fica p/ validação manual.
+  Por ser síncrona, a NF **não tem o flip** "enviado→recusado" do print.
+- **Único gap (feito, `b71be5c`):** o botão da nota mostrava só uma rodinha ao enviar; agora diz
+  **"Analisando a nota…"** (os 2 botões: nota única e 2ª nota da dupla), igual ao print e honesto (nota
+  escaneada leva ~segundos). Só texto, frontend. typecheck 0, build 0. Push → Vercel. Sem deploy de servidor.
