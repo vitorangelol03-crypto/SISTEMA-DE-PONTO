@@ -1,41 +1,47 @@
 # Checkpoint — Sessão 2026-10-22
 
-## Caso Fafá: pagamento R$ 9.380 × nota R$ 9.478 (SÓ INVESTIGAÇÃO, nada alterado)
+## Caso Fafá: pagou 9.380, nota 9.478 — CAUSA REAL: filtro de plataforma derruba o Zapex
 
 Victor mandou áudio + foto do operador: o Fafá (Fabrício dos Santos Ferreira, líder de
-grupo em Caratinga) reclamou que recebeu R$ 9.380 mas a nota dele é R$ 9.478 (−R$ 98).
-Victor perguntou se foi desconto. **Não foi desconto** (grupo com desconto 0, vale 0,
-livro-caixa vazio, espelho publicado com `deducted_amount = 0`).
+grupo em Caratinga) recebeu R$ 9.380 mas a nota dele é R$ 9.478 (−R$ 98). Victor
+perguntou se foi desconto. **Não foi desconto** (grupo com desconto 0, vale 0,
+livro-caixa vazio, espelho com `deducted_amount = 0`).
 
-**Causa (provada no banco, 2ª quinzena de setembro `9b8fd48b`, Caratinga):**
-a planilha de pagamento (lote C6) foi exportada na noite de 19/10 — depois do import
-ANJUN (19/10 19:06 UTC), antes do Zapex (19/10 23:26 UTC) e do import eMile
-(20/10 12:22 UTC). Tudo que entrou depois ficou fora do lote:
+### Causa raiz (provada nos ARQUIVOS reais + código) — 2ª set `9b8fd48b`, Caratinga
 
-- **Zapex R$ 266,00** (6 entregadores, 133×R$ 2,00 — o lançamento de 19–20/10).
-  O do Fafá: 49×2 = **R$ 98,00** → exatamente a diferença reclamada.
-- **eMile R$ 29.595,05** (64 linhas, import 20/10 12:22) — pago por transferência
-  separada (marca "pago" do eMile num clique à parte, 20/10 20:24:58 UTC); a planilha
-  do eMile só pode ter sido gerada depois do import, então deve estar certa — conferir
-  com o Clayton.
-- **2 lançamentos tardios fora até do espelho das 12:34:** LOGGI 68×2,20 = **R$ 149,60**
-  do Rogério (Vermelho Novo, 12:39) e ANJUN 55×2,00 = **R$ 110,00** do Thales (grupo do
-  Romário, 13:04). Os espelhos desses 2 grupos foram republicados segundos depois
-  (12:39:57 / 13:04:59) — espelhos atuais, lote velho.
+As planilhas de pagamento foram geradas **20/10 17:24–17:25** (Downloads):
+`Relatorio_Simples_..._LOGGI_SHOPEE_ANJUN_Coleta_Shopee.xlsx` (a principal, **com
+filtro de plataforma, sem eMile** — o jeito padrão de pagar) e
+`Relatorio_Simples_..._eMile.xlsx` (eMile à parte). As marcas "pago" têm os mesmos
+horários (17:24:48 as 4 plataformas / 17:24:58 eMile).
 
-**Prova:** os 16 valores legíveis na foto da planilha batem no centavo com o estado
-pré-Zapex/pré-eMile reconstruído por SQL (payment_packages por created_at), incluindo
-os nomes de emitente de nota (Luila=Lucas Aredes, Mikael=grupo da Greice, Denize=Oliur,
-Rosiclese=Henrique). As 2 notas do Fafá estão validadas: R$ 9.478 (tomador CD
-11.802.464/0001-38, candidato `espelho_group_cheio=9478`) + R$ 1.010 (tomador iMile
-53.824.315/0001-10). Espelho do grupo publicado 20/10 12:34 com R$ 10.488 = 9.478+1.010.
+**Bug: relatório com QUALQUER filtro de plataforma exclui o Zapex, em silêncio.**
+`computeRowTotals` (`driverPayShared.ts:1345`) só conta Zapex se 'Zapex' estiver no
+filtro (`isAllowed('Zapex')`), e 'Zapex' **não existe como opção** nos chips do
+`ReportOptionsModal` (`platformOptions` vem só de `driverpay_platforms`). Como o fluxo
+padrão é SEMPRE filtrado (tudo-menos-eMile + só-eMile), **o Zapex nunca sai em planilha
+nenhuma**. Nunca doeu antes porque a tabela Zapex estava vazia até 19/10 (1º uso).
+Espelho publicado POR PLATAFORMA tem a mesma regra (D3) — espelho "de todas" não
+(sem filtro, Zapex entra; foi por isso que o espelho do grupo saiu certo, 10.488).
 
-**Falta pagar no lote principal (total R$ 525,60):** Fafá 98,00 · Romário 162,00
-(52 Zapex + 110 Thales) · Rogério 149,60 · Lucas Aredes 74,00 · João Pedro Gomes 36,00 ·
-Higino 4,00 · Gerson 2,00.
+Conferido linha a linha nos 2 arquivos contra o banco: Fabrício 9.380 (= tudo menos
+eMile menos Zapex) + 1.010 no eMile; Rogério 7.339,20 **inclui** a LOGGI 149,60
+lançada 09:39; Romário 4.350 **inclui** a ANJUN do Thales 110 lançada 10:04; eMile
+todo certo. ⚠️ **A 1ª análise desta sessão (commit `f91b270`) concluiu errado**
+"planilha gerada na noite de 19/10, falta R$ 525,60" — os números do banco batiam com
+duas hipóteses e eu afirmei uma sem discriminador; o Victor corrigiu ("tirei a
+planilha às 17h") e os arquivos provaram. Lição regravada: duas hipóteses explicando
+os mesmos números = achar o dado que separa (aqui, o próprio .xlsx) ANTES de afirmar.
 
-**⏳ Esperando o Victor decidir:** pagar as diferenças (e como registrar — fora do
-sistema ou lançando algo); confirmar com o Clayton que a transferência do eMile saiu da
-planilha pós-import. **Causa raiz é de processo:** lote exportado antes de a quinzena
-estar completa; o sistema não avisa "tem lançamento mais novo que o lote/espelho" —
-feature possível se o Victor quiser (não feita).
+### O que falta pagar (só o Zapex): **R$ 266,00**
+Fafá 98,00 · Lucas Aredes ("Luila") 74,00 · Romário 52,00 · João Pedro Gomes 36,00 ·
+Higino 4,00 · Gerson 2,00. (49+37+26+18+2+1 = 133 entregas × R$ 2,00.)
+As notas do Fafá estão validadas (9.478 CD + 1.010 iMile = espelho 10.488).
+
+### ⏳ Esperando o Victor decidir
+1. Como acertar os R$ 266 (posso gerar planilha C6 com as 6 linhas).
+2. **Conserto do bug**: opção "Zapex" nos chips do filtro do relatório (marcada por
+   padrão) — sem isso, TODA quinzena com Zapex vai pagar errado de novo. Mesma atenção
+   pro espelho por plataforma. NÃO feito, esperando OK.
+
+Nada alterado no banco. Investigação só-leitura + leitura dos .xlsx do Downloads.
