@@ -61,12 +61,17 @@ Zapex) segue intacto.
   Linux — o `.deno/` da sessão 20/10 tinha quebrado o node_modules de lá; `npm ci`
   resolveu) · `npm run build` limpo. Push `25bf948` → main → Vercel.
 
-### ⏳ Esperando o Victor decidir
-1. **Como acertar os R$ 266,00** já devidos (posso gerar planilha C6 com as 6 linhas:
-   Fafá 98 · Lucas 74 · Romário 52 · João Pedro 36 · Higino 4 · Gerson 2). Alternativa
-   dentro do sistema: relatório simples com SÓ o chip Zapex marcado gera exatamente
-   essas linhas.
-2. (Opcional, não pedido) Espelho publicado POR PLATAFORMA continua com a regra D3
-   (Zapex fora) — o fluxo real publica "de todas", que sai certo. Só mexo se pedir.
+### ✅ Acerto dos R$ 266 — planilha entregue (22/10, pedido do Victor)
+`Diferenca_Zapex_2_Quinzena_Setembro.xlsx` (enviada no chat + cópia no Downloads):
+6 linhas — nome do recebedor IGUAL ao pagamento de 20/10, CNPJ, chave PIX (que aqui é
+o próprio CNPJ), entregas e valor; total R$ 266,00/133 entregas. **Chaves conferidas
+1 a 1 contra o arquivo pago de 20/10** (mesmo nome, mesma chave; Higino recebe como
+"Valdeci Alves de moura", recebedor configurado dele — igual no pagamento original).
+**Falta só o Clayton executar o pagamento.** Fonte: driverpay_zapex/payments/groups +
+recebedor do cadastro; cada um dos 6 é líder da própria unidade (sem sobreposição).
+
+### ⏳ Aberto (opcional, não pedido)
+Espelho publicado POR PLATAFORMA continua com a regra D3 (Zapex fora) — o fluxo real
+publica "de todas", que sai certo. Só mexo se o Victor pedir.
 
 Fora o conserto acima, nada alterado no banco — investigação só-leitura + .xlsx.
