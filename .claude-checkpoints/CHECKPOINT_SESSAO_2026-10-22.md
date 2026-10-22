@@ -80,4 +80,19 @@ olham plataformas reais — exibir Zapex ali é ajuste futuro, só se o Victor p
 Espelho publicado POR PLATAFORMA continua com a regra D3 (Zapex fora) — o fluxo real
 publica "de todas", que sai certo. Só mexo se o Victor pedir.
 
-Fora o conserto acima, nada alterado no banco — investigação só-leitura + .xlsx.
+## Fechamento da sessão (22/10, "vamos parar por aqui")
+
+- **Commits:** `f91b270` (análise ERRADA, superseded) → `5bcf9fb` (correção da análise)
+  → **`25bf948` (o fix — único commit de código)** → `c4a01dc` / `274a0b2` / `c36ad63`
+  (docs). **CI do `25bf948` VERDE** (tsc+eslint, unit, Playwright E2E — inclusive o 63,
+  que exercita esta janela) e Vercel publicou.
+- **Banco (produção):** só as 6 marcas `Zapex` em `driverpay_payment_marks` (pedido
+  explícito do Victor; reconsultadas). Resto da sessão foi leitura.
+- **Fora do repo:** `Diferenca_Zapex_2_Quinzena_Setembro.xlsx` no chat + Downloads.
+- **Cópia Linux** (`~/projetos/ponto-teste`): node_modules refeito com `npm ci`
+  (o `deno check` de 20/10 tinha deixado um `.deno/` que quebrava o vitest).
+- **Estado ao parar:** caso Fafá encerrado de ponta a ponta. Pendências que seguem
+  (de sessões anteriores, ver blurbs acima): decisões ANJUN (Perda/Avaria sem dono,
+  Multa SLA, Bônus), espelho do Mário (Patrocínio) a republicar, layout "Nomes
+  autorizados a emitir nota" no `DriverFormModal`, modo galpão no tablet real,
+  4 decisões de taxas de 09/10 — e o opcional do espelho D3 acima.
