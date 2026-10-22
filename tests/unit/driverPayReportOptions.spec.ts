@@ -201,6 +201,48 @@ describe('buildSimpleReportRows — filtro de plataforma e abate', () => {
   });
 });
 
+describe('Zapex no relatório filtrado (caso Fafá, 22/10/2026)', () => {
+  const leaderMap = new Map<string, string>();
+  // Driver com pacotes E Zapex: ANJUN 100×2 = 200 · Zapex 2 itens ×R$2 = 4.
+  const COM_ZAPEX = {
+    ...row('p4', 'd4', 'Fabricio', null, [rl('Caratinga', { ANJUN: 100 }, { ANJUN: 2 })]),
+    zapex: [{}, {}], zapexRate: 2,
+  } as unknown as DriverRowData;
+
+  it('filtro SEM Zapex derruba o Zapex do total — o silêncio que escondeu os R$ 98 do Fafá', () => {
+    const out = buildSimpleReportRows([COM_ZAPEX], leaderMap, { allowedPlatformNames: new Set(['ANJUN']) });
+    expect(out[0].total).toBe(200);
+  });
+
+  it('filtro COM Zapex (o chip novo, marcado por padrão) paga o Zapex junto', () => {
+    const out = buildSimpleReportRows([COM_ZAPEX], leaderMap, {
+      allowedPlatformNames: new Set(['ANJUN', 'Zapex']),
+    });
+    expect(out[0].total).toBe(204); // 200 + 4
+  });
+
+  it('quem SÓ tem Zapex no escopo do filtro não some do relatório', () => {
+    // Só tem LOGGI (fora do filtro) + 1 Zapex: a linha fica, valendo só o Zapex.
+    const soZapex = {
+      ...row('p5', 'd5', 'Sozinho', null, [rl('Mutum', { LOGGI: 10 }, { LOGGI: 2 })]),
+      zapex: [{}], zapexRate: 2,
+    } as unknown as DriverRowData;
+    const out = buildSimpleReportRows([soZapex], leaderMap, {
+      allowedPlatformNames: new Set(['ANJUN', 'Zapex']),
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0].total).toBe(2);
+  });
+
+  it('relatório geral: Zapex no filtro entra no TOTAL A RECEBER (colunas de plataforma não mudam)', () => {
+    const out = buildLeaderReportRows([COM_ZAPEX], PLAT, leaderMap, {
+      allowedPlatformNames: new Set(['ANJUN', 'Zapex']),
+    });
+    expect(out[0].totalToReceive).toBe(204);
+    expect(out[0].platforms.ANJUN).toEqual({ packages: 100, value: 200 });
+  });
+});
+
 describe('espelho — vales/perdas listados mas não abatidos', () => {
   it('individual sem abate: total no bruto, valores preservados e marca deductionsApplied=false', () => {
     const semAbate = buildDriverMirrorData(MISTO, PLAT, COMPANY, PERIOD, new Set(['ANJUN']), false);

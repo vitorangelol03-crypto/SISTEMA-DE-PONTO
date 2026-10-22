@@ -44,6 +44,13 @@ interface ReportOptionsModalProps {
   kind: 'geral' | 'simples';
   /** Nomes das plataformas disponíveis no período (ordem das colunas). */
   platformOptions: string[];
+  /**
+   * Total de Zapex (R$) no escopo do relatório (22/10/2026 — caso Fafá). Zapex não é
+   * plataforma cadastrada, então não tinha chip — e QUALQUER filtro de plataforma derrubava
+   * o Zapex do arquivo em silêncio (R$ 266 fora da planilha da 2ª quinzena de setembro).
+   * > 0 acrescenta o chip "Zapex" (marcado por padrão); 0 deixa a janela como sempre foi.
+   */
+  zapexTotal: number;
   /** Total de vales+perdas no escopo do relatório (0 esconde o botão de descontar). */
   deductionsTotal: number;
   /** Quem já teve vale/perda abatido numa publicação deste período (aviso anti-duplo). */
@@ -115,6 +122,7 @@ const ResumoLinha: React.FC<{
 export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
   kind,
   platformOptions,
+  zapexTotal,
   deductionsTotal,
   alreadyDeducted,
   scopeLabel,
@@ -125,7 +133,13 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
   onConfirm,
   canViewValues,
 }) => {
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(platformOptions));
+  // Com Zapex no escopo, "Zapex" vira um chip como os outros — senão o filtro o derrubava
+  // do arquivo sem nenhuma opção de incluí-lo (caso Fafá, 22/10/2026).
+  const chipOptions = useMemo(
+    () => (zapexTotal > 0 ? [...platformOptions, 'Zapex'] : platformOptions),
+    [platformOptions, zapexTotal],
+  );
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(chipOptions));
   /**
    * Padrão `pendentes` (07/08/2026): decide pessoa por pessoa. Era tudo-ou-nada, e as duas
    * posições erravam ao pagar por plataforma — marcado cobrava em dobro de quem já tinha
@@ -162,9 +176,11 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
 
   // Todas marcadas => null (sem filtro, arquivo idêntico ao de hoje).
   const allowed = useMemo<string[] | null>(
-    () => (selected.size >= platformOptions.length ? null : platformOptions.filter((p) => selected.has(p))),
-    [selected, platformOptions],
+    () => (selected.size >= chipOptions.length ? null : chipOptions.filter((p) => selected.has(p))),
+    [selected, chipOptions],
   );
+  /** A marca de "pago" grava PLATAFORMAS — Zapex não tem marca própria. */
+  const platsQueMarcam = allowed ? allowed.filter((p) => p !== 'Zapex') : null;
 
   /**
    * A conta do desconto, refeita a cada mexida nos filtros — a MESMA que o arquivo usa
@@ -302,7 +318,7 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
             :
           </p>
           <div className="flex flex-wrap gap-2">
-            {platformOptions.map((name) => {
+            {chipOptions.map((name) => {
               const on = selected.has(name);
               return (
                 <button
@@ -329,6 +345,18 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
           {allowed !== null && allowed.length === 0 && (
             <p className="text-xs text-red-700 mt-2">Marque ao menos uma plataforma.</p>
           )}
+          {/* O Zapex paga ou deixa de pagar gente de verdade: o destino dele nunca fica implícito. */}
+          {zapexTotal > 0 && allowed !== null && (selected.has('Zapex') ? (
+            <p className="text-xs text-blue-800 mt-2" data-testid="report-zapex-dentro">
+              O <b>Zapex ({formatBRLIf(zapexTotal, canViewValues)})</b> sai NESTE arquivo. Não deixe o
+              Zapex marcado em dois relatórios da mesma quinzena — sairia pago em dobro.
+            </p>
+          ) : (
+            <p className="text-xs font-semibold text-amber-800 mt-2" data-testid="report-zapex-fora">
+              ⚠ O <b>Zapex ({formatBRLIf(zapexTotal, canViewValues)})</b> NÃO sai neste arquivo — inclua
+              ele no relatório de outra plataforma pra ninguém ficar sem receber.
+            </p>
+          ))}
         </div>
 
         {/* ── Só quem já está conferido (04/08/2026) ──
@@ -450,7 +478,13 @@ export const ReportOptionsModal: React.FC<ReportOptionsModalProps> = ({
               <b>Esta planilha é o pagamento de verdade</b>
               <span className="block text-xs text-gray-600 mt-0.5">
                 Quem sair nela fica com <b>pago</b>
-                {allowed && allowed.length > 0 ? ` em ${allowed.join(' + ')}` : ' nas plataformas em que tem pacote'}.
+                {platsQueMarcam === null
+                  ? ' nas plataformas em que tem pacote'
+                  : platsQueMarcam.length > 0
+                  ? ` em ${platsQueMarcam.join(' + ')}`
+                  : allowed?.includes('Zapex')
+                  ? ' em nenhuma plataforma (Zapex não tem marca de pago)'
+                  : ' nas plataformas em que tem pacote'}.
                 Num grupo, marca <b>cada membro</b> — o dinheiro da linha do líder cobre todos.
               </span>
             </span>

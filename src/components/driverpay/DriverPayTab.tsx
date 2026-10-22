@@ -2775,10 +2775,14 @@ export const DriverPayTab: React.FC<DriverPayTabProps> = ({ userId, hasPermissio
 
       {reportModal && (() => {
         const scoped = reportScopeRows();
+        // Zapex do escopo (22/10/2026 — caso Fafá): > 0 põe o chip "Zapex" na janela,
+        // marcado por padrão; sem isso, qualquer filtro derrubava o Zapex em silêncio.
+        const zapexTotal = scoped.reduce((s, r) => s + r.zapex.length * r.zapexRate, 0);
         return (
           <ReportOptionsModal
             kind={reportModal.kind}
             platformOptions={platforms.map((p) => p.name)}
+            zapexTotal={zapexTotal}
             deductionsTotal={scoped.reduce((s, r) => s + deductionsOf(r), 0)}
             alreadyDeducted={alreadyDeductedDrivers(scoped, publications, rows)}
             scopeLabel={
