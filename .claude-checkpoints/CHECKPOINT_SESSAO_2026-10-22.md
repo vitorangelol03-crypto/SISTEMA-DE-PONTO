@@ -38,10 +38,35 @@ Fafá 98,00 · Lucas Aredes ("Luila") 74,00 · Romário 52,00 · João Pedro Gom
 Higino 4,00 · Gerson 2,00. (49+37+26+18+2+1 = 133 entregas × R$ 2,00.)
 As notas do Fafá estão validadas (9.478 CD + 1.010 iMile = espelho 10.488).
 
-### ⏳ Esperando o Victor decidir
-1. Como acertar os R$ 266 (posso gerar planilha C6 com as 6 linhas).
-2. **Conserto do bug**: opção "Zapex" nos chips do filtro do relatório (marcada por
-   padrão) — sem isso, TODA quinzena com Zapex vai pagar errado de novo. Mesma atenção
-   pro espelho por plataforma. NÃO feito, esperando OK.
+### ✅ Conserto (Victor: "pode conserta para não acontecer mais") — commit `25bf948`
+Quando o escopo do relatório tem Zapex (R$ > 0), a janela de opções ganha o chip
+**"Zapex"**, marcado por padrão — o fluxo padrão (tudo-menos-eMile) passa a pagar o
+Zapex na planilha principal. A janela também avisa quando o Zapex fica **de fora** do
+arquivo (âmbar, com o valor) e lembra de **não deixá-lo marcado em dois relatórios**
+(sairia em dobro). O texto da marca de "pago" lista só plataformas reais — Zapex não
+tem marca (`marcasDoRelatorio` já ignorava; **nada muda no banco**). Sem Zapex no
+escopo, a janela fica exatamente como era — por isso o E2E 63 (quinzena de teste sem
+Zapex) segue intacto.
 
-Nada alterado no banco. Investigação só-leitura + leitura dos .xlsx do Downloads.
+- Arquivos: `ReportOptionsModal.tsx` (chip + avisos + texto da marca),
+  `DriverPayTab.tsx` (calcula `zapexTotal` do escopo e passa pra janela),
+  `tests/unit/reportOptionsModalZapex.spec.tsx` (NOVO, 4 casos — inclui o caso Fafá:
+  desmarcar só o eMile mantém o Zapex), `tests/unit/driverPayReportOptions.spec.ts`
+  (+4 casos nas funções puras, incl. "quem só tem Zapex não some do filtrado").
+- A conta por baixo já estava pronta: `computeRowTotals` aceita 'Zapex' no filtro,
+  `hasPackagesInScope` conta Zapex, `brutoPorTomadorDaUnidade` joga Zapex no CNPJ de
+  maior valor (regra de 10/09), `pessoasDoDesconto` soma `t.zapex` no bruto. Só
+  faltava o chip existir.
+- Validação: `npm run typecheck` 0 erros · vitest **38/38** (3 arquivos, na cópia
+  Linux — o `.deno/` da sessão 20/10 tinha quebrado o node_modules de lá; `npm ci`
+  resolveu) · `npm run build` limpo. Push `25bf948` → main → Vercel.
+
+### ⏳ Esperando o Victor decidir
+1. **Como acertar os R$ 266,00** já devidos (posso gerar planilha C6 com as 6 linhas:
+   Fafá 98 · Lucas 74 · Romário 52 · João Pedro 36 · Higino 4 · Gerson 2). Alternativa
+   dentro do sistema: relatório simples com SÓ o chip Zapex marcado gera exatamente
+   essas linhas.
+2. (Opcional, não pedido) Espelho publicado POR PLATAFORMA continua com a regra D3
+   (Zapex fora) — o fluxo real publica "de todas", que sai certo. Só mexo se pedir.
+
+Fora o conserto acima, nada alterado no banco — investigação só-leitura + .xlsx.
