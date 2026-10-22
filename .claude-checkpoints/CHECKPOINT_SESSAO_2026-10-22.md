@@ -67,8 +67,14 @@ Zapex) segue intacto.
 o próprio CNPJ), entregas e valor; total R$ 266,00/133 entregas. **Chaves conferidas
 1 a 1 contra o arquivo pago de 20/10** (mesmo nome, mesma chave; Higino recebe como
 "Valdeci Alves de moura", recebedor configurado dele — igual no pagamento original).
-**Falta só o Clayton executar o pagamento.** Fonte: driverpay_zapex/payments/groups +
-recebedor do cadastro; cada um dos 6 é líder da própria unidade (sem sobreposição).
+Fonte: driverpay_zapex/payments/groups + recebedor do cadastro; cada um dos 6 é líder
+da própria unidade (sem sobreposição). **Victor enviou a planilha ao Clayton (22/10)**
+e mandou marcar como pago → **6 marcas gravadas** em `driverpay_payment_marks`
+(`platform_name='Zapex'`, `report_kind='manual'`, `paid_by='2626'`,
+`deductions_applied=false`, 22/10 16:30 UTC), derivadas por SQL direto dos lançamentos
+Zapex (sem id digitado) e **reconsultadas** (6/6, nomes certos). ⚠️ A marca Zapex é
+registro de banco: a etiqueta "pago" da grade e o aviso "já pagos" do relatório só
+olham plataformas reais — exibir Zapex ali é ajuste futuro, só se o Victor pedir.
 
 ### ⏳ Aberto (opcional, não pedido)
 Espelho publicado POR PLATAFORMA continua com a regra D3 (Zapex fora) — o fluxo real
