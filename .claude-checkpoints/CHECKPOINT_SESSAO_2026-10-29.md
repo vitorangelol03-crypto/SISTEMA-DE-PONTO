@@ -61,6 +61,40 @@ do login até anexar as notas (print da Shopee, ver espelho etc.), com **dados d
   (etiqueta interna + ponto duplicado). O cartão do **print** já tira o `[automático] `; o da nota
   não. No vídeo o motivo aparece limpo. Ajuste de 1 linha no `DriverApp.tsx` se o Victor pedir.
 
+## Parte 2 — versão "um CNPJ só" (pedido do Victor no mesmo dia)
+
+**Pedido:** "faça um sem essa peculiaridade do eMile — nem toda empresa tem a configuração do CNPJ
+separado; foca na Shopee e nas outras plataformas dentro do mesmo CNPJ; mesmo formato, tudo
+idêntico". Interpretei o fim do áudio ("tem que ter dois CNPJ") como "não tem que ter" (o resto do
+pedido inteiro é tirar o 2º CNPJ) e avisei a interpretação no chat.
+
+**O que muda em relação ao 1º vídeo** (o resto é idêntico, mesmo código com `?perfil=simples`):
+- Espelho de exemplo sem eMile: SHOPEE + LOGGI, desconto, **TOTAL A RECEBER R$ 1.889,00** (faixa
+  verde) — sem faixa amarela nem "AVISO EMILE" (gerado pelo mesmo `generateDriverMirrorPdf`).
+- "Anexar nota" com **um cartão só** ("Shopee", CNPJ fictício); sem a 2ª nota.
+- Falas novas: `esp4s` "…É esse o valor da sua nota", `nf2s` "Esse cartão é a sua nota…",
+  `nf3s` "A nota leva o valor da faixa verde…", `res5s` "anexe **a** nota" (singular). Saem `esp5`
+  (eMile) e `nf7` (outro cartão). Lupa da faixa verde: "Total a receber = valor da nota".
+- Duração **3min28s** (47 falas).
+- Arquivos separados: `assets-simples/`, `capture-simples/` (63 telas, de novo nenhuma chamada ao
+  Supabase real), `frames-simples/`, `timeline-simples.json`, `audio/mix-simples.wav`.
+- Tropeço resolvido: com o robô do shopee-bot (outro projeto, PM2) usando CPU ao mesmo tempo, 6
+  páginas do composer não carregavam a tempo (cada uma decodifica ~100 telas 3x) → render com 3
+  páginas e espera de carregamento maior. Robô NÃO foi tocado.
+
+**Entregue (versão Shopee):**
+- `C:\Users\VICTOR\Downloads\Tutorial - App Meus Pagamentos (versão Shopee).mp4` — 1080×1920,
+  3min28s, 36,5 MB.
+- `C:\Users\VICTOR\Downloads\Tutorial - App Meus Pagamentos (versão Shopee - WhatsApp).mp4` —
+  720×1280, 15,1 MB (também enviado ao celular do Victor).
+- O 1º vídeo (dois CNPJs) continua no Downloads para empresas que usam a configuração do eMile.
+
+**Validação (versão Shopee):** 4 falas novas transcritas isoladas (certas); quadros das cenas que
+mudaram revisados antes do render e extraídos do MP4 final (espelho sem faixa amarela, 1 cartão,
+"Anexe a nota"); áudio do MP4 final transcrito: **47/47 falas no lugar** (as 2 marcas automáticas
+eram os mesmos alarmes falsos do 1º vídeo, conferidos com contexto). Mix -16,0 LUFS. Cópias no
+Downloads conferidas por md5.
+
 ### Estado ao fim
 - Zero código do sistema alterado; zero escrita no banco. Servidores locais do vídeo (5199/5288)
   encerrados no fim da sessão.
