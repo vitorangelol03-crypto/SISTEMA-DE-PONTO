@@ -98,3 +98,26 @@ Downloads conferidas por md5.
 ### Estado ao fim
 - Zero código do sistema alterado; zero escrita no banco. Servidores locais do vídeo (5199/5288)
   encerrados no fim da sessão.
+
+## Fechamento da sessão (29/10, "faça um checkpoint, vou fechar o terminal")
+
+- **Commits (só docs, `[skip ci]`, enviados ao `main`):** `78b277f` (vídeo 1) → `7ba1363` (versão
+  Shopee) → este fechamento. Nenhum commit de código.
+- **Banco (produção):** só leituras (SELECT) pra copiar formato real. Nada gravado.
+- **Fora do repo:**
+  - `C:\Users\VICTOR\Downloads\`: `Tutorial - App Meus Pagamentos.mp4` (+ `(WhatsApp)`) = versão
+    **dois CNPJs (com eMile)**; `Tutorial - App Meus Pagamentos (versão Shopee).mp4` (+
+    `(versão Shopee - WhatsApp)`) = versão **um CNPJ só**. As duas de WhatsApp foram enviadas ao
+    celular do Victor.
+  - Fontes pra refazer/atualizar: `~/projetos/video-tutorial-driver/` (tem `LEIA-ME.txt` com os
+    passos). Cópia do app usada na gravação: `~/projetos/ponto-video` (pode ser reaproveitada).
+  - Rascunhos/quadros da sessão ficaram só no scratchpad (/tmp) — descartáveis.
+- **Pendências que nasceram aqui (nenhuma bloqueia):**
+  1. Voz B (Thalita) foi escolhida por padrão — Victor não respondeu A×B. Trocar = `tts.py` com
+     `pt-BR-FranciscaNeural` + render/mix/montar (passos no LEIA-ME).
+  2. Aviso do app real: nota recusada mostra "Motivo: [automático] …" + ponto duplo (1 linha no
+     `DriverApp.tsx`, só se ele pedir).
+  3. Se ele quiser: vídeo à parte do "dividir a nota em 2" (ficou fora por decisão dele).
+- **Pendências antigas seguem as mesmas** (ver blurbs do índice): decisões ANJUN, espelho do Mário,
+  layout "Nomes autorizados a emitir nota", modo galpão no tablet real, 4 decisões de taxas de
+  09/10, senha da aba Admin, folha sem salário (18 pessoas), tabela INSS/IRRF 2026.
